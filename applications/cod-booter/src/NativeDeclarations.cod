@@ -14,12 +14,12 @@ using "NameResolution.cod" {
     NameBindings, NameWork, first_item, signature_head, signature_clause, record_declaration,
     c_handle_type, handle_binding, formal_binding, local_binding, loop_index, enclosing_callable,
     record_type, array_type, c_constructor, c_operation, c_entry, callable_binding, owner_binding,
-    ordinary_selection, symbolic_selection, definition_name, native_scalar, builtin_bool,
+    ordinary_selection, symbolic_selection, definition_name, native_scalar, builtin_bool, enum_type,
     builtin_u8, builtin_u32, builtin_u64, builtin_i64, builtin_void,
 };
 using "ModuleExports.cod" {
     SelectedExports, same_name, ModuleExports, exception_type_export, exception_root_identity,
-    native_handle_export, record_export, array_export, nominal_exception_export, callable_export,
+    native_handle_export, record_export, array_export, nominal_exception_export, callable_export, enum_export,
 };
 using "ModuleExportStorage.cod" { ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header };
 using "DeclarationTypes.cod" { type_module, type_identity };
@@ -1343,6 +1343,11 @@ func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in
     if (kind == array_type()) {
         exports[at].kind <- array_export();
         exports[at].shape <- array_shape(nodes, names, selected, target);
+        return true;
+    } else {};
+    if (kind == enum_type()) {
+        exports[at].kind <- enum_export();
+        exports[at].shape <- names[nodes[target].number].kind;
         return true;
     } else {};
     if (kind == c_operation() || kind == c_entry() || kind == callable_binding()) {

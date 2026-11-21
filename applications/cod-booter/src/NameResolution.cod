@@ -15,6 +15,7 @@ using "ParserStorage.cod" {
     narrow_integer_node, logical_not_node, logical_binary, block_node, full_scope_node,
     block_item_node, try_node, catch_clause_node, finally_clause_node, null_node, return_node,
     throw_node, local_storage_binding,
+    enum_declaration_node, enum_member_node, enum_integer_node,
 };
 using "ExpressionParser.cod" ParseResult;
 using "ModuleExports.cod" { SelectedExports, record_export };
@@ -36,6 +37,7 @@ export array NameBindings[u64]:NameBinding;
 export data NameWorkSlot {
     active:u64;
     next:u64;
+    enum_code:u64;
     value_kind:u8;
     expects_here:u8;
 }
@@ -88,6 +90,7 @@ export func array_type() -> u8 { return 22u8; }
 export func loop_index() -> u8 { return 23u8; }
 export func handle_binding() -> u8 { return 24u8; }
 export func here_receiver_binding() -> u8 { return 25u8; }
+export func enum_type() -> u8 { return 26u8; }
 
 export func native_scalar(kind:u8) -> bool {
     return kind == builtin_u64() || kind == builtin_bool() || (kind >= builtin_u8() && kind <= builtin_f64());
@@ -118,6 +121,11 @@ func missing_here_control() -> u8 { return 62u8; }
 func unsupported_here_group_storage() -> u8 { return 63u8; }
 func owner_without_input() -> u8 { return 72u8; }
 func owner_without_writable_input() -> u8 { return 73u8; }
+func invalid_enum_backing() -> u8 { return 78u8; }
+func invalid_enum_code() -> u8 { return 79u8; }
+func invalid_enum_member_reference() -> u8 { return 80u8; }
+func repeated_enum_code() -> u8 { return 81u8; }
+func repeated_enum_name() -> u8 { return 82u8; }
 export func expected_value_binding() -> u8 { return 14u8; }
 
 func reject_name(state:NameState in R, node:u64, diagnostic:u8) -> void where {owner R} {
@@ -183,7 +191,7 @@ func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
     if (found == no_node()) { reject_name(state, name, unresolved_name()); return; } else {};
     val kind <- bindings[found].kind;
     val declaration <- bindings[found].declaration;
-    if (kind == c_handle_type() || kind == record_type() || kind == array_type()) {
+    if (kind == c_handle_type() || kind == record_type() || kind == array_type() || kind == enum_type()) {
         reject_name(state, name, expected_value_binding());
         return;
     } else {};
@@ -256,7 +264,7 @@ func resolve_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N
     val found <- lookup(source, nodes, work, name, 0u64, state.module_names);
     if (found == no_node()) { reject_name(state, name, unresolved_name()); return; } else {};
     val kind <- bindings[found].kind;
-    if (kind != ordinary_selection() && kind != c_handle_type() && kind != record_type() && kind != array_type()) {
+    if (kind != ordinary_selection() && kind != c_handle_type() && kind != record_type() && kind != array_type() && kind != enum_type()) {
         reject_name(state, name, expected_type_binding());
         return;
     } else {};
@@ -293,7 +301,7 @@ func list_entry(kind:u8) -> bool {
     return kind == module_item_node() || kind == block_item_node() || kind == argument_node() ||
         kind == catch_clause_node() || kind == finally_clause_node() ||
         kind == result_clause_node() || kind == throws_clause_node() || kind == owner_clause_node() ||
-        kind == here_receiver_node() || formal(kind);
+        kind == here_receiver_node() || kind == enum_member_node() || formal(kind);
 }
 
 func link_entries(nodes:const ExprNodes in N, work:NameWork in W, used:u64) -> void
@@ -794,7 +802,7 @@ export func record_declaration(kind:u8) -> bool {
 
 export func declaration_requires_native_output(kind:u8) -> bool {
     return kind == c_handle_type_node() || record_declaration(kind) || kind == array_declaration_node() ||
-        kind == c_procedure_node() || kind == export_node() || kind == export_from_node();
+        kind == enum_declaration_node() || kind == c_procedure_node() || kind == export_node() || kind == export_from_node();
 }
 
 func type_declaration_name(nodes:const ExprNodes in N, form:u64) -> u64 where {const owner N} {
@@ -834,6 +842,9 @@ func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, 
                 if (form_kind == array_declaration_node()) { array_type() } else { record_type() }
             };
             declare_name(source, nodes, bindings, work, state, type_declaration_name(nodes, form), form, kind, duplicate_binding());
+        } else {};
+        if (form_kind == enum_declaration_node()) {
+            declare_name(source, nodes, bindings, work, state, nodes[form].left, form, enum_type(), duplicate_binding());
         } else {};
         if (form_kind == using_node()) {
             name <- nodes[form].right;
@@ -1019,6 +1030,111 @@ func resolve_callable(source:const SourceBytes in S, nodes:const ExprNodes in N,
     (state.used <- state.module_names):void;
 }
 
+func earlier_enum_member(source:const SourceBytes in S, nodes:const ExprNodes in N, name:u64, prior:u64) -> u64
+    where {const owner S, const owner N} {
+    val member <- prior;
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        if (member == no_node() || same_name(source, nodes, name, nodes[member].right)) return member;
+        member <- nodes[member].left;
+    };
+    return no_node();
+}
+
+func enum_code_used(nodes:const ExprNodes in N, bindings:const NameBindings in B, work:const NameWork in W,
+                   prior:u64, code:u64) -> bool where {const owner N, const owner B, const owner W} {
+    val member <- prior;
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        if (member == no_node()) return false;
+        if (bindings[member].declaration == member && work[member].enum_code == code) return true;
+        member <- nodes[member].left;
+    };
+    return false;
+}
+
+data EnumNumbering {
+    limit:u64;
+    signed:bool;
+    previous:u64;
+    has_previous:bool;
+}
+
+func resolve_enum_member(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                         work:NameWork in W, state:NameState in R, numbering:EnumNumbering in E, member:u64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R, owner E} {
+    val prior <- nodes[member].left;
+    val name <- nodes[member].right;
+    if (earlier_enum_member(source, nodes, name, prior) != no_node()) {
+        reject_name(state, name, repeated_enum_name());
+        return;
+    } else {};
+    val maximum <- 18446744073709551615u64;
+    val initializer <- nodes[member].number;
+    val canonical <- member;
+    val code <- 0u64;
+    if (initializer == no_node()) {
+        if (numbering.has_previous) {
+            if (numbering.previous == numbering.limit) { reject_name(state, name, invalid_enum_code()); return; } else {};
+            # Signed -1 is stored using the all-ones code. Its successor is zero.
+            (code <- if (numbering.previous == maximum) { 0u64 } else { numbering.previous + 1u64 }):void;
+        } else {};
+    } else {
+        if (nodes[initializer].kind == enum_integer_node()) {
+            val magnitude <- nodes[initializer].number;
+            if (nodes[initializer].left != 0u64) {
+                if (!numbering.signed || nodes[initializer].right != 0u64 || magnitude > 9223372036854775808u64) {
+                    reject_name(state, initializer, invalid_enum_code());
+                    return;
+                } else {};
+                (code <- if (magnitude == 0u64) { 0u64 } else { maximum - (magnitude - 1u64) }):void;
+            } else {
+                if (magnitude > numbering.limit) { reject_name(state, initializer, invalid_enum_code()); return; } else {};
+                (code <- magnitude):void;
+            };
+        } else {
+            val target <- earlier_enum_member(source, nodes, initializer, prior);
+            if (target == no_node()) { reject_name(state, initializer, invalid_enum_member_reference()); return; } else {};
+            canonical <- bindings[target].declaration;
+            (code <- work[target].enum_code):void;
+        };
+    };
+    if (canonical == member) {
+        if (enum_code_used(nodes, bindings, work, prior, code)) {
+            reject_name(state, name, repeated_enum_code());
+            return;
+        } else {};
+        numbering.has_previous <- true;
+        (numbering.previous <- code):void;
+    } else {};
+    remember(bindings, member, canonical, enum_type());
+    (work[member].enum_code <- code):void;
+}
+
+func resolve_enum(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                  work:NameWork in W, state:NameState in R, form:u64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    val backing <- nodes[form].number;
+    val kind <- scalar_name(source, nodes, backing);
+    val limit <- 18446744073709551615u64;
+    if (kind == builtin_i64()) { (limit <- 9223372036854775807u64):void; } else {
+        if (kind == builtin_u8()) { (limit <- 255u64):void; } else {
+            if (kind == builtin_u32()) { (limit <- 4294967295u64):void; } else {
+                if (kind != builtin_u64()) { reject_name(state, backing, invalid_enum_backing()); return; } else {};
+            };
+        };
+    };
+    remember(bindings, backing, no_node(), kind);
+    ref numbering = make EnumNumbering {
+        limit <- limit; signed <- kind == builtin_i64(); previous <- 0u64; has_previous <- false;
+    };
+    val member <- first_item(nodes, nodes[form].right);
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        if (member == no_node()) return;
+        resolve_enum_member(source, nodes, bindings, work, state, numbering, member);
+        if (state.diagnostic != 0u8) return;
+        member <- work[member].next;
+    };
+}
+
 func resolve_type_declaration(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                               work:NameWork in W, state:NameState in R, form:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
@@ -1055,6 +1171,10 @@ func resolve_module_form(source:const SourceBytes in S, nodes:const ExprNodes in
     } else {};
     if (kind == callable_node() || kind == c_procedure_node()) {
         resolve_callable(source, nodes, bindings, work, state, form);
+        return;
+    } else {};
+    if (kind == enum_declaration_node()) {
+        resolve_enum(source, nodes, bindings, work, state, form);
         return;
     } else {};
     if (kind == c_handle_type_node() || record_declaration(kind) || kind == array_declaration_node()) {

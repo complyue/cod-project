@@ -26,7 +26,7 @@ namespace cod::language {
   fail(at, "micro-dispatch implementation gap: " + detail + "; this is not a language restriction");
 }
 
-inline bool scalar_type(const Type &type) { return numeric(type) || type == Type::boolean; }
+inline bool scalar_type(const Type &type) { return numeric(type) || type == Type::boolean || type.kind == Type::enumeration; }
 inline bool nominal_exception(const Type &type) {
   return type.kind == Type::exception && type.identity >= exception_categories.size();
 }
@@ -117,6 +117,8 @@ struct CheckedOperation {
   // The result may retain a ptr carrier even if the current target is present.
   bool nullable_view = false;
   std::uint64_t integer = 0;
+  bool enum_literal = false;
+  bool enum_assertion = false;
   bool minimum_literal = false;
   ExceptionFacts exceptions;
   std::set<size_t> captures;
@@ -262,6 +264,7 @@ struct CheckedSchema {
   std::vector<Field> fields;
   bool bits;
   std::optional<size_t> native_owner = {};
+  bool has_enum_storage = false;
 };
 
 struct CheckedArray {
@@ -671,6 +674,17 @@ struct CheckedNativeOperation {
   const auto &arrays() const { return contract.here.front().inputs; }
 };
 
+struct CheckedEnum {
+  struct Member {
+    std::uint64_t code;
+    size_t canonical;
+  };
+  const Form *source;
+  Type backing;
+  std::vector<Member> members;
+  std::map<std::string, size_t> spellings;
+};
+
 struct CheckedProgram {
   struct Initializer { size_t module; const Expression *expression; };
   std::vector<CheckedExceptionCategory> exception_types = intrinsic_exception_types();
@@ -685,6 +699,7 @@ struct CheckedProgram {
   }
   std::vector<CheckedSchema> schemas;
   std::vector<CheckedArray> arrays;
+  std::vector<CheckedEnum> enums;
   std::vector<CheckedNativeConstructor> native_constructors;
   std::vector<CheckedNativeEntry> native_entries;
   std::vector<CheckedNativeOperation> native_operations;

@@ -175,7 +175,7 @@ enum class ArgumentMode { value, borrowed_read, borrowed_ref, borrowed_ptr, borr
 struct Type {
   enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64,
               named, unit, quantity, product, region_schema, region, regional, array, reference, null_ref, abstract_type, arguments, parameter,
-              exception, never, c_type_marker, native_handle, exception_holder };
+              exception, never, c_type_marker, native_handle, exception_holder, enumeration };
   Kind kind;
   std::string name;
   size_t identity = 0;
@@ -283,7 +283,7 @@ inline std::string type_name(const Type &type) {
   case Type::quantity: return type_name(*type.target) + "(" + type.name + ")";
   case Type::unit: return type.name;
   case Type::named: case Type::product: case Type::region_schema: case Type::regional: case Type::array:
-  case Type::abstract_type: case Type::c_type_marker: return type.name;
+  case Type::abstract_type: case Type::c_type_marker: case Type::enumeration: return type.name;
   case Type::region: return std::string(type.owned ? "own " : "") + "region" +
                            (type.target ? " :" + type_name(*type.target) : "");
   case Type::reference: return "stored reference to " + type_name(*type.target);
@@ -418,11 +418,16 @@ struct SymbolMapping {
   std::string source;
   Location at;
 };
-struct Capture { std::string name; Location at; };
+struct Capture { std::string name; Location at; bool typed_name_only = false; };
+struct EnumMember {
+  Token name;
+  std::optional<Token> initializer;
+  bool negative = false;
+};
 struct Form {
   enum class Kind { symbol, symbol_from, function, procedure, data, region_definition, array, unit, using_units, global,
                     using_resource, import_resource, mixin_resource, export_resource, export_from_resource,
-                    expression, abstract_type, conformance };
+                    expression, abstract_type, conformance, enumeration };
   Kind kind;
   Location at;
   std::string name;
@@ -440,6 +445,8 @@ struct Form {
   std::optional<Type> native_owner_type;
   std::vector<SymbolMapping> mappings;
   std::vector<UnitSelection> units;
+  std::vector<EnumMember> enum_members;
+  std::optional<std::vector<Token>> selected_members; // An empty list selects every member spelling.
   std::vector<Parameter> parameters;
   std::vector<Capture> captures;
   bool explicit_captures = false;
@@ -460,7 +467,8 @@ struct Form {
   SourceSpan span = {};
 
   bool publishes_definition() const {
-    return exporting && (kind == Kind::data || kind == Kind::array || kind == Kind::function || kind == Kind::procedure);
+    return exporting && (kind == Kind::data || kind == Kind::array || kind == Kind::enumeration ||
+                         kind == Kind::function || kind == Kind::procedure);
   }
   bool requires_explicit_return() const { return kind == Kind::procedure && !implicit_scope && !supplied_scope; }
   bool returns_tail_value() const { return !supplied_group && (kind == Kind::function || implicit_scope || supplied_scope); }
@@ -724,6 +732,13 @@ class Parser {
   }
   void resource_item(Form &form) {
     resource_selection(form, form.using_symbol);
+    if (!form.symbolic && (form.kind == Form::Kind::using_resource || form.kind == Form::Kind::import_resource) && take("{")) {
+      auto &members = form.selected_members.emplace();
+      if (!take("..")) {
+        do { members.push_back(ordinary_name()); } while (take(",") && !is("}"));
+      }
+      expect("}");
+    }
     if (!take("with")) return;
     if (form.kind != Form::Kind::mixin_resource)
       fail(form.at, "a symbol map requires a mixed-in procedure");
@@ -2083,7 +2098,7 @@ public:
         }
         const auto next = peek().kind == TokenKind::end ? TokenKind::end : tokens_[cursor_ + 1].kind;
         const bool named_type = (is("data") && (next == TokenKind::identifier || next == TokenKind::string)) ||
-            (is("array") && next == TokenKind::identifier);
+            ((is("array") || is("enum")) && next == TokenKind::identifier);
         const bool named_callable = (is("func") || is("function") || is("proc") || is("procedure")) && !callable_binding();
         if (is("import") || named_type || named_callable) {
           form->exporting = true;
@@ -2149,6 +2164,25 @@ public:
         form->kind = Form::Kind::unit;
         form->name = ordinary_name().text;
         expect(";");
+      } else if (is("enum") && tokens_[cursor_ + 1].kind == TokenKind::identifier) {
+        expect("enum");
+        form->kind = Form::Kind::enumeration;
+        form->name = ordinary_name().text;
+        type_separator();
+        form->result_type = parse_type();
+        expect("{");
+        while (!take("}")) {
+          EnumMember member{ordinary_name(), {}};
+          if (take("=")) {
+            member.negative = take("-");
+            member.initializer = peek().kind == TokenKind::identifier && !member.negative
+                ? ordinary_name() : name(TokenKind::integer);
+          }
+          expect(";");
+          form->enum_members.push_back(std::move(member));
+        }
+        if (form->enum_members.empty()) fail(start.at, "an enum requires at least one member");
+        take(";");
       } else if (is("array") && tokens_[cursor_ + 1].kind == TokenKind::identifier) {
         expect("array");
         form->kind = Form::Kind::array;

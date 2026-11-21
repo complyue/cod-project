@@ -89,7 +89,7 @@ func append_decimal_digit(number:u64 in N, byte:u8) -> bool where {owner N} {
     return true;
 }
 
-func integer_width(source:const SourceBytes in S, token:const Token in T) -> u64
+export func integer_width(source:const SourceBytes in S, token:const Token in T) -> u64
     where {const owner S, const owner T} {
     val end <- token.past;
     val length <- end - token.first;
@@ -101,13 +101,9 @@ func integer_width(source:const SourceBytes in S, token:const Token in T) -> u64
     return 0u64;
 }
 
-func parse_literal(source:const SourceBytes in S, token:const Token in T,
-                   result:ParseResult in R, width:u64) -> u64 where {const owner S, const owner T, owner R} {
-    if (width == 0u64) {
-        result.diagnostic <- expected_u64();
-        return 0u64;
-    } else {};
-    val suffix <- if (width == 8u64) { 2u64 } else { 3u64 };
+export func parse_integer_magnitude(source:const SourceBytes in S, token:const Token in T,
+                                   result:ParseResult in R, width:u64) -> u64 where {const owner S, const owner T, owner R} {
+    val suffix <- if (width == 0u64) { 0u64 } else { if (width == 8u64) { 2u64 } else { 3u64 } };
     val end <- token.past - suffix;
     val number <- 0u64;
     for (at in token.first .. end) {
@@ -121,6 +117,15 @@ func parse_literal(source:const SourceBytes in S, token:const Token in T,
         return 0u64;
     } else {};
     return number;
+}
+
+func parse_literal(source:const SourceBytes in S, token:const Token in T,
+                   result:ParseResult in R, width:u64) -> u64 where {const owner S, const owner T, owner R} {
+    if (width == 0u64) {
+        result.diagnostic <- expected_u64();
+        return 0u64;
+    } else {};
+    return parse_integer_magnitude(source, token, result, width);
 }
 
 export func append_node(nodes:ExprNodes in A, result:ParseResult in R,

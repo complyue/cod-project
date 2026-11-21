@@ -111,6 +111,11 @@ class ScalarChecker {
         return found->second;
     return program_.instances[instance].effects;
   }
+  struct EnumValue {
+    Type type;
+    size_t member;
+    bool operator==(const EnumValue &) const = default;
+  };
   struct ModuleNames {
     std::map<std::string, size_t> callables;
     std::map<std::string, size_t> native_operations;
@@ -122,6 +127,11 @@ class ScalarChecker {
     std::set<size_t> selected_symbols;
     std::set<std::string> selected_callables, values;
     std::map<std::string, Type> types;
+    std::map<std::string, EnumValue> enum_members;
+    bool binds_other_than_enum_member(const std::string &name) const {
+      return callables.contains(name) || native_operations.contains(name) || symbols.contains(name) ||
+          values.contains(name) || types.contains(name);
+    }
     struct Resource {
       enum class Kind { symbol, callable, type, native_operation } kind;
       size_t symbol = 0;
@@ -2140,10 +2150,43 @@ class ScalarChecker {
     return state.bindings.contains(name) || state.owner_bindings.contains(name) ||
         state.symbol_shadows.contains(name) || lexical_self(name, state.method) || active_here(name, &state);
   }
+  bool ordinary_binding(const std::string &name, const TypeEvidenceState *state = nullptr) const {
+    const ModuleLookup lookup(module_, state && state->method ? program_.methods[*state->method].module : module_);
+    if (state ? symbol_shadowed(name, *state) || state->definitions.contains(name)
+              : lexical_.lookup(name).has_value() || active_here(name) ||
+                    lexical_self(name, checking_instance_ ? std::optional{checking_instance_->method} : std::nullopt)) return true;
+    return module_names().binds_other_than_enum_member(name) || module_names().enum_members.contains(name);
+  }
+  std::optional<EnumValue> selected_enum_member(const std::string &name, const TypeEvidenceState *state = nullptr) const {
+    const ModuleLookup lookup(module_, state && state->method ? program_.methods[*state->method].module : module_);
+    const auto member = module_names().enum_members.find(name);
+    if (member == module_names().enum_members.end()) return {};
+    return member->second;
+  }
+  std::optional<EnumValue> enum_member(const Type &type, const std::string &name) const {
+    const auto &domain = program_.enums.at(type.identity);
+    const auto member = domain.spellings.find(name);
+    if (member == domain.spellings.end()) return {};
+    return EnumValue{type, domain.members[member->second].canonical};
+  }
+  CheckedOperation enum_literal(const EnumValue &value) const {
+    CheckedOperation result;
+    result.type = value.type;
+    result.enum_literal = true;
+    result.integer = program_.enums.at(value.type.identity).members.at(value.member).code;
+    return result;
+  }
+  std::optional<EnumValue> typed_enum_member(const Expression &operand, const Type &type,
+                                             const TypeEvidenceState *state = nullptr) const {
+    if (operand.kind != Expression::Kind::name || ordinary_binding(operand.text, state)) return {};
+    if (const auto member = enum_member(type, operand.text)) return member;
+    fail(operand.at, "unknown member '" + operand.text + "' of enum '" + type.name + "'");
+  }
   size_t resolve_symbol(const std::string &name, const Location &at, bool local,
                         std::optional<size_t> method = {}) const {
     const ModuleLookup lookup(module_, method ? program_.methods[*method].module : module_);
-    if (local || lexical_self(name, method)) fail(at, "nearest binding '" + name + "' is not a symbol");
+    if (local || lexical_self(name, method) || module_names().enum_members.contains(name))
+      fail(at, "nearest binding '" + name + "' is not a symbol");
     if (method && module_names().values.contains(name))
       implementation_gap(at, "module-local binding lookup and capture in callable bodies");
     const auto found = module_names().symbols.find(name);
@@ -2158,7 +2201,8 @@ class ScalarChecker {
   static Type print_result(const Expression &expr, const std::optional<Type> &argument = {}) {
     if (expr.children.size() != 1) fail(expr.at, "print requires one scalar argument");
     if (argument == Type::never) return Type::never;
-    if (argument && !scalar_type(*argument)) fail(expr.at, "print requires one primitive scalar argument");
+    if (argument && (!scalar_type(*argument) || argument->kind == Type::enumeration))
+      fail(expr.at, "print requires one primitive scalar argument");
     return Type::void_type;
   }
   NamedFamily named_family(const std::string &name, const TypeEvidenceState *state = nullptr) const {
@@ -5580,10 +5624,13 @@ class ScalarChecker {
     for (const auto &p : method.owner_parameters) names.insert(p.name);
     required.declarations = names;
     if (!method.name.empty()) names.insert(method.name);
-    const auto use = [&](const std::string &name, const Location &at, const std::set<std::string> &bound, bool query, bool symbol = false) {
+    const auto use = [&](const std::string &name, const Location &at, const std::set<std::string> &bound,
+                         bool query, bool symbol = false, bool typed_name = false) {
+      if (bound.contains(name)) return;
       auto &dependencies = symbol ? required.symbols : query ? required.queries : required.captures;
-      if (!bound.contains(name) && std::none_of(dependencies.begin(), dependencies.end(), [&](const auto &c) { return c.name == name; }))
-        dependencies.push_back({name, at});
+      const auto existing = std::ranges::find(dependencies, name, &Capture::name);
+      if (existing == dependencies.end()) dependencies.push_back({name, at, typed_name});
+      else existing->typed_name_only &= typed_name;
     };
     const std::function<void(const Expression &, std::set<std::string> &, bool)> visit = [&](const Expression &expr, auto &bound, bool query) {
       using K = Expression::Kind;
@@ -5601,6 +5648,12 @@ class ScalarChecker {
         required.opaque_storage = true;
         break;
       default: break;
+      }
+      if (expr.kind == K::typed_expression && expr.annotation->kind == Type::named &&
+          expr.children.front()->kind == K::name) {
+        const auto &operand = *expr.children.front();
+        use(operand.text, operand.at, bound, query, false, true);
+        return;
       }
       if (expr.kind == K::make_borrowed_handle) use(expr.owner_name, expr.at, bound, query);
       if (expr.kind == K::make_object && !expr.constructor_arguments) {
@@ -5623,13 +5676,13 @@ class ScalarChecker {
         for (const auto &symbol : dependencies.symbols) use(symbol.name, symbol.at, bound, query, true);
         if (query) {
           if (nested.implicit_scope) {
-            for (const auto &capture : dependencies.captures) use(capture.name, capture.at, bound, true);
-            for (const auto &reference : dependencies.queries) use(reference.name, reference.at, bound, true);
+            for (const auto &capture : dependencies.captures) use(capture.name, capture.at, bound, true, false, capture.typed_name_only);
+            for (const auto &reference : dependencies.queries) use(reference.name, reference.at, bound, true, false, reference.typed_name_only);
           }
           return;
         }
-        for (const auto &capture : dependencies.captures) use(capture.name, capture.at, bound, false);
-        for (const auto &capture : dependencies.queries) use(capture.name, capture.at, bound, true);
+        for (const auto &capture : dependencies.captures) use(capture.name, capture.at, bound, false, false, capture.typed_name_only);
+        for (const auto &capture : dependencies.queries) use(capture.name, capture.at, bound, true, false, capture.typed_name_only);
         for (const auto &capture : nested.captures) use(capture.name, capture.at, bound, false);
         if (!nested.name.empty()) bound.insert(nested.name);
         return;
@@ -5758,8 +5811,9 @@ class ScalarChecker {
       return lexical_.lookup(capture.name).has_value() || active_here(capture.name) ||
           lexical_self(capture.name, checking_instance_ ? std::optional<size_t>{checking_instance_->method} : std::nullopt) ||
           std::any_of(query_environment().bindings.begin(), query_environment().bindings.end(), [&](const auto &binding) { return binding.name == capture.name; }) ||
-          (!module_names().callables.contains(capture.name) && !has_declarations(capture.name) && !module_names().symbols.contains(capture.name) &&
-           !module_names().native_operations.contains(capture.name));
+          (!capture.typed_name_only && !module_names().enum_members.contains(capture.name) &&
+           !module_names().callables.contains(capture.name) && !has_declarations(capture.name) &&
+           !module_names().symbols.contains(capture.name) && !module_names().native_operations.contains(capture.name));
     };
     if (source.explicit_captures) {
       std::set<std::string> listed;
@@ -6473,7 +6527,8 @@ class ScalarChecker {
       std::vector<Type> values;
       for (const auto &type : arguments) if (type != Type::never) values.push_back(type);
       if (values.empty()) { types.result = types.operand = Type::never; return types; }
-      if (equality && std::all_of(values.begin(), values.end(), [](const Type &type) { return type == Type::boolean; })) types.operand = Type::boolean;
+      if (equality && (values.front() == Type::boolean || values.front().kind == Type::enumeration) &&
+          std::ranges::all_of(values, [&](const auto &type) { return type == values.front(); })) types.operand = values.front();
       else {
         if (!std::all_of(values.begin(), values.end(), numeric)) return error("no applicable numeric operation '" + std::string(name) + "'");
         if (const auto common = common_value_type(values)) types.operand = *common;
@@ -10461,6 +10516,7 @@ class ScalarChecker {
           return callable_evidence(family.methods.front(), family.declaration ? family.declaration : &state);
       } else if (has_declarations(expr.text) && (expected_callable || !contextual || state.required))
         return declared_callable_query(expr.text, expected_callable, expr.at, state);
+      else if (const auto member = selected_enum_member(expr.text, &state)) return member->type;
       return {};
     }
     case K::grouped: {
@@ -10503,6 +10559,17 @@ class ScalarChecker {
       return type;
     }
     case K::typed_expression: {
+      const auto annotation = evidence_annotation(*expr.annotation, state);
+      if (annotation.kind == Type::enumeration) {
+        const auto &operand = *expr.children.front();
+        if (typed_enum_member(operand, annotation, &state)) return annotation;
+        const auto type = type_evidence(operand, state, false, nullptr, nullptr, expected_use, true, read, joining);
+        if (!type || type == Type::never) return type;
+        if (*type != annotation) fail(expr.at, "type assertion cannot match enum '" + annotation.name + "'");
+        view = state.value;
+        target_facts = state.target;
+        return type;
+      }
       if (*expr.annotation != Type::void_type) implementation_gap(expr.at, "non-void expression conversion or assertion");
       const auto operand = type_evidence(*expr.children.front(), state, false, nullptr, nullptr,
                                          ExpectedTypeUse::materialization, true, EvidenceRead::target, joining);
@@ -15256,6 +15323,7 @@ class ScalarChecker {
     if (has_declarations(expr.text)) fail(expr.at, "no applicable implementation for declared callable '" + expr.text + "'");
     if (module_names().symbols.contains(expr.text))
       implementation_gap(expr.at, "materialization of a compile-time symbol object");
+    if (const auto member = selected_enum_member(expr.text)) return enum_literal(*member);
     return read_binding(expr, read);
   }
   std::optional<size_t> native_operation(const std::string &name, const TypeEvidenceState *state = nullptr) const {
@@ -16112,8 +16180,22 @@ class ScalarChecker {
       break;
     }
     case K::typed_expression: {
-      if (*expr.annotation != Type::void_type) implementation_gap(expr.at, "non-void expression conversion or assertion");
       const auto &operand = *expr.children.front();
+      const auto annotation = resolve_annotation(*expr.annotation, instance);
+      if (annotation.kind == Type::enumeration) {
+        if (const auto member = typed_enum_member(operand, annotation)) {
+          operation = enum_literal(*member);
+          break;
+        }
+        const auto type = check(operand, instance, operations, read, discard, nullptr, expected_use,
+                                write_slot, indexed_use, native_loan, construction_owner, reservation_receiver, loop_discard);
+        if (type != Type::never && type != annotation)
+          fail(expr.at, "type assertion cannot match enum '" + annotation.name + "'");
+        operation = operations.at(&operand);
+        operation.enum_assertion = true;
+        break;
+      }
+      if (*expr.annotation != Type::void_type) implementation_gap(expr.at, "non-void expression conversion or assertion");
       const auto type = check(operand, instance, operations, false, false, nullptr,
           ExpectedTypeUse::materialization, false, IndexedUse::immediate_target, NativeLoanContext::discard_result);
       if (type == Type::null_ref) fail(expr.at, "explicit discard requires an independently typed operand");
@@ -17929,6 +18011,22 @@ class ScalarChecker {
     if (!inserted && published->second != resource) fail(at, "conflicting public alias '" + name + "'");
   }
 
+  void select_enum_members(const Form &form, const Type &type) {
+    if (type.kind != Type::enumeration) implementation_gap(form.at, "member selection outside an enum");
+    const auto select = [&](const Token &name) {
+      const auto value = enum_member(type, name.text);
+      if (!value) fail(name.at, "unknown member '" + name.text + "' of enum '" + type.name + "'");
+      const auto [binding, inserted] = module_names().enum_members.emplace(name.text, *value);
+      if (!inserted && binding->second != *value)
+        fail(name.at, "conflicting enum member selection '" + name.text + "'");
+    };
+    if (form.selected_members->empty()) {
+      for (const auto &member : program_.enums.at(type.identity).source->enum_members) select(member.name);
+    } else {
+      for (const auto &name : *form.selected_members) select(name);
+    }
+  }
+
   void select_module_resource(const Form &form, size_t dependency) {
     using Resource = ModuleNames::Resource;
     const bool importing = form.kind == Form::Kind::import_resource;
@@ -17941,6 +18039,10 @@ class ScalarChecker {
     auto resource = found->second;
     if (form.symbolic != (resource.kind == Resource::Kind::symbol))
       fail(form.at, "selected resource does not match the requested symbol or lexical category");
+    if (form.selected_members) {
+      if (resource.kind != Resource::Kind::type) fail(form.at, "member selection requires a type");
+      select_enum_members(form, resource.type);
+    }
     if (reexporting) {
       publish(form.alias, resource, form.at);
       return;
@@ -18084,12 +18186,66 @@ class ScalarChecker {
     plan_entry_installations();
   }
 
+  Type register_enum(const Form &form) {
+    const auto backing = *form.result_type;
+    if (!integral(backing)) fail(form.at, "enum backing type must be a fixed-width integer");
+    auto type = Type{Type::enumeration, form.name, program_.enums.size()};
+    auto &domain = program_.enums.emplace_back(CheckedEnum{&form, backing, {}, {}});
+    const bool signed_backing = backing == Type::integer;
+    const auto maximum = backing == Type::uint8 ? std::uint64_t{UINT8_MAX}
+        : backing == Type::uint32 ? std::uint64_t{UINT32_MAX}
+        : signed_backing ? std::uint64_t{INT64_MAX} : std::uint64_t{UINT64_MAX};
+    std::optional<std::uint64_t> previous;
+    std::set<std::uint64_t> codes;
+    for (const auto &source : form.enum_members) {
+      const auto &name = source.name;
+      const auto ordinal = domain.members.size();
+      if (domain.spellings.contains(name.text)) fail(name.at, "duplicate enum member '" + name.text + "'");
+      CheckedEnum::Member member{0, ordinal};
+      if (source.initializer && source.initializer->kind == TokenKind::identifier) {
+        const auto original = domain.spellings.find(source.initializer->text);
+        if (original == domain.spellings.end()) fail(source.initializer->at, "enum member identity requires an earlier member");
+        member = domain.members[original->second];
+      } else {
+        if (source.initializer) {
+          const auto &token = *source.initializer;
+          auto digits = std::string_view(token.text);
+          auto literal_maximum = std::uint64_t{UINT64_MAX};
+          const bool has_suffix = digits.find('u') != std::string_view::npos;
+          if (digits.ends_with("u8")) { digits.remove_suffix(2); literal_maximum = UINT8_MAX; }
+          else if (digits.ends_with("u32")) { digits.remove_suffix(3); literal_maximum = UINT32_MAX; }
+          else if (digits.ends_with("u64")) digits.remove_suffix(3);
+          const auto [end, error] = std::from_chars(digits.data(), digits.data() + digits.size(), member.code);
+          if (error != std::errc{} || end != digits.data() + digits.size() ||
+              member.code > literal_maximum ||
+              (source.negative ? !signed_backing || has_suffix || member.code > maximum + 1 : member.code > maximum))
+            fail(token.at, "enum member code is outside the range of '" + type_name(backing) + "'");
+          if (source.negative) member.code = std::uint64_t{0} - member.code;
+        } else if (previous) {
+          if (*previous == maximum) fail(name.at, "automatic enum member code overflows '" + type_name(backing) + "'");
+          member.code = *previous + 1;
+        }
+        if (!codes.insert(member.code).second) fail(name.at, "duplicate enum member code");
+        previous = member.code;
+      }
+      domain.members.push_back(member);
+      domain.spellings.emplace(name.text, ordinal);
+    }
+    return type;
+  }
+
   void register_nominal_types(const SourceModule &source) {
     const auto first = program_.schemas.size();
     const auto first_array = program_.arrays.size();
     for (const auto &form : source.forms) {
       const bool product = form->kind == Form::Kind::data;
       const bool array = form->kind == Form::Kind::array;
+      if (form->kind == Form::Kind::enumeration) {
+        const auto type = register_enum(*form);
+        if (!module_names().types.emplace(form->name, type).second)
+          fail(form->at, "duplicate type binding '" + form->name + "'");
+        continue;
+      }
       if (!product && !array && form->kind != Form::Kind::region_definition) continue;
       const bool marker = form->c_data && form->parameters.empty();
       const auto kind = array ? Type::array : marker ? Type::c_type_marker : product ? Type::product : Type::region_schema;
@@ -18135,6 +18291,7 @@ class ScalarChecker {
         auto type = resolve_type(field.type);
         if (schema.source->c_data && storage != PlaceKind::value)
           fail(field.at, "data \"C\" requires by-value bits fields");
+        schema.has_enum_storage |= type.kind == Type::enumeration;
         reject_c_type_payload(type, field.at);
         if (type.kind == Type::region_schema) fail(field.at, "a region schema does not name a field payload type");
         if (!scalar_type(type) && type.kind != Type::product)
@@ -18167,6 +18324,13 @@ class ScalarChecker {
     while (!ready.empty()) {
       const auto resolved = ready.front();
       ready.pop_front();
+      auto &schema = schemas[resolved];
+      for (const auto &field : schema.fields) {
+        if (field.storage == PlaceKind::value && field.type.kind == Type::product)
+          schema.has_enum_storage |= program_.schemas[field.type.identity].has_enum_storage;
+      }
+      if (schema.source->c_data && schema.has_enum_storage)
+        implementation_gap(schema.source->at, "enumeration fields in a foreign record require a checked storage boundary");
       for (const auto dependent : dependents[resolved])
         if (!--pending[dependent]) ready.push_back(dependent);
     }
@@ -18225,7 +18389,8 @@ class ScalarChecker {
                                                          : " parameters receive bits or a borrowed handle"));
         reject_c_type_payload(type, parameter.at);
         if (type.kind == Type::exception) fail(parameter.at, "an exception object is not a " + boundary + " bits argument");
-        if (!scalar_type(type)) implementation_gap(parameter.at, boundary + " bits arguments other than direct scalars");
+        if (!scalar_type(type) || type.kind == Type::enumeration)
+          implementation_gap(parameter.at, boundary + " bits arguments outside the generated scalar profile");
       }
       inputs.push_back({type, role});
     }
@@ -18252,6 +18417,8 @@ class ScalarChecker {
       const auto type = resolve_type(form.throws_types.front());
       if (!nominal_exception(type)) implementation_gap(form.at, "C constructor failures other than a concrete library-defined exception");
       const auto &schema = scalar_exception_schema(type, form.at);
+      if (schema.has_enum_storage)
+        implementation_gap(form.at, "C constructor failure payload with enumeration storage");
       for (const auto &field : schema.fields)
         if (!cod_provider_member_name(field.source->name.c_str())) implementation_gap(field.source->at, "a reserved C name in a generated failure payload");
       constructor.failure = type;
@@ -18344,6 +18511,7 @@ class ScalarChecker {
         select_module_resource(*form, dependency->second);
     for (const auto &form : forms) {
       if ((form->kind != Form::Kind::using_resource && form->kind != Form::Kind::import_resource) || form->path != COD_LANG_EXCEPTION_MODULE || form->using_symbol) continue;
+      if (form->selected_members) implementation_gap(form->at, "member selection outside an enum");
       const auto found = std::find_if(exception_categories.begin(), exception_categories.end(), [&](const ExceptionDescriptor &entry) { return form->name == entry.name; });
       if (found == exception_categories.end()) fail(form->at, "unknown intrinsic exception selection '" + form->name + "'");
       const auto type = exception_type(exception_id(found->category));
@@ -18369,7 +18537,8 @@ class ScalarChecker {
         continue;
       }
       if (form->kind == Form::Kind::expression || form->kind == Form::Kind::export_resource ||
-          form->kind == Form::Kind::data || form->kind == Form::Kind::region_definition || form->kind == Form::Kind::array)
+          form->kind == Form::Kind::data || form->kind == Form::Kind::region_definition || form->kind == Form::Kind::array ||
+          form->kind == Form::Kind::enumeration)
         continue;
       if ((form->kind == Form::Kind::using_resource || form->kind == Form::Kind::import_resource) && form->path == COD_LANG_EXCEPTION_MODULE && !form->using_symbol) continue;
       if (form->kind == Form::Kind::using_resource && form->using_symbol && form->path == COD_LANG_IO_MODULE && form->name == COD_LANG_PRINT_NAME) {
@@ -18597,7 +18766,8 @@ class ScalarChecker {
       }
       const auto id = program_.methods.size();
       if (form->c_linkage) {
-        if (!scalar_type(*prepared.result.type) && *prepared.result.type != Type::void_type)
+        if ((!scalar_type(*prepared.result.type) && *prepared.result.type != Type::void_type) ||
+            prepared.result.type->kind == Type::enumeration)
           implementation_gap(form->at, "C entry results other than direct scalars or void");
         program_.native_entries.push_back({id, std::move(native_inputs), *prepared.result.type});
       }
@@ -18636,6 +18806,9 @@ class ScalarChecker {
     for (const auto &[name, operation] : module_names().native_operations)
       if (module_names().types.contains(name) || module_names().callables.contains(name) || module_names().symbols.contains(name))
         fail(program_.native_operations[operation].contract.source->at, "native provider conflicts with the binding '" + name + "'");
+    for (const auto &[name, member] : module_names().enum_members)
+      if (module_names().binds_other_than_enum_member(name))
+        fail({source.path.string()}, "selected enum member conflicts with the binding '" + name + "'");
     for (const auto &[family, aliases] : module_names().extensions) if (aliases.size() > 1) {
       std::string message = "one callable identity is extended through multiple aliases:";
       for (const auto &[name, at] : aliases) message += " '" + name + "' at " + location_text(at);

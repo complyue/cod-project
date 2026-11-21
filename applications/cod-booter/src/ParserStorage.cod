@@ -114,6 +114,9 @@ export func narrow_integer_node() -> u8 { return 93u8; }
 export func index_access_node() -> u8 { return 94u8; }
 export func array_length_node() -> u8 { return 95u8; }
 export func export_from_node() -> u8 { return 96u8; }
+export func enum_declaration_node() -> u8 { return 97u8; }
+export func enum_member_node() -> u8 { return 98u8; }
+export func enum_integer_node() -> u8 { return 99u8; }
 
 export func module_selection(kind:u8) -> bool {
     return kind == using_node() || kind == export_from_node();

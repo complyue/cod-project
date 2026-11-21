@@ -128,6 +128,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: unsupported intrinsic syntax, expected 'intrinsic (len)(array)'\n", stderr);
     else if (diagnostic->stage == 1 && diagnostic->code == 44)
         fputs(": error: expected ',' or '}' after module selection\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 45)
+        fputs(": error: expected an enum member or its integer code\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 77)
         fputs(": error: catch annotation must name an exception type\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 7)
@@ -174,6 +176,16 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: owner requires a writable-target input under that owner\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 75)
         fputs(": error: conflicting public alias\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 78)
+        fputs(": error: enum backing type must be a fixed-width integer\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 79)
+        fputs(": error: enum member code is outside the backing type's range\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 80)
+        fputs(": error: enum member identity requires an earlier member\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 81)
+        fputs(": error: duplicate enum member code\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 82)
+        fputs(": error: duplicate enum member name\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 20)
         fputs(": error: narrow integer execution is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 21)
