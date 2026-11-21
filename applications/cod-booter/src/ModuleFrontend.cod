@@ -48,6 +48,7 @@ using "NameResolution.cod" first_item;
 using "NameResolution.cod" resolve_module_names;
 using "NativeDeclarations.cod" NativeDeclarationResult;
 using "NativeDeclarations.cod" check_native_declarations;
+using "NativeDeclarations.cod" declared_exception_type;
 using "OperandChecking.cod" OperandFacts;
 using "OperandChecking.cod" CallOwners;
 using "OperandChecking.cod" OperandCheckResult;
@@ -70,6 +71,7 @@ func module_operands_failed() -> u8 { return 4u8; }
 func module_completion_failed() -> u8 { return 5u8; }
 func unsupported_array_length() -> u8 { return 74u8; }
 func unsupported_ordinary_here() -> u8 { return 76u8; }
+func invalid_catch_annotation() -> u8 { return 77u8; }
 
 func rejected_unsupported_declaration(result:const ModuleBindingResult in R) -> bool where {const owner R} {
     return result.stage == module_binding_failed() &&
@@ -138,7 +140,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, at:u64, emit_object:boo
     if (kind == throw_named_node()) { return 43u8; } else {};
     if (kind == rethrow_from_node()) { return 44u8; } else {};
     if (kind == named_argument_node()) { return 45u8; } else {};
-    if (kind == catch_binding_node() && nodes[at].number == 0u64 && nodes[at].right != no_node()) {
+    if (emit_object && kind == catch_binding_node() && nodes[at].number == 0u64 && nodes[at].right != no_node()) {
         return 36u8;
     } else {};
     return 0u8;
@@ -187,6 +189,13 @@ func bind_parsed_module(source:const SourceBytes in S, nodes:const ExprNodes in 
         if (names.enclosing_defer != no_node()) { result.related_first <- nodes[names.enclosing_defer].first; {}; } else {};
         return false;
     } else {};
+    for (at in 0u64 .. result.frontend.tree.used) {
+        if (nodes[at].kind == catch_binding_node() && nodes[at].right != no_node() &&
+            !declared_exception_type(nodes, bindings, selected, nodes[at].right)) {
+            binding_diagnostic(nodes, result, module_binding_failed(), invalid_catch_annotation(), nodes[at].right);
+            return false;
+        } else {};
+    };
     if (first_extended_declaration(nodes, work, result.frontend.tree) != no_node() ||
         uses_native_boundary(nodes, result.frontend.tree.used)) {
         ref declarations = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };

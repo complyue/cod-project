@@ -185,6 +185,8 @@ The booter accepts a single unbraced `return` after an ordinary `if (condition)`
 
 The booter's declaration checker reads ordinary callable headers with leading `here` formals. Each callback signature has its own input names, and the receiver sees the bound callback name for invocation or forwarding. Ordinary `here` execution still requires operand checking and lowering in the booter. [Here parameter contract](../../../design/CallableStorageAndHereAccess.md#an-effect-in-a-here-callback)
 
+The booter's declaration checker resolves both writable and readonly catch annotations against local and imported exception types. An omitted annotation uses the exception root. Object emission still rejects writable typed catches in the current booter profile. [Catch binding contract](../../../design/ExceptionControl.md#exception-declarations-and-catch-bindings)
+
 In the booter, `typeof` on a bound scalar name or literal supplies the type without a payload read. Product construction, placement outside the current lexical owner, reference reassignment in initializer blocks and queries with compound expressions remain outside the executable subset. [Completed scalar construction workload](../../../applications/cod-booter/workloads/scalar-construction.cod)
 
 The seed's indexed source provider exposes a C-compatible view of a regular file's read-only mapping and its line table. The owner keeps both buffers live through parsing. Tokens use half-open byte spans tied to that revision. The parser preserves its separate token cursor, and diagnostics derive byte columns from the line table, including at end of input.

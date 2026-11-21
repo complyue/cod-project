@@ -158,6 +158,12 @@ func nominal_exception(nodes:const ExprNodes in N, names:const NameBindings in B
     return imported_kind(names, selected, at) == nominal_exception_export();
 }
 
+func declared_exception_type(nodes:const ExprNodes in N, names:const NameBindings in B,
+                             selected:const SelectedExports in E, at:u64) -> bool
+    where {const owner N, const owner B, const owner E} {
+    return exception_selection(names, selected, at) || nominal_exception(nodes, names, selected, at);
+}
+
 func is_owning_handle(nodes:const ExprNodes in N, names:const NameBindings in B,
                       selected:const SelectedExports in E, at:u64) -> bool
     where {const owner N, const owner B, const owner E} {
@@ -1122,5 +1128,6 @@ func previous_public_name(source:const SourceBytes in S, publication:const Modul
 
 export NativeDeclarationResult;
 export check_native_declarations;
+export declared_exception_type;
 export ModulePublication;
 export publish_module_exports;
