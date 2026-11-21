@@ -15,7 +15,7 @@ using "NameResolution.cod" { NameBindings, NameWork, first_item, callable_head, 
 using "OperandChecking.cod" {
     OperandFacts, scalar_kind, has_value_tail, independent_value, local_place, nullable_ptr,
     unreachable_case_item, misses_case_arm, tests_case_arm, case_guard_passes, case_guard_declines, case_guard_tests,
-    case_resumes_after_cleanup, present_target, absent_target, unknown_target,
+    case_resumes_after_cleanup, present_target, absent_target, unknown_target, selected_target_presence,
 };
 using "CompletionChecking.cod" { CompletionSites, can_continue, can_miss_return, skipped_operand };
 using "ModuleExports.cod" {
@@ -619,7 +619,7 @@ func lower_case(nodes:const ExprNodes in N, names:const NameBindings in B, links
     state.case_join <- joined;
     state.case_arm <- no_node();
     state.case_next <- no_node();
-    state.case_present_flag <- if (facts[subject].target_presence == unknown_target()) {
+    state.case_present_flag <- if (selected_target_presence(facts, subject) == unknown_target()) {
         lower_case_presence(code, plan, state, subject)
     } else { no_node() };
     state.case_read <- read_result;
