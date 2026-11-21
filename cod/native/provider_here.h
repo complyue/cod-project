@@ -31,6 +31,15 @@ static inline void cod_provider_element(cod_provider_text *output, const char *n
     else cod_provider_print(output, "cod_native_%s_row%zu", name, index);
 }
 
+static inline void cod_provider_invalid_view(cod_provider_text *output, const char *site, const char *access,
+                                             const char *name, size_t index, cod_provider_view view) {
+    cod_provider_print(output, "%s%scount > (uint64_t)PTRDIFF_MAX / sizeof(*%s%sbase)"
+        " || (%s%scount && (!%s%sbase || (uintptr_t)%s%sbase %% _Alignof(",
+        site, access, site, access, site, access, site, access, site, access);
+    cod_provider_element(output, name, index, view);
+    cod_provider_print(output, ")))");
+}
+
 static inline void cod_provider_write_view(cod_provider_text *header, cod_provider_text *stubs, const char *name,
                                            size_t index, cod_provider_view view, const cod_provider_row *row) {
     if (!view.scalar) {
@@ -86,11 +95,11 @@ static inline void cod_provider_write_here(cod_provider_text *header, cod_provid
         "    if (!views || !feedback) return state->completion = COD_NATIVE_HERE_INVALID;\n",
         name, handle, name, name, name, name, name);
     for (size_t i = 0; i < count; ++i) {
-        cod_provider_print(stubs, "    if (views->array%zu.count > (uint64_t)PTRDIFF_MAX / sizeof(*views->array%zu.base)"
-            " || (views->array%zu.count && (!views->array%zu.base || (uintptr_t)views->array%zu.base %% _Alignof(",
-            i, i, i, i, i);
-        cod_provider_element(stubs, name, i, views[i]);
-        cod_provider_print(stubs, ")))) return state->completion = COD_NATIVE_HERE_INVALID;\n");
+        char site[sizeof("views->array") + 3 * sizeof(size_t)];
+        snprintf(site, sizeof(site), "views->array%zu", i);
+        cod_provider_print(stubs, "    if (");
+        cod_provider_invalid_view(stubs, site, ".", name, i, views[i]);
+        cod_provider_print(stubs, ") return state->completion = COD_NATIVE_HERE_INVALID;\n");
     }
     cod_provider_print(stubs, "    if (!cod_native_%s_validate_impl(state->handle, views)) "
         "return state->completion = COD_NATIVE_HERE_INVALID;\n"

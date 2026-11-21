@@ -385,7 +385,7 @@ static uint8_t run_module_graph(const char *input, const char *directory, cod_bo
         if (emitted) {
             diagnostic->stage = provider_output_stage;
             diagnostic->code = emitted;
-            status = emitted == provider_output_unsupported ? 2 : 1;
+            status = 1;
         }
     }
     for (size_t i = 0; i < graph.module_count; ++i) free(graph.modules[i].path);

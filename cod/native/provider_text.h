@@ -35,9 +35,11 @@ typedef struct {
     bool failed;
 } cod_provider_text;
 
+typedef enum { cod_provider_argument_scalar, cod_provider_argument_handle, cod_provider_argument_view } cod_provider_argument_kind;
+
 typedef struct {
     const char *type;
-    bool borrowed;
+    cod_provider_argument_kind kind;
     bool boolean;
     uint64_t owner_role;
 } cod_provider_argument;
@@ -113,7 +115,7 @@ static inline void cod_provider_constructor_signature(cod_provider_text *out, co
     }
     for (size_t i = 0; i < shape->input_count; ++i) {
         const cod_provider_argument *input = &shape->inputs[i];
-        if (input->borrowed) {
+        if (input->kind == cod_provider_argument_handle) {
             cod_provider_print(out, "%scod_native_%s_borrow %sarg%zu, ", implementation ? "" : "const ",
                                input->type, implementation ? "" : "*", i);
         } else {
@@ -151,16 +153,16 @@ static inline void cod_provider_write_constructor(cod_provider_text *header, cod
     if (shape->failure) cod_provider_print(stubs, " || !error");
     for (size_t i = 0; i < shape->input_count; ++i) {
         const cod_provider_argument *input = &shape->inputs[i];
-        if (input->borrowed) cod_provider_print(stubs, " || !arg%zu", i);
+        if (input->kind == cod_provider_argument_handle) cod_provider_print(stubs, " || !arg%zu", i);
         else if (input->boolean) cod_provider_print(stubs, " || arg%zu > 1", i);
     }
     cod_provider_print(stubs, ") return COD_NATIVE_BOUNDARY_ERROR;\n");
     for (size_t i = 0; i < shape->input_count; ++i) {
         const cod_provider_argument *input = &shape->inputs[i];
-        if (!input->borrowed) continue;
+        if (input->kind != cod_provider_argument_handle) continue;
         for (size_t j = 0; j < i; ++j) {
             const cod_provider_argument *earlier = &shape->inputs[j];
-            if (earlier->borrowed && earlier->owner_role == input->owner_role) {
+            if (earlier->kind == cod_provider_argument_handle && earlier->owner_role == input->owner_role) {
                 cod_provider_print(stubs, "    if (arg%zu->owner != arg%zu->owner) return COD_NATIVE_BOUNDARY_ERROR;\n", j, i);
                 break;
             }
@@ -172,7 +174,7 @@ static inline void cod_provider_write_constructor(cod_provider_text *header, cod
     cod_provider_print(stubs, "    const cod_native_status status = cod_native_%s_construct_impl(", name);
     if (shape->parent) cod_provider_print(stubs, "*owner, ");
     for (size_t i = 0; i < shape->input_count; ++i)
-        cod_provider_print(stubs, "%sarg%zu, ", shape->inputs[i].borrowed ? "*" : "", i);
+        cod_provider_print(stubs, "%sarg%zu, ", shape->inputs[i].kind == cod_provider_argument_handle ? "*" : "", i);
     cod_provider_print(stubs, "&acquired%s);\n"
         "    if (status == COD_NATIVE_OK) {\n        *resource = acquired;\n        return status;\n    }\n",
         shape->failure ? ", &reported" : "");
