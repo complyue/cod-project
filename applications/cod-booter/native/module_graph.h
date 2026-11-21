@@ -13,5 +13,6 @@ enum {
 };
 
 uint8_t cod_booter_check_declarations(const char *input, cod_booter_diagnostic *diagnostic);
+uint8_t cod_booter_emit_c_providers(const char *input, const char *directory, cod_booter_diagnostic *diagnostic);
 
 #endif

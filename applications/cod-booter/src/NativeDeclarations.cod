@@ -671,7 +671,10 @@ func check_imported_constructor(nodes:const ExprNodes in N, names:const NameBind
     val marker <- nodes[at].left;
     val head <- find_interface(contracts, type_module(names, selected, marker, 0u64),
                                 type_identity(names, selected, marker));
-    if (head == no_node()) { reject_declaration(report, at, missing_handle_constructor()); return; } else {};
+    if (head == no_node() || contracts[head].interface_kind != c_constructor()) {
+        reject_declaration(report, at, missing_handle_constructor());
+        return;
+    } else {};
     val first <- first_item(nodes, nodes[at].right);
     val actual <- first;
     val operand <- no_node();
@@ -707,6 +710,7 @@ func check_constructor_arguments(nodes:const ExprNodes in N, names:const NameBin
         defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64;
         interface_kind <- 0u8; result_kind <- 0u8; value_kind <- 0u8;
         type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node(); target_readonly <- 0u8; owner_readonly <- 0u8;
+        has_here <- 0u8; failure_module <- 0u64; failure_identity <- 0u64;
         name_first <- 0u64; name_past <- 0u64;
     };
     val operand <- no_node();
@@ -913,6 +917,7 @@ func check_local_here(nodes:const ExprNodes in N, names:const NameBindings in B,
         defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64;
         interface_kind <- 0u8; result_kind <- 0u8; value_kind <- 0u8;
         type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node(); target_readonly <- 0u8; owner_readonly <- 0u8;
+        has_here <- 0u8; failure_module <- 0u64; failure_identity <- 0u64;
         name_first <- 0u64; name_past <- 0u64;
     };
     describe_parameter(nodes, names, selected, work[callback].next, 0u64, true, parameter);
@@ -941,7 +946,7 @@ func check_selected_here(nodes:const ExprNodes in N, names:const NameBindings in
     where {const owner N, const owner B, const owner E, const owner C, owner W, owner R} {
     val supplied <- nodes[at].right;
     if (head == no_node()) { reject_declaration(report, supplied, unproved_imported_here_signature()); return; } else {};
-    if (contracts[head].interface_kind != c_operation()) {
+    if (contracts[head].has_here == 0u8) {
         reject_declaration(report, supplied, here_operation_required());
         return;
     } else {};
@@ -1074,7 +1079,7 @@ export func check_module_interfaces(nodes:const ExprNodes in N, names:const Name
                 head <- selected_call_interface(nodes, names, selected, contracts, at);
                 if (head != no_node()) {
                     work[at].value_kind <- contracts[head].result_kind;
-                    (work[at].expects_here <- if (contracts[head].interface_kind == c_operation()) { 1u8 } else { 0u8 }):void;
+                    (work[at].expects_here <- contracts[head].has_here):void;
                 } else {};
             } else {
                 if (kind == here_call_node()) {
@@ -1145,13 +1150,14 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (count >= limit) return no_node();
     val next <- count + 1u64;
     val formal <- no_node();
+    val callback <- no_node();
     if (kind == c_constructor()) {
         val head <- signature_head(nodes, nodes[form].left);
         (formal <- first_item(nodes, nodes[head].right)):void;
     } else {};
-    if (kind == c_operation()) {
+    if (kind == c_operation()) { (callback <- native_here_parameter(nodes, form)):void; } else {};
+    if (callback != no_node()) {
         if (next >= limit) return no_node();
-        val callback <- native_here_parameter(nodes, form);
         describe_parameter(nodes, names, selected, work[callback].next, defining_module, true, contracts[next]);
         next <- next + 1u64;
         val callback_head <- signature_head(nodes, nodes[callback].right);
@@ -1160,6 +1166,7 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
     for (unused in 0u64 .. intrinsic (len)(nodes)) {
         if (formal == no_node()) {
             write_interface_header(contracts[count], defining_module, declaration, kind, result_kind, next - count - 1u64);
+            contracts[count].has_here <- if (callback == no_node()) { 0u8 } else { 1u8 };
             return next;
         } else {};
         if (next >= limit) return no_node();
@@ -1170,41 +1177,61 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
     return no_node();
 }
 
+func stage_handle_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
+                            selected:const SelectedExports in E, work:const NameWork in W,
+                            contracts:ModuleInterfaces in C, count:u64, defining_module:u64, marker:u64) -> u64
+    where {const owner N, const owner B, const owner E, const owner W, owner C} {
+    val constructor <- work[marker].active;
+    val next <- stage_interface(nodes, names, selected, work, contracts, count, defining_module,
+        marker, constructor, if (constructor == no_node()) { c_handle_type() } else { c_constructor() }, 0u8);
+    if (next == no_node()) return next;
+    val name <- nodes[marker].left;
+    contracts[count].name_first <- nodes[name].first;
+    contracts[count].name_past <- nodes[name].past;
+    val parent <- nodes[marker].right;
+    if (parent != no_node()) {
+        contracts[count].type_module <- type_module(names, selected, parent, defining_module);
+        (contracts[count].type_identity <- type_identity(names, selected, parent)):void;
+    } else {};
+    if (constructor != no_node()) {
+        val failure <- signature_clause(nodes, nodes[constructor].left, throws_clause_node());
+        if (failure != no_node()) {
+            val type_name <- nodes[failure].right;
+            contracts[count].failure_module <- type_module(names, selected, type_name, defining_module);
+            (contracts[count].failure_identity <- type_identity(names, selected, type_name)):void;
+        } else {};
+    } else {};
+    return next;
+}
+
+# The checked declarations retain their identity even when their names are
+# private. Only ModuleExports contributes names to another module's lookup.
 export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B,
                                selected:const SelectedExports in E, work:const NameWork in W,
-                               exports:const ModuleExports in X, exported:u64, defining_module:u64,
-                               contracts:ModuleInterfaces in C) -> u64
-    where {const owner N, const owner B, const owner E, const owner W, const owner X, owner C} {
+                               used:u64, defining_module:u64, contracts:ModuleInterfaces in C) -> u64
+    where {const owner N, const owner B, const owner E, const owner W, owner C} {
     val count <- 0u64;
-    val declaration <- no_node();
-    val form <- no_node();
     val kind <- 0u8;
     val result_kind <- 0u8;
-    for (at in 0u64 .. exported) {
-        if (exports[at].origin_module == defining_module) {
-            declaration <- exports[at].identity;
-            kind <- exports[at].kind;
-            if (kind == native_handle_export()) {
-                form <- work[declaration].active;
-                if (form != no_node()) {
-                    (count <- stage_interface(nodes, names, selected, work, contracts, count, defining_module,
-                                               declaration, form, c_constructor(), 0u8)):void;
-                } else {};
+    for (at in 0u64 .. used) {
+        kind <- names[at].kind;
+        if (nodes[at].kind == c_handle_type_node() && work[at].active == no_node()) {
+            (count <- stage_handle_interface(nodes, names, selected, work, contracts, count,
+                                             defining_module, at)):void;
+        } else {
+            if (nodes[at].kind == c_procedure_node() && kind == c_constructor()) {
+                (count <- stage_handle_interface(nodes, names, selected, work, contracts, count,
+                                                 defining_module, names[at].declaration)):void;
             } else {
-                if (kind == callable_export()) {
-                    kind <- callable_binding();
-                    if (names[declaration].kind == c_operation() && native_here_parameter(nodes, declaration) != no_node()) {
-                        (kind <- c_operation()):void;
-                    } else {};
-                    result_kind <- declared_call_result(nodes, names, work, declaration);
-                    if (result_kind != 0u8) {
-                        (count <- stage_interface(nodes, names, selected, work, contracts, count, defining_module,
-                                                   declaration, declaration, kind, result_kind)):void;
-                    } else {};
+                if (nodes[at].kind == c_procedure_node() ||
+                    (nodes[at].kind == callable_node() && names[at].declaration == at)) {
+                    result_kind <- declared_call_result(nodes, names, work, at);
+                    (count <- stage_interface(nodes, names, selected, work, contracts, count, defining_module,
+                                               at, at, kind, result_kind)):void;
                 } else {};
             };
-            if (count == no_node()) return count;
-        } else {};
+        };
+        if (count == no_node()) return count;
     };
     return count;
 }

@@ -4,6 +4,7 @@
 #include "lang_checked_program.hh"
 #include "lang_modules.hh"
 #include "lang_callable_flow.hh"
+#include "native/provider_names.h"
 
 #include <array>
 #include <bit>
@@ -18174,26 +18175,13 @@ class ScalarChecker {
         fail(schemas[i].source->at, "inline fields of '" + schemas[i].source->name + "' have no finite layout");
   }
 
-  static bool c_failure_field(std::string_view name) {
-    constexpr std::string_view keywords[]{"alignas", "alignof", "auto", "bool", "break", "case", "char", "const",
-        "constexpr", "continue", "default", "do", "double", "else", "enum", "extern", "false", "float", "for", "goto",
-        "if", "inline", "int", "long", "nullptr", "register", "restrict", "return", "short", "signed", "sizeof",
-        "static", "static_assert", "struct", "switch", "thread_local", "true", "typedef", "typeof", "typeof_unqual",
-        "union", "unsigned", "void", "volatile", "while"};
-    // The provider header includes stddef.h and stdint.h. Reserved identifier
-    // forms and their macro namespaces cannot be used as native member names.
-    return !name.starts_with('_') && !name.starts_with("INT") && !name.starts_with("UINT") &&
-        !name.starts_with("PTRDIFF_") && !name.starts_with("SIZE_") && !name.starts_with("WCHAR_") &&
-        !name.starts_with("WINT_") && !name.starts_with("SIG_ATOMIC_") && name != "NULL" &&
-        std::ranges::find(keywords, name) == std::end(keywords);
-  }
   void check_native_array(const Type &type, bool read_only, const Location &at) const {
     const auto &array = program_.arrays.at(type.identity);
     const bool readonly_bits = read_only && numeric(array.element);
     if (array.index != Type::uint64 || (!readonly_bits &&
         (!indexed_product(array.element, at) || program_.schemas.at(array.element.identity).fields.empty() ||
          !std::ranges::all_of(program_.schemas.at(array.element.identity).fields, [](const auto &field) {
-           return c_failure_field(field.source->name);
+           return cod_provider_member_name(field.source->name.c_str());
          })))) implementation_gap(at, "C array loans outside the u64-indexed scalar and numeric record profile");
   }
   void constrain_native_owner(std::map<std::string, size_t> &roles, const Parameter &parameter, const Type &type) const {
@@ -18265,7 +18253,7 @@ class ScalarChecker {
       if (!nominal_exception(type)) implementation_gap(form.at, "C constructor failures other than a concrete library-defined exception");
       const auto &schema = scalar_exception_schema(type, form.at);
       for (const auto &field : schema.fields)
-        if (!c_failure_field(field.source->name)) implementation_gap(field.source->at, "a reserved C name in a generated failure payload");
+        if (!cod_provider_member_name(field.source->name.c_str())) implementation_gap(field.source->at, "a reserved C name in a generated failure payload");
       constructor.failure = type;
     }
     program_.native_constructors.push_back(std::move(constructor));

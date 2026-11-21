@@ -133,8 +133,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         report_scratch_error(diagnostic, 1u32);
         return native_scratch_failed();
     } else {};
-    val interfaces <- publish_interfaces(nodes, names, selected, work, staged, count,
-                                         publication.module_identity, staged_interfaces);
+    val interfaces <- publish_interfaces(nodes, names, selected, work, used, publication.module_identity, staged_interfaces);
     if (interfaces != no_node()) {
         (interfaces <- publish_record_interfaces(nodes, names, selected, work, used, publication.module_identity,
                                                  interfaces, staged_interfaces)):void;
