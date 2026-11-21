@@ -7,7 +7,7 @@ using "CompletionChecking.cod" CompletionSites;
 using "NativeCommands.cod" NativeCommands;
 using "CompilerStatus.cod" CompilerStatus;
 
-export data "C" Scratch;
+export handle type Scratch;
 export data ScratchOpenException <: Exception { status:u32; }
 
 proc "C" Scratch(val tokens:u64, val nodes:u64, val commands:u64) throws ScratchOpenException;

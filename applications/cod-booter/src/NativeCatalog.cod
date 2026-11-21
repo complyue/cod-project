@@ -2,7 +2,7 @@ using "SourceStorage.cod" SourceBytes;
 using "ModuleExportStorage.cod" ModuleExports;
 using "CompilerStatus.cod" CompilerStatus;
 
-export data "C" IntrinsicCatalog;
+export handle type IntrinsicCatalog;
 proc "C" IntrinsicCatalog();
 export proc "C" catalog_use(here work(ref spellings:const SourceBytes in B, ref exports:const ModuleExports in B) -> CompilerStatus,
                             handle catalog:IntrinsicCatalog in B) -> CompilerStatus where {const owner B};

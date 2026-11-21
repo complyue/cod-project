@@ -3,7 +3,7 @@ using "Lexer.cod" {
     symbol_name, from_word, proc_word, func_word, ref_word, ptr_word, val_word, throws_word,
     where_word, owner_word, const_word, in_word, data_word, reserved_module_name,
     reserved_lexical_binder, array_word, export_word, handle_word, here_word, c_linkage,
-    enum_word, integer_literal, import_word,
+    enum_word, integer_literal, import_word, type_word,
 };
 using "ExpressionParser.cod" {
     exception_binder_width, ParseResult, punct_at, punct_pair_at, append_node, parse_identifier,
@@ -483,6 +483,29 @@ func parse_record_fields(source:const SourceBytes in S, tokens:const Tokens in T
     return no_node();
 }
 
+func handle_type_head(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> bool
+    where {const owner S, const owner T} {
+    return at + 1u64 < past && handle_word(source, tokens[at]) && type_word(source, tokens[at + 1u64]);
+}
+
+func parse_handle_type(source:const SourceBytes in S, tokens:const Tokens in T,
+                       nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val first <- tokens[result.next].first;
+    result.next <- result.next + 2u64;
+    if (!parse_module_name(source, tokens, nodes, result, past)) return;
+    val name <- result.root;
+    if (result.next < past && in_word(source, tokens[result.next])) {
+        val in_at <- tokens[result.next].first;
+        result.next <- result.next + 1u64;
+        if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
+        val owner_type <- result.root;
+        append_node(nodes, result, c_handle_type_node(), first, nodes[owner_type].past, 0u64, name, owner_type, in_at);
+        return;
+    } else {};
+    append_node(nodes, result, c_handle_type_node(), first, nodes[name].past, 0u64, name, no_node(), first);
+}
+
 func parse_data(source:const SourceBytes in S, tokens:const Tokens in T,
                 nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
@@ -495,18 +518,6 @@ func parse_data(source:const SourceBytes in S, tokens:const Tokens in T,
     } else {};
     if (!parse_module_name(source, tokens, nodes, result, past)) return;
     val name <- result.root;
-    if (native && result.next < past && in_word(source, tokens[result.next])) {
-        val in_at <- tokens[result.next].first;
-        result.next <- result.next + 1u64;
-        if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
-        val owner_type <- result.root;
-        append_node(nodes, result, c_handle_type_node(), first, nodes[owner_type].past, 0u64, name, owner_type, in_at);
-        return;
-    } else {};
-    if (native && punct_at(source, tokens, result.next, past) == 59u8) {
-        append_node(nodes, result, c_handle_type_node(), first, nodes[name].past, 0u64, name, no_node(), first);
-        return;
-    } else {};
     val descriptor <- name;
     if (punct_pair_at(source, tokens, result.next, past, 60u8, 58u8)) { # '<:'
         val parent_at <- tokens[result.next].first;
@@ -652,6 +663,10 @@ func parse_module_form(source:const SourceBytes in S, tokens:const Tokens in T,
     } else {};
     val named_declaration <- at + 1u64 < past && tokens[at + 1u64].kind == identifier();
     val marked_declaration <- at + 1u64 < past && tokens[at + 1u64].kind == module_path();
+    if (handle_type_head(source, tokens, at, past)) {
+        parse_handle_type(source, tokens, nodes, result, past);
+        return;
+    } else {};
     if (data_word(source, tokens[at]) && (named_declaration || marked_declaration)) {
         parse_data(source, tokens, nodes, result, past);
         return;
@@ -675,7 +690,8 @@ func named_definition_head(source:const SourceBytes in S, tokens:const Tokens in
     where {const owner S, const owner T} {
     if (at + 1u64 >= past) return false;
     val next_kind <- tokens[at + 1u64].kind;
-    return ((func_word(source, tokens[at]) || proc_word(source, tokens[at])) &&
+    return handle_type_head(source, tokens, at, past) ||
+        ((func_word(source, tokens[at]) || proc_word(source, tokens[at])) &&
             !callable_local_head(source, tokens, at, past)) ||
         (data_word(source, tokens[at]) && (next_kind == identifier() || next_kind == module_path())) ||
         ((array_word(source, tokens[at]) || enum_word(source, tokens[at])) && next_kind == identifier());

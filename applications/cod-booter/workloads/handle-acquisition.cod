@@ -1,6 +1,6 @@
-data "C" Session;
-data "C" Report in Session;
-data "C" Receipt;
+handle type Session;
+handle type Report in Session;
+handle type Receipt;
 
 proc "C" Session(val serial:u64);
 proc "C" Report(val tag:u64);

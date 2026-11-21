@@ -5622,7 +5622,7 @@ class ScalarChecker {
   }
   size_t select_native_constructor(const Type &declared, const Type &constructed, const Expression &expr) const {
     if (declared.kind != Type::c_type_marker || constructed.kind != Type::c_type_marker)
-      fail(expr.at, "'make own handle' requires a fieldless data \"C\" type");
+      fail(expr.at, "native handle construction requires a 'handle type' declaration");
     if (declared != constructed) fail(expr.at, "C handle constructor must match the declared owner type");
     const bool attached = expr.kind == Expression::Kind::make_borrowed_handle;
     const bool borrow_only = program_.schemas.at(constructed.identity).native_owner.has_value();
@@ -5967,7 +5967,7 @@ class ScalarChecker {
   }
   static void reject_c_type_payload(const Type &type, const Location &at) {
     if (type.kind == Type::c_type_marker)
-      fail(at, "fieldless data \"C\" '" + type.name + "' names a handle type and has no value representation");
+      fail(at, "handle type '" + type.name + "' has no by-value representation");
   }
   static void signature_type(const CheckedMethod &method, const Type &type, const Location &at, bool result = false,
                              bool borrowed_target = false) {
@@ -11155,7 +11155,7 @@ class ScalarChecker {
     case K::native_handle_binding: {
       const auto declared = evidence_annotation(*expr.annotation, state);
       if (declared.kind != Type::c_type_marker) {
-        if (state.required) fail(expr.at, "handle declaration requires a fieldless data \"C\" type");
+        if (state.required) fail(expr.at, "handle declaration requires a 'handle type' name");
         return {};
       }
       const bool owned = expr.binding == "<-";
@@ -16099,7 +16099,7 @@ class ScalarChecker {
       std::map<const Expression *, CheckedOperation> &operations) {
     const auto marker = resolve_annotation(*expr.annotation, instance);
     if (marker.kind != Type::c_type_marker)
-      fail(expr.at, "handle declaration requires a fieldless data \"C\" type");
+      fail(expr.at, "handle declaration requires a 'handle type' name");
     const auto &initializer = *expr.children.front();
     const auto value = check_handle_loan(initializer, instance, operations);
     CheckedOperation result;
@@ -19098,8 +19098,8 @@ class ScalarChecker {
           fail(form->at, "duplicate type binding '" + form->name + "'");
         continue;
       }
-      if (!product && !array && form->kind != Form::Kind::region_definition) continue;
-      const bool marker = form->c_data && form->parameters.empty();
+      const bool marker = form->kind == Form::Kind::native_handle_type;
+      if (!product && !array && !marker && form->kind != Form::Kind::region_definition) continue;
       const auto kind = array ? Type::array : marker ? Type::c_type_marker : product ? Type::product : Type::region_schema;
       if (form->parent_type && (!product || form->c_data))
         implementation_gap(form->at, "a parent type on this data layout");
@@ -19225,7 +19225,7 @@ class ScalarChecker {
         if (owner == form.owner_parameters.end() || owner->root || owner->explicit_parameter)
           fail(parameter.at, "C borrow requires a declared owner");
         if (handle && type.kind != Type::c_type_marker)
-          fail(parameter.at, "handle parameter requires a fieldless data \"C\" type");
+          fail(parameter.at, "handle parameter requires a 'handle type' name");
         if (handle) constrain_native_owner(native_owners, parameter, type);
         if (array) {
           if (!owner->read_only || !parameter.read_only)
@@ -19394,7 +19394,8 @@ class ScalarChecker {
         continue;
       }
       if (form->kind == Form::Kind::expression || form->kind == Form::Kind::export_resource ||
-          form->kind == Form::Kind::data || form->kind == Form::Kind::region_definition || form->kind == Form::Kind::array ||
+          form->kind == Form::Kind::data || form->kind == Form::Kind::native_handle_type ||
+          form->kind == Form::Kind::region_definition || form->kind == Form::Kind::array ||
           form->kind == Form::Kind::enumeration)
         continue;
       if ((form->kind == Form::Kind::using_resource || form->kind == Form::Kind::import_resource) && form->path == COD_LANG_EXCEPTION_MODULE && !form->using_symbol) continue;
@@ -19515,7 +19516,7 @@ class ScalarChecker {
           if (form->kind != Form::Kind::procedure || form->symbolic || !operation.empty() || lexical_methods_.contains(form))
             implementation_gap(form->at, "borrowed handle results outside named CoD procedures");
           if (prepared.result.type->kind != Type::c_type_marker)
-            fail(form->at, "handle result requires a fieldless data \"C\" type");
+            fail(form->at, "handle result requires a 'handle type' name");
           prepared.result.type = native_handle_type(*prepared.result.type, false);
         } else reject_c_type_payload(*prepared.result.type, form->at);
       }
@@ -19551,7 +19552,7 @@ class ScalarChecker {
             implementation_gap(parameter.at, "native handle parameters outside named CoD procedures");
           const auto marker = resolve_signature(parameter.type);
           if (marker.kind != Type::c_type_marker)
-            fail(parameter.at, "handle parameter requires a fieldless data \"C\" type");
+            fail(parameter.at, "handle parameter requires a 'handle type' name");
           const auto owner = std::ranges::find(prepared.input_owners(), parameter.owner, &OwnerParameter::name);
           if (owner == prepared.input_owners().end() || owner->root || owner->explicit_parameter)
             fail(parameter.at, "native handle parameter requires a declared owner");

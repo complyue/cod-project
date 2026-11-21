@@ -1,8 +1,8 @@
 using "std:exceptions" Exception;
 
-data "C" LauncherPaths;
-export data "C" Path in LauncherPaths;
-export data "C" SourceRevision;
+handle type LauncherPaths;
+export handle type Path in LauncherPaths;
+export handle type SourceRevision;
 export data SourceOpenException <: Exception { os_error:u64; }
 
 proc "C" SourceRevision(handle path:Path in A) throws SourceOpenException

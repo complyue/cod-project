@@ -2,7 +2,7 @@ using "std:exceptions" Exception;
 using "NativeCommands.cod" NativeCommands;
 using "NativeSource.cod" Path;
 
-export data "C" LLVMSession;
+export handle type LLVMSession;
 export data LLVMOpenException <: Exception { status:u8; }
 
 proc "C" LLVMSession() throws LLVMOpenException;
