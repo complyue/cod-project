@@ -186,6 +186,87 @@ func data_word(source:const SourceBytes in S, token:const Token in T) -> bool
         source[first + 2u64] == 116u8 && source[first + 3u64] == 97u8; # d a t a
 }
 
+func type_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val first <- token.first;
+    return identifier_width(token, 4u64) &&
+        source[first] == 116u8 && source[first + 1u64] == 121u8 && source[first + 2u64] == 112u8 &&
+        source[first + 3u64] == 101u8; # type
+}
+
+func unit_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val first <- token.first;
+    return identifier_width(token, 4u64) &&
+        source[first] == 117u8 && source[first + 1u64] == 110u8 && source[first + 2u64] == 105u8 &&
+        source[first + 3u64] == 116u8; # unit
+}
+
+func import_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val first <- token.first;
+    return identifier_width(token, 6u64) &&
+        source[first] == 105u8 && source[first + 1u64] == 109u8 && source[first + 2u64] == 112u8 &&
+        source[first + 3u64] == 111u8 && source[first + 4u64] == 114u8 && source[first + 5u64] == 116u8; # import
+}
+
+func mixin_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val first <- token.first;
+    return identifier_width(token, 5u64) &&
+        source[first] == 109u8 && source[first + 1u64] == 105u8 && source[first + 2u64] == 120u8 &&
+        source[first + 3u64] == 105u8 && source[first + 4u64] == 110u8; # mixin
+}
+
+func conversion_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val first <- token.first;
+    return identifier_width(token, 10u64) &&
+        source[first] == 99u8 && source[first + 1u64] == 111u8 && source[first + 2u64] == 110u8 &&
+        source[first + 3u64] == 118u8 && source[first + 4u64] == 101u8 && source[first + 5u64] == 114u8 &&
+        source[first + 6u64] == 115u8 && source[first + 7u64] == 105u8 && source[first + 8u64] == 111u8 &&
+        source[first + 9u64] == 110u8; # conversion
+}
+
+func rethrow_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val first <- token.first;
+    return identifier_width(token, 7u64) &&
+        source[first] == 114u8 && source[first + 1u64] == 101u8 && source[first + 2u64] == 116u8 &&
+        source[first + 3u64] == 104u8 && source[first + 4u64] == 114u8 && source[first + 5u64] == 111u8 &&
+        source[first + 6u64] == 119u8; # rethrow
+}
+
+func module_only_name(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    return using_word(source, token) || import_word(source, token) || mixin_word(source, token) ||
+        export_word(source, token) || conversion_word(source, token);
+}
+
+func touch_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val first <- token.first;
+    return identifier_width(token, 5u64) &&
+        source[first] == 116u8 && source[first + 1u64] == 111u8 && source[first + 2u64] == 117u8 &&
+        source[first + 3u64] == 99u8 && source[first + 4u64] == 104u8; # touch
+}
+
+func reserved_value_name(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    return module_only_name(source, token) || touch_word(source, token) ||
+        true_word(source, token) || false_word(source, token) || null_word(source, token) || not_word(source, token) ||
+        func_word(source, token) || proc_word(source, token) || ref_word(source, token) || ptr_word(source, token) ||
+        val_word(source, token) || const_word(source, token) || make_word(source, token) || return_word(source, token) ||
+        throw_word(source, token) || try_word(source, token) || catch_word(source, token) || finally_word(source, token) ||
+        defer_word(source, token) || if_word(source, token) || else_word(source, token) || behave_word(source, token);
+}
+
+func reserved_module_name(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    return reserved_value_name(source, token) || data_word(source, token) || type_word(source, token) ||
+        unit_word(source, token) || array_word(source, token);
+}
+
 func export_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
@@ -604,3 +685,6 @@ export make_word;
 export from_word;
 export region_word;
 export capacity_word;
+export reserved_value_name;
+export reserved_module_name;
+export rethrow_word;

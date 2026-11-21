@@ -1261,36 +1261,6 @@ class LLVMEmission {
         return outcome(eager_builtin(expr, arguments, choice), integer(0), integer(0), null_pointer());
       if (choice.operation->builtin == BuiltinOperation::bits_swap || choice.operation->builtin == BuiltinOperation::reference_swap)
         return swap_builtin(arguments, choice.operation->builtin, choice.inputs.front());
-      if (choice.operation->builtin == BuiltinOperation::cause_at) {
-        auto *payload = unpack(arguments[0], choice.inputs[0]);
-        auto *buffer = slot(exception_, "exception.cause");
-        auto *index = unpack(arguments[1], Type::uint64);
-        auto *found = b_.CreateCall(runtime("cod_lang_exception_cause", b_.getInt64Ty(),
-            {b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy(), b_.getInt64Ty()}),
-            {b_.CreateExtractValue(payload, 4), index, buffer, integer(bounds_checks_)});
-        const auto selected = [&] {
-          auto *loaded = load(buffer);
-          llvm::Value *result = llvm::UndefValue::get(exception_);
-          result = b_.CreateInsertValue(result, b_.CreateExtractValue(loaded, 4), 0);
-          for (unsigned i = 0; i < 4; ++i) result = b_.CreateInsertValue(result, b_.CreateExtractValue(loaded, i), i + 1);
-          return outcome(pack(result, program_->exception_type(0)), integer(0), integer(0), null_pointer());
-        };
-        if (!bounds_checks_) return selected();
-        auto *valid = block("bounds.valid"), *invalid = block("bounds.failure"), *done = block("bounds.done");
-        b_.CreateCondBr(b_.CreateICmpNE(found, integer(0)), valid, invalid);
-        b_.SetInsertPoint(invalid);
-        auto *available = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(exception_, buffer, 0));
-        auto *error = outcome(empty_scalar(), integer(exception_id(ExceptionCategory::index_out_of_bounds)),
-            integer(site(expr.at)), null_pointer(), index, available);
-        b_.CreateBr(done);
-        b_.SetInsertPoint(valid);
-        auto *value = selected();
-        b_.CreateBr(done);
-        b_.SetInsertPoint(done);
-        auto *result = b_.CreatePHI(outcome_, 2);
-        result->addIncoming(error, invalid); result->addIncoming(value, valid);
-        return result;
-      }
       if (choice.operation->builtin != BuiltinOperation::print) throw std::logic_error("unchecked call reached native invocation");
       const auto type = choice.inputs.front();
       auto *argument = unpack(arguments.front(), type);
@@ -1546,7 +1516,7 @@ class LLVMEmission {
       const auto &effect = contexts_.front().at(&expr);
       if (effect.publishes_effect) symbols.insert(*effect.symbol);
     }
-    const size_t children = expr.kind == K::range_for ? 2 : expr.kind == K::fold ? 3 : expr.children.size();
+    const size_t children = expr.kind == K::range_for ? 2 : expr.children.size();
     for (size_t i = 0; i < children; ++i) collect_effects(*expr.children[i], symbols);
   }
   struct SavedEffect {
@@ -2203,10 +2173,8 @@ class LLVMEmission {
       } else if (borrowed) {
         address = emit_expression(*declaration.children.front(), Projection::target);
         if (!reachable()) return static_cast<llvm::Value *>(nullptr);
-      } else if (binding.initializes) {
+      } else {
         const auto *initializer = declaration.children.front().get();
-        if (initializer->kind == Expression::Kind::make_local)
-          initializer = initializer->children[initializer->annotation ? 0 : 1].get();
         auto *value = emit_expression(*initializer);
         if (!reachable()) return static_cast<llvm::Value *>(nullptr);
         value = convert_result(declaration, *initializer, value);
@@ -2520,21 +2488,13 @@ class LLVMEmission {
       for (const auto &child : expr.children) expressions.push_back(child.get());
       return sequence(expressions, projection, discard);
     }
-    case K::range_for: case K::fold: {
-      const bool fold = expr.kind == K::fold;
+    case K::range_for: {
       auto *first = emit_expression(*expr.children[0]);
       if (!reachable()) return nullptr;
       auto *last = emit_expression(*expr.children[1]);
       if (!reachable()) return nullptr;
       auto *index = storage_.at(*fact.place);
       store_incoming(*fact.place, first);
-      llvm::AllocaInst *accumulator = fold ? storage_.at(*fact.accumulator) : nullptr;
-      if (fold) {
-        auto *initial = emit_expression(*expr.children[2]);
-        if (!reachable()) return nullptr;
-        if (environments_ && accumulator->getAllocatedType() == scalar_) scope_->values.values.push_back(accumulator);
-        assign_place(accumulator, initial, *expr.children[2]);
-      }
       const auto cases = choices(expr, {expr.children[0].get(), expr.children[1].get()});
       const auto test = [&] {
         auto *current = load_place(index, expr, &CheckedOperation::operand_type);
@@ -2547,12 +2507,8 @@ class LLVMEmission {
       auto *body = block("range.body"), *empty = block("range.empty"), *done = block("range.done");
       b_.CreateCondBr(test(), body, empty);
       b_.SetInsertPoint(body);
-      auto *next = iteration(*expr.children[fold ? 3 : 2], !fold);
+      iteration(*expr.children[2], true);
       if (reachable()) {
-        if (fold) {
-          next = convert_result(expr, *expr.children[3], next, &CheckedOperation::type);
-          assign_place(accumulator, next, *expr.children[2]);
-        }
         auto *current = load_place(index, expr, &CheckedOperation::operand_type);
         auto *advanced = choose(expr, {current, last}, cases, scalar_, [&](const Choice &choice) {
           const auto type = choice.operation->operand_type;
@@ -2564,11 +2520,11 @@ class LLVMEmission {
         b_.CreateCondBr(test(), body, done);
       }
       b_.SetInsertPoint(empty);
-      if (!fold && expr.children.size() == 4) iteration(*expr.children[3], true);
+      if (expr.children.size() == 4) iteration(*expr.children[3], true);
       if (reachable()) b_.CreateBr(done);
       b_.SetInsertPoint(done);
       if (fact.type == Type::never) { b_.CreateUnreachable(); return nullptr; }
-      return fold ? load_place(accumulator, expr) : empty_scalar();
+      return empty_scalar();
     }
     case K::alias: {
       const bool selected = fact.binding.has_value();

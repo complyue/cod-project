@@ -2206,8 +2206,6 @@ class ScalarChecker {
   }
   ArgumentPreparation argument_preparation(const Expression &expr, std::string_view operation, const std::vector<Type> &prefix,
                                             const std::vector<ArgumentEvidence> &evidence, const Access &prefix_access, const Owners &prefix_owners, bool required = true, const TypeEvidenceState *state = nullptr) const {
-    if (expr.text == "cause_at" && (expr.intrinsic || (!module_names().callables.contains(expr.text) && !has_declarations(expr.text))) && expr.children.size() == 2)
-      return {ArgumentMode::value, prefix.empty() ? exception_type(0) : Type{Type::uint64}};
     if (expr.intrinsic) return {};
     std::vector<std::optional<Type>> arguments;
     Access access;
@@ -2482,9 +2480,8 @@ class ScalarChecker {
   }
   static void check_initializer_type(const Expression &group, const Expression &declaration,
       const Type &initial, const Type &type, std::optional<bool> borrowed) {
-    using K = Expression::Kind;
     if (type == Type::null_ref) fail(declaration.at, "a null initializer requires an explicit target type");
-    if (initial == Type::never && !declaration.annotation && declaration.children.front()->kind != K::make_local) return;
+    if (initial == Type::never && !declaration.annotation) return;
     const auto &kind = group.declaration_kind;
     if (type.kind == Type::product) {
       if ((kind != "ref" && kind != "ptr") || (initial != Type::never && borrowed != true))
@@ -2512,9 +2509,6 @@ class ScalarChecker {
     if (borrowed == false || mixed) implementation_gap(at, "fresh storage with an explicit external owner");
     if (mismatch) fail(at, "reference initializer does not belong to the declared owner");
   }
-  static void check_local_initializer(const Type &initial, const Type &type, const Location &at) {
-    if (initial != Type::never && !transfers_bits(initial, type)) fail(at, "initializer does not satisfy local storage type");
-  }
   static Type range_index_type(const Type &first, const Type &last, const Location &at) {
     if ((first != Type::never && !integral(first)) || (last != Type::never && !integral(last)))
       fail(at, "a range requires integer endpoints");
@@ -2535,10 +2529,6 @@ class ScalarChecker {
     if (!index || !first || !last) return {true, true, true};
     const bool enters = index == Type::integer ? std::bit_cast<std::int64_t>(*first) < std::bit_cast<std::int64_t>(*last) : *first < *last;
     return {enters, !enters, enters && *last - *first > 1};
-  }
-  static void check_fold_body(const Type &body, const Type &accumulator, const Location &at) {
-    if (body != Type::never && body != accumulator && !widens(body, accumulator))
-      fail(at, "fold body does not satisfy the accumulator type");
   }
   void check_catch_category(const Type &type, std::set<size_t> &handled, const Expression &handler) const {
     if (type.kind != Type::exception) fail(handler.at, "catch requires a selected exception type");
@@ -5600,7 +5590,7 @@ class ScalarChecker {
         if (expr.text != "&&" && expr.text != "||") required.runtime_calls.push_back(&expr);
         break;
       case K::value_call: case K::symbol: case K::effect: case K::touch: case K::procedure_effect:
-      case K::effect_group: case K::allocate: case K::make_region: case K::region_binding: case K::capture_owner:
+      case K::effect_group: case K::make_region: case K::region_binding: case K::capture_owner:
       case K::processor_composition: case K::pipeline: case K::here_binding:
       case K::native_handle_binding: case K::make_owned_handle: case K::make_borrowed_handle:
         required.opaque_storage = true;
@@ -5645,11 +5635,6 @@ class ScalarChecker {
         required.declarations.insert(expr.text);
         return;
       }
-      if (expr.kind == K::make_local && !expr.annotation) {
-        auto queried = bound; visit(*expr.children.front(), queried, true);
-        for (size_t i = 1; i < expr.children.size(); ++i) visit(*expr.children[i], bound, query);
-        return;
-      }
       if (expr.kind == K::conditional) {
         const auto &condition = *expr.children[0];
         visit(condition, bound, query);
@@ -5668,14 +5653,12 @@ class ScalarChecker {
         bound.merge(otherwise);
         return;
       }
-      if (expr.kind == K::range_for || expr.kind == K::fold) {
-        const bool fold = expr.kind == K::fold;
-        for (size_t i = 0; i < (fold ? 3 : 2); ++i) visit(*expr.children[i], bound, query);
+      if (expr.kind == K::range_for) {
+        for (size_t i = 0; i < 2; ++i) visit(*expr.children[i], bound, query);
         auto iteration = bound; iteration.insert(expr.text);
         required.declarations.insert(expr.text);
-        if (fold) { iteration.insert(expr.binding); required.declarations.insert(expr.binding); }
-        visit(*expr.children[fold ? 3 : 2], iteration, query);
-        if (!fold && expr.children.size() == 4) visit(*expr.children[3], bound, query);
+        visit(*expr.children[2], iteration, query);
+        if (expr.children.size() == 4) visit(*expr.children[3], bound, query);
         return;
       }
       if (expr.kind == K::handler) {
@@ -5759,8 +5742,7 @@ class ScalarChecker {
           lexical_self(capture.name, checking_instance_ ? std::optional<size_t>{checking_instance_->method} : std::nullopt) ||
           std::any_of(query_environment().bindings.begin(), query_environment().bindings.end(), [&](const auto &binding) { return binding.name == capture.name; }) ||
           (!module_names().callables.contains(capture.name) && !has_declarations(capture.name) && !module_names().symbols.contains(capture.name) &&
-           !module_names().native_operations.contains(capture.name) &&
-           capture.name != "cause_at");
+           !module_names().native_operations.contains(capture.name));
     };
     if (source.explicit_captures) {
       std::set<std::string> listed;
@@ -7621,7 +7603,7 @@ class ScalarChecker {
           }
           const auto family = names.callables.find(name);
           if (family == names.callables.end()) {
-            if (!eager_operation(name) && !swap_operation(name) && !identity_operation(name) && name != "cause_at")
+            if (!eager_operation(name) && !swap_operation(name) && !identity_operation(name))
               return false;
             continue;
           }
@@ -8045,7 +8027,7 @@ class ScalarChecker {
     return completes;
   }
   static bool type_loop_control(const Expression *declaration) {
-    return declaration && (declaration->kind == Expression::Kind::range_for || declaration->kind == Expression::Kind::fold);
+    return declaration && declaration->kind == Expression::Kind::range_for;
   }
   static void enter_type_defer(TypeEvidenceState &state) {
     for (const auto &[name, declaration] : state.local_declarations)
@@ -8387,11 +8369,6 @@ class ScalarChecker {
     }
     return returning ? proof : std::nullopt;
   }
-  struct LocalStorageEvidence {
-    std::optional<Type> type;
-    std::optional<PresenceBranches> boolean;
-    bool completes = true;
-  };
   struct QueryCallSelection {
     EvidencePlaces places;
     TargetPresence presence = TargetPresence::unknown;
@@ -9656,30 +9633,6 @@ class ScalarChecker {
                                   !caller.changed_since(slot, before));
     }
   }
-  LocalStorageEvidence local_storage_evidence(const Expression &expr, TypeEvidenceState &state, bool reached = true) const {
-    LocalStorageEvidence storage;
-    if (expr.annotation) storage.type = evidence_annotation(*expr.annotation, state);
-    else {
-      auto query = state; query.returns = nullptr; query.exits = nullptr;
-      query.borrowed_return = nullptr;
-      if (query.checks_initialization()) query.initialization = TypeEvidenceState::InitializationCheck::unevaluated;
-      query.delayed_controls.clear();
-      storage.type = type_evidence(*expr.children.front(), query);
-    }
-    if (state.required && storage.type) {
-      reject_c_type_payload(*storage.type, expr.at);
-      if (storage.type->kind == Type::procedure)
-        implementation_gap(expr.at, "raw callable storage construction");
-    }
-    for (size_t i = expr.annotation ? 0 : 1; i < expr.children.size(); ++i) {
-      const auto initializer = type_evidence(*expr.children[i], state, false, nullptr, nullptr,
-                                             ExpectedTypeUse::materialization, reached && storage.completes);
-      if (initializer == Type::never) storage.completes = false;
-      if (state.required && storage.type && initializer) check_local_initializer(*initializer, *storage.type, expr.at);
-      if (storage.completes && initializer == Type::boolean) storage.boolean = state.target.branches;
-    }
-    return storage;
-  }
   std::optional<Type> scope_callable_evidence(const Expression &callee, TypeEvidenceState &state,
                                               const Type *expected, bool probing_argument, TargetEvidence &returned,
                                               bool joining) const {
@@ -10240,9 +10193,9 @@ class ScalarChecker {
       if (!completes) return Type::never;
       return operation.contract.result.type;
     }
-    if (state.here_control && (expr.kind == K::deferred || expr.kind == K::make_local || expr.kind == K::make_object || expr.kind == K::make_region ||
+    if (state.here_control && (expr.kind == K::deferred || expr.kind == K::make_object || expr.kind == K::make_region ||
         expr.kind == K::native_handle_binding || expr.kind == K::make_owned_handle || expr.kind == K::make_borrowed_handle ||
-        expr.kind == K::allocate || (expr.kind != K::return_test && expr.owner_name == "here")))
+        (expr.kind != K::return_test && expr.owner_name == "here")))
       implementation_gap(expr.at, "supplier-owned allocation, owner selection or defer from a here group");
     if (state.root_failure_covered.has_value() && expr.kind == K::deferred)
       implementation_gap(expr.at, "deferred completion in a queried here callback");
@@ -10503,21 +10456,11 @@ class ScalarChecker {
         if (state.required && initializer.kind == K::make_object && initializer.owner_name.empty() &&
             declared_owner && compare_owners(declared_owner, state.full_scope_owner, &state) != OwnerMatch::satisfied)
           implementation_gap(initializer.at, "product construction in the receiver's external owner");
-        std::optional<Type> initial, storage_type;
-        std::optional<PresenceBranches> boolean;
-        if (initializer.kind == K::make_local) {
-          // The raw storage type remains known if evaluating its initializer
-          // completes the callable before the declaration can finish.
-          const auto storage = local_storage_evidence(initializer, state, completes);
-          storage_type = storage.type;
-          boolean = storage.boolean;
-          initial = storage.completes ? storage.type : std::optional<Type>{Type::never};
-          state.value = storage.completes ? ViewEvidence{false, false, {}} : ViewEvidence{};
-        } else initial = type_evidence(initializer, state, declared.has_value(),
+        const auto initial = type_evidence(initializer, state, declared.has_value(),
             declared && declared->kind == Type::procedure ? &*declared : nullptr, nullptr,
             ExpectedTypeUse::materialization, completes,
             value || declaration->binding == "<-" ? EvidenceRead::payload : EvidenceRead::target);
-        const auto type = declared ? declared : storage_type ? storage_type : initial;
+        const auto type = declared ? declared : initial;
         if (initial == Type::never) completes = false;
         const auto borrowed = value || declaration->binding == "<-" ? std::optional{false} : state.value.view;
         if (completes && type && type->kind == Type::procedure && (borrowed != true || state.value.mixed_view))
@@ -10536,9 +10479,6 @@ class ScalarChecker {
           if (proving_ && validating_ && expr.declaration_kind == "ref" && *initial != Type::never &&
               borrowed == true && state.value.nullable && state.target.presence != TargetPresence::present)
             fail(initializer.at, "ref requires a proven non-null target");
-          if (expr.declaration_kind == "ref" && initializer.kind == K::make_local &&
-              initializer.children.size() == (initializer.annotation ? 0u : 1u))
-            fail(declaration->at, "ref requires definitely initialized target storage");
         }
         if (completes && borrowed == true && expr.declaration_kind == "ref")
           require_type_initialized(state, state.target, initializer.kind == K::name ? initializer.text : std::string_view{},
@@ -10568,14 +10508,9 @@ class ScalarChecker {
               implementation_gap(declaration->at, "recursive activation shares an abstract storage origin in typeof");
             places.insert(declaration.get());
             if (value) state.selections.value_places.insert_or_assign(declaration->text, places);
-            if (state.checks_initialization() && type && scalar_type(*type)) {
-              if (initializer.kind == K::make_local && initializer.children.size() == (initializer.annotation ? 0u : 1u))
-                state.selections.uninitialized.insert_or_assign(declaration.get(), state.selections.reach_condition());
-              else state.selections.initialize(places);
-            }
+            if (state.checks_initialization() && type && scalar_type(*type)) state.selections.initialize(places);
             if (type == Type::boolean) {
-              if (initializer.kind != K::make_local)
-                boolean = state.target.branches ? state.target.branches : state.selections.read_boolean(state.target.places);
+              const auto boolean = state.target.branches ? state.target.branches : state.selections.read_boolean(state.target.places);
               state.selections.write_boolean(places, boolean);
             }
           }
@@ -10583,7 +10518,7 @@ class ScalarChecker {
         if (!value && initial && *initial != Type::never) {
           auto selected = borrowed == true && !state.value.mixed_view ? state.target : TargetEvidence{};
           selected.places = std::move(places);
-          selected.presence = expr.declaration_kind != "ptr" || declaration->binding == "<-" || initializer.kind == K::make_local ?
+          selected.presence = expr.declaration_kind != "ptr" || declaration->binding == "<-" ?
               TargetPresence::present : state.target.presence;
           state.selections.bind(declaration->text, declaration.get(), std::move(selected));
         }
@@ -10679,10 +10614,6 @@ class ScalarChecker {
       if (const auto owner = state.views.find(expr.owner_name); owner != state.views.end())
         view.owner = owner->second.owner;
       return native_handle_type(type, false);
-    }
-    case K::make_local: {
-      const auto storage = local_storage_evidence(expr, state);
-      return storage.completes ? storage.type : std::optional<Type>{Type::never};
     }
     case K::make_object: {
       const auto type = evidence_annotation(*expr.annotation, state);
@@ -11059,20 +10990,16 @@ class ScalarChecker {
       if (expr.kind == K::deferred) { state = before; return Type::void_type; }
       return result;
     }
-    case K::range_for: case K::fold: {
-      const bool fold = expr.kind == K::fold;
+    case K::range_for: {
       const auto first = child(0), last = child(1, false, first != Type::never);
       const auto index = state.required ? std::optional{range_index_type(*first, *last, expr.at)} :
           first == Type::never ? last : first;
       const bool completes = first != Type::never && last != Type::never;
-      const auto accumulator = fold ? child(2, false, completes) : std::optional<Type>{Type::void_type};
-      if (fold && state.required) require_value(*accumulator, expr.at);
-      if (fold && completes && accumulator && accumulator->kind == Type::procedure) note_type_allocation(state);
       const auto bound = [&](const Expression &operand) -> std::optional<std::uint64_t> {
         if (first && first == last && integral(*first) && operand.kind == K::integer) return literal(operand).integer;
         return {};
       };
-      const auto reach = range_reachability(completes && accumulator != Type::never, index,
+      const auto reach = range_reachability(completes, index,
                                             bound(*expr.children[0]), bound(*expr.children[1]));
       const auto first_iteration_observation = state.selections.observation_decisions ? state.selections.observation_decisions->next_observation : 0;
       if (reach.body) capture_preparation_targets(expr, state);
@@ -11086,17 +11013,8 @@ class ScalarChecker {
       iteration.definitions.erase(expr.text);
       iteration.owner_bindings.erase(expr.text);
       iteration.selections.remove_binding(expr.text);
-      if (fold) {
-        iteration.bindings[expr.binding] = accumulator; iteration.views[expr.binding] = {true, true, true, control_owner, false, false, true, true};
-        iteration.views.at(expr.binding).place_owners.insert(control_owner);
-        iteration.views.at(expr.binding).storage_kind = PlaceKind::value;
-        iteration.local_declarations[expr.binding] = &expr;
-        iteration.definitions.erase(expr.binding);
-        iteration.owner_bindings.erase(expr.binding);
-        iteration.selections.remove_binding(expr.binding);
-      }
-      const auto &loop_body = *expr.children[fold ? 3 : 2];
-      const auto loop_read = fold ? EvidenceRead::payload : EvidenceRead::discarded;
+      const auto &loop_body = *expr.children[2];
+      const auto loop_read = EvidenceRead::discarded;
       const auto header = state.deferred && reach.repeat
           ? state.deferred->header(state.deferred_queue, first_iteration_observation) : 0;
       if (header) iteration.deferred_queue = header;
@@ -11119,12 +11037,9 @@ class ScalarChecker {
       if (state.exits) iteration.exits = &iteration_exits;
       const auto body = type_evidence(loop_body, iteration, false, nullptr, nullptr,
                                       ExpectedTypeUse::materialization, reach.body, loop_read);
-      if (fold && reach.body && body && body->kind == Type::procedure)
-        note_type_allocation(iteration);
       if (header && body != Type::never) state.deferred->backedge(header, iteration.deferred_queue);
       const auto leave_iteration = [&](TypeEvidenceState &path) {
         restore_type_binding(path, state, expr.text);
-        if (fold) restore_type_binding(path, state, expr.binding);
         if (reach.repeat) path.selections.forget_observations(first_iteration_observation);
         path.repeated_observations = state.repeated_observations;
       };
@@ -11135,15 +11050,14 @@ class ScalarChecker {
         if (reach.repeat) path.result.forget_observations(first_iteration_observation);
         forward_type_exit(*state.exits, path);
       }
-      if (fold && state.required) check_fold_body(*body, *accumulator, expr.at);
-      const auto otherwise = !fold && expr.children.size() == 4
+      const auto otherwise = expr.children.size() == 4
           ? type_evidence(*expr.children[3], state, false, nullptr, nullptr, ExpectedTypeUse::materialization,
                           reach.empty, EvidenceRead::discarded)
           : std::optional<Type>{Type::void_type};
       const bool body_exits = !reach.body || body == Type::never;
       const bool empty_exits = !reach.empty || otherwise == Type::never;
       state = merge_reaching_evidence(std::move(state), std::move(iteration), empty_exits, body_exits);
-      return body_exits && empty_exits ? std::optional<Type>{Type::never} : accumulator;
+      return body_exits && empty_exits ? std::optional<Type>{Type::never} : std::optional<Type>{Type::void_type};
     }
     case K::binary:
       if (expr.text == "&&" || expr.text == "||") {
@@ -11515,12 +11429,6 @@ class ScalarChecker {
           record_type_invocation(expr, state, std::move(outcomes), true);
         }
         return Type::void_type;
-      }
-      if (expr.text == "cause_at" && (expr.intrinsic || (!module_names().callables.contains(expr.text) && !has_declarations(expr.text)))) {
-        if (state.required && (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64))
-          fail(expr.at, "cause_at requires an exception and a u64 index");
-        record_type_invocation(expr, state, {0, Completion::failure(exception_id(ExceptionCategory::index_out_of_bounds)).reason}, true);
-        return exception_type(0);
       }
       if (!complete) return {};
       const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr.text, &state);
@@ -15511,9 +15419,9 @@ class ScalarChecker {
     using K = Expression::Kind;
     CheckedOperation operation;
     if (checking_method_ && checking_method_->here_group &&
-        (expr.kind == K::deferred || expr.kind == K::make_local || expr.kind == K::make_object || expr.kind == K::make_region ||
+        (expr.kind == K::deferred || expr.kind == K::make_object || expr.kind == K::make_region ||
          expr.kind == K::native_handle_binding || expr.kind == K::make_owned_handle || expr.kind == K::make_borrowed_handle ||
-         expr.kind == K::allocate || (expr.kind != K::return_test && expr.owner_name == "here")))
+         (expr.kind != K::return_test && expr.owner_name == "here")))
       implementation_gap(expr.at, "supplier-owned allocation, owner selection or defer from a here group");
     if (expr.spread) implementation_gap(expr.at, "spread arguments");
     if (expr.kind == K::call && !expr.intrinsic) if (const auto native = native_operation(expr.text)) {
@@ -15847,7 +15755,7 @@ class ScalarChecker {
         }
         break;
       }
-      if (expr.intrinsic && !eager && expr.text != "cause_at")
+      if (expr.intrinsic && !eager)
         implementation_gap(expr.at, "explicit intrinsic has no implemented builtin '" + expr.text + "'");
       if (expr.kind == K::call && !expr.intrinsic && std::ranges::any_of(expr.children,
           [](const auto &operand) { return operand->kind == K::named_argument; })) {
@@ -15885,7 +15793,7 @@ class ScalarChecker {
             preparation = argument_preparation(expr, name, arguments, evidence, access_of(views), owners_of(views));
           }
           if (!preparation.type && !builtin_signature) {
-            if (!eager && !expr.intrinsic && expr.text != "cause_at" && named_family(expr.text).methods.empty())
+            if (!eager && !expr.intrinsic && named_family(expr.text).methods.empty())
               fail(expr.at, "unknown callable '" + expr.text + "'");
             implementation_gap(expr.children[i]->at, "cannot establish a parameter type for an abruptly completing operand");
           }
@@ -15910,19 +15818,6 @@ class ScalarChecker {
             (evidence[i].read_only && *evidence[i].read_only != views[i].read_only) ||
             (evidence[i].owner && checked_owner(*evidence[i].owner) != one_owner(views[i]))))
           implementation_gap(expr.children[i]->at, "operand type/access/owner evidence depends on completion or contextual inference");
-      if (expr.text == "cause_at" && (expr.intrinsic || (!module_names().callables.contains(expr.text) && !has_declarations(expr.text)))) {
-        if (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64)
-          fail(expr.at, "cause_at requires an exception and a u64 index");
-        operation.type = completes ? exception_type(0) : Type{Type::never};
-        operation.exceptions = exception_value_categories(operation.type); operation.builtin = BuiltinOperation::cause_at;
-        if (completes) {
-          const auto bounds = exception_id(ExceptionCategory::index_out_of_bounds);
-          operation.invocation.try_emplace(0, cleanup_.preserve_pending({}));
-          operation.invocation.try_emplace(Completion::failure(bounds).reason, cleanup_.preserve_pending({}));
-          if (&expr != prepared_call_) note_abrupt(expr.at, {bounds});
-        }
-        break;
-      }
       if (eager && (expr.intrinsic || !applicable_operation(expr.text, arguments, access_of(views), owners_of(views)))) {
         if (std::any_of(operation.arguments.begin(), operation.arguments.end(), [](const auto &argument) { return argument.mode != ArgumentMode::value; }))
           implementation_gap(expr.at, "builtin fallback requires value preparation before later operand effects");
@@ -16221,13 +16116,10 @@ class ScalarChecker {
       if (exits) operation.type = Type::never;
       break;
     }
-    case K::range_for: case K::fold: {
-      const bool fold = expr.kind == K::fold;
+    case K::range_for: {
       const auto first = child(0), last = child(1);
       const auto index = range_index_type(first, last, expr.at);
       const bool completes = first != Type::never && last != Type::never;
-      Type accumulator;
-      if (fold) { accumulator = child(2); require_value(accumulator, expr.at); if (accumulator.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)}); }
       const auto before = lexical_;
       const auto start = constant_integer(*expr.children[0], operations), end = constant_integer(*expr.children[1], operations);
       const auto [body_possible, empty_possible, repeat_possible] = range_reachability(completes, index, start, end);
@@ -16269,15 +16161,7 @@ class ScalarChecker {
       operation.place = declare(expr.text, index, true, true, expr.at);
       initialize(*operation.place);
       loop_controls_.insert(*operation.place);
-      if (fold) {
-        operation.accumulator = declare(expr.binding, accumulator, true, true, expr.at);
-        initialize(*operation.accumulator);
-        assign_exceptions(*operation.accumulator, exception_value_categories(accumulator));
-        loop_controls_.insert(*operation.accumulator);
-      }
-      const auto body = child(fold ? 3 : 2, true, !fold);
-      if (fold && body.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
-      if (fold) check_fold_body(body, accumulator, expr.at);
+      const auto body = child(2, true, true);
       leave_scope();
       if (repeat_possible) {
         active_loops_.pop_back();
@@ -16296,13 +16180,13 @@ class ScalarChecker {
       lexical_ = before;
       lexical_.live = lexical_.live && empty_possible;
       lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols});
-      const auto otherwise = !fold && expr.children.size() == 4 ? child(3, true, true) : Type{Type::void_type};
+      const auto otherwise = expr.children.size() == 4 ? child(3, true, true) : Type{Type::void_type};
       leave_scope();
       const auto empty_state = lexical_;
       const bool body_exits = !body_possible || body == Type::never;
       const bool empty_exits = !empty_possible || otherwise == Type::never;
       join(body_state, body_exits, empty_state, empty_exits, expr.at);
-      operation.type = body_exits && empty_exits ? Type{Type::never} : fold ? accumulator : Type{Type::void_type};
+      operation.type = body_exits && empty_exits ? Type{Type::never} : Type{Type::void_type};
       operation.operand_type = index;
       operation.exceptions = exception_value_categories(operation.type);
       break;
@@ -16324,38 +16208,11 @@ class ScalarChecker {
         const bool copy = value || declaration->binding == "<-";
         if (initializer.kind == K::make_object && initializer.owner_name.empty() && owner && *owner != cleanup_scope_)
           implementation_gap(initializer.at, "product construction in the receiver's external owner");
-        Type initial_type;
-        bool initialized = true;
-        bool completes = true;
-        if (initializer.kind == K::make_local) {
-          if (initializer.annotation) initial_type = resolve_local_type(*initializer.annotation, instance, initializer.at);
-          else {
-            auto state = evidence_state(false, nullptr, true);
-            state.required = true;
-            initial_type = *type_evidence(*initializer.children.front(), state);
-          }
-          const size_t value_index = initializer.annotation ? 0 : 1;
-          if (initial_type.kind == Type::procedure) implementation_gap(initializer.at, "raw callable storage construction");
-          initialized = initializer.children.size() > value_index;
-          if (initialized) {
-            const auto value_type = check(*initializer.children[value_index], instance, operations);
-            completes = value_type != Type::never;
-            check_local_initializer(value_type, initial_type, initializer.at);
-          }
-          CheckedOperation allocation;
-          allocation.type = completes ? initial_type : Type{Type::never};
-          allocation.initializes = initialized;
-          if (initialized) {
-            const auto &value = operations.at(initializer.children[value_index].get());
-            allocation.exceptions = value.exceptions; allocation.predicate = predicate_of(value);
-          }
-          operations[&initializer] = allocation;
-        } else {
-          const auto annotation = declaration->annotation ?
-              resolve_local_type(*declaration->annotation, instance, declaration->at, !copy) : Type{};
-          initial_type = check(initializer, instance, operations, copy, false, annotation.kind == Type::procedure ? &annotation : nullptr);
-          completes = initial_type != Type::never;
-        }
+        const auto annotation = declaration->annotation ?
+            resolve_local_type(*declaration->annotation, instance, declaration->at, !copy) : Type{};
+        const auto initial_type = check(initializer, instance, operations, copy, false,
+            annotation.kind == Type::procedure ? &annotation : nullptr);
+        const bool completes = initial_type != Type::never;
         const auto type = declaration->annotation ?
             resolve_local_type(*declaration->annotation, instance, declaration->at, !copy) : initial_type;
         const auto &source = operations.at(&initializer);
@@ -16382,8 +16239,6 @@ class ScalarChecker {
           }
         }
         if (completes && borrowed) check_initializer_access(*declaration, source.read_only);
-        if (!borrowed && !initialized && expr.declaration_kind == "ref")
-          fail(declaration->at, "ref requires definitely initialized target storage");
         const bool read_only = declaration->read_only || (value && expr.fixed_binding) || (completes && borrowed && source.read_only);
         std::optional<size_t> place;
         if (borrowed) {
@@ -16405,9 +16260,9 @@ class ScalarChecker {
         } else {
           place = declare(declaration->text, type, read_only, value, declaration->at);
           bindings_->back().fixed = expr.fixed_binding;
-          if (initialized && completes) initialize(*place);
-          if (type.kind == Type::exception) assign_exceptions(*place, initialized ? source.exceptions : exception_value_categories(type));
-          if (type == Type::boolean && initialized && completes) {
+          if (completes) initialize(*place);
+          if (type.kind == Type::exception) assign_exceptions(*place, source.exceptions);
+          if (type == Type::boolean && completes) {
             CheckedOperation target; target.type = type; target.place = place; target.targets = {*place};
             write_predicate(target, predicate_of(source), declaration->at);
           }
@@ -16421,7 +16276,6 @@ class ScalarChecker {
         binding.operand_type = type;
         binding.view = borrowed;
         binding.mixed_view = mixed;
-        binding.initializes = !borrowed && initialized;
         if (!completes) binding.type = operation.type = Type::never;
         operations[declaration.get()] = binding;
       }
@@ -17155,14 +17009,6 @@ class ScalarChecker {
         case K::try_scope:
           input(expr->children.front().get());
           for (const auto &child : expr->children) if (child->kind == K::handler) input(child->children.front().get());
-          break;
-        case K::fold:
-          if (fact.accumulator) {
-            const auto accumulator = contexts[c].places.at(*fact.accumulator);
-            flow.link(expression(c, expr->children[2].get()), accumulator);
-            flow.link(expression(c, expr->children[3].get()), accumulator);
-            flow.link(accumulator, node);
-          }
           break;
         case K::name: case K::symbol: case K::transfer: case K::rebind: break;
         default:
@@ -17959,7 +17805,7 @@ class ScalarChecker {
         (expr.kind == K::callable && !expr.definition->name.empty()) || retained_effect)
       implementation_gap(expr.at, "retained dependency initialization scope remains unproved; use an explicit full scope for resources that end during initialization");
     for (size_t i = 0; i < expr.children.size(); ++i) {
-      const bool loop_body = (expr.kind == K::range_for && i == 2) || (expr.kind == K::fold && i == 3);
+      const bool loop_body = expr.kind == K::range_for && i == 2;
       check_dependency_lifetime(*expr.children[i], iteration || loop_body);
     }
   }
@@ -17973,9 +17819,8 @@ class ScalarChecker {
       if (expr.kind == K::callable || expr.kind == K::deferred) return;
       if (expr.kind == K::effect || expr.kind == K::procedure_effect)
         if (const auto symbol = symbols.find(expr.text); symbol != symbols.end()) explicit_installs.insert(symbol->second);
-      const size_t begin = expr.kind == K::make_local && !expr.annotation ? 1 : 0;
-      const auto end = expr.kind == K::range_for ? 2 : expr.kind == K::fold ? 3 : expr.children.size();
-      for (size_t i = begin; i < end; ++i) collect(*expr.children[i]);
+      const auto end = expr.kind == K::range_for ? 2 : expr.children.size();
+      for (size_t i = 0; i < end; ++i) collect(*expr.children[i]);
     };
     for (const auto &[module, expression] : program_.initializers)
       if (!module) collect(*expression);
@@ -18611,6 +18456,7 @@ class ScalarChecker {
     const auto visit = [&](auto &&self, const Expression &expr) -> void {
       using K = Expression::Kind;
       if (expr.kind == K::exception_binding) implementation_gap(expr.at, "owning exception local");
+      if (expr.kind == K::rethrow_from) implementation_gap(expr.at, "rethrow with an explicit cause");
       if (expr.kind == K::make_exception) implementation_gap(expr.at, "owning make exception expression");
       if (expr.kind == K::make_object && expr.constructor_arguments)
         implementation_gap(expr.at, "ordinary constructor arguments");
