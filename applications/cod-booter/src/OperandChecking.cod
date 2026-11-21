@@ -37,6 +37,7 @@ using "ParserStorage.cod" construction_body;
 using "ParserStorage.cod" construction_type_query_node;
 using "ParserStorage.cod" reserves_storage;
 using "ParserStorage.cod" call_node;
+using "ParserStorage.cod" checked_ref_argument;
 using "ParserStorage.cod" behave_node;
 using "ParserStorage.cod" return_node;
 using "ParserStorage.cod" throw_node;
@@ -85,7 +86,6 @@ data OperandFact {
     reception:u8;
     checked_exception:u8;
     target_readonly:u8;
-    checked_borrow:u8;
     needs_target:u8;
     discarded_result:u8;
     arm_result:u8;
@@ -141,6 +141,7 @@ func expected_boolean_condition() -> u8 { return 18u8; }
 func unproved_reservation_selection() -> u8 { return 19u8; }
 func unsupported_narrow_execution() -> u8 { return 20u8; }
 func readonly_owner_argument() -> u8 { return 21u8; }
+func checked_selection_requires_ref() -> u8 { return 22u8; }
 
 func set_fact(ref facts:OperandFacts in F, at:u64, kind:u8, reception:u8,
               owner_site:u64, identity:u64, checked_exception:u8) -> void where {owner F} {
@@ -151,7 +152,6 @@ func set_fact(ref facts:OperandFacts in F, at:u64, kind:u8, reception:u8,
     facts[at].reservation <- no_node();
     facts[at].checked_exception <- checked_exception;
     facts[at].target_readonly <- 0u8;
-    facts[at].checked_borrow <- 0u8;
     return;
 }
 
@@ -221,7 +221,7 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, ref
     val annotation <- nodes[binding].right;
     val readonly <- if (nodes[binding].number == readonly_declaration()) { 1u8 } else { 0u8 };
     if (nodes[annotation].kind == owned_type_node()) {
-        if (form != parameter_node() && form != ref_parameter_node() && form != ptr_parameter_node()) {
+        if (form != ref_parameter_node() && form != ptr_parameter_node()) {
             return unproved_operand();
         } else {};
         val borrowed_kind <- declared_scalar(names[nodes[annotation].left].kind);
@@ -420,6 +420,9 @@ func check_argument(nodes:const ExprNodes in N, ref facts:OperandFacts in F, ref
     val actual <- nodes[argument].right;
     val wanted <- facts[formal].reception;
     val kind <- facts[formal].kind;
+    if (checked_ref_argument(nodes, argument) && wanted != borrowed_ref()) {
+        return checked_selection_requires_ref();
+    } else {};
     if (wanted == local_place()) {
         val diagnostic <- require_typed_bits(nodes, facts, actual, kind);
         if (diagnostic != 0u8) { return diagnostic; } else {};
@@ -443,10 +446,6 @@ func check_argument(nodes:const ExprNodes in N, ref facts:OperandFacts in F, ref
     owners[owner_parameter].call_site <- invocation;
     owners[owner_parameter].actual_owner <- actual_owner;
     set_fact(facts, argument, kind, wanted, actual_owner, 0u64, 0u8);
-    if (nodes[formal].kind == parameter_node() && reception == nullable_ptr()) {
-        facts[argument].checked_borrow <- 1u8;
-        (facts[actual].needs_target <- 1u8):void;
-    } else {};
     return 0u8;
 }
 

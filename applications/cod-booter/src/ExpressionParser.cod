@@ -967,13 +967,28 @@ func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
     if (result.diagnostic == 0u8) { (result.next <- at + 1u64):void; } else {};
 }
 
-# Each argument entry links to its preceding prefix on the left and its
-# argument expression on the right. The call links to the final entry.
+func begins_checked_ref_argument(source:const SourceBytes in S, tokens:const Tokens in T,
+                                 at:u64, past:u64) -> bool where {const owner S, const owner T} {
+    val operand <- at + 2u64;
+    if (operand >= past || !not_word(source, tokens[at]) || !null_word(source, tokens[at + 1u64]) ||
+        in_word(source, tokens[operand])) { return false; } else {};
+    val kind <- tokens[operand].kind;
+    val punct <- punct_at(source, tokens, operand, past);
+    return kind == identifier() || kind == integer_literal() || kind == symbol_name() ||
+        punct == 40u8 || punct == 123u8 || punct == 33u8;
+}
+
+# Each argument entry links to the previous entry and its ordinary expression.
+# The checked ref bit belongs to preparation at this call site.
 func parse_argument(source:const SourceBytes in S, tokens:const Tokens in T,
                     ref nodes:ExprNodes in A, ref result:ParseResult in R,
                     first:u64, previous:u64, past:u64, named:bool, field_labels:bool) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val argument <- no_node();
+    val start <- result.next;
+    val operand_first <- tokens[start].first;
+    val checked <- named && !field_labels && begins_checked_ref_argument(source, tokens, start, past);
+    if (checked) { (result.next <- start + 2u64):void; } else {};
     if (!named || !punct_pair_at(source, tokens, result.next, past, 45u8, 62u8)) {
         parse_expression_at(source, tokens, nodes, result, past, 1u8);
         if (result.diagnostic != 0u8) { return false; } else {};
@@ -988,14 +1003,13 @@ func parse_argument(source:const SourceBytes in S, tokens:const Tokens in T,
         } else {};
         if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) { return false; } else {};
         val label <- result.root;
-        val start <- arrow;
-        if (argument != no_node()) { (start <- nodes[argument].first):void; } else {};
-        append_node(nodes, result, named_argument_node(), start, nodes[label].past, 0u64, argument, label, arrow);
+        val named_first <- if (argument == no_node()) { arrow } else { operand_first };
+        append_node(nodes, result, named_argument_node(), named_first, nodes[label].past, 0u64, argument, label, arrow);
         if (result.diagnostic != 0u8) { return false; } else {};
         (argument <- result.root):void;
     } else {};
-    append_node(nodes, result, argument_node(), first, nodes[argument].past,
-                0u64, previous, argument, nodes[argument].first);
+    append_node(nodes, result, argument_node(), if (checked) { operand_first } else { first },
+                nodes[argument].past, if (checked) { 1u64 } else { 0u64 }, previous, argument, operand_first);
     return result.diagnostic == 0u8;
 }
 

@@ -18,6 +18,7 @@ using "ParserStorage.cod" parameter_node;
 using "ParserStorage.cod" val_parameter_node;
 using "ParserStorage.cod" handle_parameter_node;
 using "ParserStorage.cod" here_parameter_node;
+using "ParserStorage.cod" checked_ref_argument;
 using "ParserStorage.cod" owning_handle_local_node;
 using "ParserStorage.cod" borrowed_handle_local_node;
 using "ParserStorage.cod" make_own_handle_node;
@@ -883,7 +884,7 @@ func check_here_call(nodes:const ExprNodes in N, names:const NameBindings in B, 
         return;
     } else {};
     val argument <- first_item(nodes, nodes[call].right);
-    if (argument == no_node() || work[argument].next != no_node()) {
+    if (argument == no_node() || work[argument].next != no_node() || checked_ref_argument(nodes, argument)) {
         reject_declaration(report, call, invalid_native_callback());
         return;
     } else {};

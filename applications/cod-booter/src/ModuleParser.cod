@@ -212,14 +212,16 @@ func parse_parameter(source:const SourceBytes in S, tokens:const Tokens in T,
         return false;
     } else {};
     val binding <- result.root;
-    if (kind == exception_parameter_node() && nodes[nodes[binding].right].kind == owned_type_node()) {
+    val qualified <- nodes[nodes[binding].right].kind == owned_type_node();
+    if (kind == exception_parameter_node() && qualified) {
         result.diagnostic <- invalid_exception_owner();
         return false;
     } else {};
-    if (kind == val_parameter_node() && nodes[nodes[binding].right].kind == owned_type_node()) {
+    if (kind == val_parameter_node() && qualified) {
         result.diagnostic <- invalid_value_parameter_owner();
         return false;
     } else {};
+    if (!field && kind == parameter_node() && qualified) { (kind <- ref_parameter_node()):void; } else {};
     val first <- tokens[at].first;
     append_node(nodes, result, kind, first, nodes[binding].past, 0u64, previous, binding, first);
     return result.diagnostic == 0u8;

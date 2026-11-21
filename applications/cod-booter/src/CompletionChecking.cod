@@ -11,6 +11,7 @@ using "ParserStorage.cod" block_node;
 using "ParserStorage.cod" full_scope_node;
 using "ParserStorage.cod" block_item_node;
 using "ParserStorage.cod" argument_node;
+using "ParserStorage.cod" checked_ref_argument;
 using "ParserStorage.cod" try_node;
 using "ParserStorage.cod" catch_clause_node;
 using "ParserStorage.cod" catch_handler_node;
@@ -520,20 +521,22 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
         sites[at].can_continue <- 0u8;
         return 0u8;
     } else {};
-    if (facts[at].needs_target != 0u8 && sites[at].presence != present_target()) {
-        val event <- if (sites[at].presence == absent_target()) { definite_failure() } else { possible_failure() };
+    val kind <- nodes[at].kind;
+    val target <- if (facts[at].needs_target != 0u8) { at } else { no_node() };
+    if (kind == argument_node() && facts[at].reception == borrowed_ref()) {
+        val actual <- nodes[at].right;
+        if (facts[actual].reception == nullable_ptr() && sites[actual].presence != present_target()) {
+            if (!checked_ref_argument(nodes, at)) { return unproved_nonnull_argument(); } else {};
+            (target <- actual):void;
+        } else {};
+    } else {};
+    if (target != no_node() && sites[target].presence != present_target()) {
+        val event <- if (sites[target].presence == absent_target()) { definite_failure() } else { possible_failure() };
         if (event == definite_failure()) {
             sites[at].can_continue <- 0u8;
             {};
         } else {};
         return route_failure(nodes, names, links, facts, sites, at, used, null_pointer_identity(), 1u8, event);
-    } else {};
-    val kind <- nodes[at].kind;
-    if (kind == argument_node() && facts[at].reception == borrowed_ref() && facts[at].checked_borrow == 0u8) {
-        val actual <- nodes[at].right;
-        if (facts[actual].reception == nullable_ptr() && sites[actual].presence != present_target()) {
-            return unproved_nonnull_argument();
-        } else {};
     } else {};
     if (kind == ref_local_node() && facts[nodes[at].right].reception == nullable_ptr() &&
         sites[nodes[at].right].presence != present_target()) { return unproved_nonnull_binding(); } else {};

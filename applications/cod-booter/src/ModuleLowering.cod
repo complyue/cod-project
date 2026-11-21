@@ -26,6 +26,7 @@ using "ParserStorage.cod" make_named_node;
 using "ParserStorage.cod" construction_body;
 using "ParserStorage.cod" reserves_storage;
 using "ParserStorage.cod" call_node;
+using "ParserStorage.cod" checked_ref_argument;
 using "ParserStorage.cod" behave_node;
 using "ParserStorage.cod" deferred_call_node;
 using "ParserStorage.cod" deferred_block_node;
@@ -253,14 +254,14 @@ func lower_dispatch(nodes:const ExprNodes in N, links:const NameWork in L,
     finish_block(code, plan, state, state.exception_target);
 }
 
-func require_target(nodes:const ExprNodes in N, facts:const OperandFacts in F,
-                    sites:const CompletionSites in S, ref code:NativeCommands in C,
-                    ref plan:NativePlan in P, ref state:LoweringState in R, at:u64) -> void
-    where {const owner N, const owner F, const owner S, owner C, owner P, owner R} {
+func check_target_presence(sites:const CompletionSites in S, ref code:NativeCommands in C,
+                           ref plan:NativePlan in P, ref state:LoweringState in R,
+                           at:u64, failure_at:u64) -> void
+    where {const owner S, owner C, owner P, owner R} {
     val presence <- sites[at].presence;
-    if (facts[at].needs_target == 0u8 || presence == present_target()) { return; } else {};
+    if (presence == present_target()) { return; } else {};
     if (presence == absent_target()) {
-        source_failure(code, plan, null_pointer_identity(), nodes[at].first);
+        source_failure(code, plan, null_pointer_identity(), failure_at);
         finish_block(code, plan, state, state.exception_target);
         return;
     } else {};
@@ -268,9 +269,18 @@ func require_target(nodes:const ExprNodes in N, facts:const OperandFacts in F,
     val ready <- new_block(plan);
     command(code, plan, branch_equal(), slot(at), 0u64, absent, ready);
     position(code, plan, state, absent);
-    source_failure(code, plan, null_pointer_identity(), nodes[at].first);
+    source_failure(code, plan, null_pointer_identity(), failure_at);
     finish_block(code, plan, state, state.exception_target);
     position(code, plan, state, ready);
+}
+
+func require_target(nodes:const ExprNodes in N, facts:const OperandFacts in F,
+                    sites:const CompletionSites in S, ref code:NativeCommands in C,
+                    ref plan:NativePlan in P, ref state:LoweringState in R, at:u64) -> void
+    where {const owner N, const owner F, const owner S, owner C, owner P, owner R} {
+    if (facts[at].needs_target != 0u8) {
+        check_target_presence(sites, code, plan, state, at, nodes[at].first);
+    } else {};
 }
 
 func lower_node(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
@@ -318,8 +328,8 @@ func prepare_arguments(nodes:const ExprNodes in N, names:const NameBindings in B
             if (state.live) { emit(code, plan, copy_word(), slot(argument), slot(actual)); } else {};
         } else {
             lower_node(nodes, names, links, facts, sites, code, plan, state, actual);
-            if (state.live && facts[argument].checked_borrow != 0u8) {
-                require_target(nodes, facts, sites, code, plan, state, actual);
+            if (state.live && checked_ref_argument(nodes, argument) && facts[actual].reception == nullable_ptr()) {
+                check_target_presence(sites, code, plan, state, actual, nodes[argument].first);
             } else {};
             if (state.live) {
                 storage_operation(code, plan, copy_word(), slot(argument), slot(actual), facts[actual].reservation, actual);
