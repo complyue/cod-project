@@ -88,7 +88,6 @@ func cause_placement_node() -> u8 { return 71u8; }
 func named_argument_node() -> u8 { return 72u8; }
 
 func field_access_node() -> u8 { return 73u8; }
-func readonly_ref_parameter_node() -> u8 { return 74u8; }
 func bodyless_defer_node() -> u8 { return 75u8; }
 
 func callable_local_node() -> u8 { return 76u8; }
@@ -289,7 +288,6 @@ export capacity_placement_node;
 export cause_placement_node;
 export named_argument_node;
 export field_access_node;
-export readonly_ref_parameter_node;
 export bodyless_defer_node;
 export callable_local_node;
 export throw_with_cause_node;

@@ -53,7 +53,7 @@ using "OperandChecking.cod" OperandFacts;
 using "OperandChecking.cod" scalar_kind;
 using "OperandChecking.cod" has_value_tail;
 using "OperandChecking.cod" independent_value;
-using "OperandChecking.cod" writable_place;
+using "OperandChecking.cod" local_place;
 using "OperandChecking.cod" nullable_ptr;
 using "CompletionChecking.cod" CompletionSites;
 using "CompletionChecking.cod" can_continue;
@@ -304,6 +304,9 @@ func prepare_arguments(nodes:const ExprNodes in N, names:const NameBindings in B
             if (state.live) { emit(code, plan, copy_word(), slot(argument), slot(actual)); } else {};
         } else {
             lower_node(nodes, names, links, facts, sites, code, plan, state, actual);
+            if (state.live && facts[argument].checked_borrow != 0u8) {
+                require_target(nodes, facts, sites, code, plan, state, actual);
+            } else {};
             if (state.live) {
                 storage_operation(code, plan, copy_word(), slot(argument), slot(actual), facts[actual].reservation, actual);
             } else {};
@@ -737,7 +740,7 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (kind == name_node()) {
         val declaration <- names[at].declaration;
         if (!scalar_kind(facts[at].kind)) { plan.diagnostic <- native_unsupported(); return; } else {};
-        val opcode <- if (facts[at].reception == writable_place()) { place_address() } else { copy_word() };
+        val opcode <- if (facts[at].reception == local_place()) { place_address() } else { copy_word() };
         emit(code, plan, opcode, slot(at), slot(declaration));
         return;
     } else {};

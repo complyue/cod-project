@@ -17,6 +17,7 @@ using "ParserStorage.cod" ref_parameter_node;
 using "ParserStorage.cod" ptr_parameter_node;
 using "ParserStorage.cod" val_parameter_node;
 using "ParserStorage.cod" owner_clause_node;
+using "ParserStorage.cod" readonly_declaration;
 using "ParserStorage.cod" result_clause_node;
 using "ParserStorage.cod" throws_clause_node;
 using "ParserStorage.cod" catch_binding_node;
@@ -82,6 +83,8 @@ data OperandFact {
     kind:u8;
     reception:u8;
     checked_exception:u8;
+    target_readonly:u8;
+    checked_borrow:u8;
     needs_target:u8;
     discarded_result:u8;
     arm_result:u8;
@@ -111,10 +114,9 @@ func scalar_bool() -> u8 { return 6u8; }
 func scalar_kind(kind:u8) -> bool { return kind == scalar_u64() || kind == scalar_bool(); }
 
 func independent_value() -> u8 { return 1u8; }
-func writable_place() -> u8 { return 2u8; }
+func local_place() -> u8 { return 2u8; }
 func borrowed_ref() -> u8 { return 3u8; }
 func nullable_ptr() -> u8 { return 4u8; }
-func readonly_place() -> u8 { return 5u8; }
 func readonly_exception() -> u8 { return 6u8; }
 
 func unproved_operand() -> u8 { return 1u8; }
@@ -137,6 +139,7 @@ func value_tail_in_void_function() -> u8 { return 17u8; }
 func expected_boolean_condition() -> u8 { return 18u8; }
 func unproved_reservation_selection() -> u8 { return 19u8; }
 func unsupported_narrow_execution() -> u8 { return 20u8; }
+func readonly_owner_argument() -> u8 { return 21u8; }
 
 func set_fact(ref facts:OperandFacts in F, at:u64, kind:u8, reception:u8,
               owner_site:u64, identity:u64, checked_exception:u8) -> void where {owner F} {
@@ -146,6 +149,8 @@ func set_fact(ref facts:OperandFacts in F, at:u64, kind:u8, reception:u8,
     facts[at].identity <- identity;
     facts[at].reservation <- no_node();
     facts[at].checked_exception <- checked_exception;
+    facts[at].target_readonly <- 0u8;
+    facts[at].checked_borrow <- 0u8;
     return;
 }
 
@@ -157,6 +162,7 @@ func copy_fact(ref facts:OperandFacts in F, destination:u64, source:u64) -> void
     set_fact(facts, destination, facts[source].kind, facts[source].reception, facts[source].owner,
              facts[source].identity, facts[source].checked_exception);
     facts[destination].reservation <- facts[source].reservation;
+    facts[destination].target_readonly <- facts[source].target_readonly;
     return;
 }
 
@@ -210,22 +216,28 @@ func exception_annotation(names:const NameBindings in N, selected:const Selected
 func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, ref facts:OperandFacts in F,
                   formal:u64, definition:u64) -> u8 where {const owner N, const owner B, owner F} {
     val form <- nodes[formal].kind;
-    val annotation <- nodes[nodes[formal].right].right;
+    val binding <- nodes[formal].right;
+    val annotation <- nodes[binding].right;
+    val readonly <- if (nodes[binding].number == readonly_declaration()) { 1u8 } else { 0u8 };
     if (nodes[annotation].kind == owned_type_node()) {
-        if (form != ref_parameter_node() && form != ptr_parameter_node()) { return unproved_operand(); } else {};
+        if (form != parameter_node() && form != ref_parameter_node() && form != ptr_parameter_node()) {
+            return unproved_operand();
+        } else {};
         val borrowed_kind <- declared_scalar(names[nodes[annotation].left].kind);
         if (borrowed_kind == 0u8) { return unproved_operand(); } else {};
         val owner_site <- names[nodes[annotation].right].declaration;
-        val reception <- if (form == ref_parameter_node()) { borrowed_ref() } else { nullable_ptr() };
+        if (owner_site == no_node() || nodes[owner_site].kind != owner_clause_node()) { return unproved_owner(); } else {};
+        val reception <- if (form == ptr_parameter_node()) { nullable_ptr() } else { borrowed_ref() };
         set_fact(facts, formal, borrowed_kind, reception, owner_site, 0u64, 0u8);
-        # In this syntax subset an explicit ref or ptr target is writable.
-        facts[owner_site].owner <- definition;
+        facts[formal].target_readonly <- readonly;
         return 0u8;
     } else {};
-    if (form != parameter_node() && form != val_parameter_node()) { return unproved_operand(); } else {};
+    if (form != parameter_node() && form != val_parameter_node() && form != ref_parameter_node() &&
+        form != ptr_parameter_node()) { return unproved_operand(); } else {};
     val kind <- declared_scalar(names[annotation].kind);
     if (kind == 0u8) { return unproved_operand(); } else {};
-    set_fact(facts, formal, kind, writable_place(), definition, 0u64, 0u8);
+    set_fact(facts, formal, kind, local_place(), definition, 0u64, 0u8);
+    facts[formal].target_readonly <- readonly;
     return 0u8;
 }
 
@@ -268,13 +280,7 @@ func check_signature_clauses(nodes:const ExprNodes in N, names:const NameBinding
             if (nodes[clause].kind == throws_clause_node()) {
                 report.diagnostic <- exception_annotation(names, selected, facts, annotation, clause);
                 if (report.diagnostic != 0u8) { report.node <- annotation; return; } else {};
-            } else {
-                if (facts[clause].owner != definition) {
-                    report.node <- annotation;
-                    report.diagnostic <- unproved_owner();
-                    return;
-                } else {};
-            };
+            } else {};
         };
         (clause <- links[clause].next):void;
     };
@@ -321,13 +327,13 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, ref 
         val value_kind <- if (declared_kind == 0u8) { (facts[initializer].kind) } else { declared_kind };
         if (reserves_storage(nodes, initializer)) {
             if (facts[initializer].kind != value_kind) { return wrong_operand_type(); } else {};
-            set_fact(facts, at, value_kind, writable_place(), names[at].scope, 0u64, 0u8);
+            set_fact(facts, at, value_kind, local_place(), names[at].scope, 0u64, 0u8);
             facts[at].reservation <- initializer;
             return 0u8;
         } else {};
         val diagnostic <- require_typed_bits(nodes, facts, initializer, value_kind);
         if (diagnostic != 0u8) { return diagnostic; } else {};
-        set_fact(facts, at, value_kind, writable_place(), names[at].scope, 0u64, 0u8);
+        set_fact(facts, at, value_kind, local_place(), names[at].scope, 0u64, 0u8);
         return 0u8;
     } else {};
     val owner_site <- facts[initializer].owner;
@@ -341,7 +347,7 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, ref 
         if (facts[initializer].kind != declared_kind || facts[initializer].reception == independent_value()) {
             return unproved_operand();
         } else {};
-        if (facts[initializer].reception == readonly_place()) { return expected_writable_place(); } else {};
+        if (facts[initializer].target_readonly != 0u8) { return expected_writable_place(); } else {};
     } else {};
     if (owner_site == no_node()) { return unproved_owner(); } else {};
     set_fact(facts, at, declared_kind, nullable_ptr(), owner_site, 0u64, 0u8);
@@ -379,14 +385,16 @@ func check_transfer(nodes:const ExprNodes in N, ref facts:OperandFacts in F, at:
     val reception <- facts[destination].reception;
     val kind <- facts[destination].kind;
     if (!scalar_kind(kind)) { return unproved_operand(); } else {};
-    if (reception != writable_place() && reception != borrowed_ref() && reception != nullable_ptr()) {
+    if (facts[destination].target_readonly != 0u8 ||
+        (reception != local_place() && reception != borrowed_ref() && reception != nullable_ptr())) {
         return expected_writable_place();
     } else {};
     val diagnostic <- require_typed_bits(nodes, facts, destination, kind);
     if (diagnostic != 0u8) { return diagnostic; } else {};
     diagnostic <- require_typed_bits(nodes, facts, supplied, kind);
     if (diagnostic != 0u8) { return diagnostic; } else {};
-    set_fact(facts, at, kind, readonly_place(), facts[destination].owner, 0u64, 0u8);
+    set_fact(facts, at, kind, borrowed_ref(), facts[destination].owner, 0u64, 0u8);
+    facts[at].target_readonly <- 1u8;
     facts[at].reservation <- facts[destination].reservation;
     return 0u8;
 }
@@ -396,7 +404,7 @@ func check_argument(nodes:const ExprNodes in N, ref facts:OperandFacts in F, ref
     val actual <- nodes[argument].right;
     val wanted <- facts[formal].reception;
     val kind <- facts[formal].kind;
-    if (wanted == writable_place()) {
+    if (wanted == local_place()) {
         val diagnostic <- require_typed_bits(nodes, facts, actual, kind);
         if (diagnostic != 0u8) { return diagnostic; } else {};
         set_result(facts, argument, kind);
@@ -407,16 +415,22 @@ func check_argument(nodes:const ExprNodes in N, ref facts:OperandFacts in F, ref
     if (facts[actual].kind != kind) { return wrong_operand_type(); } else {};
     val reception <- facts[actual].reception;
     if (reception == independent_value()) { return unproved_owner(); } else {};
-    if (reception == readonly_place()) { return expected_writable_place(); } else {};
+    if (facts[actual].target_readonly != 0u8 && facts[formal].target_readonly == 0u8) { return expected_writable_place(); } else {};
     val owner_parameter <- facts[formal].owner;
     val actual_owner <- facts[actual].owner;
     if (actual_owner == no_node()) { return unproved_owner(); } else {};
+    if (nodes[actual_owner].kind == owner_clause_node() && nodes[actual_owner].number == readonly_declaration() &&
+        nodes[owner_parameter].number != readonly_declaration()) { return readonly_owner_argument(); } else {};
     if (owners[owner_parameter].call_site == invocation && owners[owner_parameter].actual_owner != actual_owner) {
         return owner_conflict(nodes, owners[owner_parameter].actual_owner, actual_owner);
     } else {};
     owners[owner_parameter].call_site <- invocation;
     owners[owner_parameter].actual_owner <- actual_owner;
     set_fact(facts, argument, kind, wanted, actual_owner, 0u64, 0u8);
+    if (nodes[formal].kind == parameter_node() && reception == nullable_ptr()) {
+        facts[argument].checked_borrow <- 1u8;
+        (facts[actual].needs_target <- 1u8):void;
+    } else {};
     return 0u8;
 }
 
@@ -537,12 +551,12 @@ func merge_arm_result(nodes:const ExprNodes in N, ref facts:OperandFacts in F, a
     val owner_site <- facts[at].owner;
     if (owner_site == no_node() || facts[arm].owner == no_node()) { return unproved_owner(); } else {};
     if (owner_site != facts[arm].owner) { return owner_conflict(nodes, owner_site, facts[arm].owner); } else {};
-    val readonly <- left == readonly_place() || right == readonly_place();
-    if (readonly && nullable) { return unproved_result_contract(); } else {};
+    val readonly <- if (facts[at].target_readonly != 0u8 || facts[arm].target_readonly != 0u8) { 1u8 } else { 0u8 };
     val reservation <- facts[at].reservation;
     if (reservation != facts[arm].reservation) { return unproved_reservation_selection(); } else {};
-    val reception <- if (readonly) { readonly_place() } else { if (nullable) { nullable_ptr() } else { borrowed_ref() } };
+    val reception <- if (nullable) { nullable_ptr() } else { borrowed_ref() };
     set_fact(facts, at, kind, reception, owner_site, 0u64, 0u8);
+    facts[at].target_readonly <- readonly;
     facts[at].reservation <- reservation;
     return 0u8;
 }
@@ -942,10 +956,9 @@ export never_result;
 export exception_type;
 export null_literal;
 export independent_value;
-export writable_place;
+export local_place;
 export borrowed_ref;
 export nullable_ptr;
-export readonly_place;
 export readonly_exception;
 export unproved_operand;
 export wrong_operand_type;
