@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-20 — Declare the owner CType of a borrowed native handle
+
+<a id="h-booter-handle-owner-ctype-20261120"></a>
+**H-BOOTER-HANDLE-OWNER-CTYPE-20261120.** The project user in the [native-handle side chat](codex://threads/01a1fc67-b175-7313-9a6a-34e8987804a8) on 2026-11-20 (America/Los_Angeles) confirmed the proposed direction subject to syntax and semantics review: “非必要不要引入新概念。 我目前可以确认了，整体语法语义让 [CoD 设计讨论支线](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) 把关一下，祂也觉得没问题就按此执行。” The design review accepts `data "C" View in OwnerCType;`, ordinary borrowing of an owned handle, and recovery of the checked actual owner at the two-word C boundary. Interop r14→15 and registry r1024→1025 apply D-20-C-HANDLES/P-646/P-647. The reviewers applied these rules to the launcher's two existing foreign loans using ordinary fieldless CTypes. Marker names and internal storage are implementation choices. Permanent ABI and build configuration retain separate scope. Prior profile at `ad372f367afc192e22014717a26c231746c79b37:applications/cod-booter/docs/LLVMInterop.md`.
+
 ## 2026-11-20 — Connect builtin lookup and rejection reporting to the first launcher
 
 <a id="k-booter-catalog-diagnostic-20261120"></a>
