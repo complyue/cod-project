@@ -1,0 +1,37 @@
+data "C" Revision;
+array SourceBytes[u64]:u8;
+array LineStarts[u64]:u64;
+
+proc "C" Revision();
+proc "C" source_use(here work(ref bytes:const SourceBytes in S,
+                             ref starts:const LineStarts in S) -> u8,
+                    handle revision:Revision in S) -> u8 where {const owner S};
+proc "C" inspect(ref bytes:const SourceBytes in S, ref starts:const LineStarts in S)
+    -> u8 where {const owner S};
+proc "C" observe(val feedback:u8);
+proc "C" observe_return(val value:u64);
+
+proc scan() -> void {
+    own handle revision:Revision <- make own handle Revision();
+    observe(source_use(revision) (bytes, starts) => {
+        continue inspect(bytes, starts);
+    });
+    observe(source_use(revision) (ref bytes:const SourceBytes, starts) => {{
+        return 0u8;
+    }});
+    observe(source_use(revision) (bytes, starts) => {
+        break 127u8;
+    });
+    return;
+}
+
+proc early_exit() -> u64 {
+    own handle revision:Revision <- make own handle Revision();
+    source_use(revision) (bytes, starts) => {
+        return 41u64;
+    };
+    return 99u64;
+}
+
+scan();
+observe_return(early_exit());
