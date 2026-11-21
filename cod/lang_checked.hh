@@ -352,6 +352,11 @@ class ScalarChecker {
   CleanupEquations cleanup_{program_.exception_types};
   size_t cleanup_scope_ = 0;
   const Expression *prepared_call_ = nullptr;
+  struct CaseResultUse {
+    bool borrowed = false;
+    bool projects = false;
+  };
+  CaseResultUse case_result_use_;
   std::set<size_t> deferred_inputs_;
   std::optional<size_t> deferred_action_;
   struct ReturnInputs {
@@ -1935,11 +1940,23 @@ class ScalarChecker {
       boolean_revision = selections.writes;
     }
   };
+  struct CaseProjectionEvidence {
+    const Expression *source;
+    ViewEvidence view;
+    TargetPresence presence;
+    bool initialized;
+    auto operator==(const CaseProjectionEvidence &) const -> bool = default;
+  };
   struct CaseBreakEvidence {
     std::optional<Type> type;
-    bool view;
+    ViewEvidence view;
+    std::optional<CaseProjectionEvidence> projection;
     auto operator==(const CaseBreakEvidence &) const -> bool = default;
   };
+  static CaseProjectionEvidence case_projection_evidence(const Expression &source, const ViewEvidence &view,
+                                                          const TargetEvidence &target, const TypeEvidenceState &state) {
+    return {&source, view, target.presence, !state.checks_initialization() || target.places.empty() || target.initialized};
+  }
   struct TypeEvidenceExits {
     struct Path {
       std::set<size_t> reasons;
@@ -8082,9 +8099,19 @@ class ScalarChecker {
   static bool case_scan_scope(const Expression &arm) {
     return arm.case_resumes && arm.children.back()->kind == Expression::Kind::value_call;
   }
+  static bool case_result_type(const Type &type) {
+    return scalar_type(type) || type == Type::void_type || type == Type::null_ref;
+  }
+  static std::optional<Type> join_case_types(const Type &left, const Type &right, bool left_view, bool right_view) {
+    if (left == right) return left;
+    if (left == Type::null_ref && right_view) return right;
+    if (right == Type::null_ref && left_view) return left;
+    return std::nullopt;
+  }
   std::optional<Type> case_evidence(const Expression &expr, TypeEvidenceState &state, bool contextual,
                                    const Type *expected, std::vector<Type> *alternatives,
-                                   ExpectedTypeUse expected_use, EvidenceRead read) const {
+                                   ExpectedTypeUse expected_use, EvidenceRead read, ViewEvidence &view,
+                                   TargetEvidence &result_target, bool *value_projection = nullptr) const {
     using K = Expression::Kind;
     const auto &subject = *expr.children.front();
     const auto type = type_evidence(subject, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, true,
@@ -8099,14 +8126,27 @@ class ScalarChecker {
     std::optional<Type> result;
     std::optional<TypeEvidenceState> completed;
     auto *const outer = state.exits;
-    const auto complete = [&](const std::optional<Type> &type, bool view, TypeEvidenceState arm, const Location &at) {
+    std::optional<ViewEvidence> joined_view;
+    std::vector<std::optional<EvidenceOwner>> owners;
+    std::optional<TargetEvidence> joined_target;
+    std::vector<CaseProjectionEvidence> projections;
+    const auto complete = [&](const std::optional<Type> &type, const ViewEvidence &arm_view, TargetEvidence arm_target,
+                              TypeEvidenceState arm, const Location &at) {
       arm.exits = outer;
       if (!type) unknown_result = true;
       else {
-        if (*type != Type::void_type && (!scalar_type(*type) || view))
-          implementation_gap(at, "case arm result needs an independent scalar value");
-        if (result && *result != *type) fail(at, "case arms require one result type");
-        result = type;
+        if (!case_result_type(*type)) implementation_gap(at, "case result outside scalar bits and scalar references");
+        const auto common = result ? join_case_types(*result, *type, joined_view->view == true, arm_view.view == true) : type;
+        if (!common && !value_projection) fail(at, "case arms require one result type");
+        if (common) result = common;
+        else unknown_result = true;
+        if (arm_view.view == true && (*type != Type::null_ref || arm_view.owner)) owners.push_back(arm_view.owner);
+        joined_view = joined_view ? join_views(*joined_view, arm_view) : arm_view;
+        if (arm_view.view == true) {
+          if (arm.selections.tracking)
+            arm_target.presence_proof = arm.selections.observe(arm.selections.selection_outcomes(arm_target));
+          joined_target = joined_target ? join_targets(std::move(*joined_target), arm_target) : std::move(arm_target);
+        }
         if (alternatives) alternatives->push_back(*type);
       }
       if (completed) *completed = merge_reaching_evidence(std::move(*completed), std::move(arm), false, false);
@@ -8117,7 +8157,9 @@ class ScalarChecker {
       for (auto &path : flow.paths) {
         if (path.reasons.erase(Completion::case_break)) {
           const auto &value = *path.case_result;
-          complete(value.type, value.view, path.state, at);
+          auto target = path.result.borrowed ? path.result.borrowed->observe(path.state.selections) : TargetEvidence{};
+          if (value.projection) projections.push_back(*value.projection);
+          complete(value.type, value.view, std::move(target), path.state, at);
         }
         if (path.reasons.erase(Completion::case_scan)) {
           path.state.exits = outer;
@@ -8176,7 +8218,7 @@ class ScalarChecker {
       TypeEvidenceExits exits{{}, true};
       arm.exits = &exits;
       const auto value = type_evidence(body, arm, contextual, expected, nullptr, expected_use, body_reaches,
-          read == EvidenceRead::loop_discard ? EvidenceRead::discarded : read, false, scoped ? &scope_paths : nullptr);
+          read == EvidenceRead::loop_discard ? EvidenceRead::discarded : EvidenceRead::target, false, scoped ? &scope_paths : nullptr);
       arm.exits = outer;
       auto resumed = transfers(exits, body.at);
       if (body_reaches && scope_paths.scan) {
@@ -8188,14 +8230,40 @@ class ScalarChecker {
         scan.resume(matched, case_may_write(body));
       }
       if (body_reaches && value != Type::never && (!scoped || scope_paths.result)) {
-        const bool viewed = arm.value.view == true || arm.value.mixed_view;
-        complete(value, viewed, std::move(arm), body.at);
+        const auto arm_view = arm.value;
+        auto arm_target = arm.target;
+        if (state.required && arm_view.view == true)
+          projections.push_back(case_projection_evidence(body, arm_view, arm_target, arm));
+        complete(value, arm_view, std::move(arm_target), std::move(arm), body.at);
       }
     }
     const bool unmatched = reaches_end && !scan.remaining.empty();
-    if (unmatched && result && *result != Type::void_type)
+    if (unmatched && result && *result != Type::void_type && !value_projection)
       fail(expr.at, "value case may finish without a result; provide a completing arm or a catch-all");
     if (completed) state = merge_reaching_evidence(std::move(*completed), std::move(state), false, !unmatched);
+    if (joined_view && joined_view->view == true && result && *result != Type::void_type) {
+      if (joined_view->mixed_view) {
+        if (value_projection) *value_projection = true;
+        if (state.required && proving_ && validating_) for (const auto &projection : projections) {
+          require_present_projection(projection.view, projection.presence, projection.source->at);
+          if (!projection.initialized)
+            fail(projection.source->at, "case scalar result read before definite initialization of every possible target");
+        }
+      } else {
+        view.read_only = joined_view->read_only;
+        view.view = true;
+        view.nullable = joined_view->nullable;
+        if (!owners.empty()) {
+          view.owner = owners.front();
+          for (const auto &other : owners) {
+            const auto relation = compare_owners(owners.front(), other, &state);
+            if (state.required) require_conditional_owner(relation, expr.at);
+            if (relation != OwnerMatch::satisfied) view.owner.reset();
+          }
+        }
+        if (joined_target) result_target = std::move(*joined_target);
+      }
+    }
     if (unknown_result) return {};
     return result.value_or(unmatched ? Type::void_type : Type::never);
   }
@@ -11145,12 +11213,21 @@ class ScalarChecker {
       view.storage_kind.reset();
       return type;
     }
-    case K::case_expression: return case_evidence(expr, state, contextual, expected, alternatives, expected_use, read);
+    case K::case_expression:
+      return case_evidence(expr, state, contextual, expected, alternatives, expected_use, read, view, target_facts);
     case K::case_break: {
-      const auto type = expr.children.empty() ? std::optional{Type{Type::void_type}} : child(0);
-      if (state.exits && type != Type::never)
-        merge_type_exits(*state.exits, {Completion::case_break}, state, {}, false,
-                         CaseBreakEvidence{type, !expr.children.empty() && (state.value.view == true || state.value.mixed_view)});
+      const auto type = expr.children.empty() ? std::optional{Type{Type::void_type}} : child(0, false, true, EvidenceRead::target);
+      if (state.exits && type != Type::never) {
+        const auto view = expr.children.empty() ? ViewEvidence{false, false, {}} : state.value;
+        TypeReturned prepared;
+        if (view.view == true && state.selections.tracking)
+          prepared.borrowed = TypeBorrowedReturn::capture(state.target, state.selections);
+        std::optional<CaseProjectionEvidence> projection;
+        if (state.required && view.view == true)
+          projection = case_projection_evidence(*expr.children.front(), view, state.target, state);
+        merge_type_exits(*state.exits, {Completion::case_break}, state, std::move(prepared), false,
+                         CaseBreakEvidence{type, view, projection});
+      }
       return Type::never;
     }
     case K::case_fallthrough:
@@ -15912,6 +15989,11 @@ class ScalarChecker {
       const Type *expected, ExpectedTypeUse expected_use) {
     using K = Expression::Kind;
     CheckedOperation result;
+    auto probe = evidence_state(false, nullptr, true);
+    ViewEvidence result_view{false, false, {}};
+    TargetEvidence result_target;
+    bool projects = false;
+    case_evidence(expr, probe, false, expected, nullptr, expected_use, EvidenceRead::target, result_view, result_target, &projects);
     const auto &subject = *expr.children.front();
     const auto type = check(subject, instance, operations, false, false, nullptr, ExpectedTypeUse::materialization,
                             false, IndexedUse::immediate_target);
@@ -15921,24 +16003,57 @@ class ScalarChecker {
     if (selected.mixed_view || selected.targets.contains(null_target))
       implementation_gap(subject.at, "case matching on a mixed or possibly null subject");
     auto scan = case_scan(type, selected.view, subject);
+    const auto outer_use = std::exchange(case_result_use_, {result_view.view == true, projects});
     std::optional<LexicalState> completed;
+    bool saw_view = false, saw_bits = false, saw_mixed = false;
     const auto join_scan = [&](const LexicalState &other, bool current_exits, const Location &at) {
       const auto current = std::move(lexical_);
       join(other, false, current, current_exits, at);
     };
-    const auto complete = [&](const LexicalState &state, const Type &value, const CheckedOperation *fact, const Location &at) {
+    const auto complete = [&](LexicalState state, const Type &value, const CheckedOperation *fact,
+                              const Location &at, bool prepared) {
       if (!state.live || value == Type::never) return;
-      if (value != Type::void_type && (!scalar_type(value) || (fact && (fact->view || fact->mixed_view))))
-        implementation_gap(at, "case arm result needs an independent scalar value");
-      if (result.type != Type::never && result.type != value) fail(at, "case arms require one result type");
-      result.type = value;
+      if (!case_result_type(value)) implementation_gap(at, "case result outside scalar bits and scalar references");
+      const bool viewed = fact && fact->view;
+      const auto common = result.type == Type::never ? std::optional{value} : join_case_types(result.type, value, saw_view, viewed);
+      if (!common) fail(at, "case arms require one result type");
+      result.type = *common;
+      saw_view |= viewed;
+      saw_bits |= !viewed;
+      saw_mixed |= fact && fact->mixed_view;
       if (fact) result.exceptions.merge(fact->exceptions);
+      auto previous = std::move(lexical_);
+      lexical_ = std::move(state);
+      if (viewed) {
+        if (projects) {
+          if (!prepared) require_case_projection(*fact, at);
+        } else {
+          require_live_view(*fact, at);
+          auto readiness = fact->initialization;
+          if (std::ranges::all_of(fact->targets, [&](size_t target) {
+                return target == null_target || lexical_.initialized.contains(target);
+              })) readiness.emplace();
+          else if (const auto binding = current_binding(*fact); binding && !readiness)
+            readiness = selection_initialization(lexical_, *binding);
+          if (!result.view) result.initialization.emplace();
+          result.constrain_initialization(readiness);
+          result.view = true;
+          result.nullable_view |= fact->nullable_view;
+          result.read_only |= fact->read_only;
+          result.targets.insert(fact->targets.begin(), fact->targets.end());
+          result.null_sources.insert(fact->null_sources.begin(), fact->null_sources.end());
+          result.owners.insert(fact->owners.begin(), fact->owners.end());
+          if (!result.nullness) result.nullness.emplace();
+          CleanupEquations::merge_boolean(*result.nullness, snapshot_boolean(null_predicate(*fact), lexical_, at));
+          if (read && !discard) read_view(*fact, at, "case result");
+        }
+      }
       if (completed) {
-        auto previous = std::move(lexical_);
-        join(*completed, false, state, false, at);
-        completed = std::move(lexical_);
-        lexical_ = std::move(previous);
-      } else completed = state;
+        const auto reached = std::move(lexical_);
+        join(*completed, false, reached, false, at);
+      }
+      completed = std::move(lexical_);
+      lexical_ = std::move(previous);
     };
     const auto transfers = [&](const AbruptFlow &flow) {
       std::optional<LexicalState> resumed;
@@ -15947,7 +16062,7 @@ class ScalarChecker {
         if (path.completion.reason == Completion::case_break) {
           const auto &source = *path.case_result;
           const auto *value = source.children.empty() ? nullptr : &operations.at(source.children.front().get());
-          complete(path.state, operations.at(&source).operand_type, value, source.at);
+          complete(path.state, operations.at(&source).operand_type, value, source.at, true);
         } else if (path.completion.reason == Completion::case_scan) {
           if (resumed) {
             join(*resumed, false, path.state, false, path.at);
@@ -16009,21 +16124,21 @@ class ScalarChecker {
       if (scoped) {
         CheckedOperation call;
         check_scope_call(body, lexical_method(body.children.front()->definition.get()), instance, operations,
-                         call, read, discard, expected_use == ExpectedTypeUse::callable_result ? expected : nullptr, &resumed);
+                         call, false, discard, expected_use == ExpectedTypeUse::callable_result ? expected : nullptr, &resumed);
         value = call.type;
-        header.case_scope_returns = lexical_.live;
         header.case_scope_resumes = resumed && resumed->live;
         operations.insert_or_assign(&body, std::move(call));
       } else {
         AbruptFlow exits{lexical_.scopes.size(), {}};
         abrupt_ = &exits;
-        value = check(body, instance, operations, read, discard, expected, expected_use);
+        value = check(body, instance, operations, false, discard, expected, expected_use);
         abrupt_ = outer;
         resumed = transfers(exits);
       }
       header.type = value;
+      header.case_arm_completes = lexical_.live && value != Type::never;
       operations.insert_or_assign(&item, std::move(header));
-      complete(lexical_, value, &operations.at(&body), body.at);
+      complete(lexical_, value, &operations.at(&body), body.at, false);
       if (resumed && resumed->live) {
         lexical_ = std::move(*resumed);
         join_scan(missed, false, body.at);
@@ -16036,8 +16151,34 @@ class ScalarChecker {
       else if (result.type != Type::void_type)
         fail(expr.at, "value case may finish without a result; provide a completing arm or a catch-all");
     }
+    case_result_use_ = outer_use;
+    const bool independent = saw_view && (saw_bits || saw_mixed);
+    if (saw_view && (independent != projects || (!independent && result_view.view != true)))
+      implementation_gap(expr.at, "case result category changes during ordered checking");
+    result.scalar_value_join = projects;
+    if (result.view) {
+      select_targets(result, result.targets);
+      if (!result.targets.contains(null_target) || result.targets.size() == 1) result.nullness.reset();
+      if (result.owners.size() > 1) {
+        const auto owner = *result.owners.begin();
+        bool common = true;
+        for (const auto other : result.owners) {
+          const auto relation = compare_owners(owner, other);
+          if (proving_ && validating_) require_conditional_owner(relation, expr.at);
+          common &= relation == OwnerMatch::satisfied;
+        }
+        if (common) result.owners = {owner};
+      }
+    }
     if (completed) join_scan(*completed, !result.case_reaches_end, expr.at);
     return result;
+  }
+
+  void require_case_projection(const CheckedOperation &source, const Location &at) {
+    require_live_view(source, at);
+    if (proving_ && validating_ && lexical_.live && source.targets.contains(null_target))
+      fail(at, "case scalar value requires a proven non-null target");
+    read_view(source, at, "case scalar result");
   }
 
   Type check(const Expression &expr, CheckedInstance *instance,
@@ -16595,7 +16736,16 @@ class ScalarChecker {
       break;
     case K::case_break: {
       operation.type = Type::never;
-      operation.operand_type = expr.children.empty() ? Type{Type::void_type} : child(0);
+      if (expr.children.empty()) operation.operand_type = Type::void_type;
+      else {
+        const auto &operand = *expr.children.front();
+        const auto use = case_result_use_;
+        operation.operand_type = child(0, !use.borrowed && !use.projects);
+        const auto &source = operations.at(&operand);
+        operation.borrowed_result = use.borrowed && source.view && !source.mixed_view;
+        operation.scalar_value_join = use.projects;
+        if (use.projects && source.view) require_case_projection(source, operand.at);
+      }
       if (operation.operand_type != Type::never)
         note_abrupt(expr.at, {}, {Completion::case_break}, false, {}, false, &expr);
       break;
