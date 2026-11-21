@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-20 — Spell lexical borrows and owner-bound CoD results
+
+<a id="k-booter-handle-bindings-20261120"></a>
+**K-BOOTER-HANDLE-BINDINGS-20261120.** Agent continuity assessment under [H-BOOTER-HANDLE-OWNER-CTYPE-20261120](#h-booter-handle-owner-ctype-20261120) and [H-BOOTER-C-HANDLES-20261120](#h-booter-c-handles-20261120). Interop r15→16 and registry r1025→1026 apply D-20-C-HANDLES/P-646/P-647 to lexical `=` initialization, inferred or explicitly constrained actual owners and ordinary CoD `-> handle T in O` results. Both retain access, loan duration and the owner’s cleanup responsibility. The prior contract is at `72cc10373aedf8fcdd679a07248fced6010ab783:applications/cod-booter/docs/LLVMInterop.md`. Later rebinding of an existing native handle local has separate scope.
+
 ## 2026-11-20 — Declare the owner CType of a borrowed native handle
 
 <a id="h-booter-handle-owner-ctype-20261120"></a>
