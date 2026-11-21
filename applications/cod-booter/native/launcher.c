@@ -230,8 +230,7 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: native case pattern is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 25)
         fputs(": error: value case may finish without a result\n", stderr);
-    else if ((diagnostic->stage == 5 && diagnostic->code == 18) ||
-             (diagnostic->stage == 4 && diagnostic->code == 26))
+    else if (diagnostic->stage == 5 && diagnostic->code == 18)
         fputs(": error: a case transfer across cleanup is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 27)
         fputs(": error: this type assertion is outside the supported compiler profile\n", stderr);

@@ -48,10 +48,10 @@ export func checked_remainder() -> u8 { return 22u8; }
 # Operands are the category slot, the handler search block, and the bypass block.
 export func branch_catchable() -> u8 { return 23u8; }
 
-# The checker's private defer slots use ordinary word and branch operations
-# at the LLVM boundary. Their distinct roles allow control-flow proofs.
-export func write_defer_flag() -> u8 { return 24u8; }
-export func branch_if_unregistered() -> u8 { return 25u8; }
+# These private flag operations let initialization checking correlate
+# a control decision across cleanup. They become word operations for LLVM.
+export func write_flow_flag() -> u8 { return 24u8; }
+export func branch_on_flow_flag() -> u8 { return 25u8; }
 
 # Compile-time facts about a local's storage binding. They share the
 # initialization checker with reservation operations and have no native form.

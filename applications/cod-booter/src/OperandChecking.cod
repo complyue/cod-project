@@ -42,6 +42,7 @@ export data OperandFact {
     case_body:u8;
     case_guard:u8;
     case_resume:u8;
+    first_fallthrough:u64;
     case_end:u8;
     enum_constant:u8;
     discriminator_code:u64;
@@ -107,7 +108,6 @@ func checked_selection_requires_ref() -> u8 { return 22u8; }
 export func unsupported_case_subject() -> u8 { return 23u8; }
 export func unsupported_case_pattern() -> u8 { return 24u8; }
 func incomplete_value_case() -> u8 { return 25u8; }
-export func unsupported_case_scope_transfer() -> u8 { return 26u8; }
 func unsupported_scalar_assertion() -> u8 { return 27u8; }
 func missing_enum_member() -> u8 { return 28u8; }
 func incompatible_enum_type() -> u8 { return 29u8; }
@@ -679,10 +679,35 @@ func case_condition(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64)
     return case_guard_tests();
 }
 
-func prepare_case_arm(nodes:const ExprNodes in N, facts:OperandFacts in F, arm:u64) -> u8
-    where {const owner N, owner F} {
-    if (facts[arm].case_resume != 0u8 && nodes[nodes[arm].right].kind == full_scope_node())
-        return unsupported_case_scope_transfer();
+# A direct registration before every transfer runs unless an earlier
+# abrupt completion prevents the transfer itself. If the action cannot
+# finish normally, its completion replaces the pending scan request.
+export func has_terminal_defer_before(nodes:const ExprNodes in N, links:const NameWork in L,
+                                      facts:const OperandFacts in F, tail:u64, before:u64) -> bool
+    where {const owner N, const owner L, const owner F} {
+    val item <- first_item(nodes, tail);
+    val expression <- no_node();
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        if (item == no_node()) return false;
+        expression <- nodes[item].right;
+        if (nodes[expression].past > before) return false;
+        if (nodes[expression].kind == deferred_block_node() && facts[nodes[expression].left].kind == never_result())
+            return true;
+        item <- links[item].next;
+    };
+    return false;
+}
+
+export func case_resumes_after_cleanup() -> u8 { return 1u8; }
+func replaced_case_resume() -> u8 { return 2u8; }
+
+func prepare_case_arm(nodes:const ExprNodes in N, links:const NameWork in L, facts:OperandFacts in F, arm:u64) -> u8
+    where {const owner N, const owner L, owner F} {
+    val body <- nodes[arm].right;
+    if (facts[arm].case_resume != 0u8 && nodes[body].kind == full_scope_node() &&
+        has_terminal_defer_before(nodes, links, facts, nodes[body].left, facts[arm].first_fallthrough)) {
+        (facts[arm].case_resume <- replaced_case_resume()):void;
+    } else {};
     val behavior <- case_condition(nodes, facts, nodes[arm].number);
     if (behavior == 0u8) return expected_boolean_condition();
     facts[arm].case_guard <- behavior;
@@ -727,7 +752,7 @@ func check_case_arm(nodes:const ExprNodes in N, links:const NameWork in L, facts
     val body <- nodes[arm].right;
     val enters_body <- behavior != case_guard_exits() && behavior != case_guard_declines();
     val declines <- behavior == case_guard_declines() || behavior == case_guard_tests();
-    val falls_through <- enters_body && facts[arm].case_resume != 0u8;
+    val falls_through <- enters_body && facts[arm].case_resume == case_resumes_after_cleanup();
     if (declines || falls_through) {
         if (borrowed && (case_may_write(nodes, links, guard) ||
                          (falls_through && case_may_write(nodes, links, body)))) {
@@ -929,7 +954,10 @@ func check_scope_tail(nodes:const ExprNodes in N, facts:OperandFacts in F, scope
     val tail <- nodes[scope].left;
     val identity <- if (tail == no_node()) { 0u64 } else { (facts[tail].identity) };
     val diagnostic <- merge_result(facts, scope, sequence_result(facts, tail), identity);
-    if (diagnostic == 0u8 && facts[scope].kind == 0u8) { only_void(facts, scope); } else {};
+    if (diagnostic == 0u8 && facts[scope].kind == 0u8) {
+        if (facts[scope].case_resume != 0u8) { set_result(facts, scope, never_result()); }
+        else { only_void(facts, scope); };
+    } else {};
     return diagnostic;
 }
 
@@ -1129,11 +1157,19 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     if (kind == full_scope_node()) return check_scope_tail(nodes, facts, at);
     if (kind == try_node()) return check_try_result(nodes, links, facts, at);
     if (kind == conditional_node()) return check_conditional(nodes, facts, at);
-    if (kind == case_arm_node()) return prepare_case_arm(nodes, facts, at);
+    if (kind == case_arm_node()) return prepare_case_arm(nodes, links, facts, at);
     if (kind == case_node()) return check_case(source, nodes, names, links, facts, at);
     if (kind == break_node()) return check_case_break(nodes, names, facts, at);
     if (kind == case_fallthrough_node()) {
-        facts[names[at].declaration].case_resume <- 1u8;
+        val arm <- names[at].declaration;
+        val scope <- names[at].scope;
+        facts[arm].case_resume <- case_resumes_after_cleanup();
+        if (nodes[at].first < facts[arm].first_fallthrough) {
+            (facts[arm].first_fallthrough <- nodes[at].first):void;
+        } else {};
+        if (nodes[arm].right == scope && nodes[scope].kind == full_scope_node()) {
+            (facts[scope].case_resume <- case_resumes_after_cleanup()):void;
+        } else {};
         set_result(facts, at, never_result());
         return 0u8;
     } else {};
@@ -1232,6 +1268,7 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
         facts[at].case_body <- 0u8;
         facts[at].case_guard <- 0u8;
         facts[at].case_resume <- 0u8;
+        facts[at].first_fallthrough <- no_node();
         facts[at].case_end <- 0u8;
         facts[at].enum_constant <- 0u8;
         facts[at].discriminator_code <- 0u64;

@@ -16,7 +16,7 @@ using "NameResolution.cod" {
 };
 using "OperandChecking.cod" {
     OperandFacts, nullable_ptr, borrowed_ref, never_result, void_result, has_value_tail,
-    unreachable_case_item, misses_case_arm,
+    unreachable_case_item, misses_case_arm, has_terminal_defer_before,
 };
 using "ModuleExports.cod" {
     exception_root_identity, null_pointer_identity, missing_return_identity, unexpected_case_identity,
@@ -58,6 +58,7 @@ export func possible_failure() -> u8 { return 1u8; }
 export func definite_failure() -> u8 { return 2u8; }
 export func callable_return() -> u8 { return 3u8; }
 export func skipped_operand() -> u8 { return 4u8; }
+func case_scan_resume() -> u8 { return 5u8; }
 
 export func present_target() -> u8 { return 1u8; }
 export func absent_target() -> u8 { return 2u8; }
@@ -512,10 +513,17 @@ func check_case_transfer(nodes:const ExprNodes in N, names:const NameBindings in
                          sites:CompletionSites in X, at:u64) -> u8
     where {const owner N, const owner B, owner X} {
     val target <- names[at].declaration;
-    if (names[at].scope != names[target].scope ||
-        sites[at].case_transfer_barrier != sites[target].case_transfer_barrier)
+    if (sites[at].case_transfer_barrier != sites[target].case_transfer_barrier)
         return unsupported_case_transfer();
-    if (nodes[at].kind == break_node()) { (sites[target].case_break <- 1u8):void; } else {};
+    val scope <- names[at].scope;
+    val stop <- names[target].scope;
+    if (scope != stop) {
+        if (nodes[at].kind != case_fallthrough_node() || nodes[target].right != scope ||
+            nodes[scope].kind != full_scope_node()) return unsupported_case_transfer();
+        record_exit(sites, at, case_scan_resume(), no_node(), target, scope, stop);
+    } else {
+        if (nodes[at].kind == break_node()) { (sites[target].case_break <- 1u8):void; } else {};
+    };
     sites[at].can_continue <- 0u8;
     return 0u8;
 }
@@ -585,19 +593,9 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
 # replaces fallthrough. Any escaping language failure from it is checked
 # separately against the drain's own coverage.
 func has_terminal_defer(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                        body:u64, used:u64) -> bool
+                        body:u64) -> bool
     where {const owner N, const owner L, const owner F} {
-    if (nodes[body].kind != block_node()) return false;
-    val item <- first_item(nodes, nodes[body].left);
-    val expression <- no_node();
-    for (unused in 0u64 .. used) {
-        if (item == no_node()) return false;
-        expression <- nodes[item].right;
-        if (nodes[expression].kind == deferred_block_node() && facts[nodes[expression].left].kind == never_result())
-            return true;
-        item <- links[item].next;
-    };
-    return false;
+    return nodes[body].kind == block_node() && has_terminal_defer_before(nodes, links, facts, nodes[body].left, no_node());
 }
 
 func enqueue_failure(sites:CompletionSites in X, definition:u64, count:u64) -> u64 where {owner X} {
@@ -642,7 +640,7 @@ func check_escaping_failure_paths(nodes:const ExprNodes in N, names:const NameBi
     };
     for (at in 0u64 .. used) {
         if (category == missing_return_identity() && can_miss_return(nodes, facts, sites, at) &&
-            !has_terminal_defer(nodes, links, facts, nodes[at].right, used)) {
+            !has_terminal_defer(nodes, links, facts, nodes[at].right)) {
             (count <- enqueue_failure(sites, at, count)):void;
         } else {};
         if ((nodes[at].kind == throw_node() || nodes[at].kind == case_failure_node()) && sites[at].category == category) {
