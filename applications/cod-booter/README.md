@@ -1,10 +1,10 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 21 · Recorded: 2026-11-21 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 22 · Recorded: 2026-11-21 · Phase: initial seed delivery through alternating booter and seed development.
 
 ## Design authority
 
-- [D-17-EXCEPTION-BINDINGS](../../design/DesignAuthorityRegistry.md#d-17-exception-bindings) at roadmap r21 applies the [binding decision](../../CHANGELOG.md#h-exception-bindings-20261121) to [both bootstrap parsers](#exception-syntax-in-both-frontends). P-650/P-651 require readable exception source and one identifiable release obligation. The semantic checker and execution retain their respective delivery scopes.
+- [D-17-EXCEPTION-BINDINGS](../../design/DesignAuthorityRegistry.md#d-17-exception-bindings) and [D-10-CONTEXTUAL-NAMES](../../design/DesignAuthorityRegistry.md#d-10-contextual-names) at roadmap r22 apply the [catch](../../CHANGELOG.md#h-catch-holder-only-20261121) and [lexical name](../../CHANGELOG.md#h-lexical-name-release-20261121) decisions to both bootstrap frontends. P-650–P-653 connect readable, checkable source to one identifiable release obligation and ordinary lookup. Check positive and negative grammar boundaries. Runtime delivery remains scoped per operation.
 
 - **Initial seed delivery.** [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap), r16, covers [the seed scope and acceptance](#initial-seed-delivery). [H-BOOTER-DRIVEN-SEED-20261119](../../CHANGELOG.md#h-booter-driven-seed-20261119) confirms the booter-driven delivery priority and source-readability requirement. [H-BOOTER-NATIVE-MINIMUM-20261119](../../CHANGELOG.md#h-booter-native-minimum-20261119) confirms the shared C interface, basic C-native region support and minimal LLVM bindings as required for delivery. P-642 connects C-80 to charter §§4.3/6.3/8.1/12 through explicit native lifetimes, correct execution, readable CoD source and end-to-end evidence. P-643 records governing contracts. The exact provider ABI and operations beyond the booter's needs retain their own review boundaries.
 
@@ -18,7 +18,7 @@ Roadmap revision: 21 · Recorded: 2026-11-21 · Phase: initial seed delivery thr
 
 - **Output initialization.** [D-22](../../design/DesignAuthorityRegistry.md#d-22-init-places) governs calls that initialize an ordinary caller place under C-81/C-65 and charter §§4.3, 6.3, 8 and 12. The first native workflow uses the scoped handle contract for resource acquisition and disposal.
 
-- **Registry and scope.** [D-20](../../design/DesignAuthorityRegistry.md#d-20), roadmap revision 21. The pipeline and interop documents retain their scoped qualification. [H-353](../../CHANGELOG.md#h-353) supplies the compiler application baseline. [H-356](../../CHANGELOG.md#h-356) supplies the selected defer call/block timing. Detailed application contracts beyond the confirmed scopes remain `pending-human`.
+- **Registry and scope.** [D-20](../../design/DesignAuthorityRegistry.md#d-20), roadmap revision 22. The pipeline and interop documents retain their scoped qualification. [H-353](../../CHANGELOG.md#h-353) supplies the compiler application baseline. [H-356](../../CHANGELOG.md#h-356) supplies the selected defer call/block timing. Detailed application contracts beyond the confirmed scopes remain `pending-human`.
 - **Value:** C-80/P-314–P-318 connects inspectable compiler semantics to C-01, reusable structured artifacts to C-05, and native integration to C-02/C-11/C-79. The charter's §§2, 5.3–5.4, 6–7 and 12 provide the context; detailed derivation and trade-offs remain pending.
 - **Boundaries / acceptance:** preserve regional relocation, owner/access checks, independent module worlds and explicit TLS effects where used. Keep confirmed direction, proposals and missing evidence distinguishable. Native ABI, toolchain operations and performance claims require their own authorization or evidence.
 
@@ -52,9 +52,13 @@ Build the initial booter with statically linked C providers generated from check
 
 ### Exception syntax in both frontends
 
-The C++ seed and CoD booter must parse the [exception declarations and catch bindings](../../design/ExceptionControl.md#exception-declarations-and-catch-bindings) and [normal construction forms](../../design/ExceptionControl.md#make-exception-expressions). Both must distinguish an owning declaration, consuming parameter or owning result, an owning catch (including the shorthand), and an explicit ref with an owner. Preserve target constness independently. Parse the two construction forms and their optional fresh-region capacity or cause in the specified position. Preserve the same binding modes in try and deferred catches.
+The C++ seed and CoD booter must parse the [owning catch header and ordinary ref declarations](../../design/ExceptionControl.md#exception-declarations-and-catch-bindings) and the [normal construction forms](../../design/ExceptionControl.md#make-exception-expressions). Both recognize `catch (e)`, `catch (e:E)` and `catch (e:const E)` in try and defer. A ref or holder declaration prefix in a catch, or an owner constraint in its header, is a syntax error. Locals, parameters and results distinguish owning exception declarations from ordinary ref borrows. Both parsers preserve explicit target constness and construction placement.
 
 Acceptance checks each frontend at its own parse boundary. A valid form carries its binding mode, owner name when present, and construction operands into checking. Malformed syntax fails at parsing. When an execution path is unsupported, the compiler can reject the parsed form during checking or lowering. Supported paths must execute their required propagation, handling and cleanup. For example, parsing `catch (e:const E)` as a borrowed local loses the handler’s release obligation even when the handler only reads e.
+
+### Contextual names in both frontends
+
+Apply the [name rules](../../design/SymbolicDynamicScope.md#clause-words-and-lexical-variable-names) during dependency scanning, parsing and lookup. Cover lexical binders and their uses, `from` and `throws` in clauses, module declarations and ordinary user calls with names such as `fold` and `store`. A lexer accepting the spelling is insufficient if a later phase still diverts it to an intrinsic or rejects the binding. References to unsupported features retain their stage-specific diagnostics.
 
 ## Next-stage repositories and native runtime
 

@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 228 · Recorded: 2026-11-21 · Phase: language/application co-design.
+Design revision: 229 · Recorded: 2026-11-21 · Phase: language/application co-design.
 
 ## Design authority
+
+[D-10-CONTEXTUAL-NAMES](DesignAuthorityRegistry.md#d-10-contextual-names) at r229 applies [H-LEXICAL-NAME-RELEASE-20261121](../CHANGELOG.md#h-lexical-name-release-20261121) to [clause words and lexical variable names](#clause-words-and-lexical-variable-names). P-652/P-653 connect readable domain names and predictable lookup to C-37/C-41 and the ordinary-name contract. Check binders, uses and clause boundaries in both frontends. Module publication, ownership and overload selection retain their own contracts.
 
 [D-10-OWN-QUALIFIER](DesignAuthorityRegistry.md#d-10-own-qualifier) and [H-CONTEXTUAL-OWN-20261121](../CHANGELOG.md#h-contextual-own-20261121) cover contextual `own` and ordinary identifier lookup at r228.
 
@@ -1482,11 +1484,33 @@ H-274 additionally requires region-specific owner parameters constrained by a ro
 
 H-150 rejects reserved expression names in lexical value declarations: function/procedure parameters, ref/ptr/val declarations and loop indices. A bare name that the expression parser treats as a literal or control/declaration form cannot introduce a local binding. For example, `function identity(true:bool) -> bool { true }` is a compilation error rather than a function with an inaccessible parameter.
 
-The bounded grammar reserves `true`, `false`, `null`, `for`, `ptr`, `ref`, `val`, `throws`, `const`, `typeof`, `intrinsic`, `effect`, `perform`, `behave`, `if`, `procedure`, `function`, `global` and `symbol` in those declaration positions. Contextual names with ordinary value lookup, such as `in` and `else`, remain available. This aligns accepted declarations with their subsequent lexical lookup, serving C-37/C-41’s readable composition through the existing candidate P-86/P-97 value paths. It does not change H-149’s visibility/uniqueness rule or dynamic symbol identity.
+The bounded grammar reserves `true`, `false`, `null`, `for`, `ptr`, `ref`, `val`, `const`, `typeof`, `intrinsic`, `effect`, `perform`, `behave`, `if`, `procedure`, `function`, `global` and `symbol` in those declaration positions. Contextual names with ordinary value lookup, such as `in` and `else`, remain available. This aligns accepted declarations with their subsequent lexical lookup, serving C-37/C-41’s readable composition through the existing candidate P-86/P-97 value paths. It does not change H-149’s visibility/uniqueness rule or dynamic symbol identity.
 
 Field selectors retain contextual identifier meaning: `record.true` selects the field, and `record.true <- value` writes a writable bits field. In an ordinary call `setfield(record, flag, value)`, `flag` is a value expression. Symbol names, module resource aliases, callable names, module globals, a general reserved-word policy and escaped identifiers retain their separate boundaries; this local decision supplies no escaping syntax or wider namespace rule.
 
 Acceptance checks inaccessible parameter/local/loop names before execution, including during dependency scanning, while preserving ordinary contextual names and field selectors. Rejection names the offending spelling and its source location. P-130 records the confirmed local constraint; the complete language contract remains pending-human.
+
+### Clause words and lexical variable names
+
+`from` and `throws` are ordinary identifiers wherever a name is expected. Recognize them as clause words in the grammatical positions for a module source, an exception cause or a callable's checked-failure declaration. Name visibility does not choose the parse. An explicit `rethrow from (cause);` keeps its cause-clause meaning even when a callable or type named from is in scope. An exception type actually named from can be constructed unambiguously with `make exception from(...)`.
+
+```cod
+func distance(from:u64, to:u64) -> u64 { to - from }
+
+proc wrap(exception from:SaveException) throws SaveException {
+    throw SaveException from from { code <- 7u64; };
+}
+
+func extent(data:u64, unit:u64) -> u64 {
+    val type <- data * unit;
+    val array <- type;
+    array
+}
+```
+
+In `from from`, the clause introduces a cause and its operand names the existing holder. In `extent`, `data`, `type`, `unit` and `array` are lexical variable names. These four spellings are allowed wherever a lexical value variable is bound or used, including parameters, loop bindings and named argument labels for such parameters. Ordinary lookup also applies to a call through a variable of callable type. Their module declaration, named callable, named type and import-selector positions keep the [module-form restrictions](#primary-module-form-keywords). Thus `data Packet { ... }` introduces a type, while a parameter named data used as `data.field` selects a field. A field name such as `record.type` already belongs to its field namespace.
+
+Acceptance covers each spelling in a binding and as an operand, ordinary shadowing and missing-name errors, a checked signature followed by a body, a repeated spelling at a clause boundary, call labels, field access and valid module declarations. An explicit semicolon can end a complete expression before the following construct. These word rules leave `true`, `false`, `null`, the word operators `is` and `not`, and `touch @symbol` with their established meanings.
 
 ### Contextual ownership qualifier
 
@@ -1522,7 +1546,7 @@ Migrate user-defined parenthesized named overloads and their imports together as
 
 ### Primary module-form keywords
 
-The primary module-form keyword set reserves `type`, `data`, `unit`, `array`, `using`, `import`, `mixin`, `export` and `conversion` against ordinary declarations and aliases. These names cannot introduce lexical functions, values, types or selected UoM aliases. A declaration such as `function type(...)` is rejected before execution, independent of where it would be called. Field selectors such as `record.type` and symbolic names such as `@using` retain their contextual meaning. H-149 shadowing and usable nonreserved contextual names remain unchanged. Use `data` for a concrete representation. The identifier `regional` is available to programs. C-41/P-97's readable expression composition is the existing candidate value rationale; this local keyword decision does not qualify the complete grammar.
+At module scope, `type`, `data`, `unit`, `array`, `using`, `import`, `mixin`, `export` and `conversion` introduce forms and remain reserved as declared names and names in explicit import selections. Named type and callable declarations retain these reservations, including `function type(...)`. The [lexical variable rule](#clause-words-and-lexical-variable-names) admits the first four in value-variable positions. The other five remain reserved there. Field selectors such as `record.type` and symbolic names such as `@using` have their own grammar. Use `data` to declare a concrete representation. The identifier `regional` is available to programs.
 
 ### Parenthesized value expressions and operator idioms
 
