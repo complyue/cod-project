@@ -13,6 +13,17 @@ using "ParserStorage.cod" parameter_node;
 using "ParserStorage.cod" val_parameter_node;
 using "ParserStorage.cod" handle_parameter_node;
 using "ParserStorage.cod" here_parameter_node;
+using "ParserStorage.cod" owning_handle_local_node;
+using "ParserStorage.cod" borrowed_handle_local_node;
+using "ParserStorage.cod" make_own_handle_node;
+using "ParserStorage.cod" make_borrowed_handle_node;
+using "ParserStorage.cod" handle_construction;
+using "ParserStorage.cod" group_node;
+using "ParserStorage.cod" name_node;
+using "ParserStorage.cod" literal_node;
+using "ParserStorage.cod" bool_node;
+using "ParserStorage.cod" typed_name_node;
+using "ParserStorage.cod" val_binding_node;
 using "ParserStorage.cod" owner_clause_node;
 using "ParserStorage.cod" result_clause_node;
 using "ParserStorage.cod" throws_clause_node;
@@ -23,6 +34,10 @@ using "NameResolution.cod" signature_head;
 using "NameResolution.cod" signature_clause;
 using "NameResolution.cod" record_declaration;
 using "NameResolution.cod" c_handle_type;
+using "NameResolution.cod" handle_binding;
+using "NameResolution.cod" formal_binding;
+using "NameResolution.cod" local_binding;
+using "NameResolution.cod" loop_index;
 using "NameResolution.cod" record_type;
 using "NameResolution.cod" array_type;
 using "NameResolution.cod" c_constructor;
@@ -65,6 +80,15 @@ func duplicate_native_constructor() -> u8 { return 24u8; }
 func invalid_native_access() -> u8 { return 25u8; }
 func invalid_native_callback() -> u8 { return 26u8; }
 func invalid_array_shape() -> u8 { return 27u8; }
+func invalid_handle_initializer() -> u8 { return 52u8; }
+func mismatched_handle_type() -> u8 { return 53u8; }
+func invalid_handle_acquisition_mode() -> u8 { return 54u8; }
+func missing_handle_constructor() -> u8 { return 55u8; }
+func unproved_imported_constructor() -> u8 { return 56u8; }
+func wrong_constructor_arity() -> u8 { return 57u8; }
+func unproved_constructor_operand() -> u8 { return 58u8; }
+func mismatched_actual_handle_owner() -> u8 { return 59u8; }
+func invalid_constructor_bits() -> u8 { return 60u8; }
 
 func reject_declaration(ref report:NativeDeclarationResult in R, at:u64, cause:u8) -> void where {owner R} {
     report.diagnostic <- cause;
@@ -114,6 +138,22 @@ func is_owning_handle(nodes:const ExprNodes in N, names:const NameBindings in B,
     val target <- names[at].declaration;
     if (names[at].kind == c_handle_type()) { return nodes[target].right == no_node(); } else {};
     return imported_kind(names, selected, at) == native_handle_export() && selected[target].shape == owning_handle();
+}
+
+func native_handle_marker(names:const NameBindings in B, selected:const SelectedExports in E, marker:u64) -> bool
+    where {const owner B, const owner E} {
+    return names[marker].kind == c_handle_type() || imported_kind(names, selected, marker) == native_handle_export();
+}
+
+func same_handle_marker(names:const NameBindings in B, selected:const SelectedExports in E, first:u64, second:u64) -> bool
+    where {const owner B, const owner E} {
+    val declared <- names[first].declaration;
+    val supplied <- names[second].declaration;
+    if (names[first].kind == c_handle_type() || names[second].kind == c_handle_type()) {
+        return names[first].kind == names[second].kind && declared == supplied;
+    } else {};
+    return selected[declared].origin_module == selected[supplied].origin_module &&
+        selected[declared].identity == selected[supplied].identity;
 }
 
 func uses_direct_scalars(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -332,7 +372,7 @@ func check_c_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
         };
         return;
     } else {};
-    if (names[declared_type].kind != c_handle_type() && imported_kind(names, selected, declared_type) != native_handle_export()) {
+    if (!native_handle_marker(names, selected, declared_type)) {
         reject_declaration(report, declared_type, invalid_native_parameter());
         return;
     } else {};
@@ -481,6 +521,245 @@ func check_c_procedure(nodes:const ExprNodes in N, names:const NameBindings in B
     };
 }
 
+func ungrouped(nodes:const ExprNodes in N, at:u64) -> u64 where {const owner N} {
+    val value <- at;
+    for (unused in 0u64 .. at + 1u64) {
+        if (nodes[value].kind != group_node()) { return value; } else {};
+        (value <- nodes[value].left):void;
+    };
+    return value;
+}
+
+func handle_annotation(nodes:const ExprNodes in N, at:u64, formal:bool) -> u64 where {const owner N} {
+    return nodes[if (formal) { (nodes[at].right) } else { (nodes[at].left) }].right;
+}
+
+func annotated_marker(nodes:const ExprNodes in N, annotation:u64) -> u64 where {const owner N} {
+    return if (nodes[annotation].kind == owned_type_node()) { (nodes[annotation].left) } else { annotation };
+}
+
+data HandleLoan {
+    marker:u64;
+    owner:u64;
+    readonly:bool;
+}
+
+# Follow the binding's initializer, keeping the actual owner and access of
+# the selected borrow. A lexical name alone supplies neither.
+func trace_handle_loan(nodes:const ExprNodes in N, names:const NameBindings in B,
+                       at:u64, ref loan:HandleLoan in L) -> bool
+    where {const owner N, const owner B, owner L} {
+    val value <- ungrouped(nodes, at);
+    val declaration <- no_node();
+    val annotation <- no_node();
+    for (unused in 0u64 .. at + 1u64) {
+        if (nodes[value].kind == make_borrowed_handle_node()) {
+            loan.marker <- nodes[value].left;
+            loan.owner <- names[nodes[value].number].declaration;
+            loan.readonly <- false;
+            return true;
+        } else {};
+        if (nodes[value].kind != name_node()) { return false; } else {};
+        declaration <- names[value].declaration;
+        if (declaration == no_node()) { return false; } else {};
+        if (names[value].kind == formal_binding() && nodes[declaration].kind == handle_parameter_node()) {
+            annotation <- handle_annotation(nodes, declaration, true);
+            if (nodes[annotation].kind != owned_type_node() || names[nodes[annotation].right].kind != owner_binding()) {
+                return false;
+            } else {};
+            loan.marker <- nodes[annotation].left;
+            loan.owner <- names[nodes[annotation].right].declaration;
+            loan.readonly <- nodes[nodes[declaration].right].number != 0u64;
+            return true;
+        } else {};
+        if (names[value].kind != handle_binding()) { return false; } else {};
+        if (nodes[declaration].kind == owning_handle_local_node()) {
+            loan.marker <- handle_annotation(nodes, declaration, false);
+            loan.owner <- declaration;
+            loan.readonly <- false;
+            return true;
+        } else {};
+        (value <- ungrouped(nodes, nodes[declaration].right)):void;
+    };
+    return false;
+}
+
+func scalar_operand_kind(nodes:const ExprNodes in N, names:const NameBindings in B, at:u64) -> u8
+    where {const owner N, const owner B} {
+    val value <- ungrouped(nodes, at);
+    val kind <- nodes[value].kind;
+    if (kind == literal_node()) { return builtin_u64(); } else {};
+    if (kind == bool_node()) { return builtin_bool(); } else {};
+    if (kind != name_node()) { return 0u8; } else {};
+    val binding <- names[value].kind;
+    val declaration <- names[value].declaration;
+    if (binding == loop_index()) { return builtin_u64(); } else {};
+    if (binding == formal_binding() && (nodes[declaration].kind == val_parameter_node() ||
+        nodes[declaration].kind == parameter_node())) {
+        return names[handle_annotation(nodes, declaration, true)].kind;
+    } else {};
+    if (binding == local_binding() && nodes[declaration].kind == val_binding_node() &&
+        nodes[nodes[declaration].left].kind == typed_name_node()) {
+        return names[handle_annotation(nodes, declaration, false)].kind;
+    } else {};
+    return 0u8;
+}
+
+func check_constructor_arguments(nodes:const ExprNodes in N, names:const NameBindings in B,
+                                 selected:const SelectedExports in E, ref work:NameWork in W,
+                                 at:u64, constructor:u64, ref report:NativeDeclarationResult in R) -> void
+    where {const owner N, const owner B, const owner E, owner W, owner R} {
+    val head <- signature_head(nodes, nodes[constructor].left);
+    val formal <- first_item(nodes, nodes[head].right);
+    val actual <- first_item(nodes, nodes[at].right);
+    ref loan = make HandleLoan { marker <- no_node(); owner <- no_node(); readonly <- false; };
+    val operand <- no_node();
+    val annotation <- no_node();
+    val owner <- no_node();
+    val role_name <- no_node();
+    val actual_scalar <- 0u8;
+    val expected_scalar <- 0u8;
+    for (unused in 0u64 .. intrinsic (len)(nodes)) {
+        if (formal == no_node() || actual == no_node()) {
+            if (formal != actual) { reject_declaration(report, at, wrong_constructor_arity()); } else {};
+            return;
+        } else {};
+        operand <- nodes[actual].right;
+        annotation <- handle_annotation(nodes, formal, true);
+        if (nodes[formal].kind == handle_parameter_node()) {
+            if (!trace_handle_loan(nodes, names, operand, loan) ||
+                !native_handle_marker(names, selected, loan.marker) ||
+                !same_handle_marker(names, selected, nodes[annotation].left, loan.marker)) {
+                reject_declaration(report, operand, mismatched_handle_type());
+                return;
+            } else {};
+            owner <- names[nodes[annotation].right].declaration;
+            if ((loan.readonly && nodes[nodes[formal].right].number == 0u64) ||
+                (nodes[owner].number == 0u64 && nodes[loan.owner].kind == owner_clause_node() && nodes[loan.owner].number != 0u64)) {
+                reject_declaration(report, operand, invalid_native_access());
+                return;
+            } else {};
+            role_name <- nodes[owner].right;
+            if (work[role_name].active == at && work[owner].active != loan.owner) {
+                reject_declaration(report, operand, mismatched_actual_handle_owner());
+                return;
+            } else {};
+            work[role_name].active <- at;
+            (work[owner].active <- loan.owner):void;
+        } else {
+            actual_scalar <- scalar_operand_kind(nodes, names, operand);
+            expected_scalar <- names[annotation].kind;
+            if (actual_scalar != expected_scalar) {
+                reject_declaration(report, operand,
+                    if (native_scalar(actual_scalar) && (actual_scalar == builtin_bool() || expected_scalar == builtin_bool())) {
+                        invalid_constructor_bits()
+                    } else { unproved_constructor_operand() });
+                return;
+            } else {};
+        };
+        formal <- work[formal].next;
+        (actual <- work[actual].next):void;
+    };
+}
+
+func check_handle_construction(nodes:const ExprNodes in N, names:const NameBindings in B,
+                               selected:const SelectedExports in E, ref work:NameWork in W,
+                               at:u64, ref report:NativeDeclarationResult in R) -> void
+    where {const owner N, const owner B, const owner E, owner W, owner R} {
+    val marker <- nodes[at].left;
+    val owning <- nodes[at].kind == make_own_handle_node();
+    if (!native_handle_marker(names, selected, marker) || owning != is_owning_handle(nodes, names, selected, marker)) {
+        reject_declaration(report, marker, invalid_handle_acquisition_mode());
+        return;
+    } else {};
+    if (owning && work[at].active == no_node()) {
+        reject_declaration(report, at, invalid_handle_initializer());
+        return;
+    } else {};
+    if (!owning) {
+        val lexical <- names[nodes[at].number].declaration;
+        val actual_type <- handle_annotation(nodes, lexical, false);
+        if (!native_handle_marker(names, selected, actual_type)) {
+            reject_declaration(report, nodes[at].number, mismatched_actual_handle_owner());
+            return;
+        } else {};
+        ref required = make NativeOwnerType { origin <- 0u64; identity <- 0u64; };
+        ref actual = make NativeOwnerType { origin <- 0u64; identity <- 0u64; };
+        handle_owner(nodes, names, selected, marker, required);
+        handle_owner(nodes, names, selected, actual_type, actual);
+        if (required.origin != actual.origin || required.identity != actual.identity) {
+            reject_declaration(report, nodes[at].number, mismatched_actual_handle_owner());
+            return;
+        } else {};
+    } else {};
+    if (names[marker].kind != c_handle_type()) {
+        reject_declaration(report, at, unproved_imported_constructor());
+        return;
+    } else {};
+    val constructor <- work[names[marker].declaration].active;
+    if (constructor == no_node()) {
+        reject_declaration(report, at, missing_handle_constructor());
+        return;
+    } else {};
+    check_constructor_arguments(nodes, names, selected, work, at, constructor, report);
+}
+
+func check_handle_local(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
+                        at:u64, ref report:NativeDeclarationResult in R) -> void
+    where {const owner N, const owner B, const owner E, owner R} {
+    val annotation <- handle_annotation(nodes, at, false);
+    val marker <- annotated_marker(nodes, annotation);
+    val initializer <- ungrouped(nodes, nodes[at].right);
+    ref loan = make HandleLoan { marker <- no_node(); owner <- no_node(); readonly <- false; };
+    if (nodes[at].kind == owning_handle_local_node()) {
+        (loan.marker <- nodes[initializer].left):void;
+    } else {
+        if (!trace_handle_loan(nodes, names, initializer, loan)) {
+            reject_declaration(report, initializer, invalid_handle_initializer());
+            return;
+        } else {};
+    };
+    if (!native_handle_marker(names, selected, marker) || !native_handle_marker(names, selected, loan.marker) ||
+        !same_handle_marker(names, selected, marker, loan.marker)) {
+        reject_declaration(report, initializer, mismatched_handle_type());
+        return;
+    } else {};
+    if (nodes[annotation].kind == owned_type_node() && names[nodes[annotation].right].declaration != loan.owner) {
+        reject_declaration(report, initializer, mismatched_actual_handle_owner());
+        return;
+    } else {};
+}
+
+func check_handle_expressions(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
+                              ref work:NameWork in W, used:u64, ref report:NativeDeclarationResult in R) -> bool
+    where {const owner N, const owner B, const owner E, owner W, owner R} {
+    val initializer <- no_node();
+    for (at in 0u64 .. used) {
+        if (nodes[at].kind == owning_handle_local_node()) {
+            initializer <- ungrouped(nodes, nodes[at].right);
+            if (nodes[initializer].kind != make_own_handle_node()) {
+                reject_declaration(report, initializer, invalid_handle_initializer());
+                return false;
+            } else {};
+            work[initializer].active <- at;
+            {};
+        } else {};
+    };
+    val kind <- 0u8;
+    for (at in 0u64 .. used) {
+        kind <- nodes[at].kind;
+        if (handle_construction(kind)) {
+            check_handle_construction(nodes, names, selected, work, at, report);
+        } else {
+            if (kind == owning_handle_local_node() || kind == borrowed_handle_local_node()) {
+                check_handle_local(nodes, names, selected, at, report);
+            } else {};
+        };
+        if (report.diagnostic != 0u8) { return false; } else {};
+    };
+    return true;
+}
+
 # Name binding supplies declaration identities and finishes using the active
 # name table before these checks reuse its workspace.
 func check_native_declarations(nodes:const ExprNodes in N, ref names:NameBindings in B, ref work:NameWork in W,
@@ -505,7 +784,7 @@ func check_native_declarations(nodes:const ExprNodes in N, ref names:NameBinding
             if (report.diagnostic != 0u8) { return false; } else {};
         } else {};
     };
-    return true;
+    return check_handle_expressions(nodes, names, selected, work, used, report);
 }
 
 data ModulePublication {

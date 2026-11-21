@@ -261,7 +261,7 @@ func reserved_value_name(source:const SourceBytes in S, token:const Token in T) 
         defer_word(source, token) || if_word(source, token) || for_word(source, token) || behave_word(source, token);
 }
 
-func reserved_range_index_name(source:const SourceBytes in S, token:const Token in T) -> bool
+func reserved_lexical_binder(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     if (reserved_value_name(source, token) || void_word(source, token) || typeof_word(source, token) ||
         region_word(source, token) || symbol_word(source, token)) { return true; } else {};
@@ -759,6 +759,6 @@ export from_word;
 export region_word;
 export capacity_word;
 export reserved_value_name;
-export reserved_range_index_name;
+export reserved_lexical_binder;
 export reserved_module_name;
 export rethrow_word;
