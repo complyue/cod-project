@@ -708,7 +708,7 @@ func check_constructor_arguments(nodes:const ExprNodes in N, names:const NameBin
     ref loan = make HandleLoan { marker <- no_node(); owner <- no_node(); readonly <- false; };
     ref parameter = make ModuleInterfaceRow {
         defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64;
-        interface_kind <- 0u8; result_kind <- 0u8; value_kind <- 0u8;
+        interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
         type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node(); target_readonly <- 0u8; owner_readonly <- 0u8;
         has_here <- 0u8; failure_module <- 0u64; failure_identity <- 0u64;
         name_first <- 0u64; name_past <- 0u64;
@@ -915,7 +915,7 @@ func check_local_here(nodes:const ExprNodes in N, names:const NameBindings in B,
     ref loan = make HandleLoan { marker <- no_node(); owner <- no_node(); readonly <- false; };
     ref parameter = make ModuleInterfaceRow {
         defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64;
-        interface_kind <- 0u8; result_kind <- 0u8; value_kind <- 0u8;
+        interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
         type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node(); target_readonly <- 0u8; owner_readonly <- 0u8;
         has_here <- 0u8; failure_module <- 0u64; failure_identity <- 0u64;
         name_first <- 0u64; name_past <- 0u64;
@@ -1151,6 +1151,10 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
     val next <- count + 1u64;
     val formal <- no_node();
     val callback <- no_node();
+    val name <- no_node();
+    if (kind == c_operation() || kind == c_entry()) {
+        (name <- definition_name(nodes, form)):void;
+    } else {};
     if (kind == c_constructor()) {
         val head <- signature_head(nodes, nodes[form].left);
         (formal <- first_item(nodes, nodes[head].right)):void;
@@ -1167,6 +1171,10 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
         if (formal == no_node()) {
             write_interface_header(contracts[count], defining_module, declaration, kind, result_kind, next - count - 1u64);
             contracts[count].has_here <- if (callback == no_node()) { 0u8 } else { 1u8 };
+            if (name != no_node()) {
+                contracts[count].name_first <- nodes[name].first;
+                (contracts[count].name_past <- nodes[name].past):void;
+            } else {};
             return next;
         } else {};
         if (next >= limit) return no_node();
@@ -1204,27 +1212,50 @@ func stage_handle_interface(nodes:const ExprNodes in N, names:const NameBindings
     return next;
 }
 
+func stage_array_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
+                           selected:const SelectedExports in E, row:ModuleInterfaceRow in R,
+                           defining_module:u64, declaration:u64)
+    where {const owner N, const owner B, const owner E, owner R} {
+    write_interface_header(row, defining_module, declaration, array_type(), 0u8, 0u64);
+    val element <- nodes[nodes[declaration].right].right;
+    val kind <- names[element].kind;
+    if (kind == record_type() || imported_kind(names, selected, element) == record_export()) {
+        row.element_kind <- record_type();
+        row.type_module <- type_module(names, selected, element, defining_module);
+        (row.type_identity <- type_identity(names, selected, element)):void;
+    } else {
+        (row.element_kind <- kind):void;
+    };
+}
+
 # The checked declarations retain their identity even when their names are
 # private. Only ModuleExports contributes names to another module's lookup.
 export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B,
                                selected:const SelectedExports in E, work:const NameWork in W,
                                used:u64, defining_module:u64, contracts:ModuleInterfaces in C) -> u64
     where {const owner N, const owner B, const owner E, const owner W, owner C} {
+    val limit <- intrinsic (len)(contracts);
     val count <- 0u64;
     val kind <- 0u8;
+    val form <- 0u8;
     val result_kind <- 0u8;
     for (at in 0u64 .. used) {
         kind <- names[at].kind;
-        if (nodes[at].kind == c_handle_type_node() && work[at].active == no_node()) {
+        form <- nodes[at].kind;
+        if (form == array_declaration_node()) {
+            if (count >= limit) return no_node();
+            stage_array_interface(nodes, names, selected, contracts[count], defining_module, at);
+            (count <- count + 1u64):void;
+        } else {};
+        if (form == c_handle_type_node() && work[at].active == no_node()) {
             (count <- stage_handle_interface(nodes, names, selected, work, contracts, count,
                                              defining_module, at)):void;
         } else {
-            if (nodes[at].kind == c_procedure_node() && kind == c_constructor()) {
+            if (form == c_procedure_node() && kind == c_constructor()) {
                 (count <- stage_handle_interface(nodes, names, selected, work, contracts, count,
                                                  defining_module, names[at].declaration)):void;
             } else {
-                if (nodes[at].kind == c_procedure_node() ||
-                    (nodes[at].kind == callable_node() && names[at].declaration == at)) {
+                if (form == c_procedure_node() || (form == callable_node() && names[at].declaration == at)) {
                     result_kind <- declared_call_result(nodes, names, work, at);
                     (count <- stage_interface(nodes, names, selected, work, contracts, count, defining_module,
                                                at, at, kind, result_kind)):void;

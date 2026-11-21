@@ -2,7 +2,7 @@
 
 #include "provider_output.h"
 #include "native/provider_names.h"
-#include "native/provider_text.h"
+#include "native/provider_here.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -15,7 +15,7 @@
 enum {
     bits_u64 = 8, bits_bool = 11, handle_type = 12, record_type = 13,
     constructor = 14, operation = 15, entry = 16, bits_u8 = 17, bits_u32 = 18,
-    bits_i64 = 19, bits_f32 = 20, bits_f64 = 21,
+    bits_i64 = 19, bits_f32 = 20, bits_f64 = 21, array_type = 22,
 };
 typedef cod_native_graph_frame_use_row9 interface_row;
 
@@ -26,26 +26,49 @@ typedef struct {
     bool *borrowed;
     cod_provider_argument *inputs;
     cod_provider_field *fields;
+    cod_provider_view *views;
+    uint64_t *offsets;
 } provider_interfaces;
 
+typedef struct {
+    cod_provider_scalar scalar;
+    uint64_t size;
+    uint64_t alignment;
+} scalar_layout;
+
+static const scalar_layout *layout_for(uint8_t kind) {
+    static const scalar_layout layouts[] = {
+#define SCALAR(kind, scalar, type) [kind] = {scalar, sizeof(type), _Alignof(type)}
+        SCALAR(bits_bool, cod_provider_u8, uint8_t),
+        SCALAR(bits_u8, cod_provider_u8, uint8_t),
+        SCALAR(bits_u32, cod_provider_u32, uint32_t),
+        SCALAR(bits_u64, cod_provider_u64, uint64_t),
+        SCALAR(bits_i64, cod_provider_i64, int64_t),
+        SCALAR(bits_f32, cod_provider_f32, float),
+        SCALAR(bits_f64, cod_provider_f64, double),
+#undef SCALAR
+    };
+    if (kind >= sizeof(layouts) / sizeof(*layouts) || !layouts[kind].size) return NULL;
+    return &layouts[kind];
+}
+
 static const char *scalar_spelling(uint8_t kind) {
-    switch (kind) {
-    case bits_bool: case bits_u8: return cod_provider_scalar_spelling(cod_provider_u8);
-    case bits_u32: return cod_provider_scalar_spelling(cod_provider_u32);
-    case bits_u64: return cod_provider_scalar_spelling(cod_provider_u64);
-    case bits_i64: return cod_provider_scalar_spelling(cod_provider_i64);
-    case bits_f32: return cod_provider_scalar_spelling(cod_provider_f32);
-    case bits_f64: return cod_provider_scalar_spelling(cod_provider_f64);
-    default: return NULL;
-    }
+    const scalar_layout *layout = layout_for(kind);
+    return layout ? cod_provider_scalar_spelling(layout->scalar) : NULL;
+}
+
+static size_t next_interface(const interface_row *rows, size_t at) {
+    return at + 1 + (size_t)rows[at].entry_count;
 }
 
 static uint32_t validate_rows(const interface_row *rows, size_t count, size_t spelling_count, size_t *name_bytes) {
     for (size_t i = 0; i < count;) {
         const interface_row *row = &rows[i];
         if (row->value_kind || row->entry_count > count - i - 1) return provider_output_invalid;
-        if (row->interface_kind == operation || row->interface_kind == entry) return provider_output_unsupported;
-        i += 1 + (size_t)row->entry_count;
+        if (row->interface_kind == entry || (row->interface_kind == operation && !row->has_here))
+            return provider_output_unsupported;
+        if (row->interface_kind == operation && row->entry_count < 2) return provider_output_invalid;
+        i = next_interface(rows, i);
     }
     *name_bytes = 1;
     for (size_t i = 0; i < count; ++i) {
@@ -72,7 +95,7 @@ static void copy_names(const provider_interfaces *interfaces, const unsigned cha
 }
 
 static size_t find_declaration(const provider_interfaces *interfaces, uint64_t module, uint64_t declaration) {
-    for (size_t i = 0; i < interfaces->count; i += 1 + (size_t)interfaces->rows[i].entry_count)
+    for (size_t i = 0; i < interfaces->count; i = next_interface(interfaces->rows, i))
         if (interfaces->rows[i].defining_module == module && interfaces->rows[i].declaration == declaration) return i;
     return interfaces->count;
 }
@@ -132,29 +155,112 @@ static uint32_t describe_constructor(const provider_interfaces *interfaces, size
     return 0;
 }
 
+/* The booter emits for its own host target. The generated C checks the
+   calculated sizes, alignments and offsets against the consumer compiler. */
+static uint32_t describe_product(const provider_interfaces *interfaces, const interface_row *array, cod_provider_row *row) {
+    const size_t id = find_declaration(interfaces, array->type_module, array->type_identity);
+    if (id == interfaces->count || interfaces->rows[id].interface_kind != record_type ||
+        !interfaces->rows[id].entry_count) return provider_output_invalid;
+    *row = (cod_provider_row){.fields = interfaces->fields, .offsets = interfaces->offsets,
+        .count = (size_t)interfaces->rows[id].entry_count, .alignment = 1};
+    for (size_t i = 0; i < row->count; ++i) {
+        const size_t field = id + 1 + i;
+        const uint8_t kind = interfaces->rows[field].value_kind;
+        const scalar_layout *layout = layout_for(kind);
+        if (kind == bits_bool || !layout || !interfaces->names[field]) return provider_output_invalid;
+        if (!cod_provider_member_name(interfaces->names[field])) return provider_output_reserved_name;
+        interfaces->fields[i] = (cod_provider_field){cod_provider_scalar_spelling(layout->scalar), interfaces->names[field], false};
+        const uint64_t padding = (layout->alignment - row->size % layout->alignment) % layout->alignment;
+        if (row->size > UINT64_MAX - padding - layout->size) return provider_output_invalid;
+        interfaces->offsets[i] = row->size + padding;
+        row->size = interfaces->offsets[i] + layout->size;
+        if (row->alignment < layout->alignment) row->alignment = layout->alignment;
+    }
+    const uint64_t padding = (row->alignment - row->size % row->alignment) % row->alignment;
+    if (row->size > UINT64_MAX - padding) return provider_output_invalid;
+    row->size += padding;
+    return 0;
+}
+
+static uint32_t write_here_operation(const provider_interfaces *interfaces, size_t at,
+                                     cod_provider_text *header, cod_provider_text *stubs) {
+    const interface_row *row = &interfaces->rows[at];
+    const char *name = interfaces->names[at];
+    const char *handle;
+    uint32_t status = describe_borrow(interfaces, row + 1, &handle, header, stubs);
+    if (status) return status;
+    const size_t count = (size_t)row->entry_count - 1;
+    for (size_t i = 0; i < count; ++i) {
+        const interface_row *input = row + 2 + i;
+        const size_t id = find_declaration(interfaces, input->type_module, input->type_identity);
+        if (input->value_kind != array_type || id == interfaces->count || interfaces->rows[id].interface_kind != array_type)
+            return provider_output_invalid;
+        const interface_row *array = &interfaces->rows[id];
+        const uint8_t kind = array->element_kind;
+        cod_provider_view view = {.scalar = scalar_spelling(kind), .read_only = input->target_readonly != 0};
+        cod_provider_row layout = {0};
+        if (kind == record_type) {
+            status = describe_product(interfaces, array, &layout);
+            if (status) return status;
+        } else if (!view.scalar || kind == bits_bool || !view.read_only) {
+            return provider_output_invalid;
+        }
+        cod_provider_write_view(header, stubs, name, i, view, &layout);
+        interfaces->views[i] = view;
+    }
+    cod_provider_write_here(header, stubs, name, handle, interfaces->views, count);
+    return 0;
+}
+
+static bool unique_name(const provider_interfaces *interfaces, size_t at) {
+    const char *name = interfaces->names[at];
+    for (size_t i = 0; i < at; i = next_interface(interfaces->rows, i))
+        if (interfaces->rows[i].interface_kind == interfaces->rows[at].interface_kind &&
+            strcmp(interfaces->names[i], name) == 0) return false;
+    return true;
+}
+
 static uint32_t format_files(const provider_interfaces *interfaces, cod_provider_text *header, cod_provider_text *stubs) {
     cod_provider_begin(header, stubs);
+    for (size_t i = 0; i < interfaces->count; i = next_interface(interfaces->rows, i)) {
+        if (interfaces->rows[i].interface_kind == operation) {
+            cod_provider_here_preamble(header);
+            break;
+        }
+    }
     bool any_borrow = false;
-    for (size_t i = 0; i < interfaces->count; i += 1 + (size_t)interfaces->rows[i].entry_count) {
+    for (size_t i = 0; i < interfaces->count; i = next_interface(interfaces->rows, i)) {
         if (interfaces->rows[i].interface_kind != constructor) continue;
-        const char *name = interfaces->names[i];
-        if (!name) return provider_output_invalid;
-        for (size_t j = 0; j < i; j += 1 + (size_t)interfaces->rows[j].entry_count)
-            if (interfaces->rows[j].interface_kind == constructor && strcmp(interfaces->names[j], name) == 0)
-                return provider_output_conflict;
+        if (!interfaces->names[i]) return provider_output_invalid;
+        if (!unique_name(interfaces, i)) return provider_output_conflict;
         cod_provider_constructor shape;
         const uint32_t status = describe_constructor(interfaces, i, &shape, header, stubs);
         if (status) return status;
         any_borrow |= shape.parent != NULL;
         for (size_t j = 0; j < shape.input_count; ++j) any_borrow |= shape.inputs[j].borrowed;
     }
+    for (size_t i = 0; i < interfaces->count; i = next_interface(interfaces->rows, i)) {
+        if (interfaces->rows[i].interface_kind != operation) continue;
+        if (!interfaces->names[i] || interfaces->rows[i + 1].value_kind != handle_type) return provider_output_invalid;
+        if (!unique_name(interfaces, i)) return provider_output_conflict;
+        const char *handle;
+        const uint32_t status = describe_borrow(interfaces, &interfaces->rows[i + 1], &handle, header, stubs);
+        if (status) return status;
+        any_borrow = true;
+    }
     if (any_borrow) cod_provider_print(stubs, "\n");
-    for (size_t i = 0; i < interfaces->count; i += 1 + (size_t)interfaces->rows[i].entry_count) {
+
+    for (size_t i = 0; i < interfaces->count; i = next_interface(interfaces->rows, i)) {
         if (interfaces->rows[i].interface_kind != constructor) continue;
         cod_provider_constructor shape;
         const uint32_t status = describe_constructor(interfaces, i, &shape, header, stubs);
         if (status) return status;
         cod_provider_write_constructor(header, stubs, &shape);
+    }
+    for (size_t i = 0; i < interfaces->count; i = next_interface(interfaces->rows, i)) {
+        if (interfaces->rows[i].interface_kind != operation) continue;
+        const uint32_t status = write_here_operation(interfaces, i, header, stubs);
+        if (status) return status;
     }
     cod_provider_end(header);
     return header->failed || stubs->failed ? provider_output_io : 0;
@@ -255,15 +361,19 @@ uint32_t cod_booter_write_c_providers(const char *directory, const interface_row
     const size_t capacity = row_count ? row_count : 1;
     provider_interfaces interfaces = {.rows = rows, .count = row_count,
         .names = calloc(capacity, sizeof(*interfaces.names)), .borrowed = calloc(capacity, sizeof(*interfaces.borrowed)),
-        .inputs = calloc(capacity, sizeof(*interfaces.inputs)), .fields = calloc(capacity, sizeof(*interfaces.fields))};
+        .inputs = calloc(capacity, sizeof(*interfaces.inputs)), .fields = calloc(capacity, sizeof(*interfaces.fields)),
+        .views = calloc(capacity, sizeof(*interfaces.views)), .offsets = calloc(capacity, sizeof(*interfaces.offsets))};
     char *storage = malloc(name_bytes);
-    if (interfaces.names && interfaces.borrowed && interfaces.inputs && interfaces.fields && storage) {
+    if (interfaces.names && interfaces.borrowed && interfaces.inputs && interfaces.fields &&
+        interfaces.views && interfaces.offsets && storage) {
         copy_names(&interfaces, spellings, storage);
         status = write_files(directory, &interfaces);
     } else {
         status = provider_output_memory;
     }
     free(storage);
+    free(interfaces.offsets);
+    free(interfaces.views);
     free(interfaces.fields);
     free(interfaces.inputs);
     free(interfaces.borrowed);

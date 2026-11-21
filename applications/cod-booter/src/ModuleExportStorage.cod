@@ -27,6 +27,7 @@ export data ModuleInterfaceRow {
     entry_count:u64;
     interface_kind:u8;
     result_kind:u8;
+    element_kind:u8;
     value_kind:u8;
     type_module:u64;
     type_identity:u64;
@@ -48,6 +49,7 @@ export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:
     row.entry_count <- entries;
     row.interface_kind <- kind;
     row.result_kind <- result;
+    row.element_kind <- 0u8;
     row.value_kind <- 0u8;
     row.type_module <- 0u64;
     row.type_identity <- 0u64;
