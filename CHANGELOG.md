@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 — Single-return guards and discarded loop results
+
+<a id="h-guards-and-loop-discard-20261121"></a>
+**H-GUARDS-AND-LOOP-DISCARD-20261121.** In the [booter source discussion](codex://threads/01a1fe3d-af02-7662-bb40-d06a93504a1d) on 2026-11-21 (America/Los_Angeles), the project user requested “单条 return 的 if 可省花括号和空 else；循环体结果没人用时静默丢弃，保留执行所需的检查，不强迫写 :void。改好后把 booter 里同类写法一起清掉。” The user delegated design review and implementation in both bootstrap frontends. D-10-RETURN-GUARD r230/P-664–P-665 and D-29-LOOP-DISCARD r22/P-666–P-667 qualify that scope at registry r1034. Review preserves existing lexical return, value coverage, explicit feedback and cleanup. The motivating scanner is at `798cd1259d49a628f86000cf28f6c3e6513740a6:applications/cod-booter/src/Compiler.cod`, `count_tokens`.
+
 ## 2026-11-21 — Publish at the definition and group same-module selections
 
 <a id="h-module-source-style-20261121"></a>

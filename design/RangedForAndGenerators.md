@@ -1,8 +1,10 @@
 # Ranged for-loops and synchronous generators
 
-Design revision: 21 · Recorded: 2026-11-19 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
+Design revision: 22 · Recorded: 2026-11-21 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
 
 ## Design authority
+
+[H-GUARDS-AND-LOOP-DISCARD-20261121](../CHANGELOG.md#h-guards-and-loop-discard-20261121) confirms [loop bodies with no result receiver](#loop-bodies-with-no-result-receiver) at r22 under [D-29-LOOP-DISCARD](DesignAuthorityRegistry.md#d-29-loop-discard). P-666/P-667 apply C-96/C-41/C-65 to range traversal and the existing void-feedback contract. Check a loop-tail update, independent terminal alternatives, an invalid consumed operand, checked failure and owning cleanup. Non-void feedback and ordinary callable results retain their contracts.
 
 [H-ORDINARY-NAMES-20261119](../CHANGELOG.md#h-ordinary-names-20261119) covers the distinction between a range loop and a library fold step at r21 within [D-10-ORDINARY-NAMES](DesignAuthorityRegistry.md#d-10-ordinary-names).
 
@@ -493,6 +495,25 @@ for val n <- observations() {
 ```
 
 Discard is not nonexecution: expression effects and failures remain observable, and complete temporary values require their ordinary cleanup. It adds no hidden borrowed-payload read. Each expression must still be well formed; invalid access, unresolved inference, ownership consumption and checked failures do not disappear. An intermediate conditional whose value is actually consumed still needs ordinary compatible typing. This designated feedback rule does not make void a universal supertype, relax ordinary callable contracts or permit an escaping invalid reference.
+
+### Loop bodies with no result receiver
+
+The built-in range loop consumes no iteration result. Each normal body exit evaluates its final expression and silently discards its result. Its optional empty-range `else` has the same result use when selected. A generator or equivalent here call selects this rule when its body feedback type is void. A non-void feedback contract still applies even when the generator ignores the feedback or the enclosing code discards the call result.
+
+The token scanner uses a [single-return guard](SymbolicDynamicScope.md#single-return-guards) and ends each continuing iteration with an assignment.
+
+```cod
+for (index in 0u64 .. bytes) {
+    scan_token(source, next, token);
+    if (token.kind == end_of_source() || token.kind >= unsupported_byte())
+        return index;
+    next <- token.past;
+};
+```
+
+The update executes on each continuing iteration. No explicit `:void` or unused-result warning is due. A tail `if (flag) { true } else { 17u64 }` is also valid because either selected path discards its result independently. In `consume(if (flag) { true } else { 17u64 })`, the argument still needs a compatible type. A nested `{{ ... }}` invocation establishes its own callable result before the loop can discard it.
+
+Pass discard to the normal exits of the terminal control expression. Conditions, operands, destinations, initializers, overload selection and return operands retain the evidence needed to execute them. Keep access, initialization, owner lifetime, effects, failure propagation and cleanup at their ordinary points. A discarded borrow adds no target read. Discarding a fresh owning result runs its cleanup exactly once. Existing `return`, `break`, and `continue` destinations and operand rules still apply. A void-feedback generator accepts only bare `continue;`. A function declared void still checks its own tail under the [callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies).
 
 ### Non-void feedback checks all normal exits
 
