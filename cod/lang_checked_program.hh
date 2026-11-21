@@ -122,7 +122,7 @@ struct CheckedOperation {
   std::optional<std::uint64_t> case_code;
   bool case_reaches_end = false;
   bool case_scope_resumes = false;
-  bool case_scope_returns = false;
+  bool case_arm_completes = false;
   bool minimum_literal = false;
   ExceptionFacts exceptions;
   std::set<size_t> captures;
