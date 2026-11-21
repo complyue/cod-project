@@ -1,3 +1,4 @@
+using "SourceStorage.cod" SourceBytes;
 using "ParserStorage.cod" ExprNodes;
 using "ParserStorage.cod" no_node;
 using "ParserStorage.cod" c_handle_type_node;
@@ -6,6 +7,9 @@ using "ParserStorage.cod" c_procedure_node;
 using "ParserStorage.cod" callable_node;
 using "ParserStorage.cod" array_declaration_node;
 using "ParserStorage.cod" export_node;
+using "ParserStorage.cod" export_from_node;
+using "ParserStorage.cod" module_item_node;
+using "ParserStorage.cod" symbol_node;
 using "ParserStorage.cod" data_parent_node;
 using "ParserStorage.cod" owned_type_node;
 using "ParserStorage.cod" ref_parameter_node;
@@ -56,6 +60,8 @@ using "NameResolution.cod" c_entry;
 using "NameResolution.cod" callable_binding;
 using "NameResolution.cod" owner_binding;
 using "NameResolution.cod" ordinary_selection;
+using "NameResolution.cod" symbolic_selection;
+using "NameResolution.cod" definition_name;
 using "NameResolution.cod" native_scalar;
 using "NameResolution.cod" builtin_bool;
 using "NameResolution.cod" builtin_u8;
@@ -64,6 +70,7 @@ using "NameResolution.cod" builtin_u64;
 using "NameResolution.cod" builtin_i64;
 using "NameResolution.cod" builtin_void;
 using "ModuleExports.cod" SelectedExports;
+using "ModuleExports.cod" same_name;
 using "ModuleExports.cod" ModuleExports;
 using "ModuleExports.cod" exception_type_export;
 using "ModuleExports.cod" exception_root_identity;
@@ -973,6 +980,19 @@ data ModulePublication {
     source_first:u64;
 }
 
+func publish_selection(selected:const SelectedExports in E, site:u64,
+                       ref exports:ModuleExports in X, at:u64) -> bool
+    where {const owner E, owner X} {
+    exports[at].origin_module <- selected[site].origin_module;
+    exports[at].identity <- selected[site].identity;
+    exports[at].kind <- selected[site].kind;
+    exports[at].checked <- selected[site].checked;
+    exports[at].owner_module <- selected[site].owner_module;
+    exports[at].owner_identity <- selected[site].owner_identity;
+    exports[at].shape <- selected[site].shape;
+    return selected[site].kind != 0u8;
+}
+
 func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
                          publication:const ModulePublication in P, name:u64, ref exports:ModuleExports in X, at:u64) -> bool
     where {const owner N, const owner B, const owner E, const owner P, owner X} {
@@ -984,15 +1004,8 @@ func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in
     exports[at].owner_module <- 0u64;
     exports[at].owner_identity <- 0u64;
     (exports[at].shape <- 0u8):void;
-    if (kind == ordinary_selection()) {
-        exports[at].origin_module <- selected[target].origin_module;
-        exports[at].identity <- selected[target].identity;
-        exports[at].kind <- selected[target].kind;
-        exports[at].checked <- selected[target].checked;
-        exports[at].owner_module <- selected[target].owner_module;
-        exports[at].owner_identity <- selected[target].owner_identity;
-        exports[at].shape <- selected[target].shape;
-        return true;
+    if (kind == ordinary_selection() || kind == symbolic_selection()) {
+        return publish_selection(selected, target, exports, at);
     } else {};
     if (kind == c_handle_type()) {
         ref root = make NativeOwnerType { origin <- 0u64; identity <- 0u64; };
@@ -1039,10 +1052,12 @@ func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in
 # Append explicit exports after successful binding. The caller holds the
 # checked source bytes in the catalog and lends only the committed prefix.
 # A re-export changes spelling and preserves the original definition.
-func publish_module_exports(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
+func publish_module_exports(source:const SourceBytes in S, nodes:const ExprNodes in N,
+                            names:const NameBindings in B, selected:const SelectedExports in E,
                             publication:const ModulePublication in P, used:u64, ref exports:ModuleExports in X,
-                            ref count:u64 in C) -> bool
-    where {const owner N, const owner B, const owner E, const owner P, owner X, owner C} {
+                            ref count:u64 in C, ref conflict:u64 in C) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, const owner P, owner X, owner C} {
+    conflict <- no_node();
     if (publication.module_identity == 0u64 || publication.module_identity == no_node() ||
         used > intrinsic (len)(nodes) ||
         used > intrinsic (len)(names) || used > intrinsic (len)(selected) || count > intrinsic (len)(exports)) {
@@ -1050,21 +1065,58 @@ func publish_module_exports(nodes:const ExprNodes in N, names:const NameBindings
     } else {};
     val next <- count;
     val name <- no_node();
+    val selection <- false;
+    val first <- 0u64;
+    val prior <- no_node();
     for (at in 0u64 .. used) {
-        if (nodes[at].kind == export_node()) {
-            name <- nodes[at].left;
-            if (next == intrinsic (len)(exports) || nodes[name].past > no_node() - publication.source_first ||
-                !publish_declaration(nodes, names, selected, publication, name, exports, next)) { return false; } else {};
+        name <- no_node();
+        selection <- nodes[at].kind == export_from_node();
+        if (selection) {
+            (name <- if (nodes[at].number == 0u64) { (nodes[at].right) } else { nodes[at].number - 1u64 }):void;
+        } else {
+            if (nodes[at].kind == export_node()) { (name <- nodes[at].left):void; } else {};
+            if (nodes[at].kind == module_item_node() && nodes[at].number != 0u64) {
+                (name <- definition_name(nodes, nodes[at].right)):void;
+            } else {};
+        };
+        if (name != no_node()) {
+            if (next == intrinsic (len)(exports) || nodes[name].past > no_node() - publication.source_first) {
+                return false;
+            } else {};
+            if (selection) {
+                if (!publish_selection(selected, at, exports, next)) { return false; } else {};
+            } else {
+                if (!publish_declaration(nodes, names, selected, publication, name, exports, next)) { return false; } else {};
+            };
+            first <- nodes[name].first + if (nodes[name].kind == symbol_node()) { 1u64 } else { 0u64 };
+            prior <- previous_public_name(source, publication, exports, count, next, first, nodes[name].past);
+            if (prior != no_node() && (exports[prior].origin_module != exports[next].origin_module ||
+                exports[prior].kind != exports[next].kind || exports[prior].identity != exports[next].identity)) {
+                conflict <- name;
+                return false;
+            } else {};
             exports[next].publishing_module <- publication.module_identity;
             exports[next].module_first <- 0u64;
             exports[next].module_past <- 0u64;
-            exports[next].name_first <- publication.source_first + nodes[name].first;
+            exports[next].name_first <- publication.source_first + first;
             exports[next].name_past <- publication.source_first + nodes[name].past;
-            (next <- next + 1u64):void;
+            if (prior == no_node()) { (next <- next + 1u64):void; } else {};
         } else {};
     };
     count <- next;
     return true;
+}
+
+func previous_public_name(source:const SourceBytes in S, publication:const ModulePublication in P,
+                          exports:const ModuleExports in E, start:u64, limit:u64, first:u64, past:u64)
+    -> u64 where {const owner S, const owner P, const owner E} {
+    val offset <- publication.source_first;
+    for (at in start .. limit) {
+        if (same_name(source, first, past, source, exports[at].name_first - offset, exports[at].name_past - offset)) {
+            return at;
+        } else {};
+    };
+    return no_node();
 }
 
 export NativeDeclarationResult;

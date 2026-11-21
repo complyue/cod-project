@@ -3,7 +3,7 @@ using "ParserStorage.cod" ExprNodes;
 using "ParserStorage.cod" len as syntax_len;
 using "ParserStorage.cod" no_node;
 using "ParserStorage.cod" module_node;
-using "ParserStorage.cod" using_node;
+using "ParserStorage.cod" module_selection;
 using "ParserStorage.cod" symbol_node;
 using "ExpressionParser.cod" ParseResult;
 
@@ -85,7 +85,7 @@ func next_module_dependency(source:const SourceBytes in S, nodes:const ExprNodes
     if (used > syntax_len(nodes) || start >= used) { return no_node(); } else {};
     val path <- no_node();
     for (at in start .. used) {
-        if (nodes[at].kind == using_node()) {
+        if (module_selection(nodes[at].kind)) {
             path <- nodes[at].left;
             if (!builtin_path(source, nodes[path].first, nodes[path].past)) { return at; } else {};
         } else {};
@@ -174,7 +174,7 @@ func resolve_module_exports(source:const SourceBytes in S, nodes:const ExprNodes
     } else {};
     for (at in 0u64 .. tree.used) {
         clear_selection(selected, at);
-        if (nodes[at].kind == using_node()) {
+        if (module_selection(nodes[at].kind)) {
             report.diagnostic <- resolve_selection(source, nodes, at, spellings, exports, selected);
             if (report.diagnostic != 0u8) {
                 report.node <- if (report.diagnostic == unproved_module_exports()) {
@@ -196,6 +196,7 @@ export SelectedExport;
 export SelectedExports;
 export ExportResolutionResult;
 export resolve_module_exports;
+export same_name;
 export next_module_dependency;
 export prepare_module_dependencies;
 export exception_type_export;

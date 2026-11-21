@@ -111,6 +111,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: expected ']' after the subscript expression\n", stderr);
     else if (diagnostic->stage == 1 && diagnostic->code == 43)
         fputs(": error: unsupported intrinsic syntax, expected 'intrinsic (len)(array)'\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 44)
+        fputs(": error: expected ',' or '}' after module selection\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 13)
         fputs(": error: this module declaration is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 49)
@@ -151,6 +153,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: const owner requires an input under that owner\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 73)
         fputs(": error: owner requires a writable-target input under that owner\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 75)
+        fputs(": error: conflicting public alias\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 20)
         fputs(": error: narrow integer execution is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 21)

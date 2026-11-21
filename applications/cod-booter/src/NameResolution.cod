@@ -5,6 +5,7 @@ using "ParserStorage.cod" no_node;
 using "ParserStorage.cod" module_node;
 using "ParserStorage.cod" module_item_node;
 using "ParserStorage.cod" using_node;
+using "ParserStorage.cod" export_from_node;
 using "ParserStorage.cod" callable_node;
 using "ParserStorage.cod" callable_head_node;
 using "ParserStorage.cod" c_handle_type_node;
@@ -816,7 +817,7 @@ func record_declaration(kind:u8) -> bool {
 
 func declaration_requires_native_output(kind:u8) -> bool {
     return kind == c_handle_type_node() || record_declaration(kind) || kind == array_declaration_node() ||
-        kind == c_procedure_node() || kind == export_node();
+        kind == c_procedure_node() || kind == export_node() || kind == export_from_node();
 }
 
 func type_declaration_name(nodes:const ExprNodes in N, form:u64) -> u64 where {const owner N} {
@@ -825,13 +826,28 @@ func type_declaration_name(nodes:const ExprNodes in N, form:u64) -> u64 where {c
     return head;
 }
 
+func definition_name(nodes:const ExprNodes in N, form:u64) -> u64 where {const owner N} {
+    if (nodes[form].kind == callable_node() || nodes[form].kind == c_procedure_node()) {
+        return nodes[callable_head(nodes, form)].left;
+    } else {};
+    return type_declaration_name(nodes, form);
+}
+
+func same_selected_identity(selected:const SelectedExports in E, left:u64, right:u64) -> bool
+    where {const owner E} {
+    return selected[left].kind == selected[right].kind &&
+        selected[left].origin_module == selected[right].origin_module && selected[left].identity == selected[right].identity;
+}
+
 func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                      ref work:NameWork in W, ref state:NameState in R, first:u64) -> void
-    where {const owner S, const owner N, owner B, owner W, owner R} {
+                      selected:const SelectedExports in E, ref work:NameWork in W, ref state:NameState in R,
+                      first:u64, allow_families:bool) -> void
+    where {const owner S, const owner N, owner B, const owner E, owner W, owner R} {
     val item <- first;
     val form <- no_node();
     val form_kind <- 0u8;
     val name <- no_node();
+    val found <- no_node();
     val kind <- ordinary_selection();
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (item == no_node()) { return; } else {};
@@ -847,11 +863,23 @@ func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, 
             name <- nodes[form].right;
             if (nodes[form].number != 0u64) { (name <- nodes[form].number - 1u64):void; } else {};
             kind <- if (nodes[name].kind == symbol_node()) { symbolic_selection() } else { ordinary_selection() };
-            declare_name(source, nodes, bindings, work, state, name, form, kind, unproved_module_binding());
+            found <- lookup(source, nodes, work, name, 0u64, state.used);
+            if (found != no_node() && bindings[found].kind == kind &&
+                same_selected_identity(selected, bindings[found].declaration, form)) {
+                remember(bindings, name, bindings[found].declaration, kind);
+            } else {
+                declare_name(source, nodes, bindings, work, state, name, form, kind, unproved_module_binding());
+            };
         } else {};
         if (form_kind == callable_node()) {
-            name <- nodes[callable_head(nodes, form)].left;
-            declare_name(source, nodes, bindings, work, state, name, form, callable_binding(), unproved_module_binding());
+            name <- definition_name(nodes, form);
+            found <- lookup(source, nodes, work, name, 0u64, state.used);
+            if (allow_families && found != no_node() && bindings[found].kind == callable_binding()) {
+                remember(bindings, name, bindings[found].declaration, callable_binding());
+            } else {
+                declare_name(source, nodes, bindings, work, state, name, form, callable_binding(), unproved_module_binding());
+            };
+            remember(bindings, form, bindings[name].declaration, callable_binding());
         } else {};
         if (state.diagnostic != 0u8) { return; } else {};
         (item <- work[item].next):void;
@@ -1067,6 +1095,10 @@ func resolve_module_form(source:const SourceBytes in S, nodes:const ExprNodes in
         val name <- nodes[form].left;
         val found <- lookup(source, nodes, work, name, 0u64, state.module_names);
         if (found == no_node()) { reject_name(state, name, unresolved_name()); return; } else {};
+        if ((nodes[name].kind == symbol_node()) != (bindings[found].kind == symbolic_selection())) {
+            reject_name(state, name, expected_symbol_binding());
+            return;
+        } else {};
         remember(bindings, name, bindings[found].declaration, bindings[found].kind);
     } else {};
 }
@@ -1088,7 +1120,7 @@ func resolve_module_bodies(source:const SourceBytes in S, nodes:const ExprNodes 
 # in the syntax buffer or a builtin kind. On failure, use only the diagnostic.
 func resolve_module_names(source:const SourceBytes in S, nodes:const ExprNodes in N, tree:const ParseResult in T,
                            selected:const SelectedExports in E, ref bindings:NameBindings in B, ref work:NameWork in W,
-                           ref report:NameResolutionResult in R) -> bool
+                           declarations_only:bool, ref report:NameResolutionResult in R) -> bool
     where {const owner S, const owner N, const owner T, const owner E, owner B, owner W, owner R} {
     report.node <- no_node();
     report.enclosing_defer <- no_node();
@@ -1113,7 +1145,7 @@ func resolve_module_names(source:const SourceBytes in S, nodes:const ExprNodes i
         failed_node <- no_node(); enclosing_defer <- no_node();
     };
     val first <- first_item(nodes, nodes[tree.root].left);
-    register_module(source, nodes, bindings, work, state, first);
+    register_module(source, nodes, bindings, selected, work, state, first, declarations_only);
     if (state.diagnostic == 0u8) { register_native_procedures(source, nodes, bindings, work, state, first); } else {};
     if (state.diagnostic == 0u8) {
         state.module_names <- state.used;
@@ -1131,6 +1163,7 @@ func resolve_module_names(source:const SourceBytes in S, nodes:const ExprNodes i
 }
 
 export NameBindings;
+export definition_name;
 export NameBinding;
 export NameWork;
 export NameWorkSlot;
