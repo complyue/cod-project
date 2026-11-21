@@ -1,8 +1,10 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 20 · Recorded: 2026-11-20 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 21 · Recorded: 2026-11-21 · Phase: initial seed delivery through alternating booter and seed development.
 
 ## Design authority
+
+- [D-17-EXCEPTION-BINDINGS](../../design/DesignAuthorityRegistry.md#d-17-exception-bindings) at roadmap r21 applies the [binding decision](../../CHANGELOG.md#h-exception-bindings-20261121) to [both bootstrap parsers](#exception-syntax-in-both-frontends). P-650/P-651 require readable exception source and one identifiable release obligation. The semantic checker and execution retain their respective delivery scopes.
 
 - **Initial seed delivery.** [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap), r16, covers [the seed scope and acceptance](#initial-seed-delivery). [H-BOOTER-DRIVEN-SEED-20261119](../../CHANGELOG.md#h-booter-driven-seed-20261119) confirms the booter-driven delivery priority and source-readability requirement. [H-BOOTER-NATIVE-MINIMUM-20261119](../../CHANGELOG.md#h-booter-native-minimum-20261119) confirms the shared C interface, basic C-native region support and minimal LLVM bindings as required for delivery. P-642 connects C-80 to charter §§4.3/6.3/8.1/12 through explicit native lifetimes, correct execution, readable CoD source and end-to-end evidence. P-643 records governing contracts. The exact provider ABI and operations beyond the booter's needs retain their own review boundaries.
 
@@ -16,7 +18,7 @@ Roadmap revision: 20 · Recorded: 2026-11-20 · Phase: initial seed delivery thr
 
 - **Output initialization.** [D-22](../../design/DesignAuthorityRegistry.md#d-22-init-places) governs calls that initialize an ordinary caller place under C-81/C-65 and charter §§4.3, 6.3, 8 and 12. The first native workflow uses the scoped handle contract for resource acquisition and disposal.
 
-- **Registry and scope.** [D-20](../../design/DesignAuthorityRegistry.md#d-20), roadmap revision 20. The pipeline and interop documents retain their scoped qualification. [H-353](../../CHANGELOG.md#h-353) supplies the compiler application baseline. [H-356](../../CHANGELOG.md#h-356) supplies the selected defer call/block timing. Detailed application contracts beyond the confirmed scopes remain `pending-human`.
+- **Registry and scope.** [D-20](../../design/DesignAuthorityRegistry.md#d-20), roadmap revision 21. The pipeline and interop documents retain their scoped qualification. [H-353](../../CHANGELOG.md#h-353) supplies the compiler application baseline. [H-356](../../CHANGELOG.md#h-356) supplies the selected defer call/block timing. Detailed application contracts beyond the confirmed scopes remain `pending-human`.
 - **Value:** C-80/P-314–P-318 connects inspectable compiler semantics to C-01, reusable structured artifacts to C-05, and native integration to C-02/C-11/C-79. The charter's §§2, 5.3–5.4, 6–7 and 12 provide the context; detailed derivation and trade-offs remain pending.
 - **Boundaries / acceptance:** preserve regional relocation, owner/access checks, independent module worlds and explicit TLS effects where used. Keep confirmed direction, proposals and missing evidence distinguishable. Native ABI, toolchain operations and performance claims require their own authorization or evidence.
 
@@ -47,6 +49,12 @@ Initial delivery requires the seed to reproducibly build and run the first CoD-w
 Representative source and invalid-input cases must behave as specified, and the booter source must pass the readability review. The booter's first self-build is a downstream milestone. DBMR persistence and broader LLVM binding coverage are separate from initial delivery.
 
 Build the initial booter with statically linked C providers generated from checked CoD declarations. The seed and booter derive equivalent C contracts, including native handle constructor and destructor stubs. Separate handwritten C supplies the operations and their resource protocols. Calls in both directions use synchronous here semantics. CoD acquires the source, scratch backing and LLVM resources under lexical ownership with scope-exit destruction. See the [native handle and C record rules](docs/LLVMInterop.md#native-handles-and-c-records) for borrowed values and by-value records.
+
+### Exception syntax in both frontends
+
+The C++ seed and CoD booter must parse the [exception declarations and catch bindings](../../design/ExceptionControl.md#exception-declarations-and-catch-bindings) and [normal construction forms](../../design/ExceptionControl.md#make-exception-expressions). Both must distinguish an owning declaration, consuming parameter or owning result, an owning catch (including the shorthand), and an explicit ref with an owner. Preserve target constness independently. Parse the two construction forms and their optional fresh-region capacity or cause in the specified position. Preserve the same binding modes in try and deferred catches.
+
+Acceptance checks each frontend at its own parse boundary. A valid form carries its binding mode, owner name when present, and construction operands into checking. Malformed syntax fails at parsing. When an execution path is unsupported, the compiler can reject the parsed form during checking or lowering. Supported paths must execute their required propagation, handling and cleanup. For example, parsing `catch (e:const E)` as a borrowed local loses the handler’s release obligation even when the handler only reads e.
 
 ## Next-stage repositories and native runtime
 
