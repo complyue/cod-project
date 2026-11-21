@@ -9,6 +9,8 @@ The editor grammars follow [D-10-ORDINARY-NAMES](../../design/DesignAuthorityReg
 
 For [contextual ownership](../../design/DesignAuthorityRegistry.md#d-10-own-qualifier) and [lexical names](../../design/DesignAuthorityRegistry.md#d-10-contextual-names), both previews highlight `own`, `from`, `throws`, `data`, `type`, `unit`, and `array` by spelling, even where CoD allows them as names. `owned` is an ordinary identifier and has no keyword highlight. For example, in [`contextual-own-calls.cod`](../../tests/cod/language/contextual-own-calls.cod), `own` still gets keyword styling when used as a callable or parameter name. Highlighting does not imply that a word is reserved.
 
+Zed distinguishes type names in recognizable syntax positions, including declarations, annotations, `throws` clauses, and explicit unit selections. It does not resolve names: a bare call such as `Position(...)` or an unqualified module selection keeps ordinary identifier highlighting.
+
 ## Activate in local Zed
 
 From the repository root on macOS or Linux:
@@ -25,7 +27,7 @@ Fully quit and restart Zed, then open `showcase.cod`. The language indicator sho
 
 ## Optional Zed theme: Ayu Dark CoD
 
-[Ayu Dark CoD](themes/ayu-dark-cod.json) is a standalone theme based on the [Ayu Dark theme shipped with Zed 1.29.2](https://github.com/zed-industries/zed/blob/v1.29.2/assets/themes/ayu/ayu.json) ([MIT license](themes/ayu-dark-cod.LICENSE)). It keeps the original UI palette and lime-green strings. Ordinary identifiers use a bright warm foreground, with similarly bright colors for type names, `@symbols`, and numbers. Keywords, built-in types, CoD operators, brackets, and delimiters sit at about 80% of the identifier foreground’s estimated visual brightness. Keyword groups retain distinct hues without extra bold weight, and module directives are italic.
+[Ayu Dark CoD](themes/ayu-dark-cod.json) is a standalone theme based on the [Ayu Dark theme shipped with Zed 1.29.2](https://github.com/zed-industries/zed/blob/v1.29.2/assets/themes/ayu/ayu.json) ([MIT license](themes/ayu-dark-cod.LICENSE)). It keeps the original UI palette and lime-green strings. Ordinary CoD identifiers are warm yellow, recognized user-defined type names are vivid cyan, and CoD operators are jade green. Declaration keywords are ink blue, module directives are italic azure, and the allocation keyword `make` is bold orange-red. Control flow, built-in types, and punctuation remain subdued.
 
 Install the grammar as above, then copy just the theme JSON into Zed's user themes directory. On macOS or Linux, from the repository root:
 

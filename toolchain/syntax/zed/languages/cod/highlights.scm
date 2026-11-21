@@ -6,6 +6,73 @@
 (builtin_type) @type.builtin
 (builtin_function) @function
 (symbol) @variable.special.cod-symbol
+
+; Only color names as types in recognizable syntax positions. Bare calls,
+; argument arrows, and module selections do not identify a type.
+(identifier) @variable.cod
+
+(source_file
+  (keyword) @_type_declaration
+  . (identifier) @type.cod
+  (#any-of? @_type_declaration "array" "data" "type" "unit"))
+
+((delimiter) @_type_separator
+  . (identifier) @type.cod
+  (#eq? @_type_separator ":"))
+
+((delimiter) @_type_separator
+  . (keyword) @_type_modifier
+  . (identifier) @type.cod
+  (#eq? @_type_separator ":")
+  (#eq? @_type_modifier "const"))
+
+((keyword) @_type_operator
+  . (identifier) @type.cod
+  (#any-of? @_type_operator "make" "isa")
+  (#not-eq? @type.cod "exception")
+  (#not-eq? @type.cod "handle"))
+
+((keyword) @_callable_declaration
+  . (identifier)
+  . (parenthesized)
+  . (operator) @_result_arrow
+  . (identifier) @type.cod
+  (#any-of? @_callable_declaration "func" "function" "proc" "procedure")
+  (#eq? @_result_arrow "->"))
+
+((keyword) @_throws_clause
+  . (identifier) @type.cod
+  (#eq? @_throws_clause "throws"))
+
+; The parentheses after a numeric representation name a unit only in a type.
+; Check optional modifiers together with the required representation so the
+; predicate also matches an unqualified type.
+((delimiter) @_unit_colon
+  . (keyword)? @_unit_head
+  . (builtin_type) @_unit_head
+  . (parenthesized (identifier) @type.cod)
+  (#eq? @_unit_colon ":")
+  (#any-of? @_unit_head "const" "i64" "u8" "u32" "u64" "f32" "f64"))
+
+((keyword) @_unit_callable
+  . [(identifier) (parenthesized)]?
+  . (parenthesized)
+  . (operator) @_unit_arrow
+  . (keyword)* @_unit_head
+  . (builtin_type) @_unit_head
+  . (parenthesized (identifier) @type.cod)
+  (#any-of? @_unit_callable "func" "function" "proc" "procedure" "here")
+  (#eq? @_unit_arrow "->")
+  (#any-of? @_unit_head "const" "val" "ref" "ptr" "i64" "u8" "u32" "u64" "f32" "f64"))
+
+(source_file
+  (keyword) @_using
+  . (keyword) @_units
+  . (string)
+  . (block (identifier) @type.cod)
+  (#eq? @_using "using")
+  (#eq? @_units "units"))
+
 ; More specific keyword patterns follow the generic fallback.
 (keyword) @keyword
 

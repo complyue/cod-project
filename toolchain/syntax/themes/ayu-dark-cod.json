@@ -414,26 +414,32 @@
             "color": "#D0AA95"
           },
           "keyword.module.cod": {
-            "color": "#C4B08B",
+            "color": "#52ACF1",
             "font_style": "italic",
             "font_weight": 400
           },
           "keyword.declaration.cod": {
-            "color": "#9EBEB0",
+            "color": "#86ADE7",
             "font_weight": 400
           },
           "keyword.modifier.const.cod": {
             "color": "#D7A0A5"
           },
           "keyword.allocation.cod": {
-            "color": "#AEB78D",
-            "font_weight": 400
+            "color": "#FF7856",
+            "font_weight": 700
           },
           "variable.special.cod-symbol": {
             "color": "#FFDDE6"
           },
           "operator.cod": {
-            "color": "#A7B7CF"
+            "color": "#B9F2CA"
+          },
+          "type.cod": {
+            "color": "#69F3F2"
+          },
+          "variable.cod": {
+            "color": "#FFF0B8"
           }
         }
       }
