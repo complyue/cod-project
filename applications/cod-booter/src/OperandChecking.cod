@@ -1,3 +1,4 @@
+using "SourceStorage.cod" SourceBytes;
 using "ParserStorage.cod" {
     ExprNodes, len as syntax_len, no_node, module_node, module_item_node, block_node,
     block_item_node, full_scope_node, try_node, catch_clause_node, catch_handler_node,
@@ -11,18 +12,20 @@ using "ParserStorage.cod" {
     discard_node, bool_node, compare_node, conditional_node, narrow_integer_node, range_node,
     range_header_node, literal_range, nonempty_literal_range, logical_not_node, logical_binary,
     skips_right, unequal_words, case_node, case_arm_node, case_false_pattern, case_true_pattern,
-    case_fallthrough_node, case_failure_node, break_node,
+    case_fallthrough_node, case_failure_node, break_node, type_assertion_node, enum_declaration_node,
+    case_member_pattern, case_null_pattern,
 };
 using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" {
     NameBindings, NameWork, first_item, callable_head, enclosing_callable, builtin_u64,
     builtin_void, builtin_bool, ordinary_selection, symbolic_selection, callable_binding,
-    formal_binding, local_binding, loop_index, exception_binding,
+    formal_binding, local_binding, loop_index, exception_binding, find_enum_member,
 };
 using "ModuleExports.cod" {
     SelectedExports, exception_type_export, symbol_export, print_export_identity,
     exception_root_identity,
 };
+using "ModuleExportStorage.cod" enum_type;
 
 # An owner is a lexical scope or an owner parameter's declaration. Exception
 # type identity alone does not establish the incoming object's owner.
@@ -40,6 +43,9 @@ export data OperandFact {
     case_guard:u8;
     case_resume:u8;
     case_end:u8;
+    enum_constant:u8;
+    discriminator_code:u64;
+    case_excluded_at:u64;
     case_break_link:u64;
     case_break_tail:u64;
     owner:u64;
@@ -65,7 +71,10 @@ export func exception_type() -> u8 { return 3u8; }
 export func null_literal() -> u8 { return 4u8; }
 export func never_result() -> u8 { return 5u8; }
 func scalar_bool() -> u8 { return 6u8; }
-export func scalar_kind(kind:u8) -> bool { return kind == scalar_u64() || kind == scalar_bool(); }
+func scalar_enum() -> u8 { return 7u8; }
+export func scalar_kind(kind:u8) -> bool {
+    return kind == scalar_u64() || kind == scalar_bool() || kind == scalar_enum();
+}
 
 export func independent_value() -> u8 { return 1u8; }
 export func local_place() -> u8 { return 2u8; }
@@ -99,6 +108,9 @@ export func unsupported_case_subject() -> u8 { return 23u8; }
 export func unsupported_case_pattern() -> u8 { return 24u8; }
 func incomplete_value_case() -> u8 { return 25u8; }
 export func unsupported_case_scope_transfer() -> u8 { return 26u8; }
+func unsupported_scalar_assertion() -> u8 { return 27u8; }
+func missing_enum_member() -> u8 { return 28u8; }
+func incompatible_enum_type() -> u8 { return 29u8; }
 
 export func unreachable_case_item() -> u8 { return 1u8; }
 export func misses_case_arm() -> u8 { return 0u8; }
@@ -151,6 +163,19 @@ func require_typed_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, ope
     return 0u8;
 }
 
+func same_operand_type(facts:const OperandFacts in F, left:u64, right:u64) -> bool
+    where {const owner F} {
+    return facts[left].kind == facts[right].kind &&
+        (facts[left].kind != scalar_enum() || facts[left].identity == facts[right].identity);
+}
+
+func require_matching_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:u64, expected:u64) -> u8
+    where {const owner N, owner F} {
+    if (facts[expected].kind == scalar_enum() && facts[operand].kind == scalar_enum() &&
+        !same_operand_type(facts, operand, expected)) return wrong_operand_type();
+    return require_typed_bits(nodes, facts, operand, facts[expected].kind);
+}
+
 func require_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:u64) -> u8
     where {const owner N, owner F} {
     return require_typed_bits(nodes, facts, operand, scalar_u64());
@@ -159,7 +184,13 @@ func require_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:u
 func declared_scalar(binding:u8) -> u8 {
     if (binding == builtin_u64()) return scalar_u64();
     if (binding == builtin_bool()) return scalar_bool();
+    if (binding == enum_type()) return scalar_enum();
     return 0u8;
+}
+
+func scalar_identity(names:const NameBindings in B, annotation:u64) -> u64 where {const owner B} {
+    if (names[annotation].kind == enum_type()) return names[annotation].declaration;
+    return 0u64;
 }
 
 func owner_conflict(nodes:const ExprNodes in N, first:u64, second:u64) -> u8 where {const owner N} {
@@ -193,7 +224,7 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
         val owner_site <- names[nodes[annotation].right].declaration;
         if (owner_site == no_node() || nodes[owner_site].kind != owner_clause_node()) return unproved_owner();
         val reception <- if (form == ptr_parameter_node()) { nullable_ptr() } else { borrowed_ref() };
-        set_fact(facts, formal, borrowed_kind, reception, owner_site, 0u64, 0u8);
+        set_fact(facts, formal, borrowed_kind, reception, owner_site, scalar_identity(names, nodes[annotation].left), 0u8);
         facts[formal].target_readonly <- readonly;
         return 0u8;
     } else {};
@@ -201,7 +232,7 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
         form != ptr_parameter_node()) return unproved_operand();
     val kind <- declared_scalar(names[annotation].kind);
     if (kind == 0u8) return unproved_operand();
-    set_fact(facts, formal, kind, local_place(), definition, 0u64, 0u8);
+    set_fact(facts, formal, kind, local_place(), definition, scalar_identity(names, annotation), 0u8);
     facts[formal].target_readonly <- readonly;
     return 0u8;
 }
@@ -239,7 +270,7 @@ func check_signature_clauses(nodes:const ExprNodes in N, names:const NameBinding
                     report.diagnostic <- unproved_result_contract();
                     return;
                 } else {};
-                set_result(facts, definition, kind);
+                set_fact(facts, definition, kind, independent_value(), no_node(), scalar_identity(names, annotation), 0u8);
             };
         } else {
             if (nodes[clause].kind == throws_clause_node()) {
@@ -283,6 +314,9 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, fact
     } else {};
     val declared_kind <- if (type_name == no_node()) { 0u8 } else { declared_scalar(names[type_name].kind) };
     if (declared_kind == 0u8 && type_name != no_node()) return unproved_operand();
+    val identity <- if (type_name == no_node()) { (facts[initializer].identity) } else { scalar_identity(names, type_name) };
+    if (declared_kind == scalar_enum() && facts[initializer].kind == scalar_enum() &&
+        identity != facts[initializer].identity) return incompatible_enum_type();
     if (facts[initializer].kind == never_result()) {
         if (required_owner != no_node() && nodes[initializer].kind == make_named_node() &&
             required_owner != names[initializer].scope)
@@ -294,14 +328,14 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, fact
         val value_kind <- if (declared_kind == 0u8) { (facts[initializer].kind) } else { declared_kind };
         if (reserves_storage(nodes, initializer)) {
             if (facts[initializer].kind != value_kind) return wrong_operand_type();
-            set_fact(facts, at, value_kind, local_place(), names[at].scope, 0u64, 0u8);
+            set_fact(facts, at, value_kind, local_place(), names[at].scope, identity, 0u8);
             facts[at].target_readonly <- readonly;
             facts[at].reservation <- initializer;
             return 0u8;
         } else {};
         val diagnostic <- require_typed_bits(nodes, facts, initializer, value_kind);
         if (diagnostic != 0u8) return diagnostic;
-        set_fact(facts, at, value_kind, local_place(), names[at].scope, 0u64, 0u8);
+        set_fact(facts, at, value_kind, local_place(), names[at].scope, identity, 0u8);
         facts[at].target_readonly <- readonly;
         return 0u8;
     } else {};
@@ -325,7 +359,7 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, fact
             return expected_writable_place();
     };
     if (owner_site == no_node()) return unproved_owner();
-    set_fact(facts, at, kind, reception, owner_site, 0u64, 0u8);
+    set_fact(facts, at, kind, reception, owner_site, identity, 0u8);
     facts[at].target_readonly <- if (type_name == no_node()) { (facts[initializer].target_readonly) } else { readonly };
     facts[at].reservation <- facts[initializer].reservation;
     return 0u8;
@@ -338,19 +372,24 @@ func check_construction(nodes:const ExprNodes in N, names:const NameBindings in 
         (facts[nodes[requested].left].kind)
     } else { declared_scalar(names[requested].kind) };
     if (!scalar_kind(kind)) return unproved_operand();
+    val identity <- if (nodes[requested].kind == construction_type_query_node()) {
+        (facts[nodes[requested].left].identity)
+    } else { scalar_identity(names, requested) };
     val owner_site <- names[at].scope;
     val explicit_owner <- nodes[nodes[at].right].right;
     if (explicit_owner != no_node() && names[explicit_owner].declaration != owner_site) return unproved_owner();
     val body <- construction_body(nodes, at);
     if (body == no_node()) {
-        set_fact(facts, at, kind, borrowed_ref(), owner_site, 0u64, 0u8);
+        set_fact(facts, at, kind, borrowed_ref(), owner_site, identity, 0u8);
         facts[at].reservation <- at;
         return 0u8;
     } else {};
     if (facts[body].kind == never_result()) { set_result(facts, at, never_result()); return 0u8; } else {};
+    if (kind == scalar_enum() && facts[body].kind == scalar_enum() && facts[body].identity != identity)
+        return incompatible_enum_type();
     val diagnostic <- require_typed_bits(nodes, facts, body, kind);
     if (diagnostic != 0u8) return diagnostic;
-    set_fact(facts, at, kind, borrowed_ref(), owner_site, 0u64, 0u8);
+    set_fact(facts, at, kind, borrowed_ref(), owner_site, identity, 0u8);
     return 0u8;
 }
 
@@ -366,9 +405,9 @@ func check_transfer(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64)
         return expected_writable_place();
     val diagnostic <- require_typed_bits(nodes, facts, destination, kind);
     if (diagnostic != 0u8) return diagnostic;
-    diagnostic <- require_typed_bits(nodes, facts, supplied, kind);
+    diagnostic <- require_matching_bits(nodes, facts, supplied, destination);
     if (diagnostic != 0u8) return diagnostic;
-    set_fact(facts, at, kind, borrowed_ref(), facts[destination].owner, 0u64, 0u8);
+    set_fact(facts, at, kind, borrowed_ref(), facts[destination].owner, facts[destination].identity, 0u8);
     facts[at].target_readonly <- 1u8;
     facts[at].reservation <- facts[destination].reservation;
     return 0u8;
@@ -382,14 +421,14 @@ func check_argument(nodes:const ExprNodes in N, facts:OperandFacts in F, owners:
     if (checked_ref_argument(nodes, argument) && wanted != borrowed_ref())
         return checked_selection_requires_ref();
     if (wanted == local_place()) {
-        val diagnostic <- require_typed_bits(nodes, facts, actual, kind);
+        val diagnostic <- require_matching_bits(nodes, facts, actual, formal);
         if (diagnostic != 0u8) return diagnostic;
-        set_result(facts, argument, kind);
+        set_fact(facts, argument, kind, independent_value(), no_node(), facts[formal].identity, 0u8);
         return 0u8;
     } else {};
     if (local_storage_binding(nodes[actual].kind) ||
         facts[actual].kind == 0u8 || facts[actual].kind == null_literal()) return unproved_operand();
-    if (facts[actual].kind != kind) return wrong_operand_type();
+    if (!same_operand_type(facts, actual, formal)) return wrong_operand_type();
     val reception <- facts[actual].reception;
     if (reception == independent_value()) return unproved_owner();
     if (facts[actual].target_readonly != 0u8 && facts[formal].target_readonly == 0u8) return expected_writable_place();
@@ -402,7 +441,7 @@ func check_argument(nodes:const ExprNodes in N, facts:OperandFacts in F, owners:
         return owner_conflict(nodes, owners[owner_parameter].actual_owner, actual_owner);
     owners[owner_parameter].call_site <- invocation;
     owners[owner_parameter].actual_owner <- actual_owner;
-    set_fact(facts, argument, kind, wanted, actual_owner, 0u64, 0u8);
+    set_fact(facts, argument, kind, wanted, actual_owner, facts[formal].identity, 0u8);
     return 0u8;
 }
 
@@ -464,6 +503,10 @@ func set_result(facts:OperandFacts in F, at:u64, kind:u8) -> void where {owner F
     };
 }
 
+func set_bits_result(facts:OperandFacts in F, at:u64, value:u64) -> void where {owner F} {
+    set_fact(facts, at, facts[value].kind, independent_value(), no_node(), facts[value].identity, 0u8);
+}
+
 func explicit_discard() -> u8 { return 1u8; }
 func loop_discard() -> u8 { return 2u8; }
 
@@ -486,7 +529,8 @@ func check_sequence_item(nodes:const ExprNodes in N, facts:OperandFacts in F, at
         } else {};
         (kind <- result_kind(nodes, facts, expression, facts[at].discarded_result == 0u8)):void;
     } else {};
-    set_result(facts, at, kind);
+    if (scalar_kind(kind)) { set_bits_result(facts, at, expression); }
+    else { set_result(facts, at, kind); };
 }
 
 func sequence_result(facts:const OperandFacts in F, tail:u64) -> u8 where {const owner F} {
@@ -495,11 +539,14 @@ func sequence_result(facts:const OperandFacts in F, tail:u64) -> u8 where {const
 }
 
 # Abrupt paths add no normal result to a full scope or try expression.
-func merge_result(facts:OperandFacts in F, at:u64, kind:u8) -> u8 where {owner F} {
+func merge_result(facts:OperandFacts in F, at:u64, kind:u8, identity:u64) -> u8 where {owner F} {
     if (kind == 0u8) return unproved_result_contract();
     if (kind == never_result()) return 0u8;
-    if (facts[at].kind != 0u8 && facts[at].kind != kind) return unproved_result_contract();
-    set_result(facts, at, kind);
+    if (facts[at].kind != 0u8 &&
+        (facts[at].kind != kind || (kind == scalar_enum() && facts[at].identity != identity)))
+        return unproved_result_contract();
+    if (kind == scalar_enum()) { set_fact(facts, at, kind, independent_value(), no_node(), identity, 0u8); }
+    else { set_result(facts, at, kind); };
     return 0u8;
 }
 
@@ -509,20 +556,21 @@ func merge_arm_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u6
     if (kind == 0u8) return unproved_result_contract();
     if (kind == never_result()) return 0u8;
     if (facts[at].discarded_result == loop_discard() && nodes[at].kind != case_node())
-        return merge_result(facts, at, void_result());
+        return merge_result(facts, at, void_result(), 0u64);
     if (facts[at].kind == 0u8) {
         copy_fact(facts, at, arm);
         return 0u8;
     } else {};
-    if (kind != facts[at].kind) return unproved_result_contract();
+    if (!same_operand_type(facts, at, arm)) return unproved_result_contract();
     val left <- facts[at].reception;
     val right <- facts[arm].reception;
     val nullable <- left == nullable_ptr() || right == nullable_ptr();
     if (kind == void_result() || left == independent_value() || right == independent_value()) {
         if (nullable) return unproved_nonnull_borrow();
-        set_result(facts, at, kind);
+        if (scalar_kind(kind)) { set_bits_result(facts, at, arm); } else { set_result(facts, at, kind); };
         return 0u8;
     } else {};
+    val identity <- facts[at].identity;
     val owner_site <- facts[at].owner;
     if (owner_site == no_node() || facts[arm].owner == no_node()) return unproved_owner();
     if (owner_site != facts[arm].owner) return owner_conflict(nodes, owner_site, facts[arm].owner);
@@ -530,7 +578,7 @@ func merge_arm_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u6
     val reservation <- facts[at].reservation;
     if (reservation != facts[arm].reservation) return unproved_reservation_selection();
     val reception <- if (nullable) { nullable_ptr() } else { borrowed_ref() };
-    set_fact(facts, at, kind, reception, owner_site, 0u64, 0u8);
+    set_fact(facts, at, kind, reception, owner_site, identity, 0u8);
     facts[at].target_readonly <- readonly;
     facts[at].reservation <- reservation;
     return 0u8;
@@ -548,14 +596,47 @@ func check_conditional(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u
     return diagnostic;
 }
 
-# An ordered Boolean case tracks the codes that can still reach each item.
-# A write on a continuing borrowed path can reintroduce either code.
-data BooleanCoverage { false_reaches:bool; true_reaches:bool; }
+# Remaining canonical members are tracked by count and exclusion markers.
+# A possible write through another view starts a fresh scan generation.
+data CaseCoverage {
+    total:u64;
+    remaining:u64;
+    only:u64;
+    generation:u64;
+}
 
-func opens_case_path(coverage:BooleanCoverage in V, preserve:bool, false_matched:bool, true_matched:bool) -> void
-    where {owner V} {
-    coverage.false_reaches <- coverage.false_reaches || false_matched || !preserve;
-    (coverage.true_reaches <- coverage.true_reaches || true_matched || !preserve):void;
+func initialize_case_coverage(nodes:const ExprNodes in N, names:const NameBindings in B,
+                              links:const NameWork in L, facts:OperandFacts in F, at:u64,
+                              coverage:CaseCoverage in V) -> void
+    where {const owner N, const owner B, const owner L, owner F, owner V} {
+    val subject <- nodes[at].left;
+    val kind <- facts[subject].kind;
+    if (kind == never_result()) return;
+    if (kind == scalar_bool()) {
+        coverage.total <- 2u64;
+        coverage.remaining <- 2u64;
+        if (facts[subject].reception == independent_value()) {
+            val behavior <- case_condition(nodes, facts, subject);
+            if (behavior == case_guard_passes() || behavior == case_guard_declines()) {
+                coverage.only <- if (behavior == case_guard_passes()) { at } else { subject };
+                (coverage.remaining <- 1u64):void;
+            } else {};
+        } else {};
+        return;
+    } else {};
+    val domain <- facts[subject].identity;
+    val member <- first_item(nodes, nodes[domain].right);
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        if (member == no_node()) { (coverage.remaining <- coverage.total):void; return; } else {};
+        if (names[member].declaration == member) { (coverage.total <- coverage.total + 1u64):void; } else {};
+        member <- links[member].next;
+    };
+}
+
+func reopen_case_domain(coverage:CaseCoverage in V, generation:u64) -> void where {owner V} {
+    coverage.only <- no_node();
+    coverage.generation <- generation;
+    (coverage.remaining <- coverage.total):void;
 }
 
 func case_may_write(nodes:const ExprNodes in N, links:const NameWork in L, at:u64) -> bool
@@ -564,7 +645,7 @@ func case_may_write(nodes:const ExprNodes in N, links:const NameWork in L, at:u6
     val kind <- nodes[at].kind;
     if (kind == bool_node() || kind == literal_node() || kind == name_node() ||
         kind == case_fallthrough_node() || kind == null_node()) return false;
-    if (kind == group_node() || kind == discard_node() || kind == logical_not_node())
+    if (kind == group_node() || kind == type_assertion_node() || kind == discard_node() || kind == logical_not_node())
         return case_may_write(nodes, links, nodes[at].left);
     if (kind == conditional_node())
         return case_may_write(nodes, links, nodes[at].left) || case_may_write(nodes, links, nodes[at].right) ||
@@ -602,40 +683,64 @@ func prepare_case_arm(nodes:const ExprNodes in N, facts:OperandFacts in F, arm:u
     where {const owner N, owner F} {
     if (facts[arm].case_resume != 0u8 && nodes[nodes[arm].right].kind == full_scope_node())
         return unsupported_case_scope_transfer();
-    val pattern <- nodes[arm].left;
-    if (pattern != no_node() && nodes[pattern].number != case_false_pattern() &&
-        nodes[pattern].number != case_true_pattern()) return unsupported_case_pattern();
     val behavior <- case_condition(nodes, facts, nodes[arm].number);
     if (behavior == 0u8) return expected_boolean_condition();
     facts[arm].case_guard <- behavior;
     return 0u8;
 }
 
+func prepare_case_pattern(source:const SourceBytes in S, nodes:const ExprNodes in N,
+                          names:const NameBindings in B, links:const NameWork in L, facts:OperandFacts in F,
+                          at:u64, pattern:u64, member:u64 in M) -> u8
+    where {const owner S, const owner N, const owner B, const owner L, owner F, owner M} {
+    member <- no_node();
+    if (pattern == no_node()) return 0u8;
+    val mode <- nodes[pattern].number;
+    if (mode == case_null_pattern()) return unsupported_case_pattern();
+    val subject <- nodes[at].left;
+    val kind <- facts[subject].kind;
+    if (kind == never_result()) return 0u8;
+    if (kind == scalar_bool()) {
+        if (mode != case_false_pattern() && mode != case_true_pattern()) return unsupported_case_pattern();
+        member <- if (mode == case_true_pattern()) { at } else { subject };
+        facts[pattern].discriminator_code <- if (mode == case_true_pattern()) { 1u64 } else { 0u64 };
+        return 0u8;
+    } else {};
+    if (mode != case_member_pattern()) return unsupported_case_pattern();
+    val spelling <- find_enum_member(source, nodes, pattern, nodes[facts[subject].identity].right);
+    if (spelling == no_node()) return missing_enum_member();
+    member <- names[spelling].declaration;
+    facts[pattern].discriminator_code <- links[spelling].enum_code;
+    return 0u8;
+}
+
 func check_case_arm(nodes:const ExprNodes in N, links:const NameWork in L, facts:OperandFacts in F,
-                    coverage:BooleanCoverage in V, at:u64, arm:u64, borrowed:bool) -> u8
+                    coverage:CaseCoverage in V, at:u64, arm:u64, member:u64, borrowed:bool) -> u8
     where {const owner N, const owner L, owner F, owner V} {
-    val pattern <- nodes[arm].left;
-    val form <- if (pattern == no_node()) { 0u64 } else { (nodes[pattern].number) };
-    val false_matched <- coverage.false_reaches && (pattern == no_node() || form == case_false_pattern());
-    val true_matched <- coverage.true_reaches && (pattern == no_node() || form == case_true_pattern());
-    if (!false_matched && !true_matched) return 0u8;
-    coverage.false_reaches <- coverage.false_reaches && !false_matched;
-    coverage.true_reaches <- coverage.true_reaches && !true_matched;
-    facts[arm].case_match <- if (coverage.false_reaches || coverage.true_reaches) {
-        tests_case_arm()
-    } else { matches_case_arm() };
+    if (member != no_node() && ((coverage.only != no_node() && coverage.only != member) ||
+        facts[member].case_excluded_at == coverage.generation)) return 0u8;
+    val matches_all <- member == no_node() || coverage.remaining == 1u64;
+    facts[arm].case_match <- if (matches_all) { matches_case_arm() } else { tests_case_arm() };
+
     val guard <- nodes[arm].number;
     val behavior <- facts[arm].case_guard;
-    if (behavior == case_guard_declines() || behavior == case_guard_tests()) {
-        opens_case_path(coverage, !borrowed || !case_may_write(nodes, links, guard), false_matched, true_matched);
-    } else {};
-    if (behavior == case_guard_exits() || behavior == case_guard_declines()) return 0u8;
-    facts[arm].case_body <- 1u8;
     val body <- nodes[arm].right;
-    if (facts[arm].case_resume != 0u8) {
-        opens_case_path(coverage, !borrowed || (!case_may_write(nodes, links, guard) &&
-                                              !case_may_write(nodes, links, body)), false_matched, true_matched);
-    } else {};
+    val enters_body <- behavior != case_guard_exits() && behavior != case_guard_declines();
+    val declines <- behavior == case_guard_declines() || behavior == case_guard_tests();
+    val falls_through <- enters_body && facts[arm].case_resume != 0u8;
+    if (declines || falls_through) {
+        if (borrowed && (case_may_write(nodes, links, guard) ||
+                         (falls_through && case_may_write(nodes, links, body)))) {
+            reopen_case_domain(coverage, arm);
+        } else {};
+    } else {
+        if (matches_all) { (coverage.remaining <- 0u64):void; } else {
+            facts[member].case_excluded_at <- coverage.generation;
+            (coverage.remaining <- coverage.remaining - 1u64):void;
+        };
+    };
+    if (!enters_body) return 0u8;
+    facts[arm].case_body <- 1u8;
     return merge_arm_result(nodes, facts, at, body);
 }
 
@@ -651,7 +756,7 @@ func merge_case_breaks(nodes:const ExprNodes in N, facts:OperandFacts in F,
         if (pending == no_node() || pending > through) return 0u8;
         if (reached) {
             value <- nodes[pending].left;
-            diagnostic <- if (value == no_node()) { merge_result(facts, at, void_result()) }
+            diagnostic <- if (value == no_node()) { merge_result(facts, at, void_result(), 0u64) }
                           else { merge_arm_result(nodes, facts, at, value) };
             if (diagnostic != 0u8) return diagnostic;
         } else {};
@@ -660,27 +765,29 @@ func merge_case_breaks(nodes:const ExprNodes in N, facts:OperandFacts in F,
     return invalid_operand_tree();
 }
 
-func check_case(nodes:const ExprNodes in N, links:const NameWork in L, facts:OperandFacts in F, at:u64) -> u8
-    where {const owner N, const owner L, owner F} {
+func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
+                links:const NameWork in L, facts:OperandFacts in F, at:u64) -> u8
+    where {const owner S, const owner N, const owner B, const owner L, owner F} {
     val subject <- nodes[at].left;
-    val completed <- facts[subject].kind != never_result();
-    if (completed && (facts[subject].kind != scalar_bool() || facts[subject].reception == nullable_ptr()))
+    val kind <- facts[subject].kind;
+    val completed <- kind != never_result();
+    if (completed && ((kind != scalar_bool() && kind != scalar_enum()) || facts[subject].reception == nullable_ptr()))
         return unsupported_case_subject();
     val borrowed <- facts[subject].reception != independent_value();
-    val value <- if (completed && !borrowed) { case_condition(nodes, facts, subject) } else { case_guard_tests() };
-    ref coverage = make BooleanCoverage {
-        false_reaches <- completed && value != case_guard_passes();
-        true_reaches <- completed && value != case_guard_declines();
+    ref coverage = make CaseCoverage {
+        total <- 0u64; remaining <- 0u64; only <- no_node(); generation <- at;
     };
+    initialize_case_coverage(nodes, names, links, facts, at, coverage);
     val item <- first_item(nodes, nodes[at].right);
     val pending <- facts[at].case_break_link;
     val expression <- no_node();
     val reached <- false;
+    val member <- no_node();
     val diagnostic <- 0u8;
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (item == no_node()) {
             if (!completed) { set_result(facts, at, never_result()); return 0u8; } else {};
-            if (coverage.false_reaches || coverage.true_reaches) {
+            if (coverage.remaining != 0u64) {
                 if (scalar_kind(facts[at].kind)) return incomplete_value_case();
                 facts[at].case_end <- 1u8;
                 only_void(facts, at);
@@ -690,11 +797,13 @@ func check_case(nodes:const ExprNodes in N, links:const NameWork in L, facts:Ope
             return 0u8;
         } else {};
         expression <- nodes[item].right;
-        reached <- coverage.false_reaches || coverage.true_reaches;
+        reached <- coverage.remaining != 0u64;
         if (!reached) { (facts[item].case_item <- unreachable_case_item()):void; } else {};
         if (nodes[expression].kind == case_arm_node()) {
+            diagnostic <- prepare_case_pattern(source, nodes, names, links, facts, at, nodes[expression].left, member);
+            if (diagnostic != 0u8) return diagnostic;
             if (reached) {
-                diagnostic <- check_case_arm(nodes, links, facts, coverage, at, expression, borrowed);
+                diagnostic <- check_case_arm(nodes, links, facts, coverage, at, expression, member, borrowed);
                 if (diagnostic != 0u8) return diagnostic;
             } else {};
             diagnostic <- merge_case_breaks(nodes, facts, pending, at, nodes[expression].number,
@@ -706,11 +815,10 @@ func check_case(nodes:const ExprNodes in N, links:const NameWork in L, facts:Ope
             diagnostic <- merge_case_breaks(nodes, facts, pending, at, expression, reached);
             if (reached) {
                 if (facts[expression].kind == never_result()) {
-                    coverage.false_reaches <- false;
-                    (coverage.true_reaches <- false):void;
+                    (coverage.remaining <- 0u64):void;
                 } else {
                     if (borrowed && case_may_write(nodes, links, expression)) {
-                        opens_case_path(coverage, false, false, false);
+                        reopen_case_domain(coverage, item);
                     } else {};
                 };
             } else {};
@@ -758,8 +866,8 @@ func check_logical(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64) 
 func merge_guard_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64, arm:u64, discard:bool) -> u8
     where {const owner N, owner F} {
     val kind <- facts[arm].kind;
-    if (discard && scalar_kind(kind)) return merge_result(facts, at, void_result());
-    if (facts[at].arm_result == 0u8 || !scalar_kind(kind)) return merge_result(facts, at, kind);
+    if (discard && scalar_kind(kind)) return merge_result(facts, at, void_result(), 0u64);
+    if (facts[at].arm_result == 0u8 || !scalar_kind(kind)) return merge_result(facts, at, kind, facts[arm].identity);
     if (facts[arm].reception == nullable_ptr() && facts[at].discarded_result == 0u8)
         return unproved_nonnull_borrow();
     # A native result slot can hold either bits or a target. A guard with
@@ -818,7 +926,9 @@ func check_catch_clause(nodes:const ExprNodes in N, facts:const OperandFacts in 
 
 func check_scope_tail(nodes:const ExprNodes in N, facts:OperandFacts in F, scope:u64) -> u8
     where {const owner N, owner F} {
-    val diagnostic <- merge_result(facts, scope, sequence_result(facts, nodes[scope].left));
+    val tail <- nodes[scope].left;
+    val identity <- if (tail == no_node()) { 0u64 } else { (facts[tail].identity) };
+    val diagnostic <- merge_result(facts, scope, sequence_result(facts, tail), identity);
     if (diagnostic == 0u8 && facts[scope].kind == 0u8) { only_void(facts, scope); } else {};
     return diagnostic;
 }
@@ -834,7 +944,7 @@ func check_callable_tail(nodes:const ExprNodes in N, facts:const OperandFacts in
     val kind <- facts[nodes[definition].right].kind;
     if (kind == 0u8) return unproved_result_contract();
     if (scalar_kind(kind) && facts[definition].kind == void_result()) return value_tail_in_void_function();
-    if (scalar_kind(kind) && kind != facts[definition].kind) return wrong_return_type();
+    if (scalar_kind(kind) && !same_operand_type(facts, nodes[definition].right, definition)) return wrong_return_type();
     return 0u8;
 }
 
@@ -843,7 +953,10 @@ func check_return(nodes:const ExprNodes in N, names:const NameBindings in B, fac
     val scope <- names[at].scope;
     val value <- nodes[at].left;
     if (nodes[scope].kind == module_node()) return wrong_return_type();
-    if (nodes[scope].kind == full_scope_node()) return merge_result(facts, scope, result_kind(nodes, facts, value, true));
+    if (nodes[scope].kind == full_scope_node()) {
+        val identity <- if (value == no_node()) { 0u64 } else { (facts[value].identity) };
+        return merge_result(facts, scope, result_kind(nodes, facts, value, true), identity);
+    } else {};
     if (nodes[scope].kind != callable_node()) return unproved_result_contract();
     if (value != no_node() && facts[value].kind == never_result()) return 0u8;
     if (facts[scope].kind == void_result()) {
@@ -851,7 +964,7 @@ func check_return(nodes:const ExprNodes in N, names:const NameBindings in B, fac
         return 0u8;
     } else {};
     if (value == no_node()) return wrong_return_type();
-    val diagnostic <- require_typed_bits(nodes, facts, value, facts[scope].kind);
+    val diagnostic <- require_matching_bits(nodes, facts, value, scope);
     if (diagnostic == wrong_operand_type()) return wrong_return_type();
     return diagnostic;
 }
@@ -867,12 +980,12 @@ func check_numeric_expression(nodes:const ExprNodes in N, facts:OperandFacts in 
             return 0u8;
         } else {};
         if (scalar_kind(inside) && facts[at].discarded_result != 0u8) {
-            set_result(facts, at, inside);
+            set_bits_result(facts, at, left);
             return 0u8;
         } else {};
         val projection <- require_typed_bits(nodes, facts, left, inside);
         if (projection != 0u8) return projection;
-        set_result(facts, at, inside);
+        set_bits_result(facts, at, left);
         return 0u8;
     } else {};
     val right <- nodes[at].right;
@@ -893,7 +1006,7 @@ func check_comparison(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u6
     val kind <- if (nodes[at].number <= unequal_words()) { (facts[left].kind) } else { scalar_u64() };
     val diagnostic <- require_typed_bits(nodes, facts, left, kind);
     if (diagnostic != 0u8) return diagnostic;
-    diagnostic <- require_typed_bits(nodes, facts, nodes[at].right, kind);
+    diagnostic <- require_matching_bits(nodes, facts, nodes[at].right, left);
     if (diagnostic != 0u8) return diagnostic;
     set_result(facts, at, scalar_bool());
     return 0u8;
@@ -938,10 +1051,31 @@ func check_explicit_discard(nodes:const ExprNodes in N, facts:OperandFacts in F,
     return 0u8;
 }
 
-func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+func check_enum_assertion(source:const SourceBytes in S, nodes:const ExprNodes in N,
+                          names:const NameBindings in B, links:const NameWork in L, facts:OperandFacts in F,
+                          at:u64) -> u8 where {const owner S, const owner N, const owner B, const owner L, owner F} {
+    val annotation <- nodes[at].right;
+    if (names[annotation].kind != enum_type()) return unsupported_scalar_assertion();
+    val domain <- names[annotation].declaration;
+    val operand <- nodes[at].left;
+    if (nodes[operand].kind == name_node() && names[operand].kind == 0u8) {
+        val member <- find_enum_member(source, nodes, operand, nodes[domain].right);
+        if (member == no_node()) return missing_enum_member();
+        set_fact(facts, at, scalar_enum(), independent_value(), no_node(), domain, 0u8);
+        facts[at].enum_constant <- 1u8;
+        facts[at].discriminator_code <- links[member].enum_code;
+        return 0u8;
+    } else {};
+    if (facts[operand].kind != never_result() &&
+        (facts[operand].kind != scalar_enum() || facts[operand].identity != domain)) return incompatible_enum_type();
+    copy_fact(facts, at, operand);
+    return 0u8;
+}
+
+func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                    selected:const SelectedExports in E, facts:OperandFacts in F, owners:CallOwners in O,
                    at:u64, used:u64) -> u8
-    where {const owner N, const owner B, const owner L, const owner E, owner F, owner O} {
+    where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F, owner O} {
     val kind <- nodes[at].kind;
     if (kind == block_item_node() || kind == module_item_node()) {
         check_sequence_item(nodes, facts, at);
@@ -956,6 +1090,7 @@ func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, li
     if (kind == catch_clause_node()) return check_catch_clause(nodes, facts, at);
     if (kind == callable_node()) return check_callable_tail(nodes, facts, at);
     if (names[at].scope == no_node()) return 0u8;
+    if (kind == type_assertion_node()) return check_enum_assertion(source, nodes, names, links, facts, at);
     if (kind == narrow_integer_node()) return unsupported_narrow_execution();
     if (kind == literal_node()) { scalar_fact(facts, at, independent_value(), no_node()); return 0u8; } else {};
     if (kind == bool_node()) { set_result(facts, at, scalar_bool()); return 0u8; } else {};
@@ -986,7 +1121,8 @@ func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, li
     if (kind == block_node()) {
         val tail <- nodes[at].left;
         if (tail != no_node() && facts[at].arm_result != 0u8) { copy_fact(facts, at, tail); } else {
-            set_result(facts, at, sequence_result(facts, tail));
+            val result <- sequence_result(facts, tail);
+            if (scalar_kind(result)) { set_bits_result(facts, at, tail); } else { set_result(facts, at, result); };
         };
         return 0u8;
     } else {};
@@ -994,7 +1130,7 @@ func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, li
     if (kind == try_node()) return check_try_result(nodes, links, facts, at);
     if (kind == conditional_node()) return check_conditional(nodes, facts, at);
     if (kind == case_arm_node()) return prepare_case_arm(nodes, facts, at);
-    if (kind == case_node()) return check_case(nodes, links, facts, at);
+    if (kind == case_node()) return check_case(source, nodes, names, links, facts, at);
     if (kind == break_node()) return check_case_break(nodes, names, facts, at);
     if (kind == case_fallthrough_node()) {
         facts[names[at].declaration].case_resume <- 1u8;
@@ -1071,11 +1207,11 @@ func prepare_result_use(nodes:const ExprNodes in N, facts:OperandFacts in F, at:
 # Operands and declarations refer to the bound syntax and its owner sites.
 # Target-access demands are recorded for the completion pass, where flow can
 # prove a target present or propagate a possible checked failure.
-export func check_module_operands(nodes:const ExprNodes in N, tree:const ParseResult in T,
+export func check_module_operands(source:const SourceBytes in S, nodes:const ExprNodes in N, tree:const ParseResult in T,
                                   names:const NameBindings in B, links:const NameWork in L,
                                   selected:const SelectedExports in E, facts:OperandFacts in F,
                                   owners:CallOwners in O, report:OperandCheckResult in R) -> bool
-    where {const owner N, const owner T, const owner B, const owner L, const owner E, owner F, owner O, owner R} {
+    where {const owner S, const owner N, const owner T, const owner B, const owner L, const owner E, owner F, owner O, owner R} {
     report.node <- no_node();
     report.diagnostic <- invalid_operand_tree();
     if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) ||
@@ -1097,6 +1233,9 @@ export func check_module_operands(nodes:const ExprNodes in N, tree:const ParseRe
         facts[at].case_guard <- 0u8;
         facts[at].case_resume <- 0u8;
         facts[at].case_end <- 0u8;
+        facts[at].enum_constant <- 0u8;
+        facts[at].discriminator_code <- 0u64;
+        facts[at].case_excluded_at <- no_node();
         facts[at].case_break_link <- no_node();
         facts[at].case_break_tail <- no_node();
         owners[at].call_site <- no_node();
@@ -1115,7 +1254,7 @@ export func check_module_operands(nodes:const ExprNodes in N, tree:const ParseRe
     # The syntax puts operands before their operation and local declarations
     # before uses. Callable contracts are already available for forward calls.
     for (at in 0u64 .. tree.used) {
-        report.diagnostic <- check_operand(nodes, names, links, selected, facts, owners, at, tree.used);
+        report.diagnostic <- check_operand(source, nodes, names, links, selected, facts, owners, at, tree.used);
         if (report.diagnostic != 0u8) { report.node <- at; return false; } else {};
     };
     return true;

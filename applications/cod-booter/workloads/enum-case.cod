@@ -1,0 +1,31 @@
+using symbol "std:io" @print;
+
+enum Delivery:i64 {
+    Pending = -17;
+    Ready = 921;
+    LegacyReady = Ready;
+}
+
+proc defer_delivery(state:Delivery in O) -> bool where {owner O} {
+    state <- (Pending:Delivery);
+    return false;
+}
+
+proc live_priority(state:Delivery in O) -> u64 where {owner O} {
+    return case state of {
+        (LegacyReady) | defer_delivery(state) -> { 99u64 };
+        (Pending) -> { 11u64 };
+        (Ready) -> { 22u64 };
+    };
+}
+
+func snapshot_priority(state:Delivery) -> u64 {
+    return case state of {
+        (Pending) -> { 11u64 };
+        (LegacyReady) -> { 22u64 };
+    };
+}
+
+val current <- Ready:Delivery;
+behave @print(snapshot_priority((current)));
+behave @print(live_priority(current));

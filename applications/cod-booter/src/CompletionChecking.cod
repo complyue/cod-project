@@ -8,6 +8,7 @@ using "ParserStorage.cod" {
     throw_node, group_node, call_node, behave_node, is_transfer, make_named_node, construction_body,
     integer_arithmetic, null_node, name_node, ptr_binding_node, ptr_parameter_node, ref_local_node,
     local_storage_binding, case_node, case_arm_node, case_fallthrough_node, case_failure_node, break_node,
+    type_assertion_node,
 };
 using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" {
@@ -237,6 +238,10 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
         inherit_context(sites, at, construction_body(nodes, at), guard, incoming, replacing);
         return;
     } else {};
+    if (kind == type_assertion_node() && facts[at].enum_constant == 0u8) {
+        inherit_context(sites, at, left, guard, incoming, replacing);
+        return;
+    } else {};
     if (kind == module_node() || kind == block_node() || kind == full_scope_node() ||
         kind == group_node() || kind == discard_node() || kind == return_node() || kind == throw_node() || kind == break_node() ||
         kind == logical_not_node()) {
@@ -329,7 +334,7 @@ func record_presence(nodes:const ExprNodes in N, names:const NameBindings in B, 
         return;
     } else {};
     if (facts[at].reception != nullable_ptr()) return;
-    if (kind == group_node()) {
+    if (kind == group_node() || kind == type_assertion_node()) {
         sites[at].presence <- sites[nodes[at].left].presence;
         return;
     } else {};
@@ -397,7 +402,7 @@ func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSit
     } else {};
     if (kind == full_scope_node())
         return sites[at].local_return != 0u8 || can_continue(sites, nodes[at].left);
-    if (kind == group_node() || kind == discard_node() || kind == block_node() ||
+    if (kind == group_node() || kind == type_assertion_node() || kind == discard_node() || kind == block_node() ||
         kind == throw_node() || kind == return_node() || kind == break_node() || kind == deferred_call_node() || kind == logical_not_node())
         return can_continue(sites, nodes[at].left);
     if (local_storage_binding(kind))
