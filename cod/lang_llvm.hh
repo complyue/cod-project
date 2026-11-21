@@ -57,7 +57,6 @@ class LLVMEmission {
   bool protected_outcomes_ = false;
   bool owned_failures_ = false;
   bool case_scope_outcomes_ = false;
-  const Expression *case_scan_tail_ = nullptr;
   llvm::AllocaInst *case_scan_request_ = nullptr;
   unsigned case_scan_field() const { return 7 + protected_outcomes_ + owned_failures_; }
   unsigned failure_owner_field() const { return protected_outcomes_ ? 8 : 7; }
@@ -518,13 +517,16 @@ class LLVMEmission {
       b_.CreateStore(b_.CreateSelect(failed(result), b_.getInt8(2), b_.getInt8(3)), completion_.kind);
     } else b_.CreateStore(b_.getInt8(2), completion_.kind);
   }
-  void save_return(llvm::Value *value, const Location &at) {
+  void save_local_completion(llvm::Value *value, const Location &at, unsigned kind, bool returned) {
     assign_value(completion_.value, value, at);
     clear_failure_owner();
     b_.CreateStore(integer(0), completion_.category);
     b_.CreateStore(null_pointer(), completion_.fatal);
-    b_.CreateStore(b_.getInt1(!here_destination_), completion_.has_return);
-    b_.CreateStore(b_.getInt8(1), completion_.kind);
+    b_.CreateStore(b_.getInt1(returned), completion_.has_return);
+    b_.CreateStore(b_.getInt8(kind), completion_.kind);
+  }
+  void save_return(llvm::Value *value, const Location &at) {
+    save_local_completion(value, at, 1, !here_destination_);
   }
   llvm::Value *observed_return() {
     if (!suspended_return_.present) throw std::logic_error("return inspection has no suspended completion");
@@ -1625,6 +1627,18 @@ class LLVMEmission {
       assign_value(completion_.value, value, body.at);
     }
     if (reachable()) b_.CreateBr(scope.cleanup);
+    if (case_scan_request_) {
+      b_.SetInsertPoint(scope.cleanup);
+      auto *kind = load(completion_.kind);
+      auto *scan = b_.CreateICmpEQ(kind, b_.getInt8(Completion::case_scan));
+      b_.CreateStore(scan, case_scan_request_);
+      b_.CreateStore(b_.CreateSelect(scan, b_.getInt8(0), kind), completion_.kind);
+      // The drain loops through its own header for every action. Only
+      // arrival from the body can set the pending scan request.
+      auto *draining = block("scope.drain");
+      b_.CreateBr(draining);
+      scope.cleanup = draining;
+    }
     drain(scope); release_values(scope.values); restore_effects(effects);
     scope_ = scope.parent; control_ = control.parent; temporaries_ = outer_temporaries;
     if (requires_return) {
@@ -2306,18 +2320,41 @@ class LLVMEmission {
       return result;
     });
   }
+  void emit_case_item(llvm::BasicBlock *breaking, llvm::BasicBlock *scanning, const std::function<void()> &emit) {
+    if (!breaking && !scanning) { emit(); return; }
+    Control item{control_, block("case.transfer")};
+    control_ = &item;
+    emit();
+    control_ = item.parent;
+    auto *normal = b_.GetInsertBlock();
+    b_.SetInsertPoint(item.exit);
+    auto *dispatch = b_.CreateSwitch(load(completion_.kind), control_->exit, bool(breaking) + bool(scanning));
+    if (breaking) dispatch->addCase(b_.getInt8(Completion::case_break), breaking);
+    if (scanning) {
+      auto *resume = block("case.resume");
+      dispatch->addCase(b_.getInt8(Completion::case_scan), resume);
+      b_.SetInsertPoint(resume);
+      clear_value(completion_.value);
+      b_.CreateStore(b_.getInt8(0), completion_.kind);
+      b_.CreateBr(scanning);
+    }
+    b_.SetInsertPoint(normal);
+  }
   llvm::Value *emit_case(const Expression &expr, const Type &subject_type, bool borrowed, bool reaches_end, bool discard) {
     using K = Expression::Kind;
     const auto &subject = *expr.children.front();
     auto *selected = emit_expression(subject, borrowed ? Projection::target : Projection::value);
     if (!reachable()) return nullptr;
     auto *join = block("case.join");
+    auto *breaking = expr.case_breaks ? block("case.break") : nullptr;
     std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
     for (const auto &entry : std::span(expr.children).subspan(1)) {
       if (!reachable()) break;
       const auto &item = *entry;
       if (item.kind != K::case_arm) {
-        temporary_scope(item.at, scalar_, [&] { return emit_expression(item, Projection::value, true); });
+        emit_case_item(breaking, nullptr, [&] {
+          temporary_scope(item.at, scalar_, [&] { return emit_expression(item, Projection::value, true); });
+        });
         continue;
       }
 
@@ -2333,12 +2370,14 @@ class LLVMEmission {
       b_.SetInsertPoint(selected_arm);
       if (item.children.size() == 2) {
         const auto &guard = *item.children.front();
-        auto *condition = temporary_scope(guard.at, scalar_, [&] { return emit_expression(guard); });
-        if (reachable()) {
-          auto *body = block("case.accepted");
-          b_.CreateCondBr(unpack(condition, Type::boolean), body, next);
-          b_.SetInsertPoint(body);
-        }
+        emit_case_item(breaking, nullptr, [&] {
+          auto *condition = temporary_scope(guard.at, scalar_, [&] { return emit_expression(guard); });
+          if (reachable()) {
+            auto *body = block("case.accepted");
+            b_.CreateCondBr(unpack(condition, Type::boolean), body, next);
+            b_.SetInsertPoint(body);
+          }
+        });
       }
       if (reachable()) {
         const auto &body = *item.children.back();
@@ -2363,11 +2402,13 @@ class LLVMEmission {
             else b_.CreateUnreachable();
           }
         } else {
-          auto *value = emit_expression(body, Projection::value, item.case_resumes || discard);
-          if (reachable()) {
-            if (!item.case_resumes) incoming.emplace_back(value, b_.GetInsertBlock());
-            b_.CreateBr(item.case_resumes ? next : join);
-          }
+          emit_case_item(breaking, item.case_resumes ? next : nullptr, [&] {
+            auto *value = emit_expression(body, Projection::value, discard);
+            if (reachable()) {
+              incoming.emplace_back(value, b_.GetInsertBlock());
+              b_.CreateBr(join);
+            }
+          });
         }
       }
       b_.SetInsertPoint(next);
@@ -2378,6 +2419,15 @@ class LLVMEmission {
         incoming.emplace_back(empty_scalar(), b_.GetInsertBlock());
         b_.CreateBr(join);
       } else b_.CreateUnreachable();
+    }
+    if (breaking) {
+      b_.SetInsertPoint(breaking);
+      if (discard) clear_value(completion_.value);
+      auto *value = discard ? empty_scalar() : load(completion_.value);
+      b_.CreateStore(empty_scalar(), completion_.value);
+      b_.CreateStore(b_.getInt8(0), completion_.kind);
+      incoming.emplace_back(value, b_.GetInsertBlock());
+      b_.CreateBr(join);
     }
     b_.SetInsertPoint(join);
     if (incoming.empty()) { b_.CreateUnreachable(); return nullptr; }
@@ -2593,9 +2643,14 @@ class LLVMEmission {
         return emit_case(expr, Type{kind, {}, identity}, borrowed, reaches_end, discard);
       });
     }
-    case K::case_fallthrough:
-      if (&expr == case_scan_tail_) b_.CreateStore(b_.getTrue(), case_scan_request_);
-      return empty_scalar();
+    case K::case_break: case K::case_fallthrough: {
+      auto *value = expr.children.empty() ? empty_scalar() : emit_expression(*expr.children.front());
+      if (!reachable()) return nullptr;
+      const auto kind = expr.kind == K::case_break ? Completion::case_break : Completion::case_scan;
+      save_local_completion(value, expr.at, kind, false);
+      b_.CreateBr(control_->exit);
+      return nullptr;
+    }
     case K::case_failure:
       fail_path(ExceptionCategory::unexpected_case, expr.at);
       return nullptr;
@@ -3157,8 +3212,7 @@ class LLVMEmission {
     const auto &call = call_layouts_.at(layout.method);
     if (function->arg_size() != call.parameter_count()) throw std::logic_error("native body disagrees with its parameter roles");
     begin(function, prepared.storage, layout.bindings, frame, prepared.storage_types);
-    case_scan_tail_ = method.source->case_scan_scope ? method.source->body->children.back().get() : nullptr;
-    case_scan_request_ = case_scan_tail_ ? slot(b_.getInt1Ty(), "case.scan.requested") : nullptr;
+    case_scan_request_ = method.source->case_scan_scope ? slot(b_.getInt1Ty(), "case.scan.requested") : nullptr;
     if (case_scan_request_) b_.CreateStore(b_.getFalse(), case_scan_request_);
     for (size_t i = 0; i < call.here_count(); ++i) here_arguments_.push_back(function->getArg(call.here_index() + i));
     if (call.here_group) here_destination_ = function->getArg(call.here_index() + call.here_count());
@@ -3272,7 +3326,6 @@ class LLVMEmission {
         load(completion_.requested), load(completion_.available), load(completion_.cause),
         protected_outcomes_ ? load(completion_.transfer) : nullptr, owned_failures_ ? load(completion_.failure_owner) : nullptr,
         case_scan_request_ ? b_.CreateAnd(load(case_scan_request_), b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0))) : nullptr));
-    case_scan_tail_ = nullptr;
     case_scan_request_ = nullptr;
   }
   void emit_sites() {

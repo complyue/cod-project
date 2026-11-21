@@ -333,6 +333,7 @@ class ScalarChecker {
     bool immediate_scope_failure = false;
     std::optional<HereExit> here_exit{};
     bool receiver_transfer_pending = false;
+    const Expression *case_result = nullptr;
   };
   struct AbruptFlow { size_t depth; std::vector<AbruptPath> paths; std::set<size_t> declared{}; };
   AbruptFlow *abrupt_ = nullptr;
@@ -1934,18 +1935,25 @@ class ScalarChecker {
       boolean_revision = selections.writes;
     }
   };
+  struct CaseBreakEvidence {
+    std::optional<Type> type;
+    bool view;
+    auto operator==(const CaseBreakEvidence &) const -> bool = default;
+  };
   struct TypeEvidenceExits {
     struct Path {
       std::set<size_t> reasons;
       TypeEvidenceState state;
       TypeReturned result;
       bool retained_return = false;
+      std::optional<CaseBreakEvidence> case_result = {};
 
       bool returned() const { return retained_return || reasons.contains(1); }
     };
     // Outcomes of one operation begin with the same source evidence.
     // A handler consumes only the matching reasons from each path.
     std::vector<Path> paths;
+    bool case_control = false;
   };
   struct TypeDeferredFlow {
     struct Action {
@@ -5083,7 +5091,7 @@ class ScalarChecker {
   }
   void note_abrupt(const Location &at, ExceptionFacts exceptions = {}, Completion completion = {2, false},
                    bool immediate_scope_failure = false, std::optional<HereExit> here_exit = {},
-                   bool receiver_transfer_pending = false) {
+                   bool receiver_transfer_pending = false, const Expression *case_result = nullptr) {
     if (!lexical_.live) return;
     const auto categories = exceptions.possibilities();
     if (!categories.empty()) completion.reason = Completion::failure(*categories.begin()).reason;
@@ -5102,11 +5110,11 @@ class ScalarChecker {
     auto state = lexical_;
     while (state.scopes.size() > abrupt_->depth) retire_scope(state);
     abrupt_->paths.push_back({std::move(state), std::move(exceptions), at, completion, immediate_scope_failure, here_exit,
-                             receiver_transfer_pending});
+                             receiver_transfer_pending, case_result});
   }
   void forward_abrupt(const AbruptPath &path) {
     note_abrupt(path.at, path.exceptions, path.completion, path.immediate_scope_failure, path.here_exit,
-                path.receiver_transfer_pending);
+                path.receiver_transfer_pending, path.case_result);
   }
   static bool declares_root(const std::vector<Type> &types) {
     return std::any_of(types.begin(), types.end(), [](const Type &type) { return type.kind == Type::exception && !type.identity; });
@@ -5412,7 +5420,10 @@ class ScalarChecker {
         });
       }
       std::vector<Completion> inputs;
-      if (path.exceptions.empty()) inputs.push_back(path.completion);
+      // A scope scan is suspended as a no-return normal arrival while
+      // this scope drains. Retain its origin across failure and recovery.
+      const bool scan_requested = case_scan && path.completion.reason == Completion::case_scan;
+      if (path.exceptions.empty()) inputs.push_back(scan_requested ? Completion{} : path.completion);
       else for (const auto category : path.exceptions.possibilities()) inputs.push_back(Completion::failure(category, path.completion.returned));
       for (const auto input : inputs) for (const auto &[encoded, effects] : cleanup_.apply(queue, input)) {
         declared.insert(effects.declared_failures.begin(), effects.declared_failures.end());
@@ -5504,9 +5515,7 @@ class ScalarChecker {
         }
         state.input_facts.at(origin).queues[scope] = 0;
         if (!completion.reason) {
-          // Only normal entry to a case-arm drain reached its source
-          // fallthrough. A recovered earlier failure takes the result path.
-          if (case_scan && !path.completion.reason) {
+          if (scan_requested) {
             scans.push_back(std::move(state));
             continue;
           }
@@ -7660,16 +7669,17 @@ class ScalarChecker {
     return merge_evidence(std::move(left), right, right_exits && !left_exits);
   }
   static void merge_type_exits(TypeEvidenceExits &flow, std::set<size_t> reasons, const TypeEvidenceState &state,
-                               TypeReturned result = {}, bool retained_return = false) {
+                               TypeReturned result = {}, bool retained_return = false,
+                               std::optional<CaseBreakEvidence> case_result = {}) {
     if (reasons.empty()) return;
     if (result.borrowed) result.borrowed->initialize(state.selections);
     if (result.boolean) result.advance_boolean(state.selections);
     const auto entry = std::ranges::find_if(flow.paths, [&](const auto &path) {
       return path.reasons == reasons && path.retained_return == retained_return &&
-          path.result.saved_selection() == result.saved_selection();
+          path.case_result == case_result && path.result.saved_selection() == result.saved_selection();
     });
     if (entry == flow.paths.end()) {
-      flow.paths.push_back({std::move(reasons), state, std::move(result), retained_return});
+      flow.paths.push_back({std::move(reasons), state, std::move(result), retained_return, std::move(case_result)});
       flow.paths.back().state.exits = nullptr;
     } else {
       entry->state = merge_evidence(std::move(entry->state), state);
@@ -8088,12 +8098,46 @@ class ScalarChecker {
     bool reaches_end = true, unknown_result = false;
     std::optional<Type> result;
     std::optional<TypeEvidenceState> completed;
+    auto *const outer = state.exits;
+    const auto complete = [&](const std::optional<Type> &type, bool view, TypeEvidenceState arm, const Location &at) {
+      arm.exits = outer;
+      if (!type) unknown_result = true;
+      else {
+        if (*type != Type::void_type && (!scalar_type(*type) || view))
+          implementation_gap(at, "case arm result needs an independent scalar value");
+        if (result && *result != *type) fail(at, "case arms require one result type");
+        result = type;
+        if (alternatives) alternatives->push_back(*type);
+      }
+      if (completed) *completed = merge_reaching_evidence(std::move(*completed), std::move(arm), false, false);
+      else completed = std::move(arm);
+    };
+    const auto transfers = [&](TypeEvidenceExits &flow, const Location &at) {
+      std::optional<TypeEvidenceState> resumed;
+      for (auto &path : flow.paths) {
+        if (path.reasons.erase(Completion::case_break)) {
+          const auto &value = *path.case_result;
+          complete(value.type, value.view, path.state, at);
+        }
+        if (path.reasons.erase(Completion::case_scan)) {
+          path.state.exits = outer;
+          resumed = resumed ? merge_reaching_evidence(std::move(*resumed), path.state, false, false) : path.state;
+        }
+        if (outer) forward_type_exit(*outer, path);
+      }
+      return resumed;
+    };
     for (const auto &entry : std::span(expr.children).subspan(1)) {
       const auto &item = *entry;
       if (item.kind != K::case_arm) {
         const bool reached = reaches_end && !scan.remaining.empty();
-        if (type_evidence(item, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, reached,
-                          EvidenceRead::discarded) == Type::never && reached) reaches_end = false;
+        TypeEvidenceExits exits{{}, true};
+        state.exits = &exits;
+        const auto value = type_evidence(item, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, reached,
+                                         EvidenceRead::discarded);
+        state.exits = outer;
+        transfers(exits, item.at);
+        if (value == Type::never && reached) reaches_end = false;
         else if (reached) scan.invalidate(case_may_write(item));
         continue;
       }
@@ -8107,8 +8151,12 @@ class ScalarChecker {
       bool body_reaches = match_reaches;
       if (item.children.size() == 2) {
         const auto &guard = *item.children.front();
+        TypeEvidenceExits exits{{}, true};
+        arm.exits = &exits;
         const auto condition = type_evidence(guard, arm, false, nullptr, nullptr,
                                              ExpectedTypeUse::materialization, match_reaches);
+        arm.exits = outer;
+        transfers(exits, guard.at);
         if (condition && *condition != Type::boolean && *condition != Type::never)
           fail(guard.at, "case guard requires bool");
         const auto proof = arm.target.branches;
@@ -8124,35 +8172,25 @@ class ScalarChecker {
       }
       const auto &body = *item.children.back();
       const bool scoped = case_scan_scope(item);
-      const bool direct_scan = item.case_resumes && !scoped;
-      CaseScopeEvidence exits;
-      const auto value = type_evidence(body, arm, contextual && !direct_scan,
-          direct_scan ? nullptr : expected, direct_scan ? nullptr : alternatives,
-          expected_use, body_reaches, direct_scan || read == EvidenceRead::loop_discard ? EvidenceRead::discarded : read,
-          false, scoped ? &exits : nullptr);
-      if (!body_reaches || value == Type::never) continue;
-      if (scoped) {
-        if (exits.scan) {
-          auto continued = arm;
-          continued.selections = std::move(*exits.scan);
-          state = merge_reaching_evidence(std::move(state), std::move(continued), scan.remaining.empty(), false);
-          scan.resume(matched, case_may_write(body));
-        }
-        if (!exits.result) continue;
-      } else if (direct_scan) {
-        state = merge_reaching_evidence(std::move(state), std::move(arm), scan.remaining.empty(), false);
+      CaseScopeEvidence scope_paths;
+      TypeEvidenceExits exits{{}, true};
+      arm.exits = &exits;
+      const auto value = type_evidence(body, arm, contextual, expected, nullptr, expected_use, body_reaches,
+          read == EvidenceRead::loop_discard ? EvidenceRead::discarded : read, false, scoped ? &scope_paths : nullptr);
+      arm.exits = outer;
+      auto resumed = transfers(exits, body.at);
+      if (body_reaches && scope_paths.scan) {
+        resumed = arm;
+        resumed->selections = std::move(*scope_paths.scan);
+      }
+      if (resumed) {
+        state = merge_reaching_evidence(std::move(state), std::move(*resumed), scan.remaining.empty(), false);
         scan.resume(matched, case_may_write(body));
-        continue;
       }
-      if (!value) unknown_result = true;
-      else {
-        if (*value != Type::void_type && (!scalar_type(*value) || arm.value.view == true || arm.value.mixed_view))
-          implementation_gap(body.at, "case arm result needs an independent scalar value");
-        if (result && *result != *value) fail(body.at, "case arms require one result type");
-        result = value;
+      if (body_reaches && value != Type::never && (!scoped || scope_paths.result)) {
+        const bool viewed = arm.value.view == true || arm.value.mixed_view;
+        complete(value, viewed, std::move(arm), body.at);
       }
-      if (completed) *completed = merge_reaching_evidence(std::move(*completed), std::move(arm), false, false);
-      else completed = std::move(arm);
     }
     const bool unmatched = reaches_end && !scan.remaining.empty();
     if (unmatched && result && *result != Type::void_type)
@@ -8381,7 +8419,7 @@ class ScalarChecker {
     return selected;
   }
   static void forward_type_exit(TypeEvidenceExits &outgoing, TypeEvidenceExits::Path &path) {
-    merge_type_exits(outgoing, std::move(path.reasons), path.state, std::move(path.result), path.retained_return);
+    merge_type_exits(outgoing, std::move(path.reasons), path.state, std::move(path.result), path.retained_return, path.case_result);
   }
   static void observe_type_return(TypeEvidenceState &state, const TypeReturned *result) {
     state.observed_return.present = result != nullptr;
@@ -8390,7 +8428,7 @@ class ScalarChecker {
   }
   std::optional<Type> complete_type_finalizer(const Expression &handler, TypeEvidenceExits::Path &pending,
                                               TypeEvidenceExits &outgoing, CleanupBoundary boundary) const {
-    TypeEvidenceExits exits;
+    TypeEvidenceExits exits{{}, outgoing.case_control};
     const auto inherited = pending.state.observed_return;
     if (pending.returned() && handler.inspects_return()) observe_type_return(pending.state, &pending.result);
     pending.state.exits = &exits;
@@ -10078,7 +10116,7 @@ class ScalarChecker {
       body.supplied_invocation_result = result.origin == ResultOrigin::supplied;
       const bool track_return = body.selections.tracking && body.invocation_result == Type::boolean && !result.contract->borrowed();
       const auto first_local_observation = body.selections.observation_decisions ? body.selections.observation_decisions->next_observation : 0;
-      TypeEvidenceExits exits;
+      TypeEvidenceExits exits{{}, case_scope != nullptr};
       TypeDeferredFlow deferred;
       const bool track_completion = case_scope || state.checks_initialization() || !live_bindings.empty();
       if (track_return || body.checks_initialization() || track_completion) {
@@ -10100,8 +10138,11 @@ class ScalarChecker {
                                             ExpectedTypeUse::materialization, true, EvidenceRead::discarded);
       TypeEvidenceExits completed, scan_paths;
       if (case_scope) {
-        complete_type_deferred(deferred, {}, body, completion != Type::never, &scan_paths);
-        complete_type_deferred(deferred, exits, body, false, &completed);
+        TypeEvidenceExits scan_inputs;
+        for (auto &path : exits.paths) if (path.reasons.erase(Completion::case_scan))
+          merge_type_exits(scan_inputs, {0}, path.state);
+        complete_type_deferred(deferred, scan_inputs, body, false, &scan_paths);
+        complete_type_deferred(deferred, exits, body, completion != Type::never, &completed);
       } else if (body.deferred) {
         if (auto proof = complete_type_deferred(deferred, exits, body, completion != Type::never,
                 track_completion ? &completed : nullptr); track_return && !track_completion && proof) {
@@ -10611,7 +10652,7 @@ class ScalarChecker {
       case K::integer: case K::real: case K::boolean: case K::return_test: case K::null_ref: case K::name: case K::symbol:
       case K::unary: case K::binary: case K::call: case K::value_call: case K::behave: case K::perform: case K::field: case K::index:
       case K::conditional: case K::block: case K::grouped: case K::transfer: case K::rebind: case K::typed_expression:
-      case K::make_object: case K::case_expression: case K::case_failure: case K::case_fallthrough: break;
+      case K::make_object: case K::case_expression: case K::case_break: case K::case_failure: case K::case_fallthrough: break;
       case K::callable:
         if (expr.definition->name.empty()) break;
         [[fallthrough]];
@@ -11105,7 +11146,16 @@ class ScalarChecker {
       return type;
     }
     case K::case_expression: return case_evidence(expr, state, contextual, expected, alternatives, expected_use, read);
-    case K::case_fallthrough: return Type::void_type;
+    case K::case_break: {
+      const auto type = expr.children.empty() ? std::optional{Type{Type::void_type}} : child(0);
+      if (state.exits && type != Type::never)
+        merge_type_exits(*state.exits, {Completion::case_break}, state, {}, false,
+                         CaseBreakEvidence{type, !expr.children.empty() && (state.value.view == true || state.value.mixed_view)});
+      return Type::never;
+    }
+    case K::case_fallthrough:
+      note_type_exit(state, {Completion::case_scan});
+      return Type::never;
     case K::case_failure:
       if (state.returns) state.returns->saw_throw = true;
       note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::unexpected_case)));
@@ -11261,8 +11311,9 @@ class ScalarChecker {
       const auto before = state;
       const bool has_finalizer = guarded && expr.children.size() > 1 && expr.children.back()->kind == K::block;
       auto *const outer = state.exits;
-      const bool track_exits = guarded && ((state.required && (has_finalizer || outer)) || state.selections.tracking);
-      TypeEvidenceExits body_exits, outgoing;
+      const bool case_control = outer && outer->case_control;
+      const bool track_exits = guarded && ((state.required && (has_finalizer || outer)) || state.selections.tracking || case_control);
+      TypeEvidenceExits body_exits{{}, case_control}, outgoing{{}, case_control};
       if (track_exits) state.exits = &body_exits;
       if (guarded && state.root_failure_covered == false)
         state.root_failure_covered = std::ranges::any_of(std::span(expr.children).subspan(1), [&](const auto &handler) {
@@ -11298,7 +11349,7 @@ class ScalarChecker {
         const auto catch_entry = track_exits ? merge_evidence(incoming ? std::move(*incoming) : before, body_state, true)
                                              : merge_evidence(before, body_state);
         auto caught = catch_evidence(handler, catch_entry, handled);
-        TypeEvidenceExits exits;
+        TypeEvidenceExits exits{{}, case_control};
         if (track_exits) caught.exits = handler_reaches ? &exits : nullptr;
         auto type = type_evidence(*handler.children.front(), caught, contextual, expected, alternatives,
                                   expected_use, handler_reaches, read, guarded && joining);
@@ -11335,7 +11386,7 @@ class ScalarChecker {
         else if (!catch_exits && type != result) result.reset();
       }
       for (auto &path : body_exits.paths) forward_type_exit(outgoing, path);
-      const bool project_paths = finalizer && outer && state.selections.tracking && !outgoing.paths.empty();
+      const bool project_paths = finalizer && outer && (state.selections.tracking || case_control) && !outgoing.paths.empty();
       if (finalizer) {
         const auto before_cleanup = state.selections.writes;
         if (!outgoing.paths.empty()) {
@@ -11425,7 +11476,7 @@ class ScalarChecker {
           if (iteration.selections.same_flow(invariant)) break;
         }
       }
-      TypeEvidenceExits iteration_exits;
+      TypeEvidenceExits iteration_exits{{}, state.exits && state.exits->case_control};
       if (state.exits) iteration.exits = &iteration_exits;
       const auto body = type_evidence(loop_body, iteration, false, nullptr, nullptr,
                                       ExpectedTypeUse::materialization, reach.body, loop_read);
@@ -15391,7 +15442,7 @@ class ScalarChecker {
           const auto [reason, returned, displaced] = outcome;
           lexical_ = std::move(state);
           note_abrupt(replacement.at, replacement.exceptions, {reason, returned}, replacement.immediate_scope_failure,
-                      replacement.here_exit, displaced || replacement.receiver_transfer_pending);
+                      replacement.here_exit, displaced || replacement.receiver_transfer_pending, replacement.case_result);
         }
       }
       for (const auto &entry : pending) {
@@ -15875,11 +15926,52 @@ class ScalarChecker {
       const auto current = std::move(lexical_);
       join(other, false, current, current_exits, at);
     };
+    const auto complete = [&](const LexicalState &state, const Type &value, const CheckedOperation *fact, const Location &at) {
+      if (!state.live || value == Type::never) return;
+      if (value != Type::void_type && (!scalar_type(value) || (fact && (fact->view || fact->mixed_view))))
+        implementation_gap(at, "case arm result needs an independent scalar value");
+      if (result.type != Type::never && result.type != value) fail(at, "case arms require one result type");
+      result.type = value;
+      if (fact) result.exceptions.merge(fact->exceptions);
+      if (completed) {
+        auto previous = std::move(lexical_);
+        join(*completed, false, state, false, at);
+        completed = std::move(lexical_);
+        lexical_ = std::move(previous);
+      } else completed = state;
+    };
+    const auto transfers = [&](const AbruptFlow &flow) {
+      std::optional<LexicalState> resumed;
+      auto current = std::move(lexical_);
+      for (const auto &path : flow.paths) {
+        if (path.completion.reason == Completion::case_break) {
+          const auto &source = *path.case_result;
+          const auto *value = source.children.empty() ? nullptr : &operations.at(source.children.front().get());
+          complete(path.state, operations.at(&source).operand_type, value, source.at);
+        } else if (path.completion.reason == Completion::case_scan) {
+          if (resumed) {
+            join(*resumed, false, path.state, false, path.at);
+            resumed = std::move(lexical_);
+          } else resumed = path.state;
+        } else {
+          lexical_ = path.state;
+          forward_abrupt(path);
+        }
+      }
+      for (const auto requirement : flow.declared) note_declared(requirement);
+      lexical_ = std::move(current);
+      return resumed;
+    };
     for (const auto &entry : std::span(expr.children).subspan(1)) {
       const auto &item = *entry;
       lexical_.live &= !scan.remaining.empty();
+      auto *const outer = abrupt_;
       if (item.kind != K::case_arm) {
+        AbruptFlow exits{lexical_.scopes.size(), {}};
+        abrupt_ = &exits;
         check(item, instance, operations, true, true);
+        abrupt_ = outer;
+        transfers(exits);
         if (lexical_.live) scan.invalidate(case_may_write(item));
         continue;
       }
@@ -15896,7 +15988,11 @@ class ScalarChecker {
       }
       if (item.children.size() == 2) {
         const auto &guard = *item.children.front();
+        AbruptFlow exits{lexical_.scopes.size(), {}};
+        abrupt_ = &exits;
         const auto condition = check(guard, instance, operations);
+        abrupt_ = outer;
+        transfers(exits);
         if (condition != Type::boolean && condition != Type::never) fail(guard.at, "case guard requires bool");
         const auto evaluated = lexical_;
         refine(guard, false, operations);
@@ -15918,39 +16014,21 @@ class ScalarChecker {
         header.case_scope_returns = lexical_.live;
         header.case_scope_resumes = resumed && resumed->live;
         operations.insert_or_assign(&body, std::move(call));
-        if (header.case_scope_resumes) {
-          auto completed_arm = std::move(lexical_);
-          lexical_ = std::move(*resumed);
-          join_scan(missed, false, body.at);
-          missed = std::move(lexical_);
-          lexical_ = std::move(completed_arm);
-          scan.resume(matched, case_may_write(body));
-        }
       } else {
-        value = check(body, instance, operations, item.case_resumes || read, item.case_resumes || discard,
-                      item.case_resumes ? nullptr : expected, expected_use);
+        AbruptFlow exits{lexical_.scopes.size(), {}};
+        abrupt_ = &exits;
+        value = check(body, instance, operations, read, discard, expected, expected_use);
+        abrupt_ = outer;
+        resumed = transfers(exits);
       }
       header.type = value;
       operations.insert_or_assign(&item, std::move(header));
-      if (!lexical_.live) {
-        lexical_ = std::move(missed);
-        continue;
-      }
-      if (item.case_resumes && !scoped) {
-        scan.resume(matched, case_may_write(body));
+      complete(lexical_, value, &operations.at(&body), body.at);
+      if (resumed && resumed->live) {
+        lexical_ = std::move(*resumed);
         join_scan(missed, false, body.at);
-        continue;
-      }
-
-      const auto &fact = operations.at(&body);
-      if (value != Type::void_type && (!scalar_type(value) || fact.view || fact.mixed_view))
-        implementation_gap(body.at, "case arm result needs an independent scalar value");
-      if (result.type != Type::never && result.type != value) fail(body.at, "case arms require one result type");
-      result.type = value;
-      result.exceptions.merge(fact.exceptions);
-      if (completed) join_scan(*completed, false, body.at);
-      completed = std::move(lexical_);
-      lexical_ = std::move(missed);
+        scan.resume(matched, case_may_write(body));
+      } else lexical_ = std::move(missed);
     }
     result.case_reaches_end = lexical_.live && !scan.remaining.empty();
     if (result.case_reaches_end) {
@@ -16515,7 +16593,17 @@ class ScalarChecker {
     case K::case_expression:
       operation = check_case(expr, instance, operations, read, discard, expected, expected_use);
       break;
-    case K::case_fallthrough: operation.type = Type::void_type; break;
+    case K::case_break: {
+      operation.type = Type::never;
+      operation.operand_type = expr.children.empty() ? Type{Type::void_type} : child(0);
+      if (operation.operand_type != Type::never)
+        note_abrupt(expr.at, {}, {Completion::case_break}, false, {}, false, &expr);
+      break;
+    }
+    case K::case_fallthrough:
+      note_abrupt(expr.at, {}, {Completion::case_scan});
+      operation.type = Type::never;
+      break;
     case K::case_failure:
       note_abrupt(expr.at, {exception_id(ExceptionCategory::unexpected_case)});
       operation.type = Type::never;
