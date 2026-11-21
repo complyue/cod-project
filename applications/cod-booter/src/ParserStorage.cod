@@ -71,6 +71,8 @@ func data_record_node() -> u8 { return 55u8; }
 func c_record_node() -> u8 { return 56u8; }
 func data_parent_node() -> u8 { return 57u8; }
 func export_node() -> u8 { return 58u8; }
+func array_declaration_node() -> u8 { return 59u8; }
+func array_shape_node() -> u8 { return 60u8; }
 
 func integer_arithmetic(kind:u8) -> bool {
     return kind == add_node() || kind == subtract_node() || kind == multiply_node() ||
@@ -174,6 +176,8 @@ export data_record_node;
 export c_record_node;
 export data_parent_node;
 export export_node;
+export array_declaration_node;
+export array_shape_node;
 export readonly_declaration;
 export integer_arithmetic;
 export logical_binary;

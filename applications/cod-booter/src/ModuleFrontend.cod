@@ -4,6 +4,7 @@ using "ParserStorage.cod" ExprNodes;
 using "ParserStorage.cod" no_node;
 using "Frontend.cod" FrontendResult;
 using "Frontend.cod" read_module;
+using "ExpressionParser.cod" ParseResult;
 using "ModuleExports.cod" ModuleExports;
 using "ModuleExports.cod" SelectedExports;
 using "ModuleExports.cod" ExportResolutionResult;
@@ -12,7 +13,11 @@ using "NameResolution.cod" NameBindings;
 using "NameResolution.cod" NameWork;
 using "NameResolution.cod" NameResolutionResult;
 using "NameResolution.cod" unsupported_module_declaration;
+using "NameResolution.cod" declaration_requires_native_output;
+using "NameResolution.cod" first_item;
 using "NameResolution.cod" resolve_module_names;
+using "NativeDeclarations.cod" NativeDeclarationResult;
+using "NativeDeclarations.cod" check_native_declarations;
 using "OperandChecking.cod" OperandFacts;
 using "OperandChecking.cod" CallOwners;
 using "OperandChecking.cod" OperandCheckResult;
@@ -50,6 +55,19 @@ func binding_diagnostic(nodes:const ExprNodes in N, ref result:ModuleBindingResu
     } else {};
 }
 
+func first_extended_declaration(nodes:const ExprNodes in N, work:const NameWork in W, tree:const ParseResult in T) -> u64
+    where {const owner N, const owner W, const owner T} {
+    val item <- first_item(nodes, nodes[tree.root].left);
+    val form <- no_node();
+    for (unused in 0u64 .. tree.used) {
+        if (item == no_node()) { return no_node(); } else {};
+        form <- nodes[item].right;
+        if (declaration_requires_native_output(nodes[form].kind)) { return form; } else {};
+        (item <- work[item].next):void;
+    };
+    return no_node();
+}
+
 # Keep the source revision and immutable catalog live. A successful read
 # gives lexical declaration indices and the published objects they select.
 func bind_module(source:const SourceBytes in S, ref tokens:Tokens in T, ref nodes:ExprNodes in N,
@@ -75,6 +93,13 @@ func bind_module(source:const SourceBytes in S, ref tokens:Tokens in T, ref node
         if (names.enclosing_defer != no_node()) { result.related_first <- nodes[names.enclosing_defer].first; {}; } else {};
         return false;
     } else {};
+    if (first_extended_declaration(nodes, work, result.frontend.tree) != no_node()) {
+        ref declarations = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
+        if (!check_native_declarations(nodes, bindings, work, selected, result.frontend.tree.used, declarations)) {
+            binding_diagnostic(nodes, result, module_binding_failed(), declarations.diagnostic, declarations.node);
+            return false;
+        } else {};
+    } else {};
     return true;
 }
 
@@ -87,6 +112,11 @@ func analyze_module_operands(source:const SourceBytes in S, ref tokens:Tokens in
     where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y, owner W,
            owner F, owner O, owner R} {
     if (!bind_module(source, tokens, nodes, spellings, exports, selected, bindings, work, result)) {
+        return false;
+    } else {};
+    val declaration <- first_extended_declaration(nodes, work, result.frontend.tree);
+    if (declaration != no_node()) {
+        binding_diagnostic(nodes, result, module_binding_failed(), unsupported_module_declaration(), declaration);
         return false;
     } else {};
     ref operands = make OperandCheckResult { diagnostic <- 0u8; node <- no_node(); };
