@@ -1521,8 +1521,10 @@ class LLVMEmission {
     using K = Expression::Kind;
     if (expr.kind == K::callable) return;
     if (expr.kind == K::effect || expr.kind == K::procedure_effect) {
-      const auto &effect = contexts_.front().at(&expr);
-      if (effect.publishes_effect) symbols.insert(*effect.symbol);
+      for (const auto &context : contexts_) {
+        const auto effect = context.operations->find(&expr);
+        if (effect != context.operations->end() && effect->second.publishes_effect) symbols.insert(*effect->second.symbol);
+      }
     }
     const size_t children = expr.kind == K::range_for ? 2 : expr.children.size();
     for (size_t i = 0; i < children; ++i) collect_effects(*expr.children[i], symbols);
@@ -2288,6 +2290,64 @@ class LLVMEmission {
       return emit_projected_value(arm, source, discard);
     });
   }
+  llvm::Value *emit_case(const Expression &expr, const Type &subject_type, bool borrowed, bool reaches_end, bool discard) {
+    using K = Expression::Kind;
+    const auto &subject = *expr.children.front();
+    auto *selected = emit_expression(subject, borrowed ? Projection::target : Projection::value);
+    if (!reachable()) return nullptr;
+    auto *join = block("case.join");
+    std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
+    for (const auto &entry : std::span(expr.children).subspan(1)) {
+      if (!reachable()) break;
+      const auto &item = *entry;
+      if (item.kind != K::case_arm) {
+        temporary_scope(item.at, scalar_, [&] { return emit_expression(item, Projection::value, true); });
+        continue;
+      }
+
+      auto *selected_arm = block("case.matched"), *next = block("case.next");
+      const auto &header = contexts_.front().at(&item);
+      if (header.case_code) {
+        auto *payload = borrowed ? load_place(selected, subject) : selected;
+        auto *bits = unpack(payload, subject_type);
+        auto *code = llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(bits->getType()), *header.case_code);
+        b_.CreateCondBr(b_.CreateICmpEQ(bits, code), selected_arm, next);
+      } else b_.CreateBr(selected_arm);
+
+      b_.SetInsertPoint(selected_arm);
+      if (item.children.size() == 2) {
+        const auto &guard = *item.children.front();
+        auto *condition = temporary_scope(guard.at, scalar_, [&] { return emit_expression(guard); });
+        if (reachable()) {
+          auto *body = block("case.accepted");
+          b_.CreateCondBr(unpack(condition, Type::boolean), body, next);
+          b_.SetInsertPoint(body);
+        }
+      }
+      if (reachable()) {
+        const auto &body = *item.children.back();
+        auto *value = emit_expression(body, Projection::value, item.case_resumes || discard);
+        if (reachable()) {
+          if (!item.case_resumes) incoming.emplace_back(value, b_.GetInsertBlock());
+          b_.CreateBr(item.case_resumes ? next : join);
+        }
+      }
+      b_.SetInsertPoint(next);
+      if (!next->hasNPredecessorsOrMore(1)) b_.CreateUnreachable();
+    }
+    if (reachable()) {
+      if (reaches_end) {
+        incoming.emplace_back(empty_scalar(), b_.GetInsertBlock());
+        b_.CreateBr(join);
+      } else b_.CreateUnreachable();
+    }
+    b_.SetInsertPoint(join);
+    if (incoming.empty()) { b_.CreateUnreachable(); return nullptr; }
+    if (discard) return empty_scalar();
+    auto *result = b_.CreatePHI(scalar_, incoming.size(), "case.value");
+    for (const auto &[value, predecessor] : incoming) result->addIncoming(value, predecessor);
+    return result;
+  }
   llvm::Value *emit_checked_expression(const Expression &expr, Projection projection, bool discard) {
     const bool read = carries_value(projection);
     using K = Expression::Kind;
@@ -2483,6 +2543,22 @@ class LLVMEmission {
         return !read ? address : discard ? empty_scalar() : load_place(checked_address(address, expr, expr.at), expr);
       });
     }
+    case K::case_expression: {
+      const auto *subject = expr.children.front().get();
+      std::map<std::tuple<Type::Kind, size_t, bool, bool>, std::vector<size_t>> layouts;
+      for (size_t i = 0; i < contexts_.size(); ++i) {
+        const auto &input = contexts_[i].at(subject);
+        layouts[{input.type.kind, input.type.identity, input.view, contexts_[i].at(&expr).case_reaches_end}].push_back(i);
+      }
+      return contextual_value(expr, layouts, "case.shape", [&](const auto &layout) {
+        const auto &[kind, identity, borrowed, reaches_end] = layout;
+        return emit_case(expr, Type{kind, {}, identity}, borrowed, reaches_end, discard);
+      });
+    }
+    case K::case_fallthrough: return empty_scalar();
+    case K::case_failure:
+      fail_path(ExceptionCategory::unexpected_case, expr.at);
+      return nullptr;
     case K::conditional: {
       const auto &test = *expr.children[0];
       auto *condition = emit_expression(test);
