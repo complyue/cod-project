@@ -1226,15 +1226,18 @@ class Parser {
       expr->definition = std::move(definition);
       return expr;
     }
-    if ((is("owned") && is("handle", 1)) || (is("const") && is("owned", 1) && is("handle", 2))) {
+    if ((is("handle") && tokens_[cursor_ + 1].kind == TokenKind::identifier) ||
+        (is("owned") && is("handle", 1)) || (is("const") && is("owned", 1) && is("handle", 2))) {
       const bool fixed = take("const");
-      expect("owned");
+      const bool owned = take("owned");
       expect("handle");
       auto expr = make(Expression::Kind::native_handle_binding, value_name());
       expr->fixed_binding = fixed;
       type_separator();
       expr->annotation = parse_type();
-      expect("<-");
+      if (!owned && take("in")) expr->owner_name = ordinary_name().text;
+      expr->binding = owned ? "<-" : "=";
+      expect(expr->binding);
       expr->children.push_back(expression());
       return expr;
     }
