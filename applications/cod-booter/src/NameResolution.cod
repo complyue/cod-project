@@ -50,6 +50,11 @@ using "ParserStorage.cod" handle_local;
 using "ParserStorage.cod" handle_construction;
 using "ParserStorage.cod" owning_handle_local_node;
 using "ParserStorage.cod" make_borrowed_handle_node;
+using "ParserStorage.cod" here_call_node;
+using "ParserStorage.cod" here_receiver_node;
+using "ParserStorage.cod" break_node;
+using "ParserStorage.cod" continue_node;
+using "ParserStorage.cod" narrow_integer_node;
 using "ParserStorage.cod" logical_not_node;
 using "ParserStorage.cod" logical_binary;
 using "ParserStorage.cod" block_node;
@@ -94,6 +99,8 @@ data NameState {
     guarded:bool;
     loop_arm:bool;
     repeated:bool;
+    here_group:bool;
+    handoff:u64;
     diagnostic:u8;
     failed_node:u64;
     enclosing_defer:u64;
@@ -123,6 +130,7 @@ func builtin_f64() -> u8 { return 21u8; }
 func array_type() -> u8 { return 22u8; }
 func loop_index() -> u8 { return 23u8; }
 func handle_binding() -> u8 { return 24u8; }
+func here_receiver_binding() -> u8 { return 25u8; }
 
 func native_scalar(kind:u8) -> bool {
     return kind == builtin_u64() || kind == builtin_bool() || (kind >= builtin_u8() && kind <= builtin_f64());
@@ -148,6 +156,9 @@ func unsupported_repeated_construction() -> u8 { return 48u8; }
 func declaration_in_loop_arm() -> u8 { return 49u8; }
 func native_acquisition_in_function() -> u8 { return 50u8; }
 func repeated_handle_acquisition() -> u8 { return 51u8; }
+func declaration_in_here_group() -> u8 { return 61u8; }
+func missing_here_control() -> u8 { return 62u8; }
+func unsupported_here_group_storage() -> u8 { return 63u8; }
 func expected_value_binding() -> u8 { return 14u8; }
 
 func reject_name(ref state:NameState in R, node:u64, diagnostic:u8) -> void where {owner R} {
@@ -313,7 +324,8 @@ func formal(kind:u8) -> bool {
 func list_entry(kind:u8) -> bool {
     return kind == module_item_node() || kind == block_item_node() || kind == argument_node() ||
         kind == catch_clause_node() || kind == finally_clause_node() ||
-        kind == result_clause_node() || kind == throws_clause_node() || kind == owner_clause_node() || formal(kind);
+        kind == result_clause_node() || kind == throws_clause_node() || kind == owner_clause_node() ||
+        kind == here_receiver_node() || formal(kind);
 }
 
 func link_entries(nodes:const ExprNodes in N, ref work:NameWork in W, used:u64) -> void
@@ -387,7 +399,7 @@ func resolve_list(source:const SourceBytes in S, nodes:const ExprNodes in N, ref
 }
 
 func resolve_full_scope(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                         ref work:NameWork in W, ref state:NameState in R, scope:u64) -> void
+                        ref work:NameWork in W, ref state:NameState in R, scope:u64, first_local:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val used <- state.used;
     val first <- state.first;
@@ -396,12 +408,16 @@ func resolve_full_scope(source:const SourceBytes in S, nodes:const ExprNodes in 
     val delayed <- state.delayed;
     val loop_arm <- state.loop_arm;
     val repeated <- state.repeated;
-    state.first <- used;
+    val here_group <- state.here_group;
+    val handoff <- state.handoff;
+    state.first <- first_local;
     state.scope_node <- scope;
     state.guarded <- false;
     state.delayed <- no_node();
     state.loop_arm <- false;
     state.repeated <- false;
+    state.here_group <- false;
+    state.handoff <- no_node();
     resolve_list(source, nodes, bindings, work, state, nodes[scope].left);
     state.used <- used;
     state.first <- first;
@@ -409,6 +425,8 @@ func resolve_full_scope(source:const SourceBytes in S, nodes:const ExprNodes in 
     state.delayed <- delayed;
     state.loop_arm <- loop_arm;
     state.repeated <- repeated;
+    state.here_group <- here_group;
+    state.handoff <- handoff;
     (state.guarded <- guarded):void;
 }
 
@@ -467,6 +485,7 @@ func local_declaration_allowed(ref state:NameState in R, at:u64) -> bool where {
         return false;
     } else {};
     if (state.loop_arm) { reject_name(state, at, declaration_in_loop_arm()); return false; } else {};
+    if (state.here_group) { reject_name(state, at, declaration_in_here_group()); return false; } else {};
     if (state.guarded) { reject_name(state, at, unproved_guard_binding()); return false; } else {};
     return true;
 }
@@ -524,6 +543,7 @@ func resolve_handle_construction(source:const SourceBytes in S, nodes:const Expr
         return;
     } else {};
     if (state.repeated) { reject_name(state, at, repeated_handle_acquisition()); return; } else {};
+    if (state.here_group) { reject_name(state, at, unsupported_here_group_storage()); return; } else {};
     if (is_function(nodes, enclosing_callable(nodes, bindings, state.scope_node))) {
         reject_name(state, at, native_acquisition_in_function());
         return;
@@ -546,6 +566,7 @@ func resolve_defer(source:const SourceBytes in S, nodes:const ExprNodes in N, re
         return;
     } else {};
     if (state.repeated) { reject_name(state, at, unsupported_repeated_defer()); return; } else {};
+    if (state.here_group) { reject_name(state, at, unsupported_here_group_storage()); return; } else {};
     if (nodes[at].kind == deferred_block_node()) { state.delayed <- at; {}; } else {};
     resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
     state.delayed <- no_node();
@@ -561,6 +582,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         return;
     } else {};
     if (state.repeated) { reject_name(state, at, unsupported_repeated_construction()); return; } else {};
+    if (state.here_group) { reject_name(state, at, unsupported_here_group_storage()); return; } else {};
     val requested <- nodes[at].left;
     if (nodes[requested].kind == construction_type_query_node()) {
         resolve_expression(source, nodes, bindings, work, state, nodes[requested].left);
@@ -596,9 +618,11 @@ func resolve_range(source:const SourceBytes in S, nodes:const ExprNodes in N, re
     val first <- state.first;
     val enclosing_arm <- state.loop_arm;
     val repeated <- state.repeated;
+    val handoff <- state.handoff;
     state.first <- used;
     state.loop_arm <- true;
     state.repeated <- true;
+    state.handoff <- no_node();
     declare_name(source, nodes, bindings, work, state, nodes[header].number, header, loop_index(), duplicate_binding());
     if (state.diagnostic == 0u8) {
         resolve_expression(source, nodes, bindings, work, state, nodes[at].right);
@@ -609,7 +633,64 @@ func resolve_range(source:const SourceBytes in S, nodes:const ExprNodes in N, re
     if (state.diagnostic == 0u8) {
         resolve_expression(source, nodes, bindings, work, state, nodes[at].number);
     } else {};
+    state.handoff <- handoff;
     (state.loop_arm <- enclosing_arm):void;
+}
+
+func resolve_here_receivers(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
+                            ref work:NameWork in W, ref state:NameState in R, tail:u64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    val receiver <- first_item(nodes, tail);
+    val binding <- no_node();
+    val annotation <- no_node();
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        if (receiver == no_node()) { return; } else {};
+        binding <- nodes[receiver].right;
+        if (nodes[binding].kind == typed_name_node()) {
+            annotation <- nodes[binding].right;
+            if (nodes[annotation].kind == owned_type_node()) {
+                resolve_type_name(source, nodes, bindings, work, state, nodes[annotation].left, true);
+                if (state.diagnostic != 0u8) { return; } else {};
+                resolve_handle_owner(source, nodes, bindings, work, state, nodes[annotation].right, false);
+            } else {
+                resolve_type_name(source, nodes, bindings, work, state, annotation, true);
+            };
+            if (state.diagnostic != 0u8) { return; } else {};
+        } else {};
+        declare_name(source, nodes, bindings, work, state, binder_name(nodes, binding),
+                     receiver, here_receiver_binding(), duplicate_binding());
+        if (state.diagnostic != 0u8) { return; } else {};
+        (receiver <- work[receiver].next):void;
+    };
+}
+
+func resolve_here_call(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
+                       ref work:NameWork in W, ref state:NameState in R, at:u64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
+    if (state.diagnostic != 0u8) { return; } else {};
+    val supplied <- nodes[at].right;
+    val body <- nodes[supplied].right;
+    val first <- state.first;
+    val used <- state.used;
+    val group <- state.here_group;
+    val target <- state.handoff;
+    state.first <- used;
+    resolve_here_receivers(source, nodes, bindings, work, state, nodes[supplied].left);
+    if (state.diagnostic == 0u8) {
+        if (nodes[body].kind == full_scope_node()) {
+            bindings[body].scope <- state.scope_node;
+            resolve_full_scope(source, nodes, bindings, work, state, body, used);
+        } else {
+            state.here_group <- true;
+            state.handoff <- at;
+            resolve_expression(source, nodes, bindings, work, state, body);
+        };
+    } else {};
+    state.used <- used;
+    state.first <- first;
+    state.here_group <- group;
+    (state.handoff <- target):void;
 }
 
 func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
@@ -618,15 +699,22 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
     if (at == no_node()) { return; } else {};
     bindings[at].scope <- state.scope_node;
     val kind <- nodes[at].kind;
-    if (kind == literal_node() || kind == bool_node()) { return; } else {};
+    if (kind == literal_node() || kind == narrow_integer_node() || kind == bool_node()) { return; } else {};
     if (kind == name_node() || kind == symbol_node()) {
         resolve_value(source, nodes, bindings, work, state, at);
         return;
     } else {};
     if (kind == block_node()) { resolve_list(source, nodes, bindings, work, state, nodes[at].left); return; } else {};
-    if (kind == full_scope_node()) { resolve_full_scope(source, nodes, bindings, work, state, at); return; } else {};
+    if (kind == full_scope_node()) { resolve_full_scope(source, nodes, bindings, work, state, at, state.used); return; } else {};
     if (kind == try_node()) { resolve_try(source, nodes, bindings, work, state, at); return; } else {};
     if (kind == range_node()) { resolve_range(source, nodes, bindings, work, state, at); return; } else {};
+    if (kind == here_call_node()) { resolve_here_call(source, nodes, bindings, work, state, at); return; } else {};
+    if (kind == continue_node() || kind == break_node()) {
+        if (state.handoff == no_node()) { reject_name(state, at, missing_here_control()); return; } else {};
+        bindings[at].declaration <- state.handoff;
+        resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
+        return;
+    } else {};
     if (kind == conditional_node()) {
         resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
         if (state.diagnostic != 0u8) { return; } else {};
@@ -947,7 +1035,8 @@ func resolve_module_names(source:const SourceBytes in S, nodes:const ExprNodes i
     link_entries(nodes, work, tree.used);
     ref state = make NameState {
         used <- 0u64; first <- 0u64; module_names <- 0u64; scope_node <- tree.root;
-        delayed <- no_node(); guarded <- false; loop_arm <- false; repeated <- false; diagnostic <- 0u8;
+        delayed <- no_node(); guarded <- false; loop_arm <- false; repeated <- false;
+        here_group <- false; handoff <- no_node(); diagnostic <- 0u8;
         failed_node <- no_node(); enclosing_defer <- no_node();
     };
     val first <- first_item(nodes, nodes[tree.root].left);
@@ -981,6 +1070,7 @@ export formal_binding;
 export local_binding;
 export loop_index;
 export handle_binding;
+export here_receiver_binding;
 export owner_binding;
 export exception_binding;
 export builtin_u64;

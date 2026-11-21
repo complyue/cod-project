@@ -45,6 +45,7 @@ using "ParserStorage.cod" discard_node;
 using "ParserStorage.cod" bool_node;
 using "ParserStorage.cod" compare_node;
 using "ParserStorage.cod" conditional_node;
+using "ParserStorage.cod" narrow_integer_node;
 using "ParserStorage.cod" range_node;
 using "ParserStorage.cod" range_header_node;
 using "ParserStorage.cod" literal_range;
@@ -135,6 +136,7 @@ func procedure_call_in_function() -> u8 { return 16u8; }
 func value_tail_in_void_function() -> u8 { return 17u8; }
 func expected_boolean_condition() -> u8 { return 18u8; }
 func unproved_reservation_selection() -> u8 { return 19u8; }
+func unsupported_narrow_execution() -> u8 { return 20u8; }
 
 func set_fact(ref facts:OperandFacts in F, at:u64, kind:u8, reception:u8,
               owner_site:u64, identity:u64, checked_exception:u8) -> void where {owner F} {
@@ -782,6 +784,7 @@ func check_operand(nodes:const ExprNodes in N, names:const NameBindings in B, li
     if (kind == catch_clause_node()) { return check_catch_clause(nodes, facts, at); } else {};
     if (kind == callable_node()) { return check_callable_tail(nodes, facts, at); } else {};
     if (names[at].scope == no_node()) { return 0u8; } else {};
+    if (kind == narrow_integer_node()) { return unsupported_narrow_execution(); } else {};
     if (kind == literal_node()) { scalar_fact(facts, at, independent_value(), no_node()); return 0u8; } else {};
     if (kind == bool_node()) { set_result(facts, at, scalar_bool()); return 0u8; } else {};
     if (kind == name_node()) {

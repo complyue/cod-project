@@ -103,6 +103,12 @@ func owning_handle_local_node() -> u8 { return 84u8; }
 func borrowed_handle_local_node() -> u8 { return 85u8; }
 func make_own_handle_node() -> u8 { return 86u8; }
 func make_borrowed_handle_node() -> u8 { return 87u8; }
+func here_call_node() -> u8 { return 88u8; }
+func here_body_node() -> u8 { return 89u8; }
+func here_receiver_node() -> u8 { return 90u8; }
+func continue_node() -> u8 { return 91u8; }
+func break_node() -> u8 { return 92u8; }
+func narrow_integer_node() -> u8 { return 93u8; }
 
 func handle_local(kind:u8) -> bool {
     return kind == owning_handle_local_node() || kind == borrowed_handle_local_node();
@@ -229,6 +235,12 @@ export owning_handle_local_node;
 export borrowed_handle_local_node;
 export make_own_handle_node;
 export make_borrowed_handle_node;
+export here_call_node;
+export here_body_node;
+export here_receiver_node;
+export continue_node;
+export break_node;
+export narrow_integer_node;
 export handle_local;
 export handle_construction;
 export literal_range;

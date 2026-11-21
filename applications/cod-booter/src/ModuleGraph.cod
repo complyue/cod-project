@@ -67,7 +67,7 @@ proc discover_graph_dependencies(source:const SourceBytes in S, lines:const Sour
     where {const owner S, owner W, owner D, owner T} {
     ref result = make FrontendResult {
         scan <- make ScanResult { used <- 0u64; next <- 0u64; complete <- false; invalid_source <- false; };
-        tree <- make ParseResult { next <- 0u64; used <- 0u64; root <- no_node(); diagnostic <- 0u8; };
+        tree <- make ParseResult { next <- 0u64; used <- 0u64; root <- no_node(); diagnostic <- 0u8; supplied_here <- false; };
         diagnostic_first <- no_node(); diagnostic_past <- no_node();
     };
     if (!read_module(source, tokens, nodes, result)) {
@@ -108,7 +108,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         frontend <- make FrontendResult {
             scan <- make ScanResult { used <- 0u64; next <- 0u64; complete <- true; invalid_source <- false; };
             tree <- make ParseResult {
-                next <- 0u64; used <- progress[0u64].used; root <- progress[0u64].root; diagnostic <- 0u8;
+                next <- 0u64; used <- progress[0u64].used; root <- progress[0u64].root; diagnostic <- 0u8; supplied_here <- false;
             };
             diagnostic_first <- no_node(); diagnostic_past <- no_node();
         };
