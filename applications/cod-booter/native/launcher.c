@@ -1,5 +1,6 @@
 #include "cod_providers.h"
 
+#include "cod_region_storage.h"
 #include "compile_diagnostic.h"
 
 #include <inttypes.h>
@@ -21,7 +22,7 @@ static const char *diagnostic_phase(uint8_t stage) {
     }
 }
 
-static const char *llvm_error(uint8_t code) {
+static const char *llvm_error(uint32_t code) {
     switch (code) {
     case llvm_invalid_command_range: return "invalid command range";
     case llvm_construction_failed: return "construction failed";
@@ -29,6 +30,16 @@ static const char *llvm_error(uint8_t code) {
     case llvm_emission_failed: return "emission failed";
     case llvm_publication_failed: return "could not publish object";
     default: return "operation failed";
+    }
+}
+
+static const char *scratch_error(uint32_t code) {
+    switch (code) {
+    case COD_REGION_STORAGE_INVALID: return "invalid layout";
+    case COD_REGION_STORAGE_TOO_LARGE: return "layout is too large";
+    case COD_REGION_STORAGE_NO_MEMORY: return "out of memory";
+    case COD_REGION_STORAGE_FULL: return "layout exceeds region capacity";
+    default: return "allocation failed";
     }
 }
 
@@ -45,9 +56,11 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
     if (diagnostic->first.line)
         fprintf(stderr, ":%" PRIu64 ":%" PRIu64, diagnostic->first.line, diagnostic->first.column);
     if (diagnostic->stage == 6)
-        fprintf(stderr, ": error: LLVM backend %s (code %u)\n", llvm_error(diagnostic->code), (unsigned)diagnostic->code);
+        fprintf(stderr, ": error: LLVM backend %s (code %" PRIu32 ")\n", llvm_error(diagnostic->code), diagnostic->code);
+    else if (diagnostic->stage == 7)
+        fprintf(stderr, ": error: compiler scratch %s (code %" PRIu32 ")\n", scratch_error(diagnostic->code), diagnostic->code);
     else
-        fprintf(stderr, ": error: %s failed (code %u)\n", diagnostic_phase(diagnostic->stage), (unsigned)diagnostic->code);
+        fprintf(stderr, ": error: %s failed (code %" PRIu32 ")\n", diagnostic_phase(diagnostic->stage), diagnostic->code);
     if (diagnostic->related.line)
         fprintf(stderr, "%s:%" PRIu64 ":%" PRIu64 ": related location\n",
                 input, diagnostic->related.line, diagnostic->related.column);
