@@ -23,6 +23,7 @@ using "ParserStorage.cod" catch_binding_node;
 using "ParserStorage.cod" handle_local;
 using "ParserStorage.cod" handle_construction;
 using "ParserStorage.cod" handle_parameter_node;
+using "ParserStorage.cod" here_parameter_node;
 using "ParserStorage.cod" here_call_node;
 using "SourceStorage.cod" SourceBytes;
 using "ParserStorage.cod" Tokens;
@@ -68,6 +69,7 @@ func module_binding_failed() -> u8 { return 3u8; }
 func module_operands_failed() -> u8 { return 4u8; }
 func module_completion_failed() -> u8 { return 5u8; }
 func unsupported_array_length() -> u8 { return 74u8; }
+func unsupported_ordinary_here() -> u8 { return 76u8; }
 
 func rejected_unsupported_declaration(result:const ModuleBindingResult in R) -> bool where {const owner R} {
     return result.stage == module_binding_failed() &&
@@ -231,6 +233,12 @@ func analyze_module_operands(source:const SourceBytes in S, ref tokens:Tokens in
         binding_diagnostic(nodes, result, module_binding_failed(), unsupported_module_declaration(), declaration);
         return false;
     } else {};
+    for (at in 0u64 .. result.frontend.tree.used) {
+        if (nodes[at].kind == here_parameter_node()) {
+            binding_diagnostic(nodes, result, module_binding_failed(), unsupported_ordinary_here(), at);
+            return false;
+        } else {};
+    };
     ref operands = make OperandCheckResult { diagnostic <- 0u8; node <- no_node(); };
     if (!check_module_operands(nodes, result.frontend.tree, bindings, work, selected, facts, owners, operands)) {
         binding_diagnostic(nodes, result, module_operands_failed(), operands.diagnostic, operands.node);

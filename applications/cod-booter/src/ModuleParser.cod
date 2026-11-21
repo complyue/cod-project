@@ -57,6 +57,7 @@ using "Lexer.cod" const_word;
 using "Lexer.cod" in_word;
 using "Lexer.cod" data_word;
 using "Lexer.cod" reserved_module_name;
+using "Lexer.cod" reserved_lexical_binder;
 using "Lexer.cod" array_word;
 using "Lexer.cod" export_word;
 using "Lexer.cod" handle_word;
@@ -226,13 +227,21 @@ func parse_parameter(source:const SourceBytes in S, tokens:const Tokens in T,
 
 func parse_parameters(source:const SourceBytes in S, tokens:const Tokens in T,
                       ref nodes:ExprNodes in A, ref result:ParseResult in R,
-                      past:u64, previous:u64) -> u64
+                      past:u64, allow_here:bool, multiple_here:bool) -> u64
     where {const owner S, const owner T, owner A, owner R} {
-    val last <- previous;
+    val last <- no_node();
     if (punct_at(source, tokens, result.next, past) == 41u8) { return last; } else {}; # ')'
+    val at <- result.next;
     val delimiter <- 0u8;
     for (unused in result.next .. past) {
-        if (!parse_parameter(source, tokens, nodes, result, past, last, false)) { return no_node(); } else {};
+        at <- result.next;
+        if (allow_here && (last == no_node() || (multiple_here && nodes[last].kind == here_parameter_node())) &&
+            at < past && here_word(source, tokens[at]) && punct_at(source, tokens, at + 1u64, past) != 58u8) {
+            parse_here_parameter(source, tokens, nodes, result, past, last);
+            if (result.diagnostic != 0u8) { return no_node(); } else {};
+        } else {
+            if (!parse_parameter(source, tokens, nodes, result, past, last, false)) { return no_node(); } else {};
+        };
         last <- result.root;
         delimiter <- punct_at(source, tokens, result.next, past);
         if (delimiter == 41u8) { return last; } else {}; # ')'
@@ -244,9 +253,13 @@ func parse_parameters(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func start_parameter_list(source:const SourceBytes in S, tokens:const Tokens in T,
-                          ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> u64
+                          ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64, lexical:bool) -> u64
     where {const owner S, const owner T, owner A, owner R} {
-    if (!parse_module_name(source, tokens, nodes, result, past)) { return no_node(); } else {};
+    val at <- result.next;
+    val reserved <- at < past && (if (lexical) { reserved_lexical_binder(source, tokens[at]) }
+                                  else { reserved_module_name(source, tokens[at]) });
+    if (reserved) { result.diagnostic <- expected_name(); return no_node(); } else {};
+    if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) { return no_node(); } else {};
     val name <- result.root;
     val open <- result.next;
     if (punct_at(source, tokens, open, past) != 40u8) { # '('
@@ -320,14 +333,14 @@ func parse_type_clause(source:const SourceBytes in S, tokens:const Tokens in T, 
 }
 
 func parse_here_parameter(source:const SourceBytes in S, tokens:const Tokens in T,
-                          ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> void
+                          ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64, previous:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
-    val name <- start_parameter_list(source, tokens, nodes, result, past);
+    val name <- start_parameter_list(source, tokens, nodes, result, past, true);
     if (name == no_node()) { return; } else {};
     val open <- tokens[result.next - 1u64].first;
-    val parameters <- parse_parameters(source, tokens, nodes, result, past, no_node());
+    val parameters <- parse_parameters(source, tokens, nodes, result, past, false, false);
     if (result.diagnostic != 0u8) { return; } else {};
     finish_callable_head(tokens, nodes, result, name, parameters, open);
     if (result.diagnostic != 0u8) { return; } else {};
@@ -341,33 +354,16 @@ func parse_here_parameter(source:const SourceBytes in S, tokens:const Tokens in 
     } else {};
     val signature <- result.root;
     append_node(nodes, result, here_parameter_node(), first, nodes[signature].past,
-                0u64, no_node(), signature, first);
+                0u64, previous, signature, first);
 }
 
 func parse_callable_head(source:const SourceBytes in S, tokens:const Tokens in T,
                          ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64, native:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
-    val name <- start_parameter_list(source, tokens, nodes, result, past);
+    val name <- start_parameter_list(source, tokens, nodes, result, past, false);
     if (name == no_node()) { return; } else {};
     val open <- tokens[result.next - 1u64].first;
-    val first_parameter <- no_node();
-    if (native && result.next < past && here_word(source, tokens[result.next]) &&
-        punct_at(source, tokens, result.next + 1u64, past) != 58u8) {
-        parse_here_parameter(source, tokens, nodes, result, past);
-        if (result.diagnostic != 0u8) { return; } else {};
-        first_parameter <- result.root;
-        val delimiter <- punct_at(source, tokens, result.next, past);
-        if (delimiter == 44u8) {
-            result.next <- result.next + 1u64;
-            if (punct_at(source, tokens, result.next, past) == 41u8) {
-                result.diagnostic <- expected_name();
-                return;
-            } else {};
-        } else {
-            if (delimiter != 41u8) { result.diagnostic <- expected_parameter_list(); return; } else {};
-        };
-    } else {};
-    val parameters <- parse_parameters(source, tokens, nodes, result, past, first_parameter);
+    val parameters <- parse_parameters(source, tokens, nodes, result, past, true, !native);
     if (result.diagnostic != 0u8) { return; } else {};
     finish_callable_head(tokens, nodes, result, name, parameters, open);
 }
