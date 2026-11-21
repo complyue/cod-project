@@ -1663,7 +1663,7 @@ class LLVMEmission {
     }
     for (size_t i = 0; i < constructor.inputs.size(); ++i) {
       const auto &input = constructor.inputs[i];
-      if (input.owner) {
+      if (input.type.kind == Type::c_type_marker) {
         auto *value = emit_expression(*expr.children[i], Projection::target);
         if (!reachable()) return false;
         arguments.push_back(value);

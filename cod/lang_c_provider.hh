@@ -135,9 +135,10 @@ inline void emit_c_here(const CheckedProgram &program, const CheckedNativeOperat
 
 inline cod_provider_argument describe_c_argument(const CheckedNativeInput &input, const NativeEnumNames &enums) {
   if (input.type.kind == Type::array) return {nullptr, cod_provider_argument_view, false, input.owner.value_or(0), false};
-  return {input.owner ? input.type.name.c_str() : provider_value_type(input.type, enums),
-          input.owner ? cod_provider_argument_handle : cod_provider_argument_scalar,
-          input.type == Type::boolean, input.owner.value_or(0), input.type.kind == Type::enumeration};
+  if (input.type.kind == Type::c_type_marker)
+    return {input.type.name.c_str(), cod_provider_argument_handle, false, input.owner.value_or(SIZE_MAX), false};
+  return {provider_value_type(input.type, enums), cod_provider_argument_scalar,
+          input.type == Type::boolean, 0, input.type.kind == Type::enumeration};
 }
 
 inline void emit_c_call(const CheckedProgram &program, const CheckedNativeOperation &operation, const NativeRowLayouts &layouts,

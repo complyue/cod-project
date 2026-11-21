@@ -3,7 +3,7 @@ using "Lexer.cod" {
     symbol_name, from_word, proc_word, func_word, ref_word, ptr_word, val_word, throws_word,
     where_word, owner_word, const_word, in_word, data_word, reserved_module_name,
     reserved_lexical_binder, array_word, export_word, handle_word, here_word, c_linkage,
-    enum_word, integer_literal, import_word, type_word,
+    enum_word, integer_literal, import_word, type_word, within_word,
 };
 using "ExpressionParser.cod" {
     exception_binder_width, ParseResult, punct_at, punct_pair_at, append_node, parse_identifier,
@@ -19,7 +19,7 @@ using "ParserStorage.cod" {
     throws_clause_node, owner_clause_node, owned_type_node, c_handle_type_node, c_procedure_node,
     handle_parameter_node, here_parameter_node, data_record_node, c_record_node, data_parent_node,
     export_node, export_from_node, array_declaration_node, array_shape_node, readonly_declaration,
-    enum_declaration_node, enum_member_node, enum_integer_node,
+    enum_declaration_node, enum_member_node, enum_integer_node, retained_parent_parameter,
     import_node, local_module_selection, member_selector_node, member_selection_item_node,
 };
 using "SourceStorage.cod" SourceBytes;
@@ -217,7 +217,10 @@ func parse_parameter(source:const SourceBytes in S, tokens:const Tokens in T,
     } else {};
     if (!field && kind == parameter_node() && qualified) { (kind <- ref_parameter_node()):void; } else {};
     val first <- tokens[at].first;
-    append_node(nodes, result, kind, first, nodes[binding].past, 0u64, previous, binding, first);
+    val mode <- if (kind == handle_parameter_node() && !qualified && within_word(source, tokens[at + 1u64])) {
+        retained_parent_parameter()
+    } else { 0u64 };
+    append_node(nodes, result, kind, first, nodes[binding].past, mode, previous, binding, first);
     return result.diagnostic == 0u8;
 }
 

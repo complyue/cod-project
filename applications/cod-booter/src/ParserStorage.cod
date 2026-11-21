@@ -213,6 +213,7 @@ export func discarded_guard_result() -> u64 { return 1u64; }
 export func procedure_definition() -> u64 { return 0u64; }
 export func function_definition() -> u64 { return 1u64; }
 export func readonly_declaration() -> u64 { return 1u64; }
+export func retained_parent_parameter() -> u64 { return 1u64; }
 export func no_node() -> u64 { return 18446744073709551615u64; }
 
 export func is_function(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {

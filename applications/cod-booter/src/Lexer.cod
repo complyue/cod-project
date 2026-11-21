@@ -193,6 +193,14 @@ export func type_word(source:const SourceBytes in S, token:const Token in T) -> 
         source[first + 3u64] == 101u8; # type
 }
 
+export func within_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val first <- token.first;
+    return identifier_width(token, 6u64) && source[first] == 119u8 && source[first + 1u64] == 105u8 &&
+        source[first + 2u64] == 116u8 && source[first + 3u64] == 104u8 && source[first + 4u64] == 105u8 &&
+        source[first + 5u64] == 110u8; # w i t h i n
+}
+
 func unit_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
