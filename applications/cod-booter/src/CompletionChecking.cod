@@ -32,6 +32,7 @@ export data CompletionSite {
     in_delayed_body:u8;
     escaping_failure:u8;
     case_break:u8;
+    case_scan:u8;
     guarded_by:u64;
     incoming_handler:u64;
     throws_clause:u64;
@@ -43,7 +44,6 @@ export data CompletionSite {
     previous_defer:u64;
     last_defer:u64;
     replacing_try:u64;
-    case_transfer_barrier:u64;
     failure_user:u64;
     failure_work:u64;
 }
@@ -87,6 +87,7 @@ func initialize_site(sites:CompletionSites in X, at:u64) -> void where {owner X}
     sites[at].forwarded_operand <- 0u8;
     sites[at].in_delayed_body <- 0u8;
     sites[at].case_break <- 0u8;
+    sites[at].case_scan <- 0u8;
     sites[at].guarded_by <- no_node();
     sites[at].incoming_handler <- no_node();
     sites[at].throws_clause <- no_node();
@@ -98,7 +99,6 @@ func initialize_site(sites:CompletionSites in X, at:u64) -> void where {owner X}
     sites[at].previous_defer <- no_node();
     sites[at].last_defer <- no_node();
     sites[at].replacing_try <- no_node();
-    sites[at].case_transfer_barrier <- no_node();
     return;
 }
 
@@ -109,7 +109,6 @@ func inherit_context(sites:CompletionSites in X, parent:u64, child:u64, guarded_
     sites[child].guarded_by <- guarded_by;
     sites[child].incoming_handler <- incoming_handler;
     sites[child].replacing_try <- replacing_try;
-    sites[child].case_transfer_barrier <- sites[parent].case_transfer_barrier;
     sites[child].in_delayed_body <- sites[parent].in_delayed_body;
     if (sites[parent].event == skipped_operand()) { (sites[child].event <- skipped_operand()):void; } else {};
     return;
@@ -151,10 +150,6 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
         } else {};
         inherit_context(sites, at, nodes[at].left, at, incoming, replacing);
         inherit_context(sites, at, last, guard, incoming, replacing);
-        if (nodes[last].kind == finally_clause_node()) {
-            sites[left].case_transfer_barrier <- at;
-            (sites[last].case_transfer_barrier <- at):void;
-        } else {};
         return;
     } else {};
     if (kind == callable_node()) {
@@ -509,23 +504,33 @@ func case_can_complete(nodes:const ExprNodes in N, links:const NameWork in L, fa
     return false;
 }
 
-func check_case_transfer(nodes:const ExprNodes in N, names:const NameBindings in B,
+func check_case_transfer(nodes:const ExprNodes in N, names:const NameBindings in B, facts:const OperandFacts in F,
                          sites:CompletionSites in X, at:u64) -> u8
-    where {const owner N, const owner B, owner X} {
+    where {const owner N, const owner B, const owner F, owner X} {
     val target <- names[at].declaration;
-    if (sites[at].case_transfer_barrier != sites[target].case_transfer_barrier)
-        return unsupported_case_transfer();
+    val breaking <- nodes[at].kind == break_node();
     val scope <- names[at].scope;
     val stop <- names[target].scope;
     if (scope != stop) {
         if (nodes[at].kind != case_fallthrough_node() || nodes[target].right != scope ||
             nodes[scope].kind != full_scope_node()) return unsupported_case_transfer();
         record_exit(sites, at, case_scan_resume(), no_node(), target, scope, stop);
-    } else {
-        if (nodes[at].kind == break_node()) { (sites[target].case_break <- 1u8):void; } else {};
-    };
+    } else {};
     sites[at].can_continue <- 0u8;
-    return 0u8;
+    val cleanup <- names[at].finalizer;
+    val boundary <- names[target].finalizer;
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        if (cleanup == boundary) {
+            if (breaking) { (sites[target].case_break <- 1u8):void; } else {};
+            return 0u8;
+        } else {};
+        if (cleanup == no_node()) return invalid_completion_tree();
+        if (breaking) { (sites[cleanup].case_break <- 1u8):void; }
+        else { (sites[cleanup].case_scan <- 1u8):void; };
+        if (facts[nodes[nodes[cleanup].right].right].kind == never_result()) return 0u8;
+        cleanup <- names[cleanup].finalizer;
+    };
+    return invalid_completion_tree();
 }
 
 func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
@@ -568,7 +573,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
         sites[at].can_continue <- if (case_can_complete(nodes, links, facts, sites, at)) { 1u8 } else { 0u8 };
         return 0u8;
     } else {};
-    if (kind == break_node() || kind == case_fallthrough_node()) return check_case_transfer(nodes, names, sites, at);
+    if (kind == break_node() || kind == case_fallthrough_node()) return check_case_transfer(nodes, names, facts, sites, at);
     if (kind == case_failure_node()) {
         sites[at].can_continue <- 0u8;
         return route_failure(nodes, names, links, facts, sites, at, used,

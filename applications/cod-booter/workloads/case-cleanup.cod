@@ -7,7 +7,9 @@ proc dispatch(resume:bool, replace:bool) -> u64 {
             defer { behave @print(1u64); };
             defer { if (replace) { return 42u64; } else {}; };
             defer { behave @print(2u64); };
-            if (resume) { fallthrough; };
+            try {
+                if (resume) { fallthrough; };
+            } finally { behave @print(8u64); };
             return 5u64;
         }};
         behave @print(3u64);

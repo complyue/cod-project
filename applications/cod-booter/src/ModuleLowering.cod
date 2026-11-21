@@ -53,6 +53,12 @@ data LoweringState {
     case_read:bool;
     case_completed:bool;
     case_resumed:bool;
+    finalizer:u64;
+    break_landing:u64;
+    break_value:u64;
+    scan_landing:u64;
+    pending_break:bool;
+    pending_scan:bool;
 }
 
 export func native_unsupported() -> u8 { return 1u8; }
@@ -425,10 +431,10 @@ func lower_list(nodes:const ExprNodes in N, names:const NameBindings in B, links
     };
 }
 
-func lower_result_arm(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-                      facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                      plan:NativePlan in P, state:LoweringState in R,
-                      arm:u64, at:u64, next:u64, read_result:bool) -> bool
+func prepare_result_arm(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                        facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
+                        plan:NativePlan in P, state:LoweringState in R,
+                        arm:u64, at:u64, destination:u64, read_result:bool) -> bool
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     val used <- scalar_kind(facts[at].kind) && facts[at].discarded_result == 0u8;
     val has_result <- used && scalar_kind(facts[arm].kind);
@@ -444,7 +450,17 @@ func lower_result_arm(nodes:const ExprNodes in N, names:const NameBindings in B,
         };
     };
     if (!state.live || plan.diagnostic != 0u8) return false;
-    if (used) { emit(code, plan, copy_word(), slot(at), slot(arm)); } else {};
+    if (used) { emit(code, plan, copy_word(), destination, slot(arm)); } else {};
+    return true;
+}
+
+func lower_result_arm(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                      facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
+                      plan:NativePlan in P, state:LoweringState in R,
+                      arm:u64, at:u64, next:u64, read_result:bool) -> bool
+    where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
+    if (!prepare_result_arm(nodes, names, links, facts, sites, code, plan, state, arm, at, slot(at), read_result))
+        return false;
     finish_block(code, plan, state, next);
     return true;
 }
@@ -590,6 +606,42 @@ func lower_case(nodes:const ExprNodes in N, names:const NameBindings in B, links
     if (joins) { position(code, plan, state, joined); } else {};
 }
 
+func deliver_case_break(names:const NameBindings in B, code:NativeCommands in C, plan:NativePlan in P,
+                        state:LoweringState in R, value:u64) -> void
+    where {const owner B, owner C, owner P, owner R} {
+    val target <- state.case_index;
+    if (names[target].finalizer != state.finalizer) {
+        if (value != no_node() && value != state.break_value) {
+            emit(code, plan, copy_word(), state.break_value, value);
+        } else {};
+        state.pending_break <- true;
+        finish_block(code, plan, state, state.break_landing);
+        return;
+    } else {};
+    if (value != no_node() && value != slot(target)) { emit(code, plan, copy_word(), slot(target), value); } else {};
+    state.case_completed <- true;
+    finish_block(code, plan, state, state.case_join);
+}
+
+func deliver_case_scan(nodes:const ExprNodes in N, names:const NameBindings in B,
+                       code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R) -> void
+    where {const owner N, const owner B, owner C, owner P, owner R} {
+    val arm <- state.case_arm;
+    if (names[arm].finalizer != state.finalizer) {
+        state.pending_scan <- true;
+        finish_block(code, plan, state, state.scan_landing);
+        return;
+    } else {};
+    if (nodes[arm].right == state.active_scope && state.scope_scan_flag != no_node()) {
+        state.scope_scan_pending <- true;
+        emit(code, plan, write_flow_flag(), state.scope_scan_flag, 1u64);
+        finish_block(code, plan, state, state.scope_cleanup);
+        return;
+    } else {};
+    state.case_resumed <- true;
+    finish_block(code, plan, state, state.case_next);
+}
+
 func lower_case_break(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                        facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
                        plan:NativePlan in P, state:LoweringState in R, at:u64) -> void
@@ -600,15 +652,13 @@ func lower_case_break(nodes:const ExprNodes in N, names:const NameBindings in B,
         return;
     } else {};
     val value <- nodes[at].left;
-    if (value != no_node()) {
-        if (lower_result_arm(nodes, names, links, facts, sites, code, plan, state,
-                             value, target, state.case_join, state.case_read)) {
-            (state.case_completed <- true):void;
-        } else {};
-    } else {
-        state.case_completed <- true;
-        finish_block(code, plan, state, state.case_join);
-    };
+    val guarded <- names[target].finalizer != state.finalizer;
+    val result <- if (guarded) { state.break_value } else { slot(target) };
+    if (value != no_node() &&
+        !prepare_result_arm(nodes, names, links, facts, sites, code, plan, state, value, target, result, state.case_read))
+        return;
+    val used <- value != no_node() && scalar_kind(facts[target].kind) && facts[target].discarded_result == 0u8;
+    deliver_case_break(names, code, plan, state, if (used) { result } else { no_node() });
 }
 
 func lower_range(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
@@ -694,28 +744,19 @@ func lower_handlers(nodes:const ExprNodes in N, names:const NameBindings in B, l
     return normal;
 }
 
-# Suspend the incoming exception while finally executes. Its own return
-# and failure edges leave through the already-restored enclosing targets.
-func lower_finally(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-                   facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                   plan:NativePlan in P, state:LoweringState in R, body:u64,
-                   returned:u64, forward_to:u64, next:u64) -> bool
-    where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
-    val saved <- save_failure(code, plan);
-    emit(code, plan, word_constant(), pending_category(), 0u64);
-    lower_node(nodes, names, links, facts, sites, code, plan, state, body);
-    if (!state.live || plan.diagnostic != 0u8) return false;
-    restore_failure(code, plan, saved);
-    if (next == no_node()) {
-        command(code, plan, branch_equal(), saved, 0u64, forward_to, state.exception_target);
-    } else {
-        val succeeded <- new_block(plan);
-        command(code, plan, branch_equal(), saved, 0u64, succeeded, state.exception_target);
-        position(code, plan, state, succeeded);
-        command(code, plan, branch_equal(), returned, 0u64, next, forward_to);
-    };
-    state.live <- false;
-    return true;
+func enter_finalizer(code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R,
+                     entry:u64, reason:u64, kind:u64, finalizer:u64) -> void
+    where {owner C, owner P, owner R} {
+    position(code, plan, state, entry);
+    emit(code, plan, write_flow_flag(), reason, kind);
+    finish_block(code, plan, state, finalizer);
+}
+
+func match_finalizer_exit(code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R,
+                          reason:u64, kind:u64, destination:u64) -> void where {owner C, owner P, owner R} {
+    val rest <- new_block(plan);
+    command(code, plan, branch_on_flow_flag(), reason, kind, destination, rest);
+    position(code, plan, state, rest);
 }
 
 func lower_try(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
@@ -729,26 +770,49 @@ func lower_try(nodes:const ExprNodes in N, names:const NameBindings in B, links:
     val outer_return <- state.return_target;
     val outer_slot <- state.return_slot;
     val returned_earlier <- state.local_return;
+    val outer_finalizer <- state.finalizer;
+    val outer_break <- state.break_landing;
+    val outer_value <- state.break_value;
+    val outer_scan <- state.scan_landing;
+    val earlier_break <- state.pending_break;
+    val earlier_scan <- state.pending_scan;
     val join <- new_block(plan);
     val after_arm <- join;
-    val returned <- no_node();
+    val on_failure <- outer_exception;
     val on_return <- no_node();
     val prepared <- no_node();
+    val on_break <- no_node();
+    val prepared_break <- no_node();
+    val on_scan <- no_node();
+    val reason <- no_node();
     if (has_finally) {
         after_arm <- new_block(plan);
+        on_failure <- new_block(plan);
         on_return <- new_block(plan);
-        returned <- new_slot(plan);
+        reason <- new_slot(plan);
+        if (sites[at].case_break != 0u8) {
+            on_break <- new_block(plan);
+            val target <- state.case_index;
+            if (scalar_kind(facts[target].kind) && facts[target].discarded_result == 0u8) {
+                (prepared_break <- new_slot(plan)):void;
+            } else {};
+        } else {};
+        if (sites[at].case_scan != 0u8) { (on_scan <- new_block(plan)):void; } else {};
+        state.finalizer <- at;
+        state.break_landing <- on_break;
+        state.break_value <- prepared_break;
+        state.scan_landing <- on_scan;
+        state.pending_break <- false;
+        state.pending_scan <- false;
         state.return_target <- on_return;
-        # The protected return becomes visible to the outer destination
-        # only if the finalizer preserves it.
+        # The guard keeps prepared payloads private until finally preserves them.
         if (outer_slot != no_node()) {
             prepared <- new_slot(plan);
             (state.return_slot <- prepared):void;
         } else {};
         state.local_return <- false;
-        emit(code, plan, word_constant(), returned, 0u64);
+        emit(code, plan, write_flow_flag(), reason, 0u64);
     } else {};
-    val on_failure <- if (has_finally) { after_arm } else { outer_exception };
     state.exception_target <- if (has_catches) { at } else { on_failure };
     val body <- lower_result_arm(nodes, names, links, facts, sites, code, plan, state, nodes[at].left, at, after_arm, read_result);
     state.exception_target <- on_failure;
@@ -759,18 +823,44 @@ func lower_try(nodes:const ExprNodes in N, names:const NameBindings in B, links:
     val normal <- body || handled;
     if (has_finally) {
         val pending_return <- state.local_return;
+        val pending_break <- state.pending_break;
+        val pending_scan <- state.pending_scan;
         state.local_return <- returned_earlier;
-        position(code, plan, state, on_return);
-        emit(code, plan, word_constant(), returned, 1u64);
-        finish_block(code, plan, state, after_arm);
+        state.finalizer <- outer_finalizer;
+        state.break_landing <- outer_break;
+        state.break_value <- outer_value;
+        state.scan_landing <- outer_scan;
+        state.pending_break <- earlier_break;
+        state.pending_scan <- earlier_scan;
+        enter_finalizer(code, plan, state, on_failure, reason, 1u64, after_arm);
+        enter_finalizer(code, plan, state, on_return, reason, 2u64, after_arm);
+        if (pending_break) { enter_finalizer(code, plan, state, on_break, reason, 3u64, after_arm); } else {};
+        if (pending_scan) { enter_finalizer(code, plan, state, on_scan, reason, 4u64, after_arm); } else {};
         position(code, plan, state, after_arm);
-        val next <- if (normal) { join } else { no_node() };
+        val saved <- save_failure(code, plan);
+        emit(code, plan, word_constant(), pending_category(), 0u64);
+        lower_node(nodes, names, links, facts, sites, code, plan, state, nodes[last].right);
+        if (!state.live || plan.diagnostic != 0u8) return;
+        restore_failure(code, plan, saved);
+
         val forward_to <- if (prepared != no_node()) { new_block(plan) } else { outer_return };
-        val preserved <- lower_finally(nodes, names, links, facts, sites, code, plan, state,
-                                       nodes[last].right, returned, forward_to, next);
+        val resume_break <- if (pending_break) { new_block(plan) } else { no_node() };
+        val resume_scan <- if (pending_scan) { new_block(plan) } else { no_node() };
+        match_finalizer_exit(code, plan, state, reason, 1u64, outer_exception);
+        match_finalizer_exit(code, plan, state, reason, 2u64, forward_to);
+        if (pending_break) { match_finalizer_exit(code, plan, state, reason, 3u64, resume_break); } else {};
+        if (pending_scan) { match_finalizer_exit(code, plan, state, reason, 4u64, resume_scan); } else {};
+        finish_block(code, plan, state, if (normal) { join } else { outer_exception });
         forward_return(code, plan, state, forward_to, outer_return, prepared, no_node());
-        state.local_return <- state.local_return || (pending_return && preserved);
-        (normal <- normal && preserved):void;
+        state.local_return <- state.local_return || pending_return;
+        if (pending_break) {
+            position(code, plan, state, resume_break);
+            deliver_case_break(names, code, plan, state, prepared_break);
+        } else {};
+        if (pending_scan) {
+            position(code, plan, state, resume_scan);
+            deliver_case_scan(nodes, names, code, plan, state);
+        } else {};
     } else {};
     if (normal) { position(code, plan, state, join); } else {};
 }
@@ -930,18 +1020,7 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
             plan.diagnostic <- native_unsupported();
             return;
         } else {};
-        if (sites[at].cleanup_first == no_node()) {
-            state.case_resumed <- true;
-            finish_block(code, plan, state, state.case_next);
-        } else {
-            if (sites[at].cleanup_first != state.active_scope || state.scope_scan_flag == no_node()) {
-                plan.diagnostic <- native_unsupported();
-                return;
-            } else {};
-            state.scope_scan_pending <- true;
-            emit(code, plan, write_flow_flag(), state.scope_scan_flag, 1u64);
-            finish_block(code, plan, state, state.scope_cleanup);
-        };
+        deliver_case_scan(nodes, names, code, plan, state);
         return;
     } else {};
     if (kind == case_failure_node()) {
@@ -1156,6 +1235,8 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
         scope_cleanup <- no_node(); scope_scan_flag <- no_node(); scope_scan_pending <- false;
         case_index <- no_node(); case_join <- no_node(); case_arm <- no_node(); case_next <- no_node();
         case_read <- false; case_completed <- false; case_resumed <- false;
+        finalizer <- no_node(); break_landing <- no_node(); break_value <- no_node();
+        scan_landing <- no_node(); pending_break <- false; pending_scan <- false;
     };
     emit(code, plan, begin_function(), scope, entry);
     position(code, plan, state, entry);

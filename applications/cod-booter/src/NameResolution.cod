@@ -30,6 +30,8 @@ export data NameBinding {
     declaration:u64;
     # Expressions record the full lexical scope that contains them.
     scope:u64;
+    # Nearest try whose finalizer must run when leaving its protected group.
+    finalizer:u64;
     # A scope owns this list. Each guarded declaration links to its predecessor.
     guarded_local_link:u64;
     handle_guard:u64;
@@ -60,6 +62,7 @@ data NameState {
     scope_node:u64;
     delayed:u64;
     guard:u64;
+    finalizer:u64;
     loop_arm:bool;
     repeated:bool;
     here_group:bool;
@@ -449,7 +452,7 @@ func resolve_handler(source:const SourceBytes in S, nodes:const ExprNodes in N, 
 }
 
 func resolve_clauses(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
-                      work:NameWork in W, state:NameState in R, tail:u64) -> void
+                      work:NameWork in W, state:NameState in R, tail:u64, enclosing_finalizer:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val clause <- first_item(nodes, tail);
     for (unused in 0u64 .. syntax_len(nodes)) {
@@ -459,6 +462,7 @@ func resolve_clauses(source:const SourceBytes in S, nodes:const ExprNodes in N, 
             resolve_handler(source, nodes, bindings, work, state, nodes[clause].right);
         } else {
             state.guard <- nodes[clause].right;
+            state.finalizer <- enclosing_finalizer;
             resolve_expression(source, nodes, bindings, work, state, nodes[clause].right);
         };
         if (state.diagnostic != 0u8 || clause == tail) return;
@@ -470,13 +474,18 @@ func resolve_try(source:const SourceBytes in S, nodes:const ExprNodes in N, bind
                   work:NameWork in W, state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val guard <- state.guard;
+    val enclosing_finalizer <- state.finalizer;
     val body <- nodes[at].left;
+    val last <- nodes[at].right;
     state.guard <- body;
+    if (nodes[last].kind == finally_clause_node()) { (state.finalizer <- at):void; } else {};
     resolve_expression(source, nodes, bindings, work, state, body);
     if (state.diagnostic == 0u8) {
-        resolve_clauses(source, nodes, bindings, work, state, nodes[at].right);
+        resolve_clauses(source, nodes, bindings, work, state, last, enclosing_finalizer);
     } else {};
-    (state.guard <- guard):void;
+    state.guard <- guard;
+    state.finalizer <- enclosing_finalizer;
+    return;
 }
 
 func local_declaration_allowed(nodes:const ExprNodes in N, state:NameState in R, at:u64) -> bool where {const owner N, owner R} {
@@ -797,6 +806,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
     where {const owner S, const owner N, owner B, owner W, owner R} {
     if (at == no_node()) return;
     bindings[at].scope <- state.scope_node;
+    bindings[at].finalizer <- state.finalizer;
     val kind <- nodes[at].kind;
     if (kind == literal_node() || kind == narrow_integer_node() || kind == bool_node()) return;
     if (kind == name_node() || kind == symbol_node()) {
@@ -1331,13 +1341,14 @@ export func resolve_module_names(source:const SourceBytes in S, nodes:const Expr
         bindings[at].imported_kind <- if (local_module_selection(nodes[at].kind)) { (selected[at].kind) } else { 0u8 };
         bindings[at].guarded_local <- 0u8;
         bindings[at].scope <- no_node();
+        bindings[at].finalizer <- no_node();
         bindings[at].guarded_local_link <- no_node();
         bindings[at].handle_guard <- no_node();
     };
     link_entries(nodes, work, tree.used);
     ref state = make NameState {
         used <- 0u64; first <- 0u64; module_names <- 0u64; scope_node <- tree.root;
-        delayed <- no_node(); guard <- no_node(); loop_arm <- false; repeated <- false;
+        delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
         here_group <- false; handoff <- no_node(); case_target <- no_node(); case_arm <- no_node(); diagnostic <- 0u8;
         failed_node <- no_node(); enclosing_defer <- no_node();
     };

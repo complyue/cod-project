@@ -42,13 +42,12 @@ export data OperandFact {
     case_body:u8;
     case_guard:u8;
     case_resume:u8;
-    first_fallthrough:u64;
     case_end:u8;
     enum_constant:u8;
     discriminator_code:u64;
     case_excluded_at:u64;
-    case_break_link:u64;
-    case_break_tail:u64;
+    case_exit_link:u64;
+    case_exit_tail:u64;
     owner:u64;
     identity:u64;
     reservation:u64;
@@ -701,13 +700,42 @@ export func has_terminal_defer_before(nodes:const ExprNodes in N, links:const Na
 export func case_resumes_after_cleanup() -> u8 { return 1u8; }
 func replaced_case_resume() -> u8 { return 2u8; }
 
-func prepare_case_arm(nodes:const ExprNodes in N, links:const NameWork in L, facts:OperandFacts in F, arm:u64) -> u8
-    where {const owner N, const owner L, owner F} {
+# The destination identifies where this particular transfer stops. A
+# finalizer that always exits discards the suspended transfer.
+export func case_transfer_survives(nodes:const ExprNodes in N, names:const NameBindings in B,
+                                  facts:const OperandFacts in F, at:u64) -> bool
+    where {const owner N, const owner B, const owner F} {
+    val stop <- names[names[at].declaration].finalizer;
+    val cleanup <- names[at].finalizer;
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        if (cleanup == stop) return true;
+        if (cleanup == no_node() || facts[nodes[nodes[cleanup].right].right].kind == never_result()) return false;
+        cleanup <- names[cleanup].finalizer;
+    };
+    return false;
+}
+
+func case_resume_kind(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                      facts:const OperandFacts in F, arm:u64) -> u8
+    where {const owner N, const owner B, const owner L, const owner F} {
     val body <- nodes[arm].right;
-    if (facts[arm].case_resume != 0u8 && nodes[body].kind == full_scope_node() &&
-        has_terminal_defer_before(nodes, links, facts, nodes[body].left, facts[arm].first_fallthrough)) {
-        (facts[arm].case_resume <- replaced_case_resume()):void;
-    } else {};
+    val scan <- facts[arm].case_exit_link;
+    if (scan == no_node()) return 0u8;
+    val full <- nodes[body].kind == full_scope_node();
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        if (scan == no_node()) return replaced_case_resume();
+        if (case_transfer_survives(nodes, names, facts, scan) &&
+            (!full || !has_terminal_defer_before(nodes, links, facts, nodes[body].left, nodes[scan].first)))
+            return case_resumes_after_cleanup();
+        scan <- facts[scan].case_exit_link;
+    };
+    return replaced_case_resume();
+}
+
+func prepare_case_arm(nodes:const ExprNodes in N, names:const NameBindings in B,
+                      links:const NameWork in L, facts:OperandFacts in F, arm:u64) -> u8
+    where {const owner N, const owner B, const owner L, owner F} {
+    facts[arm].case_resume <- case_resume_kind(nodes, names, links, facts, arm);
     val behavior <- case_condition(nodes, facts, nodes[arm].number);
     if (behavior == 0u8) return expected_boolean_condition();
     facts[arm].case_guard <- behavior;
@@ -771,21 +799,21 @@ func check_case_arm(nodes:const ExprNodes in N, links:const NameWork in L, facts
 
 # Each case owns its exits in syntax postorder. Consume them at the direct
 # guard, body or intervening statement they leave, after its reach is known.
-func merge_case_breaks(nodes:const ExprNodes in N, facts:OperandFacts in F,
+func merge_case_breaks(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
                        pending:u64 in P, at:u64, through:u64, reached:bool) -> u8
-    where {const owner N, owner F, owner P} {
+    where {const owner N, const owner B, owner F, owner P} {
     if (through == no_node()) return 0u8;
     val value <- no_node();
     val diagnostic <- 0u8;
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (pending == no_node() || pending > through) return 0u8;
-        if (reached) {
+        if (reached && case_transfer_survives(nodes, names, facts, pending)) {
             value <- nodes[pending].left;
             diagnostic <- if (value == no_node()) { merge_result(facts, at, void_result(), 0u64) }
                           else { merge_arm_result(nodes, facts, at, value) };
             if (diagnostic != 0u8) return diagnostic;
         } else {};
-        pending <- facts[pending].case_break_link;
+        pending <- facts[pending].case_exit_link;
     };
     return invalid_operand_tree();
 }
@@ -804,7 +832,7 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     };
     initialize_case_coverage(nodes, names, links, facts, at, coverage);
     val item <- first_item(nodes, nodes[at].right);
-    val pending <- facts[at].case_break_link;
+    val pending <- facts[at].case_exit_link;
     val expression <- no_node();
     val reached <- false;
     val member <- no_node();
@@ -831,13 +859,13 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
                 diagnostic <- check_case_arm(nodes, links, facts, coverage, at, expression, member, borrowed);
                 if (diagnostic != 0u8) return diagnostic;
             } else {};
-            diagnostic <- merge_case_breaks(nodes, facts, pending, at, nodes[expression].number,
+            diagnostic <- merge_case_breaks(nodes, names, facts, pending, at, nodes[expression].number,
                                             reached && facts[expression].case_match != misses_case_arm());
             if (diagnostic != 0u8) return diagnostic;
-            (diagnostic <- merge_case_breaks(nodes, facts, pending, at, nodes[expression].right,
+            (diagnostic <- merge_case_breaks(nodes, names, facts, pending, at, nodes[expression].right,
                                              reached && facts[expression].case_body != 0u8)):void;
         } else {
-            diagnostic <- merge_case_breaks(nodes, facts, pending, at, expression, reached);
+            diagnostic <- merge_case_breaks(nodes, names, facts, pending, at, expression, reached);
             if (reached) {
                 if (facts[expression].kind == never_result()) {
                     (coverage.remaining <- 0u64):void;
@@ -854,16 +882,13 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     return invalid_operand_tree();
 }
 
-func check_case_break(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F, at:u64) -> u8
-    where {const owner N, const owner B, owner F} {
-    val destination <- names[at].declaration;
-    if (destination == no_node() || nodes[destination].kind != case_node()) return unproved_operand();
-    val prior <- facts[destination].case_break_tail;
-    if (prior == no_node()) { (facts[destination].case_break_link <- at):void; }
-    else { (facts[prior].case_break_link <- at):void; };
-    facts[destination].case_break_tail <- at;
+func record_case_exit(facts:OperandFacts in F, at:u64, destination:u64) -> void where {owner F} {
+    val prior <- facts[destination].case_exit_tail;
+    if (prior == no_node()) { (facts[destination].case_exit_link <- at):void; }
+    else { (facts[prior].case_exit_link <- at):void; };
+    facts[destination].case_exit_tail <- at;
     set_result(facts, at, never_result());
-    return 0u8;
+    return;
 }
 
 func check_logical(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64) -> u8
@@ -1157,20 +1182,21 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     if (kind == full_scope_node()) return check_scope_tail(nodes, facts, at);
     if (kind == try_node()) return check_try_result(nodes, links, facts, at);
     if (kind == conditional_node()) return check_conditional(nodes, facts, at);
-    if (kind == case_arm_node()) return prepare_case_arm(nodes, links, facts, at);
+    if (kind == case_arm_node()) return prepare_case_arm(nodes, names, links, facts, at);
     if (kind == case_node()) return check_case(source, nodes, names, links, facts, at);
-    if (kind == break_node()) return check_case_break(nodes, names, facts, at);
+    if (kind == break_node()) {
+        val target <- names[at].declaration;
+        if (target == no_node() || nodes[target].kind != case_node()) return unproved_operand();
+        record_case_exit(facts, at, target);
+        return 0u8;
+    } else {};
     if (kind == case_fallthrough_node()) {
         val arm <- names[at].declaration;
         val scope <- names[at].scope;
-        facts[arm].case_resume <- case_resumes_after_cleanup();
-        if (nodes[at].first < facts[arm].first_fallthrough) {
-            (facts[arm].first_fallthrough <- nodes[at].first):void;
-        } else {};
+        record_case_exit(facts, at, arm);
         if (nodes[arm].right == scope && nodes[scope].kind == full_scope_node()) {
             (facts[scope].case_resume <- case_resumes_after_cleanup()):void;
         } else {};
-        set_result(facts, at, never_result());
         return 0u8;
     } else {};
     if (kind == case_failure_node()) { set_result(facts, at, never_result()); return 0u8; } else {};
@@ -1268,13 +1294,12 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
         facts[at].case_body <- 0u8;
         facts[at].case_guard <- 0u8;
         facts[at].case_resume <- 0u8;
-        facts[at].first_fallthrough <- no_node();
         facts[at].case_end <- 0u8;
         facts[at].enum_constant <- 0u8;
         facts[at].discriminator_code <- 0u64;
         facts[at].case_excluded_at <- no_node();
-        facts[at].case_break_link <- no_node();
-        facts[at].case_break_tail <- no_node();
+        facts[at].case_exit_link <- no_node();
+        facts[at].case_exit_tail <- no_node();
         owners[at].call_site <- no_node();
         owners[at].actual_owner <- no_node();
     };
