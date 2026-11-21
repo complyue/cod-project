@@ -11,6 +11,8 @@ using "ModuleExportStorage.cod" ModuleExport;
 using "ModuleExportStorage.cod" ModuleExports;
 
 data SelectedExport {
+    # Input from dependency discovery. Zero selects the builtin namespace.
+    dependency_module:u64;
     identity:u64;
     kind:u8;
     checked:u8;
@@ -71,6 +73,32 @@ func same_module_path(source:const SourceBytes in S, first:u64, past:u64,
     return position == close_quote;
 }
 
+func builtin_path(source:const SourceBytes in S, first:u64, past:u64) -> bool where {const owner S} {
+    # Quoted path escapes can only produce quote or backslash.
+    return past >= first && past - first >= 6u64 && past <= intrinsic (len)(source) &&
+        source[first + 1u64] == 115u8 && source[first + 2u64] == 116u8 &&
+        source[first + 3u64] == 100u8 && source[first + 4u64] == 58u8;
+}
+
+func next_module_dependency(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, start:u64) -> u64
+    where {const owner S, const owner N} {
+    if (used > syntax_len(nodes) || start >= used) { return no_node(); } else {};
+    val path <- no_node();
+    for (at in start .. used) {
+        if (nodes[at].kind == using_node()) {
+            path <- nodes[at].left;
+            if (!builtin_path(source, nodes[path].first, nodes[path].past)) { return at; } else {};
+        } else {};
+    };
+    return no_node();
+}
+
+func prepare_module_dependencies(ref selected:SelectedExports in R, used:u64) -> bool where {owner R} {
+    if (used > intrinsic (len)(selected)) { return false; } else {};
+    for (at in 0u64 .. used) { (selected[at].dependency_module <- 0u64):void; };
+    return true;
+}
+
 func clear_selection(ref selected:SelectedExports in R, at:u64) -> void
     where {owner R} {
     selected[at].identity <- 0u64;
@@ -104,13 +132,17 @@ func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N
     val name_past <- nodes[name].past;
     val path_first <- nodes[path].first;
     val path_past <- nodes[path].past;
-    val diagnostic <- unproved_module_exports();
+    val dependency <- selected[site].dependency_module;
+    val intrinsic_path <- builtin_path(source, path_first, path_past);
+    if ((dependency == 0u64 && !intrinsic_path) || dependency == no_node() ||
+        (dependency != 0u64 && intrinsic_path)) { return unproved_module_exports(); } else {};
+    val diagnostic <- if (dependency == 0u64) { unproved_module_exports() } else { missing_module_export() };
     for (at in 0u64 .. intrinsic (len)(exports)) {
-        if (exports[at].kind != 0u8 &&
-            exports[at].module_first <= exports[at].module_past && exports[at].module_past <= intrinsic (len)(spellings) &&
+        if (exports[at].kind != 0u8 && exports[at].publishing_module == dependency &&
             exports[at].name_first <= exports[at].name_past && exports[at].name_past <= intrinsic (len)(spellings) &&
-            same_module_path(source, path_first, path_past, spellings,
-                             exports[at].module_first, exports[at].module_past)) {
+            (dependency != 0u64 ||
+             (exports[at].module_first <= exports[at].module_past && exports[at].module_past <= intrinsic (len)(spellings) &&
+              same_module_path(source, path_first, path_past, spellings, exports[at].module_first, exports[at].module_past)))) {
             if (same_name(source, name_first, name_past, spellings, exports[at].name_first, exports[at].name_past)) {
                 if (symbolic == (exports[at].kind == symbol_export())) {
                     select_export(exports, at, selected, site);
@@ -125,9 +157,9 @@ func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N
     return diagnostic;
 }
 
-# Consume a successful module parse and a complete publication table for each
-# supplied module. A name binding that identifies a using site can read that
-# site's selected identity. On failure, only the diagnostic is available.
+# Consume a successful parse and the supplied dependency targets. The
+# publication table carries a checked prefix for those module identities.
+# On failure only the diagnostic is available.
 func resolve_module_exports(source:const SourceBytes in S, nodes:const ExprNodes in N, tree:const ParseResult in T,
                             spellings:const SourceBytes in B, exports:const ModuleExports in E,
                             ref selected:SelectedExports in X, ref report:ExportResolutionResult in R) -> bool
@@ -164,6 +196,8 @@ export SelectedExport;
 export SelectedExports;
 export ExportResolutionResult;
 export resolve_module_exports;
+export next_module_dependency;
+export prepare_module_dependencies;
 export exception_type_export;
 export symbol_export;
 export native_handle_export;

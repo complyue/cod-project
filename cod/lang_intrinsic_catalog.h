@@ -37,7 +37,7 @@ typedef struct cod_lang_intrinsic_export {
   uint64_t name_first, name_past;
   uint64_t identity;
   uint8_t kind, checked;
-  uint64_t origin_module, owner_module, owner_identity;
+  uint64_t publishing_module, origin_module, owner_module, owner_identity;
   uint8_t shape;
 } cod_lang_intrinsic_export;
 
@@ -66,11 +66,11 @@ static const cod_lang_intrinsic_spellings cod_lang_intrinsic_names = {
 static const cod_lang_intrinsic_export cod_lang_intrinsic_exports[] = {
 #define COD_LANG_EXCEPTION_EXPORT(key, spelling, id, checked) \
   {COD_LANG_SPELLING_SPAN(exceptions, COD_LANG_EXCEPTION_MODULE), COD_LANG_SPELLING_SPAN(key, #spelling), \
-      id, COD_LANG_EXCEPTION_TYPE_EXPORT, checked, 0, 0, 0, 0},
+      id, COD_LANG_EXCEPTION_TYPE_EXPORT, checked, 0, 0, 0, 0, 0},
     COD_LANG_INTRINSIC_EXCEPTIONS(COD_LANG_EXCEPTION_EXPORT)
 #undef COD_LANG_EXCEPTION_EXPORT
     {COD_LANG_SPELLING_SPAN(io, COD_LANG_IO_MODULE), COD_LANG_SPELLING_SPAN(print, COD_LANG_PRINT_NAME),
-        COD_LANG_PRINT_SYMBOL, COD_LANG_SYMBOL_EXPORT, 0, 0, 0, 0, 0},
+        COD_LANG_PRINT_SYMBOL, COD_LANG_SYMBOL_EXPORT, 0, 0, 0, 0, 0, 0},
 };
 
 #undef COD_LANG_SPELLING_SPAN
