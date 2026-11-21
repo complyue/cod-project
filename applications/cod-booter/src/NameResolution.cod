@@ -965,25 +965,24 @@ func resolve_formals(source:const SourceBytes in S, nodes:const ExprNodes in N, 
     val binding <- no_node();
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (parameter == no_node()) { return; } else {};
-        binding <- nodes[parameter].right;
-        resolve_annotation(source, nodes, bindings, work, state, binding);
-        if (state.diagnostic != 0u8) { return; } else {};
-        declare_name(source, nodes, bindings, work, state, binder_name(nodes, binding),
-                     parameter, formal_binding(), duplicate_binding());
+        if (nodes[parameter].kind == here_parameter_node()) {
+            resolve_here_formal(source, nodes, bindings, work, state, parameter);
+        } else {
+            binding <- nodes[parameter].right;
+            resolve_annotation(source, nodes, bindings, work, state, binding);
+            if (state.diagnostic != 0u8) { return; } else {};
+            declare_name(source, nodes, bindings, work, state, binder_name(nodes, binding),
+                         parameter, formal_binding(), duplicate_binding());
+        };
         if (state.diagnostic != 0u8) { return; } else {};
         (parameter <- work[parameter].next):void;
     };
 }
 
-func resolve_c_formals(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
-                        ref work:NameWork in W, ref state:NameState in R, tail:u64) -> void
+func resolve_here_formal(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
+                         ref work:NameWork in W, ref state:NameState in R, formal:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
-    val first <- first_item(nodes, tail);
-    if (first == no_node() || nodes[first].kind != here_parameter_node()) {
-        resolve_formals(source, nodes, bindings, work, state, first);
-        return;
-    } else {};
-    val callback <- signature_head(nodes, nodes[first].right);
+    val callback <- signature_head(nodes, nodes[formal].right);
     val enclosing_first <- state.first;
     val enclosing_used <- state.used;
     state.first <- enclosing_used;
@@ -993,11 +992,8 @@ func resolve_c_formals(source:const SourceBytes in S, nodes:const ExprNodes in N
     if (state.diagnostic != 0u8) { return; } else {};
     state.first <- enclosing_first;
     state.used <- enclosing_used;
-    declare_name(source, nodes, bindings, work, state, nodes[callback].left, first, formal_binding(), duplicate_binding());
-    if (state.diagnostic != 0u8) { return; } else {};
-    # The callback has its own lexical formal list. Only its name belongs
-    # to the enclosing C procedure.
-    resolve_formals(source, nodes, bindings, work, state, work[first].next);
+    # Only the callback's name enters the receiver's parameter scope.
+    declare_name(source, nodes, bindings, work, state, nodes[callback].left, formal, formal_binding(), duplicate_binding());
 }
 
 func has_owner_input(nodes:const ExprNodes in N, bindings:const NameBindings in B, work:const NameWork in W,
@@ -1008,11 +1004,13 @@ func has_owner_input(nodes:const ExprNodes in N, bindings:const NameBindings in 
     val annotation <- no_node();
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (input == no_node()) { return false; } else {};
-        binding <- nodes[input].right;
-        annotation <- nodes[binding].right;
-        if (nodes[annotation].kind == owned_type_node() &&
-            bindings[nodes[annotation].right].declaration == clause &&
-            (readonly_owner || nodes[binding].number != readonly_declaration())) { return true; } else {};
+        if (nodes[input].kind != here_parameter_node()) {
+            binding <- nodes[input].right;
+            annotation <- nodes[binding].right;
+            if (nodes[annotation].kind == owned_type_node() &&
+                bindings[nodes[annotation].right].declaration == clause &&
+                (readonly_owner || nodes[binding].number != readonly_declaration())) { return true; } else {};
+        } else {};
         (input <- work[input].next):void;
     };
     return false;
@@ -1045,12 +1043,8 @@ func resolve_callable(source:const SourceBytes in S, nodes:const ExprNodes in N,
     if (state.diagnostic != 0u8) { return; } else {};
     resolve_header_types(source, nodes, bindings, work, state, head);
     if (state.diagnostic != 0u8) { return; } else {};
-    if (native) {
-        resolve_c_formals(source, nodes, bindings, work, state, nodes[head].right);
-    } else {
-        resolve_formals(source, nodes, bindings, work, state, first_item(nodes, nodes[head].right));
-        if (state.diagnostic == 0u8) { check_owner_inputs(nodes, bindings, work, state, head); } else {};
-    };
+    resolve_formals(source, nodes, bindings, work, state, first_item(nodes, nodes[head].right));
+    if (state.diagnostic == 0u8 && !native) { check_owner_inputs(nodes, bindings, work, state, head); } else {};
     if (state.diagnostic != 0u8) { return; } else {};
     if (nodes[definition].right != no_node()) {
         resolve_expression(source, nodes, bindings, work, state, nodes[definition].right);

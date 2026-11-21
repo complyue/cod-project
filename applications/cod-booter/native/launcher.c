@@ -72,6 +72,7 @@ static const char *unsupported_source_form(uint32_t code) {
     case 65: return "selection of an imported here signature";
     case 71: return "unproved native here feedback type";
     case 74: return "array length query";
+    case 76: return "ordinary here parameter lowering";
     default: return NULL;
     }
 }
