@@ -2194,23 +2194,36 @@ class ScalarChecker {
     if (member == domain.spellings.end()) return {};
     return EnumValue{type, domain.members[member->second].canonical};
   }
+  struct CasePossibilities {
+    std::set<std::uint64_t> codes;
+    bool absent = false;
+
+    bool present() const { return !codes.empty(); }
+    bool empty() const { return !present() && !absent; }
+  };
   struct CaseScan {
-    using Codes = std::set<std::uint64_t>;
-    Codes domain, remaining;
+    std::set<std::uint64_t> domain;
+    CasePossibilities remaining;
     bool borrowed;
 
-    Codes match(std::optional<std::uint64_t> code) {
-      if (!code) return std::exchange(remaining, {});
-      if (remaining.erase(*code)) return {*code};
-      return {};
+    CasePossibilities match(CasePattern pattern) {
+      using K = CasePattern::Kind;
+      switch (pattern.kind) {
+      case K::any: return std::exchange(remaining, {});
+      case K::null: return {{}, std::exchange(remaining.absent, false)};
+      case K::code: return remaining.codes.erase(pattern.code) ? CasePossibilities{{pattern.code}} : CasePossibilities{};
+      }
+      throw std::logic_error("invalid checked case pattern");
     }
     void invalidate(bool may_write) {
-      if (borrowed && may_write) remaining = domain;
+      // A write can change the bits at the selected address. The address
+      // itself, including its absence, was fixed on entry.
+      if (borrowed && may_write && remaining.present()) remaining.codes = domain;
     }
-    void resume(const Codes &matched, bool may_write) {
-      if (matched.empty()) return;
-      remaining.insert(matched.begin(), matched.end());
-      invalidate(may_write);
+    void resume(const CasePossibilities &matched, bool may_write) {
+      remaining.absent |= matched.absent;
+      remaining.codes.insert(matched.codes.begin(), matched.codes.end());
+      if (matched.present()) invalidate(may_write);
     }
   };
   static bool case_may_write(const Expression &expr) {
@@ -2223,28 +2236,32 @@ class ScalarChecker {
     default: return true;
     }
   }
-  CaseScan case_scan(const Type &subject, bool borrowed, const Expression &operand) const {
-    CaseScan::Codes codes;
+  CaseScan case_scan(const Type &subject, bool borrowed, TargetPresence presence, const Expression &operand) const {
+    std::set<std::uint64_t> codes;
     if (subject == Type::boolean) codes = {0, 1};
     else if (subject.kind == Type::enumeration) {
       for (const auto &member : program_.enums.at(subject.identity).members) codes.insert(member.code);
-    } else implementation_gap(operand.at, "case matching on a subject other than bool or enum");
-    auto remaining = codes;
+    } else if (subject != Type::null_ref) implementation_gap(operand.at, "case matching on a subject other than bool, enum or null");
+    if (subject == Type::null_ref) presence = TargetPresence::absent;
+    auto remaining = presence == TargetPresence::absent ? std::set<std::uint64_t>{} : codes;
     if (subject == Type::boolean && !borrowed) {
       const auto *literal = &operand;
       while (literal->kind == Expression::Kind::grouped) literal = literal->children.front().get();
       if (literal->kind == Expression::Kind::boolean) remaining = {literal->text == "true"};
     }
-    return {std::move(codes), std::move(remaining), borrowed};
+    return {std::move(codes), {std::move(remaining), borrowed && presence != TargetPresence::present}, borrowed};
   }
-  std::optional<std::uint64_t> case_code(const Type &subject, const Expression &arm) const {
+  CasePattern case_pattern(const Type &subject, const Expression &arm) const {
+    using K = CasePattern::Kind;
     if (arm.text == "_") return {};
+    if (arm.text == "null") return {K::null};
     if (subject == Type::boolean) {
-      if (arm.text == "true" || arm.text == "false") return arm.text == "true";
-      fail(arm.at, "a bool case pattern requires true, false or a catch-all");
+      if (arm.text == "true" || arm.text == "false") return {K::code, arm.text == "true"};
+      fail(arm.at, "a bool case pattern requires true, false, null or a catch-all");
     }
+    if (subject == Type::null_ref) fail(arm.at, "a null case subject requires a null pattern or a catch-all");
     if (const auto member = enum_member(subject, arm.text))
-      return program_.enums.at(subject.identity).members.at(member->member).code;
+      return {K::code, program_.enums.at(subject.identity).members.at(member->member).code};
     fail(arm.at, "unknown member '" + arm.text + "' of enum '" + subject.name + "'");
   }
   CheckedOperation enum_literal(const EnumValue &value) const {
@@ -8119,9 +8136,23 @@ class ScalarChecker {
     if (!type || *type == Type::never) return type;
     const auto selected = state.value;
     const auto target = state.target;
-    if (selected.mixed_view || (selected.nullable && target.presence != TargetPresence::present))
-      implementation_gap(subject.at, "case matching on a mixed or possibly null subject");
-    auto scan = case_scan(*type, selected.view == true, subject);
+    if (selected.mixed_view) implementation_gap(subject.at, "case matching on a mixed value and reference subject");
+    const auto presence = selected.nullable ? target.presence : TargetPresence::present;
+    auto scan = case_scan(*type, selected.view == true, presence, subject);
+    const bool can_test_absence = scan.remaining.absent;
+    const auto revision = state.selections.writes;
+    const auto refine_presence = [&](TypeEvidenceState &path, bool present) {
+      if (!can_test_absence) return true;
+      auto saved = target;
+      path.selections.forget_changed(saved, revision);
+      const auto proof = path.selections.selection_outcomes(saved);
+      if (!path.selections.reachable(proof, present)) return false;
+      path.selections.assume(proof, present);
+      return true;
+    };
+    const auto enter_partition = [&](TypeEvidenceState &path, const CasePossibilities &choices) {
+      return !choices.empty() && (choices.present() == choices.absent || refine_presence(path, choices.present()));
+    };
     bool reaches_end = true, unknown_result = false;
     std::optional<Type> result;
     std::optional<TypeEvidenceState> completed;
@@ -8183,13 +8214,23 @@ class ScalarChecker {
         else if (reached) scan.invalidate(case_may_write(item));
         continue;
       }
-      const auto pattern = case_code(*type, item);
+      const auto pattern = case_pattern(*type, item);
       const auto matched = scan.match(pattern);
       auto arm = state;
-      const bool match_reaches = reaches_end && !matched.empty();
-      const bool miss_reaches = reaches_end && !scan.remaining.empty();
-      if (scan.borrowed && pattern && match_reaches)
-        require_type_initialized(arm, target, {}, item.at);
+      if (scan.borrowed && pattern.kind == CasePattern::Kind::code && reaches_end &&
+          (matched.present() || scan.remaining.present())) {
+        auto present = state;
+        if (refine_presence(present, true)) {
+          auto saved = target;
+          present.selections.forget_changed(saved, revision);
+          saved.presence = TargetPresence::present;
+          require_type_initialized(present, saved, {}, item.at);
+        }
+      }
+      const bool match_reaches = reaches_end && enter_partition(arm, matched);
+      const bool miss_reaches = reaches_end && enter_partition(state, scan.remaining);
+      bool scan_reaches = miss_reaches;
+      const bool guard_writes = item.children.size() == 2 && case_may_write(*item.children.front());
       bool body_reaches = match_reaches;
       if (item.children.size() == 2) {
         const auto &guard = *item.children.front();
@@ -8209,7 +8250,8 @@ class ScalarChecker {
         body_reaches = guard_returns && arm.selections.reachable(proof, true);
         if (guard_returns && declined.selections.reachable(proof, false)) {
           state = merge_reaching_evidence(std::move(state), std::move(declined), !miss_reaches, false);
-          scan.resume(matched, case_may_write(guard));
+          scan.resume(matched, guard_writes);
+          scan_reaches = true;
         }
       }
       const auto &body = *item.children.back();
@@ -8226,9 +8268,11 @@ class ScalarChecker {
         resumed->selections = std::move(*scope_paths.scan);
       }
       if (resumed) {
-        state = merge_reaching_evidence(std::move(state), std::move(*resumed), scan.remaining.empty(), false);
-        scan.resume(matched, case_may_write(body));
+        state = merge_reaching_evidence(std::move(state), std::move(*resumed), !scan_reaches, false);
+        scan.resume(matched, guard_writes || case_may_write(body));
+        scan_reaches = true;
       }
+      reaches_end = scan_reaches;
       if (body_reaches && value != Type::never && (!scoped || scope_paths.result)) {
         const auto arm_view = arm.value;
         auto arm_target = arm.target;
@@ -16000,9 +16044,15 @@ class ScalarChecker {
     result.type = Type::never;
     if (type == Type::never) return result;
     const auto selected = operations.at(&subject);
-    if (selected.mixed_view || selected.targets.contains(null_target))
-      implementation_gap(subject.at, "case matching on a mixed or possibly null subject");
-    auto scan = case_scan(type, selected.view, subject);
+    if (selected.mixed_view) implementation_gap(subject.at, "case matching on a mixed value and reference subject");
+    const auto presence = !selected.targets.contains(null_target) ? TargetPresence::present :
+        selected.targets.size() == 1 ? TargetPresence::absent : TargetPresence::unknown;
+    auto scan = case_scan(type, selected.view, presence, subject);
+    result.case_subject_may_be_null = scan.remaining.absent;
+    const auto subject_null = result.case_subject_may_be_null ? null_predicate(selected) : nullptr;
+    const auto refine_presence = [&](bool present, const Location &at) {
+      if (lexical_.live && subject_null) refine_predicate(subject_null, !present, at);
+    };
     const auto outer_use = std::exchange(case_result_use_, {result_view.view == true, projects});
     std::optional<LexicalState> completed;
     bool saw_view = false, saw_bits = false, saw_mixed = false;
@@ -16092,15 +16142,35 @@ class ScalarChecker {
       }
 
       CheckedOperation header;
-      header.case_code = case_code(type, item);
-      const auto matched = scan.match(header.case_code);
-      auto missed = lexical_;
-      missed.live &= !scan.remaining.empty();
-      lexical_.live &= !matched.empty();
-      if (scan.borrowed && header.case_code) {
+      header.case_pattern = case_pattern(type, item);
+      const auto matched = scan.match(header.case_pattern);
+      const auto before = lexical_;
+      std::optional<LexicalState> tested_present;
+      if (lexical_.live && scan.borrowed && header.case_pattern.kind != CasePattern::Kind::any)
         require_live_view(selected, item.at);
-        require_initialized(selected, item.at, "case subject");
+      if (lexical_.live && scan.borrowed && header.case_pattern.kind == CasePattern::Kind::code &&
+          (matched.present() || scan.remaining.present())) {
+        refine_presence(true, item.at);
+        if (lexical_.live) require_initialized(selected, item.at, "case subject");
+        tested_present = std::move(lexical_);
       }
+      const auto after_test = [&](const CasePossibilities &choices) {
+        if (tested_present && choices.present()) {
+          if (choices.absent) {
+            lexical_ = before;
+            refine_presence(false, item.at);
+            join_scan(*tested_present, false, item.at);
+          } else lexical_ = *tested_present;
+        } else {
+          lexical_ = before;
+          lexical_.live &= !choices.empty();
+          if (choices.present() != choices.absent) refine_presence(choices.present(), item.at);
+        }
+      };
+      after_test(scan.remaining);
+      auto missed = lexical_;
+      after_test(matched);
+      const bool guard_writes = item.children.size() == 2 && case_may_write(*item.children.front());
       if (item.children.size() == 2) {
         const auto &guard = *item.children.front();
         AbruptFlow exits{lexical_.scopes.size(), {}};
@@ -16111,7 +16181,7 @@ class ScalarChecker {
         if (condition != Type::boolean && condition != Type::never) fail(guard.at, "case guard requires bool");
         const auto evaluated = lexical_;
         refine(guard, false, operations);
-        if (lexical_.live) scan.resume(matched, case_may_write(guard));
+        if (lexical_.live) scan.resume(matched, guard_writes);
         join_scan(missed, condition == Type::never, guard.at);
         missed = lexical_;
         lexical_ = evaluated;
@@ -16142,7 +16212,7 @@ class ScalarChecker {
       if (resumed && resumed->live) {
         lexical_ = std::move(*resumed);
         join_scan(missed, false, body.at);
-        scan.resume(matched, case_may_write(body));
+        scan.resume(matched, guard_writes || case_may_write(body));
       } else lexical_ = std::move(missed);
     }
     result.case_reaches_end = lexical_.live && !scan.remaining.empty();

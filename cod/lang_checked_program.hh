@@ -76,6 +76,12 @@ inline bool accepts_argument(const Type &source, const Type &target, ArgumentMod
 
 enum class HereExit : std::uint8_t { break_call = 1, return_supplier, failure };
 
+struct CasePattern {
+  enum class Kind { any, null, code };
+  Kind kind = Kind::any;
+  std::uint64_t code = 0;
+};
+
 struct CheckedOperation {
   Type type;
   Type operand_type;
@@ -119,7 +125,8 @@ struct CheckedOperation {
   std::uint64_t integer = 0;
   bool enum_literal = false;
   bool enum_assertion = false;
-  std::optional<std::uint64_t> case_code;
+  CasePattern case_pattern;
+  bool case_subject_may_be_null = false;
   bool case_reaches_end = false;
   bool case_scope_resumes = false;
   bool case_arm_completes = false;

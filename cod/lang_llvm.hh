@@ -2343,8 +2343,8 @@ class LLVMEmission {
   llvm::Value *case_view(llvm::Value *address) {
     return b_.CreateInsertValue(empty_scalar(), b_.CreatePtrToInt(address, b_.getInt64Ty()), 0);
   }
-  llvm::Value *emit_case(const Expression &expr, const Type &subject_type, bool borrowed, bool reaches_end,
-                         bool result_view, bool projects, Projection projection, bool discard) {
+  llvm::Value *emit_case(const Expression &expr, const Type &subject_type, bool borrowed, bool may_be_null,
+                         bool reaches_end, bool result_view, bool projects, Projection projection, bool discard) {
     using K = Expression::Kind;
     const auto &subject = *expr.children.front();
     auto *selected = emit_expression(subject, borrowed ? Projection::target : Projection::value);
@@ -2363,13 +2363,28 @@ class LLVMEmission {
       }
 
       auto *selected_arm = block("case.matched"), *next = block("case.next");
-      const auto &header = contexts_.front().at(&item);
-      if (header.case_code) {
+      const auto pattern = contexts_.front().at(&item).case_pattern;
+      using P = CasePattern::Kind;
+      switch (pattern.kind) {
+      case P::any:
+        b_.CreateBr(selected_arm);
+        break;
+      case P::null:
+        if (may_be_null) b_.CreateCondBr(b_.CreateIsNull(selected), selected_arm, next);
+        else b_.CreateBr(next);
+        break;
+      case P::code:
+        if (may_be_null) {
+          auto *present = block("case.present");
+          b_.CreateCondBr(b_.CreateIsNull(selected), next, present);
+          b_.SetInsertPoint(present);
+        }
         auto *payload = borrowed ? load_place(selected, subject) : selected;
         auto *bits = unpack(payload, subject_type);
-        auto *code = llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(bits->getType()), *header.case_code);
+        auto *code = llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(bits->getType()), pattern.code);
         b_.CreateCondBr(b_.CreateICmpEQ(bits, code), selected_arm, next);
-      } else b_.CreateBr(selected_arm);
+        break;
+      }
 
       b_.SetInsertPoint(selected_arm);
       if (item.children.size() == 2) {
@@ -2654,15 +2669,15 @@ class LLVMEmission {
     }
     case K::case_expression: {
       const auto *subject = expr.children.front().get();
-      std::map<std::tuple<Type::Kind, size_t, bool, bool, bool, bool>, std::vector<size_t>> layouts;
+      std::map<std::tuple<Type::Kind, size_t, bool, bool, bool, bool, bool>, std::vector<size_t>> layouts;
       for (size_t i = 0; i < contexts_.size(); ++i) {
         const auto &input = contexts_[i].at(subject), &result = contexts_[i].at(&expr);
-        layouts[{input.type.kind, input.type.identity, input.view, result.case_reaches_end,
-                 result.view, result.scalar_value_join}].push_back(i);
+        layouts[{input.type.kind, input.type.identity, input.view, result.case_subject_may_be_null,
+                 result.case_reaches_end, result.view, result.scalar_value_join}].push_back(i);
       }
       return contextual_value(expr, layouts, "case.shape", [&](const auto &layout) {
-        const auto &[kind, identity, borrowed, reaches_end, result_view, projects] = layout;
-        return emit_case(expr, Type{kind, {}, identity}, borrowed, reaches_end, result_view, projects, projection, discard);
+        const auto &[kind, identity, borrowed, nullable, reaches_end, result_view, projects] = layout;
+        return emit_case(expr, Type{kind, {}, identity}, borrowed, nullable, reaches_end, result_view, projects, projection, discard);
       }, carries_value(projection) ? scalar_ : static_cast<llvm::Type *>(b_.getPtrTy()));
     }
     case K::case_break: case K::case_fallthrough: {
