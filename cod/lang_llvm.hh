@@ -152,6 +152,7 @@ class LLVMEmission {
     llvm::StructType *layout;
     std::set<size_t> captures;
     std::optional<size_t> native_constructor = {};
+    llvm::AllocaInst *activation_record = nullptr;
   };
   struct Control {
     Control *parent;
@@ -1328,7 +1329,9 @@ class LLVMEmission {
     for (const auto &captures : layouts) {
       std::vector<llvm::Type *> fields{cleanup_header_};
       fields.insert(fields.end(), body.kind == Expression::Kind::block ? captures.size() : prepared_count(body), scalar_);
-      scope.actions.push_back({&expr, llvm::StructType::get(context_, fields), captures});
+      auto *layout = llvm::StructType::get(context_, fields);
+      auto *backing = expr.repeated_defer_registration ? nullptr : slot(layout, "defer.record");
+      scope.actions.push_back({&expr, layout, captures, {}, backing});
     }
   }
   void prepare_cleanup_record(llvm::Value *record, size_t action) {
@@ -1416,7 +1419,9 @@ class LLVMEmission {
     auto *action = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(cleanup_header_, record, 1));
     b_.CreateStore(previous, scope.head);
     auto *dispatch = b_.CreateSwitch(action, invalid, scope.actions.size());
-    const auto release = runtime("cod_lang_defer_free", b_.getVoidTy(), {b_.getPtrTy()});
+    const auto release_heap_record = [&] {
+      b_.CreateCall(runtime("cod_lang_defer_free", b_.getVoidTy(), {b_.getPtrTy()}), {record});
+    };
     for (size_t i = 0; i < scope.actions.size(); ++i) {
       const auto &descriptor = scope.actions[i];
       if (descriptor.native_constructor) {
@@ -1447,7 +1452,7 @@ class LLVMEmission {
           bindings.emplace_back(id, storage_.at(id));
           storage_[id] = captured;
         }
-        b_.CreateCall(release, {record});
+        if (!descriptor.activation_record) release_heap_record();
         auto *pending_failure = b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2));
         complete_cleanup([&] {
           if (descriptor.action->children.size() == 1) emit_expression(body, Projection::value, true);
@@ -1461,7 +1466,7 @@ class LLVMEmission {
       for (size_t j = 0; j < prepared_count(body); ++j)
         arguments.push_back(b_.CreateLoad(scalar_, b_.CreateStructGEP(descriptor.layout, record, j + 1)));
       // Prepared values and checked borrowed addresses do not refer into their record.
-      b_.CreateCall(release, {record});
+      if (!descriptor.activation_record) release_heap_record();
       if (body.kind == Expression::Kind::transfer || body.kind == Expression::Kind::rebind) {
         if (body.kind == Expression::Kind::transfer) arguments[1] = own_value(arguments[1]);
         assign_prepared(body, arguments);
@@ -1495,8 +1500,8 @@ class LLVMEmission {
       b_.SetInsertPoint(replace); save_abrupt(result); b_.CreateBr(scope.cleanup);
     }
     b_.SetInsertPoint(invalid);
-    if (std::ranges::none_of(scope.actions, [](const auto &action) { return action.native_constructor.has_value(); }))
-      b_.CreateCall(release, {record});
+    if (std::ranges::none_of(scope.actions, [](const auto &action) { return action.native_constructor || action.activation_record; }))
+      release_heap_record();
     save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::unsound_runtime_typing)), integer(0), null_pointer()));
     b_.CreateBr(scope.cleanup);
     b_.SetInsertPoint(done);
@@ -2766,14 +2771,18 @@ class LLVMEmission {
         return entry.action == &expr && entry.captures == fact.captures;
       });
       if (record == scope_->actions.end()) throw std::logic_error("uncollected deferred action");
-      auto *status = slot(b_.getInt64Ty(), "defer.status");
-      b_.CreateStore(integer(0), status);
-      const auto bytes = module_.getDataLayout().getTypeAllocSize(record->layout).getFixedValue();
-      auto *prepared = b_.CreateCall(runtime("cod_lang_defer_allocate", b_.getPtrTy(), {b_.getInt64Ty(), b_.getPtrTy()}), {integer(bytes), status});
-      auto *ready = block("defer.prepared"), *failed = block("defer.allocation_failed");
-      b_.CreateCondBr(b_.CreateICmpEQ(prepared, null_pointer()), failed, ready);
-      b_.SetInsertPoint(failed); fail_path(ExceptionCategory::out_of_memory, expr.at);
-      b_.SetInsertPoint(ready);
+      llvm::Value *prepared = record->activation_record;
+      if (!prepared) {
+        auto *status = slot(b_.getInt64Ty(), "defer.status");
+        b_.CreateStore(integer(0), status);
+        const auto bytes = module_.getDataLayout().getTypeAllocSize(record->layout).getFixedValue();
+        const auto allocate = runtime("cod_lang_defer_allocate", b_.getPtrTy(), {b_.getInt64Ty(), b_.getPtrTy()});
+        prepared = b_.CreateCall(allocate, {integer(bytes), status});
+        auto *ready = block("defer.prepared"), *failed = block("defer.allocation_failed");
+        b_.CreateCondBr(b_.CreateICmpEQ(prepared, null_pointer()), failed, ready);
+        b_.SetInsertPoint(failed); fail_path(ExceptionCategory::out_of_memory, expr.at);
+        b_.SetInsertPoint(ready);
+      }
       prepare_cleanup_record(prepared, std::distance(scope_->actions.begin(), record));
       for (size_t i = 0; i < arguments.size(); ++i) {
         b_.CreateStore(arguments[i], b_.CreateStructGEP(record->layout, prepared, i + 1));

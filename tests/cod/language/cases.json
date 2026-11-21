@@ -2796,7 +2796,7 @@
     "file": "scopes/defer-checked-popped.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "checked NullPointerException requires a local catch"
+    "stderr_contains": "checked exception 'NullPointerException' requires a covering catch or throws declaration"
   },
   {
     "file": "scopes/defer-checked.cod",
@@ -2812,7 +2812,7 @@
     "file": "scopes/defer-checked-registration-failure.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "checked NullPointerException requires a local catch"
+    "stderr_contains": "checked exception 'NullPointerException' requires a covering catch or throws declaration"
   },
   {
     "file": "symbol-lookup-read.cod",
@@ -2979,9 +2979,8 @@
   },
   {
     "file": "scopes/defer-initialization-registration.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "read of storage before definite initialization"
+    "exit": 0,
+    "stdout": "1\n"
   },
   {
     "file": "scopes/defer-initialization-branch.cod",
@@ -3085,7 +3084,7 @@
     "file": "scopes/defer-queue-registration-failure.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "read of storage before definite initialization"
+    "stderr_contains": "cannot prove initialization"
   },
   {
     "file": "scopes/defer-queue-empty-loop.cod",
@@ -3306,7 +3305,7 @@
     "file": "scopes/defer-first-owner-failed-registration.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "checked NullPointerException"
+    "stderr_contains": "checked exception 'NullPointerException' requires a covering catch or throws declaration"
   },
   {
     "file": "scopes/defer-first-owner-consumed.cod",

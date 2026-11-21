@@ -331,6 +331,7 @@ struct Expression {
   bool read_only = false;
   bool scoped = false;
   bool grouped_deferred_call = false;
+  bool repeated_defer_registration = true;
   std::string declaration_kind = {};
   std::string owner_name = {};
   std::shared_ptr<ReceivingHeader> receiving = {};
@@ -1943,7 +1944,7 @@ class Parser {
     expr.children.push_back(std::move(callable));
   }
   enum class ReturnContext { module, callable, deferred };
-  static void validate_explicit_scopes(const Expression &expr, ReturnContext returning,
+  static void validate_explicit_scopes(Expression &expr, ReturnContext returning,
                                        bool iteration = false, bool deferred = false,
                                        const Location *draining = nullptr, const ReceivingHeader *handoff = nullptr) {
     using K = Expression::Kind;
@@ -1963,9 +1964,14 @@ class Parser {
       if (handoff->from_for && expr.kind == K::break_value && !expr.children.empty())
         fail(expr.at, "a generator for loop requires bare 'break'");
     }
-    if (expr.kind == K::deferred && draining)
-      fail(expr.at, "defer cannot register work into its currently draining scope\n" +
-          location_text(*draining) + ": note: enclosing deferred execution begins here");
+    if (expr.kind == K::deferred) {
+      if (draining)
+        fail(expr.at, "defer cannot register work into its currently draining scope\n" +
+            location_text(*draining) + ": note: enclosing deferred execution begins here");
+      // Ordinary iterations share the surrounding cleanup scope. Full scopes
+      // and callable invocations start a fresh registration sequence.
+      expr.repeated_defer_registration = iteration || handoff;
+    }
     const bool declaration = expr.kind == K::pointer_group || expr.kind == K::region_binding ||
         expr.kind == K::native_handle_binding || expr.kind == K::here_binding ||
         expr.kind == K::alias || (expr.kind == K::callable && !expr.definition->name.empty());

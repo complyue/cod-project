@@ -7674,9 +7674,9 @@ class ScalarChecker {
       outcomes.insert(Completion::failure(category).reason);
     return outcomes;
   }
-  static void register_type_defer(TypeEvidenceState &state, const Expression *entry, bool may_replace,
-                                  TypeDeferredEffects effects) {
-    note_type_allocation(state);
+  static void register_type_defer(TypeEvidenceState &state, const Expression &source, const Expression *entry,
+                                  bool may_replace, TypeDeferredEffects effects) {
+    if (source.repeated_defer_registration) note_type_allocation(state);
     state.has_deferred_action = true;
     state.selections.deferred_writes.merge(effects.payloads);
     state.selections.deferred_writes.unknown |= !effects.outcomes.empty() && effects.opaque;
@@ -10903,7 +10903,7 @@ class ScalarChecker {
             effects.outcomes = deferred_outcomes();
             effects.opaque = true;
           }
-          register_type_defer(state, nullptr, false, std::move(effects));
+          register_type_defer(state, expr, nullptr, false, std::move(effects));
           return Type::void_type;
         }
         auto delayed = state;
@@ -10940,7 +10940,8 @@ class ScalarChecker {
           may_replace |= path.returned();
         }
         const bool bodyless_catch = expr.binding == "fallback" && expr.children[1]->kind == K::handler;
-        register_type_defer(state, bodyless_catch && !state.tracks_target_places() ? nullptr : &expr, may_replace, std::move(effects));
+        register_type_defer(state, expr, bodyless_catch && !state.tracks_target_places() ? nullptr : &expr,
+                            may_replace, std::move(effects));
         return Type::void_type;
       }
       if (!state.returns || expr.children.front()->kind != K::block) {
@@ -16984,7 +16985,7 @@ class ScalarChecker {
             (!path.effects.initialized.empty() || !path.effects.uninitialized.empty());
       });
       cleanup_.define(action, std::move(summary));
-      note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
+      if (expr.repeated_defer_registration) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       if (lexical_.live) {
         const auto reaching = CleanupEquations::stable_input_conditions(path_conditions(lexical_));
         // When only the present arm registers a writer, the missing write

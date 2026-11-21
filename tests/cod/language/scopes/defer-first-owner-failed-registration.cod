@@ -1,5 +1,12 @@
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 using "std:exceptions" OutOfMemoryError;
-proc run()->void {val value:u64<-1u64;ptr p:u64=null in here;try {{defer {p=value;};}} catch(e:const OutOfMemoryError) {};behave @print(p);}
+proc run() -> void {
+  val value:u64 <- 1u64;
+  ptr pending:u64 = null in here;
+  try {{for (i in 0u64 .. 1u64) {defer {(pending = value):void;};};}}
+  catch(e:const OutOfMemoryError) {};
+  behave @print(pending);
+  return;
+}
 run();
