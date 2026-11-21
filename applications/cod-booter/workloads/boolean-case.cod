@@ -1,0 +1,31 @@
+using symbol "std:io" @print;
+
+proc decline_after_update(choice:bool in O) -> bool where {owner O} {
+    choice <- false;
+    return false;
+}
+
+proc observe_choice(choice:bool in O) -> u64 where {owner O} {
+    return case choice of {
+        (true) | decline_after_update(choice) -> { 90u64 };
+        (false) -> { 18u64 };
+        () -> { 91u64 };
+    };
+}
+
+proc observe_snapshot(choice:bool in O) -> u64 where {owner O} {
+    return case (choice) of {
+        (true) | decline_after_update(choice) -> { 92u64 };
+        (true) -> { behave @print(26u64); fallthrough; };
+        (false) -> { 93u64 };
+        () -> {{
+            defer { behave @print(27u64); };
+            return 28u64;
+        }};
+    };
+}
+
+val input <- true;
+behave @print(observe_choice(input));
+input <- true;
+behave @print(observe_snapshot(input));

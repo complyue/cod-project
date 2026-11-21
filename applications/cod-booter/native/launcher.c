@@ -85,7 +85,6 @@ static const char *unsupported_source_form(uint32_t code) {
     case 71: return "unproved native here feedback type";
     case 74: return "array length query";
     case 76: return "ordinary here parameter lowering";
-    case 89: return "case expression lowering";
     default: return NULL;
     }
 }
@@ -225,6 +224,15 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: narrow integer execution is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 21)
         fputs(": error: const owner cannot supply allocation access to the callee\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 23)
+        fputs(": error: native case requires a nonnullable bool subject in this compiler profile\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 24)
+        fputs(": error: native case pattern is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 25)
+        fputs(": error: value case may finish without a result\n", stderr);
+    else if ((diagnostic->stage == 5 && diagnostic->code == 18) ||
+             (diagnostic->stage == 4 && diagnostic->code == 26))
+        fputs(": error: a case transfer across cleanup is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 12)
         fputs(": error: ref argument requires a proven non-null target\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 13)
