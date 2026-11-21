@@ -152,7 +152,6 @@ func expected_type() -> u8 { return 20u8; }
 func expected_binding_operator() -> u8 { return 21u8; }
 func unsupported_typed_expression() -> u8 { return 26u8; }
 func expected_condition_open() -> u8 { return 27u8; }
-func expected_else() -> u8 { return 28u8; }
 func expected_exception_initializer() -> u8 { return 32u8; }
 func invalid_exception_placement() -> u8 { return 33u8; }
 func duplicate_exception_placement() -> u8 { return 34u8; }
@@ -558,13 +557,14 @@ func parse_behave(source:const SourceBytes in S, tokens:const Tokens in T,
 
 func parse_completion(source:const SourceBytes in S, tokens:const Tokens in T,
                       ref nodes:ExprNodes in A, ref result:ParseResult in R,
-                      past:u64, kind:u8) -> void
+                      past:u64, kind:u8, guard_arm:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     val first <- tokens[at].first;
     result.next <- at + 1u64;
     val following <- punct_at(source, tokens, result.next, past);
-    if (following == 59u8 || following == 125u8) { # ';' or '}'
+    if (following == 59u8 || following == 125u8 ||
+        (guard_arm && result.next < past && else_word(source, tokens[result.next]))) {
         append_node(nodes, result, kind, first, tokens[at].past, 0u64, no_node(), no_node(), first);
         return;
     } else {};
@@ -686,15 +686,29 @@ func parse_conditional(source:const SourceBytes in S, tokens:const Tokens in T,
     val condition <- result.root;
     if (punct_at(source, tokens, result.next, past) != 41u8) { result.diagnostic <- expected_close(); return; } else {};
     result.next <- result.next + 1u64;
-    parse_block(source, tokens, nodes, result, past);
-    if (result.diagnostic != 0u8) { return; } else {};
-    val yes <- result.root;
-    if (result.next >= past || !else_word(source, tokens[result.next])) { result.diagnostic <- expected_else(); return; } else {};
-    result.next <- result.next + 1u64;
-    if (result.next < past && if_word(source, tokens[result.next])) {
-        parse_conditional(source, tokens, nodes, result, past);
+    val single_return <- result.next < past && return_word(source, tokens[result.next]);
+    if (single_return) {
+        parse_completion(source, tokens, nodes, result, past, return_node(), true);
     } else {
         parse_block(source, tokens, nodes, result, past);
+    };
+    if (result.diagnostic != 0u8) { return; } else {};
+    val yes <- result.root;
+    # Use the return terminator as the outer separator unless an else follows it.
+    if (single_return && punct_at(source, tokens, result.next, past) == 59u8 &&
+        result.next + 1u64 < past && else_word(source, tokens[result.next + 1u64])) {
+        (result.next <- result.next + 1u64):void;
+    } else {};
+    if (result.next < past && else_word(source, tokens[result.next])) {
+        result.next <- result.next + 1u64;
+        if (result.next < past && if_word(source, tokens[result.next])) {
+            parse_conditional(source, tokens, nodes, result, past);
+        } else {
+            parse_block(source, tokens, nodes, result, past);
+        };
+    } else {
+        val end <- nodes[yes].past;
+        append_node(nodes, result, block_node(), end, end, 0u64, no_node(), no_node(), end);
     };
     if (result.diagnostic != 0u8) { return; } else {};
     val no <- result.root;
@@ -883,16 +897,16 @@ func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
         return;
     } else {};
     if (throw_word(source, tokens[at])) {
-        parse_completion(source, tokens, nodes, result, past, throw_node());
+        parse_completion(source, tokens, nodes, result, past, throw_node(), false);
         return;
     } else {};
     if (return_word(source, tokens[at])) {
-        parse_completion(source, tokens, nodes, result, past, return_node());
+        parse_completion(source, tokens, nodes, result, past, return_node(), false);
         return;
     } else {};
     if (result.supplied_here && (continue_word(source, tokens[at]) || break_word(source, tokens[at]))) {
         val handoff_kind <- if (continue_word(source, tokens[at])) { continue_node() } else { break_node() };
-        parse_completion(source, tokens, nodes, result, past, handoff_kind);
+        parse_completion(source, tokens, nodes, result, past, handoff_kind, false);
         return;
     } else {};
     val exception_width <- exception_binder_width(source, tokens, at, past);
