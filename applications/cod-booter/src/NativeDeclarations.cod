@@ -1,6 +1,6 @@
 using "SourceStorage.cod" SourceBytes;
 using "ParserStorage.cod" {
-    ExprNodes, no_node, c_handle_type_node, c_record_node, c_procedure_node, callable_node,
+    ExprNodes, no_node, c_handle_type_node, c_record_node, c_procedure_node, callable_node, callable_head_node,
     array_declaration_node, export_node, export_from_node, module_item_node, symbol_node,
     data_parent_node, owned_type_node, ref_parameter_node, ptr_parameter_node, parameter_node,
     val_parameter_node, handle_parameter_node, here_parameter_node, checked_ref_argument,
@@ -707,7 +707,7 @@ func check_constructor_arguments(nodes:const ExprNodes in N, names:const NameBin
     val actual <- first_item(nodes, nodes[at].right);
     ref loan = make HandleLoan { marker <- no_node(); owner <- no_node(); readonly <- false; };
     ref parameter = make ModuleInterfaceRow {
-        defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64;
+        defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
         interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
         type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node(); target_readonly <- 0u8; owner_readonly <- 0u8;
         has_here <- 0u8; failure_module <- 0u64; failure_identity <- 0u64;
@@ -914,7 +914,7 @@ func check_local_here(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (operand == no_node()) return;
     ref loan = make HandleLoan { marker <- no_node(); owner <- no_node(); readonly <- false; };
     ref parameter = make ModuleInterfaceRow {
-        defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64;
+        defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
         interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
         type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node(); target_readonly <- 0u8; owner_readonly <- 0u8;
         has_here <- 0u8; failure_module <- 0u64; failure_identity <- 0u64;
@@ -1141,6 +1141,17 @@ export data ModulePublication {
     source_first:u64;
 }
 
+func count_owner_clauses(nodes:const ExprNodes in N, tail:u64) -> u64 where {const owner N} {
+    val clause <- tail;
+    val count <- 0u64;
+    for (unused in 0u64 .. tail + 1u64) {
+        if (nodes[clause].kind == callable_head_node()) return count;
+        if (nodes[clause].kind == owner_clause_node()) { (count <- count + 1u64):void; } else {};
+        clause <- nodes[clause].left;
+    };
+    return count;
+}
+
 func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
                      selected:const SelectedExports in E, work:const NameWork in W,
                      contracts:ModuleInterfaces in C, count:u64, defining_module:u64, declaration:u64,
@@ -1155,11 +1166,11 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (kind == c_operation() || kind == c_entry()) {
         (name <- definition_name(nodes, form)):void;
     } else {};
-    if (kind == c_constructor()) {
+    if (kind == c_operation()) { (callback <- native_here_parameter(nodes, form)):void; } else {};
+    if (kind == c_constructor() || kind == c_entry() || (kind == c_operation() && callback == no_node())) {
         val head <- signature_head(nodes, nodes[form].left);
         (formal <- first_item(nodes, nodes[head].right)):void;
     } else {};
-    if (kind == c_operation()) { (callback <- native_here_parameter(nodes, form)):void; } else {};
     if (callback != no_node()) {
         if (next >= limit) return no_node();
         describe_parameter(nodes, names, selected, work[callback].next, defining_module, true, contracts[next]);
@@ -1171,6 +1182,9 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
         if (formal == no_node()) {
             write_interface_header(contracts[count], defining_module, declaration, kind, result_kind, next - count - 1u64);
             contracts[count].has_here <- if (callback == no_node()) { 0u8 } else { 1u8 };
+            if (kind == c_entry()) {
+                (contracts[count].owner_count <- count_owner_clauses(nodes, nodes[form].left)):void;
+            } else {};
             if (name != no_node()) {
                 contracts[count].name_first <- nodes[name].first;
                 (contracts[count].name_past <- nodes[name].past):void;
@@ -1179,6 +1193,9 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
         } else {};
         if (next >= limit) return no_node();
         describe_parameter(nodes, names, selected, formal, defining_module, kind == c_operation(), contracts[next]);
+        if (kind == c_entry() && contracts[next].value_kind == c_handle_type()) {
+            (contracts[next].owner_role <- count_owner_clauses(nodes, nodes[contracts[next].owner_role].left)):void;
+        } else {};
         formal <- work[formal].next;
         next <- next + 1u64;
     };

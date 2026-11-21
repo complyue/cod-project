@@ -49,7 +49,6 @@ static const char *scratch_error(uint32_t code) {
 
 static const char *provider_error(uint32_t code) {
     switch (code) {
-    case provider_output_unsupported: return "ordinary C operation and entry generation is outside the supported provider profile";
     case provider_output_conflict: return "C provider declarations have conflicting native names";
     case provider_output_invalid: return "C provider declaration metadata is incomplete";
     case provider_output_io: return "could not publish the generated C provider files";

@@ -5,8 +5,7 @@
 #include <stddef.h>
 
 enum {
-    provider_output_unsupported = 1,
-    provider_output_conflict,
+    provider_output_conflict = 1,
     provider_output_invalid,
     provider_output_io,
     provider_output_memory,

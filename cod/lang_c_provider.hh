@@ -2,7 +2,7 @@
 #pragma once
 
 #include "lang_checked_program.hh"
-#include "native/provider_here.h"
+#include "native/provider_call.h"
 
 #include <sstream>
 #include <string>
@@ -34,7 +34,6 @@ inline const char *provider_scalar(const Type &type) {
   }
 }
 
-inline std::string provider_borrow(const Type &handle) { return "cod_native_" + handle.name + "_borrow"; }
 enum class NativeStatus : unsigned {
   ok = cod_provider_native_ok, failure = cod_provider_native_failure, boundary_error = cod_provider_native_boundary_error,
 };
@@ -71,11 +70,6 @@ inline cod_provider_view emit_c_view(const CheckedProgram &program, const Type &
   return view;
 }
 
-inline std::string invalid_c_view(const std::string &base, const std::string &count, const std::string &element) {
-  return count + " > (uint64_t)PTRDIFF_MAX / sizeof(*" + base + ") || (" + count +
-         " && (!" + base + " || (uintptr_t)" + base + " % _Alignof(" + element + ")))";
-}
-
 inline void emit_c_here(const CheckedProgram &program, const CheckedNativeOperation &operation, const NativeRowLayouts &layouts,
                         cod_provider_text &header, cod_provider_text &stubs) {
   const auto &name = operation.contract.source->name;
@@ -88,118 +82,37 @@ inline void emit_c_here(const CheckedProgram &program, const CheckedNativeOperat
   cod_provider_write_here(&header, &stubs, name.c_str(), handle.name.c_str(), views.data(), views.size());
 }
 
+inline cod_provider_argument describe_c_argument(const CheckedNativeInput &input) {
+  if (input.type.kind == Type::array) return {nullptr, cod_provider_argument_view, false, input.owner.value_or(0)};
+  return {input.owner ? input.type.name.c_str() : provider_scalar(input.type),
+          input.owner ? cod_provider_argument_handle : cod_provider_argument_scalar,
+          input.type == Type::boolean, input.owner.value_or(0)};
+}
+
 inline void emit_c_call(const CheckedProgram &program, const CheckedNativeOperation &operation, const NativeRowLayouts &layouts,
-                        std::ostringstream &header, std::ostringstream &stubs) {
-  const auto name = native_operation_name(operation);
-  const bool returns_value = operation.contract.result.type != Type::void_type;
-  std::ostringstream boundary, implementation, arguments, checks;
-  boundary << "cod_native_status " << name << "_call(";
-  implementation << "cod_native_status " << name << "_impl(";
-  std::map<size_t, std::string> first_handle;
+                        cod_provider_text &header, cod_provider_text &stubs) {
+  const auto &name = operation.contract.source->name;
+  std::vector<cod_provider_argument> inputs;
+  std::vector<cod_provider_view> views(operation.inputs.size());
   for (size_t i = 0; i < operation.inputs.size(); ++i) {
     const auto &input = operation.inputs[i];
-    const auto suffix = std::to_string(i);
-    const auto arg = "arg" + suffix;
-    if (i) {
-      boundary << ", ";
-      implementation << ", ";
-      arguments << ", ";
-    }
-    std::string type;
-    if (input.type.kind == Type::array) {
-      cod_provider_text header_text{provider_stream_write, &header, false}, stubs_text{provider_stream_write, &stubs, false};
-      const auto view = emit_c_view(program, input.type, true, operation.contract.source->name, i, layouts, header_text, stubs_text);
-      if (header_text.failed || stubs_text.failed) throw std::runtime_error("could not format a generated C view");
-      const auto element = view.scalar ? std::string(view.scalar) : name + "_row" + suffix;
-      type = name + "_view" + suffix;
-      checks << "    if (!" << arg << " || " << invalid_c_view(arg + "->base", arg + "->count", element)
-             << ") return COD_NATIVE_BOUNDARY_ERROR;\n";
-    } else if (input.owner) {
-      type = provider_borrow(input.type);
-      checks << "    if (!" << arg;
-      const auto [first, inserted] = first_handle.try_emplace(*input.owner, arg);
-      if (!inserted) checks << " || " << arg << "->owner != " << first->second << "->owner";
-      checks << ") return COD_NATIVE_BOUNDARY_ERROR;\n";
-    } else {
-      type = provider_scalar(input.type);
-      if (input.type == Type::boolean)
-        checks << "    if (" << arg << " > 1) return COD_NATIVE_BOUNDARY_ERROR;\n";
-    }
-    if (input.owner) boundary << "const " << type << " *" << arg;
-    else boundary << type << ' ' << arg;
-    implementation << type << ' ' << arg;
-    if (input.owner) arguments << '*';
-    arguments << arg;
+    inputs.push_back(describe_c_argument(input));
+    if (input.type.kind == Type::array)
+      views[i] = emit_c_view(program, input.type, true, name, i, layouts, header, stubs);
   }
-  if (returns_value) {
-    const auto separator = operation.inputs.empty() ? "" : ", ";
-    boundary << separator << "uint8_t *value";
-    implementation << separator << "uint8_t *value";
-    arguments << separator << "&result";
-  } else if (operation.inputs.empty()) {
-    boundary << "void";
-    implementation << "void";
-  }
-  boundary << ')';
-  implementation << ')';
-  header << boundary.str() << ";\n" << implementation.str() << ";\n\n";
-  stubs << boundary.str() << " {\n";
-  if (returns_value) stubs << "    if (!value) return COD_NATIVE_BOUNDARY_ERROR;\n";
-  stubs << checks.str();
-  if (returns_value) stubs << "    uint8_t result = 0;\n";
-  stubs << "    const cod_native_status status = " << name << "_impl(" << arguments.str() << ");\n"
-        << "    if (status != COD_NATIVE_OK) return COD_NATIVE_BOUNDARY_ERROR;\n";
-  if (returns_value) stubs << "    *value = result;\n";
-  stubs << "    return COD_NATIVE_OK;\n}\n\n";
+  const auto &result = *operation.contract.result.type;
+  const cod_provider_callable shape{
+      name.c_str(), inputs.data(), inputs.size(), result == Type::void_type ? nullptr : provider_scalar(result), 0};
+  cod_provider_write_call(&header, &stubs, &shape, views.data());
 }
 
 inline void emit_c_entry(const CheckedNativeEntry &entry, const Form &form,
-                         std::ostringstream &header, std::ostringstream &stubs) {
-  const auto signature = [&](bool body) {
-    std::ostringstream text;
-    text << (body ? "void " + native_entry_body_name(form) : "cod_native_status " + native_entry_name(form)) << '(';
-    bool comma = false;
-    const auto argument = [&](const std::string &type, const std::string &name) {
-      if (comma) text << ", ";
-      text << type << ' ' << name;
-      comma = true;
-    };
-    for (size_t i = 0; i < entry.inputs.size(); ++i) {
-      const auto &input = entry.inputs[i];
-      argument(input.owner ? "const " + provider_borrow(input.type) + " *" : provider_scalar(input.type),
-               "arg" + std::to_string(i));
-    }
-    for (size_t i = 0; i < form.owner_parameters.size(); ++i)
-      argument(body ? "const void *" : "const cod_native_loan *", "loan" + std::to_string(i));
-    if (entry.result != Type::void_type) argument(std::string(provider_scalar(entry.result)) + " *", "value");
-    if (!comma) text << "void";
-    text << ')';
-    return std::move(text).str();
-  };
-  const auto boundary = signature(false);
-  header << boundary << ";\n\n";
-  stubs << "extern " << signature(true) << ";\n\n" << boundary << " {\n";
-  if (entry.result != Type::void_type) stubs << "    if (!value) return COD_NATIVE_BOUNDARY_ERROR;\n";
-  for (size_t i = 0; i < form.owner_parameters.size(); ++i)
-    stubs << "    if (!loan" << i << " || !loan" << i << "->activation) return COD_NATIVE_BOUNDARY_ERROR;\n";
-  for (size_t i = 0; i < entry.inputs.size(); ++i) {
-    const auto &input = entry.inputs[i];
-    if (input.owner)
-      stubs << "    if (!arg" << i << " || arg" << i << "->owner != loan" << *input.owner << "->owner) return COD_NATIVE_BOUNDARY_ERROR;\n";
-    else if (input.type == Type::boolean)
-      stubs << "    if (arg" << i << " > 1) return COD_NATIVE_BOUNDARY_ERROR;\n";
-  }
-  stubs << "    " << native_entry_body_name(form) << '(';
-  bool comma = false;
-  const auto pass = [&](const std::string &value) {
-    if (comma) stubs << ", ";
-    stubs << value;
-    comma = true;
-  };
-  for (size_t i = 0; i < entry.inputs.size(); ++i) pass("arg" + std::to_string(i));
-  for (size_t i = 0; i < form.owner_parameters.size(); ++i) pass("loan" + std::to_string(i) + "->activation");
-  if (entry.result != Type::void_type) pass("value");
-  stubs << ");\n    return COD_NATIVE_OK;\n}\n\n";
+                         cod_provider_text &header, cod_provider_text &stubs) {
+  std::vector<cod_provider_argument> inputs;
+  for (const auto &input : entry.inputs) inputs.push_back(describe_c_argument(input));
+  const cod_provider_callable shape{form.name.c_str(), inputs.data(), inputs.size(),
+      entry.result == Type::void_type ? nullptr : provider_scalar(entry.result), form.owner_parameters.size()};
+  cod_provider_write_entry(&header, &stubs, &shape);
 }
 
 inline NativeProviderFiles emit_native_providers(const CheckedProgram &program, const NativeRowLayouts &layouts) {
@@ -211,13 +124,7 @@ inline NativeProviderFiles emit_native_providers(const CheckedProgram &program, 
 
   if (std::ranges::any_of(program.native_entries, [&](const auto &entry) {
         return !program.methods.at(entry.method).source->owner_parameters.empty();
-      })) header << R"C(/* The supplying native activation keeps the lent backing live through the call. */
-typedef struct cod_native_loan {
-    const void *activation;
-    uint64_t owner;
-} cod_native_loan;
-
-)C";
+      })) cod_provider_loan_preamble(&header_text);
 
   std::set<size_t> emitted_borrows;
   const auto emit_borrows = [&](const std::vector<CheckedNativeInput> &inputs) {
@@ -237,10 +144,7 @@ typedef struct cod_native_loan {
 
   for (const auto &constructor : program.native_constructors) {
     std::vector<cod_provider_argument> inputs;
-    for (const auto &input : constructor.inputs) {
-      inputs.push_back({input.owner ? input.type.name.c_str() : provider_scalar(input.type),
-                        input.owner.has_value(), input.type == Type::boolean, input.owner.value_or(0)});
-    }
+    for (const auto &input : constructor.inputs) inputs.push_back(describe_c_argument(input));
     std::vector<cod_provider_field> fields;
     if (constructor.failure) {
       const auto &schema = program.schemas.at(*program.exception_types.at(constructor.failure->identity).schema);
@@ -253,10 +157,10 @@ typedef struct cod_native_loan {
         fields.data(), fields.size()};
     cod_provider_write_constructor(&header_text, &stubs_text, &shape);
   }
-  for (const auto &entry : program.native_entries) emit_c_entry(entry, *program.methods.at(entry.method).source, header, stubs);
+  for (const auto &entry : program.native_entries) emit_c_entry(entry, *program.methods.at(entry.method).source, header_text, stubs_text);
   for (const auto &native : program.native_operations) {
     if (native.has_here()) emit_c_here(program, native, layouts, header_text, stubs_text);
-    else emit_c_call(program, native, layouts, header, stubs);
+    else emit_c_call(program, native, layouts, header_text, stubs_text);
   }
   cod_provider_end(&header_text);
   if (header_text.failed || stubs_text.failed || !header || !stubs)
