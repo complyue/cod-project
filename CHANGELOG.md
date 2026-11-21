@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 — Publish at the definition and group same-module selections
+
+<a id="h-module-source-style-20261121"></a>
+**H-MODULE-SOURCE-STYLE-20261121.** In the [source-style discussion](codex://threads/01a1fe3d-af02-7662-bb40-d06a93504a1d) on 2026-11-21 (America/Los_Angeles), the project user directed “idiomatic CoD 应该把 `export` 直接放定义前面， using/import/mixin 不应该无脑重复写模块，只有内容分组有业务意义时，才拆成多句。 通知主线程改正booter代码的写法”. D-15-PUBLIC-SOURCE, D-15r59/registry r1033, P-662/P-663 records that source policy. Design review resolves the bounded grammar as publication of the same local identity and ordered expansion of single selections. Typed enums r1→r2 continues the same domain under the public spelling. The previous contracts are at `65a8a1fcb1fe6730ddc5008ce0d9f1aa860aaf1d:design/ModuleWorlds.md` and `65a8a1fcb1fe6730ddc5008ce0d9f1aa860aaf1d:design/TypedEnums.md`.
+
 ## 2026-11-21 — Typed enums and checked by-value C exchange
 
 <a id="h-typed-enum-20261121"></a>

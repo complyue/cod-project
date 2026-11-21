@@ -1,15 +1,17 @@
 # Typed enums
 
-Design revision: 1 · 2026-11-21
+Design revision: 2 · 2026-11-21
 
 ## Design authority
 
 [H-TYPED-ENUM-20261121](../CHANGELOG.md#h-typed-enum-20261121) covers the project user's proposal, explicit requirement for old and new member names, and delegation of the detailed review. [D-07-ENUM](DesignAuthorityRegistry.md#d-07-enum), P-658/P-659, qualifies the closed nominal type, member identities, selection and coverage. [D-20-C-ENUM](DesignAuthorityRegistry.md#d-20-c-enum), P-660/P-661, qualifies generated current-target by-value exchange for the first booter workload. Charter §§3.2, 6.3, 8.1 and 12 connect named domain outcomes to readable programs and checked native execution. [K-TYPED-ENUM-REVIEW-20261121](../CHANGELOG.md#k-typed-enum-review-20261121) records the delegated resolutions below. Acceptance exercises the same identities from declaration through case analysis and the C boundary. Shared foreign storage and permanent binary interfaces remain outside this scope.
 
+[H-MODULE-SOURCE-STYLE-20261121](../CHANGELOG.md#h-module-source-style-20261121) continues r1 to r2 for the public declaration example. The [module contract](ModuleWorlds.md#public-definitions-and-grouped-selections) supplies its publication semantics.
+
 ## Declaration and value identity
 
 ```cod
-enum NativeError:u8 {
+export enum NativeError:u8 {
     Complete = 0;
     Rejected = 1;
     OldRejected = Rejected;
@@ -20,7 +22,6 @@ enum NativeError:u8 {
     ScratchFailed;
     SourceOpenFailed;
 }
-export NativeError;
 ```
 
 This declares eight distinct values with codes 0 through 7. `OldRejected` is a **name/identity alias** for `Rejected`. Either spelling produces the same nominal value and backing code. A different enum with the same backing type and codes has a different type identity. A name ending in `Error` has no bearing on the exception hierarchy.
