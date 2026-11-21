@@ -94,7 +94,7 @@ func first_extended_declaration(nodes:const ExprNodes in N, work:const NameWork 
     for (unused in 0u64 .. tree.used) {
         if (item == no_node()) { return no_node(); } else {};
         form <- nodes[item].right;
-        if (declaration_requires_native_output(nodes[form].kind)) { return form; } else {};
+        if (nodes[item].number != 0u64 || declaration_requires_native_output(nodes[form].kind)) { return form; } else {};
         (item <- work[item].next):void;
     };
     return no_node();
@@ -180,7 +180,7 @@ func bind_parsed_module(source:const SourceBytes in S, nodes:const ExprNodes in 
         return false;
     } else {};
     ref names = make NameResolutionResult { diagnostic <- 0u8; node <- no_node(); enclosing_defer <- no_node(); };
-    if (!resolve_module_names(source, nodes, result.frontend.tree, selected, bindings, work, names)) {
+    if (!resolve_module_names(source, nodes, result.frontend.tree, selected, bindings, work, !emit_object, names)) {
         binding_diagnostic(nodes, result, module_binding_failed(), names.diagnostic, names.node);
         if (names.enclosing_defer != no_node()) { result.related_first <- nodes[names.enclosing_defer].first; {}; } else {};
         return false;

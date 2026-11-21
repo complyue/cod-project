@@ -22,6 +22,7 @@ using "ModuleExports.cod" prepare_module_dependencies;
 using "ModuleFrontend.cod" ModuleBindingResult;
 using "ModuleFrontend.cod" bind_parsed_module;
 using "ModuleFrontend.cod" module_read_failed;
+using "ModuleFrontend.cod" module_binding_failed;
 using "ModuleFrontend.cod" module_selection_failed;
 using "NameResolution.cod" NameBindings;
 using "NameResolution.cod" NameWork;
@@ -121,7 +122,13 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     } else {};
     ref publication = make ModulePublication { module_identity <- progress[0u64].identity; source_first <- 0u64; };
     val count <- 0u64;
-    if (!publish_module_exports(nodes, names, selected, publication, result.frontend.tree.used, staged, count)) {
+    val conflict <- no_node();
+    if (!publish_module_exports(source, nodes, names, selected, publication, result.frontend.tree.used, staged, count, conflict)) {
+        if (conflict != no_node()) {
+            report_rejection(source, lines, diagnostic, module_binding_failed(), 75u8,
+                             nodes[conflict].first, nodes[conflict].past, no_node());
+            return native_source_rejected();
+        } else {};
         report_scratch_error(diagnostic, 1u32);
         return native_scratch_failed();
     } else {};

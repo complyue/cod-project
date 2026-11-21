@@ -57,11 +57,15 @@ proc compile_with_module_source(here open() -> u8, here work() -> u8, here relea
     return work();
 }
 
-# A module root uses the EOF token. Each other syntax node uses one non-EOF token.
+# A normalized grouped selection may need one extra node per item. Each
+# such item accounts for a name and a delimiter, so half the token count
+# bounds the additional nodes, including a group with no trailing comma.
 func plan_module_source(source:const SourceBytes in S, ref plan:ExpressionScratchPlan in P) -> bool
     where {const owner S, owner P} {
     if (!plan_expression_scratch(source, plan)) { return false; } else {};
-    plan.node_capacity <- plan.token_count;
+    val extra <- plan.token_count / 2u64;
+    if (plan.token_count > no_node() - extra) { return false; } else {};
+    plan.node_capacity <- plan.token_count + extra;
     return true;
 }
 

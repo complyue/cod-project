@@ -110,6 +110,11 @@ func break_node() -> u8 { return 92u8; }
 func narrow_integer_node() -> u8 { return 93u8; }
 func index_access_node() -> u8 { return 94u8; }
 func array_length_node() -> u8 { return 95u8; }
+func export_from_node() -> u8 { return 96u8; }
+
+func module_selection(kind:u8) -> bool {
+    return kind == using_node() || kind == export_from_node();
+}
 
 func local_storage_binding(kind:u8) -> bool {
     return kind == val_binding_node() || kind == ref_local_node() || kind == ptr_binding_node();
@@ -297,6 +302,8 @@ export named_argument_node;
 export field_access_node;
 export index_access_node;
 export array_length_node;
+export export_from_node;
+export module_selection;
 export bodyless_defer_node;
 export callable_local_node;
 export throw_with_cause_node;
