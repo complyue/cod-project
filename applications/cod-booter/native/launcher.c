@@ -116,6 +116,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: expected ',' or '}' after module selection\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 77)
         fputs(": error: catch annotation must name an exception type\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 7)
+        fputs(": error: native handle binding is unproved on this path\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 13)
         fputs(": error: this module declaration is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 49)
