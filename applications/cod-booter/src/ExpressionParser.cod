@@ -9,13 +9,9 @@ using "ParserStorage.cod" field_initializer_node;
 using "ParserStorage.cod" capacity_placement_node;
 using "ParserStorage.cod" cause_placement_node;
 using "ParserStorage.cod" named_argument_node;
-using "ParserStorage.cod" explicit_owning_catch;
-using "ParserStorage.cod" borrowed_catch;
 using "Lexer.cod" exception_word;
 using "Lexer.cod" own_word;
 using "Lexer.cod" ref_word;
-using "Lexer.cod" where_word;
-using "Lexer.cod" owner_word;
 using "Lexer.cod" make_word;
 using "Lexer.cod" from_word;
 using "Lexer.cod" region_word;
@@ -116,7 +112,6 @@ func expected_block_separator() -> u8 { return 12u8; }
 func expected_try_clause() -> u8 { return 13u8; }
 func expected_catch_header() -> u8 { return 14u8; }
 func expected_catch_name() -> u8 { return 15u8; }
-func expected_catch_owner() -> u8 { return 16u8; }
 func catch_all_must_be_last() -> u8 { return 17u8; }
 func expected_symbol() -> u8 { return 18u8; }
 func expected_name() -> u8 { return 19u8; }
@@ -346,49 +341,6 @@ func exception_binder_width(source:const SourceBytes in S, tokens:const Tokens i
     return 0u64;
 }
 
-func parse_catch_owner(source:const SourceBytes in S, tokens:const Tokens in T,
-                        ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64,
-                        declared_type:u64, owner_name:u64) -> void
-    where {const owner S, const owner T, owner A, owner R} {
-    val declared <- 0u64;
-    val end <- nodes[owner_name].past;
-    if (result.next < past && where_word(source, tokens[result.next])) {
-        result.next <- result.next + 1u64;
-        if (punct_at(source, tokens, result.next, past) != 123u8 || result.next + 1u64 >= past ||
-            !owner_word(source, tokens[result.next + 1u64])) {
-            result.diagnostic <- expected_catch_owner();
-            return;
-        } else {};
-        result.next <- result.next + 2u64;
-        if (result.next >= past || tokens[result.next].kind != identifier()) {
-            result.diagnostic <- expected_catch_owner();
-            return;
-        } else {};
-        val repeated <- result.next;
-        val width <- nodes[owner_name].past - nodes[owner_name].first;
-        if (tokens[repeated].past - tokens[repeated].first != width) {
-            result.diagnostic <- expected_catch_owner();
-            return;
-        } else {};
-        for (offset in 0u64 .. width) {
-            if (source[nodes[owner_name].first + offset] != source[tokens[repeated].first + offset]) {
-                result.diagnostic <- expected_catch_owner();
-                return;
-            } else {};
-        };
-        result.next <- repeated + 1u64;
-        if (punct_at(source, tokens, result.next, past) != 125u8) {
-            result.diagnostic <- expected_catch_owner();
-            return;
-        } else {};
-        end <- tokens[result.next].past;
-        result.next <- result.next + 1u64;
-        (declared <- 1u64):void;
-    } else {};
-    append_node(nodes, result, owned_type_node(), nodes[declared_type].first, end, declared,
-                declared_type, owner_name, nodes[owner_name].first);
-}
-
 func parse_catch_binding(source:const SourceBytes in S, tokens:const Tokens in T,
                          ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
@@ -398,40 +350,22 @@ func parse_catch_binding(source:const SourceBytes in S, tokens:const Tokens in T
         return;
     } else {};
     result.next <- open + 1u64;
-    val width <- exception_binder_width(source, tokens, result.next, past);
-    val mode <- 0u64;
-    if (width != 0u64) {
-        mode <- explicit_owning_catch();
-        (result.next <- result.next + width):void;
-    } else {
-        if (result.next < past && ref_word(source, tokens[result.next])) {
-            mode <- borrowed_catch();
-            (result.next <- result.next + 1u64):void;
-        } else {};
-    };
+    if (result.next < past && ref_word(source, tokens[result.next])) {
+        result.diagnostic <- expected_catch_name();
+        return;
+    } else {};
     if (!parse_identifier(source, tokens, nodes, result, past, expected_catch_name())) { return; } else {};
     val name <- result.root;
     val declared_type <- no_node();
+    val access <- 0u64;
     if (punct_at(source, tokens, result.next, past) == 58u8) {
         result.next <- result.next + 1u64;
         if (result.next < past && const_word(source, tokens[result.next])) {
-            mode <- mode + readonly_declaration();
+            access <- readonly_declaration();
             (result.next <- result.next + 1u64):void;
         } else {};
-        if (!parse_identifier(source, tokens, nodes, result, past, expected_catch_name())) { return; } else {};
+        if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) { return; } else {};
         (declared_type <- result.root):void;
-    } else {
-        if (mode != 0u64) { result.diagnostic <- expected_type(); return; } else {};
-    };
-    val owner_name <- no_node();
-    if (mode >= borrowed_catch()) {
-        if (result.next >= past || !in_word(source, tokens[result.next])) {
-            result.diagnostic <- expected_catch_owner();
-            return;
-        } else {};
-        result.next <- result.next + 1u64;
-        if (!parse_identifier(source, tokens, nodes, result, past, expected_catch_owner())) { return; } else {};
-        (owner_name <- result.root):void;
     } else {};
     val close <- result.next;
     if (punct_at(source, tokens, close, past) != 41u8) {
@@ -439,14 +373,8 @@ func parse_catch_binding(source:const SourceBytes in S, tokens:const Tokens in T
         return;
     } else {};
     result.next <- close + 1u64;
-    if (owner_name != no_node()) {
-        parse_catch_owner(source, tokens, nodes, result, past, declared_type, owner_name);
-        if (result.diagnostic != 0u8) { return; } else {};
-        (declared_type <- result.root):void;
-    } else {};
-    val end <- if (owner_name == no_node()) { close } else { result.next - 1u64 };
     val first <- tokens[open].first;
-    append_node(nodes, result, catch_binding_node(), first, tokens[end].past, mode, name, declared_type, first);
+    append_node(nodes, result, catch_binding_node(), first, tokens[close].past, access, name, declared_type, first);
 }
 
 # Clauses link in source order through the preceding clause. A catch stores

@@ -18614,9 +18614,6 @@ class ScalarChecker {
       if (expr.kind == K::make_exception) implementation_gap(expr.at, "owning make exception expression");
       if (expr.kind == K::make_object && expr.constructor_arguments)
         implementation_gap(expr.at, "ordinary constructor arguments");
-      if (expr.kind == K::handler && expr.catch_mode != Expression::CatchMode::owning)
-        implementation_gap(expr.at, expr.catch_mode == Expression::CatchMode::borrowed
-                            ? "explicit borrowed exception catch" : "explicit owning exception catch");
       if (expr.annotation)
         require_implemented_source_forms(*expr.annotation, expr.at, "owning exception callable type");
       if (expr.definition) require_implemented_source_forms(*expr.definition);

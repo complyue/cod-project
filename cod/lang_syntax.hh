@@ -315,7 +315,6 @@ struct Expression {
                     here_body, named_argument, break_value, continue_value, typed_expression, return_tail,
                     processor_composition, pipeline, here_binding, make_object, native_handle_binding, make_owned_handle, make_borrowed_handle,
                     exception_binding, make_exception };
-  enum class CatchMode { owning, explicit_owning, borrowed };
   enum class ExceptionPlacement { default_region, capacity, cause };
   Kind kind;
   Location at;
@@ -337,8 +336,6 @@ struct Expression {
   std::unique_ptr<PipelineEndpoints> endpoints = {};
   bool initializer_block = false;
   SourceSpan span = {};
-  CatchMode catch_mode = CatchMode::owning;
-  bool declares_catch_owner = false;
   bool constructor_arguments = false;
   // An explicit placement operand follows the initializer operands in children.
   ExceptionPlacement exception_placement = ExceptionPlacement::default_region;
@@ -1263,32 +1260,12 @@ class Parser {
 
   Expr catch_handler(bool &catch_all) {
     expect("(");
-    auto mode = Expression::CatchMode::owning;
-    if (take("ref")) mode = Expression::CatchMode::borrowed;
-    else if (exception_binding_head()) {
-      expect_exception_binder();
-      mode = Expression::CatchMode::explicit_owning;
-    }
     auto handler = make(Expression::Kind::handler, value_name());
-    handler->catch_mode = mode;
-    if (mode != Expression::CatchMode::owning || is(":")) {
-      expect(":");
+    if (take(":")) {
       handler->read_only = take("const");
       handler->annotation = parse_type();
     } else catch_all = true;
-    if (mode == Expression::CatchMode::borrowed) {
-      expect("in");
-      handler->owner_name = ordinary_name().text;
-    }
     expect(")");
-    if (mode == Expression::CatchMode::borrowed && take("where")) {
-      expect("{");
-      expect("owner");
-      const auto owner = ordinary_name();
-      if (owner.text != handler->owner_name) fail(owner.at, "a catch owner declaration must match the name after 'in'");
-      handler->declares_catch_owner = true;
-      expect("}");
-    }
     handler->children.push_back(block());
     return handler;
   }
