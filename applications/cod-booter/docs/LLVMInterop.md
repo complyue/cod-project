@@ -1,8 +1,10 @@
 # Native C providers, LLVM bindings and scoped cleanup
 
-Revision 20 · 2026-11-21 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
+Revision 21 · 2026-11-21 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
 
 ## Design authority
+
+[D-07-UTF8](../../../design/DesignAuthorityRegistry.md#d-07-utf8) at interop r21 covers [bounded UTF-8 entry arguments and native C string loans](../../../design/Utf8Strings.md#borrowing-text-for-a-c-call). [H-UTF8-NATIVE-TEXT-20261121](../../../CHANGELOG.md#h-utf8-native-text-20261121), P-674/P-675 apply C-80 to real output filenames. Verify direct literals, explicit `path:CString`, the selected owner through a synchronous provider call, and failure before filesystem effects. The source constructor still accepts its typed `Path` loan.
 
 [D-20-HANDLE-EFFECT](../../../design/DesignAuthorityRegistry.md#d-20-handle-effect) covers [owning native handle effects](#owning-native-handle-effects) at r20. The [user’s proposal and delegated review](../../../CHANGELOG.md#h-native-handle-effect-20261121) apply C-36/C-80 through P-672/P-673. A procedure can reach the active native session by its published symbol while the installing scope owns its cleanup. Check actual-owner selection, nested restoration, constructor rollback, deferred use and dependent destruction in both compilers and in the object writer. The existing C loan and destructor interfaces suffice.
 
@@ -65,7 +67,7 @@ handle type LauncherDiagnostics;
 handle type DiagnosticDestination in LauncherDiagnostics;
 ```
 
-The private marker names describe what C owns during this invocation. The launcher lends one actual path owner A for both paths and a separate writable record owner D. In the [launcher entry](../src/CompilerCLI.cod), the two occurrences of `Path in A` constrain A to `LauncherPaths`. The diagnostic parameter constrains D to `LauncherDiagnostics`. The generated adapter binds the incoming owner evidence for A and D separately and checks agreement for the two uses of A. The native caller supplies truthful typed provenance and valid backing and keeps both loans live through the synchronous call. The boundary words alone cannot authenticate arbitrary C input. Merely naming an owner CType grants no constructor, allocation or disposal permission. The entry borrows both owners. The launcher retains responsibility for their storage. A host payload may differ from its owner word, as it does for a path; equality for the current diagnostic record is a private provider convention.
+The private marker names describe what C owns during this invocation. In the [launcher entry](../src/CompilerCLI.cod), the input `Path in A` constrains A to `LauncherPaths`. The launcher can also lend the [bounded output filename](../../../design/Utf8Strings.md#borrowing-text-for-a-c-call) under that same actual A. It supplies a separate writable record owner D. The diagnostic parameter constrains D to `LauncherDiagnostics`. The generated adapter binds the incoming owner evidence for A and D separately and checks agreement for the two uses of A. The native caller supplies truthful typed provenance and valid backing and keeps both loans live through the synchronous call. The boundary words alone cannot authenticate arbitrary C input. Merely naming an owner CType grants no constructor, allocation or disposal permission. The entry borrows both owners. The launcher retains responsibility for their storage. A host payload may differ from its owner word, as it does for a path; equality for the current diagnostic record is a private provider convention.
 
 ### Dependent owning handle construction
 
@@ -179,7 +181,7 @@ The first generated boundary serves the indexed source, scratch and LLVM operati
 
 | Operation group | First-booter contract |
 | --- | --- |
-| C entry and paths | The launcher lends source and output path handles under its live activation. The source constructor reads the path while that loan is valid. The CoD driver returns its ordinary compilation status. The booter borrows its builtin table through a scoped catalog operation. The launcher supplies independent diagnostic storage. See [catalog and rejection reporting](#builtin-catalog-and-rejection-reporting). |
+| C entry and paths | The launcher lends the input path handle and the bounded UTF-8 output filename under its live activation. The source constructor reads the input path while its loan is valid. The object writer asserts the output text as `CString` for the native emission operation. The CoD driver returns its ordinary compilation status. The booter borrows its builtin table through a scoped catalog operation. The launcher supplies independent diagnostic storage. See [catalog and rejection reporting](#builtin-catalog-and-rejection-reporting). |
 | Indexed source revision | CoD acquires a source revision as an owned CType. A synchronous use lends read-only bytes and the completed line index under one actual revision owner. CoD resolves a rejected byte position while that owner remains live. Tokens retain revision-relative half-open byte spans. An unsuccessful acquisition produces no lend. |
 | In-memory working region | CoD computes checked token, syntax and command capacities. A native scratch owner provides fixed backing and supplies properly initialized arrays to a synchronous work body under one actual working owner. The called operations preserve CoD's access and relocation rules. |
 | LLVM session | Apply the [confirmed session lifecycle](#llvm-session-ownership) inside the work scope. The construct operation borrows the readonly command array under the caller's actual working owner and checks its initialized prefix. The session is destroyed before the scratch owner and source revision. |
@@ -202,7 +204,7 @@ proc "C" source_use(
     handle revision:SourceRevision in S
 ) -> u8 where {const owner S};
 
-proc "C" compile_cli(handle path:Path in A, handle output:Path in A) -> u8
+proc "C" compile_cli(handle path:Path in A, output:const String in A) -> u8
     where {const owner A} {
     try {
         own handle src:SourceRevision <- make own handle SourceRevision(path);
