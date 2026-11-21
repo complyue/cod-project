@@ -48,11 +48,16 @@ export data OperandFact {
     case_end:u8;
     case_presence:u8;
     case_selection:u64;
+    case_context:u64;
+    case_after_subject:u64;
     case_discriminator:u8;
     case_may_be_absent:u8;
     enum_constant:u8;
     discriminator_code:u64;
     case_excluded_at:u64;
+    case_exclusion_member:u64;
+    case_exclusion_previous:u64;
+    case_exclusion_next:u64;
     case_exit_link:u64;
     case_exit_tail:u64;
     owner:u64;
@@ -630,6 +635,28 @@ data CaseCoverage {
     absent:bool;
     only:u64;
     generation:u64;
+    exclusions:u64;
+}
+
+# A case proof belongs to a saved address. An enclosing proof for another
+# pointer, including one with the same declared owner, cannot supply it.
+export func selected_target_presence(facts:const OperandFacts in F, at:u64) -> u8 where {const owner F} {
+    val presence <- facts[at].target_presence;
+    val selection <- facts[at].selection;
+    if (presence != unknown_target() || selection == no_node()) return presence;
+    val header <- facts[at].case_context;
+    for (unused in 0u64 .. intrinsic (len)(facts)) {
+        if (header == no_node()) return presence;
+        if (facts[header].case_selection == selection) return facts[header].case_presence;
+        header <- facts[header].case_context;
+    };
+    return presence;
+}
+
+func enter_case_context(facts:OperandFacts in F, outer:u64, header:u64) -> u64 where {owner F} {
+    facts[header].case_context <- outer;
+    if (facts[header].case_selection == no_node() || facts[header].case_presence == unknown_target()) return outer;
+    return header;
 }
 
 func case_has_paths(coverage:const CaseCoverage in V) -> bool where {const owner V} {
@@ -649,7 +676,7 @@ func initialize_case_coverage(nodes:const ExprNodes in N, names:const NameBindin
     val subject <- nodes[at].left;
     val kind <- facts[subject].kind;
     if (kind == never_result()) return;
-    val present <- facts[subject].target_presence;
+    val present <- selected_target_presence(facts, subject);
     coverage.absent <- present != present_target();
     if (present == absent_target()) return;
     if (kind == scalar_bool()) {
@@ -808,9 +835,9 @@ func prepare_case_pattern(source:const SourceBytes in S, nodes:const ExprNodes i
     return 0u8;
 }
 
-func check_case_arm(nodes:const ExprNodes in N, links:const NameWork in L, facts:OperandFacts in F,
-                    coverage:CaseCoverage in V, at:u64, arm:u64, member:u64, borrowed:bool) -> u8
-    where {const owner N, const owner L, owner F, owner V} {
+func match_case_arm(nodes:const ExprNodes in N, facts:OperandFacts in F, coverage:const CaseCoverage in V,
+                    at:u64, arm:u64, member:u64) -> void
+    where {const owner N, owner F, const owner V} {
     val pattern <- nodes[arm].left;
     val null_pattern <- pattern != no_node() && nodes[pattern].number == case_null_pattern();
     val all_pattern <- pattern == no_node();
@@ -819,8 +846,8 @@ func check_case_arm(nodes:const ExprNodes in N, links:const NameWork in L, facts
     facts[arm].case_discriminator <- if (member != no_node() && had_present) { 1u8 } else { 0u8 };
     facts[arm].case_may_be_absent <- if (had_absence) { 1u8 } else { 0u8 };
     if (member != no_node() && (!had_present || (coverage.only != no_node() && coverage.only != member) ||
-        facts[member].case_excluded_at == coverage.generation)) return 0u8;
-    if (null_pattern && !had_absence) return 0u8;
+        facts[member].case_excluded_at == coverage.generation)) return;
+    if (null_pattern && !had_absence) return;
     val matches_present <- !null_pattern && had_present;
     val matches_absence <- (null_pattern || all_pattern) && had_absence;
     val matches_all <- all_pattern || (null_pattern && !had_present) ||
@@ -828,7 +855,39 @@ func check_case_arm(nodes:const ExprNodes in N, links:const NameWork in L, facts
     facts[arm].case_match <- if (matches_all) { matches_case_arm() } else { tests_case_arm() };
     facts[arm].case_presence <- case_presence(matches_present, matches_absence);
     facts[arm].case_selection <- facts[nodes[at].left].selection;
+    return;
+}
 
+# Share the indexed member table across cases. A nested case restores the
+# enclosing scan's marks after consuming its own arms.
+func exclude_case_member(facts:OperandFacts in F, coverage:CaseCoverage in V, member:u64, arm:u64) -> void
+    where {owner F, owner V} {
+    facts[arm].case_exclusion_member <- member;
+    facts[arm].case_exclusion_previous <- facts[member].case_excluded_at;
+    facts[arm].case_exclusion_next <- coverage.exclusions;
+    facts[member].case_excluded_at <- coverage.generation;
+    coverage.exclusions <- arm;
+    return;
+}
+
+func restore_case_exclusions(facts:OperandFacts in F, coverage:const CaseCoverage in V) -> void
+    where {owner F, const owner V} {
+    val mark <- coverage.exclusions;
+    for (unused in 0u64 .. intrinsic (len)(facts)) {
+        if (mark == no_node()) return;
+        facts[facts[mark].case_exclusion_member].case_excluded_at <- facts[mark].case_exclusion_previous;
+        mark <- facts[mark].case_exclusion_next;
+    };
+}
+
+func finish_case_arm(nodes:const ExprNodes in N, links:const NameWork in L, facts:OperandFacts in F,
+                     coverage:CaseCoverage in V, at:u64, arm:u64, member:u64, borrowed:bool) -> u8
+    where {const owner N, const owner L, owner F, owner V} {
+    if (facts[arm].case_match == misses_case_arm()) return 0u8;
+    val pattern <- nodes[arm].left;
+    val matches_present <- coverage.remaining != 0u64 &&
+        (pattern == no_node() || nodes[pattern].number != case_null_pattern());
+    val matches_absence <- coverage.absent && (pattern == no_node() || nodes[pattern].number == case_null_pattern());
     val guard <- nodes[arm].number;
     val behavior <- facts[arm].case_guard;
     val body <- nodes[arm].right;
@@ -842,9 +901,9 @@ func check_case_arm(nodes:const ExprNodes in N, links:const NameWork in L, facts
         } else {};
     } else {
         if (matches_absence) { (coverage.absent <- false):void; } else {};
-        if (all_pattern) { (coverage.remaining <- 0u64):void; } else {
+        if (pattern == no_node()) { (coverage.remaining <- 0u64):void; } else {
             if (member != no_node()) {
-                facts[member].case_excluded_at <- coverage.generation;
+                exclude_case_member(facts, coverage, member, arm);
                 (coverage.remaining <- coverage.remaining - 1u64):void;
             } else {};
         };
@@ -857,11 +916,12 @@ func check_case_arm(nodes:const ExprNodes in N, links:const NameWork in L, facts
 # Each case owns its exits in syntax postorder. Consume them at the direct
 # guard, body or intervening statement they leave, after its reach is known.
 func merge_case_breaks(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
-                       pending:u64 in P, at:u64, through:u64, reached:bool) -> u8
+                       last:u64 in P, at:u64, through:u64, reached:bool) -> u8
     where {const owner N, const owner B, owner F, owner P} {
     if (through == no_node()) return 0u8;
     val value <- no_node();
     val diagnostic <- 0u8;
+    val pending <- if (last == no_node()) { facts[at].case_exit_link } else { facts[last].case_exit_link };
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (pending == no_node() || pending > through) return 0u8;
         if (reached && case_transfer_survives(nodes, names, facts, pending)) {
@@ -870,62 +930,80 @@ func merge_case_breaks(nodes:const ExprNodes in N, names:const NameBindings in B
                           else { merge_arm_result(nodes, facts, at, value) };
             if (diagnostic != 0u8) return diagnostic;
         } else {};
+        last <- pending;
         pending <- facts[pending].case_exit_link;
     };
     return invalid_operand_tree();
 }
 
+func operand_problem(report:OperandCheckResult in R, at:u64, diagnostic:u8) -> bool where {owner R} {
+    report.node <- at;
+    report.diagnostic <- diagnostic;
+    return false;
+}
+
 func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
-                links:const NameWork in L, facts:OperandFacts in F, at:u64) -> u8
-    where {const owner S, const owner N, const owner B, const owner L, owner F} {
+                links:const NameWork in L, selected:const SelectedExports in E, facts:OperandFacts in F,
+                owners:CallOwners in O, report:OperandCheckResult in R, at:u64, used:u64, outer:u64) -> bool
+    where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F, owner O, owner R} {
     val subject <- nodes[at].left;
     val kind <- facts[subject].kind;
     val completed <- kind != never_result();
     if (completed && kind != scalar_bool() && kind != scalar_enum() && kind != null_literal())
-        return unsupported_case_subject();
+        return operand_problem(report, at, unsupported_case_subject());
     val borrowed <- facts[subject].reception != independent_value();
     ref coverage = make CaseCoverage {
-        total <- 0u64; remaining <- 0u64; absent <- false; only <- no_node(); generation <- at;
+        total <- 0u64; remaining <- 0u64; absent <- false; only <- no_node(); generation <- at; exclusions <- no_node();
     };
     initialize_case_coverage(nodes, names, links, facts, at, coverage);
     val item <- first_item(nodes, nodes[at].right);
-    val pending <- facts[at].case_exit_link;
+    val cursor <- subject + 1u64;
+    val last_exit <- no_node();
     val expression <- no_node();
     val reached <- false;
+    val context <- no_node();
     val member <- no_node();
     val diagnostic <- 0u8;
-    for (unused in 0u64 .. syntax_len(nodes)) {
+    for (unused in 0u64 .. used) {
         if (item == no_node()) {
-            if (!completed) { set_result(facts, at, never_result()); return 0u8; } else {};
+            restore_case_exclusions(facts, coverage);
+            if (!completed) { set_result(facts, at, never_result()); return true; } else {};
             if (case_has_paths(coverage)) {
-                if (scalar_kind(facts[at].kind)) return incomplete_value_case();
+                if (scalar_kind(facts[at].kind)) return operand_problem(report, at, incomplete_value_case());
                 facts[at].case_end <- 1u8;
                 only_void(facts, at);
-                return 0u8;
+                return true;
             } else {};
             if (facts[at].kind == 0u8) { set_result(facts, at, never_result()); } else {};
-            return 0u8;
+            return true;
         } else {};
         expression <- nodes[item].right;
         reached <- case_has_paths(coverage);
         if (!reached) { (facts[item].case_item <- unreachable_case_item()):void; } else {};
         if (nodes[expression].kind == case_arm_node()) {
             diagnostic <- prepare_case_pattern(source, nodes, names, links, facts, at, nodes[expression].left, member);
-            if (diagnostic != 0u8) return diagnostic;
-            if (reached) {
-                diagnostic <- check_case_arm(nodes, links, facts, coverage, at, expression, member, borrowed);
-                if (diagnostic != 0u8) return diagnostic;
-            } else {};
-            diagnostic <- merge_case_breaks(nodes, names, facts, pending, at, nodes[expression].number,
-                                            reached && facts[expression].case_match != misses_case_arm());
-            if (diagnostic != 0u8) return diagnostic;
-            (diagnostic <- merge_case_breaks(nodes, names, facts, pending, at, nodes[expression].right,
-                                             reached && facts[expression].case_body != 0u8)):void;
+            if (diagnostic != 0u8) return operand_problem(report, at, diagnostic);
+            if (reached) { match_case_arm(nodes, facts, coverage, at, expression, member); } else {};
+            context <- enter_case_context(facts, outer, expression);
+            if (!check_operand_range(source, nodes, names, links, selected, facts, owners, report,
+                                     cursor, item, used, context)) return false;
+            diagnostic <- finish_case_arm(nodes, links, facts, coverage, at, expression, member, borrowed);
+            if (diagnostic != 0u8) return operand_problem(report, at, diagnostic);
+            diagnostic <- merge_case_breaks(nodes, names, facts, last_exit, at, nodes[expression].number,
+                                            facts[expression].case_match != misses_case_arm());
+            if (diagnostic != 0u8) return operand_problem(report, at, diagnostic);
+            (diagnostic <- merge_case_breaks(nodes, names, facts, last_exit, at, nodes[expression].right,
+                                             facts[expression].case_body != 0u8)):void;
         } else {
-            diagnostic <- merge_case_breaks(nodes, names, facts, pending, at, expression, reached);
             if (reached) {
                 facts[item].case_presence <- case_presence(coverage.remaining != 0u64, coverage.absent);
-                facts[item].case_selection <- facts[subject].selection;
+                (facts[item].case_selection <- facts[subject].selection):void;
+            } else {};
+            context <- enter_case_context(facts, outer, item);
+            if (!check_operand_range(source, nodes, names, links, selected, facts, owners, report,
+                                     cursor, item, used, context)) return false;
+            diagnostic <- merge_case_breaks(nodes, names, facts, last_exit, at, expression, reached);
+            if (reached) {
                 if (facts[expression].kind == never_result()) {
                     coverage.remaining <- 0u64;
                     (coverage.absent <- false):void;
@@ -936,10 +1014,12 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
                 };
             } else {};
         };
-        if (diagnostic != 0u8) return diagnostic;
+        if (diagnostic != 0u8) return operand_problem(report, at, diagnostic);
+        check_sequence_item(nodes, facts, item);
+        cursor <- item + 1u64;
         item <- links[item].next;
     };
-    return invalid_operand_tree();
+    return operand_problem(report, at, invalid_operand_tree());
 }
 
 func record_case_exit(facts:OperandFacts in F, at:u64, destination:u64) -> void where {owner F} {
@@ -1243,7 +1323,6 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     if (kind == try_node()) return check_try_result(nodes, links, facts, at);
     if (kind == conditional_node()) return check_conditional(nodes, facts, at);
     if (kind == case_arm_node()) return prepare_case_arm(nodes, names, links, facts, at);
-    if (kind == case_node()) return check_case(source, nodes, names, links, facts, at);
     if (kind == break_node()) {
         val target <- names[at].declaration;
         if (target == no_node() || nodes[target].kind != case_node()) return unproved_operand();
@@ -1275,6 +1354,32 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     } else {};
     if (kind == deferred_call_node() || kind == deferred_block_node()) { only_void(facts, at); } else {};
     return 0u8;
+}
+
+# Ordinary nodes are checked in postorder. Once a case subject is ready,
+# its ordered scan checks each direct item in the context that reaches it.
+func check_operand_range(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
+                         links:const NameWork in L, selected:const SelectedExports in E, facts:OperandFacts in F,
+                         owners:CallOwners in O, report:OperandCheckResult in R, first:u64, past:u64, used:u64,
+                         context:u64) -> bool
+    where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F, owner O, owner R} {
+    val at <- first;
+    val diagnostic <- 0u8;
+    val enclosing_case <- no_node();
+    for (unused in first .. past) {
+        if (at == past) return true;
+        if (at != context) { (facts[at].case_context <- context):void; } else {};
+        if (at == enclosing_case) {
+            if (!check_case(source, nodes, names, links, selected, facts, owners, report,
+                            at, used, context)) return false;
+        } else {
+            diagnostic <- check_operand(source, nodes, names, links, selected, facts, owners, at, used);
+            if (diagnostic != 0u8) return operand_problem(report, at, diagnostic);
+        };
+        enclosing_case <- facts[at].case_after_subject;
+        at <- if (enclosing_case != no_node() && enclosing_case < past) { enclosing_case } else { at + 1u64 };
+    };
+    return at == past;
 }
 
 func discard_result(facts:OperandFacts in F, at:u64, mode:u8) -> void where {owner F} {
@@ -1357,6 +1462,8 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
         facts[at].case_end <- 0u8;
         facts[at].case_presence <- unknown_target();
         facts[at].case_selection <- no_node();
+        facts[at].case_context <- no_node();
+        facts[at].case_after_subject <- no_node();
         facts[at].case_discriminator <- 0u8;
         facts[at].case_may_be_absent <- 0u8;
         facts[at].enum_constant <- 0u8;
@@ -1374,14 +1481,14 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
             if (report.diagnostic != 0u8) return false;
         } else {};
     };
+    val at <- no_node();
     for (offset in 0u64 .. tree.used) {
-        prepare_result_use(nodes, facts, tree.used - 1u64 - offset);
+        at <- tree.used - 1u64 - offset;
+        prepare_result_use(nodes, facts, at);
+        if (nodes[at].kind == case_node() && names[at].scope != no_node()) {
+            (facts[nodes[at].left].case_after_subject <- at):void;
+        } else {};
     };
-    # The syntax puts operands before their operation and local declarations
-    # before uses. Callable contracts are already available for forward calls.
-    for (at in 0u64 .. tree.used) {
-        report.diagnostic <- check_operand(source, nodes, names, links, selected, facts, owners, at, tree.used);
-        if (report.diagnostic != 0u8) { report.node <- at; return false; } else {};
-    };
-    return true;
+    return check_operand_range(source, nodes, names, links, selected, facts, owners, report,
+                               0u64, tree.used, tree.used, no_node());
 }

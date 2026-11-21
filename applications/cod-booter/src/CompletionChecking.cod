@@ -16,7 +16,7 @@ using "NameResolution.cod" {
 };
 using "OperandChecking.cod" {
     OperandFacts, nullable_ptr, borrowed_ref, never_result, void_result, has_value_tail,
-    unreachable_case_item, misses_case_arm, has_terminal_defer_before, present_target, absent_target, unknown_target,
+    unreachable_case_item, misses_case_arm, has_terminal_defer_before, present_target, absent_target, selected_target_presence,
 };
 using "ModuleExports.cod" {
     exception_root_identity, null_pointer_identity, missing_return_identity, unexpected_case_identity,
@@ -33,7 +33,6 @@ export data CompletionSite {
     escaping_failure:u8;
     case_break:u8;
     case_scan:u8;
-    case_presence_from:u64;
     guarded_by:u64;
     incoming_handler:u64;
     throws_clause:u64;
@@ -85,7 +84,6 @@ func initialize_site(sites:CompletionSites in X, at:u64) -> void where {owner X}
     sites[at].in_delayed_body <- 0u8;
     sites[at].case_break <- 0u8;
     sites[at].case_scan <- 0u8;
-    sites[at].case_presence_from <- no_node();
     sites[at].guarded_by <- no_node();
     sites[at].incoming_handler <- no_node();
     sites[at].throws_clause <- no_node();
@@ -108,17 +106,8 @@ func inherit_context(sites:CompletionSites in X, parent:u64, child:u64, guarded_
     sites[child].incoming_handler <- incoming_handler;
     sites[child].replacing_try <- replacing_try;
     sites[child].in_delayed_body <- sites[parent].in_delayed_body;
-    sites[child].case_presence_from <- sites[parent].case_presence_from;
     if (sites[parent].event == skipped_operand()) { (sites[child].event <- skipped_operand()):void; } else {};
     return;
-}
-
-func inherit_case_presence(facts:const OperandFacts in F, sites:CompletionSites in X, header:u64, child:u64) -> void
-    where {const owner F, owner X} {
-    if (child != no_node() && facts[header].case_selection != no_node() &&
-        facts[header].case_presence != unknown_target()) {
-        (sites[child].case_presence_from <- header):void;
-    } else {};
 }
 
 func binary_context(kind:u8) -> bool {
@@ -187,8 +176,6 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
         val condition <- nodes[at].number;
         inherit_context(sites, at, condition, guard, incoming, replacing);
         inherit_context(sites, at, right, guard, incoming, replacing);
-        inherit_case_presence(facts, sites, at, condition);
-        inherit_case_presence(facts, sites, at, right);
         if (condition != no_node() && facts[at].case_match == misses_case_arm()) {
             (sites[condition].event <- skipped_operand()):void;
         } else {};
@@ -198,7 +185,6 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
     if (kind == block_item_node()) {
         inherit_context(sites, at, left, guard, incoming, replacing);
         inherit_context(sites, at, right, guard, incoming, replacing);
-        inherit_case_presence(facts, sites, at, right);
         if (facts[at].case_item == unreachable_case_item()) { (sites[right].event <- skipped_operand()):void; } else {};
         return;
     } else {};
@@ -329,25 +315,6 @@ func route_failure(nodes:const ExprNodes in N, names:const NameBindings in B, li
     } else {};
     record_exit(sites, at, event, category, boundary, scope, no_node());
     return 0u8;
-}
-
-# Admitted ptr holders retain their selected address throughout their
-# lexical activation. Only transparent copies share that decision here.
-func record_presence(facts:const OperandFacts in F, sites:CompletionSites in X, at:u64, used:u64) -> void
-    where {const owner F, owner X} {
-    val presence <- facts[at].target_presence;
-    sites[at].presence <- presence;
-    val selection <- facts[at].selection;
-    if (presence != unknown_target() || selection == no_node()) return;
-    val header <- sites[at].case_presence_from;
-    for (unused in 0u64 .. used) {
-        if (header == no_node()) return;
-        if (facts[header].case_selection == selection) {
-            sites[at].presence <- facts[header].case_presence;
-            return;
-        } else {};
-        header <- sites[header].case_presence_from;
-    };
 }
 
 func record_registration(names:const NameBindings in B, sites:CompletionSites in X, at:u64) -> void
@@ -537,7 +504,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
         sites[at].can_continue <- 0u8;
         return 0u8;
     } else {};
-    record_presence(facts, sites, at, used);
+    sites[at].presence <- selected_target_presence(facts, at);
     if (!operands_can_complete(nodes, sites, at)) {
         sites[at].can_continue <- 0u8;
         return 0u8;
