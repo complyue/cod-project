@@ -10,18 +10,18 @@ import subprocess
 import tempfile
 import time
 
+from language_test_support import runtime_archive
+
 
 def run(executable, root, entry, expected, label):
-    generated, bitcode, runtime = [entry.with_suffix(suffix) for suffix in ('.ll', '.bc', '.cc')]
+    generated, bitcode = [entry.with_suffix(suffix) for suffix in ('.ll', '.bc')]
     program = entry.with_suffix('.native')
     toolchain = executable.parent.parent
+    runtime = runtime_archive(toolchain)
     commands = [
         ('check', [executable, '--check', entry, '--emit-llvm', generated,
-                   '--emit-bc', bitcode, '--emit-runtime', runtime]),
-        ('compile_link', [toolchain / 'bin/clang++', '-std=c++20', '-O2', '-g',
-                          '-stdlib=libc++', '-fuse-ld=lld', '-I' + str(root / 'include'),
-                          bitcode, runtime, '-o', program, '-L' + str(toolchain / 'lib'),
-                          '-Wl,-rpath,' + str(toolchain / 'lib')]),
+                   '--emit-bc', bitcode]),
+        ('compile_link', [toolchain / 'bin/clang', '-O2', '-fuse-ld=lld', bitcode, runtime, '-o', program]),
         ('run', [program]),
         ('size', [toolchain / 'bin/llvm-size', '--format=sysv', '--radix=10', program]),
     ]
@@ -342,7 +342,7 @@ export @walk;
 
     if report := os.environ.get('COD_LANGUAGE_STRESS_REPORT'):
         sources = [root / 'cod/lang_exceptions.hh', root / 'cod/lang_syntax.hh', root / 'cod/lang_frontend.hh', root / 'cod/lang_llvm.hh',
-                   root / 'cod/lang_native_runtime.hh', root / 'include/shilos/region.hh', Path(__file__).resolve()]
+                   root / 'cod/runtime/cod_lang_runtime.c', root / 'include/shilos/region.hh', Path(__file__).resolve()]
         Path(report).write_text(json.dumps({
             'schema_version': 2, 'recorded_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'platform': platform.platform(), 'results': results,

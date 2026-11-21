@@ -9,7 +9,7 @@ import tempfile
 from types import MappingProxyType
 from typing import Callable, Mapping
 
-from language_test_support import ROOT, MODE, COD, checked, shadow_diagnostics
+from language_test_support import ROOT, MODE, COD, RUNTIME_SOURCE, checked, shadow_diagnostics, write_instrumented_runtime
 
 
 @dataclass(frozen=True)
@@ -21,7 +21,7 @@ class NativeFixture:
     expected_shadows: tuple[str, ...] = ()
     source_files: Mapping[str, str] = field(default_factory=dict)
     sources: tuple[Path, ...] = ()
-    transform_ir: Callable[[str, str], tuple[str, dict]] | None = None
+    transform_ir: Callable[[str], tuple[str, dict]] | None = None
 
     def __post_init__(self):
         object.__setattr__(self, 'expected_values', tuple(self.expected_values))
@@ -47,11 +47,10 @@ def run_native(fixture, report_path=None):
             path.write_text(contents)
         entry.write_text(fixture.source)
         for general in (False, True):
-            ir, bc, runtime = [scratch / name for name in ("main.ll", "main.bc", "runtime.cc")]
+            ir, bc = [scratch / name for name in ("main.ll", "main.bc")]
             command = [COD, "--check", entry, "--emit-llvm", ir]
             if fixture.transform_ir is None:
                 command.extend(["--emit-bc", bc])
-            command.extend(["--emit-runtime", runtime])
             if general:
                 command.append("--no-specialize")
             diagnostics = []
@@ -63,7 +62,7 @@ def run_native(fixture, report_path=None):
             evidence = {}
             if fixture.transform_ir is not None:
                 original = ir.read_text()
-                modified, evidence = fixture.transform_ir(original, runtime.read_text())
+                modified, evidence = fixture.transform_ir(original)
                 ir.write_text(modified)
                 evidence = {**evidence, "original_ir_sha256": hashlib.sha256(original.encode()).hexdigest(),
                             "injected_ir_sha256": hashlib.sha256(modified.encode()).hexdigest()}
@@ -71,7 +70,7 @@ def run_native(fixture, report_path=None):
             checked([toolchain / "bin/llvm-as", ir, "-o", assembled], ROOT)
             checked([toolchain / "bin/opt", "-passes=verify", "-disable-output", bc], ROOT)
             source = scratch / "instrumented.cc"
-            source.write_text(fixture.wrappers + runtime.read_text() + fixture.harness)
+            write_instrumented_runtime(source, fixture.wrappers, fixture.harness)
             executable = scratch / "native"
             compile_command = [toolchain / "bin/clang++", "-std=c++20", "-O2", "-g", "-UNDEBUG", "-stdlib=libc++",
                                "-fuse-ld=lld", "-I" + str(ROOT / "include"), bc, source, "-o", executable,
@@ -87,7 +86,9 @@ def run_native(fixture, report_path=None):
                             "compile_command": list(map(str, compile_command))})
             print(f"PASS {results[-1]['name']}: {metrics}", flush=True)
     if report := report_path or os.environ.get("COD_LANGUAGE_REPORT"):
-        sources = [ROOT / "cod/main.cc", *sorted((ROOT / "cod").glob("lang_*.hh"))]
+        sources = [ROOT / "cod/main.cc", RUNTIME_SOURCE, RUNTIME_SOURCE.with_suffix(".h"),
+                   RUNTIME_SOURCE.parent.parent / "lang_intrinsic_catalog.h",
+                   *sorted((ROOT / "cod").glob("lang_*.hh"))]
         sources += [Path(__file__), Path(__file__).with_name("language_test_support.py"), *fixture.sources]
         Path(report).write_text(json.dumps({"recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(), "toolchain": MODE,
                                          "passed": len(results), "total": len(results), "results": results,

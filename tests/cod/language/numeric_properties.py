@@ -84,7 +84,7 @@ def main():
                               'This validates arithmetic and regional input access, not a neural model.'],
                     'source_sha256': {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
                                       for p in [root / 'cod/lang_syntax.hh', root / 'cod/lang_frontend.hh',
-                                                root / 'cod/lang_llvm.hh', root / 'cod/lang_native_runtime.hh',
+                                                root / 'cod/lang_llvm.hh', root / 'cod/runtime/cod_lang_runtime.c',
                                                 root / 'include/shilos/region.hh',
                                                 Path(__file__).resolve()]}}
         if report := os.environ.get('COD_NUMERIC_REPORT'):

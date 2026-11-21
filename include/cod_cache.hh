@@ -277,9 +277,9 @@ public:
   bool compile_to_bitcode(const fs::path &source_path, const fs::path &output_path,
                           const std::vector<std::string> &compiler_args);
 
-  // Link bitcode files into executable
-  bool link_bitcode(const std::vector<fs::path> &bitcode_files, const fs::path &output_executable,
-                    const std::vector<std::string> &linker_args);
+  // Link bitcode and native inputs into an executable.
+  bool link_bitcode(const std::vector<fs::path> &inputs, const fs::path &output_executable,
+                    const std::vector<std::string> &linker_args, const std::string &driver = {});
 };
 
 // YAML support for regional_cache_key

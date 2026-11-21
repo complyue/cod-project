@@ -8,7 +8,6 @@
 #include "cod.hh"
 #include "cod_cache.hh"
 #include "lang_frontend.hh"
-#include "lang_native_runtime.hh"
 
 #include "codp.hh"
 #include "codp_yaml.hh"
@@ -72,7 +71,7 @@ struct CodReplConfig {
 };
 
 struct LanguageEmission {
-  std::optional<fs::path> ir, bitcode, runtime, providers;
+  std::optional<fs::path> ir, bitcode, providers;
   bool specialize = true;
   bool bounds_checks = true;
 };
@@ -108,6 +107,23 @@ private:
       return development_include;
     }
     return {};
+  }
+
+  fs::path getLanguageRuntime() const {
+    constexpr auto archive_name = "libcod-runtime.a";
+    if (const char *override = std::getenv("COD_RUNTIME_ARCHIVE"); override && *override) {
+      const auto archive = fs::absolute(override);
+      if (!fs::is_regular_file(archive))
+        throw std::runtime_error("COD_RUNTIME_ARCHIVE does not name a runtime archive: " + archive.string());
+      return archive;
+    }
+    const auto installed = toolchain_root_ / "lib" / archive_name;
+    if (fs::is_regular_file(installed)) return installed;
+    if (fs::is_regular_file(toolchain_root_ / "CMakeCache.txt")) {
+      const auto development = toolchain_root_.parent_path() / "build-cod-runtime" / archive_name;
+      if (fs::is_regular_file(development)) return development;
+    }
+    throw std::runtime_error("CoD runtime archive is missing; build it with make -C cod/runtime or set COD_RUNTIME_ARCHIVE");
   }
 
 #ifdef _WIN32
@@ -195,7 +211,6 @@ static void printUsage(const char *prog_name) {
             << "  --check FILE        Check a CoD entry and its demanded call paths\n"
             << "  --emit-llvm FILE    Save directly emitted textual LLVM IR\n"
             << "  --emit-bc FILE      Save directly emitted LLVM bitcode\n"
-            << "  --emit-runtime FILE Save native system services for external linking\n"
             << "  --emit-c-provider DIR  Generate the checked C boundary header and stubs\n"
             << "  --no-specialize    Validate CoD calls through general native implementations\n"
             << "  --no-bounds-checks Assume source builtin indices are in range\n"
@@ -209,6 +224,8 @@ static void printUsage(const char *prog_name) {
             << "  --force-rebuild     Force rebuild (ignore cache)\n"
             << "  -v, --verbose       Enable verbose debug output\n"
             << "  --cache-max-age=HOURS Set cache expiration time in hours\n"
+            << "\n"
+            << "COD_RUNTIME_ARCHIVE selects the shared runtime archive for --run.\n"
             << "\n"
             << "If no -e/--eval is specified, starts interactive REPL mode.\n"
             << "\n"
@@ -651,7 +668,6 @@ int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry,
     };
     if (emission.ir) write(*emission.ir, compilation.llvm_ir);
     if (emission.bitcode) write(*emission.bitcode, compilation.bitcode);
-    if (emission.runtime) write(*emission.runtime, cod::language::native_runtime_source());
     if (emission.providers) {
       using Files = cod::language::NativeProviderFiles;
       fs::create_directories(*emission.providers);
@@ -661,37 +677,39 @@ int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry,
     if (check_only) return 0;
     if (compilation.native_library)
       throw std::runtime_error("a C entry library requires a linked native launcher; emit it with --check");
+    const auto archive = getLanguageRuntime();
 
     llvm::SmallString<256> directory;
     const auto model = (fs::temp_directory_path() / "cod-language").string();
     if (const auto error = llvm::sys::fs::createUniqueDirectory(model, directory))
       throw std::system_error(error, "cannot create native compilation directory");
     const fs::path temporary(directory.str().str());
-    const auto source = temporary / "runtime.cc";
     const auto bitcode = temporary / "program.bc";
-    const auto runtime_bitcode = temporary / "runtime.bc";
     const auto executable = getRunnerPath(temporary);
     struct TemporaryFiles {
-      fs::path source, bitcode, runtime_bitcode, executable, directory;
+      fs::path bitcode, executable, directory;
       ~TemporaryFiles() {
         std::error_code ignored;
-        fs::remove(source, ignored);
         fs::remove(bitcode, ignored);
-        fs::remove(runtime_bitcode, ignored);
         fs::remove(executable, ignored);
         fs::remove(directory, ignored);
       }
-    } cleanup{source, bitcode, runtime_bitcode, executable, temporary};
+    } cleanup{bitcode, executable, temporary};
     cod::cache::BitcodeCompiler compiler;
     write(bitcode, compilation.bitcode);
-    write(source, cod::language::native_runtime_source());
     // Native optimization needs the files, not duplicate in-memory encodings.
     std::string{}.swap(compilation.llvm_ir);
     std::string{}.swap(compilation.bitcode);
-    if (!compiler.compile_to_bitcode(source, runtime_bitcode, buildCompilerArgs(config))) return 3;
-    auto linker_args = buildLinkerArgs(config);
-    linker_args.push_back("-O2");
-    if (!compiler.link_bitcode({bitcode, runtime_bitcode}, executable, linker_args)) return 3;
+    std::vector<std::string> linker_args{"-O2"};
+#ifdef _WIN32
+    constexpr auto clang = "clang.exe";
+#else
+    constexpr auto clang = "clang";
+    linker_args.push_back("-fuse-ld=lld");
+#endif
+    const auto bundled_clang = toolchain_root_ / "bin" / clang;
+    if (!compiler.link_bitcode({bitcode, archive}, executable, linker_args,
+                              fs::exists(bundled_clang) ? bundled_clang.string() : clang)) return 3;
     return runExecutableAndWait(executable).value_or(3);
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
@@ -899,13 +917,12 @@ int main(int argc, const char **argv) {
       warnings.errors.insert(cod::language::Warning::unused_capture);
     } else if (arg == "-Werror=missing-return") {
       warnings.errors.insert(cod::language::Warning::missing_return);
-    } else if (arg == "--emit-llvm" || arg == "--emit-bc" || arg == "--emit-runtime" || arg == "--emit-c-provider") {
+    } else if (arg == "--emit-llvm" || arg == "--emit-bc" || arg == "--emit-c-provider") {
       if (i + 1 >= argc) {
         std::cerr << "Error: " << arg << " requires a path\n";
         return 1;
       }
-      auto &output = arg == "--emit-llvm" ? emission.ir : arg == "--emit-bc" ? emission.bitcode :
-          arg == "--emit-runtime" ? emission.runtime : emission.providers;
+      auto &output = arg == "--emit-llvm" ? emission.ir : arg == "--emit-bc" ? emission.bitcode : emission.providers;
       output = fs::absolute(argv[++i]);
     } else if (arg == "-e" || arg == "--eval") {
       if (i + 1 >= argc) {
@@ -956,7 +973,7 @@ int main(int argc, const char **argv) {
     std::cerr << "Error: CoD warning options require --run or --check\n";
     return 1;
   }
-  if (emission.ir || emission.bitcode || emission.runtime || emission.providers || !emission.specialize || !emission.bounds_checks) {
+  if (emission.ir || emission.bitcode || emission.providers || !emission.specialize || !emission.bounds_checks) {
     std::cerr << "Error: language emission options require --run or --check\n";
     return 1;
   }

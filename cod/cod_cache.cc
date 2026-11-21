@@ -409,16 +409,11 @@ bool BitcodeCompiler::compile_to_bitcode(const fs::path &source_path, const fs::
   return execute_and_wait(compiler_path, std::move(arguments)) && fs::exists(output_path);
 }
 
-bool BitcodeCompiler::link_bitcode(const std::vector<fs::path> &bitcode_files, const fs::path &output_executable,
-                                   const std::vector<std::string> &linker_args) {
-  // Get toolchain compiler path - look for project build directory
-  std::string compiler_path = find_clangxx();
-
+bool BitcodeCompiler::link_bitcode(const std::vector<fs::path> &inputs, const fs::path &output_executable,
+                                   const std::vector<std::string> &linker_args, const std::string &driver) {
   std::vector<std::string> arguments;
-
-  // Add bitcode files
-  for (const auto &bitcode_file : bitcode_files) {
-    arguments.push_back(bitcode_file.string());
+  for (const auto &input : inputs) {
+    arguments.push_back(input.string());
   }
 
   // Add linker arguments
@@ -429,7 +424,7 @@ bool BitcodeCompiler::link_bitcode(const std::vector<fs::path> &bitcode_files, c
   arguments.push_back(output_executable.string());
 
   // Execute the linking command
-  return execute_and_wait(compiler_path, std::move(arguments));
+  return execute_and_wait(driver.empty() ? find_clangxx() : driver, std::move(arguments));
 }
 
 } // namespace cod::cache

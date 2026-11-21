@@ -82,7 +82,7 @@ extern "C" std::uint64_t cod_lang_exception_cause(std::uint64_t cause,std::uint6
 }
 static bool deny_create='''))
 FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('if(value==9000)', '''if(value>=9060 && value<9064){
-    deny_cause=true;invalid_category=value==9060?0:value==9061?std::size(cod_exception_names):value==9062?(std::uint64_t{1}<<32)+5:static_cast<std::uint64_t>(CoDException::IndexOutOfBoundsError);return;
+    deny_cause=true;invalid_category=value==9060?0:value==9061?std::size(cod_exception_names):value==9062?(std::uint64_t{1}<<32)+5:COD_EXCEPTION_index_out_of_bounds;return;
   }
   if(value==9000)''').replace('assert(created+copied==released', 'assert(!deny_cause && breaches==4);\n  assert(created+copied==released'))
 FIXTURE = FIXTURE.updated(expected_values=['6500', '9', '1', '8', '7', '1', '7', '6', '9', '6', '9', '6', '9', '9'])

@@ -11,7 +11,7 @@ import tempfile
 import time
 
 from foundation_tests import ROOT, MODE, COD
-from language_test_support import checked
+from language_test_support import checked, write_instrumented_runtime
 
 WRAPPERS = """
 #define cod_lang_defer_allocate cod_record_allocate
@@ -95,8 +95,8 @@ def main():
                     loop = 'defer{consume(-1);};defer{consume(42);defer{consume(-2);};};'
                 path.write_text('using symbol "std:io" @print;\nproc consume(x:T)->void where T {behave @print(x);}\n'
                                 'proc batch(n:i64)->void {' + loop + '}\nbatch(' + str(count) + ');\n')
-                ir, bc, runtime = [scratch / item for item in ("main.ll", "main.bc", "runtime.cc")]
-                command = [COD, "--check", path, "--emit-llvm", ir, "--emit-bc", bc, "--emit-runtime", runtime]
+                ir, bc = [scratch / item for item in ("main.ll", "main.bc")]
+                command = [COD, "--check", path, "--emit-llvm", ir, "--emit-bc", bc]
                 if general:
                     command.append("--no-specialize")
                 output, frontend_seconds = checked(command, ROOT)
@@ -122,7 +122,7 @@ def main():
                     expected = '(observed == 0 ? 42 : -1)'
                 defines = f'#define FAIL_ON {fail_on}\n#define EXPECTED_REGISTRATIONS {registrations}\n#define EXPECTED_PEAK {peak}\n#define EXPECTED_VALUE {expected}\n'
                 source = scratch / "instrumented.cc"
-                source.write_text(defines + WRAPPERS + runtime.read_text() + HARNESS)
+                write_instrumented_runtime(source, defines + WRAPPERS, HARNESS)
                 executable = scratch / "native"
                 compile_command = [toolchain / "bin/clang++", "-std=c++20", "-O2", "-g", "-UNDEBUG", "-stdlib=libc++",
                                    "-fuse-ld=lld", "-I" + str(ROOT / "include"), bc, source, "-o", executable,

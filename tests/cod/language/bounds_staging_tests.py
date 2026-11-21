@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounds policy survives shared code, imports and separate runtime emission."""
+"""Bounds policy survives shared code, imports and a separately built runtime."""
 import datetime
 import hashlib
 import json
@@ -9,6 +9,7 @@ import re
 import subprocess
 import tempfile
 from foundation_tests import ROOT, MODE, COD
+from language_test_support import runtime_archive
 from callable_value_staging_tests import inventory
 from bounds_tests import TYPES, SEED, LINK
 
@@ -34,15 +35,16 @@ def main():
         if not passed: print(json.dumps(details,indent=2),flush=True)
     with tempfile.TemporaryDirectory(prefix='cod-bounds-staging-') as directory:
         root = Path(directory); (root/'lib.cod').write_text(LIBRARY)
-        source, ir_path, runtime_path = root/'main.cod',root/'main.ll',root/'runtime.cc'
-        runtime = None
+        source, ir_path = root/'main.cod',root/'main.ll'
+        archive = runtime_archive(ROOT / MODE)
+        runtime = archive.read_bytes()
         for general in (False,True):
             for checked in (True,False):
                 mode = ('general' if general else 'default')+('/checked' if checked else '/unchecked')
                 previous = None
                 for depth in (30,300):
                     source.write_text(SOURCE.replace('DEPTH',str(depth)))
-                    command = [str(COD),'--run',str(source),'--emit-llvm',str(ir_path),'--emit-runtime',str(runtime_path)]
+                    command = [str(COD),'--run',str(source),'--emit-llvm',str(ir_path)]
                     if general: command.append('--no-specialize')
                     if not checked: command.append('--no-bounds-checks')
                     run = subprocess.run(command,cwd=ROOT,capture_output=True,text=True,timeout=60)
@@ -56,10 +58,7 @@ def main():
                     record(label+'/shared_method',sum('.at.' in method and method.endswith('.general') for method in methods)==1)
                     if previous is not None: record(label+'/stable_inventory',bool(methods) and methods==previous)
                     previous = methods
-                    if run.returncode==0:
-                        emitted = runtime_path.read_text()
-                        if runtime is not None:record(label+'/common_runtime',emitted==runtime)
-                        runtime = emitted
+                    record(label+'/common_runtime',archive.read_bytes()==runtime)
         run = subprocess.run([str(COD),'--no-bounds-checks'],cwd=ROOT,capture_output=True,text=True,timeout=30)
         record('option_requires_source',run.returncode==1 and 'require --run or --check' in run.stderr)
         run = subprocess.run([str(COD),'--help'],cwd=ROOT,capture_output=True,text=True,timeout=30)

@@ -61,7 +61,7 @@ def main():
     expected = ["10", "30", "20", "40", "70", "80", "6201", "90", "71", "72"]
     assert trace == expected, trace
     sources = [root / "cod" / name for name in
-               ("lang_exceptions.hh", "lang_syntax.hh", "lang_frontend.hh", "lang_llvm.hh", "lang_native_runtime.hh")]
+               ("lang_exceptions.hh", "lang_syntax.hh", "lang_frontend.hh", "lang_llvm.hh", "runtime/cod_lang_runtime.c")]
     sources += [fixture, Path(__file__), directory / "callable_runtime_tests.py", directory / "regional_runtime_tests.py",
                 root / "include/shilos/region.hh"]
     evidence.update(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(), toolchain=mode, trace=trace,

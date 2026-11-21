@@ -63,11 +63,11 @@ chain = '''extern "C" std::uint64_t cod_lang_exception_chain(std::uint64_t categ
 '''
 assert needle in FIXTURE.harness
 FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace(needle, chain+needle))
-FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('if(value==9000)', '''if(value==9070){assert(cod_causes && cod_causes->size()==3);deny_chain=true;return;}
-  if(value==9071){assert(deny_chain && chain_failures==1 && cod_causes->size()==3);deny_chain=false;return;}
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('if(value==9000)', '''if(value==9070){assert(cod_causes.records && cod_causes.size==3);deny_chain=true;return;}
+  if(value==9071){assert(deny_chain && chain_failures==1 && cod_causes.size==3);deny_chain=false;return;}
   if(value==9000)'''))
 FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('creation_failures==1', 'creation_failures==0').replace('copy_failures==3', 'copy_failures==1').replace('largest>4000', 'largest>0'))
-FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('  cod_finish();', '  assert(!deny_chain && chain_calls==6 && chain_failures==1 && cod_causes->size()==5);\n  cod_finish();assert(!cod_causes);'))
+FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('  cod_finish();', '  assert(!deny_chain && chain_calls==6 && chain_failures==1 && cod_causes.size==5);\n  cod_finish();assert(!cod_causes.records);'))
 FIXTURE = FIXTURE.updated(expected_values=['1000', '0', '1', '1', '0', '1', '1', '1', '0', '1'])
 FIXTURE = FIXTURE.updated(expected_shadows=[])
 

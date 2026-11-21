@@ -1,8 +1,10 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 22 · Recorded: 2026-11-21 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 23 · Recorded: 2026-11-21 · Phase: initial seed delivery through alternating booter and seed development.
 
 ## Design authority
+
+- [D-20-SHARED-RUNTIME](../../design/DesignAuthorityRegistry.md#d-20-shared-runtime) and [D-20-NATIVE-BUILD](../../design/DesignAuthorityRegistry.md#d-20-native-build), roadmap r23, apply the [runtime](../../CHANGELOG.md#h-shared-c-runtime-20261121) and [native build](../../CHANGELOG.md#h-native-build-boundary-20261121) decisions. P-654–P-657 connect reusable native implementations to consistent execution and verifiable compiler boundaries under charter §§4.3, 6.3 and 12. Check the same archive through seed execution and the seed-built booter, link emitted code without LLVM, and build reusable components without building either compiler. Existing language contracts and application adapter ownership continue. Permanent ABI and distribution retain their own scope.
 
 - [D-17-EXCEPTION-BINDINGS](../../design/DesignAuthorityRegistry.md#d-17-exception-bindings) and [D-10-CONTEXTUAL-NAMES](../../design/DesignAuthorityRegistry.md#d-10-contextual-names) at roadmap r22 apply the [catch](../../CHANGELOG.md#h-catch-holder-only-20261121) and [lexical name](../../CHANGELOG.md#h-lexical-name-release-20261121) decisions to both bootstrap frontends. P-650–P-653 connect readable, checkable source to one identifiable release obligation and ordinary lookup. Check positive and negative grammar boundaries. Runtime delivery remains scoped per operation.
 
@@ -18,7 +20,7 @@ Roadmap revision: 22 · Recorded: 2026-11-21 · Phase: initial seed delivery thr
 
 - **Output initialization.** [D-22](../../design/DesignAuthorityRegistry.md#d-22-init-places) governs calls that initialize an ordinary caller place under C-81/C-65 and charter §§4.3, 6.3, 8 and 12. The first native workflow uses the scoped handle contract for resource acquisition and disposal.
 
-- **Registry and scope.** [D-20](../../design/DesignAuthorityRegistry.md#d-20), roadmap revision 22. The pipeline and interop documents retain their scoped qualification. [H-353](../../CHANGELOG.md#h-353) supplies the compiler application baseline. [H-356](../../CHANGELOG.md#h-356) supplies the selected defer call/block timing. Detailed application contracts beyond the confirmed scopes remain `pending-human`.
+- **Registry and scope.** [D-20](../../design/DesignAuthorityRegistry.md#d-20), roadmap revision 23. The pipeline and interop documents retain their scoped qualification. [H-353](../../CHANGELOG.md#h-353) supplies the compiler application baseline. [H-356](../../CHANGELOG.md#h-356) supplies the selected defer call/block timing. Detailed application contracts beyond the confirmed scopes remain `pending-human`.
 - **Value:** C-80/P-314–P-318 connects inspectable compiler semantics to C-01, reusable structured artifacts to C-05, and native integration to C-02/C-11/C-79. The charter's §§2, 5.3–5.4, 6–7 and 12 provide the context; detailed derivation and trade-offs remain pending.
 - **Boundaries / acceptance:** preserve regional relocation, owner/access checks, independent module worlds and explicit TLS effects where used. Keep confirmed direction, proposals and missing evidence distinguishable. Native ABI, toolchain operations and performance claims require their own authorization or evidence.
 
@@ -65,6 +67,8 @@ Apply the [name rules](../../design/SymbolicDynamicScope.md#clause-words-and-lex
 The standalone build uses GNU Make 4.3 or newer and an existing CoD seed and compatible LLVM SDK with shared libraries. From the repository root, build the booter and run the deferred-release workload.
 
 ```sh
+make -C cod/runtime
+make -C cod/native/llvm
 make -C applications/cod-booter
 ./build-cod-booter/cod-booter applications/cod-booter/workloads/deferred-release.cod \
     build-cod-booter/deferred-release.o
@@ -72,9 +76,11 @@ make -C applications/cod-booter
 ./build-cod-booter/deferred-release
 ```
 
-The program prints `1` on three lines. Use `TOOLCHAIN` for a different ready toolchain prefix, or set `COD_SEED`, `LLVM_CONFIG`, `CLANG` and `CLANGXX` individually. Use a separate `OUT` for each build you run concurrently or want to retain, such as `OUT=../../build-cod-booter-shared COD_SEED_FLAGS=--no-specialize`. Make interprets relative paths from the booter directory. Use paths without whitespace.
+The program prints `1` on three lines. Use `TOOLCHAIN` for a ready toolchain prefix. The runtime and LLVM service builds accept `CLANG` and `LLVM_AR`, and the LLVM service also accepts `LLVM_CONFIG`. The booter accepts `COD_SEED`, `CLANG`, `LLVM_CONFIG`, `COD_RUNTIME_ARCHIVE` and `COD_LLVM_ARCHIVE`. Use a separate `OUT` for each build you run concurrently or want to retain, such as `OUT=../../build-cod-booter-shared COD_SEED_FLAGS=--no-specialize`. Make interprets relative paths from the selected build directory. Use paths without whitespace.
 
-The seed checks the booter sources and emits the provider header and stubs, LLVM IR and C++ runtime into `OUT`. Clang compiles those outputs and the handwritten C providers. The link uses the shared libraries reported by `llvm-config`, with the SDK library directory recorded for the loader. The seed and LLVM build tree is a read-only input to Make.
+The seed checks the booter sources and emits the provider header and stubs and LLVM IR into `OUT`. Clang compiles those outputs and the handwritten C adapters, then links the CoD archives and the shared libraries reported by `llvm-config`. The SDK library directory is recorded for the loader. The seed and LLVM build tree supplies read-only inputs.
+
+After building the runtime, the development seed uses it for `./build/bin/cod --run FILE`. An installed toolchain can provide `lib/libcod-runtime.a` under its prefix. Set the `COD_RUNTIME_ARCHIVE` environment variable to select a different compatible archive. Link seed-emitted objects or bitcode with the same archive when building an executable outside the seed.
 
 ## Next-stage repositories and native runtime
 
@@ -91,6 +97,12 @@ All five planned repositories will live in the [e-wrks GitHub organization](http
 After the split, a change to what a CoD program means belongs in `cod-lang`. Each compiler repository documents how it implements the rule, its current coverage and any known gaps.
 
 New CoD native components are written in C. The CoD native interface is C-based. The C++ seed, the booter, the future production compiler and foreign adapters consume the same interface. Specify each operation from the runtime behavior its callers need. C++ classes, templates and exception propagation are internal to C++ clients or dependencies. This choice covers CoD’s LLVM bindings as well as region support.
+
+### Shared runtime and independent component builds
+
+The shared language runtime provides allocation and release, backing for callable values and deferred actions, and common exception operations. Build one static archive per target and reuse it when linking the seed's emitted programs and the seed-built booter. The future `e-wrks/cod` compiler and its emitted programs use the same implementation. The seed executable links the archive into the programs it runs. Source sites and program-defined exception names stay with emitted code. The archive uses the canonical intrinsic exception catalog and has no LLVM dependency. The link interface is private to matching compiler and runtime builds.
+
+Reusable C components own their build entry points and outputs. The indexed source and region storage services are header-only. The standalone LLVM service builds its command-construction and verified object-emission implementation against a prepared SDK. It owns complete object publication. The booter keeps its generated stubs and handwritten adapters for CoD handles, status mapping and callback loans. Application builds consume prepared component headers and archives.
 
 At the separate DBMR checkpoint, the region service must [publish a newly created disk-backed region](../../design/ConstructionAndAcquisition.md#publishing-a-newly-created-dbmr) only after initialization and preserve an existing destination in a race. Create private staging on the target filesystem, reject mismatched destinations, and verify the destination at the instant another process can open it. A killed builder and two publishers racing for the same name must preserve every previously published image. The C++ region and DBMR code is historical reference. The new components follow the CoD operation contracts.
 

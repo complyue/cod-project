@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-21 — Share the C language runtime and build native components independently
+
+<a id="h-shared-c-runtime-20261121"></a>
+**H-SHARED-C-RUNTIME-20261121.** In the [native build side chat](codex://threads/01a1fd61-077d-75f3-b90d-c1b5e1266148) on 2026-11-21 (America/Los_Angeles), the project user accepted one shared C runtime with “同意，告知主线程落实”. D-20-SHARED-RUNTIME/P-654/P-655 qualify the per-target static archive for the seed's emitted executables, the seed-built booter and future `e-wrks/cod` consumers. Program-specific metadata stays with emitted code. Existing language behavior, the LLVM-free runtime dependency boundary and the private interface continue. The previous runtime generator is at `588bf6ec712a3f4f04b0d9d48b6e6858dd2c629f:cod/lang_native_runtime.hh`. Design links to the image and cause backing follow the implementation without changing their contracts.
+
+<a id="h-native-build-boundary-20261121"></a>
+**H-NATIVE-BUILD-BOUNDARY-20261121.** In the same chat and date, the project user requested “native C components 也最好是独立构建系统吧，这个如果还没明确下来，你通知主线按此决策”. D-20-NATIVE-BUILD/P-656/P-657 qualify independent builds and outputs for reusable native C components at roadmap r23. Consumers take prepared headers and libraries, and application-generated adapters stay with the application. Header-only components retain that form. The LLVM-facing service can consume a prepared SDK. The seed bootstrap, language semantics, repository boundaries and permanent ABI retain their existing scope.
+
 ## 2026-11-21 — Catch the holder and release contextual variable names
 
 <a id="h-catch-holder-only-20261121"></a>
