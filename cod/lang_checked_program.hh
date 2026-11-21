@@ -100,11 +100,6 @@ struct CheckedOperation {
   std::optional<NativeAcquisition> native_acquisition;
   std::optional<size_t> native_call;
   bool reborrows_native_owner = false;
-  struct NativeHereCall {
-    size_t operation, place, owner;
-    auto operator<=>(const NativeHereCall &) const = default;
-  };
-  std::optional<NativeHereCall> native_here_call;
   std::optional<size_t> binding;
   // Immutable selected reference, independent of the mutable binding version.
   std::optional<size_t> selection_identity;

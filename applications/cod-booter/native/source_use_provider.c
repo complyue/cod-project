@@ -7,16 +7,22 @@ _Static_assert(_Alignof(cod_source_span) == _Alignof(cod_native_source_use_row1)
 _Static_assert(offsetof(cod_source_span, first) == offsetof(cod_native_source_use_row1, first), "source index start");
 _Static_assert(offsetof(cod_source_span, past) == offsetof(cod_native_source_use_row1, past), "source index end");
 
+static const cod_source_revision *source_revision(cod_native_SourceRevision_borrow revision) {
+  return revision.payload == revision.owner ? (const cod_source_revision *)(uintptr_t)revision.payload : NULL;
+}
+
 int cod_native_source_use_validate_impl(cod_native_SourceRevision_borrow revision,
                                        const cod_native_source_use_arrays *views) {
-  const cod_source_view canonical = cod_source_borrow((const cod_source_revision *)(uintptr_t)revision.payload);
+  const cod_source_revision *source = source_revision(revision);
+  if (!source) return 0;
+  const cod_source_view canonical = cod_source_borrow(source);
   return views->array0.base == canonical.bytes && views->array0.count == canonical.size &&
       (const void *)views->array1.base == (const void *)canonical.lines && views->array1.count == canonical.line_count;
 }
 
 cod_native_status cod_native_source_use_impl(cod_native_SourceRevision_borrow revision, cod_native_source_use_callback run,
                                              void *loan, uint8_t *value) {
-  const cod_source_revision *source = (const cod_source_revision *)(uintptr_t)revision.payload;
+  const cod_source_revision *source = source_revision(revision);
   if (!source) return COD_NATIVE_BOUNDARY_ERROR;
 
   const cod_source_view view = cod_source_borrow(source);

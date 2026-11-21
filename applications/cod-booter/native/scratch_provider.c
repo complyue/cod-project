@@ -76,8 +76,12 @@ static cod_native_scratch_use_arrays scratch_views(scratch_region *scratch) {
   };
 }
 
+static scratch_region *scratch_from_handle(cod_native_Scratch_borrow resource) {
+  return resource.payload == resource.owner ? (scratch_region *)(uintptr_t)resource.payload : NULL;
+}
+
 int cod_native_scratch_use_validate_impl(cod_native_Scratch_borrow resource, const cod_native_scratch_use_arrays *views) {
-  scratch_region *scratch = (scratch_region *)(uintptr_t)resource.payload;
+  scratch_region *scratch = scratch_from_handle(resource);
   if (!scratch) return 0;
   const cod_native_scratch_use_arrays expected = scratch_views(scratch);
 #define MATCH(index) (views->array##index.base == expected.array##index.base && views->array##index.count == expected.array##index.count)
@@ -87,7 +91,7 @@ int cod_native_scratch_use_validate_impl(cod_native_Scratch_borrow resource, con
 
 cod_native_status cod_native_scratch_use_impl(cod_native_Scratch_borrow resource, cod_native_scratch_use_callback run,
                                             void *loan, uint8_t *value) {
-  scratch_region *scratch = (scratch_region *)(uintptr_t)resource.payload;
+  scratch_region *scratch = scratch_from_handle(resource);
   if (!scratch) return COD_NATIVE_BOUNDARY_ERROR;
   const cod_native_scratch_use_arrays views = scratch_views(scratch);
   const cod_native_here_step completion = run(loan, &views, value);

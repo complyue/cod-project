@@ -907,21 +907,24 @@ class LLVMEmission {
     return bridge;
   }
   llvm::Value *emit_native_here(const Expression &expr) {
-    using Call = std::pair<CheckedOperation::NativeHereCall, CheckedOperation::SuppliedHere>;
+    using Call = std::pair<size_t, std::optional<CheckedOperation::SuppliedHere>>;
     std::map<Call, std::vector<size_t>> alternatives;
     for (size_t i = 0; i < contexts_.size(); ++i) {
       const auto &fact = contexts_[i].at(&expr);
-      alternatives[{*fact.native_here_call, *fact.supplied_here}].push_back(i);
+      alternatives[{*fact.native_call, fact.supplied_here}].push_back(i);
     }
     return contextual_value(expr, alternatives, "native.here", [&](const auto &selected) -> llvm::Value * {
-      const auto &[call, body] = selected;
-      const auto &native = program_->native_operations.at(call.operation);
-      auto *borrow = native_reborrow(load(storage_.at(call.place)));
+      const auto &[id, supplied] = selected;
+      const auto &operand = *expr.children.front();
+      auto *borrow = emit_expression(operand, Projection::target);
+      if (!reachable()) return nullptr;
+      const auto &body = supplied.value();
+      const auto &native = program_->native_operations.at(id);
       auto *callback = prepare_here(body, expr.at);
       auto *frame = llvm::StructType::get(context_, {here_, b_.getPtrTy(), outcome_});
       auto *state = slot(frame, "native.here.context");
       b_.CreateStore(callback, b_.CreateStructGEP(frame, state, 0));
-      b_.CreateStore(owner_identity(call.owner, expr.at), b_.CreateStructGEP(frame, state, 1));
+      b_.CreateStore(selected_owner(operand), b_.CreateStructGEP(frame, state, 1));
       auto *completion = slot(b_.getInt32Ty(), "native.here.completion");
       b_.CreateStore(b_.getInt32(static_cast<unsigned>(NativeHereStep::invalid)), completion);
       auto *value = slot(b_.getInt8Ty(), "native.here.value");
@@ -2288,9 +2291,9 @@ class LLVMEmission {
     using K = Expression::Kind;
     const auto &fact = contexts_.front().at(&expr);
     if (fact.native_call)
-      return temporary_scope(expr.at, scalar_, [&] { return emit_native_call(expr); });
-    if (fact.native_here_call)
-      return temporary_scope(expr.at, scalar_, [&] { return emit_native_here(expr); });
+      return temporary_scope(expr.at, scalar_, [&] {
+        return program_->native_operations.at(*fact.native_call).has_here() ? emit_native_here(expr) : emit_native_call(expr);
+      });
     if (fact.argument_sources) {
       using Layout = std::tuple<std::vector<const Expression *>, std::vector<CheckedOperation::OperandPreparation>,
                                 std::optional<CheckedOperation::PipelinePreparation>>;
