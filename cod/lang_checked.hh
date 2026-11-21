@@ -7155,6 +7155,7 @@ class ScalarChecker {
     const auto &input = *item.children.front();
     if (input.kind != Expression::Kind::make_object)
       implementation_gap(item.at, "whole-product field initialization without an explicit nested make");
+    if (input.construction_type_query) implementation_gap(input.at, "inline product construction through typeof");
     if (!input.initializer_block)
       fail(input.at, "an inline product field requires a complete make initializer block");
     return input;
@@ -7174,12 +7175,15 @@ class ScalarChecker {
     complete_product(schema, order, expr.at);
     return order;
   }
-  size_t reserve_product(const Type &type, const Location &at) {
-    const auto name = "$product." + std::to_string(storage_->size());
+  size_t reserve_lexical_construction(const Type &type, const Location &at, const Expression *receiver = nullptr) {
+    const auto name = receiver ? receiver->text : "$make." + std::to_string(storage_->size());
     if (delayed_ || declaration_scope(name, at).id != cleanup_scope_ ||
         std::ranges::any_of(active_loops_, [&](const auto *loop) { return cleanup_scope_ < loop_states_.at(loop).first; }))
-      implementation_gap(at, "product allocation in a repeated or deferred group requires a separate full lexical scope");
-    const auto root = declare(name, type, false, true, at, false);
+      implementation_gap(at, "allocation in a repeated or deferred group requires a separate full lexical scope");
+    return declare(name, type, false, true, receiver ? receiver->at : at, receiver != nullptr);
+  }
+  size_t reserve_product(const Type &type, const Location &at) {
+    const auto root = reserve_lexical_construction(type, at);
     std::vector<size_t> pending{root};
     for (size_t next = 0; next < pending.size(); ++next) {
       const auto parent = pending[next];
@@ -7970,6 +7974,30 @@ class ScalarChecker {
   }
   Type evidence_annotation(const Type &type, const TypeEvidenceState &state) const {
     return state.method ? substitute(type, program_.methods[*state.method], state.substitutions, true) : resolve_type(type);
+  }
+  std::optional<Type> construction_type(const Expression &expr, const TypeEvidenceState &state) const {
+    if (!expr.construction_type_query) return evidence_annotation(*expr.annotation, state);
+    auto query = state;
+    query.returns = nullptr;
+    query.exits = nullptr;
+    query.borrowed_return = nullptr;
+    query.deferred = nullptr;
+    query.initialization = TypeEvidenceState::InitializationCheck::unevaluated;
+    query.delayed_controls.clear();
+    return type_evidence(*expr.children.front(), query);
+  }
+  static const Expression *require_scalar_initializer(const Expression &expr) {
+    if (!expr.initializer_block) return nullptr;
+    const auto *initializer = expr.value_initializer();
+    if (!initializer) {
+      if (!expr.children.empty()) implementation_gap(expr.at, "a named scalar initializer beginning with a field-shaped assignment");
+      fail(expr.at, "scalar make requires an initializer block yielding one bits value");
+    }
+    return initializer;
+  }
+  static bool reserves_value_receiver(const Expression &group, const Expression &initializer) {
+    return group.declaration_kind == "val" && initializer.kind == Expression::Kind::make_object &&
+        !initializer.initializer_block && !initializer.constructor_arguments;
   }
   bool query_product_initializers(const Expression &expr, const Type &type, const QueryProductPlace &product,
                                   TypeEvidenceState &state, bool track_places, bool reached = true) const {
@@ -10453,13 +10481,14 @@ class ScalarChecker {
         const auto declared = declaration->annotation ?
             std::optional<Type>{evidence_annotation(*declaration->annotation, state)} : std::nullopt;
         const auto &initializer = *declaration->children.front();
+        const bool reservation = reserves_value_receiver(expr, initializer);
         if (state.required && initializer.kind == K::make_object && initializer.owner_name.empty() &&
             declared_owner && compare_owners(declared_owner, state.full_scope_owner, &state) != OwnerMatch::satisfied)
-          implementation_gap(initializer.at, "product construction in the receiver's external owner");
+          implementation_gap(initializer.at, "construction in the receiver's external owner");
         const auto initial = type_evidence(initializer, state, declared.has_value(),
             declared && declared->kind == Type::procedure ? &*declared : nullptr, nullptr,
             ExpectedTypeUse::materialization, completes,
-            value || declaration->binding == "<-" ? EvidenceRead::payload : EvidenceRead::target);
+            !reservation && (value || declaration->binding == "<-") ? EvidenceRead::payload : EvidenceRead::target);
         const auto type = declared ? declared : initial;
         if (initial == Type::never) completes = false;
         const auto borrowed = value || declaration->binding == "<-" ? std::optional{false} : state.value.view;
@@ -10472,6 +10501,8 @@ class ScalarChecker {
                                     declaration->at);
           }
           check_initializer_type(expr, *declaration, *initial, *type, borrowed);
+          if (reservation && *initial != *type)
+            fail(declaration->at, "scalar reservation requires the val's exact type");
           if (type->kind == Type::product && state.value.mixed_view)
             implementation_gap(initializer.at, "a product initializer mixing a target and an independent value");
           if (*initial != Type::never && borrowed == true)
@@ -10506,10 +10537,11 @@ class ScalarChecker {
           else if (borrowed == false && !state.value.mixed_view) {
             if (state.imported_storage.contains(declaration.get()))
               implementation_gap(declaration->at, "recursive activation shares an abstract storage origin in typeof");
-            places.insert(declaration.get());
+            if (reservation) places = state.target.places;
+            else places.insert(declaration.get());
             if (value) state.selections.value_places.insert_or_assign(declaration->text, places);
-            if (state.checks_initialization() && type && scalar_type(*type)) state.selections.initialize(places);
-            if (type == Type::boolean) {
+            if (!reservation && state.checks_initialization() && type && scalar_type(*type)) state.selections.initialize(places);
+            if (!reservation && type == Type::boolean) {
               const auto boolean = state.target.branches ? state.target.branches : state.selections.read_boolean(state.target.places);
               state.selections.write_boolean(places, boolean);
             }
@@ -10616,10 +10648,41 @@ class ScalarChecker {
       return native_handle_type(type, false);
     }
     case K::make_object: {
-      const auto type = evidence_annotation(*expr.annotation, state);
+      const auto constructed = construction_type(expr, state);
+      if (!constructed) return {};
+      const auto &type = *constructed;
+      const bool track_places = state.checks_initialization() && state.selections.tracking;
+      if (scalar_type(type)) {
+        if (state.required && !expr.owner_name.empty() && expr.owner_name != "here") {
+          const auto selected = owner_evidence(expr.owner_name, state, expr.at);
+          if (selected && selected->kind == EvidenceOwner::Kind::checked && const_owner(selected->id))
+            fail(expr.at, "const owner cannot allocate storage");
+          if (compare_owners(selected, state.full_scope_owner, &state) != OwnerMatch::satisfied)
+            implementation_gap(expr.at, "construction outside the current lexical owner");
+        }
+        if (const auto *initializer = require_scalar_initializer(expr)) {
+          const auto value = type_evidence(*initializer, state);
+          if (value == Type::never) return Type::never;
+          if (state.required) transfer_type(*value, type, initializer->at);
+          if (type == Type::boolean) target_facts.branches = state.target.branches;
+        }
+        view = {false, true, {}, state.full_scope_owner};
+        target_facts.presence = TargetPresence::present;
+        if (track_places) {
+          if (state.imported_storage.contains(&expr))
+            implementation_gap(expr.at, "recursive activation shares an abstract storage origin in typeof");
+          target_facts.places.insert(&expr);
+          if (expr.initializer_block) {
+            state.selections.initialize(target_facts.places);
+            if (type == Type::boolean) state.selections.write_boolean(target_facts.places, target_facts.branches);
+          } else state.selections.uninitialized.insert_or_assign(&expr, state.selections.reach_condition());
+        }
+        return type;
+      }
       if (type.kind != Type::product && !state.required) return {};
       product_schema(type, expr.at);
-      const bool track_places = state.checks_initialization() && state.selections.tracking;
+      if (expr.construction_type_query) implementation_gap(expr.at, "product construction through typeof");
+      if (expr.value_initializer()) fail(expr.at, "product make requires named field initializers");
       const QueryProductPlace product{&expr, type.identity, {}};
       if (track_places) {
         if (std::ranges::any_of(state.imported_storage, [&](const auto &place) {
@@ -15333,25 +15396,53 @@ class ScalarChecker {
     result.place = place;
     return result;
   }
+  void check_construction_owner(const Expression &expr, std::optional<size_t> required) const {
+    auto owner = required.value_or(cleanup_scope_);
+    if (!expr.owner_name.empty()) {
+      const auto selected = expr.owner_name == "here" ? cleanup_scope_ : named_owner(expr.owner_name, expr.at);
+      if (required && compare_owners(selected, *required) != OwnerMatch::satisfied)
+        fail(expr.at, "make owner must match the required destination owner");
+      owner = selected;
+    }
+    if (const_owner(owner)) fail(expr.at, "const owner cannot allocate storage");
+    if (owner != cleanup_scope_) implementation_gap(expr.at, "construction outside the current lexical owner");
+  }
+  CheckedOperation construction_target(size_t place, const Type &type) const {
+    CheckedOperation operation;
+    operation.type = operation.operand_type = type;
+    operation.view = true;
+    select_targets(operation, {place});
+    operation.owners = {storage(place).scope};
+    return operation;
+  }
+  CheckedOperation check_scalar_construction(const Expression &expr, const Type &type, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations, bool read, const Expression *receiver) {
+    const auto *initializer = require_scalar_initializer(expr);
+    const auto place = reserve_lexical_construction(type, expr.at, receiver);
+    auto operation = construction_target(place, type);
+    if (initializer) {
+      const auto value = check(*initializer, instance, operations);
+      if (value == Type::never) {
+        operation.type = Type::never;
+        return operation;
+      }
+      transfer_type(value, type, initializer->at);
+      initialize(place);
+      if (type == Type::boolean) write_predicate(operation, predicate_of(operations.at(initializer)), expr.at);
+    }
+    if (read) read_view(operation, expr.at, "scalar make target");
+    return operation;
+  }
   CheckedOperation check_product_construction(const Expression &expr, const Type &type, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, std::optional<size_t> destination = {}, bool read = false) {
     const auto &schema = product_schema(type, expr.at);
     if (read) implementation_gap(expr.at, "reading a whole product as an independent value");
-    const auto owner = destination ? storage(*destination).scope : cleanup_scope_;
-    if (!expr.owner_name.empty()) {
-      const auto selected = expr.owner_name == "here" ? cleanup_scope_ : named_owner(expr.owner_name, expr.at);
-      if (const_owner(selected)) fail(expr.at, "const owner cannot allocate product storage");
-      if (destination && compare_owners(selected, owner) != OwnerMatch::satisfied)
-        fail(expr.at, "nested make owner must match the containing product's owner");
-      if (!destination && selected != owner) implementation_gap(expr.at, "product construction outside the current lexical owner");
-    }
+    if (expr.construction_type_query) implementation_gap(expr.at, "product construction through typeof");
+    if (expr.value_initializer()) fail(expr.at, "product make requires named field initializers");
+    if (destination) check_construction_owner(expr, storage(*destination).scope);
     const auto order = product_initializers(schema, expr);
     const auto root = destination ? *destination : reserve_product(type, expr.at);
-    CheckedOperation operation;
-    operation.type = operation.operand_type = type;
-    operation.view = true;
-    select_targets(operation, {root});
-    operation.owners = {storage(root).scope};
+    auto operation = construction_target(root, type);
     for (size_t i = 0; i < order.size(); ++i) {
       const auto &item = *expr.children[i];
       const auto index = order[i];
@@ -15415,7 +15506,8 @@ class ScalarChecker {
              std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false,
              const Type *expected = nullptr, ExpectedTypeUse expected_use = ExpectedTypeUse::materialization,
              bool write_slot = false, IndexedUse indexed_use = IndexedUse::value_only,
-             NativeLoanContext native_loan = NativeLoanContext::none) {
+             NativeLoanContext native_loan = NativeLoanContext::none, std::optional<size_t> construction_owner = {},
+             const Expression *reservation_receiver = nullptr) {
     using K = Expression::Kind;
     CheckedOperation operation;
     if (checking_method_ && checking_method_->here_group &&
@@ -16206,12 +16298,12 @@ class ScalarChecker {
         }
         const auto &initializer = *declaration->children.front();
         const bool copy = value || declaration->binding == "<-";
-        if (initializer.kind == K::make_object && initializer.owner_name.empty() && owner && *owner != cleanup_scope_)
-          implementation_gap(initializer.at, "product construction in the receiver's external owner");
+        const bool reservation = reserves_value_receiver(expr, initializer);
         const auto annotation = declaration->annotation ?
             resolve_local_type(*declaration->annotation, instance, declaration->at, !copy) : Type{};
-        const auto initial_type = check(initializer, instance, operations, copy, false,
-            annotation.kind == Type::procedure ? &annotation : nullptr);
+        const auto initial_type = check(initializer, instance, operations, copy && !reservation, false,
+            annotation.kind == Type::procedure ? &annotation : nullptr, ExpectedTypeUse::materialization,
+            false, IndexedUse::value_only, NativeLoanContext::none, owner, reservation ? declaration.get() : nullptr);
         const bool completes = initial_type != Type::never;
         const auto type = declaration->annotation ?
             resolve_local_type(*declaration->annotation, instance, declaration->at, !copy) : initial_type;
@@ -16225,6 +16317,7 @@ class ScalarChecker {
               [&](size_t actual) { return actual != *owner; }), declaration->at);
         if ((!borrowed || mixed) && type.kind == Type::procedure) note_abrupt(declaration->at, {exception_id(ExceptionCategory::out_of_memory)});
         check_initializer_type(expr, *declaration, completes ? initial_type : Type{Type::never}, type, borrowed);
+        if (reservation && initial_type != type) fail(declaration->at, "scalar reservation requires the val's exact type");
         if (borrowed && completes) {
           auto owners = source.owners;
           if (mixed) owners.insert(declaration_scope(declaration->text, declaration->at).id);
@@ -16257,6 +16350,11 @@ class ScalarChecker {
           } else id = bind(declaration->text, type, selected.targets, read_only, false, expr.fixed_binding, declaration->at);
           assign_targets(id, selected, snapshot_selection(selected, initializer.at));
           if (owner) lexical_.owners[id].insert(*owner);
+        } else if (reservation) {
+          place = source.place;
+          storage_->at(*place).read_only = read_only;
+          bindings_->back().read_only = read_only;
+          bindings_->back().fixed = expr.fixed_binding;
         } else {
           place = declare(declaration->text, type, read_only, value, declaration->at);
           bindings_->back().fixed = expr.fixed_binding;
@@ -16563,7 +16661,19 @@ class ScalarChecker {
       operation = check_attached_native_acquisition(expr, instance, operations);
       break;
     case K::make_object: {
-      operation = check_product_construction(expr, resolve_annotation(*expr.annotation, instance), instance, operations, {}, read && !discard);
+      check_construction_owner(expr, construction_owner);
+      const auto type = [&] {
+        if (!expr.construction_type_query) return resolve_annotation(*expr.annotation, instance);
+        auto state = evidence_state(false, nullptr, true);
+        state.required = true;
+        return *construction_type(expr, state);
+      }();
+      if (scalar_type(type))
+        operation = check_scalar_construction(expr, type, instance, operations, read && !discard, reservation_receiver);
+      else {
+        if (reservation_receiver) implementation_gap(expr.at, "reserving a non-scalar val with make");
+        operation = check_product_construction(expr, type, instance, operations, {}, read && !discard);
+      }
       break;
     }
     case K::index: {

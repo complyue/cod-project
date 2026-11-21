@@ -10,17 +10,17 @@ func generic(x:T) -> const T where T {
   return saved + x;
 }
 func initialized(flag:bool) -> const u64 {
-  val result <- make local u64;
+  val result <- make u64;
   if (flag) { return 5u64; } else { result <- 6u64; {} };
   return result;
 }
 func choose(flag:bool) -> const u64 {
-  val result <- make local u64;
+  val result <- make u64;
   if (flag) { result <- 7u64; {} } else { result <- 8u64; {} };
   return result;
 }
 func typed(x:T) -> const T where T {
-  val saved <- make local T;
+  val saved <- make T;
   saved <- x;
   return saved;
 }
@@ -43,8 +43,8 @@ behave @print(choose(true));
 behave @print(choose(false));
 behave @print(typed(11u64));
 behave @print(typed(true));
-val allocated <- make local u64;
-val queried <- make local typeof(allocated);
+val allocated <- make u64;
+val queried <- make typeof(allocated);
 allocated <- 2u64;
 queried <- allocated + 1u64;
 behave @print(queried);
