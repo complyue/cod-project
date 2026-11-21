@@ -2,7 +2,7 @@
 #ifndef COD_LANG_LLVM_OBJECT_C_H
 #define COD_LANG_LLVM_OBJECT_C_H
 
-#include <stddef.h>
+#include <stdbool.h>
 
 #include <llvm-c/Analysis.h>
 #include <llvm-c/Core.h>
@@ -21,57 +21,21 @@ typedef struct cod_llvm_object_result {
   char *diagnostic;
 } cod_llvm_object_result;
 
-/* The result owns its object bytes and any LLVM diagnostic. */
-static inline void cod_llvm_object_release(cod_llvm_object_result *result) {
-  if (result->object) LLVMDisposeMemoryBuffer(result->object);
-  if (result->diagnostic) LLVMDisposeMessage(result->diagnostic);
-  result->object = NULL;
-  result->diagnostic = NULL;
-}
+#ifdef __cplusplus
+extern "C" {
+#endif
 
+/* The result owns its object bytes and any LLVM diagnostic. */
+void cod_llvm_object_release(cod_llvm_object_result *result);
 /* The caller initializes the target and its assembly printer. A module that
    omits its triple uses LLVM's default target. Construct target-sensitive IR
    against a layout compatible with the selected target before calling this. */
-static inline cod_llvm_object_result cod_llvm_emit_object(LLVMModuleRef module) {
-  cod_llvm_object_result result = {COD_LLVM_OBJECT_TARGET_UNAVAILABLE, NULL, NULL};
-  const char *triple = LLVMGetTarget(module);
-  char *default_triple = NULL;
-  if (!*triple) {
-    default_triple = LLVMGetDefaultTargetTriple();
-    if (!default_triple) return result;
-    triple = default_triple;
-  }
+cod_llvm_object_result cod_llvm_emit_object(LLVMModuleRef module);
+/* Publish the complete buffer by replacing the destination on the same filesystem. */
+bool cod_llvm_publish_object(LLVMMemoryBufferRef object, const char *path);
 
-  LLVMTargetRef target = NULL;
-  LLVMTargetMachineRef machine = NULL;
-  if (!LLVMGetTargetFromTriple(triple, &target, &result.diagnostic))
-    machine = LLVMCreateTargetMachine(target, triple, "generic", "",
-        LLVMCodeGenLevelDefault, LLVMRelocPIC, LLVMCodeModelDefault);
-  if (default_triple) {
-    if (machine) LLVMSetTarget(module, default_triple);
-    LLVMDisposeMessage(default_triple);
-  }
-  if (!machine) return result;
-
-  LLVMTargetDataRef layout = LLVMCreateTargetDataLayout(machine);
-  LLVMSetModuleDataLayout(module, layout);
-  LLVMDisposeTargetData(layout);
-
-  result.status = COD_LLVM_OBJECT_INVALID_MODULE;
-  if (!LLVMVerifyModule(module, LLVMReturnStatusAction, &result.diagnostic)) {
-    if (result.diagnostic) LLVMDisposeMessage(result.diagnostic);
-    result.diagnostic = NULL;
-    LLVMMemoryBufferRef object = NULL;
-    if (LLVMTargetMachineEmitToMemoryBuffer(machine, module, LLVMObjectFile, &result.diagnostic, &object) || !object) {
-      if (object) LLVMDisposeMemoryBuffer(object);
-      result.status = COD_LLVM_OBJECT_EMISSION_FAILED;
-    } else {
-      result.object = object;
-      result.status = COD_LLVM_OBJECT_OK;
-    }
-  }
-  LLVMDisposeTargetMachine(machine);
-  return result;
+#ifdef __cplusplus
 }
+#endif
 
 #endif

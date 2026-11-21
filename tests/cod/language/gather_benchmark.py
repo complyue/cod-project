@@ -14,6 +14,8 @@ import subprocess
 import tempfile
 import time
 
+from language_test_support import runtime_archive
+
 
 def run(command, root):
     started = time.perf_counter()
@@ -84,12 +86,11 @@ def main():
     with tempfile.TemporaryDirectory(prefix='cod-gather-benchmark-') as temporary:
         scratch = Path(temporary)
         entry, generated, executable = scratch / 'main.cod', scratch / 'main.ll', scratch / 'kernel'
-        bitcode, runtime = scratch / 'main.bc', scratch / 'runtime.cc'
+        bitcode = scratch / 'main.bc'
+        runtime = runtime_archive(toolchain)
         entry.write_text(source)
-        _, frontend_seconds = run([toolchain / 'bin/cod', '--check', entry, '--emit-llvm', generated, '--emit-bc', bitcode, '--emit-runtime', runtime], root)
-        command = [toolchain / 'bin/clang++', '-std=c++20', '-O2', '-g', '-stdlib=libc++', '-fuse-ld=lld',
-                   '-I' + str(root / 'include'), bitcode, runtime, '-o', executable,
-                   '-L' + str(toolchain / 'lib'), '-Wl,-rpath,' + str(toolchain / 'lib')]
+        _, frontend_seconds = run([toolchain / 'bin/cod', '--check', entry, '--emit-llvm', generated, '--emit-bc', bitcode], root)
+        command = [toolchain / 'bin/clang', '-O2', '-fuse-ld=lld', bitcode, runtime, '-o', executable]
         _, compile_seconds = run(command, root)
         output, process_seconds = run([executable], root)
         lines = output.splitlines()
@@ -107,7 +108,7 @@ def main():
                     'native_process_seconds': process_seconds, 'llvm_ir_bytes': generated.stat().st_size, 'bitcode_bytes': bitcode.stat().st_size,
                     'native_executable_bytes': executable.stat().st_size,
                     'notes': ['Timing includes initialization, process startup and printed checksums.',
-                              'Only the system runtime has C++ debug information; CoD code is directly emitted LLVM IR.',
+                              'CoD code is emitted directly as LLVM IR and linked with the shared C runtime archive.',
                               'FP32 reference uses independent row capacities and rounded additions.',
                               'The full-pool case assigns one arithmetic row per slot set; it is not a CC neuron count.',
                               'This numerical kernel defines no neuron transition or training rule.'],
@@ -115,7 +116,7 @@ def main():
                                       for p in [*sorted(directory.glob('region-gather*.cod')),
                                                 *sorted(directory.glob('pool-*.cod')),
                                                 root / 'cod/lang_syntax.hh', root / 'cod/lang_frontend.hh',
-                                                root / 'cod/lang_llvm.hh', root / 'cod/lang_native_runtime.hh',
+                                                root / 'cod/lang_llvm.hh', root / 'cod/runtime/cod_lang_runtime.c',
                                                 root / 'include/shilos/region.hh',
                                                 Path(__file__).resolve()]}}
         if report := os.environ.get('COD_GATHER_REPORT'):

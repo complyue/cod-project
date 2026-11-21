@@ -9,7 +9,7 @@ from pathlib import Path
 import platform
 import tempfile
 
-from language_test_support import checked
+from language_test_support import checked, write_instrumented_runtime
 
 
 # The only hook runs when the generated program releases its region. The CoD
@@ -211,10 +211,10 @@ extern "C" void cod_lang_region_free(void *owner) {
 
 
 def run_case(root, toolchain, entry, scratch, harness, capture_lifetimes=False, extra_wrappers="", frontend_warnings=()):
-    ir, bitcode, runtime = [scratch / name for name in ("main.ll", "main.bc", "runtime.cc")]
+    ir, bitcode = [scratch / name for name in ("main.ll", "main.bc")]
     diagnostics = []
     _, frontend_seconds = checked([toolchain / "bin/cod", "--check", entry,
-                                   "--emit-llvm", ir, "--emit-bc", bitcode, "--emit-runtime", runtime],
+                                   "--emit-llvm", ir, "--emit-bc", bitcode],
                                   root, frontend_warnings, diagnostics)
     roundtrip = scratch / "roundtrip.bc"
     disassembled = scratch / "roundtrip.ll"
@@ -228,7 +228,7 @@ def run_case(root, toolchain, entry, scratch, harness, capture_lifetimes=False, 
     if capture_lifetimes:
         wrappers += ('#define cod_lang_region_new cod_lang_region_acquire\n'
                      '#define cod_lang_region_capacity cod_lang_region_inspect\n')
-    source.write_text(wrappers + extra_wrappers + runtime.read_text() + harness)
+    write_instrumented_runtime(source, wrappers + extra_wrappers, harness)
     executable = scratch / "relocation"
     command = [toolchain / "bin/clang++", "-std=c++20", "-O2", "-g", "-UNDEBUG", "-stdlib=libc++",
                "-fuse-ld=lld", "-I" + str(root / "include"), roundtrip, source, "-o", executable,
@@ -282,7 +282,7 @@ def main():
                               "An untaken branch acquires no owner; the module owner releases last. Allocation-address reuse is allowed after release."],
                     "source_sha256": {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
                                       for path in [root / "cod/lang_exceptions.hh", root / "cod/lang_syntax.hh", root / "cod/lang_frontend.hh", root / "cod/lang_llvm.hh",
-                                                   root / "cod/lang_native_runtime.hh", root / "include/shilos/region.hh",
+                                                   root / "cod/runtime/cod_lang_runtime.c", root / "include/shilos/region.hh",
                                                    directory / "region-records.cod", directory / "region-pool.cod",
                                                    directory / "reusable-pool.cod", directory / "pool-interface.cod",
                                                    directory / "pool-adapter.cod", directory / "pool-algorithms.cod",

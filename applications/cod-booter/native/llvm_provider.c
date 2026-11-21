@@ -1,12 +1,10 @@
-#define _POSIX_C_SOURCE 200809L
-
 #include "cod_providers.h"
 
 #include "compile_diagnostic.h"
 #include "lang_llvm_commands_c.h"
 #include "lang_llvm_object_c.h"
 
-#include <unistd.h>
+#include <stdlib.h>
 
 _Static_assert(UINTPTR_MAX <= UINT64_MAX, "LLVM handles require a pointer that fits in a handle word");
 _Static_assert(sizeof(cod_native_llvm_construct_row1) == sizeof(cod_llvm_command), "unexpected command width");
@@ -64,30 +62,6 @@ cod_native_status cod_native_llvm_verify_impl(cod_native_LLVMSession_borrow reso
   return COD_NATIVE_OK;
 }
 
-static bool publish_object(LLVMMemoryBufferRef object, const char *path) {
-  static const char suffix[] = ".tmp.XXXXXX";
-  const size_t length = strlen(path);
-  if (length > SIZE_MAX - sizeof(suffix)) return false;
-  char *temporary = malloc(length + sizeof(suffix));
-  if (!temporary) return false;
-  memcpy(temporary, path, length);
-  memcpy(temporary + length, suffix, sizeof(suffix));
-  const int fd = mkstemp(temporary);
-  bool published = false;
-  if (fd >= 0) {
-    FILE *stream = fdopen(fd, "wb");
-    if (stream) {
-      const size_t size = LLVMGetBufferSize(object);
-      const bool written = fwrite(LLVMGetBufferStart(object), 1, size, stream) == size;
-      const bool closed = fclose(stream) == 0;
-      published = written && closed && rename(temporary, path) == 0;
-    } else close(fd);
-    if (!published) unlink(temporary);
-  }
-  free(temporary);
-  return published;
-}
-
 /* The launcher registers the native target and its assembly printer. */
 cod_native_status cod_native_llvm_emit_object_impl(cod_native_LLVMSession_borrow resource, cod_native_Path_borrow output,
                                                   uint8_t *status) {
@@ -97,7 +71,7 @@ cod_native_status cod_native_llvm_emit_object_impl(cod_native_LLVMSession_borrow
   cod_llvm_object_result result = cod_llvm_emit_object(session->module);
   *status = llvm_emission_failed;
   if (result.status == COD_LLVM_OBJECT_OK)
-    *status = publish_object(result.object, path) ? llvm_ok : llvm_publication_failed;
+    *status = cod_llvm_publish_object(result.object, path) ? llvm_ok : llvm_publication_failed;
   cod_llvm_object_release(&result);
   return COD_NATIVE_OK;
 }

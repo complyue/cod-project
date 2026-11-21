@@ -2,6 +2,7 @@
 """Inject declared failures at native methods; no unknown-type ingress is claimed."""
 from pathlib import Path
 import re
+from language_test_support import ROOT
 from native_test_support import run_native
 import owner_dispatch_runtime_tests as fixture
 
@@ -67,11 +68,12 @@ EXPECTED_SHADOWS=['other']
 EXTRA_SOURCES=[*list(FIXTURE.sources),Path(fixture.__file__),Path(__file__).with_name('exception_value_runtime_tests.py'),Path(__file__)]
 
 
-def inject_failures(ir, runtime):
+def inject_failures(ir):
     """Replace only declared native providers, retaining all compiled consumers."""
+    catalog = (ROOT / "cod/lang_intrinsic_catalog.h").read_text()
     injected=[]
     for method,category in [('unknown_boundary','StaticallyUnknownTypeException'),('typing_boundary','UnsoundRuntimeTypingError')]:
-        identity=int(re.search(r'\b'+category+r' = (\d+),',runtime)[1])
+        identity=int(re.search(r'ENTRY\(\w+, '+category+r', (\d+),',catalog)[1])
         pattern=r'(?ms)^(define internal %cod.outcome @cod\.method\.\d+\.'+method+r'\.native\(\) \{)\n.*?^}'
         body='\nentry:\n  ret %cod.outcome { %cod.scalar zeroinitializer, i64 '+str(identity)+', i64 1, ptr null, i64 321, i64 123, i64 0 }\n}'
         ir,count=re.subn(pattern,lambda match:match[1]+body,ir)

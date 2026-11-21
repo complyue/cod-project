@@ -29,9 +29,9 @@ observe(9000u64);
 FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('checkpoints==5','checkpoints==6').replace('record_failures==1','record_failures==2'))
 FIXTURE = FIXTURE.updated(harness='static std::size_t causes_before_measurement=0;\n'+FIXTURE.harness)
 FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('baseline=created+copied;measuring=true;',
-    'baseline=created+copied;causes_before_measurement=cod_causes?cod_causes->size():0;measuring=true;'))
+    'baseline=created+copied;causes_before_measurement=cod_causes.size;measuring=true;'))
 FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace('assert(measuring && created+copied==baseline);',
-    'assert(measuring && created+copied==baseline);assert((cod_causes?cod_causes->size():0)==causes_before_measurement);'))
+    'assert(measuring && created+copied==baseline);assert(cod_causes.size==causes_before_measurement);'))
 FIXTURE = FIXTURE.updated(expected_values=list(FIXTURE.expected_values) + ['20','9','1','1'])
 if __name__ == '__main__':
     raise SystemExit(run_native(FIXTURE))

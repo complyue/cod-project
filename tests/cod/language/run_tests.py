@@ -69,7 +69,7 @@ def main():
     print(f"CoD language: {passed_count}/{len(results)} passed ({mode} toolchain, LLVM IR)")
     if report := os.environ.get("COD_LANGUAGE_REPORT"):
         sources = [root / "cod/main.cc", root / "cod/lang_exceptions.hh", root / "cod/lang_syntax.hh", root / "cod/lang_frontend.hh",
-                   root / "cod/lang_llvm.hh", root / "cod/lang_native_runtime.hh",
+                   root / "cod/lang_llvm.hh", root / "cod/runtime/cod_lang_runtime.c",
                    root / "include/shilos/region.hh",
                    root / "tests/cod/test_language.sh", directory / "run_tests.py", directory / "cases.json",
                    *sorted(directory.rglob("*.cod"))]

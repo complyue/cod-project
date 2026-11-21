@@ -9,7 +9,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from language_test_support import checked
+from language_test_support import checked, write_instrumented_runtime
 from regional_runtime_tests import run_case
 
 
@@ -49,7 +49,7 @@ void operator delete(void *p) noexcept {
 void operator delete(void *p, std::size_t) noexcept { ::operator delete(p); }
 extern "C" void cod_lang_print_i64(std::int64_t value) {
   assert(provider_failures == 1);
-  assert(!cod_causes);
+  assert(!cod_causes.records);
   if (value == 10) assert(released == 0 && live[0] && live[1]);
   else assert((value == 20 || value == 30) && released == 1 && live[0] && !live[1]);
   cod_lang_trace_i64(value);
@@ -100,9 +100,9 @@ extern "C" void cod_lang_region_free(void *owner) {
   ++relocated_images;
 }
 extern "C" void cod_lang_exception_finish() noexcept {
-  assert(relocated_images == 1 && cod_causes && cod_causes->size() == 4);
+  assert(relocated_images == 1 && cod_causes.records && cod_causes.size == 4);
   cod_lang_exception_release();
-  assert(!cod_causes);
+  assert(!cod_causes.records);
   std::puts("{\"returned_and_stored_causes\":true,\"relocation_after_original_release\":true,"
             "\"category_preserved\":true,\"immutable_records\":4,\"storage_released_at_exit\":true}");
 }
@@ -148,35 +148,45 @@ CHAIN_FAILURE_HARNESS = r'''
 #undef cod_lang_exception_chain
 #undef cod_lang_print_i64
 #include <cassert>
+#undef realloc
+#undef free
 static bool append_active = false;
-static unsigned allocation_in_call = 0;
 static unsigned calls = 0, failures = 0, allocations = 0, frees = 0;
 static unsigned acquired = 0, released = 0;
-static void *backing[4]{};
+static void *backing = nullptr;
+
+static void *test_cause_realloc(void *current, std::size_t size) {
+  assert(append_active && current == backing);
+  if (calls == 1 || calls == 2 || calls == 4) { ++failures; return nullptr; }
+  void *grown = std::realloc(current, size);
+  assert(grown);
+  backing = grown;
+  ++allocations;
+  return grown;
+}
+
+static void test_cause_free(void *value) {
+  if (value && value == backing) { backing = nullptr; ++frees; }
+  std::free(value);
+}
+
 void *operator new(std::size_t size) {
-  if (append_active && (++allocation_in_call == (calls == 2 ? 2u : 1u)) &&
-      (calls == 1 || calls == 2 || calls == 4)) { ++failures; throw std::bad_alloc(); }
   void *p = std::malloc(size ? size : 1);
   if (!p) throw std::bad_alloc();
-  if (append_active) { assert(allocations < 4); backing[allocations++] = p; }
-  else if (size == sizeof(CoDRegion) + 16) ++acquired;
+  if (size == sizeof(CoDRegion) + 16) ++acquired;
   return p;
 }
-void operator delete(void *p) noexcept {
-  for (auto &address : backing) if (p && p == address) {address = nullptr; ++frees;}
-  std::free(p);
-}
+void operator delete(void *p) noexcept { std::free(p); }
 void operator delete(void *p, std::size_t) noexcept { ::operator delete(p); }
 extern "C" std::uint64_t cod_lang_exception_chain(std::uint64_t category, std::uint64_t site,
     std::uint64_t requested, std::uint64_t available, std::uint64_t cause, std::uint64_t *status) {
   append_active = true;
-  allocation_in_call = 0;
   ++calls;
-  if (calls == 4) assert(cod_causes->size() == cod_causes->capacity());
+  if (calls == 4) assert(cod_causes.size == cod_causes.capacity);
   const auto result = cod_lang_exception_append(category, site, requested, available, cause, status);
   append_active = false;
-  if (calls <= 2) assert(status[0] == 1 && result == 0 && !cod_causes);
-  if (calls == 4) assert(status[0] == 1 && result == 0 && cod_causes->size() == 1);
+  if (calls <= 2) assert(status[0] == 1 && result == 0 && !cod_causes.records);
+  if (calls == 4) assert(status[0] == 1 && result == 0 && cod_causes.size == 1);
   return result;
 }
 extern "C" void cod_lang_region_free(void *owner) {
@@ -189,9 +199,9 @@ extern "C" void cod_lang_print_i64(std::int64_t value) {
   cod_lang_trace_i64(value);
 }
 extern "C" void cod_lang_exception_finish() noexcept {
-  assert(calls == 5 && failures == 3 && acquired == 2 && released == 2 && allocations == 4);
+  assert(calls == 5 && failures == 3 && acquired == 2 && released == 2 && allocations == 2);
   cod_lang_exception_release();
-  assert(frees == 4 && !cod_causes);
+  assert(frees == 1 && !cod_causes.records);
   std::puts("{\"real_chain_allocation_failures\":3,\"automatic_cause_added\":false,"
             "\"saved_chain_survives_failure\":true,\"retry_passed\":true,"
             "\"owners_acquired\":2,\"owners_released\":2,"
@@ -251,13 +261,17 @@ def main():
         fault = scratch / "chain-failure.cod"
         fault.write_text(CHAIN_FAILURE_SOURCE)
         output, chain_failure = run_case(root, toolchain, fault, scratch, CHAIN_FAILURE_HARNESS,
-            extra_wrappers=("#define cod_lang_exception_finish cod_lang_exception_release\n"
+            extra_wrappers=("static void *test_cause_realloc(void *, std::size_t);\n"
+                            "static void test_cause_free(void *);\n"
+                            "#define realloc test_cause_realloc\n"
+                            "#define free test_cause_free\n"
+                            "#define cod_lang_exception_finish cod_lang_exception_release\n"
                             "#define cod_lang_exception_chain cod_lang_exception_append\n"
                             "#define cod_lang_print_i64 cod_lang_trace_i64\n"))
         assert output == ["10"], output
         evidence["chain_allocation_failure"] = chain_failure
         print("PASS: real chain-allocation OOM, preserved prior chain, retry and exact cleanup")
-        ir, runtime = scratch / "uncaught.ll", scratch / "uncaught-runtime.cc"
+        ir = scratch / "uncaught.ll"
         uncaught_source = scratch / "uncaught-callables.cod"
         uncaught_source.write_text('''function identity(n:u64)->const u64 { return n }
 func module_value = identity;
@@ -266,12 +280,12 @@ false && (func()->const bool { return true })();
             (directory / "exception-reraise.cod").read_text().replace(
                 'try {{', 'try {{\n  func local_value = module_value;', 1))
         checked([toolchain / "bin/cod", "--check", uncaught_source,
-                 "--emit-llvm", ir, "--emit-runtime", runtime], root)
+                 "--emit-llvm", ir], root)
         source, executable = scratch / "uncaught.cc", scratch / "uncaught"
-        source.write_text("#define cod_lang_region_free cod_lang_region_release\n"
+        write_instrumented_runtime(source, "#define cod_lang_region_free cod_lang_region_release\n"
             "#define cod_lang_callable_create cod_image_create\n"
             "#define cod_lang_callable_copy cod_image_copy\n"
-            "#define cod_lang_callable_free cod_image_free\n" + runtime.read_text() + r'''
+            "#define cod_lang_callable_free cod_image_free\n", r'''
 #undef cod_lang_region_free
 #undef cod_lang_callable_create
 #undef cod_lang_callable_copy
@@ -336,8 +350,8 @@ catch(seed) {
   }}
 };
 ''')
-        checked([toolchain / "bin/cod", "--check", loop, "--emit-llvm", ir, "--emit-runtime", runtime], root)
-        source.write_text("#define cod_lang_region_free cod_lang_region_release\n" + runtime.read_text() + r'''
+        checked([toolchain / "bin/cod", "--check", loop, "--emit-llvm", ir], root)
+        write_instrumented_runtime(source, "#define cod_lang_region_free cod_lang_region_release\n", r'''
 #undef cod_lang_region_free
 #include <cassert>
 static unsigned released = 0;
@@ -348,7 +362,7 @@ extern "C" void cod_lang_region_free(void *owner) {
 }
 static const int audit = [] {
   return std::atexit([] {
-    assert(released == 2 && !cod_causes);
+    assert(released == 2 && !cod_causes.records);
     std::puts("uncaught chain cleanup passed");
   });
 }();
@@ -396,7 +410,7 @@ static const int audit = [] {
             evidence["compiler_sha256"] = hashlib.sha256((toolchain / "bin/cod").read_bytes()).hexdigest()
             evidence["source_sha256"] = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
                 for path in [root / "cod/lang_exceptions.hh", root / "cod/lang_syntax.hh", root / "cod/lang_frontend.hh", root / "cod/lang_llvm.hh",
-                             root / "cod/lang_native_runtime.hh", root / "include/shilos/region.hh",
+                             root / "cod/runtime/cod_lang_runtime.c", root / "include/shilos/region.hh",
                              directory / "exception-allocation.cod", directory / "exception-chain.cod",
                              directory / "exception-reraise.cod", directory / "recursive-calls.cod", directory / "regional_runtime_tests.py",
                              Path(__file__).resolve()]}

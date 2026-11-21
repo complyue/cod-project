@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 from foundation_tests import ROOT, MODE, COD
-from language_test_support import checked
+from language_test_support import checked, write_instrumented_runtime
 
 TLS_SLOTS = 1
 EXTRA_SOURCES = []
@@ -62,8 +62,8 @@ def main():
         entry.write_text(SOURCE)
         for general in (False, True):
             label = 'general' if general else 'default'
-            ir, runtime = scratch / 'main.ll', scratch / 'runtime.cc'
-            command = [COD, '--check', entry, '--emit-llvm', ir, '--emit-runtime', runtime]
+            ir = scratch / 'main.ll'
+            command = [COD, '--check', entry, '--emit-llvm', ir]
             if general:
                 command.append('--no-specialize')
             output, _ = checked(command, ROOT, ALLOWED_DIAGNOSTICS)
@@ -73,7 +73,7 @@ def main():
             assert code.count('thread_local global %cod.scalar') == TLS_SLOTS
             code = code.replace('define i32 @main()', 'define i32 @cod_test_entry()')
             source = scratch / 'instrumented.cc'
-            source.write_text(WRAPPERS + runtime.read_text() + HARNESS)
+            write_instrumented_runtime(source, WRAPPERS, HARNESS)
             for isolated in (True, False):
                 candidate = scratch / 'candidate.ll'
                 candidate.write_text(code if isolated else code.replace('thread_local ', ''))

@@ -719,6 +719,9 @@ The native-fixture support suite checks all 130 fixture declarations in forward,
 
 ## Focused validation
 
+Prepare the [shared C runtime archive](../../../applications/cod-booter/README.md#build-and-run-on-linux)
+for the selected toolchain before running native source checks.
+
 Run the focused source checks:
 
 ```sh

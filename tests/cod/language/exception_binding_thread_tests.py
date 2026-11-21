@@ -24,7 +24,7 @@ behave @print(100u64);
 behave @print(102u64);
 behave @print(perform @selected());
 '''
-runner.HARNESS = runner.HARNESS.replace('{++completed;}', '{assert(cod_causes && cod_causes->size()==2);cod_default_finish();assert(!cod_causes);++completed;}')
+runner.HARNESS = runner.HARNESS.replace('{++completed;}', '{assert(cod_causes.records && cod_causes.size==2);cod_default_finish();assert(!cod_causes.records);++completed;}')
 runner.TLS_SLOTS = 2
 runner.ALLOWED_DIAGNOSTICS = ('[-Wmissing-return]',)
 runner.EXTRA_SOURCES = [Path(__file__)]

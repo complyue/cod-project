@@ -57,7 +57,7 @@ def main():
                            "#define cod_lang_print_i64 cod_lang_trace_i64\n")
     assert trace == ["3", "3", "2"] * 3 + ["1", "2", "1", "2", "1", "2", "1"], trace
     sources = [root / "cod" / name for name in
-               ("lang_exceptions.hh", "lang_syntax.hh", "lang_frontend.hh", "lang_llvm.hh", "lang_native_runtime.hh")]
+               ("lang_exceptions.hh", "lang_syntax.hh", "lang_frontend.hh", "lang_llvm.hh", "runtime/cod_lang_runtime.c")]
     sources += [fixture, Path(__file__), directory / "regional_runtime_tests.py", root / "include/shilos/region.hh"]
     evidence.update(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(), toolchain=mode,
                     trace=trace, compiler_sha256=hashlib.sha256((root / mode / "bin/cod").read_bytes()).hexdigest(),

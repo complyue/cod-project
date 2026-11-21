@@ -12,6 +12,31 @@ MODE = os.environ.get("COD_TEST_TOOLCHAIN", "build")
 if MODE not in ("build", "built"):
     raise SystemExit("COD_TEST_TOOLCHAIN must be build or built")
 COD = ROOT / MODE / "bin" / ("cod.exe" if os.name == "nt" else "cod")
+RUNTIME_SOURCE = ROOT / "cod/runtime/cod_lang_runtime.c"
+
+
+def runtime_archive(toolchain):
+    if override := os.environ.get("COD_RUNTIME_ARCHIVE"):
+        return Path(override).resolve()
+    installed = toolchain / "lib/libcod-runtime.a"
+    if installed.is_file() or not (toolchain / "CMakeCache.txt").is_file():
+        return installed
+    return toolchain.parent / "build-cod-runtime/libcod-runtime.a"
+
+
+def write_instrumented_runtime(path, wrappers, harness):
+    # Apply the fixture's symbol wrappers to the shared implementation.
+    path.write_text(f'''#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <iterator>
+#include <new>
+{wrappers}
+#include "{RUNTIME_SOURCE.as_posix()}"
+{harness}''')
 
 
 def expect_source_rejections(fixture, names, diagnostic):
