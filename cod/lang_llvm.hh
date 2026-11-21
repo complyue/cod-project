@@ -809,8 +809,11 @@ class LLVMEmission {
       b_.CreateStore(here_arguments_.at(body.lexical_here[i]), b_.CreateStructGEP(entry.activation, activation, here_begin + i));
     return b_.CreateInsertValue(value, activation, 1);
   }
+  llvm::StructType *native_handle_pair() {
+    return llvm::StructType::get(context_, {b_.getInt64Ty(), b_.getInt64Ty()});
+  }
   llvm::AllocaInst *native_reborrow(llvm::Value *resource) {
-    auto *pair = llvm::StructType::get(context_, {b_.getInt64Ty(), b_.getInt64Ty()});
+    auto *pair = native_handle_pair();
     auto *view = slot(pair, "native.reborrow");
     for (unsigned word = 0; word < 2; ++word) b_.CreateStore(resource, b_.CreateStructGEP(pair, view, word));
     return view;
@@ -842,6 +845,9 @@ class LLVMEmission {
         llvm::Value *argument;
         if (const auto &loan = call.loans.at(i)) {
           argument = native_handle_argument(*loan);
+        } else if (input.type.kind == Type::c_type_marker) {
+          argument = emit_expression(operand, Projection::target);
+          if (!reachable()) return nullptr;
         } else if (input.type.kind == Type::array) {
           argument = emit_expression(operand, Projection::target);
           if (!reachable()) return nullptr;
@@ -853,9 +859,12 @@ class LLVMEmission {
         arguments.push_back(argument);
         types.push_back(argument->getType());
       }
-      auto *value = slot(b_.getInt8Ty(), "native.call.value");
-      arguments.push_back(value);
-      types.push_back(b_.getPtrTy());
+      llvm::AllocaInst *value = nullptr;
+      if (native.contract.result.type != Type::void_type) {
+        value = slot(b_.getInt8Ty(), "native.call.value");
+        arguments.push_back(value);
+        types.push_back(b_.getPtrTy());
+      }
       auto *status = b_.CreateCall(runtime(native_operation_name(native) + "_call", b_.getInt32Ty(), types), arguments);
       for (size_t i = 0; i < native.inputs.size(); ++i)
         if (types[i] == b_.getInt8Ty()) status->addParamAttr(i, llvm::Attribute::ZExt);
@@ -864,7 +873,7 @@ class LLVMEmission {
       b_.SetInsertPoint(invalid);
       fail_path(ExceptionCategory::system, expr.at, b_.CreateGlobalString(location_text(expr.at) + ": invalid native provider status"));
       b_.SetInsertPoint(ready);
-      return pack(load(value), Type::uint8);
+      return value ? pack(load(value), Type::uint8) : empty_scalar();
     });
   }
   llvm::Function *native_here_bridge(const CheckedNativeOperation &native, llvm::StructType *frame) {
@@ -1640,25 +1649,33 @@ class LLVMEmission {
     }
     b_.CreateBr(finish_);
   }
-  llvm::Value *acquire_native_handle(const Expression &binding, size_t place,
-                                     const CheckedOperation::NativeAcquisition &plan) {
+  bool call_native_constructor(const CheckedOperation::NativeAcquisition &plan,
+                               llvm::Value *resource, llvm::Value *parent = nullptr) {
     const auto &expr = *plan.initializer;
     const auto &constructor = program_->native_constructors.at(plan.constructor);
     std::vector<llvm::Type *> types;
     std::vector<llvm::Value *> arguments;
+    if (parent) {
+      types.push_back(b_.getPtrTy());
+      arguments.push_back(parent);
+    }
     for (size_t i = 0; i < constructor.inputs.size(); ++i) {
       const auto &input = constructor.inputs[i];
       if (const auto &loan = plan.loans.at(i)) {
         arguments.push_back(native_handle_argument(*loan));
         types.push_back(b_.getPtrTy());
+      } else if (input.owner) {
+        auto *value = emit_expression(*expr.children[i], Projection::target);
+        if (!reachable()) return false;
+        arguments.push_back(value);
+        types.push_back(b_.getPtrTy());
       } else {
         auto *value = native_scalar_argument(*expr.children[i], input.type);
-        if (!reachable()) return nullptr;
+        if (!reachable()) return false;
         arguments.push_back(value);
         types.push_back(value->getType());
       }
     }
-    auto *resource = storage_.at(place);
     arguments.push_back(resource);
     types.push_back(b_.getPtrTy());
     llvm::AllocaInst *error = nullptr;
@@ -1673,7 +1690,7 @@ class LLVMEmission {
       arguments.push_back(error);
     }
     auto *status = b_.CreateCall(runtime(native_construct_name(constructor.handle), b_.getInt32Ty(), types), arguments);
-    for (size_t i = 0; i < constructor.inputs.size(); ++i)
+    for (size_t i = parent ? 1 : 0, end = i + constructor.inputs.size(); i < end; ++i)
       if (types[i] == b_.getInt8Ty()) status->addParamAttr(i, llvm::Attribute::ZExt);
     auto *ready = block("native.acquired"), *invalid = block("native.invalid");
     auto *select = b_.CreateSwitch(status, invalid, 1 + bool(failure));
@@ -1695,6 +1712,12 @@ class LLVMEmission {
     b_.SetInsertPoint(invalid);
     fail_path(ExceptionCategory::system, expr.at, b_.CreateGlobalString(location_text(expr.at) + ": invalid C constructor completion"));
     b_.SetInsertPoint(ready);
+    return true;
+  }
+  llvm::Value *acquire_native_handle(const Expression &binding, size_t place,
+                                     const CheckedOperation::NativeAcquisition &plan) {
+    auto *resource = storage_.at(place);
+    if (!call_native_constructor(plan, resource)) return nullptr;
     const auto action = std::ranges::find_if(scope_->actions, [&](const auto &item) {
       return item.action == &binding && item.native_constructor == plan.constructor;
     });
@@ -1706,6 +1729,22 @@ class LLVMEmission {
     b_.CreateStore(load(resource), b_.CreateStructGEP(action->layout, record, 1));
     b_.CreateStore(record, scope_->head);
     return empty_scalar();
+  }
+  llvm::Value *emit_attached_native_handle(const Expression &expr) {
+    std::map<CheckedOperation::NativeAcquisition, std::vector<size_t>> plans;
+    for (size_t i = 0; i < contexts_.size(); ++i)
+      plans[*contexts_[i].at(&expr).native_acquisition].push_back(i);
+    return contextual_value(expr, plans, "native.attach", [&](const auto &plan) {
+      return temporary_scope(expr.at, b_.getPtrTy(), [&]() -> llvm::Value * {
+        auto *owner = native_handle_argument(*plan.parent);
+        auto *pair = native_handle_pair();
+        auto *owner_word = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(pair, owner, 1));
+        auto *child = slot(pair, "native.child.borrow");
+        if (!call_native_constructor(plan, b_.CreateStructGEP(pair, child, 0), owner)) return nullptr;
+        b_.CreateStore(owner_word, b_.CreateStructGEP(pair, child, 1));
+        return child;
+      });
+    }, b_.getPtrTy());
   }
   llvm::Value *emit_finally(const Expression &expr, Projection projection, bool discard = false, llvm::Value *skip_body = nullptr) {
     const bool read = carries_value(projection);
@@ -2682,6 +2721,8 @@ class LLVMEmission {
         return temporary_scope(expr.at, scalar_, [&] { return acquire_native_handle(expr, selected.first, selected.second); });
       });
     }
+    case K::make_borrowed_handle:
+      return emit_attached_native_handle(expr);
     case K::make_object: {
       auto *address = storage_.at(*fact.place);
       emit_product_initializers(expr, address);
