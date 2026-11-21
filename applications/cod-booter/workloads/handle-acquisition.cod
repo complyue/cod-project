@@ -1,0 +1,20 @@
+data "C" Session;
+data "C" Report in Session;
+data "C" Receipt;
+
+proc "C" Session(val serial:u64);
+proc "C" Report(val tag:u64);
+proc "C" Receipt(handle first:Report in O, handle second:Report in O) where {const owner O};
+proc "C" inspect(handle report:Report in O) where {const owner O};
+
+proc run() -> void {
+    own handle session:Session <- make own handle Session(7u64);
+    handle first:Report in session = make handle Report(8u64) in session;
+    handle forwarded:Report = first;
+    handle second:Report = make handle Report(9u64) in session;
+    own handle receipt:Receipt <- make own handle Receipt(forwarded, second);
+    inspect(forwarded);
+    return;
+}
+
+run();

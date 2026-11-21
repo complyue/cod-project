@@ -21,6 +21,8 @@ using "ParserStorage.cod" field_access_node;
 using "ParserStorage.cod" readonly_ref_parameter_node;
 using "ParserStorage.cod" owner_clause_node;
 using "ParserStorage.cod" catch_binding_node;
+using "ParserStorage.cod" handle_local;
+using "ParserStorage.cod" handle_construction;
 using "SourceStorage.cod" SourceBytes;
 using "ParserStorage.cod" Tokens;
 using "ParserStorage.cod" ExprNodes;
@@ -93,6 +95,13 @@ func first_extended_declaration(nodes:const ExprNodes in N, work:const NameWork 
         (item <- work[item].next):void;
     };
     return no_node();
+}
+
+func has_native_handle_expressions(nodes:const ExprNodes in N, used:u64) -> bool where {const owner N} {
+    for (at in 0u64 .. used) {
+        if (handle_local(nodes[at].kind) || handle_construction(nodes[at].kind)) { return true; } else {};
+    };
+    return false;
 }
 
 func supported_construction_shape(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
@@ -172,7 +181,8 @@ func bind_parsed_module(source:const SourceBytes in S, nodes:const ExprNodes in 
         if (names.enclosing_defer != no_node()) { result.related_first <- nodes[names.enclosing_defer].first; {}; } else {};
         return false;
     } else {};
-    if (first_extended_declaration(nodes, work, result.frontend.tree) != no_node()) {
+    if (first_extended_declaration(nodes, work, result.frontend.tree) != no_node() ||
+        has_native_handle_expressions(nodes, result.frontend.tree.used)) {
         ref declarations = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
         if (!check_native_declarations(nodes, bindings, work, selected, result.frontend.tree.used, declarations)) {
             binding_diagnostic(nodes, result, module_binding_failed(), declarations.diagnostic, declarations.node);

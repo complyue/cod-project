@@ -99,6 +99,18 @@ func construction_type_query_node() -> u8 { return 80u8; }
 func initializer_assignment_node() -> u8 { return 81u8; }
 func range_node() -> u8 { return 82u8; }
 func range_header_node() -> u8 { return 83u8; }
+func owning_handle_local_node() -> u8 { return 84u8; }
+func borrowed_handle_local_node() -> u8 { return 85u8; }
+func make_own_handle_node() -> u8 { return 86u8; }
+func make_borrowed_handle_node() -> u8 { return 87u8; }
+
+func handle_local(kind:u8) -> bool {
+    return kind == owning_handle_local_node() || kind == borrowed_handle_local_node();
+}
+
+func handle_construction(kind:u8) -> bool {
+    return kind == make_own_handle_node() || kind == make_borrowed_handle_node();
+}
 
 func literal_range(nodes:const ExprNodes in N, header:u64) -> bool where {const owner N} {
     return nodes[nodes[header].left].kind == literal_node() && nodes[nodes[header].right].kind == literal_node();
@@ -213,6 +225,12 @@ export compare_node;
 export conditional_node;
 export range_node;
 export range_header_node;
+export owning_handle_local_node;
+export borrowed_handle_local_node;
+export make_own_handle_node;
+export make_borrowed_handle_node;
+export handle_local;
+export handle_construction;
 export literal_range;
 export nonempty_literal_range;
 export logical_not_node;

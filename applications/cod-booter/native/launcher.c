@@ -66,6 +66,9 @@ static const char *unsupported_source_form(uint32_t code) {
     case 46: return "reference assignment in a construction initializer";
     case 47: return "defer accumulating in an ordinary loop body";
     case 48: return "repeated lexical construction in an ordinary loop body";
+    case 51: return "repeated handle acquisition in an ordinary loop body";
+    case 56: return "acquisition through an imported CType constructor signature";
+    case 58: return "unproved C constructor operand type";
     default: return NULL;
     }
 }
@@ -91,10 +94,30 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fprintf(stderr, ": error: %s is outside the supported compiler profile\n", unsupported);
     else if (diagnostic->stage == 1 && diagnostic->code == 36)
         fputs(": error: expected a range header of the form 'for (name in lower .. upper)'\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 37)
+        fputs(": error: expected a native handle constructor argument list\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 38)
+        fputs(": error: borrowed handle construction requires 'in' followed by a live owning handle\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 13)
         fputs(": error: this module declaration is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 49)
         fputs(": error: a declaration in a loop body or else requires an explicit {{ ... }} scope\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 50)
+        fputs(": error: a function cannot call a native handle constructor\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 52)
+        fputs(": error: owning native construction requires a lexical own handle binding, and a borrowed initializer requires a live handle\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 53)
+        fputs(": error: native handle CType does not match the required type\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 54)
+        fputs(": error: native acquisition mode does not match the owning or borrow-only CType\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 55)
+        fputs(": error: no C constructor declared for this CType\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 57)
+        fputs(": error: wrong number of C constructor arguments\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 59)
+        fputs(": error: native handle does not have the required actual owner\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 60)
+        fputs(": error: C constructor argument has an incompatible bits type\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 12)
         fputs(": error: ref argument requires a proven non-null target\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 13)
