@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 — Scoped native handle effects
+
+<a id="h-native-handle-effect-20261121"></a>
+**H-NATIVE-HANDLE-EFFECT-20261121.** In the [native handle effect discussion](codex://threads/01a20058-486e-7583-be20-26a49ab9d63d) on 2026-11-21 (America/Los_Angeles), the project user proposed `export symbol @llvmSession :own handle LLVMSession;` and `effect @llvmSession <- make own handle LLVMSession();` for direct session access and automatic release, and authorized implementation after design review: “把关设计，没有问题的话发给主线程落实”. The review qualifies D-20-HANDLE-EFFECT/P-672–P-673 (interop r20, D-10r232, D-15r61, roadmap r24, registry r1038). Applying existing effect, native ownership and defer contracts gives one cleanup obligation, scoped restoration and actual-owner borrowing. Prior lexical-holder scope: `7040f7bd66ddbabd793a836915ce48d7b5c8906f:applications/cod-booter/docs/LLVMInterop.md`, “Native handles and C records”.
+
 ## 2026-11-21 — Native handle type declarations and nested resource ownership
 
 <a id="h-handle-type-within-20261121"></a>

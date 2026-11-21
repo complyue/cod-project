@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 231 · Recorded: 2026-11-21 · Phase: language/application co-design.
+Design revision: 232 · Recorded: 2026-11-21 · Phase: language/application co-design.
 
 ## Design authority
+
+[D-20-HANDLE-EFFECT](DesignAuthorityRegistry.md#d-20-handle-effect) covers the owning native handle row in [symbolic storage](#symbolic-storage-and-regional-provenance) at r232. The [user’s delegated review](../CHANGELOG.md#h-native-handle-effect-20261121) applies C-36/C-80 and P-672/P-673. Check that a named procedure uses the current installation, saved borrows keep the selected owner, and an exiting scope restores its predecessor and disposes its own acquisition once.
 
 [D-14-REF-ARGUMENT](DesignAuthorityRegistry.md#d-14-ref-argument) and [H-OWNER-REF-ARGUMENT-20261121](../CHANGELOG.md#h-owner-ref-argument-20261121) cover [pointer reads and parameter owners](#pointer-reads-and-parameter-owners) and the grammar of `not null` in ref arguments at r231. P-668/P-669 distinguish caller-side reference selection from payload reads and boolean negation. Check named and positional arguments under the same signature and checked-failure rules.
 
@@ -132,6 +134,7 @@ Dynamic symbolic variables have their own storage and rebinding contract (H-277�
 | Explicit `ref/ptr symbol @x:T in @arena` | A borrowed target in the region selected through @arena at installation; T may be scalar/bits or an admissible object type. `effect @x = rhs` installs the reference and actual-owner association. |
 | Explicit `ref/ptr symbol @x:T in S where {owner S}` | A borrowed target whose one actual owner is established from the RHS; lexical and ordinary regional owners are admitted under H-561 without installing a region symbol. |
 | Region symbol | It provides the whole-region resource under the existing ownership contract. Shadowing preserves hidden owners; extraction remains forbidden. |
+| `symbol @s :own handle S` | `effect @s <- make own handle S(...)` installs one scoped owner. A handle argument borrows the active instance. Shadowing preserves the hidden instance, and leaving the installing scope restores the preceding binding. The [native effect contract](../applications/cod-booter/docs/LLVMInterop.md#owning-native-handle-effects) specifies cleanup and call-path acceptance. |
 | Procedure-valued symbol | It selects/replays lexical callable-view values under the separate scoped capture contract. H-563 forbids regional view storage; TLS binding bookkeeping cannot retain an expired lexical/captured owner or authorize a regional carrier. |
 
 Symbolic binding writes require `effect`: `effect @x = rhs` performs rebinding, while `effect @x <- rhs` performs ownership/bits transfer (H-280). Bare `@x = rhs` and bare `@x <- rhs` cannot write a symbolic binding. The proposed object-content transfer form is distinguished below. Both forms have scoped validity: an effect saves the preceding binding and restores it when its scope ends. For bits, the saved state is the preceding bits value; for an object reference, it is the preceding reference and its provenance. Edits to referenced regional contents are not undone by restoration. Every effect expression has type `void` (H-288). A following explicit symbolic read obtains the current binding; an effect cannot supply a value argument or form an assignment chain.

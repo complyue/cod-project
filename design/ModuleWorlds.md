@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 60 · Recorded: 2026-11-21 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 61 · Recorded: 2026-11-21 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+[D-15-PUBLIC-SOURCE](DesignAuthorityRegistry.md#d-15-public-source) at r61 applies its single-identity publication rule to [a named owning handle symbol](../applications/cod-booter/docs/LLVMInterop.md#owning-native-handle-effects) under [H-NATIVE-HANDLE-EFFECT-20261121](../CHANGELOG.md#h-native-handle-effect-20261121). P-662/P-663 preserve vocabulary identity and separate publication from runtime installation. Check an exported symbol selected before any acquisition.
 
 [D-15-PUBLIC-SOURCE](DesignAuthorityRegistry.md#d-15-public-source) at r60 applies the existing publication rule to a named `handle type` under [H-HANDLE-TYPE-WITHIN-20261121](../CHANGELOG.md#h-handle-type-within-20261121). P-662/P-663 preserve nominal identity and constructor contracts through selections and renamed re-exports. Check two different defining modules with identically spelled handle types.
 
@@ -320,7 +322,7 @@ using "SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
 
 The prefix publishes the same local identity that a separate `export name;` would publish after the declaration. This includes named `data`, `array`, `func`, `proc`, `enum` and `handle type` declarations. It applies to a foreign-marked declaration with a separately publishable identity under its existing rules, including a local `data "C"` or `proc "C"` declaration. Marking one method publishes its complete locally resolved callable family. Likewise a public type carries its existing constructors, methods or member table according to that type's contract. A private definition sharing only a foreign object's spelling cannot publish that foreign object by accident. Use the [publication-only re-export](#publication-only-re-export) when the public identity comes from upstream.
 
-The prefix applies to a declaration that has a single publishable name, including a named overload family. Anonymous forms, expressions, initializer blocks and individual fields have no such publication. Split a declaration of multiple independent identities when their visibility differs, or select them using standalone exports. Prefixing a declaration adds no initialization, repeats no method body and confers no additional extension grant. Existing `export name;`, `export from` and `export import` retain their uses and privacy checks.
+The prefix applies to a declaration that has a single publishable name, including a named overload family. For `export symbol @s :own handle S;`, the published name is the symbol identity `@s`. Another module can select it with `using symbol "m" @s;` before any resource is installed. Anonymous forms, expressions, initializer blocks and individual fields have no such publication. Split a declaration of multiple independent identities when their visibility differs, or select them using standalone exports. Prefixing a declaration adds no initialization, repeats no method body and confers no additional extension grant. Existing `export name;`, `export from` and `export import` retain their uses and privacy checks.
 
 For several selections with one source and operation, place a comma-separated list **after the quoted module path**. Each item obeys the same source-name, destination-name and suffix grammar as a singleton of that operation. For example:
 

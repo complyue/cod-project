@@ -1,8 +1,10 @@
 # Native C providers, LLVM bindings and scoped cleanup
 
-Revision 19 · 2026-11-21 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
+Revision 20 · 2026-11-21 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
 
 ## Design authority
+
+[D-20-HANDLE-EFFECT](../../../design/DesignAuthorityRegistry.md#d-20-handle-effect) covers [owning native handle effects](#owning-native-handle-effects) at r20. The [user’s proposal and delegated review](../../../CHANGELOG.md#h-native-handle-effect-20261121) apply C-36/C-80 through P-672/P-673. A procedure can reach the active native session by its published symbol while the installing scope owns its cleanup. Check actual-owner selection, nested restoration, constructor rollback, deferred use and dependent destruction in both compilers and in the object writer. The existing C loan and destructor interfaces suffice.
 
 [D-20-C-HANDLES](../../../design/DesignAuthorityRegistry.md#d-20-c-handles) at r19 covers the fieldless `handle type` declarations and their two construction forms under [H-HANDLE-TYPE-WITHIN-20261121](../../../CHANGELOG.md#h-handle-type-within-20261121) and P-646/P-647. Check owner and borrow-only CTypes, ordinary lending, foreign-supplied handles and recursively bits-only C records. [D-20-HANDLE-WITHIN](../../../design/DesignAuthorityRegistry.md#d-20-handle-within) covers [dependent owning acquisition](#dependent-owning-handle-construction) under C-80/C-65. The user requires the particular container to survive its child's destruction. CoD registers destruction only for successful `make own handle` acquisitions. Check successful and failed acquisition of three levels, reverse cleanup of siblings, two live containers of the same type, and the absence of CoD cleanup for a borrowed view.
 
@@ -29,7 +31,7 @@ For [enum arguments, results and normal feedback](../../../design/TypedEnums.md#
 
 A fieldless `handle type` declaration identifies a nominal native resource type. Its public identity carries the associated constructor contracts through module selection, including a renamed re-export. Declare a C-layout record with fields as `data "C" Record { ... }`. Each native handle payload is an opaque 64-bit word. CoD declares each constructor's parameters under the bits-or-handle rule. Generate C stubs for declared constructors and a disposal hook for CoD-owned resources. Handwritten C implements the resource operations.
 
-- `make own handle SomeCType(...)` acquires an `own handle`. It is an owner kind, subject to the lexical-variable-only ownership rule used for `own region`. At scope exit, the owning variable releases the resource it still owns through the generated destructor stub. An owning handle cannot be a field.
+- `make own handle SomeCType(...)` acquires an `own handle`. A lexical owning variable or a [scoped effect installation](#owning-native-handle-effects) holds the release obligation. At the owning scope’s exit, CoD releases the resource it still owns through the generated destructor stub. An owning handle cannot be a field.
 - `make handle View(...) in oh` constructs a borrow under the actual live owner `oh` of the CType declared by `View`. The borrow carries no independent destruction responsibility. When creating the borrow also creates a native child requiring disposal, the provider attaches the child to `oh` before publishing the loan. The provider preserves the child's native dependencies for the duration of that loan.
 - A borrowed `handle in oh` crossing from CoD to C carries both opaque 64-bit words, one for its own payload and one for `oh`. They supply the native context even when a signature has no separate owner argument. The checked reference to the actual owner instance supplies the lifetime relationship. The words convey no proof of liveness or release authority.
 - Nonempty by-value `data "C"` records are recursively bits-only, including nested records. Borrowed handles can travel as explicit locals, arguments and results with their owner obligations. Native aggregates holding handles stay in C behind a typed handle. Native resources and their handle payloads are process-local.
@@ -127,9 +129,47 @@ For an ordinary CoD callable, `-> handle T in O` ties the result to an actual ow
 
 Post-initialization `view = other;` for a native handle local is a separate question. The two alternatives are a mutable local that can select another compatible borrow under its original owner, and a local fixed to its initial borrow. Initialization and ordinary CoD results can be implemented independently of this choice.
 
+### Owning native handle effects
+
+Declare a symbol with an ownable nominal handle type. The following uses the booter’s existing LLVM constructor and verification operation.
+
+```cod
+# NativeLLVM.cod
+export symbol @llvmSession :own handle LLVMSession;
+
+# ObjectCompiler.cod
+using symbol "NativeLLVM.cod" @llvmSession;
+using "NativeLLVM.cod" { LLVMSession, LLVMOpenException, llvm_verify };
+
+proc verify_active() -> u8 {
+    return llvm_verify(@llvmSession);
+}
+proc verify_new_session() -> u8 throws LLVMOpenException {
+    effect @llvmSession <- make own handle LLVMSession();
+    return verify_active();
+}
+```
+
+The exported declaration publishes one typed identity. A separate `symbol @llvmSession :own handle LLVMSession;` followed by `export @llvmSession;` has the same effect on the module interface. Selecting the identity with `using symbol` requires no live session. Direct procedure calls can use the current installation across any number of calls. Every reachable use must have a live binding under the ordinary symbolic call-path rules. A func cannot read the symbol. Declaring an owning symbol of a borrow-only type rejects.
+
+Evaluate the constructor against the preceding bindings. A successful installation transfers its one release obligation to the installing effect scope. The effect expression has type `void`. If acquisition fails, C cleans its acquired prefix before the declared exception propagates. This installs nothing, schedules no destructor for the failed acquisition and leaves any preceding session available. A native handle argument such as `llvm_verify(@llvmSession)` borrows the selected instance with its existing access and actual-owner word. Reading, selecting, forwarding or replaying a binding confers no ownership. In particular, `effect @other <- @llvmSession;` cannot extract the session.
+
+Each successful shadow owns its own acquisition. On normal or exceptional exit restore the preceding binding (or its absence) and release exactly the resources owned by the exiting scope. A borrow selected under the outer installation continues to name the outer instance while it is hidden. For `make own handle Child(@llvmSession)` with a `within` parameter, the selected session must live through the child's destructor. Reinstalling the same symbol with another session cannot satisfy that obligation. Owning children and parents drained together follow reverse successful acquisition order. Native views attached by the provider follow its disposal contract.
+
+Deferred calls follow [argument preparation and scope exit](../../../design/ExceptionControl.md#deferred-work-and-explicit-scopes). For example, `defer llvm_verify(@llvmSession);` prepares a borrow of the session visible at registration. In `defer { verify_active(); }`, the procedure looks up the session when the block executes. An admitted use during cleanup must run with its selected owner still live. An iteration-owned session expires at iteration exit, so a prepared borrow of it in the enclosing callable’s defer list rejects. An explicit `{{ ... }}` inside the iteration can own both the installation and the deferred call.
+
+**Acceptance in seed and booter**
+
+- Exercise identity-only selection across modules, a direct intermediate procedure with no session parameter, and the existing native loan words. Reject a demanded path with no installation, a wrong handle type, extraction and an escaping borrow.
+- Exercise nested sessions A and B of the same CType on normal return and exceptional exit. Observe B during the inner call, a deferred use of B before its destruction, and A on resumption in the outer scope. A failed inner constructor rolls back before its typed catch, preserves A and registers zero B destructors.
+- Check a dependent owning child under the selected session, child destruction with that parent still live, and one destructor per successful owning acquisition. Cover prepared versus delayed lookup and the rejected iteration loan.
+- Install the checked effect in the real [object writer](../src/ObjectCompiler.cod) and use it across a CoD procedure call. Keep LLVM construction, verification, emission, and the existing `LLVMOpenException` reporting observable. The C-facing operations continue to take explicit borrows.
+
+This scope covers fresh owning construction in a procedure’s dynamic effect scope. It adds no native-handle field storage, general consuming handle parameter, TLS disposal ABI or fallible-destructor policy.
+
 ### LLVM session ownership
 
-The first LLVM binding acquires the session as a lexical owned handle. Owner-bound typed borrows cover its views. The generated destructor stub releases a successfully acquired session. C releases any acquired resources before reporting construction failure, while it still owns the acquired prefix. Release the builder, module and context in that order as applicable. CoD invokes verification and emission explicitly while the session is live. Ordinary `defer` and `init` retain their language contracts for other work.
+The LLVM binding acquires one scoped owning handle per session. The object writer can install it under the published session symbol. Owner-bound typed borrows cover its views. The generated destructor stub releases a successfully acquired session. C releases any acquired resources before reporting construction failure, while it still owns the acquired prefix. Release the builder, module and context in that order as applicable. CoD invokes verification and emission explicitly while the session is live. Ordinary `defer` and `init` retain their language contracts for other work.
 
 <a id="first-declaration-profile-for-review"></a>
 
