@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 — UTF-8 text at the C boundary
+
+<a id="h-utf8-native-text-20261121"></a>
+**H-UTF8-NATIVE-TEXT-20261121.** In the [native interface discussion](codex://threads/01a20058-486e-7583-be20-26a49ab9d63d) on 2026-11-21 (America/Los_Angeles), the project user requested built-in UTF-8 strings and natural C interoperability and excluded non-UTF-8 locales. In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the same day, they chose direct compatible literals and explicit conversion for runtime strings: “选1. 语法我倾向于用 `path:CString`”. D-07-UTF8 r1 / interop r21 / registry r1039, P-674/P-675 apply that source decision to the ordinary nonnumeric assertion, an owner-bound native loan and the first object-output workload. The real output-path baseline is at `35c3a0773d2195594db89822fe028a0602ee2e7d:applications/cod-booter/native/llvm_provider.c`, `cod_native_llvm_emit_object_impl`.
+
 ## 2026-11-21 — Scoped native handle effects
 
 <a id="h-native-handle-effect-20261121"></a>
