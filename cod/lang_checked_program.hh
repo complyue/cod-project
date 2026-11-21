@@ -121,6 +121,8 @@ struct CheckedOperation {
   bool enum_assertion = false;
   std::optional<std::uint64_t> case_code;
   bool case_reaches_end = false;
+  bool case_scope_resumes = false;
+  bool case_scope_returns = false;
   bool minimum_literal = false;
   ExceptionFacts exceptions;
   std::set<size_t> captures;
@@ -320,6 +322,14 @@ struct CheckedBinding {
 
 // Substitutions are checking obligations, not semantic methods or activation records.
 struct CallEffects {
+  struct CaseScopeExits {
+    bool scan = false;
+    bool result = false;
+    bool operator==(const CaseScopeExits &) const = default;
+  };
+  // A case-arm scope preserves normal scan and delivered return as distinct
+  // exit summaries. Ordinary callables combine them under normal completion.
+  std::optional<CaseScopeExits> case_scope_exits;
   struct ReadSite {
     Location at;
     std::string diagnostic;

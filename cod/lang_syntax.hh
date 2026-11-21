@@ -453,6 +453,7 @@ struct Form {
   std::vector<Capture> captures;
   bool explicit_captures = false;
   bool implicit_scope = false;
+  bool case_scan_scope = false;
   bool supplied_scope = false;
   bool supplied_group = false;
   std::vector<TypeParameter> type_parameters;
@@ -1968,7 +1969,7 @@ class Parser {
     auto &body = *form.body;
     if (body.kind == K::block && body.children.empty()) return;
     auto &result = body.kind == K::block ? body.children.back() : form.body;
-    if (result->kind == K::return_value) return;
+    if (result->kind == K::return_value || result->kind == K::case_fallthrough) return;
     auto tail = std::make_unique<Expression>();
     tail->kind = K::return_tail;
     tail->at = result->at;
@@ -2047,6 +2048,7 @@ class Parser {
     definition->at = expr.at;
     definition->span = expr.span;
     definition->implicit_scope = true;
+    definition->case_scan_scope = !expr.children.empty() && expr.children.back()->kind == K::case_fallthrough;
     definition->body = std::make_unique<Expression>(std::move(expr));
     definition->body->scoped = false;
     normalize_return_tail(*definition);
@@ -2125,8 +2127,6 @@ class Parser {
       auto &child = *expr.children[i];
       const bool arm_fallthrough = selected_arm && child.kind == K::block &&
           !child.children.empty() && child.children.back()->kind == K::case_fallthrough;
-      if (arm_fallthrough && child.scoped)
-        fail(child.children.back()->at, "fallthrough after full-scope cleanup is outside the supported seed profile");
       if (arm_fallthrough) expr.case_resumes = true;
       const bool direct = expr.kind == K::block && direct_fallthrough && i + 1 == expr.children.size();
       validate_explicit_scopes(child, child_returning, loop_body || iteration, deferred_body || deferred,

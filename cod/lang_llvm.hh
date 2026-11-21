@@ -56,6 +56,10 @@ class LLVMEmission {
   llvm::StructType *here_transfer_ = llvm::StructType::create(context_, "cod.here.transfer");
   bool protected_outcomes_ = false;
   bool owned_failures_ = false;
+  bool case_scope_outcomes_ = false;
+  const Expression *case_scan_tail_ = nullptr;
+  llvm::AllocaInst *case_scan_request_ = nullptr;
+  unsigned case_scan_field() const { return 7 + protected_outcomes_ + owned_failures_; }
   unsigned failure_owner_field() const { return protected_outcomes_ ? 8 : 7; }
   const CheckedProgram *program_ = nullptr;
   // Transient native parameter roles shared by declarations, calls and entry.
@@ -455,7 +459,7 @@ class LLVMEmission {
   }
   llvm::Value *outcome(llvm::Value *value, llvm::Value *category, llvm::Value *where, llvm::Value *fatal,
       llvm::Value *requested = nullptr, llvm::Value *available = nullptr, llvm::Value *cause = nullptr,
-      llvm::Value *transfer = nullptr, llvm::Value *failure_owner = nullptr) {
+      llvm::Value *transfer = nullptr, llvm::Value *failure_owner = nullptr, llvm::Value *resumes_case = nullptr) {
     llvm::Value *result = llvm::UndefValue::get(outcome_);
     result = b_.CreateInsertValue(result, value, 0);
     result = b_.CreateInsertValue(result, category, 1);
@@ -466,6 +470,7 @@ class LLVMEmission {
     result = b_.CreateInsertValue(result, cause ? cause : integer(0), 6);
     if (protected_outcomes_) result = b_.CreateInsertValue(result, transfer ? transfer : null_pointer(), 7);
     if (owned_failures_) result = b_.CreateInsertValue(result, failure_owner ? failure_owner : null_pointer(), failure_owner_field());
+    if (case_scope_outcomes_) result = b_.CreateInsertValue(result, resumes_case ? resumes_case : b_.getFalse(), case_scan_field());
     return result;
   }
   llvm::Value *failed(llvm::Value *result) {
@@ -1624,7 +1629,9 @@ class LLVMEmission {
     scope_ = scope.parent; control_ = control.parent; temporaries_ = outer_temporaries;
     if (requires_return) {
       auto *missing = block("return.missing");
-      b_.CreateCondBr(b_.CreateAnd(requires_return, b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0))), missing, finish_);
+      auto *unprepared = b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0));
+      if (case_scan_request_) unprepared = b_.CreateAnd(unprepared, b_.CreateNot(load(case_scan_request_)));
+      b_.CreateCondBr(b_.CreateAnd(requires_return, unprepared), missing, finish_);
       b_.SetInsertPoint(missing);
       save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::missing_return)), integer(site(at)), null_pointer()));
     }
@@ -2290,6 +2297,15 @@ class LLVMEmission {
       return emit_projected_value(arm, source, discard);
     });
   }
+  llvm::Value *emit_case_scope(const Expression &body) {
+    return temporary_scope(body.at, outcome_, [&]() -> llvm::Value * {
+      const auto arguments = prepare_arguments(body);
+      if (!reachable()) return nullptr;
+      auto *result = invoke(body, arguments);
+      propagate(result);
+      return result;
+    });
+  }
   llvm::Value *emit_case(const Expression &expr, const Type &subject_type, bool borrowed, bool reaches_end, bool discard) {
     using K = Expression::Kind;
     const auto &subject = *expr.children.front();
@@ -2326,10 +2342,32 @@ class LLVMEmission {
       }
       if (reachable()) {
         const auto &body = *item.children.back();
-        auto *value = emit_expression(body, Projection::value, item.case_resumes || discard);
-        if (reachable()) {
-          if (!item.case_resumes) incoming.emplace_back(value, b_.GetInsertBlock());
-          b_.CreateBr(item.case_resumes ? next : join);
+        if (item.case_resumes && body.kind == K::value_call) {
+          auto *result = emit_case_scope(body);
+          if (reachable()) {
+            const bool resumes = std::ranges::any_of(contexts_, [&](const auto &context) {
+              return context.at(&item).case_scope_resumes;
+            });
+            const bool returns = std::ranges::any_of(contexts_, [&](const auto &context) {
+              return context.at(&item).case_scope_returns;
+            });
+            if (resumes && returns) {
+              auto *returned = block("case.returned");
+              b_.CreateCondBr(b_.CreateExtractValue(result, case_scan_field()), next, returned);
+              b_.SetInsertPoint(returned);
+            }
+            if (returns) {
+              incoming.emplace_back(b_.CreateExtractValue(result, 0), b_.GetInsertBlock());
+              b_.CreateBr(join);
+            } else if (resumes) b_.CreateBr(next);
+            else b_.CreateUnreachable();
+          }
+        } else {
+          auto *value = emit_expression(body, Projection::value, item.case_resumes || discard);
+          if (reachable()) {
+            if (!item.case_resumes) incoming.emplace_back(value, b_.GetInsertBlock());
+            b_.CreateBr(item.case_resumes ? next : join);
+          }
         }
       }
       b_.SetInsertPoint(next);
@@ -2555,7 +2593,9 @@ class LLVMEmission {
         return emit_case(expr, Type{kind, {}, identity}, borrowed, reaches_end, discard);
       });
     }
-    case K::case_fallthrough: return empty_scalar();
+    case K::case_fallthrough:
+      if (&expr == case_scan_tail_) b_.CreateStore(b_.getTrue(), case_scan_request_);
+      return empty_scalar();
     case K::case_failure:
       fail_path(ExceptionCategory::unexpected_case, expr.at);
       return nullptr;
@@ -3117,6 +3157,9 @@ class LLVMEmission {
     const auto &call = call_layouts_.at(layout.method);
     if (function->arg_size() != call.parameter_count()) throw std::logic_error("native body disagrees with its parameter roles");
     begin(function, prepared.storage, layout.bindings, frame, prepared.storage_types);
+    case_scan_tail_ = method.source->case_scan_scope ? method.source->body->children.back().get() : nullptr;
+    case_scan_request_ = case_scan_tail_ ? slot(b_.getInt1Ty(), "case.scan.requested") : nullptr;
+    if (case_scan_request_) b_.CreateStore(b_.getFalse(), case_scan_request_);
     for (size_t i = 0; i < call.here_count(); ++i) here_arguments_.push_back(function->getArg(call.here_index() + i));
     if (call.here_group) here_destination_ = function->getArg(call.here_index() + call.here_count());
     if (method.here_group && method.here_group->supplier_return.has_value())
@@ -3227,7 +3270,10 @@ class LLVMEmission {
     if (call.callable_destination) b_.CreateStore(value, function->getArg(call.result_index()));
     b_.CreateRet(outcome(value, load(completion_.category), load(completion_.site), load(completion_.fatal),
         load(completion_.requested), load(completion_.available), load(completion_.cause),
-        protected_outcomes_ ? load(completion_.transfer) : nullptr, owned_failures_ ? load(completion_.failure_owner) : nullptr));
+        protected_outcomes_ ? load(completion_.transfer) : nullptr, owned_failures_ ? load(completion_.failure_owner) : nullptr,
+        case_scan_request_ ? b_.CreateAnd(load(case_scan_request_), b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0))) : nullptr));
+    case_scan_tail_ = nullptr;
+    case_scan_request_ = nullptr;
   }
   void emit_sites() {
     function_ = llvm::Function::Create(llvm::FunctionType::get(b_.getPtrTy(), {b_.getInt64Ty()}, false),
@@ -3353,9 +3399,13 @@ public:
     program_ = &program; specialize_ = specialize; bounds_checks_ = bounds_checks;
     protected_outcomes_ = std::ranges::any_of(program.methods, [](const auto &method) { return method.here_group && !method.instances.empty(); });
     owned_failures_ = program.exception_types.size() > exception_categories.size();
-    if (protected_outcomes_ || owned_failures_) {
+    case_scope_outcomes_ = std::ranges::any_of(program.methods, [](const auto &method) {
+      return method.source->case_scan_scope && !method.instances.empty();
+    });
+    if (protected_outcomes_ || owned_failures_ || case_scope_outcomes_) {
       std::vector<llvm::Type *> fields(outcome_->element_begin(), outcome_->element_end());
       fields.resize(fields.size() + protected_outcomes_ + owned_failures_, b_.getPtrTy());
+      if (case_scope_outcomes_) fields.push_back(b_.getInt1Ty());
       outcome_->setBody(fields);
     }
     if (protected_outcomes_) here_transfer_->setBody({b_.getInt8Ty(), outcome_});
