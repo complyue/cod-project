@@ -1,0 +1,19 @@
+# The provider keeps these offsets within its immutable spelling bytes. The
+# kind and defining module and declaration select one published object.
+data ModuleExport {
+    module_first:u64;
+    module_past:u64;
+    name_first:u64;
+    name_past:u64;
+    identity:u64;
+    kind:u8;
+    checked:u8;
+    origin_module:u64;
+    owner_module:u64;
+    owner_identity:u64;
+    shape:u8;
+}
+array ModuleExports[u64]:ModuleExport;
+
+export ModuleExport;
+export ModuleExports;

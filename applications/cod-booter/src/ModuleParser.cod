@@ -1,5 +1,5 @@
 using "SourceStorage.cod" SourceBytes;
-using "SourceStorage.cod" len as source_len;
+using "SourceAccess.cod" len as source_len;
 using "ParserStorage.cod" Tokens;
 using "ParserStorage.cod" ExprNodes;
 using "ParserStorage.cod" len as token_len;
@@ -34,6 +34,7 @@ using "ParserStorage.cod" readonly_declaration;
 using "Lexer.cod" module_path;
 using "Lexer.cod" identifier;
 using "Lexer.cod" using_word;
+using "Lexer.cod" as_word;
 using "Lexer.cod" symbol_word;
 using "Lexer.cod" proc_word;
 using "Lexer.cod" func_word;
@@ -95,7 +96,18 @@ func parse_selection(source:const SourceBytes in S, tokens:const Tokens in T,
         if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) { return; } else {};
     };
     val selection <- result.root;
-    append_node(nodes, result, using_node(), first, nodes[selection].past, 0u64, path_node, selection, first);
+    val local_name <- 0u64;
+    if (result.next < past && as_word(source, tokens[result.next])) {
+        result.next <- result.next + 1u64;
+        if (symbolic) {
+            if (!parse_symbol(tokens, nodes, result, past)) { return; } else {};
+        } else {
+            if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) { return; } else {};
+        };
+        (local_name <- result.root + 1u64):void;
+    } else {};
+    val last_name <- result.root;
+    append_node(nodes, result, using_node(), first, nodes[last_name].past, local_name, path_node, selection, first);
 }
 
 # Formal parameters link to their preceding parameter and retain the typed name.

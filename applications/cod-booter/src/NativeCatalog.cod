@@ -1,5 +1,5 @@
 using "SourceStorage.cod" SourceBytes;
-using "ModuleExports.cod" ModuleExports;
+using "ModuleExportStorage.cod" ModuleExports;
 
 data "C" IntrinsicCatalog;
 proc "C" IntrinsicCatalog();

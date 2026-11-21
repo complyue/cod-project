@@ -1,6 +1,6 @@
 using "SourceStorage.cod" SourceBytes;
 using "SourceStorage.cod" Token;
-using "SourceStorage.cod" len;
+using "SourceAccess.cod" len;
 
 func end_of_source() -> u8 { return 0u8; }
 func identifier() -> u8 { return 1u8; }
@@ -90,6 +90,12 @@ func using_word(source:const SourceBytes in S, token:const Token in T) -> bool
     return source[first] == 117u8 && source[first + 1u64] == 115u8 && # u s
         source[first + 2u64] == 105u8 && source[first + 3u64] == 110u8 && # i n
         source[first + 4u64] == 103u8; # g
+}
+
+func as_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val first <- token.first;
+    return identifier_width(token, 2u64) && source[first] == 97u8 && source[first + 1u64] == 115u8;
 }
 
 func symbol_word(source:const SourceBytes in S, token:const Token in T) -> bool
@@ -518,6 +524,7 @@ export const_word;
 export behave_word;
 export throw_word;
 export using_word;
+export as_word;
 export symbol_word;
 export proc_word;
 export func_word;

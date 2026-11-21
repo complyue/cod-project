@@ -561,6 +561,7 @@ func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, 
         } else {};
         if (form_kind == using_node()) {
             name <- nodes[form].right;
+            if (nodes[form].number != 0u64) { (name <- nodes[form].number - 1u64):void; } else {};
             kind <- if (nodes[name].kind == symbol_node()) { symbolic_selection() } else { ordinary_selection() };
             declare_name(source, nodes, bindings, work, state, name, form, kind, unproved_module_binding());
         } else {};
