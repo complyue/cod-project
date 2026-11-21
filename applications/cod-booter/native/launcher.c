@@ -2,9 +2,11 @@
 
 #include "cod_region_storage.h"
 #include "compile_diagnostic.h"
+#include "module_graph.h"
 
 #include <inttypes.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <llvm-c/Target.h>
 
@@ -61,6 +63,14 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fprintf(stderr, ": error: compiler scratch %s (code %" PRIu32 ")\n", scratch_error(diagnostic->code), diagnostic->code);
     else if (diagnostic->stage == 3 && diagnostic->code == 13)
         fputs(": error: this module declaration is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 2 && diagnostic->code == module_cycle_unproved)
+        fputs(": error: cyclic module construction remains unproved\n", stderr);
+    else if (diagnostic->stage == 2 && diagnostic->code == module_dependency_rejected)
+        fputs(": error: selected source dependency could not be checked\n", stderr);
+    else if (diagnostic->stage == 2 && diagnostic->code == module_graph_storage_failed)
+        fputs(": error: could not allocate dependency graph storage\n", stderr);
+    else if (diagnostic->stage == 2 && diagnostic->code == module_depth_unproved)
+        fputs(": error: dependency depth exceeds the current compiler profile\n", stderr);
     else
         fprintf(stderr, ": error: %s failed (code %" PRIu32 ")\n", diagnostic_phase(diagnostic->stage), diagnostic->code);
     if (diagnostic->related.line)
@@ -81,8 +91,14 @@ static cod_native_status compile(const char *source, const char *object, cod_boo
 
 int main(int argc, char **argv) {
     if (argc != 3) {
-        fputs("usage: cod-booter SOURCE OUTPUT\n", stderr);
+        fputs("usage: cod-booter SOURCE OUTPUT\n       cod-booter --check-declarations SOURCE\n", stderr);
         return 64;
+    }
+    if (strcmp(argv[1], "--check-declarations") == 0) {
+        cod_booter_diagnostic diagnostic;
+        const uint8_t status = cod_booter_check_declarations(argv[2], &diagnostic);
+        if (status) report(argv[2], status, &diagnostic);
+        return status;
     }
     if (LLVMInitializeNativeTarget() || LLVMInitializeNativeAsmPrinter()) {
         fputs("cod-booter: native LLVM target unavailable\n", stderr);

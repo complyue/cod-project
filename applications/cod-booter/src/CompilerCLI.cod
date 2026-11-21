@@ -1,3 +1,4 @@
+using "ModuleGraph.cod" check_graph_module;
 using "NativeSource.cod" Path;
 using "NativeCatalog.cod" IntrinsicCatalog;
 using "NativeCatalog.cod" catalog_use;

@@ -57,14 +57,20 @@ proc compile_with_module_source(here open() -> u8, here work() -> u8, here relea
     return work();
 }
 
-# A module root uses the EOF token. Each other syntax node uses one
-# non-EOF token. Lowering emits each guard dispatch and callable prologue
-# once and each deferred call's preparation and invocation once.
+# A module root uses the EOF token. Each other syntax node uses one non-EOF token.
+func plan_module_source(source:const SourceBytes in S, ref plan:ExpressionScratchPlan in P) -> bool
+    where {const owner S, owner P} {
+    if (!plan_expression_scratch(source, plan)) { return false; } else {};
+    plan.node_capacity <- plan.token_count;
+    return true;
+}
+
+# Lowering emits each guard dispatch and callable prologue once and each
+# deferred call's preparation and invocation once.
 func plan_module_workspace(source:const SourceBytes in S, ref workspace:ModuleWorkspacePlan in W) -> u8
     where {const owner S, owner W} {
     workspace.commands <- 0u64;
-    if (!plan_expression_scratch(source, workspace.source)) { return native_source_rejected(); } else {};
-    workspace.source.node_capacity <- workspace.source.token_count;
+    if (!plan_module_source(source, workspace.source)) { return native_source_rejected(); } else {};
     val commands_per_node <- 32u64;
     if (workspace.source.node_capacity > 18446744073709551615u64 / commands_per_node) {
         return native_scratch_failed();
@@ -163,6 +169,7 @@ export ModuleWorkspacePlan;
 export NativeModuleResult;
 export native_source_open_failed;
 export compile_with_module_source;
+export plan_module_source;
 export plan_module_workspace;
 export compile_with_module_workspace;
 export compile_native_module;
