@@ -167,6 +167,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: initialization proof exceeds available compiler workspace\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 16)
         fputs(": error: ref initialization requires a proven non-null target\n", stderr);
+    else if (diagnostic->stage == 5 && diagnostic->code == 17)
+        fputs(": error: local binding is not established on every path to this use\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == module_cycle_unproved)
         fputs(": error: cyclic module construction remains unproved\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == module_dependency_rejected)

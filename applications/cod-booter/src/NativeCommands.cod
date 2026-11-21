@@ -53,6 +53,13 @@ func branch_catchable() -> u8 { return 23u8; }
 func write_defer_flag() -> u8 { return 24u8; }
 func branch_if_unregistered() -> u8 { return 25u8; }
 
+# Compile-time facts about a local's storage binding. They share the
+# initialization checker with reservation operations and have no native form.
+func unbind_local() -> u8 { return 26u8; }
+func bind_local() -> u8 { return 27u8; }
+func use_local() -> u8 { return 28u8; }
+func local_binding_fact(opcode:u8) -> bool { return opcode >= unbind_local() && opcode <= use_local(); }
+
 # Internal outcome words. Zero denotes success. Fatal numeric failures
 # bypass language catches and still leave through the activation cleanup.
 func returned_word() -> u64 { return 0u64; }
@@ -63,15 +70,16 @@ func call_site() -> u64 { return 4u64; }
 func arithmetic_fault() -> u64 { return 5u64; }
 func slot(node:u64) -> u64 { return node + 6u64; }
 
-# Before native verification, selected address, store, load and copy rows
-# can carry a reservation index plus one in c and the source node in d.
+# Before native verification, storage operations and binding facts can carry
+# the relevant construction or declaration index plus one in c and source node in d.
 # Initialization checking consumes those fields before the provider sees them.
 func reservation_tag(reservation:u64) -> u64 {
     return if (reservation == no_node()) { 0u64 } else { reservation + 1u64 };
 }
 
 func initialization_access(opcode:u8) -> bool {
-    return opcode == place_address() || opcode == store_target() || opcode == load_target() || opcode == copy_word();
+    return opcode == place_address() || opcode == store_target() || opcode == load_target() ||
+        opcode == copy_word() || local_binding_fact(opcode);
 }
 
 export NativeCommand;
@@ -102,6 +110,10 @@ export checked_remainder;
 export branch_catchable;
 export write_defer_flag;
 export branch_if_unregistered;
+export unbind_local;
+export bind_local;
+export use_local;
+export local_binding_fact;
 export returned_word;
 export pending_category;
 export pending_site;

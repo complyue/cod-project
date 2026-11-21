@@ -80,9 +80,12 @@ data NameBinding {
     kind:u8;
     # A using node records the category supplied by its checked export.
     imported_kind:u8;
+    guarded_local:u8;
     declaration:u64;
     # Expressions record the full lexical scope that contains them.
     scope:u64;
+    # A scope owns this list. Each guarded declaration links to its predecessor.
+    guarded_local_link:u64;
 }
 array NameBindings[u64]:NameBinding;
 
@@ -495,7 +498,6 @@ func local_declaration_allowed(ref state:NameState in R, at:u64) -> bool where {
     } else {};
     if (state.loop_arm) { reject_name(state, at, declaration_in_loop_arm()); return false; } else {};
     if (state.here_group) { reject_name(state, at, declaration_in_here_group()); return false; } else {};
-    if (state.guarded) { reject_name(state, at, unproved_guard_binding()); return false; } else {};
     return true;
 }
 
@@ -509,6 +511,12 @@ func resolve_local(source:const SourceBytes in S, nodes:const ExprNodes in N, re
     resolve_expression(source, nodes, bindings, work, state, nodes[at].right);
     if (state.diagnostic != 0u8) { return; } else {};
     declare_name(source, nodes, bindings, work, state, binder_name(nodes, binding), at, local_binding(), duplicate_binding());
+    if (state.diagnostic == 0u8 && state.guarded) {
+        val scope <- state.scope_node;
+        bindings[at].guarded_local <- 1u8;
+        bindings[at].guarded_local_link <- bindings[scope].guarded_local_link;
+        (bindings[scope].guarded_local_link <- at):void;
+    } else {};
 }
 
 func resolve_handle_owner(source:const SourceBytes in S, nodes:const ExprNodes in N, ref bindings:NameBindings in B,
@@ -528,6 +536,7 @@ func resolve_handle_local(source:const SourceBytes in S, nodes:const ExprNodes i
                           ref work:NameWork in W, ref state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     if (!local_declaration_allowed(state, at)) { return; } else {};
+    if (state.guarded) { reject_name(state, at, unproved_guard_binding()); return; } else {};
     val binding <- nodes[at].left;
     val annotation <- nodes[binding].right;
     val explicit_owner <- nodes[annotation].kind == owned_type_node();
@@ -1135,7 +1144,9 @@ func resolve_module_names(source:const SourceBytes in S, nodes:const ExprNodes i
     for (at in 0u64 .. tree.used) {
         remember(bindings, at, no_node(), 0u8);
         bindings[at].imported_kind <- if (nodes[at].kind == using_node()) { (selected[at].kind) } else { 0u8 };
+        bindings[at].guarded_local <- 0u8;
         bindings[at].scope <- no_node();
+        bindings[at].guarded_local_link <- no_node();
     };
     link_entries(nodes, work, tree.used);
     ref state = make NameState {
