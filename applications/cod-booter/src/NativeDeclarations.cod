@@ -510,8 +510,6 @@ func check_native_declarations(nodes:const ExprNodes in N, ref names:NameBinding
 
 data ModulePublication {
     module_identity:u64;
-    path_first:u64;
-    path_past:u64;
     source_first:u64;
 }
 
@@ -586,7 +584,7 @@ func publish_module_exports(nodes:const ExprNodes in N, names:const NameBindings
                             ref count:u64 in C) -> bool
     where {const owner N, const owner B, const owner E, const owner P, owner X, owner C} {
     if (publication.module_identity == 0u64 || publication.module_identity == no_node() ||
-        publication.path_first >= publication.path_past || used > intrinsic (len)(nodes) ||
+        used > intrinsic (len)(nodes) ||
         used > intrinsic (len)(names) || used > intrinsic (len)(selected) || count > intrinsic (len)(exports)) {
         return false;
     } else {};
@@ -597,8 +595,9 @@ func publish_module_exports(nodes:const ExprNodes in N, names:const NameBindings
             name <- nodes[at].left;
             if (next == intrinsic (len)(exports) || nodes[name].past > no_node() - publication.source_first ||
                 !publish_declaration(nodes, names, selected, publication, name, exports, next)) { return false; } else {};
-            exports[next].module_first <- publication.path_first;
-            exports[next].module_past <- publication.path_past;
+            exports[next].publishing_module <- publication.module_identity;
+            exports[next].module_first <- 0u64;
+            exports[next].module_past <- 0u64;
             exports[next].name_first <- publication.source_first + nodes[name].first;
             exports[next].name_past <- publication.source_first + nodes[name].past;
             (next <- next + 1u64):void;

@@ -14,6 +14,7 @@ CHECK_FIELD(name_past);
 CHECK_FIELD(identity);
 CHECK_FIELD(kind);
 CHECK_FIELD(checked);
+CHECK_FIELD(publishing_module);
 CHECK_FIELD(origin_module);
 CHECK_FIELD(owner_module);
 CHECK_FIELD(owner_identity);
