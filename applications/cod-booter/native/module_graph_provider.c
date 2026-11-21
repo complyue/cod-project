@@ -13,7 +13,7 @@ enum { frame_arrays = 7, max_active_modules = 128 };
 enum { scratch_failed = 6, source_open_failed = 7, invalid_boundary = 70 };
 
 typedef cod_native_graph_frame_use_row5 export_row;
-typedef cod_native_graph_frame_use_row9 constructor_row;
+typedef cod_native_graph_frame_use_row9 interface_row;
 
 #define CATALOG_FIELD(field) \
     _Static_assert(offsetof(export_row, field) == offsetof(cod_lang_intrinsic_export, field), "graph catalog row offset")
@@ -49,8 +49,8 @@ typedef struct {
     size_t spelling_count, spelling_capacity;
     export_row *exports;
     size_t export_count, export_capacity;
-    constructor_row *constructors;
-    size_t constructor_count, constructor_capacity;
+    interface_row *interfaces;
+    size_t interface_count, interface_capacity;
 } module_graph;
 
 typedef struct {
@@ -125,7 +125,7 @@ static cod_native_graph_frame_use_arrays frame_views(module_frame *frame) {
         {graph->spellings, graph->spelling_count},
         {(const void *)graph->exports, graph->export_count},
         {frame_array(frame, 6), frame->nodes},
-        {(const void *)graph->constructors, graph->constructor_count},
+        {(const void *)graph->interfaces, graph->interface_count},
     };
 }
 
@@ -291,14 +291,14 @@ cod_native_status cod_native_commit_graph_exports_impl(cod_native_ModuleFrame_bo
     cod_native_commit_graph_exports_view1 source, uint8_t *status) {
     module_frame *frame = frame_from_handle(handle);
     if (!frame || frame->views_live || frame->progress.count > frame->nodes ||
-        frame->progress.constructor_count > frame->nodes) return COD_NATIVE_BOUNDARY_ERROR;
+        frame->progress.interface_count > frame->nodes) return COD_NATIVE_BOUNDARY_ERROR;
     const export_row *staged = frame_array(frame, 5);
     module_graph *graph = frame->graph;
     size_t spelling_end = graph->spelling_count;
     const size_t count = (size_t)frame->progress.count;
-    const size_t constructor_count = (size_t)frame->progress.constructor_count;
+    const size_t interface_count = (size_t)frame->progress.interface_count;
     *status = COD_REGION_STORAGE_TOO_LARGE;
-    if (count > SIZE_MAX - graph->export_count || constructor_count > SIZE_MAX - graph->constructor_count) {
+    if (count > SIZE_MAX - graph->export_count || interface_count > SIZE_MAX - graph->interface_count) {
         return COD_NATIVE_OK;
     }
     for (size_t i = 0; i < count; ++i) {
@@ -315,13 +315,13 @@ cod_native_status cod_native_commit_graph_exports_impl(cod_native_ModuleFrame_bo
     export_row *exports = reserve(graph->exports, &graph->export_capacity, graph->export_count + count, sizeof(*exports));
     if (!exports) return COD_NATIVE_OK;
     graph->exports = exports;
-    if (constructor_count) {
-        constructor_row *constructors = reserve(graph->constructors, &graph->constructor_capacity,
-                                                graph->constructor_count + constructor_count, sizeof(*constructors));
-        if (!constructors) return COD_NATIVE_OK;
-        graph->constructors = constructors;
-        memcpy(constructors + graph->constructor_count, frame_array(frame, 6), constructor_count * sizeof(*constructors));
-        graph->constructor_count += constructor_count;
+    if (interface_count) {
+        interface_row *interfaces = reserve(graph->interfaces, &graph->interface_capacity,
+                                                graph->interface_count + interface_count, sizeof(*interfaces));
+        if (!interfaces) return COD_NATIVE_OK;
+        graph->interfaces = interfaces;
+        memcpy(interfaces + graph->interface_count, frame_array(frame, 6), interface_count * sizeof(*interfaces));
+        graph->interface_count += interface_count;
     }
     for (size_t i = 0; i < count; ++i) {
         export_row row = staged[i];
@@ -365,7 +365,7 @@ uint8_t cod_booter_check_declarations(const char *input, cod_booter_diagnostic *
     for (size_t i = 0; i < graph.module_count; ++i) free(graph.modules[i].path);
     free(graph.modules);
     free(graph.exports);
-    free(graph.constructors);
+    free(graph.interfaces);
     free(graph.spellings);
     return status;
 }
