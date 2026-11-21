@@ -111,6 +111,10 @@ func narrow_integer_node() -> u8 { return 93u8; }
 func index_access_node() -> u8 { return 94u8; }
 func array_length_node() -> u8 { return 95u8; }
 
+func local_storage_binding(kind:u8) -> bool {
+    return kind == val_binding_node() || kind == ref_local_node() || kind == ptr_binding_node();
+}
+
 func handle_local(kind:u8) -> bool {
     return kind == owning_handle_local_node() || kind == borrowed_handle_local_node();
 }
@@ -281,6 +285,7 @@ export exception_local_node;
 export exception_parameter_node;
 export exception_result_node;
 export ref_local_node;
+export local_storage_binding;
 export ref_result_node;
 export make_exception_node;
 export make_named_node;

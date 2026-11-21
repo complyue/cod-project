@@ -638,14 +638,14 @@ func parse_binding_name(source:const SourceBytes in S, tokens:const Tokens in T,
 
 func parse_local_binding(source:const SourceBytes in S, tokens:const Tokens in T,
                          ref nodes:ExprNodes in A, ref result:ParseResult in R,
-                         past:u64, pointer:bool) -> void
+                         past:u64, kind:u8) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
-    if (!parse_binding_name(source, tokens, nodes, result, past, pointer, true, false)) { return; } else {};
+    if (!parse_binding_name(source, tokens, nodes, result, past, kind == ptr_binding_node(), true, false)) { return; } else {};
     val binding <- result.root;
     val assignment <- result.next;
-    val valid <- if (pointer) {
+    val valid <- if (kind != val_binding_node()) {
         punct_at(source, tokens, assignment, past) == 61u8 # '='
     } else {
         punct_pair_at(source, tokens, assignment, past, 60u8, 45u8) # '<-'
@@ -655,7 +655,6 @@ func parse_local_binding(source:const SourceBytes in S, tokens:const Tokens in T
     parse_expression_at(source, tokens, nodes, result, past, 1u8);
     if (result.diagnostic != 0u8) { return; } else {};
     val initializer <- result.root;
-    val kind <- if (pointer) { ptr_binding_node() } else { val_binding_node() };
     append_node(nodes, result, kind, first, nodes[initializer].past, 0u64, binding, initializer, tokens[assignment].first);
 }
 
@@ -764,26 +763,6 @@ func parse_exception_local(source:const SourceBytes in S, tokens:const Tokens in
     if (result.diagnostic != 0u8) { return; } else {};
     val initializer <- result.root;
     append_node(nodes, result, exception_local_node(), first, nodes[initializer].past, 0u64,
-                binding, initializer, tokens[assignment].first);
-}
-
-func parse_ref_local(source:const SourceBytes in S, tokens:const Tokens in T,
-                     ref nodes:ExprNodes in A, ref result:ParseResult in R, past:u64) -> void
-    where {const owner S, const owner T, owner A, owner R} {
-    val first <- tokens[result.next].first;
-    result.next <- result.next + 1u64;
-    if (!parse_binding_name(source, tokens, nodes, result, past, false, true, false)) { return; } else {};
-    val binding <- result.root;
-    val assignment <- result.next;
-    if (punct_at(source, tokens, assignment, past) != 61u8) {
-        result.diagnostic <- expected_binding_operator();
-        return;
-    } else {};
-    result.next <- assignment + 1u64;
-    parse_expression_at(source, tokens, nodes, result, past, 1u8);
-    if (result.diagnostic != 0u8) { return; } else {};
-    val initializer <- result.root;
-    append_node(nodes, result, ref_local_node(), first, nodes[initializer].past, 0u64,
                 binding, initializer, tokens[assignment].first);
 }
 
@@ -923,11 +902,11 @@ func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
     if (make_word(source, tokens[at])) { parse_construction(source, tokens, nodes, result, past); return; } else {};
     if (callable_local_head(source, tokens, at, past)) { parse_callable_local(source, tokens, nodes, result, past); return; } else {};
     if (ref_word(source, tokens[at]) && at + 1u64 < past && tokens[at + 1u64].kind == identifier()) {
-        parse_ref_local(source, tokens, nodes, result, past);
+        parse_local_binding(source, tokens, nodes, result, past, ref_local_node());
         return;
     } else {};
-    if (val_word(source, tokens[at])) { parse_local_binding(source, tokens, nodes, result, past, false); return; } else {};
-    if (ptr_word(source, tokens[at])) { parse_local_binding(source, tokens, nodes, result, past, true); return; } else {};
+    if (val_word(source, tokens[at])) { parse_local_binding(source, tokens, nodes, result, past, val_binding_node()); return; } else {};
+    if (ptr_word(source, tokens[at])) { parse_local_binding(source, tokens, nodes, result, past, ptr_binding_node()); return; } else {};
     if (null_word(source, tokens[at])) { parse_null(source, tokens, nodes, result, past); return; } else {};
     if (behave_word(source, tokens[at])) { parse_behave(source, tokens, nodes, result, past); return; } else {};
     if (intrinsic_word(source, tokens[at])) { parse_array_length(source, tokens, nodes, result, past); return; } else {};

@@ -1,0 +1,24 @@
+using symbol "std:io" @print;
+
+func increment(value:u64) -> u64 {
+    return value + 1u64;
+}
+
+proc update(pick_first:bool) -> void {
+    val first <- 10u64;
+    val second <- 20u64;
+    ref selected = if (pick_first) { first } else { second };
+    ref snapshot = (selected);
+    ref fresh = increment(selected);
+    ref readonly_view:const u64 = selected;
+
+    selected <- 30u64;
+    behave @print(first);
+    behave @print(second);
+    behave @print(snapshot);
+    behave @print(fresh);
+    behave @print(readonly_view);
+    return;
+}
+
+update(false);

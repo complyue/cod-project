@@ -14,7 +14,8 @@ using "ParserStorage.cod" null_node;
 using "ParserStorage.cod" name_node;
 using "ParserStorage.cod" group_node;
 using "ParserStorage.cod" val_binding_node;
-using "ParserStorage.cod" ptr_binding_node;
+using "ParserStorage.cod" ref_local_node;
+using "ParserStorage.cod" local_storage_binding;
 using "ParserStorage.cod" multiply_node;
 using "ParserStorage.cod" subtract_node;
 using "ParserStorage.cod" divide_node;
@@ -684,7 +685,18 @@ func lower_binding(nodes:const ExprNodes in N, names:const NameBindings in B, li
     } else {
         lower_node(nodes, names, links, facts, sites, code, plan, state, initializer);
     };
-    if (state.live) { emit(code, plan, copy_word(), slot(at), slot(initializer)); } else {};
+    if (!state.live) { return; } else {};
+    if (nodes[at].kind == val_binding_node()) {
+        emit(code, plan, copy_word(), slot(at), slot(initializer));
+        return;
+    } else {};
+    if (facts[initializer].reception == independent_value()) {
+        emit(code, plan, place_address(), slot(at), slot(initializer));
+        return;
+    } else {};
+    if (nodes[at].kind == ref_local_node()) {
+        storage_operation(code, plan, copy_word(), slot(at), slot(initializer), facts[initializer].reservation, initializer);
+    } else { emit(code, plan, copy_word(), slot(at), slot(initializer)); };
 }
 
 func lower_construction(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
@@ -771,7 +783,7 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
         lower_node(nodes, names, links, facts, sites, code, plan, state, nodes[at].left);
         return;
     } else {};
-    if (kind == val_binding_node() || kind == ptr_binding_node()) {
+    if (local_storage_binding(kind)) {
         lower_binding(nodes, names, links, facts, sites, code, plan, state, at);
         return;
     } else {};

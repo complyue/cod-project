@@ -51,7 +51,6 @@ static const char *unsupported_source_form(uint32_t code) {
     case 29: return "owning exception parameter";
     case 30: return "owning exception result";
     case 33: return "owning make exception expression";
-    case 34: return "borrowed reference local";
     case 35: return "borrowed reference result";
     case 36: return "writable owning exception catch";
     case 37: return "ordinary construction";
@@ -162,6 +161,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: target must be initialized before this read or borrow\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 14)
         fputs(": error: initialization proof exceeds available compiler workspace\n", stderr);
+    else if (diagnostic->stage == 5 && diagnostic->code == 16)
+        fputs(": error: ref initialization requires a proven non-null target\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == module_cycle_unproved)
         fputs(": error: cyclic module construction remains unproved\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == module_dependency_rejected)
