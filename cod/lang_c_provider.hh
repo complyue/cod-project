@@ -114,7 +114,7 @@ inline void emit_c_here(const CheckedProgram &program, const CheckedNativeOperat
   stubs << "    if (!" << name << "_validate_impl(state->handle, views)) return state->completion = COD_NATIVE_HERE_INVALID;\n"
         << "    return state->completion = state->body(state->context, views, feedback);\n}\n\n"
         << boundary << " {\n"
-        << "    if (!handle || !body || !context || !completion || !value || handle->payload != handle->owner)\n"
+        << "    if (!handle || !body || !context || !completion || !value)\n"
         << "        return COD_NATIVE_BOUNDARY_ERROR;\n"
         << "    " << state << " state = {*handle, body, context, COD_NATIVE_HERE_VALUE};\n"
         << "    uint8_t result = 0;\n"
