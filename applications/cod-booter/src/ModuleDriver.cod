@@ -9,11 +9,8 @@ using "ModuleFrontend.cod" { ModuleBindingResult, rejected_unsupported_declarati
 using "NativeCommands.cod" { NativeCommands, NativePlan };
 using "ModuleCompiler.cod" compile_module_commands;
 using "ModuleLowering.cod" native_unsupported;
-using "Compiler.cod" {
-    ExpressionScratchPlan, plan_expression_scratch, native_complete, native_source_rejected,
-    native_form_unsupported, native_open_failed, native_lowering_failed, native_finish_failed,
-    native_scratch_failed,
-};
+using "Compiler.cod" { ExpressionScratchPlan, plan_expression_scratch };
+using "CompilerStatus.cod" CompilerStatus { Complete, Rejected, FormUnsupported, OpenFailed, LoweringFailed, FinishFailed, ScratchFailed, SourceOpenFailed };
 
 export data ModuleWorkspacePlan {
     source:ExpressionScratchPlan;
@@ -31,16 +28,14 @@ export data NativeModuleResult {
     related_position:SourcePosition;
 }
 
-export func native_source_open_failed() -> u8 { return 7u8; }
-
 # Opening and lending the source revision are separate operations. The
 # provider keeps the mapping and line index live throughout work.
-export proc compile_with_module_source(here open() -> u8, here work() -> u8, here release() -> void,
-                                       source_status:u8 in R) -> u8 where {owner R} {
+export proc compile_with_module_source(here open() -> u8, here work() -> CompilerStatus, here release() -> void,
+                                       source_status:u8 in R) -> CompilerStatus where {owner R} {
     source_status <- 0u8;
     defer { release(); };
     source_status <- open();
-    if (source_status != 0u8) return native_source_open_failed();
+    if (source_status != 0u8) return SourceOpenFailed;
     return work();
 }
 
@@ -58,15 +53,15 @@ export func plan_module_source(source:const SourceBytes in S, plan:ExpressionScr
 
 # Lowering emits each guard dispatch and callable prologue once and each
 # deferred call's preparation and invocation once.
-export func plan_module_workspace(source:const SourceBytes in S, workspace:ModuleWorkspacePlan in W) -> u8
+export func plan_module_workspace(source:const SourceBytes in S, workspace:ModuleWorkspacePlan in W) -> CompilerStatus
     where {const owner S, owner W} {
     workspace.commands <- 0u64;
-    if (!plan_module_source(source, workspace.source)) return native_source_rejected();
+    if (!plan_module_source(source, workspace.source)) return Rejected;
     val commands_per_node <- 32u64;
     if (workspace.source.node_capacity > 18446744073709551615u64 / commands_per_node)
-        return native_scratch_failed();
+        return ScratchFailed;
     workspace.commands <- workspace.source.node_capacity * commands_per_node;
-    return native_complete();
+    return Complete;
 }
 
 func clear_rejection(result:NativeModuleResult in R) -> void where {owner R} {
@@ -83,9 +78,9 @@ func clear_rejection(result:NativeModuleResult in R) -> void where {owner R} {
 
 # The source revision and its index outlive scratch. Retain only numeric
 # positions after the revision is released by the outer driver.
-export proc compile_with_module_workspace(here work(tokens:u64, nodes:u64, commands:u64) -> u8,
+export proc compile_with_module_workspace(here work(tokens:u64, nodes:u64, commands:u64) -> CompilerStatus,
                                           here release() -> void, source:const SourceBytes in S, lines:const SourceLines in S,
-                                          workspace:ModuleWorkspacePlan in W, result:NativeModuleResult in R) -> u8
+                                          workspace:ModuleWorkspacePlan in W, result:NativeModuleResult in R) -> CompilerStatus
     where {const owner S, owner W, owner R} {
     clear_rejection(result);
     result.analysis.stage <- 0u8;
@@ -95,11 +90,11 @@ export proc compile_with_module_workspace(here work(tokens:u64, nodes:u64, comma
     result.plan.used <- 0u64;
     result.plan.diagnostic <- 0u8;
     val status <- plan_module_workspace(source, workspace);
-    if (status == native_complete()) {
+    if (status == Complete) {
         defer { release(); };
         (status <- work(workspace.source.token_count, workspace.source.node_capacity, workspace.commands)):void;
     } else {
-        if (status == native_source_rejected()) {
+        if (status == Rejected) {
             result.rejected_first <- workspace.source.diagnostic_first;
             result.rejected_past <- workspace.source.diagnostic_past;
             {};
@@ -111,20 +106,20 @@ export proc compile_with_module_workspace(here work(tokens:u64, nodes:u64, comma
     return status;
 }
 
-func retain_rejection(nodes:const ExprNodes in N, result:NativeModuleResult in R) -> u8
+func retain_rejection(nodes:const ExprNodes in N, result:NativeModuleResult in R) -> CompilerStatus
     where {const owner N, owner R} {
     if (result.analysis.stage != 0u8) {
         result.rejected_first <- result.analysis.frontend.diagnostic_first;
         result.rejected_past <- result.analysis.frontend.diagnostic_past;
-        if (rejected_unsupported_declaration(result.analysis)) return native_form_unsupported();
-        return native_source_rejected();
+        if (rejected_unsupported_declaration(result.analysis)) return FormUnsupported;
+        return Rejected;
     } else {};
     if (result.plan.node != no_node()) {
         result.rejected_first <- nodes[result.plan.node].first;
         (result.rejected_past <- nodes[result.plan.node].past):void;
     } else {};
-    if (result.plan.diagnostic == native_unsupported()) return native_form_unsupported();
-    return native_lowering_failed();
+    if (result.plan.diagnostic == native_unsupported()) return FormUnsupported;
+    return LoweringFailed;
 }
 
 # Construct borrows the initialized command prefix under the scratch
@@ -137,7 +132,7 @@ export proc compile_native_module(here begin() -> bool,
                                   selected:SelectedExports in X, bindings:NameBindings in Y,
                                   names:NameWork in W, facts:OperandFacts in F, owners:CallOwners in O,
                                   sites:CompletionSites in K, commands:NativeCommands in C,
-                                  result:NativeModuleResult in R) -> u8
+                                  result:NativeModuleResult in R) -> CompilerStatus
     where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y,
            owner W, owner F, owner O, owner K, owner C, owner R} {
     result.backend_status <- 0u8;
@@ -146,10 +141,10 @@ export proc compile_native_module(here begin() -> bool,
                                  facts, owners, sites, commands, result.plan, result.analysis))
         return retain_rejection(nodes, result);
     defer { release(); };
-    if (!begin()) return native_open_failed();
+    if (!begin()) return OpenFailed;
     result.backend_status <- construct(commands, result.plan.used, result.plan.labels, result.plan.slots);
-    if (result.backend_status != 0u8) return native_lowering_failed();
+    if (result.backend_status != 0u8) return LoweringFailed;
     result.backend_status <- finish();
-    if (result.backend_status != 0u8) return native_finish_failed();
-    return native_complete();
+    if (result.backend_status != 0u8) return FinishFailed;
+    return Complete;
 }

@@ -1,6 +1,7 @@
 using "NativeSource.cod" SourceRevision;
 using "SourceStorage.cod" { SourceBytes, SourceLines };
+using "CompilerStatus.cod" CompilerStatus;
 
-export proc "C" source_use(here work(ref bytes:const SourceBytes in S, ref lines:const SourceLines in S) -> u8,
-                           handle revision:SourceRevision in S) -> u8
+export proc "C" source_use(here work(ref bytes:const SourceBytes in S, ref lines:const SourceLines in S) -> CompilerStatus,
+                           handle revision:SourceRevision in S) -> CompilerStatus
     where {const owner S};

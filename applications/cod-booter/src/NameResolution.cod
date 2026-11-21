@@ -40,6 +40,8 @@ export data NameWorkSlot {
     active:u64;
     next:u64;
     enum_code:u64;
+    value_module:u64;
+    value_identity:u64;
     value_kind:u8;
     expects_here:u8;
 }

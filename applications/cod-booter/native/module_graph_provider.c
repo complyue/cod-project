@@ -11,7 +11,14 @@
 #include <string.h>
 
 enum { frame_arrays = 7, max_active_modules = 128 };
-enum { scratch_failed = 6, source_open_failed = 7, invalid_boundary = 70 };
+enum { invalid_boundary = 70 };
+
+typedef cod_enum_CompilerStatusx2ecod_14_CompilerStatus compiler_status;
+enum {
+    complete = cod_enum_CompilerStatusx2ecod_14_CompilerStatus_member_Complete,
+    scratch_failed = cod_enum_CompilerStatusx2ecod_14_CompilerStatus_member_ScratchFailed,
+    source_open_failed = cod_enum_CompilerStatusx2ecod_14_CompilerStatus_member_SourceOpenFailed,
+};
 
 typedef cod_native_graph_frame_use_row5 export_row;
 typedef cod_native_graph_frame_use_row9 interface_row;
@@ -142,7 +149,7 @@ int cod_native_graph_frame_use_validate_impl(cod_native_ModuleFrame_borrow handl
 }
 
 cod_native_status cod_native_graph_frame_use_impl(cod_native_ModuleFrame_borrow handle,
-                                                 cod_native_graph_frame_use_callback run, void *loan, uint8_t *value) {
+                                                 cod_native_graph_frame_use_callback run, void *loan, compiler_status *value) {
     module_frame *frame = frame_from_handle(handle);
     if (!frame || !frame->scratch.bytes || frame->views_live) return COD_NATIVE_BOUNDARY_ERROR;
     const cod_native_graph_frame_use_arrays views = frame_views(frame);
@@ -237,16 +244,16 @@ static uint8_t enter_module(module_graph *graph, char *path, cod_booter_diagnost
     const cod_native_Path_borrow input = {paths.owner, paths.owner};
     const cod_native_ModuleFrame_borrow module_work = {work.owner, work.owner};
     const cod_native_DiagnosticDestination_borrow result = {destination.owner, destination.owner};
-    uint8_t status = 0;
+    compiler_status status;
     ++graph->active_count;
-    if (cod_native_check_graph_module_entry(&input, &module_work, &result, &paths, &work, &destination, &status) != COD_NATIVE_OK)
-        status = invalid_boundary;
+    const cod_native_status entered =
+        cod_native_check_graph_module_entry(&input, &module_work, &result, &paths, &work, &destination, &status);
     --graph->active_count;
     for (size_t i = 0; i < frame.edge_count; ++i) free(frame.edges[i].path);
     free(frame.edges);
     cod_region_storage_release(&frame.scratch);
-    graph->modules[module].checked = status == 0;
-    return status;
+    graph->modules[module].checked = entered == COD_NATIVE_OK && status == complete;
+    return entered == COD_NATIVE_OK ? status : invalid_boundary;
 }
 
 cod_native_status cod_native_follow_graph_dependencies_impl(cod_native_ModuleFrame_borrow handle, uint8_t *status) {

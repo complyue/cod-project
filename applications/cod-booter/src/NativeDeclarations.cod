@@ -57,6 +57,7 @@ func mismatched_here_feedback() -> u8 { return 68u8; }
 func here_body_required() -> u8 { return 69u8; }
 func native_here_in_function() -> u8 { return 70u8; }
 func unproved_here_feedback() -> u8 { return 71u8; }
+func mismatched_enum_feedback() -> u8 { return 88u8; }
 
 func reject_declaration(report:NativeDeclarationResult in R, at:u64, cause:u8) -> void where {owner R} {
     report.diagnostic <- cause;
@@ -585,14 +586,13 @@ func trace_handle_loan(nodes:const ExprNodes in N, names:const NameBindings in B
     return false;
 }
 
-func scalar_operand_kind(nodes:const ExprNodes in N, names:const NameBindings in B, work:const NameWork in W, at:u64) -> u8
+func scalar_operand_kind(nodes:const ExprNodes in N, names:const NameBindings in B, work:const NameWork in W, value:u64) -> u8
     where {const owner N, const owner B, const owner W} {
-    val value <- ungrouped(nodes, at);
     val kind <- nodes[value].kind;
+    if (work[value].value_kind != 0u8) return work[value].value_kind;
     if (kind == literal_node()) return builtin_u64();
     if (kind == narrow_integer_node()) return if (nodes[value].left == 8u64) { builtin_u8() } else { builtin_u32() };
     if (kind == bool_node()) return builtin_bool();
-    if (kind == field_access_node()) return work[value].value_kind;
     if (kind != name_node()) return 0u8;
     val binding <- names[value].kind;
     val declaration <- names[value].declaration;
@@ -663,11 +663,13 @@ func match_constructor_parameter(nodes:const ExprNodes in N, names:const NameBin
     where {const owner N, const owner B, const owner E, const owner P, const owner W, owner L, owner R} {
     if (parameter.value_kind == c_handle_type())
         return match_handle_parameter(nodes, names, selected, parameter, operand, loan, report);
-    val actual <- scalar_operand_kind(nodes, names, work, operand);
+    val actual <- ungrouped(nodes, operand);
+    val kind <- scalar_operand_kind(nodes, names, work, actual);
     val expected <- parameter.value_kind;
-    if (actual != expected) {
+    if (kind != expected || (kind == enum_type() &&
+        (work[actual].value_module != parameter.type_module || work[actual].value_identity != parameter.type_identity))) {
         reject_declaration(report, operand,
-            if (native_scalar(actual)) { invalid_constructor_bits() } else { unproved_constructor_operand() });
+            if (native_scalar(kind) || kind == enum_type()) { invalid_constructor_bits() } else { unproved_constructor_operand() });
         return false;
     } else {};
     return true;
@@ -878,6 +880,19 @@ func declared_call_result(nodes:const ExprNodes in N, names:const NameBindings i
     return 0u8;
 }
 
+func record_local_call_result(nodes:const ExprNodes in N, names:const NameBindings in B,
+                              work:NameWork in W, selected:const SelectedExports in E, call:u64, definition:u64) -> void
+    where {const owner N, const owner B, owner W, const owner E} {
+    val kind <- declared_call_result(nodes, names, work, selected, definition);
+    work[call].value_kind <- kind;
+    if (kind != enum_type()) return;
+    val result <- signature_clause(nodes, nodes[definition].left, result_clause_node());
+    val marker <- nodes[result].right;
+    work[call].value_module <- type_module(names, selected, marker, 0u64);
+    work[call].value_identity <- type_identity(names, selected, marker);
+    return;
+}
+
 func check_here_receiver(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
                          receiver:u64, expected:const ModuleInterfaceRow in P, actual_owner:u64,
                          report:NativeDeclarationResult in R) -> bool
@@ -921,8 +936,11 @@ func check_here_supplier(nodes:const ExprNodes in N, names:const NameBindings in
 
 func attach_here_body(nodes:const ExprNodes in N, work:NameWork in W, at:u64)
     where {const owner N, owner W} {
-    work[nodes[at].left].active <- at;
-    work[at].value_kind <- builtin_u8();
+    val call <- nodes[at].left;
+    work[call].active <- at;
+    work[at].value_kind <- work[call].value_kind;
+    work[at].value_module <- work[call].value_module;
+    work[at].value_identity <- work[call].value_identity;
     val body <- nodes[nodes[at].right].right;
     if (nodes[body].kind == full_scope_node()) { (work[body].active <- at):void; } else {};
 }
@@ -930,11 +948,6 @@ func attach_here_body(nodes:const ExprNodes in N, work:NameWork in W, at:u64)
 func check_local_here(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
                       work:NameWork in W, at:u64, callback:u64, report:NativeDeclarationResult in R)
     where {const owner N, const owner B, const owner E, owner W, owner R} {
-    val feedback <- signature_clause(nodes, nodes[callback].right, result_clause_node());
-    if (native_value_kind(names, selected, nodes[feedback].right) == enum_type()) {
-        reject_declaration(report, at, unproved_here_feedback());
-        return;
-    } else {};
     val operand <- check_here_supplier(nodes, names, work, at, report);
     if (operand == no_node()) return;
     ref loan = make HandleLoan { marker <- no_node(); owner <- no_node(); readonly <- false; };
@@ -975,10 +988,6 @@ func check_selected_here(nodes:const ExprNodes in N, names:const NameBindings in
         reject_declaration(report, supplied, here_operation_required());
         return;
     } else {};
-    if (contracts[head].result_kind == enum_type()) {
-        reject_declaration(report, at, unproved_here_feedback());
-        return;
-    } else {};
     val operand <- check_here_supplier(nodes, names, work, at, report);
     if (operand == no_node()) return;
     ref loan = make HandleLoan { marker <- no_node(); owner <- no_node(); readonly <- false; };
@@ -1006,7 +1015,7 @@ func prepare_local_calls(nodes:const ExprNodes in N, names:const NameBindings in
             callee <- nodes[at].left;
             if (names[callee].kind == c_operation() || names[callee].kind == callable_binding() || names[callee].kind == c_entry()) {
                 definition <- names[callee].declaration;
-                work[at].value_kind <- declared_call_result(nodes, names, work, selected, definition);
+                record_local_call_result(nodes, names, work, selected, at, definition);
                 if (names[callee].kind == c_operation() && native_here_parameter(nodes, definition) != no_node()) {
                     (work[at].expects_here <- 1u8):void;
                 } else {};
@@ -1040,32 +1049,45 @@ func prepare_local_calls(nodes:const ExprNodes in N, names:const NameBindings in
     return true;
 }
 
+func here_completion_destination(nodes:const ExprNodes in N, names:const NameBindings in B,
+                                 work:const NameWork in W, at:u64) -> u64
+    where {const owner N, const owner B, const owner W} {
+    val kind <- nodes[at].kind;
+    if (kind == continue_node() || kind == break_node()) return names[at].declaration;
+    val scope <- names[at].scope;
+    if (kind == return_node() && scope != no_node() && nodes[scope].kind == full_scope_node())
+        return work[scope].active;
+    return no_node();
+}
+
 func check_here_completions(nodes:const ExprNodes in N, names:const NameBindings in B, work:const NameWork in W,
                             used:u64, report:NativeDeclarationResult in R) -> bool
     where {const owner N, const owner B, const owner W, owner R} {
-    val kind <- 0u8;
-    val scope <- no_node();
+    val target <- no_node();
+    val expected <- 0u8;
+    val mismatch <- 0u8;
     val operand <- no_node();
     val value <- no_node();
     val feedback <- 0u8;
     for (at in 0u64 .. used) {
-        kind <- nodes[at].kind;
-        if (kind == call_node() && work[at].expects_here != 0u8 && work[at].active == no_node()) {
+        if (nodes[at].kind == call_node() && work[at].expects_here != 0u8 && work[at].active == no_node()) {
             reject_declaration(report, at, here_body_required());
             return false;
         } else {};
-        scope <- names[at].scope;
-        if (kind == continue_node() || kind == break_node() ||
-            (kind == return_node() && scope != no_node() && work[scope].active != no_node() && nodes[scope].kind == full_scope_node())) {
+        target <- here_completion_destination(nodes, names, work, at);
+        if (target != no_node()) {
+            expected <- work[target].value_kind;
+            mismatch <- if (expected == enum_type()) { mismatched_enum_feedback() }
+                            else { mismatched_here_feedback() };
             operand <- nodes[at].left;
-            if (operand == no_node()) { reject_declaration(report, at, mismatched_here_feedback()); return false; } else {};
+            if (operand == no_node()) { reject_declaration(report, at, mismatch); return false; } else {};
             value <- ungrouped(nodes, operand);
             feedback <- scalar_operand_kind(nodes, names, work, value);
-            if (nodes[value].kind == call_node() || nodes[value].kind == here_call_node()) {
-                (feedback <- work[value].value_kind):void;
-            } else {};
-            if (feedback != builtin_u8()) {
-                reject_declaration(report, operand, if (feedback == 0u8) { unproved_here_feedback() } else { mismatched_here_feedback() });
+            if (feedback == 0u8) { reject_declaration(report, operand, unproved_here_feedback()); return false; } else {};
+            if (feedback != expected || (expected == enum_type() &&
+                (work[value].value_module != work[target].value_module ||
+                 work[value].value_identity != work[target].value_identity))) {
+                reject_declaration(report, operand, mismatch);
                 return false;
             } else {};
         } else {};
@@ -1084,43 +1106,52 @@ func selected_call_interface(nodes:const ExprNodes in N, names:const NameBinding
     return find_interface(contracts, selected[site].origin_module, selected[site].identity);
 }
 
+export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBindings in B,
+                                   selected:const SelectedExports in E, contracts:const ModuleInterfaces in C,
+                                   work:NameWork in W, used:u64, report:NativeDeclarationResult in R) -> bool
+    where {const owner N, const owner B, const owner E, const owner C, owner W, owner R} {
+    val kind <- 0u8;
+    val head <- no_node();
+    val call <- no_node();
+    for (at in 0u64 .. used) {
+        kind <- nodes[at].kind;
+        if (kind == call_node()) {
+            head <- selected_call_interface(nodes, names, selected, contracts, at);
+            if (head != no_node()) {
+                work[at].value_kind <- contracts[head].result_kind;
+                work[at].value_module <- contracts[head].type_module;
+                work[at].value_identity <- contracts[head].type_identity;
+                (work[at].expects_here <- contracts[head].has_here):void;
+            } else {};
+        } else {
+            if (kind == here_call_node()) {
+                call <- nodes[at].left;
+                if (names[nodes[call].left].kind == ordinary_selection()) {
+                    check_selected_here(nodes, names, selected, contracts, work, at,
+                                        selected_call_interface(nodes, names, selected, contracts, call), report);
+                    if (report.diagnostic != 0u8) return false;
+                } else {};
+            } else {};
+        };
+    };
+    return true;
+}
+
 export func check_module_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B,
                                       selected:const SelectedExports in E, contracts:const ModuleInterfaces in C,
                                       work:NameWork in W, used:u64, report:NativeDeclarationResult in R) -> bool
     where {const owner N, const owner B, const owner E, const owner C, owner W, owner R} {
-    report.diagnostic <- 0u8;
-    report.node <- no_node();
-    val kind <- 0u8;
-    val call <- no_node();
-    val head <- no_node();
     val marker <- no_node();
     for (at in 0u64 .. used) {
-        kind <- nodes[at].kind;
-        if (handle_construction(kind)) {
+        if (handle_construction(nodes[at].kind)) {
             marker <- nodes[at].left;
             if (names[marker].kind == ordinary_selection()) {
                 check_imported_constructor(nodes, names, selected, contracts, work, at, report);
             } else {
                 check_constructor_arguments(nodes, names, selected, work, at, work[names[marker].declaration].active, report);
             };
-        } else {
-            if (kind == call_node()) {
-                head <- selected_call_interface(nodes, names, selected, contracts, at);
-                if (head != no_node()) {
-                    work[at].value_kind <- contracts[head].result_kind;
-                    (work[at].expects_here <- contracts[head].has_here):void;
-                } else {};
-            } else {
-                if (kind == here_call_node()) {
-                    call <- nodes[at].left;
-                    if (names[nodes[call].left].kind == ordinary_selection()) {
-                        head <- selected_call_interface(nodes, names, selected, contracts, call);
-                        check_selected_here(nodes, names, selected, contracts, work, at, head, report);
-                    } else {};
-                } else {};
-            };
-        };
-        if (report.diagnostic != 0u8) return false;
+            if (report.diagnostic != 0u8) return false;
+        } else {};
     };
     return check_here_completions(nodes, names, work, used, report);
 }
@@ -1135,6 +1166,8 @@ export func check_native_declarations(nodes:const ExprNodes in N, names:NameBind
     for (at in 0u64 .. used) {
         work[at].active <- no_node();
         work[at].value_kind <- 0u8;
+        work[at].value_module <- 0u64;
+        work[at].value_identity <- 0u64;
         work[at].expects_here <- 0u8;
     };
     for (at in 0u64 .. used) {

@@ -4,6 +4,9 @@ using "Lexer.cod" { scan_token, end_of_source, unsupported_byte };
 using "ParserStorage.cod" { Tokens, ExprNodes, no_node };
 using "Frontend.cod" { FrontendResult, read_expression };
 using "Lowering.cod" { lower_expression, arithmetic_node };
+using "CompilerStatus.cod" CompilerStatus { Complete, Rejected, FormUnsupported, OpenFailed, LoweringFailed, FinishFailed };
+
+export from "CompilerStatus.cod" CompilerStatus;
 
 export data ExpressionScratchPlan {
     token_count:u64;
@@ -19,14 +22,6 @@ export data NativeExpressionResult {
     rejected_at:u64;
     backend_status:u8;
 }
-
-export func native_complete() -> u8 { return 0u8; }
-export func native_source_rejected() -> u8 { return 1u8; }
-export func native_form_unsupported() -> u8 { return 2u8; }
-export func native_open_failed() -> u8 { return 3u8; }
-export func native_lowering_failed() -> u8 { return 4u8; }
-export func native_finish_failed() -> u8 { return 5u8; }
-export func native_scratch_failed() -> u8 { return 6u8; }
 
 func count_tokens(source:const SourceBytes in S, token:Token in T) -> u64
     where {const owner S, owner T} {
@@ -65,9 +60,9 @@ export func plan_expression_scratch(source:const SourceBytes in S, scratch:Expre
 }
 
 func prepare_native_expression(source:const SourceBytes in S, tokens:Tokens in T,
-                               nodes:ExprNodes in N, result:FrontendResult in R) -> u8
+                               nodes:ExprNodes in N, result:FrontendResult in R) -> CompilerStatus
     where {const owner S, owner T, owner N, owner R} {
-    if (!read_expression(source, tokens, nodes, result)) return native_source_rejected();
+    if (!read_expression(source, tokens, nodes, result)) return Rejected;
     # Source order identifies the enclosing unavailable form even though the
     # parser stores its children first.
     val supported <- true;
@@ -79,8 +74,8 @@ func prepare_native_expression(source:const SourceBytes in S, tokens:Tokens in T
             (supported <- false):void;
         } else {};
     };
-    if (!supported) return native_form_unsupported();
-    return native_complete();
+    if (!supported) return FormUnsupported;
+    return Complete;
 }
 
 # The caller keeps the source and scratch buffers live. A syntax error or
@@ -90,7 +85,7 @@ export proc compile_expression(here emit(ordinal:u64, kind:u8, number:u64, left:
                                source:const SourceBytes in S, tokens:Tokens in T,
                                nodes:ExprNodes in N, result:FrontendResult in R) -> bool
     where {const owner S, owner T, owner N, owner R} {
-    if (prepare_native_expression(source, tokens, nodes, result) != native_complete()) return false;
+    if (prepare_native_expression(source, tokens, nodes, result) != Complete) return false;
     val rejected_node <- no_node();
     return lower_expression(emit, nodes, result.tree, rejected_node);
 }
@@ -104,34 +99,34 @@ export proc compile_native_expression(here begin() -> bool,
                                       here finish() -> u8,
                                       here release() -> void,
                                       source:const SourceBytes in S, tokens:Tokens in T,
-                                      nodes:ExprNodes in N, result:NativeExpressionResult in R) -> u8
+                                      nodes:ExprNodes in N, result:NativeExpressionResult in R) -> CompilerStatus
     where {const owner S, owner T, owner N, owner R} {
     result.rejected_node <- no_node();
     result.rejected_at <- no_node();
     result.backend_status <- 0u8;
     val preparation <- prepare_native_expression(source, tokens, nodes, result.frontend);
-    if (preparation != native_complete()) return preparation;
+    if (preparation != Complete) return preparation;
     defer { release(); };
-    if (!begin()) return native_open_failed();
+    if (!begin()) return OpenFailed;
     if (!lower_expression(emit, nodes, result.frontend.tree, result.rejected_node)) {
         if (result.rejected_node != no_node()) {
             (result.rejected_at <- nodes[result.rejected_node].operation_at):void;
         } else {};
-        return native_lowering_failed();
+        return LoweringFailed;
     } else {};
     result.backend_status <- finish();
-    if (result.backend_status != 0u8) return native_finish_failed();
-    return native_complete();
+    if (result.backend_status != 0u8) return FinishFailed;
+    return Complete;
 }
 
 # The callbacks share one scratch allocation. Work keeps its buffer borrows
 # within the call and supplies the pipeline status. Release accepts an empty
 # allocation if acquisition fails.
-export proc compile_with_scratch(here work(token_count:u64, node_capacity:u64) -> u8,
+export proc compile_with_scratch(here work(token_count:u64, node_capacity:u64) -> CompilerStatus,
                                  here release() -> void,
-                                 source:const SourceBytes in S, plan:ExpressionScratchPlan in P) -> u8
+                                 source:const SourceBytes in S, plan:ExpressionScratchPlan in P) -> CompilerStatus
     where {const owner S, owner P} {
-    if (!plan_expression_scratch(source, plan)) return native_source_rejected();
+    if (!plan_expression_scratch(source, plan)) return Rejected;
     defer { release(); };
     return work(plan.token_count, plan.node_capacity);
 }

@@ -23,36 +23,34 @@ using "ModuleFrontend.cod" {
 using "ModuleCompiler.cod" compile_module_commands;
 using "NativeCommands.cod" { NativeCommands, NativePlan };
 using "ModuleLowering.cod" native_unsupported;
-using "ModuleDriver.cod" { ModuleWorkspacePlan, plan_module_workspace, native_source_open_failed };
-using "Compiler.cod" {
-    ExpressionScratchPlan, native_complete, native_source_rejected, native_form_unsupported,
-    native_open_failed, native_lowering_failed, native_finish_failed, native_scratch_failed,
-};
+using "ModuleDriver.cod" { ModuleWorkspacePlan, plan_module_workspace };
+using "Compiler.cod" ExpressionScratchPlan;
+using "CompilerStatus.cod" CompilerStatus { Complete, Rejected, FormUnsupported, OpenFailed, LoweringFailed, FinishFailed, ScratchFailed, SourceOpenFailed };
 
 proc write_object(handle output:Path in A, handle diagnostic:DiagnosticDestination in D,
-                  commands:const NativeCommands in W, plan:const NativePlan in P) -> u8
+                  commands:const NativeCommands in W, plan:const NativePlan in P) -> CompilerStatus
     where {const owner A, const owner W, const owner P, owner D} {
     try {
         own handle session:LLVMSession <- make own handle LLVMSession();
         val constructed <- llvm_construct(session, commands, plan.used, plan.labels, plan.slots);
         if (constructed != 0u8) {
             report_backend_error(diagnostic, constructed);
-            return native_lowering_failed();
+            return LoweringFailed;
         } else {};
         val verified <- llvm_verify(session);
         if (verified != 0u8) {
             report_backend_error(diagnostic, verified);
-            return native_finish_failed();
+            return FinishFailed;
         } else {};
         val emitted <- llvm_emit_object(session, output);
         if (emitted != 0u8) {
             report_backend_error(diagnostic, emitted);
-            return native_finish_failed();
+            return FinishFailed;
         } else {};
-        return native_complete();
+        return Complete;
     } catch (error:LLVMOpenException) {
         report_backend_error(diagnostic, error.status);
-        return native_open_failed();
+        return OpenFailed;
     }
 }
 
@@ -62,7 +60,7 @@ proc lower_object(source:const SourceBytes in S, lines:const SourceLines in S,
                   tokens:Tokens in W, nodes:ExprNodes in W,
                   selected:SelectedExports in W, bindings:NameBindings in W, names:NameWork in W,
                   facts:OperandFacts in W, owners:CallOwners in W, sites:CompletionSites in W,
-                  commands:NativeCommands in W) -> u8
+                  commands:NativeCommands in W) -> CompilerStatus
     where {const owner S, const owner B, const owner A, owner D, owner W} {
     ref analysis = make ModuleBindingResult {
         frontend <- make FrontendResult {
@@ -83,8 +81,8 @@ proc lower_object(source:const SourceBytes in S, lines:const SourceLines in S,
                         else { analysis.diagnostic };
             report_rejection(source, lines, diagnostic, analysis.stage, code, analysis.frontend.diagnostic_first,
                              analysis.frontend.diagnostic_past, analysis.related_first);
-            if (rejected_unsupported_declaration(analysis)) return native_form_unsupported();
-            return native_source_rejected();
+            if (rejected_unsupported_declaration(analysis)) return FormUnsupported;
+            return Rejected;
         } else {};
         val first <- no_node();
         val past <- no_node();
@@ -93,15 +91,15 @@ proc lower_object(source:const SourceBytes in S, lines:const SourceLines in S,
             (past <- nodes[plan.node].past):void;
         } else {};
         report_rejection(source, lines, diagnostic, 0u8, plan.diagnostic, first, past, no_node());
-        if (plan.diagnostic == native_unsupported()) return native_form_unsupported();
-        return native_lowering_failed();
+        if (plan.diagnostic == native_unsupported()) return FormUnsupported;
+        return LoweringFailed;
     } else {};
     return write_object(output, diagnostic, commands, plan);
 }
 
 proc compile_revision(source:const SourceBytes in S, lines:const SourceLines in S,
                       spellings:const SourceBytes in B, exports:const ModuleExports in B,
-                      handle output:Path in A, handle diagnostic:DiagnosticDestination in D) -> u8
+                      handle output:Path in A, handle diagnostic:DiagnosticDestination in D) -> CompilerStatus
     where {const owner S, const owner B, const owner A, owner D} {
     ref workspace = make ModuleWorkspacePlan {
         source <- make ExpressionScratchPlan {
@@ -111,7 +109,7 @@ proc compile_revision(source:const SourceBytes in S, lines:const SourceLines in 
         commands <- 0u64;
     };
     val planned <- plan_module_workspace(source, workspace);
-    if (planned != native_complete()) {
+    if (planned != Complete) {
         if (workspace.source.diagnostic != 0u8) {
             report_rejection(source, lines, diagnostic, module_read_failed(), workspace.source.diagnostic,
                              workspace.source.diagnostic_first, workspace.source.diagnostic_past, no_node());
@@ -127,13 +125,13 @@ proc compile_revision(source:const SourceBytes in S, lines:const SourceLines in 
         };
     } catch (error:ScratchOpenException) {
         report_scratch_error(diagnostic, error.status);
-        return native_scratch_failed();
+        return ScratchFailed;
     }
 }
 
 export proc compile_object(handle input:Path in A, handle output:Path in A,
                            handle diagnostic:DiagnosticDestination in D,
-                           spellings:const SourceBytes in B, exports:const ModuleExports in B) -> u8
+                           spellings:const SourceBytes in B, exports:const ModuleExports in B) -> CompilerStatus
     where {const owner A, const owner B, owner D} {
     try {
         own handle source:SourceRevision <- make own handle SourceRevision(input);
@@ -142,6 +140,6 @@ export proc compile_object(handle input:Path in A, handle output:Path in A,
         };
     } catch (error:SourceOpenException) {
         report_source_open_error(diagnostic, error.os_error);
-        return native_source_open_failed();
+        return SourceOpenFailed;
     }
 }

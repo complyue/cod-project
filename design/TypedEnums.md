@@ -1,12 +1,12 @@
 # Typed enums
 
-Design revision: 2 · 2026-11-21
+Design revision: 3 · 2026-11-21
 
 ## Design authority
 
 [H-TYPED-ENUM-20261121](../CHANGELOG.md#h-typed-enum-20261121) covers the project user's proposal, explicit requirement for old and new member names, and delegation of the detailed review. [D-07-ENUM](DesignAuthorityRegistry.md#d-07-enum), P-658/P-659, qualifies the closed nominal type, member identities, selection and coverage. [D-20-C-ENUM](DesignAuthorityRegistry.md#d-20-c-enum), P-660/P-661, qualifies generated current-target by-value exchange for the first booter workload. Charter §§3.2, 6.3, 8.1 and 12 connect named domain outcomes to readable programs and checked native execution. [K-TYPED-ENUM-REVIEW-20261121](../CHANGELOG.md#k-typed-enum-review-20261121) records the delegated resolutions below. Acceptance exercises the same identities from declaration through case analysis and the C boundary. Shared foreign storage and permanent binary interfaces remain outside this scope.
 
-[H-MODULE-SOURCE-STYLE-20261121](../CHANGELOG.md#h-module-source-style-20261121) continues r1 to r2 for the public declaration example. The [module contract](ModuleWorlds.md#public-definitions-and-grouped-selections) supplies its publication semantics.
+[H-MODULE-SOURCE-STYLE-20261121](../CHANGELOG.md#h-module-source-style-20261121) continues r1 to r2 for the public declaration example. The [module contract](ModuleWorlds.md#public-definitions-and-grouped-selections) supplies its publication semantics. [K-ENUM-STATUS-WIRING](../CHANGELOG.md#k-enum-status-wiring) continues r2 to r3 for the first workload’s source links and keeps the accepted exchange and validation contract.
 
 ## Declaration and value identity
 
@@ -68,7 +68,7 @@ Use a checked CoD signature to generate a current-target C typedef of the exact 
 
 ## First workload and acceptance
 
-The compiler status domain includes `Complete=0`, `Rejected=1`, `FormUnsupported=2`, `OpenFailed=3`, `LoweringFailed=4`, `FinishFailed=5`, `ScratchFailed=6` and `SourceOpenFailed=7`. The seven [Compiler.cod results](../applications/cod-booter/src/Compiler.cod) cover 0–6. [ModuleDriver.cod](../applications/cod-booter/src/ModuleDriver.cod) also defines 7, which [ObjectCompiler.cod](../applications/cod-booter/src/ObjectCompiler.cod) returns for a caught source-open exception. At the [CLI entry](../applications/cod-booter/src/CompilerCLI.cod) keep all eight CLI exit codes, diagnostic fields, and resource cleanup. Trace the type across the ordinary compile result and the normal here feedback carried by `source_use`, `scratch_use` and `catalog_use`. A small leaf declaration module with a publication-only re-export from Compiler is available if needed to avoid a dependency cycle. Raw LLVM operation statuses, OS errors, diagnostic subcodes, launcher-only exit codes and existing arbitrary-`u8` callbacks have separate domains.
+[CompilerStatus](../applications/cod-booter/src/CompilerStatus.cod) defines `Complete=0`, `Rejected=1`, `FormUnsupported=2`, `OpenFailed=3`, `LoweringFailed=4`, `FinishFailed=5`, `ScratchFailed=6` and `SourceOpenFailed=7`. [Compiler.cod](../applications/cod-booter/src/Compiler.cod) re-exports the type. [ObjectCompiler.cod](../applications/cod-booter/src/ObjectCompiler.cod) returns `SourceOpenFailed` for a caught source-open exception. The [CLI entry](../applications/cod-booter/src/CompilerCLI.cod) carries this type through ordinary results and normal `source_use`, `scratch_use` and `catalog_use` feedback. Preserve all eight CLI exit codes, diagnostic fields and resource cleanup. Raw LLVM operation statuses, OS errors, diagnostic subcodes, launcher-only exit codes and existing arbitrary-`u8` callbacks have separate domains.
 
 Acceptance for the seed and seed-built booter includes the following observations.
 
