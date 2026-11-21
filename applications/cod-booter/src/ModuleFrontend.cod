@@ -5,7 +5,7 @@ using "ParserStorage.cod" {
     reserves_storage, construction_type_query_node, name_node, literal_node, bool_node,
     field_access_node, index_access_node, array_length_node, catch_binding_node, handle_local,
     handle_construction, handle_parameter_node, here_parameter_node, here_call_node, Tokens,
-    ExprNodes, no_node, type_assertion_node, case_node,
+    ExprNodes, no_node, type_assertion_node,
 };
 using "SourceStorage.cod" SourceBytes;
 using "Frontend.cod" { FrontendResult, read_module };
@@ -22,8 +22,13 @@ using "NameResolution.cod" {
 using "NativeDeclarations.cod" {
     NativeDeclarationResult, check_native_declarations, declared_exception_type,
 };
-using "OperandChecking.cod" { OperandFacts, CallOwners, OperandCheckResult, check_module_operands };
-using "CompletionChecking.cod" { CompletionSites, CompletionCheckResult, check_module_completion };
+using "OperandChecking.cod" {
+    OperandFacts, CallOwners, OperandCheckResult, check_module_operands,
+    unsupported_case_subject, unsupported_case_pattern, unsupported_case_scope_transfer,
+};
+using "CompletionChecking.cod" {
+    CompletionSites, CompletionCheckResult, check_module_completion, unsupported_case_transfer,
+};
 using "DeclarationTypes.cod" unproved_type_assertion;
 
 export data ModuleBindingResult {
@@ -41,12 +46,14 @@ export func module_completion_failed() -> u8 { return 5u8; }
 func unsupported_array_length() -> u8 { return 74u8; }
 func unsupported_ordinary_here() -> u8 { return 76u8; }
 func invalid_catch_annotation() -> u8 { return 77u8; }
-func unsupported_case_lowering() -> u8 { return 89u8; }
 
 export func rejected_unsupported_declaration(result:const ModuleBindingResult in R) -> bool where {const owner R} {
+    if (result.stage == module_operands_failed())
+        return result.diagnostic == unsupported_case_subject() || result.diagnostic == unsupported_case_pattern() ||
+            result.diagnostic == unsupported_case_scope_transfer();
+    if (result.stage == module_completion_failed()) return result.diagnostic == unsupported_case_transfer();
     return result.stage == module_binding_failed() &&
         (result.diagnostic == unsupported_module_declaration() || result.diagnostic == unsupported_array_length() ||
-         result.diagnostic == unsupported_case_lowering() ||
          (result.diagnostic >= 28u8 && result.diagnostic <= 40u8));
 }
 
@@ -102,7 +109,6 @@ func unsupported_source_form(nodes:const ExprNodes in N, at:u64, emit_object:boo
     if (kind == make_exception_node()) return 33u8;
     if (kind == ref_result_node()) return 35u8;
     if (kind == make_named_node() && !supported_construction_shape(nodes, at)) return unsupported_ordinary_construction();
-    if (emit_object && kind == case_node()) return unsupported_case_lowering();
     if (emit_object && kind == type_assertion_node()) return unproved_type_assertion();
     if (emit_object && kind == field_access_node()) return 38u8;
     if (emit_object && kind == index_access_node()) return 39u8;

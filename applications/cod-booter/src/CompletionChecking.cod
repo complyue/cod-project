@@ -7,7 +7,7 @@ using "ParserStorage.cod" {
     nonempty_literal_range, bool_node, logical_not_node, logical_binary, skips_right, return_node,
     throw_node, group_node, call_node, behave_node, is_transfer, make_named_node, construction_body,
     integer_arithmetic, null_node, name_node, ptr_binding_node, ptr_parameter_node, ref_local_node,
-    local_storage_binding,
+    local_storage_binding, case_node, case_arm_node, case_fallthrough_node, case_failure_node, break_node,
 };
 using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" {
@@ -15,9 +15,10 @@ using "NameResolution.cod" {
 };
 using "OperandChecking.cod" {
     OperandFacts, nullable_ptr, borrowed_ref, never_result, void_result, has_value_tail,
+    unreachable_case_item, misses_case_arm,
 };
 using "ModuleExports.cod" {
-    exception_root_identity, null_pointer_identity, missing_return_identity,
+    exception_root_identity, null_pointer_identity, missing_return_identity, unexpected_case_identity,
 };
 
 export data CompletionSite {
@@ -28,7 +29,8 @@ export data CompletionSite {
     retains_caught:u8;
     forwarded_operand:u8;
     in_delayed_body:u8;
-    may_miss_return:u8;
+    escaping_failure:u8;
+    case_break:u8;
     guarded_by:u64;
     incoming_handler:u64;
     throws_clause:u64;
@@ -40,8 +42,9 @@ export data CompletionSite {
     previous_defer:u64;
     last_defer:u64;
     replacing_try:u64;
-    missing_return_user:u64;
-    missing_return_work:u64;
+    case_transfer_barrier:u64;
+    failure_user:u64;
+    failure_work:u64;
 }
 export array CompletionSites[u64]:CompletionSite;
 
@@ -71,6 +74,7 @@ export func unproved_throw_operand() -> u8 { return 10u8; }
 export func unproved_caught_handoff() -> u8 { return 11u8; }
 func unproved_nonnull_argument() -> u8 { return 12u8; }
 func unproved_nonnull_binding() -> u8 { return 16u8; }
+export func unsupported_case_transfer() -> u8 { return 18u8; }
 
 func initialize_site(sites:CompletionSites in X, at:u64) -> void where {owner X} {
     sites[at].event <- 0u8;
@@ -80,7 +84,7 @@ func initialize_site(sites:CompletionSites in X, at:u64) -> void where {owner X}
     sites[at].retains_caught <- 0u8;
     sites[at].forwarded_operand <- 0u8;
     sites[at].in_delayed_body <- 0u8;
-    sites[at].may_miss_return <- 0u8;
+    sites[at].case_break <- 0u8;
     sites[at].guarded_by <- no_node();
     sites[at].incoming_handler <- no_node();
     sites[at].throws_clause <- no_node();
@@ -92,8 +96,7 @@ func initialize_site(sites:CompletionSites in X, at:u64) -> void where {owner X}
     sites[at].previous_defer <- no_node();
     sites[at].last_defer <- no_node();
     sites[at].replacing_try <- no_node();
-    sites[at].missing_return_user <- no_node();
-    sites[at].missing_return_work <- no_node();
+    sites[at].case_transfer_barrier <- no_node();
     return;
 }
 
@@ -104,6 +107,7 @@ func inherit_context(sites:CompletionSites in X, parent:u64, child:u64, guarded_
     sites[child].guarded_by <- guarded_by;
     sites[child].incoming_handler <- incoming_handler;
     sites[child].replacing_try <- replacing_try;
+    sites[child].case_transfer_barrier <- sites[parent].case_transfer_barrier;
     sites[child].in_delayed_body <- sites[parent].in_delayed_body;
     if (sites[parent].event == skipped_operand()) { (sites[child].event <- skipped_operand()):void; } else {};
     return;
@@ -145,6 +149,10 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
         } else {};
         inherit_context(sites, at, nodes[at].left, at, incoming, replacing);
         inherit_context(sites, at, last, guard, incoming, replacing);
+        if (nodes[last].kind == finally_clause_node()) {
+            sites[left].case_transfer_barrier <- at;
+            (sites[last].case_transfer_barrier <- at):void;
+        } else {};
         return;
     } else {};
     if (kind == callable_node()) {
@@ -164,6 +172,27 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
         inherit_context(sites, at, nodes[at].left, guard, incoming, replacing);
         inherit_context(sites, at, nodes[at].right, guard, incoming, replacing);
         inherit_context(sites, at, nodes[at].number, guard, incoming, replacing);
+        return;
+    } else {};
+    if (kind == case_node()) {
+        inherit_context(sites, at, left, guard, incoming, replacing);
+        inherit_context(sites, at, right, guard, incoming, replacing);
+        return;
+    } else {};
+    if (kind == case_arm_node()) {
+        val condition <- nodes[at].number;
+        inherit_context(sites, at, condition, guard, incoming, replacing);
+        inherit_context(sites, at, right, guard, incoming, replacing);
+        if (condition != no_node() && facts[at].case_match == misses_case_arm()) {
+            (sites[condition].event <- skipped_operand()):void;
+        } else {};
+        if (facts[at].case_body == 0u8) { (sites[right].event <- skipped_operand()):void; } else {};
+        return;
+    } else {};
+    if (kind == block_item_node() && facts[at].case_item == unreachable_case_item()) {
+        inherit_context(sites, at, left, guard, incoming, replacing);
+        inherit_context(sites, at, right, guard, incoming, replacing);
+        sites[right].event <- skipped_operand();
         return;
     } else {};
     if (kind == range_node()) {
@@ -209,7 +238,7 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
         return;
     } else {};
     if (kind == module_node() || kind == block_node() || kind == full_scope_node() ||
-        kind == group_node() || kind == discard_node() || kind == return_node() || kind == throw_node() ||
+        kind == group_node() || kind == discard_node() || kind == return_node() || kind == throw_node() || kind == break_node() ||
         kind == logical_not_node()) {
         inherit_context(sites, at, nodes[at].left, guard, incoming, replacing);
     } else {};
@@ -369,7 +398,7 @@ func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSit
     if (kind == full_scope_node())
         return sites[at].local_return != 0u8 || can_continue(sites, nodes[at].left);
     if (kind == group_node() || kind == discard_node() || kind == block_node() ||
-        kind == throw_node() || kind == return_node() || kind == deferred_call_node() || kind == logical_not_node())
+        kind == throw_node() || kind == return_node() || kind == break_node() || kind == deferred_call_node() || kind == logical_not_node())
         return can_continue(sites, nodes[at].left);
     if (local_storage_binding(kind))
         return can_continue(sites, nodes[at].right);
@@ -457,6 +486,35 @@ func check_throw_completion(nodes:const ExprNodes in N, names:const NameBindings
     return diagnostic;
 }
 
+func case_can_complete(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
+                       sites:const CompletionSites in X, at:u64) -> bool
+    where {const owner N, const owner L, const owner F, const owner X} {
+    if (!can_continue(sites, nodes[at].left)) return false;
+    if (facts[at].case_end != 0u8 || sites[at].case_break != 0u8) return true;
+    val item <- first_item(nodes, nodes[at].right);
+    val arm <- no_node();
+    for (unused in 0u64 .. intrinsic (len)(nodes)) {
+        if (item == no_node()) return false;
+        arm <- nodes[item].right;
+        if (nodes[arm].kind == case_arm_node() && facts[arm].case_body != 0u8 &&
+            can_continue(sites, nodes[arm].number) && can_continue(sites, nodes[arm].right)) return true;
+        item <- links[item].next;
+    };
+    return false;
+}
+
+func check_case_transfer(nodes:const ExprNodes in N, names:const NameBindings in B,
+                         sites:CompletionSites in X, at:u64) -> u8
+    where {const owner N, const owner B, owner X} {
+    val target <- names[at].declaration;
+    if (names[at].scope != names[target].scope ||
+        sites[at].case_transfer_barrier != sites[target].case_transfer_barrier)
+        return unsupported_case_transfer();
+    if (nodes[at].kind == break_node()) { (sites[target].case_break <- 1u8):void; } else {};
+    sites[at].can_continue <- 0u8;
+    return 0u8;
+}
+
 func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                  facts:const OperandFacts in F, sites:CompletionSites in X, at:u64, used:u64) -> u8
     where {const owner N, const owner B, const owner L, const owner F, owner X} {
@@ -493,6 +551,16 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
         record_registration(names, sites, at);
         return 0u8;
     } else {};
+    if (kind == case_node()) {
+        sites[at].can_continue <- if (case_can_complete(nodes, links, facts, sites, at)) { 1u8 } else { 0u8 };
+        return 0u8;
+    } else {};
+    if (kind == break_node() || kind == case_fallthrough_node()) return check_case_transfer(nodes, names, sites, at);
+    if (kind == case_failure_node()) {
+        sites[at].can_continue <- 0u8;
+        return route_failure(nodes, names, links, facts, sites, at, used,
+                             unexpected_case_identity(), 0u8, definite_failure());
+    } else {};
     if (kind == throw_node()) {
         sites[at].can_continue <- 0u8;
         return check_throw_completion(nodes, names, links, facts, sites, at, used);
@@ -527,18 +595,18 @@ func has_terminal_defer(nodes:const ExprNodes in N, links:const NameWork in L, f
     return false;
 }
 
-func enqueue_return_failure(sites:CompletionSites in X, definition:u64, count:u64) -> u64 where {owner X} {
-    if (sites[definition].may_miss_return != 0u8) return count;
-    sites[definition].may_miss_return <- 1u8;
-    sites[count].missing_return_work <- definition;
+func enqueue_failure(sites:CompletionSites in X, definition:u64, count:u64) -> u64 where {owner X} {
+    if (sites[definition].escaping_failure != 0u8) return count;
+    sites[definition].escaping_failure <- 1u8;
+    sites[count].failure_work <- definition;
     return count + 1u64;
 }
 
-func propagate_return_failure(nodes:const ExprNodes in N, names:const NameBindings in B, sites:CompletionSites in X,
+func propagate_failure(nodes:const ExprNodes in N, names:const NameBindings in B, sites:CompletionSites in X,
                                report:CompletionCheckResult in R, definition:u64, queued:u64, used:u64) -> u64
     where {const owner N, const owner B, owner X, owner R} {
     val count <- queued;
-    val use <- sites[definition].missing_return_user;
+    val use <- sites[definition].failure_user;
     val caller <- no_node();
     for (unused in 0u64 .. used) {
         if (use == no_node()) return count;
@@ -548,30 +616,34 @@ func propagate_return_failure(nodes:const ExprNodes in N, names:const NameBindin
             return no_node();
         } else {};
         caller <- enclosing_callable(nodes, names, names[use].scope);
-        if (nodes[caller].kind == callable_node()) { (count <- enqueue_return_failure(sites, caller, count)):void; } else {};
-        use <- sites[use].missing_return_user;
+        if (nodes[caller].kind == callable_node()) { (count <- enqueue_failure(sites, caller, count)):void; } else {};
+        use <- sites[use].failure_user;
     };
     return count;
 }
 
-# An unchecked missing return may cross ordinary calls. Follow reverse
-# call edges to closure before admitting a deferred invocation, where a
-# residual failure would require the deferred-error queue.
-func check_missing_return_paths(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+# Follow reverse call edges for each concrete unchecked failure that can
+# escape. A deferred invocation cannot use an enclosing catch as evidence.
+func check_escaping_failure_paths(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                                 facts:const OperandFacts in F, sites:CompletionSites in X,
-                                report:CompletionCheckResult in R, used:u64) -> bool
+                                report:CompletionCheckResult in R, used:u64, category:u64) -> bool
     where {const owner N, const owner B, const owner L, const owner F, owner X, owner R} {
     val count <- 0u64;
     val definition <- no_node();
     for (at in 0u64 .. used) {
-        if (can_miss_return(nodes, facts, sites, at) &&
+        sites[at].escaping_failure <- 0u8;
+        sites[at].failure_user <- no_node();
+        (sites[at].failure_work <- no_node()):void;
+    };
+    for (at in 0u64 .. used) {
+        if (category == missing_return_identity() && can_miss_return(nodes, facts, sites, at) &&
             !has_terminal_defer(nodes, links, facts, nodes[at].right, used)) {
-            (count <- enqueue_return_failure(sites, at, count)):void;
+            (count <- enqueue_failure(sites, at, count)):void;
         } else {};
-        if (nodes[at].kind == throw_node() && sites[at].category == missing_return_identity()) {
+        if ((nodes[at].kind == throw_node() || nodes[at].kind == case_failure_node()) && sites[at].category == category) {
             definition <- enclosing_callable(nodes, names, names[at].scope);
             if (sites[at].destination == definition && nodes[definition].kind == callable_node()) {
-                (count <- enqueue_return_failure(sites, definition, count)):void;
+                (count <- enqueue_failure(sites, definition, count)):void;
             } else {};
         } else {};
     };
@@ -579,16 +651,16 @@ func check_missing_return_paths(nodes:const ExprNodes in N, names:const NameBind
     for (at in 0u64 .. used) {
         if (nodes[at].kind == call_node() && can_continue(sites, at) &&
             (sites[at].registration != no_node() || (sites[at].replacing_try == no_node() &&
-             matching_handler(nodes, links, facts, sites, at, missing_return_identity(), used) == no_node()))) {
+             matching_handler(nodes, links, facts, sites, at, category, used) == no_node()))) {
             definition <- names[nodes[at].left].declaration;
-            sites[at].missing_return_user <- sites[definition].missing_return_user;
-            sites[definition].missing_return_user <- at;
+            sites[at].failure_user <- sites[definition].failure_user;
+            sites[definition].failure_user <- at;
             {};
         } else {};
     };
     for (item in 0u64 .. used) {
         if (item == count) return true;
-        count <- propagate_return_failure(nodes, names, sites, report, sites[item].missing_return_work, count, used);
+        count <- propagate_failure(nodes, names, sites, report, sites[item].failure_work, count, used);
         if (count == no_node()) return false;
     };
     return true;
@@ -628,5 +700,6 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
         report.diagnostic <- check_event(nodes, names, links, facts, sites, at, tree.used);
         if (report.diagnostic != 0u8) { report.node <- at; return false; } else {};
     };
-    return check_missing_return_paths(nodes, names, links, facts, sites, report, tree.used);
+    return check_escaping_failure_paths(nodes, names, links, facts, sites, report, tree.used, missing_return_identity()) &&
+        check_escaping_failure_paths(nodes, names, links, facts, sites, report, tree.used, unexpected_case_identity());
 }
