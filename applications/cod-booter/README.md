@@ -56,6 +56,22 @@ The C++ seed and CoD booter must parse the [exception declarations and catch bin
 
 Acceptance checks each frontend at its own parse boundary. A valid form carries its binding mode, owner name when present, and construction operands into checking. Malformed syntax fails at parsing. When an execution path is unsupported, the compiler can reject the parsed form during checking or lowering. Supported paths must execute their required propagation, handling and cleanup. For example, parsing `catch (e:const E)` as a borrowed local loses the handler’s release obligation even when the handler only reads e.
 
+## Build and run on Linux
+
+The standalone build uses GNU Make 4.3 or newer and an existing CoD seed and compatible LLVM SDK with shared libraries. From the repository root, build the booter and run the deferred-release workload.
+
+```sh
+make -C applications/cod-booter
+./build-cod-booter/cod-booter applications/cod-booter/workloads/deferred-release.cod \
+    build-cod-booter/deferred-release.o
+./build/bin/clang build-cod-booter/deferred-release.o -o build-cod-booter/deferred-release
+./build-cod-booter/deferred-release
+```
+
+The program prints `1` on three lines. Use `TOOLCHAIN` for a different ready toolchain prefix, or set `COD_SEED`, `LLVM_CONFIG`, `CLANG` and `CLANGXX` individually. Use a separate `OUT` for each build you run concurrently or want to retain, such as `OUT=../../build-cod-booter-shared COD_SEED_FLAGS=--no-specialize`. Make interprets relative paths from the booter directory. Use paths without whitespace.
+
+The seed checks the booter sources and emits the provider header and stubs, LLVM IR and C++ runtime into `OUT`. Clang compiles those outputs and the handwritten C providers. The link uses the shared libraries reported by `llvm-config`, with the SDK library directory recorded for the loader. The seed and LLVM build tree is a read-only input to Make.
+
 ## Next-stage repositories and native runtime
 
 All five planned repositories will live in the [e-wrks GitHub organization](https://github.com/e-wrks).
