@@ -18,10 +18,10 @@ using "ParserStorage.cod" {
     throw_node, local_storage_binding, case_node, case_arm_node, case_fallthrough_node, case_failure_node,
     enum_declaration_node, enum_member_node, enum_integer_node, type_assertion_node,
     local_module_selection, local_resource_name, native_symbol_declaration_node,
-    reference_symbol_declaration_node, effect_node, bind_effect, text_literal_node,
+    reference_symbol_declaration_node, abstract_type_node, effect_node, bind_effect, text_literal_node,
 };
 using "ExpressionParser.cod" ParseResult;
-using "ModuleExports.cod" { SelectedExports, record_export, enum_member_export };
+using "ModuleExports.cod" { SelectedExports, record_export, enum_member_export, exception_type_export };
 using "ModuleExportStorage.cod" enum_type;
 
 export data NameBinding {
@@ -106,6 +106,7 @@ export func native_symbol_binding() -> u8 { return 28u8; }
 export func builtin_string() -> u8 { return 29u8; }
 export func builtin_c_string() -> u8 { return 30u8; }
 export func reference_symbol_binding() -> u8 { return 31u8; }
+export func abstract_type_binding() -> u8 { return 32u8; }
 
 export func text_type(kind:u8) -> bool {
     return kind == builtin_string() || kind == builtin_c_string();
@@ -217,7 +218,8 @@ func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
     } else {};
     val kind <- bindings[found].kind;
     val declaration <- bindings[found].declaration;
-    if (kind == c_handle_type() || kind == record_type() || kind == array_type() || kind == enum_type()) {
+    if (kind == c_handle_type() || kind == record_type() || kind == array_type() ||
+        kind == enum_type() || kind == abstract_type_binding()) {
         reject_name(state, name, expected_value_binding());
         return;
     } else {};
@@ -301,7 +303,8 @@ func resolve_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N
     val found <- lookup(source, nodes, work, name, 0u64, state.module_names);
     if (found == no_node()) { reject_name(state, name, unresolved_name()); return; } else {};
     val kind <- bindings[found].kind;
-    if (kind != ordinary_selection() && kind != c_handle_type() && kind != record_type() && kind != array_type() && kind != enum_type()) {
+    if (kind != ordinary_selection() && kind != c_handle_type() && kind != record_type() && kind != array_type() &&
+        kind != enum_type() && kind != abstract_type_binding()) {
         reject_name(state, name, expected_type_binding());
         return;
     } else {};
@@ -667,6 +670,15 @@ func resolve_record_initializer(source:const SourceBytes in S, nodes:const ExprN
     };
 }
 
+export func has_exception_parent(nodes:const ExprNodes in N, bindings:const NameBindings in B, form:u64) -> bool
+    where {const owner N, const owner B} {
+    val header <- nodes[form].left;
+    if (nodes[header].kind != data_parent_node()) return false;
+    val parent <- nodes[header].right;
+    return bindings[parent].kind == ordinary_selection() &&
+        bindings[bindings[parent].declaration].imported_kind == exception_type_export();
+}
+
 func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                           work:NameWork in W, state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
@@ -688,7 +700,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         val kind <- bindings[requested].kind;
         val definition <- bindings[requested].declaration;
         text_initializer <- kind == builtin_string();
-        record_initializer <- (kind == record_type() && nodes[nodes[definition].left].kind != data_parent_node()) ||
+        record_initializer <- (kind == record_type() && !has_exception_parent(nodes, bindings, definition)) ||
             (kind == ordinary_selection() && bindings[definition].imported_kind == record_export());
         if (!text_initializer && !record_initializer && !native_scalar(kind) && kind != builtin_void() && kind != enum_type()) {
             reject_name(state, at, unsupported_ordinary_construction());
@@ -984,7 +996,7 @@ export func record_declaration(kind:u8) -> bool {
 export func declaration_requires_native_output(kind:u8) -> bool {
     return kind == c_handle_type_node() || record_declaration(kind) || kind == array_declaration_node() ||
         kind == enum_declaration_node() || kind == c_procedure_node() || kind == native_symbol_declaration_node() ||
-        kind == reference_symbol_declaration_node() ||
+        kind == reference_symbol_declaration_node() || kind == abstract_type_node() ||
         kind == export_node() || kind == export_from_node();
 }
 
@@ -1029,6 +1041,10 @@ func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, 
         if (form_kind == enum_declaration_node()) {
             declare_name(source, nodes, bindings, work, state, nodes[form].left, form, enum_type(), duplicate_binding());
         } else {};
+        if (form_kind == abstract_type_node()) {
+            declare_name(source, nodes, bindings, work, state, type_declaration_name(nodes, form), form,
+                         abstract_type_binding(), duplicate_binding());
+        };
         if (form_kind == native_symbol_declaration_node()) {
             declare_name(source, nodes, bindings, work, state, nodes[form].left, form, native_symbol_binding(), duplicate_binding());
         } else {};
@@ -1338,13 +1354,29 @@ func resolve_type_declaration(source:const SourceBytes in S, nodes:const ExprNod
         if (state.diagnostic == 0u8) { resolve_type_name(source, nodes, bindings, work, state, nodes[shape].right); } else {};
         return;
     } else {};
-    val header <- nodes[form].left;
-    if (nodes[header].kind == data_parent_node()) {
-        resolve_type_name(source, nodes, bindings, work, state, nodes[header].right);
-        if (state.diagnostic != 0u8) return;
-    } else {};
+    if (nodes[form].kind == abstract_type_node()) return;
     resolve_formals(source, nodes, bindings, work, state, first_item(nodes, nodes[form].right));
     (state.used <- state.module_names):void;
+}
+
+func resolve_module_parents(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                            work:NameWork in W, state:NameState in R, first:u64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    val item <- first;
+    val form <- no_node();
+    val header <- no_node();
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        if (item == no_node()) return;
+        form <- nodes[item].right;
+        if (record_declaration(nodes[form].kind) || nodes[form].kind == abstract_type_node()) {
+            header <- nodes[form].left;
+            if (nodes[header].kind == data_parent_node()) {
+                resolve_type_name(source, nodes, bindings, work, state, nodes[header].right);
+                if (state.diagnostic != 0u8) return;
+            };
+        };
+        item <- work[item].next;
+    };
 }
 
 func resolve_module_form(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
@@ -1365,7 +1397,7 @@ func resolve_module_form(source:const SourceBytes in S, nodes:const ExprNodes in
         resolve_enum(source, nodes, bindings, work, state, form);
         return;
     } else {};
-    if (kind == c_handle_type_node() || record_declaration(kind) || kind == array_declaration_node()) {
+    if (kind == c_handle_type_node() || record_declaration(kind) || kind == array_declaration_node() || kind == abstract_type_node()) {
         resolve_type_declaration(source, nodes, bindings, work, state, form);
         return;
     } else {};
@@ -1449,7 +1481,8 @@ export func resolve_module_names(source:const SourceBytes in S, nodes:const Expr
     if (state.diagnostic == 0u8) {
         state.module_names <- state.used;
         state.first <- state.used;
-        resolve_module_bodies(source, nodes, bindings, work, state, first, true);
+        resolve_module_parents(source, nodes, bindings, work, state, first);
+        if (state.diagnostic == 0u8) { resolve_module_bodies(source, nodes, bindings, work, state, first, true); };
     } else {};
     if (state.diagnostic == 0u8) {
         state.scope_node <- tree.root;

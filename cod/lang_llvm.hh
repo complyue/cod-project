@@ -183,6 +183,7 @@ class LLVMEmission {
     std::vector<Type> inputs;
     const CheckedOperation *operation;
     std::vector<const CheckedInstance *> contexts = {};
+    std::optional<size_t> nominal_callee = {};
   };
 
   llvm::ConstantInt *integer(std::uint64_t value) { return b_.getInt64(value); }
@@ -621,13 +622,10 @@ class LLVMEmission {
   }
   std::vector<Choice> choices(const Expression &expr, const std::vector<const Expression *> &inputs, bool prepared = false) {
     std::vector<Choice> result;
-    for (const auto &context : contexts_) {
-      if (std::any_of(inputs.begin(), inputs.end(), [&](const auto *input) { return context.at(input).type == Type::never; })) continue;
-      Choice choice{{}, &context.at(&expr)};
-      for (size_t p = 0; p < inputs.size(); ++p)
-        choice.inputs.push_back(prepared ? choice.operation->arguments.at(p).type : context.at(inputs[p]).type);
+    const auto add = [&](Choice choice, const CheckedInstance *instance) {
       const auto same = [&](const Choice &other) {
-        return other.inputs == choice.inputs && other.operation->callee == choice.operation->callee &&
+        return other.inputs == choice.inputs && other.nominal_callee == choice.nominal_callee &&
+            other.operation->callee == choice.operation->callee &&
             other.operation->symbol == choice.operation->symbol &&
             other.operation->type == choice.operation->type && other.operation->operand_type == choice.operation->operand_type &&
             other.operation->arguments == choice.operation->arguments && other.operation->builtin == choice.operation->builtin &&
@@ -635,7 +633,20 @@ class LLVMEmission {
       };
       auto found = std::find_if(result.begin(), result.end(), same);
       if (found == result.end()) { result.push_back(std::move(choice)); found = std::prev(result.end()); }
-      if (context.instance) found->contexts.push_back(context.instance);
+      if (instance) found->contexts.push_back(instance);
+    };
+    for (const auto &context : contexts_) {
+      if (std::any_of(inputs.begin(), inputs.end(), [&](const auto *input) { return context.at(input).type == Type::never; })) continue;
+      const auto &operation = context.at(&expr);
+      if (prepared && !operation.nominal_calls.empty()) {
+        for (const auto &call : operation.nominal_calls)
+          add(Choice{call.inputs, &operation, {}, call.callee}, context.instance);
+        continue;
+      }
+      Choice choice{{}, &operation};
+      for (size_t p = 0; p < inputs.size(); ++p)
+        choice.inputs.push_back(prepared ? choice.operation->arguments.at(p).type : context.at(inputs[p]).type);
+      add(std::move(choice), context.instance);
     }
     for (auto &choice : result)
       if (std::none_of(result.begin(), result.end(), [&](const auto &other) { return &choice != &other && choice.inputs == other.inputs; }))
@@ -1000,7 +1011,7 @@ class LLVMEmission {
   llvm::Value *native_call(const Expression &expr, llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared,
                            const std::vector<llvm::Value *> &captured = {}, std::optional<size_t> instance = {},
                            const Type *callable_view = nullptr, llvm::AllocaInst *here_site = nullptr,
-                           const std::vector<llvm::Value *> &here_values = {}) {
+                           const std::vector<llvm::Value *> &here_values = {}, bool nominal = false) {
     const auto &layout = call_layouts_.at(method);
     const auto &inputs = input_frame(method).inputs;
     if (prepared.size() != layout.operands) throw std::logic_error("unchecked native call arity");
@@ -1022,7 +1033,8 @@ class LLVMEmission {
           return owner_identity(actual, expr.at);
         }, b_.getPtrTy()));
       } else {
-        prepared.push_back(selected_owner(invocation.argument(expr, input + offset), &expr, method, callable_view));
+        const auto &operand = invocation.argument(expr, input + offset);
+        prepared.push_back(nominal ? selected_owner(operand) : selected_owner(operand, &expr, method, callable_view));
       }
     }
     if (captured.size() != layout.captures) throw std::logic_error("native call lacks its lexical captures");
@@ -1294,6 +1306,12 @@ class LLVMEmission {
           })) return native_call(expr, general_[target.method], target.method, inputs, captured, id, nullptr, here_site, here_values);
     }
     return choose(expr, inputs, cases, outcome_, [&](const Choice &choice) -> llvm::Value * {
+      if (choice.nominal_callee) {
+        const auto id = *choice.nominal_callee;
+        const auto method = program_->instances[id].method;
+        auto *target = specialize_ ? specialized_[id] : general_[method];
+        return native_call(expr, target, method, inputs, captured, id, nullptr, nullptr, {}, true);
+      }
       if (choice.operation->callee) {
         const auto id = *choice.operation->callee;
         auto *target = specialize_ && cases.size() == 1 ? specialized_[id] : general_[program_->instances[id].method];
@@ -2019,6 +2037,13 @@ class LLVMEmission {
     const auto &child = contexts_.front().at(&expr).argument(expr, index);
     const auto prepare = [&](const std::pair<ArgumentMode, bool> &plan) -> llvm::Value * {
       const auto [mode, binding_slot] = plan;
+      if (contexts_.front().at(&child).type.kind == Type::abstract_type) {
+        const auto *source = &child;
+        while (source->kind == Expression::Kind::grouped) source = source->children.front().get();
+        auto *binding = symbols_.at(*contexts_.front().at(source).symbol);
+        auto *selected = b_.CreateLoad(binding->getValueType(), binding, "effect.current");
+        return b_.CreateExtractValue(selected, 0, "effect.selection");
+      }
       auto *value = emit_expression(child, binding_slot ? Projection::slot : mode == ArgumentMode::value ? Projection::value : Projection::target);
       if (!reachable()) return nullptr;
       if (mode != ArgumentMode::value) {
@@ -2722,7 +2747,7 @@ class LLVMEmission {
       auto *binding = symbols_.at(*fact.symbol);
       auto *value = b_.CreateLoad(binding->getValueType(), binding, "effect.current");
       if (program_->symbols.at(*fact.symbol).reference) {
-        auto *address = b_.CreateExtractValue(value, 0, "effect.target");
+        auto *address = view_address(b_.CreateExtractValue(value, 0, "effect.selection"));
         if (read && discard) return empty_scalar();
         return read ? load_place(address, expr) : address;
       }
@@ -2736,7 +2761,7 @@ class LLVMEmission {
         const auto &source = *expr.children.front();
         auto *target = emit_expression(source, Projection::target);
         if (!reachable()) return nullptr;
-        auto *view = b_.CreateInsertValue(llvm::PoisonValue::get(binding->getValueType()), target, 0);
+        auto *view = b_.CreateInsertValue(llvm::PoisonValue::get(binding->getValueType()), pack_view(target, source), 0);
         view = b_.CreateInsertValue(view, selected_owner(source), 1);
         b_.CreateStore(view, binding);
         return empty_scalar();
@@ -3580,6 +3605,34 @@ class LLVMEmission {
         case_scan_request_ ? b_.CreateAnd(load(case_scan_request_), b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0))) : nullptr));
     case_scan_request_ = nullptr;
   }
+  void dispatch_native_frames(llvm::Function *function, const CheckedMethod &method) {
+    function_ = function;
+    b_.SetInsertPoint(block("entry"));
+    const auto &first = program_->instances[method.instances.front()];
+    const auto &layout = call_layouts_[first.method];
+    std::vector<llvm::Value *> forwarded;
+    for (auto &argument : function->args()) forwarded.push_back(&argument);
+    arguments_.assign(forwarded.begin(), forwarded.begin() + layout.operands);
+    if (layout.captures) {
+      auto *values = forwarded.at(layout.captures_index());
+      for (size_t i = 0; i < layout.captures; ++i)
+        arguments_.push_back(b_.CreateLoad(scalar_, b_.CreateGEP(scalar_, values, integer(i))));
+    }
+    for (size_t i = 0; i < layout.retained; ++i)
+      arguments_.push_back(b_.CreateInsertValue(empty_scalar(), forwarded.at(layout.retained_begin() + i), 1));
+    query_environment_ = layout.declaration_context ? forwarded.at(layout.query_index()) : nullptr;
+    for (const auto id : method.instances) {
+      auto *selected = block("frame.selected"), *next = block("frame.next");
+      b_.CreateCondBr(matches_context(program_->instances[id]), selected, next);
+      b_.SetInsertPoint(selected);
+      b_.CreateRet(b_.CreateCall(specialized_[id], forwarded));
+      b_.SetInsertPoint(next);
+    }
+    for (size_t i = 0; i < first.frame.inputs.size(); ++i)
+      if (first.frame.inputs[i].mode == ArgumentMode::value) release_value(forwarded[i]);
+    b_.CreateRet(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::unsound_runtime_typing)),
+        integer(site(method.source->at)), null_pointer()));
+  }
   void emit_sites() {
     function_ = llvm::Function::Create(llvm::FunctionType::get(b_.getPtrTy(), {b_.getInt64Ty()}, false),
         llvm::GlobalValue::ExternalLinkage, "cod_lang_exception_site", module_);
@@ -3746,6 +3799,7 @@ public:
     const auto collect_operations = [&](const auto &operations) {
       for (const auto &[expr, operation] : operations) {
         if (operation.callee) retain_method(program.instances[*operation.callee].method);
+        for (const auto &call : operation.nominal_calls) retain_method(program.instances[call.callee].method);
         if (operation.opened_source) {
           prepared_sources.insert(*operation.opened_source);
           retain_method(program.instances[*operation.opened_source].method);
@@ -3778,7 +3832,7 @@ public:
       const auto &symbol = program.symbols[i];
       llvm::GlobalVariable *slot = nullptr;
       if (used_symbols.contains(i) && symbol.type) {
-        auto *layout = symbol.reference ? llvm::StructType::get(context_, {b_.getPtrTy(), b_.getPtrTy()}) : scalar_;
+        auto *layout = symbol.reference ? llvm::StructType::get(context_, {scalar_, b_.getPtrTy()}) : scalar_;
         slot = new llvm::GlobalVariable(module_, layout, false, llvm::GlobalValue::InternalLinkage,
             llvm::Constant::getNullValue(layout), "cod.symbol." + std::to_string(i));
         slot->setThreadLocalMode(llvm::GlobalVariable::GeneralDynamicTLSModel);
@@ -3824,8 +3878,8 @@ public:
         continue;
       }
       general_[i] = declare(prefix + ".general", layout);
-      if (specialize) for (const auto id : method.instances) {
-        std::string name = prefix + ".specialized";
+      if (specialize || method.separate_native_frames) for (const auto id : method.instances) {
+        std::string name = prefix + (method.separate_native_frames ? ".frame" : ".specialized");
         for (const auto &type : program.instances[id].context) name += "." + type_name(type);
         if (method.declaration_context()) name += ".query." + std::to_string(program.instances[id].query_environment);
         specialized_[id] = declare(name, layout);
@@ -3841,8 +3895,10 @@ public:
         body(general_[i], method, first);
         continue;
       }
-      body(general_[i], method, {});
-      if (specialize) for (const auto id : method.instances) body(specialized_[id], method, id);
+      if (method.separate_native_frames) dispatch_native_frames(general_[i], method);
+      else body(general_[i], method, {});
+      if (specialize || method.separate_native_frames)
+        for (const auto id : method.instances) body(specialized_[id], method, id);
     }
     if (program.native_entries.empty()) emit_main();
     else {

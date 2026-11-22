@@ -239,6 +239,10 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: const owner cannot allocate storage\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 104)
         fputs(": error: effect operator does not match the declared symbol\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 105)
+        fputs(": error: invalid nominal parent type\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 106)
+        fputs(": error: abstract parent declarations form a cycle\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 20)
         fputs(": error: narrow integer execution is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 21)

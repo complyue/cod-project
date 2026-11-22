@@ -477,7 +477,7 @@ struct Form {
   SourceSpan span = {};
 
   bool publishes_definition() const {
-    return exporting && (kind == Kind::symbol || kind == Kind::data || kind == Kind::native_handle_type || kind == Kind::array || kind == Kind::enumeration ||
+    return exporting && (kind == Kind::symbol || kind == Kind::data || kind == Kind::abstract_type || kind == Kind::native_handle_type || kind == Kind::array || kind == Kind::enumeration ||
                          kind == Kind::function || kind == Kind::procedure);
   }
   bool requires_explicit_return() const { return kind == Kind::procedure && !implicit_scope && !supplied_scope; }
@@ -2240,7 +2240,7 @@ public:
         }
         const auto next = peek().kind == TokenKind::end ? TokenKind::end : tokens_[cursor_ + 1].kind;
         const bool named_type = native_handle_head() || (is("data") && (next == TokenKind::identifier || next == TokenKind::string)) ||
-            ((is("array") || is("enum")) && next == TokenKind::identifier);
+            ((is("type") || is("array") || is("enum")) && next == TokenKind::identifier);
         const bool named_callable = (is("func") || is("function") || is("proc") || is("procedure")) && !callable_binding();
         if (is("import") || (is("symbol") && next == TokenKind::symbol) || reference_symbol_head() || named_type || named_callable) {
           form->exporting = true;
@@ -2386,7 +2386,7 @@ public:
           if (form->c_data) fail(peek().at, "expected fields for a data \"C\" record; declare native handles with 'handle type'");
           if (data && !form->parent_type)
             fail(start.at, "a head-only data declaration requires an abstract parent");
-          if (form->exporting) fail(start.at, "export requires a locally defined identity");
+          if (form->exporting && data) fail(start.at, "export requires a locally defined identity");
           form->kind = data ? Form::Kind::conformance : Form::Kind::abstract_type;
           expect(";");
           append(std::move(form));

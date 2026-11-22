@@ -37,6 +37,7 @@ export func nominal_exception_export() -> u8 { return 6u8; }
 export func callable_export() -> u8 { return 7u8; }
 export func enum_export() -> u8 { return 8u8; }
 export func enum_member_export() -> u8 { return 9u8; }
+export func abstract_type_export() -> u8 { return 10u8; }
 export func print_export_identity() -> u64 { return 0u64; }
 export func exception_root_identity() -> u64 { return 0u64; }
 export func null_pointer_identity() -> u64 { return 4u64; }
