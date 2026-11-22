@@ -369,6 +369,9 @@ struct Expression {
   bool deferred_catch() const {
     return kind == Kind::deferred && binding == "fallback" && children.at(1)->kind == Kind::handler;
   }
+  const Expression *deferred_finalizer() const {
+    return deferred_catch() && children.back()->kind == Kind::block ? children.back().get() : nullptr;
+  }
   bool inspects_return(bool binds_payload = false) const;
 };
 using Expr = std::unique_ptr<Expression>;

@@ -1491,7 +1491,14 @@ class LLVMEmission {
     }
     b_.CreateBr(done);
     b_.SetInsertPoint(replace);
-    release_failure_owner(b_, pending.failure_owner);
+    llvm::Value *retain_failure = nullptr;
+    if (boundary == CleanupBoundary::deferred) {
+      retain_failure = b_.CreateAnd(b_.CreateICmpEQ(pending.kind, b_.getInt8(2)),
+          b_.CreateAnd(b_.CreateICmpNE(kind, b_.getInt8(2)), b_.CreateNot(entered_failure)));
+    }
+    if (pending.failure_owner)
+      release_failure_owner(b_, retain_failure ? b_.CreateSelect(retain_failure, null_pointer(), pending.failure_owner)
+                                               : pending.failure_owner);
     if (boundary == CleanupBoundary::deferred) {
       auto *retain = block("cleanup.retain.return"), *replaced = block("cleanup.replaced.return");
       b_.CreateCondBr(b_.CreateAnd(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2)), b_.CreateNot(load(completion_.has_return))), retain, replaced);
@@ -1503,6 +1510,13 @@ class LLVMEmission {
       b_.SetInsertPoint(replaced);
     }
     release_value(pending.value);
+    if (retain_failure) {
+      const auto places = completion_.failure_fields();
+      const auto values = pending.failure_fields();
+      for (size_t i = 0; i < places.size(); ++i)
+        if (places[i]) b_.CreateStore(b_.CreateSelect(retain_failure, values[i], load(places[i])), places[i]);
+      b_.CreateStore(b_.CreateSelect(retain_failure, b_.getInt8(2), kind), completion_.kind);
+    }
     b_.CreateBr(done);
     b_.SetInsertPoint(done);
     auto *transfer = pending.transfer;
@@ -1539,18 +1553,26 @@ class LLVMEmission {
       b_.CreateBr(next_entry);
       b_.SetInsertPoint(next_entry);
     }
-    const auto run_action = [&](const auto &emit, bool deferred_catch = false) {
+    const auto run_action = [&](const auto &emit, const Expression *handler_entry = nullptr) {
       llvm::Value *arrives = nullptr;
-      if (deferred_catch) {
-        arrives = b_.CreateAnd(b_.CreateICmpNE(load(completion_.category), integer(0)),
-                               b_.CreateICmpEQ(load(completion_.fatal), null_pointer()));
+      if (handler_entry) {
+        auto *category = load(completion_.category);
+        llvm::Value *matches = b_.getFalse();
+        for (const auto &clause : std::span{handler_entry->children}.subspan(1)) {
+          if (clause->kind != Expression::Kind::handler) break;
+          auto *selected = choose(*clause, {}, choices(*clause, {}), b_.getInt1Ty(), [&](const Choice &choice) {
+            return catch_matches(category, choice.operation->type.identity);
+          });
+          matches = b_.CreateOr(matches, selected);
+        }
+        arrives = b_.CreateAnd(matches, b_.CreateAnd(b_.CreateICmpNE(category, integer(0)),
+                                b_.CreateICmpEQ(load(completion_.fatal), null_pointer())));
       }
       auto *replaces_body = complete_cleanup(emit, CleanupBoundary::deferred, arrives);
       auto *pending = load(body_pending);
       if (owned_failures_)
         release_failure_owner(b_, b_.CreateSelect(b_.CreateAnd(pending, replaces_body), body_outcome.failure_owner, null_pointer()));
       b_.CreateStore(b_.CreateAnd(pending, b_.CreateNot(replaces_body)), body_pending);
-      b_.CreateBr(next_entry);
     };
     auto *pop = block("defer.pop"), *done = block("defer.done"), *invalid = block("defer.invalid");
     auto *record = load(scope.head);
@@ -1603,8 +1625,11 @@ class LLVMEmission {
         run_action([&] {
           if (descriptor.action->children.size() == 1) emit_expression(body, Projection::value, true);
           else emit_finally(*descriptor.action, Projection::value, true);
-        }, descriptor.action->deferred_catch());
+        }, descriptor.action->deferred_catch() ? descriptor.action : nullptr);
+        if (const auto *finalizer = descriptor.action->deferred_finalizer())
+          run_action([&] { emit_expression(*finalizer, Projection::value, true); });
         for (const auto &[id, place] : bindings) storage_[id] = place;
+        b_.CreateBr(next_entry);
         continue;
       }
       std::vector<llvm::Value *> arguments;
@@ -1621,11 +1646,13 @@ class LLVMEmission {
       if (!descriptor.activation_record) release_heap_record();
       if (contexts_.front().at(&body).native_call) {
         run_action([&] { emit_native_call(body, &arguments); });
+        b_.CreateBr(next_entry);
         continue;
       }
       if (body.kind == Expression::Kind::transfer || body.kind == Expression::Kind::rebind) {
         if (body.kind == Expression::Kind::transfer) arguments[1] = own_value(arguments[1]);
         run_action([&] { assign_prepared(body, arguments); });
+        b_.CreateBr(next_entry);
         continue;
       }
       run_action([&] {
@@ -1644,6 +1671,7 @@ class LLVMEmission {
         b_.SetInsertPoint(replace); save_abrupt(result); b_.CreateBr(done);
         b_.SetInsertPoint(done);
       });
+      b_.CreateBr(next_entry);
     }
     b_.SetInsertPoint(invalid);
     if (std::ranges::none_of(scope.actions, [](const auto &action) { return action.native_constructor || action.activation_record; }))
@@ -1954,6 +1982,15 @@ class LLVMEmission {
       });
     }, b_.getPtrTy());
   }
+  llvm::Value *catch_matches(llvm::Value *category, size_t identity) {
+    if (!identity) return b_.getTrue();
+    if (identity != error_root_id) return b_.CreateICmpEQ(category, integer(identity));
+    llvm::Value *matched = b_.getFalse();
+    for (size_t i = 1; i < program_->exception_types.size(); ++i)
+      if (matches_failure(program_->exception_types, i, identity))
+        matched = b_.CreateOr(matched, b_.CreateICmpEQ(category, integer(i)));
+    return matched;
+  }
   llvm::Value *emit_finally(const Expression &expr, Projection projection, bool discard = false) {
     const bool read = carries_value(projection);
     Control guarded{control_, block("try.completed")};
@@ -1971,21 +2008,16 @@ class LLVMEmission {
     const Expression *finalizer = nullptr;
     for (size_t i = 1; i < expr.children.size(); ++i) {
       const auto &handler = *expr.children[i];
-      if (handler.kind == Expression::Kind::block) { finalizer = &handler; break; }
+      if (handler.kind == Expression::Kind::block) {
+        if (!expr.deferred_catch()) finalizer = &handler;
+        break;
+      }
       const auto &fact = contexts_.front().at(&handler);
       auto *selected = block("catch.selected"), *next = block("catch.next");
       auto *caught = choose(handler, {}, choices(handler, {}), scalar_, [&](const Choice &choice) -> llvm::Value * {
         const auto &type = choice.operation->type;
         auto *value = pack(active_exception(), type);
-        if (!type.identity) return value;
-        auto *category = load(completion_.category);
-        if (type.identity != error_root_id)
-          return b_.CreateSelect(b_.CreateICmpEQ(category, integer(type.identity)), value, empty_scalar());
-        llvm::Value *matched = b_.getFalse();
-        for (size_t i = 1; i < program_->exception_types.size(); ++i)
-          if (matches_failure(program_->exception_types, i, type.identity))
-            matched = b_.CreateOr(matched, b_.CreateICmpEQ(category, integer(i)));
-        return b_.CreateSelect(matched, value, empty_scalar());
+        return b_.CreateSelect(catch_matches(load(completion_.category), type.identity), value, empty_scalar());
       });
       b_.CreateCondBr(b_.CreateICmpNE(b_.CreateExtractValue(caught, 1), b_.getInt32(0)), selected, next);
       b_.SetInsertPoint(selected);
@@ -2018,8 +2050,7 @@ class LLVMEmission {
     }
     b_.CreateBr(handled);
     b_.SetInsertPoint(handled);
-    if (finalizer) complete_cleanup([&] { emit_expression(*finalizer); },
-        expr.deferred_catch() ? CleanupBoundary::deferred : CleanupBoundary::ordinary_finally);
+    if (finalizer) complete_cleanup([&] { emit_expression(*finalizer); }, CleanupBoundary::ordinary_finally);
     auto *done = block("try.continue");
     b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0)), done, control_->exit);
     b_.SetInsertPoint(done);

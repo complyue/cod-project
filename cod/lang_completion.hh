@@ -1322,20 +1322,12 @@ private:
   // New nodes leave existing dependencies intact. Changes to backedges,
   // action definitions or the observation projection can revise old results.
   std::map<QueueState, SolvedState> solved_;
-  DrainState deferred_coverage(DrainState state, const Action &action, size_t action_id,
+  DrainState deferred_coverage(DrainState state, const Action &action, bool receives,
                                const Path &path, Completion outgoing, Effects &effects) const {
     const auto incoming = state.active();
-    const bool receives = action.bodyless_catch && incoming.exception();
-    const bool consumes = receives && action.catches.contains(incoming.category());
-    const auto &thrown = path.effects.thrown.terms;
-    const bool forwards_arrival = receives && !thrown.empty() &&
-        std::ranges::all_of(thrown, [&](const auto &term) {
-          return term.first.kind == ExceptionFacts::Origin::Kind::arrival && term.first.action == action_id;
-        });
-    const bool preserves = incoming.failed() && incoming.reason == outgoing.reason && !consumes &&
-        (!path.completion.reason || forwards_arrival);
-    if ((state.pending_checked() && !consumes && !preserves) ||
-        (consumes && state.coverage == DeferredCoverage::declared_root && !action.catches_root))
+    const bool preserves = incoming.failed() && !receives && !path.completion.failed();
+    if ((state.pending_checked() && !receives && !preserves) ||
+        (receives && state.coverage == DeferredCoverage::declared_root && !action.catches_root))
       effects.needs_checked_cleanup_proof = true;
     state.encoded = outgoing.index();
     if (path.completion.returned || (path.completion.reason && !path.completion.failed())) state.body_failure = 0;
@@ -1343,7 +1335,7 @@ private:
       state.coverage = DeferredCoverage::none;
       if (outgoing.exception() &&
           (exception_types_[outgoing.category()].checked || !effects.declared_failures.empty())) {
-        if (incoming.failed() && !consumes) effects.needs_checked_cleanup_proof = true;
+        if (incoming.failed() && !receives) effects.needs_checked_cleanup_proof = true;
         state.coverage = DeferredCoverage::checked;
       }
     }
@@ -1609,7 +1601,7 @@ public:
       } else {
         const auto &action = actions_.at(*node.action);
         const auto incoming = state.active();
-        const bool receives = action.bodyless_catch && incoming.exception();
+        const bool receives = action.bodyless_catch && incoming.exception() && action.catches.contains(incoming.category());
         const auto selected = deferred_input(incoming, receives, action.observes_return);
         for (const auto &path : action.paths) {
           if (path.input != selected) continue;
@@ -1619,9 +1611,10 @@ public:
                 Completion{incoming.returned ? size_t{1} : size_t{0}, incoming.returned} : incoming;
           } else if (next.reason != 1) next.returned = next.returned || incoming.returned;
           if (incoming.protected_here() && !next.failed()) next.reason = incoming.reason;
+          if (incoming.failed() && !receives && !path.completion.failed()) next.reason = incoming.reason;
           auto effects = path.effects;
           effects.reaching = intersect_reaching(effects.reaching, conditions->second);
-          const auto outgoing = deferred_coverage(state, action, *node.action, path, next, effects);
+          const auto outgoing = deferred_coverage(state, action, receives, path, next, effects);
           effects.observes_return |= action.observes_return;
           effects.raises_deferred_failure |= path.completion.failed();
           if (!next.exception()) effects.thrown.clear();
@@ -1629,7 +1622,7 @@ public:
             auto invoked = compose(effects, nested);
             invoked.enter_initialization(action_frame(*node.action));
             invoked.enter_selection_guards(*node.action);
-            const auto arrival = incoming.exception()
+            const auto arrival = receives
                 ? ExceptionFacts::arrival({incoming.category()}) : ExceptionFacts{};
             invoked.transform_values([&](const auto &value) { return value.enter(*node.action, arrival); });
             invoked.transform_conditions([&](const auto &clauses) { return enter_conditions(clauses, *node.action); });

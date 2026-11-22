@@ -86,6 +86,40 @@ proc run() -> void {
 }
 run();
 ''', 0, '42\n', ''),
+    "unrelated_return_preserves_checked_deferred_failure": (CHECKED_READ + '''
+proc run() -> u64 {
+    ptr missing:u64 = null in here;
+    defer catch (failure:const NullPointerException) { behave @print(1u64); }
+          finally { behave @print(2u64); };
+    defer { return 77u64; };
+    defer read(missing);
+    return 99u64;
+}
+behave @print(run());
+''', 0, '1\n2\n77\n', ''),
+    "bodyless_finalizer_return_preserves_forwarded_failure": (CHECKED_READ + '''
+proc run() -> u64 {
+    ptr missing:u64 = null in here;
+    defer catch (failure:const NullPointerException) { behave @print(30u64); }
+          finally { behave @print(31u64); };
+    defer catch (failure:const NullPointerException) { behave @print(10u64); throw failure; }
+          finally { behave @print(20u64); return 77u64; };
+    defer read(missing);
+    return 99u64;
+}
+behave @print(run());
+''', 0, '10\n20\n30\n31\n77\n', ''),
+    "separate_handler_and_finalizer_failures_need_fifo": (CHECKED_READ + '''
+proc run() -> void {
+    ptr missing:u64 = null in here;
+    defer catch (failure:const NullPointerException) { behave @print(30u64); };
+    defer catch (failure:const NullPointerException) { throw failure; }
+          finally { read(missing); };
+    defer read(missing);
+    return;
+}
+run();
+''', 2, '', 'coverage within the owning pass'),
     "pending_return": (PRELUDE + 'proc f()->const i64{defer observe(1);defer catch(e:const MissingReturnError){observe(2);};defer missing();return 7;}observe(f());', 0, '2\n1\n7\n', WARN),
     "attached_body_runs_during_failure": (PRELUDE + 'try{{defer{observe(1);}catch(e:const MissingReturnError){observe(99);}finally{observe(2);};missing();{}}}catch(e:const MissingReturnError){observe(3);};', 0, '1\n2\n3\n', WARN),
     "own_body_failure": (PRELUDE + '{{defer{observe(1);missing();}catch(e:const MissingReturnError){observe(2);}finally{observe(3);};}};observe(4);', 0, '1\n2\n3\n4\n', WARN),
