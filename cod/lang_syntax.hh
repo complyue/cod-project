@@ -373,6 +373,7 @@ using Expr = std::unique_ptr<Expression>;
 
 struct HereSignature;
 struct Parameter {
+  enum class CallerPlace { none, writable, initializing };
   std::string name;
   Type type;
   Location at;
@@ -384,6 +385,9 @@ struct Parameter {
   std::string declaration_kind = {};
   bool fixed_binding = false;
   std::shared_ptr<HereSignature> here = {};
+  CallerPlace caller_place = CallerPlace::none;
+  bool selects_caller_place() const { return caller_place != CallerPlace::none; }
+  bool initializes_caller_place() const { return caller_place == CallerPlace::initializing; }
 };
 struct HereSignature {
   std::vector<Parameter> parameters;
@@ -995,8 +999,10 @@ class Parser {
     }
     return parse_type();
   }
-  Parameter parameter_declaration(bool native_handles = false) {
+  Parameter parameter_declaration(bool native_handles = false, bool caller_places = false) {
     const bool fixed_binding = take("const");
+    const bool initializes = caller_places && is("init") && is("val", 1) && is("var", 2);
+    if (initializes) expect("init");
     const bool exception = exception_binding_head();
     if (exception) expect_exception_binder();
     const bool owned_region = ownership_qualifier("region");
@@ -1005,6 +1011,8 @@ class Parser {
     std::string mode;
     if (!regional && !exception && (is("ptr") || is("ref") || is("val") || (native_handles && is("handle") && !is(":", 1))))
       mode = tokens_[cursor_++].text;
+    const bool place = caller_places && mode == "val" && is("var") && !is(":", 1);
+    if (place) expect("var");
     auto param = value_name();
     Parameter parameter{param.text, Type::void_type, param.at, false, {}};
     parameter.fixed_binding = fixed_binding;
@@ -1016,9 +1024,10 @@ class Parser {
       parameter.type = exception ? exception_holder(std::move(object)) : std::move(object);
     }
     parameter.declaration_kind = mode;
+    if (place) parameter.caller_place = initializes ? Parameter::CallerPlace::initializing : Parameter::CallerPlace::writable;
     if (take("in")) parameter.owner = ordinary_name().text;
     if (exception && !parameter.owner.empty()) fail(param.at, "an exception holder establishes its own owner");
-    if (mode == "val" && !parameter.owner.empty()) fail(param.at, "a val parameter has callee-local bits storage, not an external owner");
+    if (mode == "val" && !place && !parameter.owner.empty()) fail(param.at, "a val parameter has callee-local bits storage, not an external owner");
     if (!regional && !exception && mode.empty() && !parameter.owner.empty()) parameter.declaration_kind = "ref";
     if (parameter.type == Type::void_type) fail(param.at, "a parameter must have a value type");
     parameter.variadic = take("...");
@@ -1168,7 +1177,7 @@ class Parser {
             if (!pipeline && !form.parameters.empty() && !form.parameters.back().here)
               fail(peek().at, "here callable parameters must precede ordinary parameters");
             form.parameters.push_back(here_parameter());
-          } else form.parameters.push_back(parameter_declaration(true));
+          } else form.parameters.push_back(parameter_declaration(true, true));
         } while (take(","));
         expect(")");
       }
@@ -1198,6 +1207,10 @@ class Parser {
       form.throws_types.push_back(parse_type());
     }
     for (auto &parameter : form.parameters) {
+      if (parameter.selects_caller_place() && parameter.owner.empty()) {
+        parameter.owner = "$place." + parameter.name;
+        form.owner_parameters.push_back({parameter.owner, {}, parameter.at, false, true});
+      }
       if (parameter.type.kind != Type::region) continue;
       const auto mentions = [&](auto &&self, const Type &type) -> bool {
         return std::find(type.capture_owners.begin(), type.capture_owners.end(), parameter.name) != type.capture_owners.end() ||

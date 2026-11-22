@@ -1,0 +1,52 @@
+using symbol "std:io" @print;
+using "std:text-storage" { utf8_size, utf8_byte };
+
+data Entry { name:String; }
+
+proc (<-)(init val var out:String in D, text:const String in D) -> void
+    where {const owner D} {
+    behave @print(11u64);
+    out = text;
+    return;
+}
+
+proc (<-)(init val var out:String in D, text:const String in S) -> void
+    where {owner D, const owner S} {
+    behave @print(22u64);
+    out = make String(text) in D;
+    return;
+}
+
+proc (<-)(entry:Entry in D, text:const String in S) -> void
+    where {owner D, const owner S} {
+    behave @print(33u64);
+    entry.name = make String(text) in D;
+    return;
+}
+
+proc select_entry(input:Entry in D) -> ref Entry in D where {owner D} {
+    behave @print(41u64);
+    return input;
+}
+
+proc select_text(input:const String in S) -> ref const String in S where {const owner S} {
+    behave @print(42u64);
+    return input;
+}
+
+proc verify() -> u64 {
+    ref initial = make String("first");
+    ref entry = make Entry in here { name <- initial; };
+    ref earlier:const CString = entry.name:CString;
+    {{
+        ref next = make String("x\0y");
+        select_entry(entry).name <- select_text(next);
+    }};
+    if (utf8_size(earlier) != 5u64 || utf8_byte(earlier, 0u64) != 102u8) return 1u64;
+    if (utf8_size(entry.name) != 3u64 || utf8_byte(entry.name, 1u64) != 0u8) return 2u64;
+    entry <- "after";
+    if (utf8_size(entry.name) != 5u64 || utf8_byte(entry.name, 0u64) != 97u8) return 3u64;
+    if (utf8_byte(earlier, 4u64) != 116u8) return 4u64;
+    return 73u64;
+}
+behave @print(verify());

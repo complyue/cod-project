@@ -455,10 +455,10 @@ class ScalarChecker {
   using Access = std::vector<std::optional<bool>>;
   // Only a known argument or return contract can supply an implicit callable's result.
   enum class ExpectedTypeUse { materialization, callable_result };
-  enum class EvidenceRead { payload, target, projection, binding_slot, discarded, loop_discard, native_loan };
+  enum class EvidenceRead { payload, target, projection, binding_slot, transfer_destination, discarded, loop_discard, native_loan };
   enum class BindingUse { ordinary, exception_field, native_loan };
   enum class NativeLoanContext { none, borrow, discard_result };
-  enum class IndexedUse { value_only, immediate_target };
+  enum class IndexedUse { value_only, immediate_target, transfer_destination };
   static ExpectedTypeUse expected_type_use(ArgumentMode mode) {
     return mode == ArgumentMode::value ? ExpectedTypeUse::callable_result : ExpectedTypeUse::materialization;
   }
@@ -2741,13 +2741,21 @@ class ScalarChecker {
     if (value_binding) fail(at, "val storage has no reference binding; use '<-' for bits transfer");
     if (fixed) fail(at, "cannot rebind a const reference binding");
   }
-  static void reference_destination(const ViewEvidence &view, const Location &at) {
+  static void reference_destination(const ViewEvidence &view, const Location &at, bool text_installation = false) {
+    if (view.direct_text_place) {
+      if (!text_installation) fail(at, "a direct String place is not a reference binding slot");
+      if (view.fixed_binding != false) fail(at, "cannot write through a readonly direct String place");
+      return;
+    }
     if (!view.value_binding) fail(at, "reference operation requires a binding slot");
     reference_slot(*view.value_binding, view.fixed_binding.value_or(false), at);
     if (!view.fixed_binding) implementation_gap(at, "reference binding mutability is not established");
   }
   static void rebind_type(const Type &target, const Type &source, const Location &at) {
     if (source != Type::null_ref && source != target) fail(at, "reference rebinding requires the exact target type");
+  }
+  static void text_installation_type(const Type &source, const Location &at) {
+    if (!text_type(source)) fail(at, "a direct String place requires an initialized String or CString target");
   }
   static void rebind_access(bool target_read_only, bool source_read_only, const Location &at) {
     if (!target_read_only && source_read_only) fail(at, "readonly source cannot rebind a writable reference target");
@@ -2840,11 +2848,24 @@ class ScalarChecker {
     if (body != Type::never && handler != Type::never && body != handler)
       fail(at, "try body and catch arms must have the same result type");
   }
-  void reference_destination(const CheckedOperation &view, const Location &at) const {
+  bool direct_text_destination(const CheckedOperation &view) const {
+    return !view.slots.empty() && std::ranges::all_of(physical_slots(view.slots),
+        [&](size_t id) { return bindings_->at(id).direct_text_place; });
+  }
+  bool direct_text_field(const Expression &expr, const CheckedOperation &view) const {
+    return expr.kind == Expression::Kind::field && view.product_field && view.operand_type.kind == Type::product &&
+        program_.schemas[view.operand_type.identity].fields[*view.product_field].direct_text_place();
+  }
+  void reference_destination(const CheckedOperation &view, const Location &at, bool text_installation = false) const {
     if (view.slots.empty()) fail(at, "reference operation requires a binding slot");
     require_slots_live(view.slots, at, "reference binding's lexical scope has ended");
     for (const auto id : physical_slots(view.slots)) {
       const auto &binding = bindings_->at(id);
+      if (binding.direct_text_place) {
+        if (!text_installation) fail(at, "a direct String place is not a reference binding slot");
+        if (view.fixed_binding || binding.fixed) fail(at, "cannot write through a readonly direct String place");
+        continue;
+      }
       reference_slot(binding.value_binding, view.fixed_binding || binding.fixed, at);
     }
   }
@@ -2862,9 +2883,14 @@ class ScalarChecker {
   }
   void check_rebind(const CheckedOperation &target, const CheckedOperation &source, const Location &at,
                     bool allow_first_binding = false) {
-    reference_destination(target, at);
+    reference_destination(target, at, true);
     if (!source.view || source.mixed_view) implementation_gap(at, "rebinding from a fresh value without an existing target");
-    rebind_type(target.type, source.type, at);
+    if (direct_text_destination(target)) {
+      text_installation_type(source.type, at);
+      if (source.nullable_view || source.targets.contains(null_target))
+        fail(at, "a direct String place requires a non-null text target");
+      require_initialized(source, at, "String target");
+    } else rebind_type(target.type, source.type, at);
     require_live_view(source, at);
     const auto physical = physical_slots(target.slots);
     for (const auto id : overlapping_slots(target.slots)) {
@@ -3966,6 +3992,12 @@ class ScalarChecker {
   }
   static bool caller_bindings(const CheckedMethod &method) {
     return method.operation == "<=>";
+  }
+  static bool caller_place(const CheckedMethod &method, size_t input) {
+    return caller_bindings(method) || parameter_at(method, input).selects_caller_place();
+  }
+  static bool has_caller_places(const CheckedMethod &method) {
+    return caller_bindings(method) || std::ranges::any_of(method.input_parameters(), &Parameter::selects_caller_place);
   }
   static bool initialized_when_present(size_t parameter, const CleanupEquations::ConditionClauses &missing) {
     return std::ranges::all_of(missing, [&](const auto &facts) { return facts.absent.contains(parameter); });
@@ -6809,9 +6841,9 @@ class ScalarChecker {
     const auto &definition = *method.source;
     const auto &parameters = method.input_parameters();
     const bool uses_caller_bindings = caller_bindings(method);
-    if (std::any_of(operation.arguments.begin(), operation.arguments.end(), [&](const auto &argument) {
-          return argument.binding_slot != uses_caller_bindings;
-        })) implementation_gap(expr.at, "selected method requires unproved slot preparation adaptation");
+    for (size_t i = 0; i < operation.arguments.size(); ++i)
+      if (operation.arguments[i].binding_slot != caller_place(method, i))
+        implementation_gap(expr.at, "selected method requires unproved place preparation");
     bool distinct_bindings = false;
     if (uses_caller_bindings && views.size() == 2) {
       const auto left = overlapping_slots(views[0].slots);
@@ -7287,19 +7319,23 @@ class ScalarChecker {
       const auto &parameter = method.input_parameters()[i];
       const bool value = parameter.owner.empty();
       const bool live_value = method.scope_inputs && method.scope_inputs->live_values.contains(i);
-      const bool independent = parameter.declaration_kind == "val" || (value && arguments[i].kind == Type::procedure);
+      const bool place = parameter.selects_caller_place();
+      const bool local_value = parameter.declaration_kind == "val" && !place;
+      const bool independent = local_value || (value && arguments[i].kind == Type::procedure);
       state.bindings[parameter.name] = text_type(method.parameters[i]) ? method.parameters[i] : arguments[i];
       state.definitions.erase(parameter.name);
-      state.views[parameter.name] = {parameter.read_only || (parameter.declaration_kind == "val" && parameter.fixed_binding), true,
-                                    live_value || parameter.declaration_kind == "val",
+      state.views[parameter.name] = {place || parameter.read_only || (local_value && parameter.fixed_binding), true,
+                                    live_value || local_value,
                                     value ? EvidenceOwner{} : state.owner_bindings.at(parameter.owner), false,
-                                    parameter.fixed_binding, parameter.read_only, independent || live_value,
-                                    !live_value && argument_mode(parameter) == ArgumentMode::borrowed_ptr};
+                                    parameter.fixed_binding, place || parameter.read_only, independent || live_value,
+                                    !place && !live_value && argument_mode(parameter) == ArgumentMode::borrowed_ptr};
       auto &view = state.views.at(parameter.name);
-      view.storage_kind = place_kind(*view.value_binding, parameter.declaration_kind == "ref");
+      view.direct_text_place = place;
+      view.storage_kind = place ? PlaceKind::value : place_kind(*view.value_binding, parameter.declaration_kind == "ref");
       if (const auto &profile = method.scope_inputs; profile && profile->place_owners.contains(i)) {
         for (const auto role : profile->place_owners.at(i)) view.place_owners.insert(EvidenceOwner::parameter(role));
-      } else if (state.full_scope_owner) view.place_owners.insert(*state.full_scope_owner);
+      } else if (place) view.place_owners.insert(*view.owner);
+      else if (state.full_scope_owner) view.place_owners.insert(*state.full_scope_owner);
     }
     if (method.scope_inputs) for (const auto &[name, access] : method.scope_inputs->place_access) {
       auto view = state.views.at(method.input_parameters()[access.input].name);
@@ -7697,9 +7733,9 @@ class ScalarChecker {
     result.view = true;
     result.indexed_target = parent.indexed_target;
     result.owners = parent.owners;
-    result.read_only = parent.read_only || (field.storage == PlaceKind::value ? readonly_field(field) : field.source->read_only);
+    result.read_only = parent.read_only || (field.stores_target() ? field.readonly_target() : readonly_field(field));
     result.initialization = parent.initialization;
-    if (result.place && field.storage == PlaceKind::value) {
+    if (result.place && !field.stores_target()) {
       const auto binding = storage(*result.place).binding;
       if (const auto found = lexical_.selection_identities.find(binding); found != lexical_.selection_identities.end())
         result.selection_identity = found->second;
@@ -7729,6 +7765,13 @@ class ScalarChecker {
         require_initialized(place, at, field.source->name, {}, selected_target(slot, place, true));
     }
     slot.binding = slot.slots.size() == 1 ? std::optional{*slot.slots.begin()} : std::nullopt;
+    if (field.direct_text_place()) {
+      // The slot's readiness is known separately from the opaque selected text.
+      select_targets(slot, {});
+      slot.selection_identity.reset();
+      if (!write_only) slot.initialization.emplace();
+      return slot;
+    }
     slot.nullable_view = field.storage == PlaceKind::pointer;
     const auto owners = slot.owners;
     slot = selection_state(std::move(slot), at);
@@ -7765,6 +7808,8 @@ class ScalarChecker {
       const auto &field = schema.fields[index];
       const bool direct = field.storage == PlaceKind::value;
       const bool rebind = item->kind == Expression::Kind::rebind || item->binding == "=";
+      if (field.direct_text_place() && rebind)
+        fail(label->at, "a direct String field initializer uses a selected '<-' method");
       if (direct && rebind) fail(label->at, "a direct product field requires bits transfer '<-'");
       if (!direct && !rebind) fail(label->at, "a reference field initializer requires binding '='");
       if (!initialized.insert(index).second) {
@@ -7817,15 +7862,16 @@ class ScalarChecker {
         if (storage_->size() - root >= 4096)
           fail(at, "compiler resource limit: too many subobjects in one lexical product");
         const auto name = "$field." + std::to_string(storage_->size()) + "." + field.source->name;
-        const bool direct = field.storage == PlaceKind::value;
-        const auto place = declare(name, field.type, direct ? readonly_field(field) : field.source->read_only,
+        const bool direct = !field.stores_target();
+        const auto place = declare(name, field.type, direct ? readonly_field(field) : field.readonly_target(),
                                    direct, at, false, nullptr, !direct);
         (*storage_)[place].subobject = true;
         (*storage_)[parent].fields.push_back(place);
         if (direct && field.type.kind == Type::product) pending.push_back(place);
         auto &binding = bindings_->at(storage(place).binding);
-        binding.fixed = field.source->fixed_binding;
-        binding.requires_initialized = field.storage == PlaceKind::reference;
+        binding.fixed = field.direct_text_place() ? readonly_field(field) : field.source->fixed_binding;
+        binding.requires_initialized = field.storage == PlaceKind::reference || field.direct_text_place();
+        binding.direct_text_place = field.direct_text_place();
         binding.nullable = field.storage == PlaceKind::pointer;
       }
     }
@@ -8857,6 +8903,17 @@ class ScalarChecker {
           completes = query_product_initializers(nested, constructed, member, state, track_places, reached && completes) && completes;
         continue;
       }
+      if (field.direct_text_place()) {
+        const auto value = type_evidence(*item.children.back(), state, false, nullptr, nullptr,
+            ExpectedTypeUse::materialization, reached && completes, EvidenceRead::target);
+        if (value && *value != Type::never) {
+          ViewEvidence place{true, true, false, state.full_scope_owner, false, false};
+          check_type_text_transfer(item, Type::string, place, *value, state, true, reached && completes);
+          if (track_places && reached && completes) state.selections.initialize(EvidencePlaces{member});
+        }
+        completes = completes && value != Type::never;
+        continue;
+      }
       const auto value = type_evidence(*item.children.back(), state, false, nullptr, nullptr,
           ExpectedTypeUse::materialization, reached && completes, direct ? EvidenceRead::payload : EvidenceRead::target);
       if (state.required && value && *value != Type::never) {
@@ -8890,6 +8947,27 @@ class ScalarChecker {
       if (track_places && reached && schema.fields.empty()) state.selections.initialize(EvidencePlaces{product});
     }
     return completes;
+  }
+  bool check_type_text_transfer(const Expression &expr, const Type &destination_type, const ViewEvidence &destination,
+      const Type &source, TypeEvidenceState &state, bool initializing = false, bool reached = true) const {
+    if (!state.required) return false;
+    const auto family = named_family(expr.text, &state);
+    if (family.methods.empty()) fail(expr.at, "a direct String field requires a visible '<-' method");
+    const bool place = destination_type == Type::string;
+    if (place && destination.fixed_binding != false) fail(expr.at, "cannot write through a readonly direct String place");
+    text_installation_type(source, expr.at);
+    prepare_type_readable_argument(state, *expr.children.back(), state.value, state.target, ArgumentMode::borrowed_ref);
+    const std::vector<Type> arguments{destination_type, source};
+    const Access access{place ? std::optional{false} : destination.read_only, state.value.read_only};
+    const Owners owners{destination.owner, state.value.owner};
+    const auto id = select_method(family.methods, arguments, expr.at, expr.text, family.retained_types(), access, owners, &state);
+    const auto &method = program_.methods[id];
+    const auto &parameter = method.input_parameters().front();
+    if (place && !parameter.selects_caller_place()) fail(expr.at, "String transfer requires a direct place parameter");
+    if (initializing && !parameter.initializes_caller_place())
+      fail(expr.at, "a direct String field initializer requires an init val var parameter");
+    if (reached) record_type_call(expr, state, method, true);
+    return parameter.initializes_caller_place();
   }
   static bool type_loop_control(const Expression *declaration) {
     return declaration && declaration->kind == Expression::Kind::range_for;
@@ -11819,17 +11897,31 @@ class ScalarChecker {
       return type;
     }
     case K::transfer: case K::rebind: {
-      const auto read_destination = expr.kind == K::rebind ? EvidenceRead::binding_slot : EvidenceRead::target;
+      const auto read_destination = expr.kind == K::rebind ? EvidenceRead::binding_slot : EvidenceRead::transfer_destination;
       const auto type = child(0, false, true, read_destination); view = state.value;
       auto destination = state.target;
       const auto destination_revision = state.selections.writes;
-      if (expr.kind == K::transfer && type != Type::never) read_type_target(state, view, state.target);
+      const bool text_transfer = expr.kind == K::transfer && (view.direct_text_place ||
+          (type && type->kind == Type::product && !named_family(expr.text, &state).methods.empty()));
+      if (expr.kind == K::transfer && !text_transfer && type != Type::never) read_type_target(state, view, state.target);
       const auto *context = expr.kind == K::transfer && type && type->kind == Type::procedure ? &*type : nullptr;
       const auto source = type_evidence(*expr.children[1], state, context != nullptr, context, nullptr,
                                         ExpectedTypeUse::materialization, type != Type::never,
-                                        expr.kind == K::transfer ? EvidenceRead::payload : EvidenceRead::target);
+                                        expr.kind == K::transfer && !text_transfer ? EvidenceRead::payload : EvidenceRead::target);
       if (type == Type::never || source == Type::never) return Type::never;
       if (state.required) assignment_destination(view.view == true, view.mixed_view, expr.at);
+      if (text_transfer) {
+        if (state.required && state.preparing(expr)) implementation_gap(expr.at, "a prepared deferred String place transfer");
+        if (type && source && check_type_text_transfer(expr, *type, view, *source, state) && state.checks_initialization())
+          state.selections.initialize(destination.selection.footprint);
+        else if (state.required && state.checks_initialization()) {
+          TargetEvidence places;
+          places.places = view.direct_text_place ? destination.selection.footprint : destination.places;
+          require_type_initialized(state, places, "direct String place", expr.at);
+        }
+        view = {false, false, {}};
+        return Type::void_type;
+      }
       if (expr.kind == K::transfer) {
         if (type && type->kind == Type::procedure) note_type_allocation(state);
         if (state.required) {
@@ -11863,11 +11955,16 @@ class ScalarChecker {
               type == Type::boolean, saved, std::move(fields)};
         }
       } else if (state.required) {
-        reference_destination(view, expr.at);
+        reference_destination(view, expr.at, true);
         const auto &selected = state.value;
         if (selected.view != true || selected.mixed_view)
           implementation_gap(expr.at, "rebinding from a fresh value without an existing target");
-        rebind_type(*type, *source, expr.at);
+        if (view.direct_text_place) {
+          text_installation_type(*source, expr.at);
+          if (selected.nullable || state.target.presence == TargetPresence::absent)
+            fail(expr.at, "a direct String place requires a non-null text target");
+          require_type_initialized(state, state.target, "String target", expr.at);
+        } else rebind_type(*type, *source, expr.at);
         if (proving_ && validating_ && !view.nullable && selected.nullable && state.target.presence != TargetPresence::present)
           fail(expr.at, "ref requires a proven non-null target");
         const bool first_product_binding = !destination.selection.footprint.empty() &&
@@ -12949,15 +13046,18 @@ class ScalarChecker {
         if (state.required && (parent.view != true || parent.mixed_view))
           implementation_gap(expr.at, "field selection requires an existing product target");
         read_type_target(state, parent, state.target);
-        const bool direct = field.storage == PlaceKind::value;
+        const bool direct = !field.stores_target();
         auto access = parent.read_only;
-        if (direct ? readonly_field(field) : field.source->read_only) access = true;
+        if (direct ? readonly_field(field) : field.readonly_target()) access = true;
         view = {access, true, direct, parent.owner};
         view.place_owners = parent.place_owners;
         view.storage_kind = field.storage;
-        view.fixed_binding = direct || field.source->fixed_binding || parent.read_only.value_or(true);
-        view.slot_read_only = field.source->read_only;
+        view.fixed_binding = direct || readonly_field(field) || parent.read_only.value_or(true);
+        if (!field.direct_text_place() && !direct)
+          view.fixed_binding = field.source->fixed_binding || parent.read_only.value_or(true);
+        view.slot_read_only = field.readonly_target();
         view.nullable = field.storage == PlaceKind::pointer;
+        view.direct_text_place = field.direct_text_place();
         if (state.checks_initialization()) {
           auto fields = query_product_fields(state.selections, state.target, type->identity, index, direct);
           const auto *first = fields.size() == 1 ? std::get_if<QueryProductPlace>(&*fields.begin()) : nullptr;
@@ -12975,13 +13075,17 @@ class ScalarChecker {
             state.selections.project_field(field_slot, state.target, type->identity, index);
             const auto selection = state.selections.project_slot(std::move(field_slot.field_selections),
                 std::move(fields), state.repeated_observations.has_value());
-            if (read != EvidenceRead::binding_slot && !state.selections.product_slot_initialized(selection)) {
+            const bool read_slot = read != EvidenceRead::binding_slot &&
+                (!field.direct_text_place() || read != EvidenceRead::transfer_destination);
+            if (read_slot && !state.selections.product_slot_initialized(selection)) {
               TargetEvidence slots;
               slots.places = selection.footprint;
               require_type_initialized(state, slots, expr.text, expr.at);
             }
             target_facts = state.selections.selected_target(selection);
-            if (read != EvidenceRead::binding_slot && target_facts.places.empty() &&
+            if (field.direct_text_place() && read_slot)
+              target_facts.initialized = true;
+            else if (read_slot && target_facts.places.empty() &&
                 target_facts.presence != TargetPresence::absent && field.type.kind != Type::product &&
                 !state.selections.uninitialized.empty())
               implementation_gap(expr.at, "product field referent initialization is unproved in typeof");
@@ -13296,6 +13400,7 @@ class ScalarChecker {
       for (const auto slot : physical_selection)
         for (const auto owner : bindings_->at(slot).place_owners) state.views.at(name).place_owners.insert(owner);
       state.views.at(name).storage_kind = binding.kind();
+      state.views.at(name).direct_text_place = binding.direct_text_place;
       if (!track_selection || binding.owner_binding || physical_selection.empty()) return;
       if (binding.value_binding) {
         if (physical_selection.size() == 1) {
@@ -13779,7 +13884,7 @@ class ScalarChecker {
   }
   void check_family_contract(const CheckedMethod &method, const std::vector<Type> &actual,
       const std::vector<Type> &prepared, const ResultContract &result, const Type &view, const Location &at) const {
-    if (caller_bindings(method))
+    if (has_caller_places(method))
       implementation_gap(at, "caller-binding method values require an unproved callable slot contract");
     if (std::ranges::any_of(method.input_owners(), [](const auto &owner) { return owner.read_only; }))
       implementation_gap(at, "callable values with const owner requirements");
@@ -13813,7 +13918,7 @@ class ScalarChecker {
   std::optional<CallableSelection> try_select_callable(const std::vector<size_t> &family, const Type *expected, const Location &at,
                                                         const TypeEvidenceState *state = nullptr, bool definition_site = false) const {
     if (family.empty()) fail(at, "no applicable implementation for declared callable value");
-    if (std::any_of(family.begin(), family.end(), [&](size_t id) { return caller_bindings(program_.methods[id]); }))
+    if (std::any_of(family.begin(), family.end(), [&](size_t id) { return has_caller_places(program_.methods[id]); }))
       implementation_gap(at, "caller-binding method values require an unproved callable slot contract");
     const auto &definition = program_.methods[family.front()];
     if (expected) signature_type(CheckedMethod{}, *expected, at);
@@ -17005,6 +17110,20 @@ class ScalarChecker {
       CheckedOperation field;
       field.operand_type = member.type;
       field.product_field = index;
+      if (member.direct_text_place()) {
+        const auto &label = *item.initializer_field_label();
+        auto target = project_product(construction_target(root, type), index, at);
+        // Construction supplies the field's place before the containing value
+        // is ready to be observed through an ordinary product borrow.
+        target = select_product_reference(std::move(target), member, at, true);
+        target.fixed_binding = false;
+        operations.insert_or_assign(&label, target);
+        if (&label != item.children.front().get()) field.argument_sources = {{&label, item.children.back().get()}};
+        check_text_transfer(item, instance, operations, target, field, true);
+        if (field.type == Type::never) operation.type = Type::never;
+        operations.insert_or_assign(&item, std::move(field));
+        continue;
+      }
       const bool inline_product = direct && member.type.kind == Type::product;
       Type supplied;
       if (inline_product) {
@@ -17054,6 +17173,48 @@ class ScalarChecker {
       initialize(root);
     }
     return operation;
+  }
+  void check_text_transfer(const Expression &expr, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations, const CheckedOperation &destination,
+      CheckedOperation &operation, bool initializing = false) {
+    if (&expr == prepared_call_) implementation_gap(expr.at, "a prepared deferred String transfer policy");
+    const bool direct_place = destination.type == Type::string;
+    if (direct_place && !initializing) {
+      // Discovery can see a borrowed product result before its target summary
+      // has been derived. Check the actual places once call summaries settle.
+      if (!destination.slots.empty() || (proving_ && validating_))
+        reference_destination(destination, expr.at, true);
+    }
+    if (!direct_place) prepare_borrow(destination, ArgumentMode::borrowed_ref, expr.at);
+    const auto family = named_family(expr.text);
+    if (family.methods.empty()) fail(expr.at, "a direct String field requires a visible '<-' method");
+    operation.arguments = {{direct_place ? ArgumentMode::borrowed_ptr : ArgumentMode::borrowed_ref, destination.type, direct_place},
+                           {ArgumentMode::borrowed_ref, Type::never}};
+    const auto &source = *expr.children.back();
+    auto input = check_argument_expression(source, ArgumentMode::borrowed_ref, instance, operations,
+                                           nullptr, IndexedUse::immediate_target);
+    if (input.type == Type::never) { operation.type = Type::never; return; }
+    text_installation_type(input.type, source.at);
+    prepare_borrow(input, ArgumentMode::borrowed_ref, source.at);
+    auto place = destination;
+    if (direct_place) {
+      place = embedded_slot_targets(destination);
+      place.view = true;
+      place.type = Type::string;
+      place.owners = destination.owners;
+    }
+    const std::vector<Type> arguments{destination.type, input.type};
+    const std::vector<CheckedOperation> views{place, input};
+    const auto method = select_method(family.methods, arguments, expr.at, expr.text,
+                                      family.retained_types(), access_of(views), owners_of(views));
+    const auto &parameter = program_.methods[method].input_parameters().front();
+    if (direct_place && !parameter.selects_caller_place()) fail(expr.at, "String transfer requires a direct place parameter");
+    if (initializing && !parameter.initializes_caller_place())
+      fail(expr.at, "a direct String field initializer requires an init val var parameter");
+    if (direct_place && !parameter.initializes_caller_place()) require_initialized(place, expr.at, "direct String place");
+    operation.arguments.back().type = input.type;
+    const auto callee = demand_named(expr, family, method, arguments);
+    finish_named_call(expr, arguments, views, operation, false, true, prepared_argument_completes(input), callee);
   }
   CheckedOperation check_case(const Expression &expr, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, bool read, bool discard,
@@ -17485,6 +17646,15 @@ class ScalarChecker {
         }
       }
       operation = named_value(expr, callable_expectation(expected), read);
+      if (operation.binding) {
+        const auto &binding = bindings_->at(*operation.binding);
+        if (binding.direct_text_place && !write_slot && indexed_use != IndexedUse::transfer_destination) {
+          const auto place = *binding.embedded_slot;
+          if (proving_ && validating_ && lexical_.live && !missing_initialization(lexical_, place).empty())
+            fail(expr.at, "direct String place read before definite initialization");
+          operation.initialization.emplace();
+        }
+      }
       break;
     case K::callable: {
       const auto method = lexical_method(expr.definition.get());
@@ -18357,6 +18527,8 @@ class ScalarChecker {
       source = selection_state(std::move(source), expr.at);
       const auto slots = physical_slots(source.slots);
       const auto selected = bindings_->at(*slots.begin());
+      if (std::ranges::any_of(slots, [&](size_t id) { return bindings_->at(id).direct_text_place; }))
+        implementation_gap(expr.at, "a local declared place for a direct String field");
       for (const auto slot : slots) {
         const auto &binding = bindings_->at(slot);
         if (!expr.declaration_kind.empty() && expr.declaration_kind != place_kind_name(binding.kind()))
@@ -18393,7 +18565,7 @@ class ScalarChecker {
                              {expr.kind == K::transfer ? ArgumentMode::value : ArgumentMode::borrowed_ptr, Type::never}};
       const auto destination = check(*expr.children[0], instance, operations, false, false, nullptr,
           ExpectedTypeUse::materialization, expr.kind == K::rebind,
-          expr.kind == K::transfer && !prepared ? IndexedUse::immediate_target : IndexedUse::value_only);
+          expr.kind == K::transfer && !prepared ? IndexedUse::transfer_destination : IndexedUse::value_only);
       operation.arguments[0].type = destination;
       if (destination == Type::never) {
         child(1, expr.kind == K::transfer);
@@ -18406,7 +18578,7 @@ class ScalarChecker {
         if (!owner_alive(owner))
           fail(expr.at, "assignment destination's lexical owner has ended");
       if (expr.kind == K::rebind) {
-        reference_destination(target, expr.at);
+        reference_destination(target, expr.at, true);
         if (prepared) require_deferred_slots(target, expr.at);
         if (child(1, false) == Type::never) { operation.type = Type::never; break; }
         const auto &selected = operations.at(expr.children[1].get());
@@ -18456,6 +18628,11 @@ class ScalarChecker {
         operation.read_only = target.read_only;
         operation.fixed_binding = target.fixed_binding;
         if (read && !discard) dereference(operation, expr.at);
+        break;
+      }
+      if (direct_text_destination(target) || direct_text_field(*expr.children[0], target) ||
+          (target.type.kind == Type::product && !named_family(expr.text).methods.empty())) {
+        check_text_transfer(expr, instance, operations, target, operation);
         break;
       }
       transfer_access(target.read_only, expr.at);
@@ -18745,17 +18922,18 @@ class ScalarChecker {
       require_live_view(parent, expr.at);
       dereference(parent, expr.at);
       operation = project_product(parent, index, expr.at);
-      if (field.storage != PlaceKind::value) {
-        operation.read_only = parent.read_only || field.source->read_only;
-        operation.fixed_binding = parent.read_only || field.source->fixed_binding;
+      if (field.stores_target()) {
+        operation.read_only = parent.read_only || field.readonly_target();
+        operation.fixed_binding = parent.read_only || (field.direct_text_place() ? readonly_field(field) : field.source->fixed_binding);
         if (parent.targets.size() == 1 && parent.targets.contains(null_target)) {
           operation.type = Type::never;
           break;
         }
-        operation = select_product_reference(std::move(operation), field, expr.at, write_slot);
+        operation = select_product_reference(std::move(operation), field, expr.at, write_slot ||
+            (field.direct_text_place() && indexed_use == IndexedUse::transfer_destination));
       }
       if (read) {
-        if (field.storage == PlaceKind::value) require_initialized(operation, expr.at, expr.text);
+        if (!field.stores_target()) require_initialized(operation, expr.at, expr.text);
         else read_view(operation, expr.at, expr.text);
         operation.predicate = stored_predicate(operation);
       }
@@ -18987,7 +19165,7 @@ class ScalarChecker {
     }
     default: implementation_gap(expr.at, "source expression '" + expr.text + "' is outside the scalar-method foundation");
     }
-    if (operation.indexed_target && (write_slot || (!read && !discard_view && indexed_use != IndexedUse::immediate_target)))
+    if (operation.indexed_target && (write_slot || (!read && !discard_view && indexed_use == IndexedUse::value_only)))
       implementation_gap(expr.at, "borrowing an indexed array element outside a direct projection, transfer or call");
     if (operation.type.kind == Type::native_handle && native_loan == NativeLoanContext::none && !discard)
       implementation_gap(expr.at, "using a borrowed handle result outside a checked native loan");
@@ -19241,7 +19419,7 @@ class ScalarChecker {
   template <typename Visit> void visit_binding_inputs(const Visit &visit) const {
     const auto &inputs = checking_instance_->frame.inputs;
     for (size_t parameter = 0; parameter < inputs.size(); ++parameter) {
-      if (!inputs[parameter].binding_slot) continue;
+      if (!inputs[parameter].binding_slot || checking_method_->input_parameters()[parameter].selects_caller_place()) continue;
       const auto binding = storage(inputs[parameter].place).binding;
       if (!checking_method_->scope_inputs || rebound_.contains(binding)) visit(parameter, binding);
     }
@@ -19263,6 +19441,11 @@ class ScalarChecker {
       if (clauses.empty()) known.insert(p);
       else if (clauses != CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}})
         missing.emplace(p, std::move(clauses));
+    }
+    if (validating_ && reason == 0) for (size_t i = 0; i < checking_method_->input_parameters().size(); ++i) {
+      const auto &parameter = checking_method_->input_parameters()[i];
+      if (parameter.initializes_caller_place() && !known.contains(i))
+        fail(parameter.at, "init String place must be written on every successful completion");
     }
     const auto [found, inserted] = observed_.initialized.emplace(reason, known);
     if (inserted) observed_.uninitialized[reason] = std::move(missing);
@@ -19352,19 +19535,22 @@ class ScalarChecker {
       const auto name = "$input.field." + std::to_string(storage_->size()) + "." + description->source->name;
       const bool slot = role == ProductInput::Role::slot;
       const bool referent = role == ProductInput::Role::referent;
+      const bool text_place = description->direct_text_place();
+      const bool selected_place = slot || text_place;
       const bool readonly = storage(container).read_only ||
-          (role == ProductInput::Role::direct ? readonly_field(*description) : description->source->read_only);
-      const auto place = declare(name, description->type, readonly, !slot, at, false, &entry, slot);
+          (selected_place || referent ? description->readonly_target() : readonly_field(*description));
+      const auto place = declare(name, description->type, readonly, !selected_place, at, false, &entry, selected_place);
       auto &field = storage_->at(place);
       field.scope = owner;
       field.borrowed = field.subobject = true;
-      if (slot) {
-        field.type = Type::void_type;
+      if (selected_place) {
+        if (slot) field.type = Type::void_type;
         auto &binding = bindings_->at(field.binding);
         binding.place_owners = {owner};
-        binding.requires_initialized = description->storage == PlaceKind::reference;
+        binding.requires_initialized = description->storage == PlaceKind::reference || text_place;
         binding.nullable = description->storage == PlaceKind::pointer;
-        binding.fixed = description->source->fixed_binding;
+        binding.fixed = text_place ? readonly_field(*description) : description->source->fixed_binding;
+        binding.direct_text_place = text_place;
         auto &matching = field_slots[description->source];
         for (const auto other : matching) {
           const auto &other_place = storage(*bindings_->at(other).embedded_slot);
@@ -19453,17 +19639,18 @@ class ScalarChecker {
       }
       for (size_t p = 0; p < checking_method_->input_parameters().size(); ++p) {
         const auto &parameter = checking_method_->input_parameters()[p];
-        const bool value = parameter.declaration_kind == "val";
+        const bool place = parameter.selects_caller_place();
+        const bool value = parameter.declaration_kind == "val" && !place;
         const bool live_value = checking_method_->scope_inputs && checking_method_->scope_inputs->live_values.contains(p);
         const bool live_binding = checking_method_->scope_inputs && checking_method_->scope_inputs->live_bindings.contains(p);
         const auto mode = argument_mode(parameter);
         const auto &declared = checking_method_->parameters[p];
         const auto &type = text_type(declared) ? declared : instance.arguments[p];
-        const auto id = declare(parameter.name, type, parameter.read_only || (value && parameter.fixed_binding),
-                                value || live_value, parameter.at, !checking_method_->scope_inputs, &entry);
+        const auto id = declare(parameter.name, type, place || parameter.read_only || (value && parameter.fixed_binding),
+                                value || live_value, parameter.at, !checking_method_->scope_inputs, &entry, place);
         const auto binding = storage_->at(id).binding;
         if (declared.kind == Type::abstract_type) abstract_input_bindings_.insert(binding);
-        instance.frame.inputs.push_back({id, mode, live_binding || caller_bindings(*checking_method_)});
+        instance.frame.inputs.push_back({id, mode, live_binding || caller_place(*checking_method_, p)});
         if (const auto &profile = checking_method_->scope_inputs; profile && profile->native_owner_inputs.contains(p))
           scope_native_owner_places_.insert(id);
         if (const auto &profile = checking_method_->scope_inputs; profile && profile->place_owners.contains(p)) {
@@ -19472,8 +19659,9 @@ class ScalarChecker {
           for (const auto role : profile->place_owners.at(p)) owners.insert(null_target - 1 - role);
         }
         bindings_->back().fixed = parameter.fixed_binding || mode == ArgumentMode::borrowed_handle;
-        bindings_->back().requires_initialized = parameter.declaration_kind == "ref";
-        bindings_->back().nullable = !live_value && mode == ArgumentMode::borrowed_ptr;
+        bindings_->back().requires_initialized = parameter.declaration_kind == "ref" || place;
+        bindings_->back().direct_text_place = place;
+        bindings_->back().nullable = !place && !live_value && mode == ArgumentMode::borrowed_ptr;
         bindings_->back().callable_value = instance.arguments[p].kind == Type::procedure && (parameter.owner.empty() || live_value);
         if (!parameter.owner.empty()) {
           const auto owner = external_owners_.at(parameter.owner);
@@ -19483,6 +19671,7 @@ class ScalarChecker {
           incoming_selections_.emplace(id, lexical_.selection_identities.at(binding));
           std::erase(scope_storage_[0], id);
           lexical_.owners[binding] = {owner};
+          if (place) bindings_->at(binding).place_owners = {owner};
           const bool nonnull = checking_method_->scope_inputs && checking_method_->scope_inputs->nonnull.at(p);
           if (parameter.declaration_kind == "ptr" && !nonnull) {
             lexical_.targets[binding].insert(null_target);
@@ -19490,9 +19679,10 @@ class ScalarChecker {
             entry.selections.assign(binding, selection_targets(lexical_.targets[binding], lexical_.null_sources.at(binding)));
             if (!proving) { possible_targets_[binding].insert(null_target); possible_null_sources_[binding] = {id}; }
           }
-          if (nonnull || mode != ArgumentMode::borrowed_ptr) entry.present.insert(id);
+          if (nonnull || place || mode != ArgumentMode::borrowed_ptr) entry.present.insert(id);
         }
-        if (mode != ArgumentMode::borrowed_ptr || (live_value && method.supplied_scope)) entry.initialized.insert(id);
+        if (mode != ArgumentMode::borrowed_ptr || (live_value && method.supplied_scope) ||
+            (place && !parameter.initializes_caller_place())) entry.initialized.insert(id);
         if (instance.arguments[p].kind == Type::exception)
           entry.exceptions.emplace(id, ExceptionFacts::input(p, exception_value_categories(instance.arguments[p])));
         if (instance.arguments[p] == Type::boolean) seed_boolean_input(id, p);
@@ -20271,9 +20461,11 @@ class ScalarChecker {
         schema.has_enum_storage |= type.kind == Type::enumeration;
         reject_c_type_payload(type, field.at);
         if (type.kind == Type::region_schema) fail(field.at, "a region schema does not name a field payload type");
-        if (!scalar_type(type) && type.kind != Type::product)
+        const bool text_place = !schema.source->c_data && schema.source->kind == Form::Kind::data &&
+            storage == PlaceKind::value && type == Type::string;
+        if (!scalar_type(type) && type.kind != Type::product && !text_place)
           implementation_gap(field.at, "field representation for type '" + type_name(type) + "'");
-        schema.bits &= storage == PlaceKind::value;
+        schema.bits &= storage == PlaceKind::value && !text_place;
         schema.fields.push_back({&field, std::move(type), storage});
       }
     }
@@ -20345,6 +20537,8 @@ class ScalarChecker {
     std::map<std::string, size_t> native_owners;
     for (const auto &parameter : form.parameters) {
       if (!names.insert(parameter.name).second) fail(parameter.at, "duplicate " + boundary + " parameter name");
+      if (parameter.selects_caller_place())
+        implementation_gap(parameter.at, "a caller's direct place at a C boundary");
       if (parameter.here || parameter.variadic || parameter.automatic_conversion)
         implementation_gap(parameter.at, "here, variadic or conversion parameters of a " + boundary);
       const auto type = resolve_type(parameter.type);
@@ -20687,7 +20881,7 @@ class ScalarChecker {
                                             : parameters.size() == 2 && here && !parameters[1].here;
         if (!valid) implementation_gap(form->at, "this pipeline operator method signature");
       }
-      if ((!operation.empty() && !eager_operation(operation) && operation != "++" && !swap_operation(operation) && !pipeline) || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || (!form->body && lexical_methods_.contains(form)))
+      if ((!operation.empty() && !eager_operation(operation) && operation != "++" && operation != "<-" && !swap_operation(operation) && !pipeline) || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || (!form->body && lexical_methods_.contains(form)))
         implementation_gap(form->at, "callable captures, effects, declarations, operators, owners or throws contracts");
       if (!operation.empty() && !pipeline) {
         const auto arity = form->parameters.size();
@@ -20772,6 +20966,14 @@ class ScalarChecker {
         if (!parameter.owner.empty() && !owners.contains(parameter.owner)) fail(parameter.at, "unknown parameter owner '" + parameter.owner + "'");
         if (parameter.variadic && form->body) implementation_gap(parameter.at, "variadic method bodies");
         if (parameter.automatic_conversion) implementation_gap(parameter.at, "automatic parameter conversion contract");
+        if (parameter.selects_caller_place()) {
+          if (resolve_signature(parameter.type) != Type::string || parameter.read_only || parameter.fixed_binding)
+            fail(parameter.at, "a direct String place parameter requires writable val var storage");
+          if (operation != "<-" || &parameter != &prepared.input_parameters().front() || !form->body ||
+              !form->result_type || *form->result_type != Type::void_type || here || form->symbolic ||
+              form->c_linkage || lexical_methods_.contains(form))
+            implementation_gap(parameter.at, "a direct String place outside a void transfer method");
+        }
         if (parameter.declaration_kind == "handle") {
           if (form->kind != Form::Kind::procedure || form->symbolic || !operation.empty() || lexical_methods_.contains(form))
             implementation_gap(parameter.at, "native handle parameters outside named CoD procedures");
@@ -20787,9 +20989,18 @@ class ScalarChecker {
         }
         prepared.parameters.push_back(resolve_signature(parameter.type));
         const auto mode = argument_mode(parameter);
-        if (text_type(prepared.parameters.back()) && (mode != ArgumentMode::borrowed_ref || !parameter.read_only))
+        if (!parameter.selects_caller_place() && text_type(prepared.parameters.back()) &&
+            (mode != ArgumentMode::borrowed_ref || !parameter.read_only))
           fail(parameter.at, "text parameters require a readonly, non-null owner-qualified reference");
         signature_type(prepared, prepared.parameters.back(), parameter.at, false, mode != ArgumentMode::value);
+      }
+      if (operation == "<-") {
+        const auto inputs = prepared.input_parameters();
+        if (prepared.parameters.size() != 2 || !form->result_type || *form->result_type != Type::void_type ||
+            (!inputs[0].selects_caller_place() && (prepared.parameters[0].kind != Type::product ||
+              argument_mode(inputs[0]) != ArgumentMode::borrowed_ref || inputs[0].read_only)) ||
+            !text_type(prepared.parameters[1]) || argument_mode(inputs[1]) != ArgumentMode::borrowed_ref)
+          implementation_gap(form->at, "a transfer method outside the void String place and product policy profile");
       }
       if (handle_result) {
         const auto &owner = prepared.result.owner;

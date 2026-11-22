@@ -1,0 +1,8 @@
+data Entry { name:String; }
+proc (<-)(init val var out:String in D, text:const String in D) -> void where {const owner D} {
+    return;
+}
+ref text = make String("first");
+ptr entry = make Entry;
+entry.name = text;
+entry.name <- text;
