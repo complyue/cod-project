@@ -183,8 +183,13 @@ inline NativeProviderFiles emit_native_providers(const CheckedProgram &program, 
   const auto has_text = [](const auto &boundary) {
     return std::ranges::any_of(boundary.inputs, [](const auto &input) { return text_type(input.type); });
   };
+  const auto publishes_text = [&](Type::Kind kind) {
+    return std::ranges::any_of(program.native_operations, [&](const auto &operation) {
+      return std::ranges::any_of(operation.inputs, [&](const auto &input) { return input.type.kind == kind; });
+    });
+  };
   cod_provider_text_preamble(&header_text, &stubs_text, std::ranges::any_of(program.native_entries, has_text),
-                            std::ranges::any_of(program.native_operations, has_text));
+                            publishes_text(Type::string), publishes_text(Type::c_string));
   const auto enums = emit_c_enums(program, entry_path, header_text, stubs_text);
 
   std::set<size_t> emitted_borrows;

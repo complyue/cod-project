@@ -299,7 +299,7 @@ static uint32_t write_callable(const provider_interfaces *interfaces, size_t at,
         if (inbound && argument->kind == cod_provider_argument_handle && argument->owner_role >= shape.owner_count)
             return provider_output_invalid;
         if (cod_provider_text_argument(argument) && (!input->target_readonly || !input->owner_readonly ||
-                (inbound ? argument->owner_role >= shape.owner_count : argument->kind != cod_provider_argument_c_string)))
+                (inbound && argument->owner_role >= shape.owner_count)))
             return provider_output_invalid;
     }
     if (inbound) cod_provider_write_entry(header, stubs, &shape);
@@ -352,7 +352,7 @@ static uint32_t write_interface(const provider_interfaces *interfaces, size_t at
 
 static uint32_t format_files(const provider_interfaces *interfaces, cod_provider_text *header, cod_provider_text *stubs) {
     cod_provider_begin(header, stubs);
-    bool here = false, loans = false, incoming_text = false, outgoing_text = false;
+    bool here = false, loans = false, incoming_text = false, bounded_output = false, c_string_output = false;
     for (size_t i = 0; i < interfaces->count; i = next_interface(interfaces->rows, i)) {
         const interface_row *row = &interfaces->rows[i];
         here |= row->interface_kind == operation && row->has_here;
@@ -361,13 +361,14 @@ static uint32_t format_files(const provider_interfaces *interfaces, cod_provider
             const uint8_t kind = row[1 + j].value_kind;
             if (kind == string_type || kind == c_string_type) {
                 incoming_text |= row->interface_kind == entry;
-                outgoing_text |= row->interface_kind == operation;
+                bounded_output |= row->interface_kind == operation && kind == string_type;
+                c_string_output |= row->interface_kind == operation && kind == c_string_type;
             }
         }
     }
     if (here) cod_provider_here_preamble(header);
     if (loans) cod_provider_loan_preamble(header);
-    cod_provider_text_preamble(header, stubs, incoming_text, outgoing_text);
+    cod_provider_text_preamble(header, stubs, incoming_text, bounded_output, c_string_output);
 
     static const uint8_t groups[] = {constructor, entry, operation};
     for (size_t group = 0; group < sizeof(groups) / sizeof(*groups); ++group) {
