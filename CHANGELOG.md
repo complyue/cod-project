@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-22 — Implementation architecture review
+
+<a id="h-compiler-layers-20261122"></a>
+**H-COMPILER-LAYERS-20261122.** On 2026-11-22 (America/Los_Angeles) the [architecture discussion](codex://threads/01a2045b-ce41-7f20-b43a-6b1caca20e27) relayed the project user's instruction “实现代码的层次结构设计，也需要按我的原则让 CoD 设计讨论支线 把关确认了再推进编码”. The user's principles place frames, workspace, traversal and payload-bearing alternatives in the compiler language, with scoped CoD callbacks and narrow native services. The [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) reviewed mainline's r1 and cleared the stated graph architecture with first-entry, owner-replacement, publication and restoration checks. D-20-MODULE-GRAPH r1, roadmap r25 and interop r22, P-680/P-681. The native baseline is at `5c12421e9a68bfb3fc6587cfca63162b5787db5c:applications/cod-booter/native/module_graph_provider.c`.
+
+<a id="h-project-architecture-review-20261122"></a>
+**H-PROJECT-ARCHITECTURE-REVIEW-20261122.** On the same date the [architecture discussion](codex://threads/01a2045b-ce41-7f20-b43a-6b1caca20e27) relayed the user's expansion “不仅是刚刚提及的范围，所有代码程序结构、架构方面都完整过一遍把关确认，今后新增代码也是”. The design discussion reviewed the complete published/local component inventory and cleared the seed parser proposal with an explicit sum discriminator and its separately reviewed first executable lexical sum slice. These are delegated reviewer dispositions, not human approval of every implementation detail. D-ARCH-REVIEW r1, P-682/P-683, registry r1048. The audited seed representation is at `5c12421e9a68bfb3fc6587cfca63162b5787db5c:cod/lang_syntax.hh`.
+
 ## 2026-11-22 — Seed availability of residual deferred aggregates
 
 <a id="k-defer-aggregate-availability-20261122"></a>
