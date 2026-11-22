@@ -440,8 +440,13 @@ struct EnumMember {
   std::optional<Token> initializer;
   bool negative = false;
 };
+struct SumAlternative {
+  Token name;
+  std::vector<Parameter> fields;
+  SourceSpan span;
+};
 struct Form {
-  enum class Kind { symbol, symbol_from, function, procedure, data, region_definition, array, unit, using_units, global,
+  enum class Kind { symbol, symbol_from, function, procedure, data, sum_data, region_definition, array, unit, using_units, global,
                     using_resource, import_resource, mixin_resource, export_resource, export_from_resource,
                     expression, abstract_type, conformance, enumeration, native_handle_type };
   Kind kind;
@@ -463,6 +468,7 @@ struct Form {
   std::vector<SymbolMapping> mappings;
   std::vector<UnitSelection> units;
   std::vector<EnumMember> enum_members;
+  std::vector<SumAlternative> sum_alternatives;
   std::optional<std::vector<Token>> selected_members; // An empty list selects every member spelling.
   std::vector<Parameter> parameters;
   std::vector<Capture> captures;
@@ -486,7 +492,7 @@ struct Form {
   SourceSpan span = {};
 
   bool publishes_definition() const {
-    return exporting && (kind == Kind::symbol || kind == Kind::data || kind == Kind::abstract_type || kind == Kind::native_handle_type || kind == Kind::array || kind == Kind::enumeration ||
+    return exporting && (kind == Kind::symbol || kind == Kind::data || kind == Kind::sum_data || kind == Kind::abstract_type || kind == Kind::native_handle_type || kind == Kind::array || kind == Kind::enumeration ||
                          kind == Kind::function || kind == Kind::procedure);
   }
   bool requires_explicit_return() const { return kind == Kind::procedure && !implicit_scope && !supplied_scope; }
@@ -698,6 +704,40 @@ class Parser {
       fail(peek().at, kind == TokenKind::symbol ? "expected a symbol name" : "expected a lexical name");
     return tokens_[cursor_++];
   }
+  std::vector<Parameter> parse_data_fields() {
+    std::vector<Parameter> fields;
+    expect("{");
+    while (!take("}")) {
+      const bool fixed_binding = take("const");
+      if (is("region") || ownership_qualifier("region"))
+        fail(peek().at, "region handles cannot be stored in user data fields");
+      std::string mode;
+      if (is("ref") || is("ptr") || is("val")) mode = tokens_[cursor_++].text;
+      auto field = name(TokenKind::identifier);
+      type_separator();
+      const bool read_only = take("const");
+      auto type = parse_type();
+      if (type == Type::void_type) fail(field.at, "a product field must have a value type");
+      fields.push_back({field.text, type, field.at, false, {}});
+      fields.back().declaration_kind = mode;
+      fields.back().fixed_binding = fixed_binding;
+      fields.back().read_only = read_only;
+      if (!is("}")) expect(";");
+    }
+    return fields;
+  }
+
+  void parse_sum_alternatives(Form &form) {
+    do {
+      auto name = ordinary_name();
+      const auto first = name.at.span.first;
+      auto fields = parse_data_fields();
+      const auto past = tokens_[cursor_ - 1].at.span.past;
+      form.sum_alternatives.push_back({std::move(name), std::move(fields), {first, past}});
+    } while (take("|"));
+    expect(";");
+  }
+
   Token ordinary_name(bool lexical_value = false) {
     auto token = name(TokenKind::identifier);
     if (expression_keyword(token.text) || (module_keyword(token.text) && !(lexical_value && lexical_module_name(token.text))) ||
@@ -2374,6 +2414,13 @@ public:
         }
         form->name = ordinary_name().text;
         if (take("<:")) form->parent_type = parse_type();
+        if (data && !region && take("=")) {
+          if (form->c_data) fail(start.at, "a data \"C\" declaration requires a record");
+          form->kind = Form::Kind::sum_data;
+          parse_sum_alternatives(*form);
+          append(std::move(form));
+          continue;
+        }
         if (!is("{")) {
           if (form->c_data) fail(peek().at, "expected fields for a data \"C\" record; declare native handles with 'handle type'");
           if (data && !form->parent_type)
@@ -2386,24 +2433,7 @@ public:
         }
         if (!data)
           fail(start.at, "abstract type declarations have no body; use data for a representation");
-        expect("{");
-        while (!take("}")) {
-          const bool fixed_binding = take("const");
-          if (is("region") || ownership_qualifier("region"))
-            fail(peek().at, "region handles cannot be stored in user data fields");
-          std::string mode;
-          if (is("ref") || is("ptr") || is("val")) mode = tokens_[cursor_++].text;
-          auto field = name(TokenKind::identifier);
-          type_separator();
-          const bool read_only = take("const");
-          auto type = parse_type();
-          if (type == Type::void_type) fail(field.at, "a product field must have a value type");
-          form->parameters.push_back({field.text, type, field.at, false, {}});
-          form->parameters.back().declaration_kind = mode;
-          form->parameters.back().fixed_binding = fixed_binding;
-          form->parameters.back().read_only = read_only;
-          if (!is("}")) expect(";");
-        }
+        form->parameters = parse_data_fields();
         if (form->c_data && form->parameters.empty())
           fail(start.at, "a data \"C\" record requires at least one field; declare native handles with 'handle type'");
         take(";");
