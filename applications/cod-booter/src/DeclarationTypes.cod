@@ -1,7 +1,7 @@
 using "SourceStorage.cod" SourceBytes;
 using "SourceAccess.cod" same_bytes;
 using "ParserStorage.cod" {
-    ExprNodes, no_node, group_node, ungrouped, name_node, owned_type_node, typed_name_node, data_parent_node,
+    ExprNodes, no_node, group_node, block_node, conditional_node, ungrouped, name_node, owned_type_node, typed_name_node, data_parent_node,
     make_named_node, field_access_node, enum_declaration_node, type_assertion_node, literal_node, text_literal_node,
     narrow_integer_node, bool_node, call_node, here_call_node, compare_node, logical_not_node, logical_binary,
     case_node, case_arm_node, case_member_pattern, case_true_pattern, case_false_pattern, case_null_pattern,
@@ -147,6 +147,21 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
         return describe_type(nodes, names, selected, nodes[at].left, 0u64, result);
     if (kind == group_node())
         return trace_type(source, nodes, names, selected, work, spellings, interfaces, nodes[at].left, result);
+    if (kind == block_node()) {
+        val tail <- nodes[at].left;
+        return tail != no_node() &&
+            trace_type(source, nodes, names, selected, work, spellings, interfaces, nodes[tail].right, result);
+    };
+    if (kind == conditional_node()) {
+        if (!trace_type(source, nodes, names, selected, work, spellings, interfaces, nodes[at].left, result) ||
+            result.kind != builtin_bool()) return false;
+        if (!trace_type(source, nodes, names, selected, work, spellings, interfaces, nodes[at].right, result)) return false;
+        val left_kind <- result.kind;
+        val left_module <- result.defining_module;
+        val left_identity <- result.identity;
+        return trace_type(source, nodes, names, selected, work, spellings, interfaces, nodes[at].number, result) &&
+            result.kind == left_kind && result.defining_module == left_module && result.identity == left_identity;
+    };
     if (kind == field_access_node()) {
         if (!trace_type(source, nodes, names, selected, work, spellings, interfaces, nodes[at].left, result) ||
             result.kind != record_type()) return false;
@@ -407,12 +422,13 @@ export func prepare_native_operand_types(source:const SourceBytes in S, nodes:co
     where {const owner S, const owner N, const owner B, const owner E, owner W, const owner P, const owner I} {
     ref result = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
     val kind <- 0u8;
+    val composite <- false;
     for (at in 0u64 .. used) {
         kind <- nodes[at].kind;
-        if ((kind == field_access_node() || (kind == name_node() && names[at].kind != 0u8)) &&
+        composite <- kind == field_access_node() || kind == block_node() || kind == conditional_node();
+        if ((composite || (kind == name_node() && names[at].kind != 0u8)) &&
             trace_type(source, nodes, names, selected, work, spellings, interfaces, at, result)) {
-            if (result.kind == enum_type() || text_type(result.kind) ||
-                (kind == field_access_node() && native_scalar(result.kind))) {
+            if (result.kind == enum_type() || text_type(result.kind) || (composite && native_scalar(result.kind))) {
                 work[at].value_kind <- result.kind;
                 work[at].value_module <- result.defining_module;
                 (work[at].value_identity <- result.identity):void;

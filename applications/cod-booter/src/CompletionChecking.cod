@@ -11,7 +11,7 @@ using "ParserStorage.cod" {
     local_storage_binding, case_node, case_arm_node, case_fallthrough_node, case_failure_node, break_node,
     type_assertion_node,
 };
-using "ExpressionParser.cod" ParseResult;
+using "ParserInput.cod" ParseResult;
 using "NameResolution.cod" {
     NameBindings, NameWork, first_item, signature_clause, enclosing_callable, exception_binding,
 };

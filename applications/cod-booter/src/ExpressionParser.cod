@@ -1,16 +1,22 @@
+using "ParserInput.cod" {
+    ParseResult, append_node, exception_binder_width, expected_name, expected_type, parse_binding_name,
+    parse_identifier, punct_at, punct_pair_at, reset_parse_result, expected_c_linkage,
+};
+using "CallableSyntax.cod" parse_callable_signature;
 using "ParserStorage.cod" {
     field_access_node, index_access_node, array_length_node, bodyless_defer_node,
     exception_local_node, ref_local_node, make_exception_node, make_named_node,
     construction_payload_node, construction_type_query_node, initializer_assignment_node,
     field_initializer_node, capacity_placement_node, cause_placement_node, named_argument_node,
-    callable_local_node, throw_with_cause_node, throw_named_node, rethrow_from_node,
+    callable_local_node, lexical_callable_node, callable_node, c_procedure_node, function_definition,
+    procedure_definition, throw_with_cause_node, throw_named_node, rethrow_from_node,
     owning_handle_local_node, borrowed_handle_local_node, make_own_handle_node,
     make_borrowed_handle_node, here_call_node, here_body_node, here_receiver_node, continue_node,
     break_node, narrow_integer_node, Tokens, ExprNode, ExprNodes, len, literal_node, add_node,
     multiply_node, subtract_node, divide_node, remainder_node, concat_node, group_node, name_node, call_node,
     argument_node, deferred_call_node, deferred_block_node, block_node, full_scope_node,
     block_item_node, try_node, catch_clause_node, catch_handler_node, catch_binding_node,
-    finally_clause_node, symbol_node, behave_node, throw_node, transfer_node, rebind_node, typed_name_node,
+    finally_clause_node, symbol_node, behave_node, throw_node, transfer_node, rebind_node,
     readonly_declaration, val_binding_node, ptr_binding_node, null_node, return_node,
     owned_type_node, discarded_guard_result, discard_node, bool_node, conditional_node, range_node,
     range_header_node, logical_not_node, logical_and_node, logical_or_node, compare_node,
@@ -21,27 +27,17 @@ using "ParserStorage.cod" {
 using "Lexer.cod" {
     exception_word, own_word, handle_word, ref_word, make_word, typeof_word, from_word,
     rethrow_word, reserved_value_name, intrinsic_word, len_word, reserved_lexical_binder, proc_word,
-    func_word, region_word, capacity_word, identifier, integer_literal, punctuation, defer_word,
+    func_word, region_word, capacity_word, identifier, integer_literal, defer_word,
     catch_word, finally_word, try_word, const_word, behave_word, throw_word, symbol_name, in_word,
     ptr_word, val_word, null_word, return_word, void_word, if_word, for_word, continue_word,
-    break_word, else_word, true_word, false_word, not_word, case_word, of_word, fallthrough_word, effect_word, quoted_text,
+    break_word, else_word, true_word, false_word, c_linkage, not_word, case_word, of_word, fallthrough_word, effect_word, quoted_text,
 };
 using "SourceStorage.cod" { SourceBytes, Token };
-
-export data ParseResult {
-    next:u64;
-    used:u64;
-    root:u64;
-    diagnostic:u8;
-    supplied_here:bool;
-    case_control:bool;
-}
 
 func expected_operand() -> u8 { return 1u8; }
 func expected_close() -> u8 { return 2u8; }
 func expected_u64() -> u8 { return 3u8; }
 func literal_too_large() -> u8 { return 4u8; }
-func node_storage_exhausted() -> u8 { return 5u8; }
 export func unexpected_token() -> u8 { return 6u8; }
 func expected_argument_separator() -> u8 { return 7u8; }
 export func expected_deferred_call() -> u8 { return 8u8; }
@@ -53,8 +49,6 @@ func expected_catch_header() -> u8 { return 14u8; }
 func expected_catch_name() -> u8 { return 15u8; }
 func catch_all_must_be_last() -> u8 { return 17u8; }
 func expected_symbol() -> u8 { return 18u8; }
-export func expected_name() -> u8 { return 19u8; }
-export func expected_type() -> u8 { return 20u8; }
 func expected_binding_operator() -> u8 { return 21u8; }
 func expected_condition_open() -> u8 { return 27u8; }
 func expected_exception_initializer() -> u8 { return 32u8; }
@@ -72,22 +66,6 @@ func expected_case_arrow() -> u8 { return 47u8; }
 func invalid_text_literal() -> u8 { return 113u8; }
 func unsupported_case_pattern() -> u8 { return 48u8; }
 func invalid_throwing_case_arm() -> u8 { return 49u8; }
-
-export func punct_at(source:const SourceBytes in S, tokens:const Tokens in T,
-                     at:u64, past:u64) -> u8 where {const owner S, const owner T} {
-    if (at >= past || tokens[at].kind != punctuation()) return 0u8;
-    val first <- tokens[at].first;
-    if (tokens[at].past - first != 1u64) return 0u8;
-    return source[first];
-}
-
-export func punct_pair_at(source:const SourceBytes in S, tokens:const Tokens in T,
-                          at:u64, past:u64, left:u8, right:u8) -> bool
-    where {const owner S, const owner T} {
-    if (at >= past || tokens[at].kind != punctuation()) return false;
-    val first <- tokens[at].first;
-    return tokens[at].past - first == 2u64 && source[first] == left && source[first + 1u64] == right;
-}
 
 func append_decimal_digit(number:u64 in N, byte:u8) -> bool where {owner N} {
     val digit:u64 <- byte - 48u8;
@@ -133,26 +111,6 @@ func parse_literal(source:const SourceBytes in S, token:const Token in T,
         return 0u64;
     } else {};
     return parse_integer_magnitude(source, token, result, width);
-}
-
-export func append_node(nodes:ExprNodes in A, result:ParseResult in R,
-                        kind:u8, first:u64, past:u64, number:u64, left:u64,
-                        right:u64, operation_at:u64) -> void where {owner A, owner R} {
-    val id <- result.used;
-    if (id >= len(nodes)) {
-        result.diagnostic <- node_storage_exhausted();
-        return;
-    } else {};
-    nodes[id].kind <- kind;
-    nodes[id].first <- first;
-    nodes[id].past <- past;
-    nodes[id].number <- number;
-    nodes[id].left <- left;
-    nodes[id].right <- right;
-    nodes[id].operation_at <- operation_at;
-    result.root <- id;
-    result.used <- id + 1u64;
-    return;
 }
 
 func comparison(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> u64
@@ -301,30 +259,6 @@ export func parse_block(source:const SourceBytes in S, tokens:const Tokens in T,
                         nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     parse_braced_items(source, tokens, nodes, result, past, false);
-}
-
-export func parse_identifier(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
-                             result:ParseResult in R, past:u64, missing:u8) -> bool
-    where {const owner S, const owner T, owner A, owner R} {
-    val at <- result.next;
-    if (at >= past || tokens[at].kind != identifier() || not_word(source, tokens[at])) {
-        result.diagnostic <- missing;
-        return false;
-    } else {};
-    val first <- tokens[at].first;
-    append_node(nodes, result, name_node(), first, tokens[at].past, 0u64, 0u64, 0u64, first);
-    if (result.diagnostic != 0u8) return false;
-    result.next <- at + 1u64;
-    return true;
-}
-
-export func exception_binder_width(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> u64
-    where {const owner S, const owner T} {
-    if (at + 1u64 >= past) return 0u64;
-    if (own_word(source, tokens[at]) && exception_word(source, tokens[at + 1u64])) return 2u64;
-    if (exception_word(source, tokens[at]) && tokens[at + 1u64].kind == identifier() &&
-        punct_at(source, tokens, at + 2u64, past) == 58u8) return 1u64;
-    return 0u64;
 }
 
 func parse_catch_binding(source:const SourceBytes in S, tokens:const Tokens in T,
@@ -518,41 +452,6 @@ func parse_completion(source:const SourceBytes in S, tokens:const Tokens in T,
         return;
     } else {};
     append_node(nodes, result, kind, first, nodes[operand].past, 0u64, operand, no_node(), first);
-}
-
-export func parse_binding_name(source:const SourceBytes in S, tokens:const Tokens in T,
-                               nodes:ExprNodes in A, result:ParseResult in R,
-                               past:u64, require_type:bool, qualified:bool, field:bool) -> bool
-    where {const owner S, const owner T, owner A, owner R} {
-    if (!field && result.next < past && reserved_lexical_binder(source, tokens[result.next])) {
-        result.diagnostic <- expected_name();
-        return false;
-    } else {};
-    if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) return false;
-    if (punct_at(source, tokens, result.next, past) != 58u8) { # ':'
-        if (require_type) { result.diagnostic <- expected_type(); return false; } else {};
-        return true;
-    } else {};
-    val name <- result.root;
-    val colon <- tokens[result.next].first;
-    result.next <- result.next + 1u64;
-    val readonly <- qualified && result.next < past && const_word(source, tokens[result.next]);
-    if (readonly) { (result.next <- result.next + 1u64):void; } else {};
-    if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return false;
-    val annotation <- result.root;
-    if (result.next < past && in_word(source, tokens[result.next])) {
-        val anchor <- tokens[result.next].first;
-        result.next <- result.next + 1u64;
-        if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) return false;
-        val owner_name <- result.root;
-        append_node(nodes, result, owned_type_node(), nodes[annotation].first, nodes[owner_name].past,
-                    0u64, annotation, owner_name, anchor);
-        if (result.diagnostic != 0u8) return false;
-        (annotation <- result.root):void;
-    } else {};
-    append_node(nodes, result, typed_name_node(), nodes[name].first, nodes[annotation].past,
-                if (readonly) { readonly_declaration() } else { 0u64 }, name, annotation, colon);
-    return result.diagnostic == 0u8;
 }
 
 func parse_local_binding(source:const SourceBytes in S, tokens:const Tokens in T,
@@ -1026,6 +925,39 @@ func parse_effect(source:const SourceBytes in S, tokens:const Tokens in T,
                 if (bind) { bind_effect() } else { 0u64 }, name, initializer, tokens[assignment].first);
 }
 
+export func parse_callable(source:const SourceBytes in S, tokens:const Tokens in T,
+                    nodes:ExprNodes in A, result:ParseResult in R, past:u64, kind:u64, lexical:bool) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val first <- tokens[result.next].first;
+    result.next <- result.next + 1u64;
+    val native <- result.next < past && tokens[result.next].kind == quoted_text();
+    if (native) {
+        if (lexical || kind == function_definition() || !c_linkage(source, tokens[result.next])) {
+            result.diagnostic <- expected_c_linkage();
+            return;
+        } else {};
+        (result.next <- result.next + 1u64):void;
+    } else {};
+    parse_callable_signature(source, tokens, nodes, result, past, native, !native && !lexical);
+    if (result.diagnostic != 0u8) return;
+    val header <- result.root;
+    if (native && punct_at(source, tokens, result.next, past) == 59u8) {
+        append_node(nodes, result, c_procedure_node(), first, nodes[header].past, 0u64, header, no_node(), first);
+        return;
+    } else {};
+    val supplied_here <- result.supplied_here;
+    val case_control <- result.case_control;
+    result.supplied_here <- false;
+    result.case_control <- false;
+    parse_block(source, tokens, nodes, result, past);
+    result.supplied_here <- supplied_here;
+    result.case_control <- case_control;
+    if (result.diagnostic != 0u8) return;
+    val body <- result.root;
+    val form <- if (native) { c_procedure_node() } else { if (lexical) { lexical_callable_node() } else { callable_node() } };
+    append_node(nodes, result, form, first, nodes[body].past, kind, header, body, first);
+}
+
 func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
                    nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
@@ -1075,6 +1007,12 @@ func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
     if (handle_width != 0u64) { parse_handle_local(source, tokens, nodes, result, past, handle_width); return; } else {};
     if (make_word(source, tokens[at])) { parse_construction(source, tokens, nodes, result, past); return; } else {};
     if (callable_local_head(source, tokens, at, past)) { parse_callable_local(source, tokens, nodes, result, past); return; } else {};
+    if (at + 1u64 < past && tokens[at + 1u64].kind == identifier() &&
+        (func_word(source, tokens[at]) || proc_word(source, tokens[at]))) {
+        val kind <- if (func_word(source, tokens[at])) { function_definition() } else { procedure_definition() };
+        parse_callable(source, tokens, nodes, result, past, kind, true);
+        return;
+    };
     if (ref_word(source, tokens[at]) && at + 1u64 < past && tokens[at + 1u64].kind == identifier()) {
         parse_local_binding(source, tokens, nodes, result, past, ref_local_node());
         return;
@@ -1738,16 +1676,6 @@ func parse_infix(source:const SourceBytes in S, tokens:const Tokens in T,
     val number <- if (kind == compare_node()) { predicate } else { 0u64 };
     append_node(nodes, result, kind, nodes[left].first, nodes[right].past, number, left, right, operation_at);
     return result.diagnostic == 0u8;
-}
-
-export func reset_parse_result(first:u64, result:ParseResult in R) -> void where {owner R} {
-    result.next <- first;
-    result.used <- 0u64;
-    result.root <- 0u64;
-    result.diagnostic <- 0u8;
-    result.supplied_here <- false;
-    result.case_control <- false;
-    return;
 }
 
 # Tokens come from the indexed lexer over source. The caller supplies

@@ -12,7 +12,7 @@ using "ParserStorage.cod" {
     text_literal_node, narrow_integer_node, owner_clause_node, init_place_parameter_node, rebind_node, export_node,
     export_from_node,
 };
-using "ExpressionParser.cod" ParseResult;
+using "ParserInput.cod" ParseResult;
 using "NameResolution.cod" { NameBindings, NameWork, first_item, callable_head, exception_binding };
 using "OperandChecking.cod" {
     OperandFacts, scalar_kind, product_kind, immutable_text_kind, has_value_tail, independent_value, local_place,

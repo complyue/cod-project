@@ -1,5 +1,5 @@
 using "ParserStorage.cod" {
-    callable_local_node, throw_with_cause_node, throw_named_node, rethrow_from_node,
+    callable_local_node, lexical_callable_node, throw_with_cause_node, throw_named_node, rethrow_from_node,
     named_argument_node, exception_local_node, bodyless_defer_node, exception_parameter_node,
     exception_result_node, ref_result_node, make_exception_node, make_named_node, construction_body,
     reserves_storage, positional_construction, construction_type_query_node, name_node, literal_node, bool_node,
@@ -10,7 +10,7 @@ using "ParserStorage.cod" {
 };
 using "SourceStorage.cod" SourceBytes;
 using "Frontend.cod" { FrontendResult, read_module };
-using "ExpressionParser.cod" ParseResult;
+using "ParserInput.cod" ParseResult;
 using "ModuleExports.cod" {
     ModuleExports, SelectedExports, ExportResolutionResult, resolve_module_exports,
     prepare_module_dependencies, export_storage_exhausted, exception_type_export, error_root_identity,
@@ -47,6 +47,7 @@ export func module_completion_failed() -> u8 { return 5u8; }
 func unsupported_array_length() -> u8 { return 74u8; }
 func unsupported_ordinary_here() -> u8 { return 76u8; }
 func invalid_catch_annotation() -> u8 { return 77u8; }
+func unsupported_lexical_callable() -> u8 { return 108u8; }
 
 export func rejected_unsupported_declaration(result:const ModuleBindingResult in R) -> bool where {const owner R} {
     if (result.stage == module_operands_failed())
@@ -57,6 +58,7 @@ export func rejected_unsupported_declaration(result:const ModuleBindingResult in
     if (result.stage == module_completion_failed()) return result.diagnostic == unsupported_case_transfer();
     return result.stage == module_binding_failed() &&
         (result.diagnostic == unsupported_module_declaration() || result.diagnostic == unsupported_array_length() ||
+         result.diagnostic == unsupported_lexical_callable() ||
          (result.diagnostic >= 28u8 && result.diagnostic <= 40u8));
 }
 
@@ -125,6 +127,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, at:u64, emit_object:boo
     if (emit_object && kind == array_length_node()) return unsupported_array_length();
     if (kind == bodyless_defer_node()) return 40u8;
     if (kind == callable_local_node()) return 41u8;
+    if (emit_object && kind == lexical_callable_node()) return unsupported_lexical_callable();
     if (kind == throw_with_cause_node()) return 42u8;
     if (kind == throw_named_node()) return 43u8;
     if (kind == rethrow_from_node()) return 44u8;

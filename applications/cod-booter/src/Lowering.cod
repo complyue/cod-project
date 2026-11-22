@@ -1,7 +1,7 @@
 using "ParserStorage.cod" {
     ExprNodes, len, literal_node, add_node, multiply_node, group_node, no_node,
 };
-using "ExpressionParser.cod" ParseResult;
+using "ParserInput.cod" ParseResult;
 
 export func arithmetic_node(kind:u8) -> bool {
     return kind == literal_node() || kind == add_node() || kind == multiply_node() || kind == group_node();
