@@ -1,8 +1,10 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 24 · Recorded: 2026-11-21 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 25 · Recorded: 2026-11-22 · Phase: initial seed delivery through alternating booter and seed development.
 
 ## Design authority
+
+- [D-20-MODULE-GRAPH](../../design/DesignAuthorityRegistry.md#d-20-module-graph), roadmap r25, covers [module traversal, frames and scoped reentry](docs/ModuleGraph.md) under the [user-directed layer review](../../CHANGELOG.md#h-compiler-layers-20261122). P-680/P-681 connect compiler-language ownership to inspectable end-to-end behavior. Verify the actual graph, nested restoration, typed AST, provider files and object workloads. The separate pipeline/cache proposal retains its own scope.
 
 - [D-20-HANDLE-EFFECT](../../design/DesignAuthorityRegistry.md#d-20-handle-effect) at r24 covers the first object writer’s [scoped LLVM session](docs/LLVMInterop.md#owning-native-handle-effects) under [H-NATIVE-HANDLE-EFFECT-20261121](../../CHANGELOG.md#h-native-handle-effect-20261121), P-672/P-673. Check the same actual session across CoD helper calls in both frontends, typed construction failure and exact scope cleanup. C operations still take checked borrows.
 
