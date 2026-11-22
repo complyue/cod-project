@@ -3,6 +3,7 @@
 from pathlib import Path
 import sys
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;\n'
 PRE = IO + 'using "std:exceptions" NullPointerException;\n'
@@ -20,9 +21,8 @@ runner.CASES = {
     'value_expression_call': (IO+INC+'behave @print((if(true){inc}else{dec})(12));',0,'13\n',''),
     'grouped_callable_prepared_before_operands': (IO+INC+'func held=inc;'
         'behave @print((held)({held<-dec;12}));behave @print(held(12));',0,'13\n11\n',''),
-    'grouped_callable_snapshot': (IO+INC+'func wrap(val offset:i64)->func(i64)->i64{'
-        'return func[offset](input:i64)->i64{return input+offset;};}'
-        'func held=wrap(4);ptr saved=(held);held<-inc;behave @print(saved(10));behave @print(held(10));',0,'14\n11\n',''),
+    'grouped_callable_snapshot': (IO+INC+'func add_four(input:i64)->i64{return input+4;}'
+        'func held=add_four;ptr saved=(held);held<-inc;behave @print(saved(10));behave @print(held(10));',0,'14\n11\n',''),
     'anonymous_expression_call': (IO+'behave @print((func(x:i64)->const i64{return x+5;})(1));',0,'6\n',''),
     'copy_outlives_original_holder': (IO+INC+'func f={{func g=inc;return g;}};behave @print(f(14));',0,'15\n',''),
     'pointer_observes_replacement': (PRE+INC+'func f=inc;ptr p=f;f<-dec;behave @print(p(16));',0,'15\n',''),
@@ -59,8 +59,8 @@ runner.CASES = {
     'signature_mismatch': (INC+'func f:func(bool)->const i64=inc;',2,'','no applicable method'),
     'argument_type_mismatch': (INC+'func f=inc;f(true);',2,'','callable view type'),
     'argument_count_mismatch': (INC+'func f=inc;f();',2,'','argument count'),
-    'wrong_callable_category': (IO+PROC+'func f=one;',2,'','matching func/proc'),
-    'function_cannot_call_procedure_value': (IO+PROC+'func wrong()->void{proc f=one;f(1);}',2,'','function cannot invoke a procedure'),
+    'wrong_callable_category': (IO+PROC+'func f=one;',2,'','procedure signatures cannot occupy ordinary value or reference storage'),
+    'function_cannot_call_procedure_value': (IO+PROC+'func wrong()->void{one(1);}',2,'','function cannot invoke a procedure'),
     'lexical_capture_not_promoted': (IO+'proc run()->void{val x<-1;func f=func[x]()->const i64{return x;};'
         'x<-7;behave @print(f());behave @print(x);return;}run();',0,'1\n7\n',''),
     'callable_not_numeric_bits': (INC+'func f=inc;f+f;',2,'','no applicable numeric operation'),
@@ -69,7 +69,7 @@ runner.CASES = {
     'checked_view_cannot_hide_throw': (PRE+'func f(x:i64)->const i64 throws NullPointerException{return x;}func g:func(i64)->const i64=f;',2,'','omits a required checked exception'),
     'voluntary_checked_view_contract': (PRE+INC+'func f:func(i64)->const i64 throws NullPointerException=inc;f(1);',2,'','requires a covering catch'),
     'deferred_checked_view': (PRE+'proc f(x:i64)->void throws NullPointerException{behave @print(x);return;}'
-        'proc run()->void{proc g=f;defer catch(e:const NullPointerException){behave @print(-1);};defer g(48);return;}run();',
+        'proc run()->void{defer catch(e:const NullPointerException){behave @print(-1);};defer f(48);return;}run();',
         0,'48\n',''),
     'failure_retains_previous_holder': (IO+INC+MISS+'func failed()->func(i64)->const i64{missing();return dec;}func f=inc;try{f<-failed();{}}catch(e:const MissingReturnError){behave @print(f(48));};',0,'49\n',WARN),
     'generic_body_constructs_distinct_views': (IO+'func id(x:T)->const T where T{return x;}func adapt(sample:F)->const F where F{return id;}func a:func(i64)->const i64=id;func b:func(bool)->const bool=id;func fa=adapt(a);func fb=adapt(b);behave @print(fa(50));behave @print(fb(true));',0,'50\ntrue\n',''),
@@ -104,5 +104,17 @@ runner.CASE_SHADOWS = {
     'borrowed_result_copy_is_independent': ['f'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'procedure_value',
+    'deferred_target_snapshot',
+    'deferred_expression_target',
+    'deferred_operand_replacement',
+    'delayed_block_reads_current_value',
+), 'procedure signatures cannot occupy ordinary value or reference storage')
+expect_source_rejections(runner, (
+    'lexical_capture_not_promoted',
+), 'a storable func must be capture-free')
+
 if __name__ == '__main__':
     sys.exit(runner.main())

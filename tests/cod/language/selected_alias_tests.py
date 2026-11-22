@@ -2,6 +2,7 @@
 """Selected declared place aliases retain slot identity and access through effects."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO='using symbol "std:io" @print;'
 NPE='using "std:exceptions" NullPointerException;'
@@ -79,5 +80,10 @@ runner.CASE_SHADOWS = {
     'query_alias_declaration_evidence': ['x'],
 }
 runner.EXTRA_SOURCES=[Path(__file__)]
+
+expect_source_rejections(runner, (
+    'ordinary_capture_still_rejected',
+), 'a storable func must be capture-free')
+
 if __name__=='__main__':
  raise SystemExit(runner.main())

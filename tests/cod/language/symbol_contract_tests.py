@@ -2,6 +2,7 @@
 """Compile-time symbol contracts preserve identity, lookup and phase boundaries."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;'
 SYMBOL = 'symbol @gain:u64;'
@@ -80,6 +81,15 @@ runner.CASE_SHADOWS = {
     'nested_shadow_ends': ['gain'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'module_value_keeps_definition_context',
+    'lexical_definition_context',
+    'recursive_definition_context',
+    'closure_shadowed_symbol',
+    'nested_closure_shadowed_symbol',
+    'deferred_outer_shadow',
+), 'procedure signatures cannot occupy ordinary value or reference storage')
 
 if __name__ == '__main__':
     raise SystemExit(runner.main())

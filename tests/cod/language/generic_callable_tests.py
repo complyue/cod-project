@@ -2,6 +2,7 @@
 """Structural callable type relations, same-T and native completion contracts."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO='using symbol "std:io" @print;\n'
 BASE='func inc(x:i64)->const i64{return x+1;}func yes(x:bool)->const bool{return x;}func positive(x:i64)->const bool{return x>0;}\n'
@@ -60,5 +61,14 @@ runner.CASE_SHADOWS = {
     'nested_common_exception_generic': ['f'],
 }
 runner.EXTRA_SOURCES=[Path(__file__)]
+
+expect_source_rejections(runner, (
+    'procedure_parameter',
+), 'procedure signatures cannot occupy ordinary value or reference storage')
+expect_source_rejections(runner, (
+    'captured_argument',
+    'captured_generic_factory_argument',
+), 'a storable func must be capture-free')
+
 if __name__=='__main__':
  raise SystemExit(runner.main())

@@ -2092,6 +2092,7 @@ class ScalarChecker {
     size_t query = 0;
   };
   std::map<size_t, DefinitionContext> definitions_;
+  std::vector<DefinitionContext> retained_definitions_;
 
   static std::optional<bool> access_of(const CheckedOperation &view) {
     return view.type == Type::never ? std::nullopt : std::optional<bool>{view.read_only};
@@ -2771,14 +2772,24 @@ class ScalarChecker {
     if (destination.kind == Type::product) implementation_gap(at, "whole-product bits transfer");
     if (!transfers_value(source, destination)) fail(at, "bits transfer source does not satisfy destination type");
   }
+  static bool ordinary_callable_type(const Type &type) {
+    if (type.kind != Type::procedure) return true;
+    return type.pure_callable && type.target && ordinary_callable_type(*type.target) &&
+        std::ranges::all_of(type.parameters, ordinary_callable_type);
+  }
+  static void require_ordinary_callable_type(const Type &type, const Location &at) {
+    if (!ordinary_callable_type(type)) fail(at, "procedure signatures cannot occupy ordinary value or reference storage");
+  }
   static void require_value(const Type &type, const Location &at) {
+    require_ordinary_callable_type(type, at);
     if (!lexical_value_type(type)) implementation_gap(at, "non-value or abruptly completing operand");
   }
   static void check_initializer_type(const Expression &group, const Expression &declaration,
       const Type &initial, const Type &type, std::optional<bool> borrowed) {
+    const auto &kind = group.declaration_kind;
+    if (kind == "proc") fail(declaration.at, "a procedure cannot initialize a callable-value holder");
     if (type == Type::null_ref) fail(declaration.at, "a null initializer requires an explicit target type");
     if (initial == Type::never && !declaration.annotation) return;
-    const auto &kind = group.declaration_kind;
     if (text_type(type)) {
       if (kind != "ref" || (initial != Type::never && borrowed != true))
         fail(declaration.at, "text requires a readonly reference to existing storage");
@@ -2794,11 +2805,11 @@ class ScalarChecker {
       return;
     }
     require_value(type, group.at);
-    const bool callable = kind == "func" || kind == "proc";
-    if (callable && (type.kind != Type::procedure || type.pure_callable != (kind == "func")))
-      fail(declaration.at, "callable declaration requires a matching func/proc value");
+    const bool callable = kind == "func";
+    if (callable && (type.kind != Type::procedure || !type.pure_callable))
+      fail(declaration.at, "a function holder requires a func value");
     if (type.kind == Type::procedure && !callable && kind != "ptr")
-      implementation_gap(declaration.at, "callable storage uses func/proc values or ptr views");
+      implementation_gap(declaration.at, "function storage uses func values or ptr views");
     if (initial == Type::never) return;
     const bool value_matches = borrowed != true && transfers_value(initial, type);
     const bool view_matches = borrowed != false && (initial == Type::null_ref || initial == type);
@@ -5945,6 +5956,7 @@ class ScalarChecker {
                           bool borrowed_target = false) const {
     auto resolved = resolve_annotation(type, instance);
     reject_c_type_payload(resolved, at);
+    require_ordinary_callable_type(resolved, at);
     if (!lexical_value_type(resolved) && !(borrowed_target && (resolved.kind == Type::product || text_type(resolved))))
       implementation_gap(at, "non-value local storage type '" + type_name(type) + "'");
     return resolved;
@@ -6290,6 +6302,7 @@ class ScalarChecker {
         if (!field.name.empty() && !names.insert(field.name).second)
           fail(field.at, "duplicate here input name '" + field.name + "'");
         const auto type = resolve_type(field.type, &receiver);
+        require_ordinary_callable_type(type, field.at);
         const auto mode = argument_mode(field);
         const bool array_ref = type.kind == Type::array && mode == ArgumentMode::borrowed_ref &&
             (field.read_only || indexed_product(program_.arrays.at(type.identity).element, field.at));
@@ -6315,6 +6328,7 @@ class ScalarChecker {
     if (source.feedback_fields) contract.feedback = components(*source.feedback_fields, true);
     else {
       contract.result.type = resolve_type(source.result, &receiver);
+      require_ordinary_callable_type(contract.result.type, formal.at);
       signature_type(receiver, contract.result.type, formal.at, true);
       contract.result.owner = owner_role(source.result_owner, formal.at);
       if (contract.result.owner) {
@@ -6680,6 +6694,7 @@ class ScalarChecker {
           if (required->second.contains(symbol)) abstract_targets.emplace(symbol, types);
     const auto declared = declared_results(definition, arguments);
     arguments = prepared_types(definition, arguments, retained);
+    for (const auto &argument : arguments) require_ordinary_callable_type(argument, at);
     if (std::ranges::any_of(arguments, [](const auto &type) { return type.kind == Type::abstract_type; }))
       implementation_gap(at, "native body without concrete input evidence for an abstract parameter");
     for (const auto id : definition.instances)
@@ -6721,6 +6736,7 @@ class ScalarChecker {
     const auto &supplied = program_.query_environments[query_environment].result;
     const auto result = supplied ? ResultEvidence{supplied, ResultOrigin::supplied} :
         require_result(method, arguments, retained, at, state);
+    require_ordinary_callable_type(*result.contract->type, at);
     check_aggregate_owner_roles(definition, arguments);
     for (size_t i = 0; i < arguments.size(); ++i) if (arguments[i].kind == Type::product) {
       const auto &parameter = parameter_at(definition, i);
@@ -11117,11 +11133,6 @@ class ScalarChecker {
         implementation_gap(operands[i]->at, "cannot establish a scalar parameter type for an abruptly completing operand");
     }
   }
-  static bool function_result_type(const Type &type) {
-    if (type.kind != Type::procedure) return true;
-    return type.pure_callable && type.target && function_result_type(*type.target) &&
-        std::ranges::all_of(type.parameters, function_result_type);
-  }
   static bool supported_here_exit_result(const ResultContract &result) {
     return !result.borrowed() && result.type &&
         (*result.type == Type::void_type || scalar_type(*result.type) || result.type->kind == Type::procedure);
@@ -13589,14 +13600,17 @@ class ScalarChecker {
       state.owner_relations[{owner, other}] = compare_owners(owner, other);
     return state;
   }
-  size_t retain_query_environment(const CheckedMethod &method, const std::optional<ResultContract> &result = {},
+  size_t retain_query_environment(CheckedMethod &method, const std::optional<ResultContract> &result = {},
                                   const TypeEvidenceState *declaration = nullptr, const std::vector<size_t> &scope_owners = {},
-                                  std::map<std::string, QueryEnvironment::ScopeSelection> scope_selections = {}) {
+                                  std::map<std::string, QueryEnvironment::ScopeSelection> scope_selections = {},
+                                  std::map<std::string, size_t> lexical_definitions = {}) {
     const auto &symbols = free_bindings(*method.source).symbols;
-    if (method.queries.empty() && symbols.empty() && !result) return 0;
+    if (method.queries.empty() && symbols.empty() && !result && lexical_definitions.empty()) return 0;
     QueryEnvironment environment;
     environment.result = result;
     environment.scope_selections = std::move(scope_selections);
+    method.retains_lexical_definitions |= !lexical_definitions.empty();
+    environment.lexical_definitions = std::move(lexical_definitions);
     const auto state = declaration ? *declaration : evidence_state();
     if (lexical_methods_.contains(method.source))
       for (const auto &symbol : symbols)
@@ -14138,14 +14152,14 @@ class ScalarChecker {
     if (found == program_.callables.end()) program_.callables.push_back(std::move(value));
     return id;
   }
-  CheckedOperation materialized_value(size_t id, std::vector<CheckedOperation> captures, const Location &at) {
+  CheckedOperation materialized_value(size_t id, const Location &at) {
     std::set<size_t> symbols;
     for (const auto target : program_.callables[id].implementations()) {
       const auto &required = read_effects(target).symbols;
       symbols.insert(required.begin(), required.end());
     }
-    if (!symbols.empty() && checking_method_ && checking_method_->source->kind == Form::Kind::function)
-      fail(at, "a function cannot capture dynamic bindings");
+    if (!symbols.empty() && program_.callables[id].type.pure_callable)
+      fail(at, "a storable func cannot retain dynamic bindings");
     for (const auto symbol : symbols) {
       const auto &type = program_.symbols[symbol].type;
       if (type && type->kind == Type::native_handle) fail(at, "an owning native symbol must be used through a direct procedure call");
@@ -14153,8 +14167,8 @@ class ScalarChecker {
         implementation_gap(at, "capturing a borrowed symbol in a callable value");
       require_symbol(lexical_, symbol, at);
     }
-    if (!captures.empty() || !symbols.empty()) note_abrupt(at, {exception_id(ExceptionCategory::out_of_memory)});
-    CheckedOperation value; value.type = program_.callables[id].type; value.callable = id; value.callable_captures = std::move(captures);
+    if (!symbols.empty()) note_abrupt(at, {exception_id(ExceptionCategory::out_of_memory)});
+    CheckedOperation value; value.type = program_.callables[id].type; value.callable = id;
     return value;
   }
   void warn_captures(const CheckedMethod &definition) {
@@ -14174,9 +14188,33 @@ class ScalarChecker {
     if (!source.value_binding && !source.callable_value && !source.definition)
       implementation_gap(at, "capture of a lexical reference requires selected-target lifetime and transport proof");
   }
+  size_t retain_lexical_definition(const DefinitionContext &definition, const Location &at) {
+    if (!definition.captures.empty())
+      implementation_gap(at, "direct calls to a lexical definition requiring the supplying activation's live slots");
+    const auto found = std::ranges::find_if(retained_definitions_, [&](const auto &prior) {
+      return prior.method == definition.method && prior.query == definition.query && prior.retained == definition.retained;
+    });
+    const auto index = std::distance(retained_definitions_.begin(), found);
+    if (found == retained_definitions_.end()) retained_definitions_.push_back(definition);
+    return index;
+  }
   void define_callable(size_t method, const Location &at) {
     auto &definition = program_.methods[method];
     resolve_captures(definition);
+    if (!definition.source->explicit_captures)
+      std::erase_if(definition.captures, [&](const auto &capture) {
+        const auto binding = lexical_.lookup(capture.name);
+        if (!binding || !definitions_.contains(*binding)) return false;
+        definition.lexical_definitions.push_back(capture);
+        return true;
+      });
+    std::map<std::string, size_t> lexical_definitions;
+    for (const auto &name : definition.lexical_definitions) {
+      const auto binding = lexical_.lookup(name.name);
+      if (!binding || !definitions_.contains(*binding))
+        implementation_gap(name.at, "a lexical definition without its declaration context");
+      lexical_definitions.emplace(name.name, retain_lexical_definition(definitions_.at(*binding), name.at));
+    }
     auto evidence = std::make_shared<TypeEvidenceState>(evidence_state(false, &definition_dependencies(*definition.source)));
     DefinitionContext context{method, evidence, {}, {}, definition_retained(method, *evidence)};
     for (const auto &capture : definition.captures) {
@@ -14193,7 +14231,7 @@ class ScalarChecker {
       const auto access = evidence->views.find(capture.name);
       context.environment.push_back({*type, access != evidence->views.end() && access->second.read_only.value_or(false)});
     }
-    context.query = retain_query_environment(definition, {}, evidence.get());
+    context.query = retain_query_environment(definition, {}, evidence.get(), {}, {}, std::move(lexical_definitions));
     warn_captures(definition);
     const auto id = bind(definition.source->name, Type::void_type, {}, true, true, true, at);
     bindings_->at(id).definition = method;
@@ -14242,20 +14280,20 @@ class ScalarChecker {
     if (lexical_methods_.contains(definition.source)) resolve_captures(definition);
     if (definition.family) {
       const auto view = expected ? *expected : select_callable(family.methods, nullptr, at).type;
+      require_ordinary_callable_type(view, at);
       return materialize_family(*definition.family, view, at);
     }
     const auto &dependencies = definition_dependencies(*definition.source);
     const auto state = family.declaration ? *family.declaration : evidence_state(family.context != nullptr, &dependencies);
     const auto selection = select_callable(family.methods, expected, at, definition_site, &state);
-    auto captures = capture_values(family, at);
-    std::vector<CheckedCaptureInput> environment;
-    for (const auto &capture : captures) environment.push_back({capture.type, capture.read_only});
-    warn_captures(definition);
+    require_ordinary_callable_type(selection.type, at);
+    if (!definition.captures.empty())
+      fail(at, "a storable func must be capture-free");
     CheckedCallable value{selection.type};
     const auto query = family.context ? family.context->query_environment : family.definition ? family.definition->query
         : retain_query_environment(definition, selection.definition_result, &state);
     const auto selection_inputs = cover_family(family.methods, selection.type, at, [&](size_t selected, const std::vector<Type> &arguments) {
-      const auto target = demand(selected, arguments, at, environment, selection.retained, query, &state);
+      const auto target = demand(selected, arguments, at, {}, selection.retained, query, &state);
       const auto &instance = program_.instances[target];
       check_family_contract(program_.methods[selected], arguments, instance.arguments, instance.result, selection.type, at);
       value.dispatch.emplace_back(arguments, target);
@@ -14263,7 +14301,7 @@ class ScalarChecker {
     if (selection_inputs && selection_inputs->uniform()) {
       value.uniform_target = value.dispatch.front().second; value.dispatch.clear();
     } else value.selection_inputs = selection_inputs;
-    return materialized_value(intern_callable(std::move(value)), std::move(captures), at);
+    return materialized_value(intern_callable(std::move(value)), at);
   }
   CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at, bool definition_site = false) {
     return materialize_definition(NamedFamily{family}, expected, at, definition_site);
@@ -14295,7 +14333,7 @@ class ScalarChecker {
       } else value.selection_inputs = selection_inputs;
       program_.callables.push_back(std::move(value));
     }
-    return materialized_value(id, {}, at);
+    return materialized_value(id, at);
   }
   const Expression &scope_operand(size_t method, const Capture &capture) {
     const auto key = std::pair{method, capture.name};
@@ -14545,6 +14583,7 @@ class ScalarChecker {
     std::vector<Type> arguments;
     std::vector<CheckedOperation> views;
     std::map<size_t, size_t> place_inputs;
+    std::map<std::string, size_t> lexical_definitions;
     for (const auto &capture : method.captures) {
       if (const auto slot = here_slot(capture.name)) {
         retain_lexical_here(inputs, operation.scope_here, capture, *slot, owner_role);
@@ -14552,11 +14591,15 @@ class ScalarChecker {
       }
       const auto binding = lexical_.lookup(capture.name);
       const auto *source = binding ? &bindings_->at(*binding) : nullptr;
+      if (source && source->definition) {
+        lexical_definitions.emplace(capture.name, retain_lexical_definition(definitions_.at(*binding), capture.at));
+        continue;
+      }
       if (source && source->owner_binding) {
         inputs.owner_names.emplace(capture.name, owner_role(named_owner(capture.name, capture.at), capture.at));
         continue;
       }
-      const bool independent = !source || source->definition;
+      const bool independent = !source;
       const bool live_value = !independent && (source->value_binding || source->callable_value);
       const bool live_binding = !independent && !live_value;
       const bool declared_place = !independent && (source->alias || !source->selection.empty());
@@ -14637,7 +14680,7 @@ class ScalarChecker {
       always_throws = result.always_throws;
     }
     const auto query = retain_query_environment(program_.methods[profile], supplied, &state, operation.scope_owners,
-                                                 std::move(scope_selections));
+                                                 std::move(scope_selections), std::move(lexical_definitions));
     const auto target = demand(profile, arguments, expr.at, {}, retained, query, &state, incoming_abstract_targets(expr));
     operation.callee = target;
     const auto &selected = program_.instances[target];
@@ -14932,7 +14975,7 @@ class ScalarChecker {
       if (checking_method_ && checking_method_->here_group) implementation_gap(body.at, "a single-brace here body supplied inside a here group");
       if (body.receiving->from_for && receiving.type != Type::void_type)
         fail(body.at, "a generator loop requires a receiver with a void result");
-      if (!function_result_type(*receiving.type) || (supplier && !function_result_type(*supplier->result.type)))
+      if (!ordinary_callable_type(*receiving.type) || (supplier && !ordinary_callable_type(*supplier->result.type)))
         fail(body.at, "protected here results cannot carry procedure values");
       if (!supported_here_exit_result(receiving) || (supplier && !supported_here_exit_result(supplier->result)))
         implementation_gap(body.at, "single-brace here completion requires a scalar, func or void supplier and receiving result");
@@ -18056,26 +18099,19 @@ class ScalarChecker {
           if (!cancelled && lexical_.live) lexical_.bound_symbols.insert(id);
           break;
         }
-        if (symbol.type->kind == Type::procedure) {
-          if (expr.binding != "=") fail(expr.at, "procedure symbols require effect '=' installation");
-        } else if (expr.binding != "<-") fail(expr.at, "bits symbols require effect '<-' transfer");
+        if (symbol.type->kind == Type::procedure)
+          fail(expr.at, "procedure symbols require definition activation");
+        if (expr.binding != "<-") fail(expr.at, "bits symbols require effect '<-' transfer");
         const auto &operand = *expr.children[0];
-        Type source;
-        if (symbol.type->kind == Type::procedure && operand.kind == K::name &&
-            !lexical_.lookup(operand.text) && module_names().symbols.contains(operand.text)) {
-          const auto selected = resolve_symbol(operand.text, operand.at,
-              query_environment().symbol_shadows.contains(operand.text), instance ? std::optional<size_t>{instance->method} : std::nullopt);
-          operations[&operand] = materialize_symbol(selected, *symbol.type, operand.at);
-          source = operations[&operand].type;
-        } else source = check(operand, instance, operations, true, false,
-                              symbol.type->kind == Type::procedure ? &*symbol.type : nullptr);
+        const auto source = check(operand, instance, operations);
         if (source != Type::never && !transfers_value(source, *symbol.type))
           fail(expr.at, "effect value does not satisfy the declared symbol type");
         operation.operand_type = *symbol.type;
         operation.type = source == Type::never ? Type{Type::never} : Type{Type::void_type};
-        if (source.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
         if (!cancelled && source != Type::never && lexical_.live) lexical_.bound_symbols.insert(*operation.symbol);
       } else {
+        if (expr.kind == K::symbol && symbol.type->kind == Type::procedure)
+          fail(expr.at, "an installed procedure can only be invoked with perform or behave");
         require_symbol(lexical_, *operation.symbol, expr.at);
         operation.type = expr.kind == K::touch ? Type{Type::void_type} : *symbol.type;
         operation.exceptions = exception_value_categories(operation.type);
@@ -18857,6 +18893,7 @@ class ScalarChecker {
         state.required = true;
         return *construction_type(expr, state);
       }();
+      require_ordinary_callable_type(type, expr.at);
       if (type.kind == Type::abstract_type) fail(expr.at, "an abstract type has no constructible layout");
       const bool builder = program_.builder_type(type);
       const bool lexical_text = type.kind == Type::string || builder;
@@ -19730,6 +19767,12 @@ class ScalarChecker {
     checking_method_ = &program_.methods[instance.method];
     check_flow([&](bool proving) {
       begin_check(instance.storage, instance.bindings, instance.operations, proving);
+      for (const auto &[name, index] : query_environment().lexical_definitions) {
+        const auto &definition = retained_definitions_.at(index);
+        const auto binding = bind(name, Type::void_type, {}, true, true, true, method.at);
+        bindings_->at(binding).definition = definition.method;
+        definitions_.emplace(binding, definition);
+      }
       lexical_.abstract_symbol_targets = instance.incoming_abstract_targets;
       if (const auto &group = checking_method_->here_group; group && group->supplier_return.has_value())
         (*group->supplier_return ? return_inputs_.present : return_inputs_.absent).insert(0);
@@ -20100,6 +20143,7 @@ class ScalarChecker {
     if (parent) adapted.parent = parent;
     adapted.instances.clear(); adapted.nested.clear();
     adapted.captures.clear(); adapted.queries.clear(); adapted.captures_resolved = false;
+    adapted.lexical_definitions.clear(); adapted.retains_lexical_definitions = false;
     const auto id = program_.methods.size();
     program_.methods.push_back(std::move(adapted));
     adapted_methods_.emplace(key, id);
@@ -20564,6 +20608,7 @@ class ScalarChecker {
         const auto storage = place_kind(field.declaration_kind.empty() || field.declaration_kind == "val",
                                         field.declaration_kind == "ref");
         auto type = resolve_type(field.type);
+        require_ordinary_callable_type(type, field.at);
         if (type.kind == Type::builder_storage) {
           if (schema.source->kind != Form::Kind::data || schema.source->c_data || schema.source->parameters.size() != 1 ||
               storage != PlaceKind::value || !schema.bits)
@@ -21066,6 +21111,7 @@ class ScalarChecker {
         if (!form->result_const) implementation_gap(form->at, "default result mode for non-scalar or generic types");
       }
       if (prepared.result.type && !handle_result) signature_type(prepared, *prepared.result.type, form->at, true, prepared.result.borrowed());
+      if (prepared.result.type) require_ordinary_callable_type(*prepared.result.type, form->at);
       for (const auto &type : form->throws_types) {
         const auto resolved = resolve_type(type);
         if (resolved.kind != Type::exception) fail(form->at, "throws contracts require selected exception types");
@@ -21103,6 +21149,7 @@ class ScalarChecker {
           continue;
         }
         prepared.parameters.push_back(resolve_signature(parameter.type));
+        require_ordinary_callable_type(prepared.parameters.back(), parameter.at);
         const auto mode = argument_mode(parameter);
         if (!parameter.selects_caller_place() && text_type(prepared.parameters.back()) &&
             (mode != ArgumentMode::borrowed_ref || !parameter.read_only))

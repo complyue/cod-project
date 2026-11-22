@@ -1,3 +1,2 @@
-symbol chosen : proc(bool) -> i64;
-proc candidate(x:i64) -> i64 { return x }
-effect @chosen = candidate;
+symbol @chosen:proc(bool)->i64;
+effect @chosen(x:i64)->i64 {return x;};

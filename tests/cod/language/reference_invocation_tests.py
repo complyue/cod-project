@@ -2,6 +2,7 @@
 """Reference intrinsics share operand preparation without reading target payloads."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;'
 OBS = IO + 'proc observe(x:i64)->void {behave @print(x);return;}'
@@ -62,6 +63,10 @@ runner.CASE_SHADOWS = {
     'swap_cleanup_before_invocation': ['x'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'captured_callable_holder',
+), 'a storable func must be capture-free')
 
 if __name__ == '__main__':
     raise SystemExit(runner.main())

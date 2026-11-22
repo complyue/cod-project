@@ -1,8 +1,13 @@
 using symbol "std:io" @print;
 symbol @value:u64;
+proc write_item() -> void {
+  val item:u64 <- 2u64;
+  effect @value <- item;
+  return;
+}
 proc unused() -> void {
   defer { {{ val item:u64 <- 1u64; effect @value <- item; }} };
-  defer { proc() -> void { val item:u64 <- 2u64; effect @value <- item; return; }; };
+  defer { write_item(); };
   defer catch(error) { {{ val item:u64 <- 3u64; effect @value <- item; }} }
   finally { {{ effect @value <- 4u64; }} };
   return;

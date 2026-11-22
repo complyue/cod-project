@@ -2,6 +2,7 @@
 """Ordered overload preparation from checked argument prefixes and native contexts."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;\n'
 NPE = 'using "std:exceptions" NullPointerException;\n'
@@ -77,5 +78,10 @@ runner.CASE_SHADOWS = {
     'contextual_callable_view': ['f', 'f'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'captured_type_context',
+), 'a storable func must be capture-free')
+
 if __name__ == '__main__':
     raise SystemExit(runner.main())

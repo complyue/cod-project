@@ -2,6 +2,7 @@
 """Common exception payloads preserve exact borrowed storage contracts."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;'
 TYPES = 'using "std:exceptions" Exception;using "std:exceptions" MissingReturnError;using "std:exceptions" NullPointerException;'
@@ -59,5 +60,10 @@ for name, (source, status, output, diagnostic) in list(runner.CASES.items()):
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {name: [] for name in runner.CASES}
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'deferred_catch_target_expires',
+), 'procedure signatures cannot occupy ordinary value or reference storage')
+
 if __name__ == '__main__':
     raise SystemExit(runner.main())

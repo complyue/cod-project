@@ -49,7 +49,7 @@ runner.CASES = {
  'guarded_definition_contexts': (IO+'func f:func()->u64=try{func(){return 23u32;}}catch(e){func(){return 24u32;}};behave @print(f());',0,'23\n',''),
  'ordinary_and_explicit_scopes': (IO+'func apply(f:func(u64)->const u64)->u64{return f(25u64);}'
      'behave @print(apply({ {{return func(x:T)->const T where T{return x;};}} }));',0,'25\n',''),
- 'captured_callback': (IO+'func id(x:u64)->u64{return x;}func factory(f:func(u64)->u64)->func()->u64{return func[f](){return f(26u64);};}func f=factory(id);behave @print(f());',0,'26\n',''),
+ 'inferred_callback_from_result': (IO+'func id(x:u64)->u64{return x;}func factory()->func()->u64{return func(){return id(26u64);};}func f=factory();behave @print(f());',0,'26\n',''),
  'expected_throws_remains_caller_obligation': (NPE+'func f:func()->bool throws NullPointerException=func(){return true;};f();',2,'','requires a covering catch or throws'),
  'expected_throws_does_not_waive_body_boundary': (NPE+'func anchor(ptr x:i64 in A)->i64 throws NullPointerException where {owner A}{return x;}func f=anchor;f<-func(ptr x:i64 in B) where {owner B}{return x;};',2,'','requires a covering catch or throws'),
  'explicit_throws_cannot_be_erased': (NPE+'func f:func()->bool=func() throws NullPointerException{return true;};',2,'','required checked exception'),
@@ -78,7 +78,6 @@ runner.CASE_SHADOWS = {
     'nullable_result': ['x', 'x'],
     'expected_value_result_snapshots_before_cleanup': ['x', 'x'],
     'expected_borrowed_result_retains_cleanup_write': ['x', 'x'],
-    'captured_callback': ['f'],
     'generic_expected_value_and_view_modes': ['x', 'x', 'x'],
     'generic_expected_result_owner_roles': ['x', 'y', 'x', 'y'],
 }

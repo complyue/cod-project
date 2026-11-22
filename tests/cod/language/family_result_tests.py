@@ -2,6 +2,7 @@
 """Family value results share transfer rules and preserve completion and identity."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;'
 GAP = 'callable view contract'
@@ -16,7 +17,7 @@ runner.CASES = {
     'selected_methods_keep_own_results': (IO + 'symbol @f:proc(u64)->f64;proc @f(x:u64)->u32{return 7u32;}proc @f(x:T)->f32 where T{return 1.5f32;}'
         'effect @f;behave @print(behave @f(1u8));behave @print(perform @f(1u64));', 0, '1.5\n7\n', ''),
     'generic_result_uses_instance': (IO + 'symbol @f:proc(u64)->u64;proc @f(x:T) where T{return x;}'
-        'effect @f;proc held=@f;behave @print(held(255u8));behave @print(held(4294967295u32));behave @print(held(18446744073709551615u64));', 0, '255\n4294967295\n18446744073709551615\n', ''),
+        'effect @f;behave @print(behave @f(255u8));behave @print(behave @f(4294967295u32));behave @print(behave @f(18446744073709551615u64));', 0, '255\n4294967295\n18446744073709551615\n', ''),
     'shared_generic_caller': (IO + 'symbol @f:proc(u64)->f64;proc @f(x:T)->u32 where T{return 4294967295u32;}'
         'proc relay(x:T)->f64 where T{return behave @f(x);}effect @f;behave @print(relay(1u8));behave @print(relay(1u64));', 0, '4294967295\n4294967295\n', ''),
     'nested_capture_and_return': (IO + 'symbol @f:proc()->f64;proc @f()->u32{return 7u32;}'
@@ -74,6 +75,15 @@ runner.CASE_SHADOWS = {
     'exception_cause_and_caller_binding': ['x'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'nested_capture_and_return',
+), 'procedure signatures cannot occupy ordinary value or reference storage')
+expect_source_rejections(runner, (
+    'one_family_multiple_result_views',
+    'borrowed_target_not_widened',
+    'result_mode_not_changed',
+), 'procedure symbols require definition activation')
 
 if __name__ == '__main__':
     raise SystemExit(runner.main())

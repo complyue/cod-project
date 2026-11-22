@@ -160,8 +160,9 @@
   },
   {
     "file": "procedure-rebinding.cod",
-    "exit": 0,
-    "stdout": "22\n11\n"
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "procedure symbols require definition activation"
   },
   {
     "file": "early-alias.cod",
@@ -825,8 +826,9 @@
   },
   {
     "file": "capture-scope-restore.cod",
-    "exit": 0,
-    "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n10\n100\n"
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "procedure symbols require definition activation"
   },
   {
     "file": "region-mutual.cod",
@@ -918,10 +920,7 @@
     "file": "procedure-signature-error.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": [
-      "expected proc(bool) -> i64",
-      "got proc(i64) -> i64"
-    ]
+    "stderr_contains": "no applicable method for 'callable family'"
   },
   {
     "file": "procedure-declaration-error.cod",
@@ -1336,7 +1335,7 @@
     "file": "symbolic-procedure-transfer.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "use '=' for object/procedure rebinding"
+    "stderr_contains": "procedure symbols require definition activation"
   },
   {
     "file": "symbolic-procedure-signature.cod",
@@ -1638,7 +1637,7 @@
     "file": "closures/closure-lexical-error.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "cannot capture lexical variable storage"
+    "stderr_contains": "a storable func must be capture-free"
   },
   {
     "file": "closures/closure-escape-error.cod",
@@ -1870,13 +1869,13 @@
     "file": "closures/callable-kind-error.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "must match its function/procedure kind"
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "closures/callable-ref-error.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "non-null callable values use func or proc, not ref"
+    "stderr_contains": "micro-dispatch implementation gap: function storage uses func values or ptr views; this is not a language restriction"
   },
   {
     "file": "recursive-calls.cod",
@@ -1887,7 +1886,7 @@
     "file": "closures/callable-loop-demand-error.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "unavailable lexical function 'unavailable'"
+    "stderr_contains": "a storable func must be capture-free"
   },
   {
     "file": "closures/callable-procedures.cod",
@@ -1898,12 +1897,13 @@
     "file": "closures/callable-procedure-binding-error.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "missing required binding"
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "closures/callable-captures.cod",
-    "exit": 0,
-    "stdout": "3\n12\n3\n24\n3\n40\n34\n42\n"
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "closures/callable-invocation.cod",
@@ -1912,14 +1912,15 @@
   },
   {
     "file": "closures/callable-effects.cod",
-    "exit": 0,
-    "stdout": "3\n12\n12\n10\n11\n12\n12\n12\n1\n11\n12\n22\n"
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "closures/callable-effects-error.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "missing required binding"
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "closures/callable-regions.cod",
@@ -1950,8 +1951,9 @@
   },
   {
     "file": "closures/callable-higher-order.cod",
-    "exit": 0,
-    "stdout": "1\n3\n4\n13\n103\n112\n3\n12\n17\n2\n10\n46\n10\n23\n10\n99\n"
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "closures/callable-generic.cod",
@@ -2071,7 +2073,7 @@
     "file": "closures/callable-borrowed-holder-effects.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "missing required binding"
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "closures/callable-borrowed-holder-expired.cod",
@@ -2100,7 +2102,7 @@
     "file": "closures/callable-holder-result-effects.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "missing required binding"
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "closures/callable-holder-owner-readonly.cod",
@@ -2323,7 +2325,7 @@
     "file": "closures/callable-expression-effects.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "a function cannot invoke a procedure"
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "scopes/iteration-explicit.cod",
@@ -2946,7 +2948,7 @@
     "file": "symbol-lookup-capture.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+    "stderr_contains": "nearest binding 'gain' is not a symbol"
   },
   {
     "file": "symbol-lookup-loop.cod",
@@ -2963,7 +2965,8 @@
   {
     "file": "symbol-lookup.cod",
     "exit": 0,
-    "stdout": "10\n7\n7\n7\n99\n7\n"
+    "stdout": "10\n7\n7\n7\n99\n7\n",
+    "stderr_contains": "[-Wshadow]"
   },
   {
     "file": "symbol-lookup-owner.cod",
@@ -2975,7 +2978,7 @@
     "file": "symbol-lookup-owner-capture.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "symbol access @O resolves to non-symbol lexical binding 'O'"
+    "stderr_contains": "nearest binding 'O' is not a symbol"
   },
   {
     "file": "owner-binding-rebind.cod",
@@ -3234,13 +3237,13 @@
     "file": "scopes/defer-callable-order-error.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "missing required binding"
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "scopes/defer-callable-registration-error.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "missing required binding"
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "scopes/defer-callable-readonly.cod",
@@ -3538,13 +3541,13 @@
     "file": "scopes/defer-context-missing.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "missing required binding"
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "scopes/defer-context-callee.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "missing required binding"
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "scopes/defer-context-nested-missing.cod",
@@ -3556,7 +3559,7 @@
     "file": "scopes/defer-context-capture.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "perform requires an unavailable definition-time capture"
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "scopes/defer-context-group-owner.cod",
@@ -3618,13 +3621,13 @@
     "file": "closures/callable-scalar-result-value-owner.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "owner 'o' requires storage with known provenance"
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "closures/callable-scalar-result-value-write.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "object transfer requires a regional object destination"
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "closures/callable-pointer-results.cod",
@@ -3926,10 +3929,7 @@
     "file": "closures/callable-growing-parameter-missing.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": [
-      "missing required binding",
-      "::@missing"
-    ]
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "closures/callable-growing-parameter-expired.cod",
@@ -3973,8 +3973,9 @@
   },
   {
     "file": "closures/callable-nested-perform-scalar.cod",
-    "exit": 0,
-    "stdout": "1310\n2009\n1\n700\n777\n700\n2009\n1310\n"
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "closures/callable-nested-perform-regional.cod",
@@ -4003,7 +4004,7 @@
     "file": "closures/callable-nested-perform-missing.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "perform requires an unavailable definition-time capture"
+    "stderr_contains": "procedure signatures cannot occupy ordinary value or reference storage"
   },
   {
     "file": "closures/callable-recomposed-factory-selection.cod",

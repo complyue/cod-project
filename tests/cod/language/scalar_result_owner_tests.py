@@ -66,7 +66,7 @@ runner.CASES = {
  'failed_rhs_retains_destination': (IO+ERROR+'func get(x:i64 in O)->i64 where {owner O}{x<-3;missing();return 9;}val x<-1,y<-2;try{y<-get(x);{}}catch(e:const MissingReturnError){};behave @print(x);behave @print(y);',0,'3\n2\n','[-Wmissing-return]'),
  'copy_then_alias_is_independent': (IO+'val x<-1;val copy<-x;ref r=copy;x<-2;r<-3;behave @print(x);behave @print(copy);',0,'2\n3\n',''),
  'ptr_transfer_shorthand_preserved': (IO+'val x<-1;ptr p<-x;x<-2;behave @print(p);',0,'1\n',''),
- 'captured_scalar_callable_result': (IO+'func wrap(f:func(i64)->i64)->func(i64)->i64{return func[f](x:i64)->i64{return f(x)+1;};}func inc(x:i64)->val i64{return x+1;}func f=wrap(inc);behave @print(f(3));',0,'5\n',''),
+ 'direct_scalar_callable_result': (IO+'func inc(x:i64)->val i64{return x+1;}func wrap(x:i64)->i64{return inc(x)+1;}func f=wrap;behave @print(f(3));',0,'5\n',''),
  'different_const_spellings_share_callable_type': (IO+'func same(x:T,y:T)->bool where T{return true;}func a(x:i64)->i64{return x;}func b(x:i64)->const i64{return x;}behave @print(same(a,b));',0,'true\n',''),
  'nullable_return_retains_owner_after_cleanup': (IO+'func get(x:i64 in O)->ptr i64 in O where {owner O}{ptr p:i64=null in O;defer{p=x;};return p;}val x<-1;ptr p=get(x);behave @print((p is null));p=x;behave @print(p);',0,'true\n1\n',''),
  'same_owner_runtime_choice': (IO+'func get(x:i64 in O,y:i64 in O,flag:bool)->i64 in O where {owner O}{return if(flag){x}else{y};}val x<-1,y<-2;ref r=get(x,y,false);r<-3;behave @print(x);behave @print(y);',0,'1\n3\n',''),
@@ -93,7 +93,6 @@ runner.CASE_SHADOWS = {
     'borrowed_return_does_not_follow_rebind': ['x', 'y'],
     'borrowed_return_can_be_replaced': ['x', 'y'],
     'failed_rhs_retains_destination': ['x'],
-    'captured_scalar_callable_result': ['f'],
     'nullable_return_retains_owner_after_cleanup': ['x', 'p'],
     'same_owner_runtime_choice': ['x', 'y'],
 }

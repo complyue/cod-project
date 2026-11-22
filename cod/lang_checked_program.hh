@@ -515,6 +515,7 @@ struct QueryEnvironment {
   };
   std::vector<QueryBinding> bindings;
   std::map<std::string, ScopeSelection> scope_selections;
+  std::map<std::string, size_t> lexical_definitions;
   std::set<std::string> symbol_shadows;
   std::vector<std::vector<OwnerMatch>> owners;
   std::vector<std::vector<OwnerMatch>> scope_owners;
@@ -616,7 +617,9 @@ struct CheckedMethod {
   bool captures_resolved = false;
   bool contextual_result = false;
   bool separate_native_frames = false;
-  bool declaration_context() const { return contextual_result || !queries.empty(); }
+  bool retains_lexical_definitions = false;
+  std::vector<Capture> lexical_definitions;
+  bool declaration_context() const { return contextual_result || !queries.empty() || retains_lexical_definitions; }
   std::vector<std::string> type_parameters;
   std::vector<size_t> retained_types;
   std::optional<size_t> parent;

@@ -2,6 +2,7 @@
 """Independent callable result evidence, recursive anchors and return-boundary joins."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;'
 MISSING = 'using "std:exceptions" MissingReturnError;'
@@ -107,5 +108,13 @@ runner.CASE_SHADOWS = {
     'common_exception_parameter_context': ['e', 'e'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'recursive_void_completion_without_termination_proof',
+), 'procedure signatures cannot occupy ordinary value or reference storage')
+expect_source_rejections(runner, (
+    'captured_callable_result',
+), 'a storable func must be capture-free')
+
 if __name__ == '__main__':
  raise SystemExit(runner.main())

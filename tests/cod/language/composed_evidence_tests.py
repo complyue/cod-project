@@ -2,6 +2,7 @@
 """Non-effecting signature evidence composes guards, loops and callable construction."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;\n'
 NPE = 'using "std:exceptions" NullPointerException;\n'
@@ -88,5 +89,15 @@ runner.CASE_SHADOWS = {
     'exception_adapter_preserves_payload': ['e', 'e', 'e'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'callable_capture_construction_is_not_evaluated_early',
+    'value_capture_with_evidence',
+    'captured_exception_view_adapter',
+), 'a storable func must be capture-free')
+expect_source_rejections(runner, (
+    'deferred_exception_view_adapter',
+), 'procedure signatures cannot occupy ordinary value or reference storage')
+
 if __name__ == '__main__':
     raise SystemExit(runner.main())
