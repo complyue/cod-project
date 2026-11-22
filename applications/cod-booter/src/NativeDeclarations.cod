@@ -10,7 +10,7 @@ using "ParserStorage.cod" {
     typed_name_node, val_binding_node, here_call_node, call_node, full_scope_node, continue_node,
     break_node, return_node, narrow_integer_node, is_function, owner_clause_node,
     result_clause_node, ref_result_node, throws_clause_node, field_access_node, import_node, local_resource_name,
-    retained_parent_parameter, native_symbol_declaration_node, reference_symbol_declaration_node,
+    retained_parent_parameter, native_symbol_declaration_node, reference_symbol_declaration_node, abstract_type_node,
     effect_node, bind_effect, readonly_declaration,
     text_literal_node,
 };
@@ -18,13 +18,14 @@ using "NameResolution.cod" {
     NameBindings, NameWork, first_item, signature_head, signature_clause, record_declaration,
     c_handle_type, handle_binding, formal_binding, local_binding, loop_index, enclosing_callable,
     record_type, array_type, c_constructor, c_operation, c_entry, callable_binding, owner_binding,
-    ordinary_selection, symbolic_selection, native_symbol_binding, reference_symbol_binding, definition_name, native_scalar, builtin_bool,
+    ordinary_selection, symbolic_selection, native_symbol_binding, reference_symbol_binding, abstract_type_binding,
+    has_exception_parent, definition_name, native_scalar, builtin_bool,
     builtin_u8, builtin_u32, builtin_u64, builtin_i64, builtin_void, builtin_c_string, text_type,
 };
 using "ModuleExports.cod" {
     SelectedExports, ModuleExports, exception_type_export, exception_root_identity,
     native_handle_export, record_export, array_export, nominal_exception_export, callable_export, enum_export,
-    symbol_export,
+    symbol_export, abstract_type_export,
 };
 using "ModuleExportStorage.cod" { ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header, enum_type };
 using "DeclarationTypes.cod" { type_module, type_identity, interior_nul_in_c_string };
@@ -48,6 +49,8 @@ func invalid_native_callback() -> u8 { return 26u8; }
 func c_string_argument_required() -> u8 { return 99u8; }
 func string_argument_required() -> u8 { return 100u8; }
 func mismatched_symbol_installation() -> u8 { return 104u8; }
+func invalid_nominal_parent() -> u8 { return 105u8; }
+func cyclic_nominal_parent() -> u8 { return 106u8; }
 func invalid_array_shape() -> u8 { return 27u8; }
 func invalid_handle_initializer() -> u8 { return 52u8; }
 func mismatched_handle_type() -> u8 { return 53u8; }
@@ -102,14 +105,10 @@ func exception_selection(names:const NameBindings in B, selected:const SelectedE
     return imported_kind(names, selected, at) == exception_type_export();
 }
 
-func exception_record(nodes:const ExprNodes in N, record:u64) -> bool where {const owner N} {
-    return nodes[nodes[record].left].kind == data_parent_node();
-}
-
 func nominal_exception(nodes:const ExprNodes in N, names:const NameBindings in B,
                        selected:const SelectedExports in E, at:u64) -> bool
     where {const owner N, const owner B, const owner E} {
-    if (names[at].kind == record_type()) return exception_record(nodes, names[at].declaration);
+    if (names[at].kind == record_type()) return has_exception_parent(nodes, names, names[at].declaration);
     return imported_kind(names, selected, at) == nominal_exception_export();
 }
 
@@ -160,7 +159,7 @@ func scalar_failure(nodes:const ExprNodes in N, names:const NameBindings in B, s
                     at:u64) -> bool where {const owner N, const owner B, const owner E} {
     val target <- names[at].declaration;
     if (names[at].kind == record_type())
-        return exception_record(nodes, target) && uses_direct_scalars(nodes, names, nodes[target].right, false);
+        return has_exception_parent(nodes, names, target) && uses_direct_scalars(nodes, names, nodes[target].right, false);
     return imported_kind(names, selected, at) == nominal_exception_export() && selected[target].shape == scalar_exception();
 }
 
@@ -207,7 +206,7 @@ func check_record(nodes:const ExprNodes in N, names:NameBindings in B, work:Name
                 return;
             } else {};
             target <- names[declared_type].declaration;
-            if (kind == record_type() && exception_record(nodes, target)) {
+            if (kind == record_type() && has_exception_parent(nodes, names, target)) {
                 reject_declaration(report, declared_type, invalid_record_field());
                 return;
             } else {};
@@ -235,9 +234,37 @@ func check_record(nodes:const ExprNodes in N, names:NameBindings in B, work:Name
     reject_declaration(report, start, recursive_record_layout());
 }
 
+func check_nominal_parent(nodes:const ExprNodes in N, names:const NameBindings in B,
+                          selected:const SelectedExports in E, form:u64, used:u64,
+                          report:NativeDeclarationResult in R) -> void
+    where {const owner N, const owner B, const owner E, owner R} {
+    val abstract <- nodes[form].kind == abstract_type_node();
+    val header <- nodes[form].left;
+    val parent <- no_node();
+    for (unused in 0u64 .. used) {
+        if (nodes[header].kind != data_parent_node()) return;
+        parent <- nodes[header].right;
+        if (nodes[form].kind == c_record_node()) {
+            reject_declaration(report, parent, invalid_nominal_parent());
+            return;
+        };
+        if (names[parent].kind == abstract_type_binding()) {
+            if (!abstract) return;
+            (header <- nodes[names[parent].declaration].left):void;
+        } else {
+            if (imported_kind(names, selected, parent) == abstract_type_export()) return;
+            if (!abstract && exception_selection(names, selected, parent) &&
+                selected[names[parent].declaration].identity == exception_root_identity()) return;
+            reject_declaration(report, parent, invalid_nominal_parent());
+            return;
+        };
+    };
+    reject_declaration(report, form, cyclic_nominal_parent());
+}
+
 func check_type_declaration(nodes:const ExprNodes in N, names:const NameBindings in B,
                             selected:const SelectedExports in E, form:u64,
-                            report:NativeDeclarationResult in R) -> void
+                            used:u64, report:NativeDeclarationResult in R) -> void
     where {const owner N, const owner B, const owner E, owner R} {
     val kind <- nodes[form].kind;
     if (kind == native_symbol_declaration_node()) {
@@ -260,20 +287,17 @@ func check_type_declaration(nodes:const ExprNodes in N, names:const NameBindings
         val element <- nodes[shape].right;
         val element_kind <- names[element].kind;
         val integral <- index == builtin_u8() || index == builtin_u32() || index == builtin_u64() || index == builtin_i64();
-        val product <- (element_kind == record_type() && !exception_record(nodes, names[element].declaration)) ||
+        val product <- (element_kind == record_type() && !has_exception_parent(nodes, names, names[element].declaration)) ||
             imported_kind(names, selected, element) == record_export();
         if (!integral || (!native_scalar(element_kind) && !product)) {
             reject_declaration(report, shape, invalid_array_shape());
         } else {};
         return;
     } else {};
-    if (record_declaration(kind) && exception_record(nodes, form)) {
-        val parent <- nodes[nodes[form].left].right;
-        if (!exception_selection(names, selected, parent) ||
-            selected[names[parent].declaration].identity != exception_root_identity()) {
-            reject_declaration(report, parent, invalid_native_failure());
-        } else {};
-    } else {};
+    if (record_declaration(kind) || kind == abstract_type_node()) {
+        check_nominal_parent(nodes, names, selected, form, used, report);
+    };
+    return;
 }
 
 func array_shape(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
@@ -283,7 +307,7 @@ func array_shape(nodes:const ExprNodes in N, names:const NameBindings in B, sele
     val element <- nodes[shape].right;
     if (numeric_native(names[element].kind)) return readonly_numeric_array();
     val record <- names[element].declaration;
-    if (names[element].kind == record_type() && !exception_record(nodes, record) && nodes[record].right != no_node() &&
+    if (names[element].kind == record_type() && !has_exception_parent(nodes, names, record) && nodes[record].right != no_node() &&
         uses_direct_scalars(nodes, names, nodes[record].right, true)) return numeric_record_array();
     if (imported_kind(names, selected, element) == record_export() &&
         selected[record].shape == numeric_record()) return numeric_record_array();
@@ -1316,7 +1340,7 @@ export func check_native_declarations(nodes:const ExprNodes in N, names:NameBind
         work[at].expects_here <- 0u8;
     };
     for (at in 0u64 .. used) {
-        check_type_declaration(nodes, names, selected, at, report);
+        check_type_declaration(nodes, names, selected, at, used, report);
         if (report.diagnostic != 0u8) return false;
     };
     for (at in 0u64 .. used) {
@@ -1557,8 +1581,12 @@ func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in
         exports[at].owner_identity <- root.identity;
         return true;
     } else {};
+    if (kind == abstract_type_binding()) {
+        exports[at].kind <- abstract_type_export();
+        return true;
+    };
     if (kind == record_type()) {
-        if (exception_record(nodes, target)) {
+        if (has_exception_parent(nodes, names, target)) {
             exports[at].kind <- nominal_exception_export();
             exports[at].checked <- 1u8;
             if (scalar_failure(nodes, names, selected, name)) { (exports[at].shape <- scalar_exception()):void; } else {};

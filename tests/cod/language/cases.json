@@ -1071,7 +1071,7 @@
     "file": "abstract-cycle.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "cyclic abstract type inheritance"
+    "stderr_contains": "abstract parent declarations form a cycle"
   },
   {
     "file": "abstract-body.cod",

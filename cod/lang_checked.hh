@@ -370,6 +370,8 @@ class ScalarChecker {
   CleanupEquations cleanup_{program_.exception_types};
   size_t cleanup_scope_ = 0;
   const Expression *prepared_call_ = nullptr;
+  const Expression *abstract_operand_ = nullptr;
+  std::set<size_t> abstract_input_bindings_;
   struct CaseResultUse {
     bool borrowed = false;
     bool projects = false;
@@ -2388,6 +2390,39 @@ class ScalarChecker {
     while (operand->kind == Expression::Kind::grouped) operand = operand->children.front().get();
     return operand->kind == Expression::Kind::string_literal ? operand : nullptr;
   }
+  std::vector<Type> concrete_targets(const Type &bound) const {
+    std::vector<Type> types;
+    for (size_t i = 0; i < program_.schemas.size(); ++i) {
+      const auto &schema = program_.schemas[i];
+      if (!schema.abstract_parent) continue;
+      Type candidate{Type::product, schema.source->name, i};
+      if (program_.conforms_to(candidate, bound)) types.push_back(std::move(candidate));
+    }
+    return types;
+  }
+  template <typename Validate>
+  void cover_nominal_call(const Expression &expr, const std::vector<Type> &arguments, const Validate &validate) const {
+    InputPlan plan;
+    for (const auto &type : arguments) {
+      auto domain = type.kind == Type::abstract_type ? concrete_targets(type) : std::vector{type};
+      if (domain.empty()) implementation_gap(expr.at, "unproved native coverage for abstract target '" + type_name(type) + "'");
+      plan.domains.push_back(std::move(domain));
+    }
+    cover_inputs(Type{Type::named, expr.text}, expr.at, plan, validate);
+  }
+  size_t select_nominal_method(const Expression &expr, const NamedFamily &family, const std::vector<Type> &actual,
+                               const Access &access, const Owners &owners, const TypeEvidenceState *state = nullptr) const {
+    const auto &retained = family.retained_types();
+    if (method_candidates(family.methods, actual, retained, access, owners, state).methods.empty()) {
+      std::string inputs;
+      for (const auto &type : actual) {
+        if (!inputs.empty()) inputs += ", ";
+        inputs += type_name(type);
+      }
+      implementation_gap(expr.at, "unproved native coverage for '" + expr.text + "(" + inputs + ")'");
+    }
+    return select_method(family.methods, actual, expr.at, expr.text, retained, access, owners, state);
+  }
   ArgumentPreparation argument_preparation(const Expression &expr, std::string_view operation, const std::vector<Type> &prefix,
                                             const std::vector<ArgumentEvidence> &evidence, const Access &prefix_access, const Owners &prefix_owners, bool required = true, const TypeEvidenceState *state = nullptr) const {
     if (expr.intrinsic) return {};
@@ -2401,6 +2436,26 @@ class ScalarChecker {
     bool complete = true;
     for (size_t i = prefix.size(); i < evidence.size(); ++i)
       complete = complete && evidence[i].type.has_value() && evidence[i].type != Type::never;
+    if (std::ranges::any_of(arguments, [](const auto &type) { return type && type->kind == Type::abstract_type; })) {
+      std::vector<Type> types;
+      for (const auto &type : arguments) types.push_back(type.value_or(Type{Type::never}));
+      std::optional<ArgumentPreparation> common;
+      bool compatible = true;
+      cover_nominal_call(expr, types, [&](const auto &actual) {
+        if (complete) select_nominal_method(expr, named_family(expr.text, state), actual, access, owners, state);
+        auto selected_evidence = evidence;
+        for (size_t i = 0; i < actual.size(); ++i)
+          if (arguments[i] && arguments[i]->kind == Type::abstract_type) selected_evidence[i].type = actual[i];
+        const std::vector<Type> selected_prefix(actual.begin(), actual.begin() + prefix.size());
+        auto prepared = argument_preparation(expr, operation, selected_prefix, selected_evidence, prefix_access, prefix_owners, required, state);
+        if (!common) common = std::move(prepared);
+        else if (common->mode != prepared.mode) compatible = false;
+        else if (common->type != prepared.type) common->type.reset();
+      });
+      if (!compatible && required)
+        implementation_gap(expr.at, "abstract call alternatives require different argument preparation");
+      return compatible ? *common : ArgumentPreparation{};
+    }
     const auto family = named_family(expr.text, state);
     auto candidates = method_candidates(family.methods, arguments, family.retained_types(), access, owners, state);
     if (candidates.methods.empty() && !candidates.type_match) {
@@ -6096,7 +6151,8 @@ class ScalarChecker {
     reject_c_type_payload(type, at);
     if (nominal_exception(type)) implementation_gap(at, "library-defined exception arguments and results require an owner-aware signature");
     if (bits_type(type) || binder(method, type) || (result && type == Type::void_type)) return;
-    if (borrowed_target && (type.kind == Type::product || text_type(type) || (!result && type.kind == Type::array))) return;
+    if (borrowed_target && (type.kind == Type::product || text_type(type) ||
+                            (!result && (type.kind == Type::array || type.kind == Type::abstract_type)))) return;
     if (type.kind == Type::array)
       implementation_gap(at, "array parameter or result of type '" + type_name(type) + "'");
     if (type.kind == Type::procedure && type.target) {
@@ -6198,10 +6254,13 @@ class ScalarChecker {
     for (size_t i = 0; i < retained.size(); ++i) substitutions.at(method.source->type_parameters.size() + i) = retained[i];
     return substitutions;
   }
-  static bool bind_parameter(const CheckedMethod &method, size_t index, const Type &argument,
-                             Substitutions &substitutions, bool widening) {
+  bool bind_parameter(const CheckedMethod &method, size_t index, const Type &argument,
+                      Substitutions &substitutions, bool widening) const {
     index = parameter_index(method, index);
     if (bind_type(method, method.parameters[index], argument, substitutions, true)) return true;
+    if (method.parameters[index].kind == Type::abstract_type &&
+        argument_mode(method.input_parameters()[index]) == ArgumentMode::borrowed_ref &&
+        !caller_bindings(method) && program_.conforms_to(argument, method.parameters[index])) return true;
     if (widening && argument_mode(method.input_parameters()[index]) == ArgumentMode::borrowed_ref &&
         widens_text(argument, method.parameters[index])) return true;
     if (!widening || argument_mode(method.input_parameters()[index]) != ArgumentMode::value) return false;
@@ -6214,8 +6273,8 @@ class ScalarChecker {
     }
     return numeric(target) && widens(argument, target);
   }
-  static std::optional<Substitutions> match(const CheckedMethod &method, const std::vector<Type> &arguments,
-                                          const std::vector<Type> &retained = {}, bool widening = false) {
+  std::optional<Substitutions> match(const CheckedMethod &method, const std::vector<Type> &arguments,
+                                     const std::vector<Type> &retained = {}, bool widening = false) const {
     if (!accepts_arity(method, arguments.size()) || method.retained_types.size() != retained.size()) return {};
     auto substitutions = type_context(method, retained);
     for (size_t i = 0; i < arguments.size(); ++i) {
@@ -6266,7 +6325,10 @@ class ScalarChecker {
     const auto substitutions = match(method, arguments, retained, true);
     if (!substitutions) throw std::logic_error("unchecked method arguments");
     auto prepared = method.parameters;
-    for (auto &type : prepared) type = substitute(type, method, *substitutions);
+    for (size_t i = 0; i < prepared.size(); ++i) {
+      auto &type = prepared[i];
+      type = type.kind == Type::abstract_type ? arguments[i] : substitute(type, method, *substitutions);
+    }
     return prepared;
   }
   struct MethodCandidates {
@@ -6274,8 +6336,8 @@ class ScalarChecker {
     std::map<size_t, Substitutions> substitutions;
     bool widening = false, type_match = false, access_match = false;
   };
-  static std::optional<Substitutions> match_evidence(const CheckedMethod &method,
-      const std::vector<std::optional<Type>> &arguments, const std::vector<Type> &retained, bool widening) {
+  std::optional<Substitutions> match_evidence(const CheckedMethod &method,
+      const std::vector<std::optional<Type>> &arguments, const std::vector<Type> &retained, bool widening) const {
     if (!accepts_arity(method, arguments.size()) || method.retained_types.size() != retained.size()) return {};
     auto substitutions = type_context(method, retained);
     for (size_t i = 0; i < arguments.size(); ++i)
@@ -6370,7 +6432,7 @@ class ScalarChecker {
     return type;
   }
   // Signature containment includes repeated binders; layout equality is irrelevant.
-  static bool implies(const CheckedMethod &narrow, const CheckedMethod &broad, bool widening = false) {
+  bool implies(const CheckedMethod &narrow, const CheckedMethod &broad, bool widening = false) const {
     if (narrow.parameters.size() != broad.parameters.size() || narrow.here.size() != broad.here.size()) return false;
     std::vector<Type> arguments;
     for (size_t i = 0; i < narrow.parameters.size(); ++i) {
@@ -6509,6 +6571,8 @@ class ScalarChecker {
     auto &definition = program_.methods[method];
     const auto declared = declared_results(definition, arguments);
     arguments = prepared_types(definition, arguments, retained);
+    if (std::ranges::any_of(arguments, [](const auto &type) { return type.kind == Type::abstract_type; }))
+      implementation_gap(at, "native body without concrete input evidence for an abstract parameter");
     for (const auto id : definition.instances)
       if (program_.instances[id].arguments == arguments && program_.instances[id].environment == environment &&
           program_.instances[id].retained_types == retained && program_.instances[id].query_environment == query_environment) {
@@ -6617,16 +6681,19 @@ class ScalarChecker {
                        const Access &access = {}, const Owners &owners = {}, size_t query_environment = 0) {
     return demand(select_method(family, arguments, at, name, retained, access, owners), arguments, at, environment, retained, query_environment);
   }
+  size_t demand_named(const Expression &expr, const NamedFamily &family, size_t method, const std::vector<Type> &arguments) {
+    return demand(method, arguments, expr.at,
+        family.context ? family.context->environment : family.definition ? family.definition->environment : std::vector<CheckedCaptureInput>{},
+        family.retained_types(), family.context ? family.context->query_environment : family.definition ? family.definition->query : 0,
+        family.declaration);
+  }
   size_t select(const Expression &expr, const std::vector<Type> &arguments, const Access &access, const Owners &owners) {
     const auto family = named_family(expr.text);
     if (family.definition) check_query_binding(expr.text, expr.at);
     if (family.methods.empty()) fail(expr.at, has_declarations(expr.text)
         ? "no applicable implementation for declared callable '" + expr.text + "'" : "unknown callable '" + expr.text + "'");
     const auto method = select_method(family.methods, arguments, expr.at, expr.text, family.retained_types(), access, owners);
-    return demand(method, arguments, expr.at,
-        family.context ? family.context->environment : family.definition ? family.definition->environment : std::vector<CheckedCaptureInput>{},
-        family.retained_types(), family.context ? family.context->query_environment : family.definition ? family.definition->query : 0,
-        family.declaration);
+    return demand_named(expr, family, method, arguments);
   }
   bool applicable_operation(const std::string &name, const std::vector<Type> &arguments, const Access &access = {}, const Owners &owners = {}) const {
     const auto family = module_names().callables.find(name);
@@ -6728,6 +6795,56 @@ class ScalarChecker {
     if (proving_ && effects.propagates_here_transfer && (!operation.here_arguments.empty() || operation.supplied_here))
       reasons.insert(Completion::protected_transfer);
     finish_call(expr, contract, effects, reasons, arguments, views, operation, read, discard);
+  }
+  void finish_nominal_call(const Expression &expr, const std::vector<Type> &arguments,
+                           const std::vector<CheckedOperation> &views, CheckedOperation &operation, bool completes) {
+    if (&expr == prepared_call_ || !operation.callable_captures.empty())
+      implementation_gap(expr.at, "abstract target dispatch in a prepared defer or lexical callable");
+    const auto before = lexical_;
+    std::optional<LexicalState> continuation;
+    std::optional<Type> result;
+    auto preparation = operation.arguments;
+    cover_nominal_call(expr, arguments, [&](const auto &actual) {
+      lexical_ = before;
+      auto selected_views = views;
+      for (size_t i = 0; i < views.size(); ++i)
+        if (arguments[i].kind == Type::abstract_type) selected_views[i].type = actual[i];
+      auto call = operation;
+      call.nominal_calls.clear();
+      const auto family = named_family(expr.text);
+      const auto method = select_nominal_method(expr, family, actual, access_of(selected_views), owners_of(selected_views));
+      const auto target_id = demand_named(expr, family, method, actual);
+      finish_named_call(expr, actual, selected_views, call, false, true, completes, target_id);
+      const auto &target = program_.instances[*call.callee];
+      const auto type = *target.result.type;
+      if (target.result.borrowed() || !(scalar_type(type) || type == Type::void_type))
+        implementation_gap(expr.at, "abstract dispatch without a common independent scalar or void result");
+      if (result && *result != type) implementation_gap(expr.at, "abstract dispatch alternatives have different result types");
+      for (size_t i = 0; i < arguments.size(); ++i) if (arguments[i].kind != Type::abstract_type) {
+        if (result && preparation[i] != call.arguments[i])
+          implementation_gap(expr.at, "abstract dispatch alternatives prepare an ordinary operand differently");
+        preparation[i] = call.arguments[i];
+      }
+      result = type;
+      if (!call.callable_argument_targets.empty()) {
+        operation.callable_argument_targets.resize(arguments.size());
+        for (size_t i = 0; i < arguments.size(); ++i) {
+          const auto &targets = call.callable_argument_targets[i];
+          operation.callable_argument_targets[i].insert(targets.begin(), targets.end());
+        }
+      }
+      std::vector<Type> inputs;
+      for (const auto &argument : call.arguments) inputs.push_back(argument.type);
+      operation.nominal_calls.push_back({std::move(inputs), *call.callee});
+      if (continuation) {
+        const auto branch = lexical_;
+        join(*continuation, !continuation->live, branch, !branch.live, expr.at);
+      }
+      continuation = lexical_;
+    });
+    lexical_ = std::move(*continuation);
+    operation.arguments = std::move(preparation);
+    operation.type = completes ? *result : Type{Type::never};
   }
   struct EagerTypes {
     Type result, operand;
@@ -7633,7 +7750,7 @@ class ScalarChecker {
   }
   enum class GroupResult { value, target, unsupported };
   static GroupResult group_result(const Type &type, bool view, bool nullable, bool mixed) {
-    if (nullable || (view && text_type(type)))
+    if (nullable || (view && (text_type(type) || type.kind == Type::abstract_type)))
       return mixed ? GroupResult::unsupported : GroupResult::target;
     if (!view || scalar_type(type) || type.kind == Type::procedure) return GroupResult::value;
     return GroupResult::unsupported;
@@ -10664,8 +10781,11 @@ class ScalarChecker {
       IndexedUse indexed_use = IndexedUse::value_only) {
     check_ref_selection_mode(operand, mode);
     if (mode == ArgumentMode::borrowed_handle) return check_handle_loan(operand, instance, operations);
+    const auto *previous_abstract = abstract_operand_;
+    if (mode == ArgumentMode::borrowed_ref) abstract_operand_ = &ungrouped_expression(operand);
     const auto type = check(operand, instance, operations, mode == ArgumentMode::value, false, expected,
                             expected_type_use(mode), false, indexed_use, NativeLoanContext::none, {}, nullptr, false, true);
+    abstract_operand_ = previous_abstract;
     auto &actual = operations.at(&operand);
     if (!operand.checked_ref_argument || type == Type::never) return actual;
     const auto &at = *operand.checked_ref_argument;
@@ -11414,6 +11534,10 @@ class ScalarChecker {
       const auto constructed = construction_type(expr, state);
       if (!constructed) return {};
       const auto &type = *constructed;
+      if (type.kind == Type::abstract_type) {
+        if (state.required) fail(expr.at, "an abstract type has no constructible layout");
+        return {};
+      }
       const bool track_places = state.checks_initialization() && state.selections.tracking;
       auto text_owner = state.full_scope_owner;
       if (type.kind == Type::string && !expr.owner_name.empty() && expr.owner_name != "here")
@@ -12321,6 +12445,32 @@ class ScalarChecker {
       if (!complete) return {};
       const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr.text, &state);
       const auto &retained = family.retained_types();
+      if (!local && std::ranges::any_of(arguments, [](const auto &type) { return type.kind == Type::abstract_type; })) {
+        std::optional<Type> result;
+        std::optional<TypeEvidenceState> continuation;
+        cover_nominal_call(expr, arguments, [&](const auto &actual) {
+          const auto id = select_nominal_method(expr, family, actual, access, owners, &state);
+          const auto &method = program_.methods[id];
+          const auto contract = infer_result(id, actual, retained, family.declaration ? family.declaration : &state).contract;
+          if (!contract || contract->borrowed() || !(scalar_type(*contract->type) || contract->type == Type::void_type))
+            implementation_gap(expr.at, "abstract dispatch without a common independent scalar or void result");
+          if (result && *result != *contract->type)
+            implementation_gap(expr.at, "abstract dispatch alternatives have different result types");
+          result = *contract->type;
+          if (state.required) for (size_t i = 0; i < actual.size(); ++i)
+            check_borrowed_argument(i, argument_mode(parameter_at(method, i)));
+          auto branch = state;
+          for (size_t i = 0; i < operand_targets.size(); ++i) {
+            const auto &parameter = parameter_at(method, i);
+            type_input_mutation(expr, branch, actual[i], operand_targets[i], argument_mode(parameter),
+                                parameter.read_only, caller_bindings(method));
+          }
+          record_type_call(expr, branch, method, invokes);
+          continuation = continuation ? merge_evidence(std::move(*continuation), branch) : std::move(branch);
+        });
+        state = std::move(*continuation);
+        return result;
+      }
       const auto candidates = method_candidates(family.methods, arguments, retained, access, owners, &state);
       if (candidates.methods.empty() && !expr.intrinsic && has_declarations(expr.text) &&
           (!eager_operation(name) || !eager_types(name, arguments).error.empty())) {
@@ -13181,8 +13331,8 @@ class ScalarChecker {
     if (const auto binding = binder(method, type); binding && context.at(*binding)) return *context.at(*binding);
     return type;
   }
-  static bool disjoint_input_domain(const CheckedMethod &method, const InputDomains &domains,
-                                    const std::vector<Type> &retained) {
+  bool disjoint_input_domain(const CheckedMethod &method, const InputDomains &domains,
+                             const std::vector<Type> &retained) const {
     if (!accepts_arity(method, domains.size())) return true;
     if (method.retained_types.size() != retained.size()) return false;
     auto context = type_context(method, retained);
@@ -13223,8 +13373,8 @@ class ScalarChecker {
     }
     return context;
   }
-  static bool fixed_preparation(const CheckedMethod &method, const Type &view, const InputDomains &domains,
-                                const std::vector<Type> &retained = {}) {
+  bool fixed_preparation(const CheckedMethod &method, const Type &view, const InputDomains &domains,
+                         const std::vector<Type> &retained = {}) const {
     // Each input prepares independently to the same fixed formal.
     // Declaration evidence is fixed per materialization across these inputs.
     const auto context = factored_coverage_context(method, view, domains, retained);
@@ -16119,6 +16269,8 @@ class ScalarChecker {
     if (!binding) fail(expr.at, "unknown scalar value '" + expr.text + "'");
     if (!lexical_.bindings_available.contains(*binding)) fail(expr.at, "binding '" + expr.text + "' is not available on every reaching path");
     const auto &slot = (*bindings_)[*binding];
+    if (abstract_input_bindings_.contains(*binding) && (read || abstract_operand_ != &expr))
+      implementation_gap(expr.at, "an abstract formal outside direct borrowed argument forwarding");
     if (slot.owner_binding) fail(expr.at, "owner binding '" + expr.text + "' is not a scalar value");
     if (slot.pipeline) fail(expr.at, "a bounded here binding requires a pipeline connection or consumer");
     if (slot.type.kind == Type::native_handle && use != BindingUse::native_loan)
@@ -16356,13 +16508,30 @@ class ScalarChecker {
     if (selected == lexical_.borrowed_symbol_owners.end()) return symbol_owner_key(symbol);
     return selected->second.value_or(symbol_owner_key(symbol));
   }
+  bool stable_nominal_target(const Type &type, bool read_only) const {
+    if (type.kind != Type::product) return false;
+    std::vector<size_t> pending{type.identity};
+    std::set<size_t> visited;
+    while (!pending.empty()) {
+      const auto id = pending.back();
+      pending.pop_back();
+      if (!visited.insert(id).second) continue;
+      for (const auto &field : program_.schemas.at(id).fields) {
+        if (field.storage != PlaceKind::value) return false;
+        if (field.type.kind == Type::product) pending.push_back(field.type.identity);
+        else if (!(numeric(field.type) || field.type.kind == Type::enumeration ||
+                   (read_only && field.type == Type::boolean))) return false;
+      }
+    }
+    return true;
+  }
   void check_reference_symbol(const Expression &expr, const CheckedSymbol &symbol, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation) {
     using K = Expression::Kind;
     const auto id = *operation.symbol;
     const auto &mode = *symbol.reference;
     const auto &type = *symbol.type;
-    if (mode.nullable || !(numeric(type) || type.kind == Type::enumeration ||
+    if (mode.nullable || !(numeric(type) || type.kind == Type::enumeration || type.kind == Type::abstract_type ||
                            (mode.read_only && (type == Type::boolean || text_type(type)))))
       implementation_gap(expr.at, "reference symbol target or mode outside the stable lexical borrow profile");
     if (expr.kind == K::effect || expr.kind == K::procedure_effect) {
@@ -16375,8 +16544,10 @@ class ScalarChecker {
       operation.type = source == Type::never ? Type::never : Type::void_type;
       if (source == Type::never) return;
       const auto &view = operations.at(&operand);
-      if (source != type && !(mode.read_only && widens_text(source, type)))
+      if (!program_.conforms_to(source, type) && !(mode.read_only && widens_text(source, type)))
         fail(operand.at, "effect target does not satisfy the declared reference symbol type");
+      if (type.kind == Type::abstract_type && !stable_nominal_target(source, mode.read_only))
+        implementation_gap(operand.at, "abstract symbol target outside the stable lexical product profile");
       prepare_borrow(view, ArgumentMode::borrowed_ref, operand.at);
       require_live_view(view, operand.at);
       if (view.read_only && !mode.read_only)
@@ -16397,6 +16568,8 @@ class ScalarChecker {
     }
     require_symbol(lexical_, id, expr.at);
     if (expr.kind == K::touch) { operation.type = Type::void_type; return; }
+    if (type.kind == Type::abstract_type && abstract_operand_ != &expr)
+      implementation_gap(expr.at, "an abstract symbol outside direct borrowed argument preparation");
     operation.type = type;
     operation.view = true;
     operation.read_only = mode.read_only;
@@ -17255,7 +17428,7 @@ class ScalarChecker {
           const bool borrowed_text = mode == ArgumentMode::borrowed_ref && text_type(argument);
           if (mode == ArgumentMode::value ||
               (mode != ArgumentMode::borrowed_handle && !borrowed_text &&
-               argument.kind != Type::product && argument.kind != Type::array))
+               argument.kind != Type::product && argument.kind != Type::array && argument.kind != Type::abstract_type))
             require_value(argument, expr.at);
         }
         operation.arguments.push_back({mode, arguments.back()});
@@ -17279,7 +17452,9 @@ class ScalarChecker {
         if (!completes) operation.type = Type::never;
         break;
       }
-      finish_named_call(expr, arguments, views, operation, read, discard, completes);
+      if (std::ranges::any_of(arguments, [](const auto &type) { return type.kind == Type::abstract_type; }))
+        finish_nominal_call(expr, arguments, views, operation, completes);
+      else finish_named_call(expr, arguments, views, operation, read, discard, completes);
       break;
     }
     case K::symbol: case K::procedure_effect: case K::effect: case K::touch: {
@@ -18112,6 +18287,7 @@ class ScalarChecker {
         state.required = true;
         return *construction_type(expr, state);
       }();
+      if (type.kind == Type::abstract_type) fail(expr.at, "an abstract type has no constructible layout");
       if (type.kind != Type::string) check_construction_owner(expr, construction_owner);
       if (type.kind == Type::string) {
         const auto owner = construction_destination(expr, construction_owner);
@@ -18574,6 +18750,9 @@ class ScalarChecker {
         }
         if (fact.callee && fact.type != Type::never) {
           for (const auto &[from, to] : invocation(c, *expr, fact, *fact.callee + 1, 0)) flow.link(from, to);
+        } else if (!fact.nominal_calls.empty() && fact.type != Type::never) {
+          for (const auto &call : fact.nominal_calls)
+            for (const auto &[from, to] : invocation(c, *expr, fact, call.callee + 1, 0)) flow.link(from, to);
         } else if (fact.callable_call && fact.type != Type::never) {
           const auto callee = flow.node(); contexts[c].observations.emplace(expr, callee);
           const size_t offset = expr->kind == K::value_call ? 1 : 0;
@@ -18634,6 +18813,8 @@ class ScalarChecker {
     lexical_ = {}; cleanup_ = CleanupEquations{program_.exception_types}; scope_storage_.clear(); checked_scope_owners_.clear(); read_sites_.clear(); external_owners_.clear();
     native_resource_owners_.clear(); native_owner_scopes_.clear(); scope_native_owner_places_.clear();
     incoming_native_symbol_owners_.clear();
+    abstract_input_bindings_.clear();
+    abstract_operand_ = nullptr;
     literal_text_owner_.reset();
     declared_sites_.clear(); declared_requirements_.clear();
     deferred_actions_with_checked_scopes_.clear();
@@ -18921,6 +19102,7 @@ class ScalarChecker {
         const auto id = declare(parameter.name, type, parameter.read_only || (value && parameter.fixed_binding),
                                 value || live_value, parameter.at, !checking_method_->scope_inputs, &entry);
         const auto binding = storage_->at(id).binding;
+        if (declared.kind == Type::abstract_type) abstract_input_bindings_.insert(binding);
         instance.frame.inputs.push_back({id, mode, live_binding || caller_bindings(*checking_method_)});
         if (const auto &profile = checking_method_->scope_inputs; profile && profile->native_owner_inputs.contains(p))
           scope_native_owner_places_.insert(id);
@@ -19557,7 +19739,36 @@ class ScalarChecker {
     return type;
   }
 
+  void register_abstract_types(const SourceModule &source) {
+    const auto first = program_.abstract_types.size();
+    for (const auto &form : source.forms) if (form->kind == Form::Kind::abstract_type) {
+      const Type type{Type::abstract_type, form->name, program_.abstract_types.size()};
+      if (!module_names().types.emplace(form->name, type).second)
+        fail(form->at, "duplicate type binding '" + form->name + "'");
+      program_.abstract_types.push_back({form.get()});
+    }
+    for (auto &type : std::span(program_.abstract_types).subspan(first)) if (type.source->parent_type) {
+      const auto parent = resolve_type(*type.source->parent_type);
+      if (parent.kind != Type::abstract_type)
+        fail(type.source->at, "an abstract parent must name an abstract type");
+      type.parent = parent.identity;
+    }
+    enum class Visit { unseen, active, complete };
+    std::vector<Visit> visited(program_.abstract_types.size() - first);
+    for (size_t i = first; i < program_.abstract_types.size(); ++i) {
+      std::vector<size_t> path;
+      for (std::optional<size_t> type = i; type && *type >= first; type = program_.abstract_types[*type].parent) {
+        auto &state = visited[*type - first];
+        if (state == Visit::complete) break;
+        if (state == Visit::active) fail(program_.abstract_types[*type].source->at, "abstract parent declarations form a cycle");
+        state = Visit::active;
+        path.push_back(*type);
+      }
+      for (const auto type : path) visited[type - first] = Visit::complete;
+    }
+  }
   void register_nominal_types(const SourceModule &source) {
+    register_abstract_types(source);
     const auto first = program_.schemas.size();
     const auto first_array = program_.arrays.size();
     for (const auto &form : source.forms) {
@@ -19574,12 +19785,27 @@ class ScalarChecker {
       const auto kind = array ? Type::array : marker ? Type::c_type_marker : product ? Type::product : Type::region_schema;
       if (form->parent_type && (!product || form->c_data))
         implementation_gap(form->at, "a parent type on this data layout");
-      const auto type = form->parent_type ? program_.append_exception_type(*form)
+      std::optional<size_t> abstract_parent;
+      bool exception = false;
+      if (form->parent_type) {
+        const auto parent = resolve_type(*form->parent_type);
+        exception = parent == exception_type(0);
+        if (parent.kind == Type::abstract_type) abstract_parent = parent.identity;
+        else if (!exception) {
+          if (parent.kind == Type::exception)
+            implementation_gap(form->at, "library-defined exception inheritance beyond the root Exception");
+          fail(form->at, "a data parent must name an abstract type or Exception");
+        }
+      }
+      const auto type = exception ? program_.append_exception_type(*form)
           : Type{kind, form->name, array ? program_.arrays.size() : program_.schemas.size()};
       if (!module_names().types.emplace(form->name, type).second)
         fail(form->at, "duplicate type binding '" + form->name + "'");
       if (array) program_.arrays.push_back({form.get(), *form->index_type, *form->result_type});
-      else if (!form->parent_type) program_.schemas.push_back({form.get(), {}, kind == Type::product});
+      else if (!exception) {
+        program_.schemas.push_back({form.get(), {}, kind == Type::product});
+        program_.schemas.back().abstract_parent = abstract_parent;
+      }
     }
     for (auto &array : std::span(program_.arrays).subspan(first_array)) {
       array.index = resolve_type(std::move(array.index));
@@ -19603,8 +19829,6 @@ class ScalarChecker {
           fail(schema.source->at, "a borrowed native handle requires a fieldless owning CType");
         schema.native_owner = owner.identity;
       }
-      if (schema.source->parent_type && resolve_type(*schema.source->parent_type) != exception_type(0))
-        implementation_gap(schema.source->at, "data conformance other than a checked exception with parent Exception");
       std::set<std::string> names;
       for (const auto &field : schema.source->parameters) {
         if (!names.insert(field.name).second)
@@ -19883,7 +20107,8 @@ class ScalarChecker {
         continue;
       }
       if (form->kind == Form::Kind::expression || form->kind == Form::Kind::export_resource ||
-          form->kind == Form::Kind::data || form->kind == Form::Kind::native_handle_type ||
+          form->kind == Form::Kind::data || form->kind == Form::Kind::abstract_type ||
+          form->kind == Form::Kind::native_handle_type ||
           form->kind == Form::Kind::region_definition || form->kind == Form::Kind::array ||
           form->kind == Form::Kind::enumeration)
         continue;
@@ -20235,6 +20460,7 @@ public:
     for (size_t i = 0; i < program_.methods.size(); ++i) {
       const auto &method = *program_.methods[i].source;
       if (program_.methods[i].definition != i || !method.type_parameters.empty() || lexical_methods_.contains(&method)) continue;
+      if (std::ranges::any_of(program_.methods[i].parameters, [](const auto &type) { return type.kind == Type::abstract_type; })) continue;
       demand(i, program_.methods[i].parameters, method.at);
     }
     check_entry();
@@ -20276,6 +20502,10 @@ public:
         });
       });
       const auto &first = program_.instances[method.instances.front()];
+      for (const auto id : method.instances) for (size_t p = 0; p < method.parameters.size(); ++p)
+        if (method.parameters[p].kind == Type::abstract_type && first.arguments[p] != program_.instances[id].arguments[p])
+          method.separate_native_frames = true;
+      if (method.separate_native_frames) continue;
       for (const auto id : method.instances) {
         const auto &instance = program_.instances[id];
         if (instance.bindings.size() != first.bindings.size())

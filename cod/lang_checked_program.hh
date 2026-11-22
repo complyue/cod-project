@@ -89,6 +89,12 @@ struct CheckedOperation {
   std::optional<size_t> symbol;
   bool publishes_effect = true;
   std::optional<size_t> callee;
+  struct NominalCall {
+    std::vector<Type> inputs;
+    size_t callee;
+    bool operator==(const NominalCall &) const = default;
+  };
+  std::vector<NominalCall> nominal_calls{};
   std::optional<size_t> callable, callable_binding, callable_place;
   std::vector<CheckedOperation> callable_captures;
   bool callable_call = false;
@@ -280,6 +286,12 @@ struct CheckedSchema {
   bool bits;
   std::optional<size_t> native_owner = {};
   bool has_enum_storage = false;
+  std::optional<size_t> abstract_parent = {};
+};
+
+struct CheckedAbstractType {
+  const Form *source;
+  std::optional<size_t> parent = {};
 };
 
 struct CheckedArray {
@@ -557,6 +569,7 @@ struct CheckedMethod {
   std::vector<Capture> queries;
   bool captures_resolved = false;
   bool contextual_result = false;
+  bool separate_native_frames = false;
   bool declaration_context() const { return contextual_result || !queries.empty(); }
   std::vector<std::string> type_parameters;
   std::vector<size_t> retained_types;
@@ -742,6 +755,7 @@ struct CheckedProgram {
     return exception_type(category);
   }
   std::vector<CheckedSchema> schemas;
+  std::vector<CheckedAbstractType> abstract_types;
   std::vector<CheckedArray> arrays;
   std::vector<CheckedEnum> enums;
   std::vector<CheckedNativeConstructor> native_constructors;
@@ -762,6 +776,18 @@ struct CheckedProgram {
   std::vector<CheckedStorage> entry_storage;
   std::vector<CheckedBinding> entry_bindings;
   bool exception_values = false;
+  bool conforms_to(const Type &actual, const Type &bound) const {
+    if (actual == bound) return true;
+    if (bound.kind != Type::abstract_type) return false;
+    std::optional<size_t> parent;
+    if (actual.kind == Type::abstract_type) parent = abstract_types.at(actual.identity).parent;
+    else if (actual.kind == Type::product) parent = schemas.at(actual.identity).abstract_parent;
+    while (parent) {
+      if (*parent == bound.identity) return true;
+      parent = abstract_types.at(*parent).parent;
+    }
+    return false;
+  }
   std::set<size_t> captured_symbols(const CheckedCallable &value) const {
     std::set<size_t> result;
     for (const auto target : value.implementations()) {
