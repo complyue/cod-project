@@ -1,10 +1,10 @@
 # Native C providers, LLVM bindings and scoped cleanup
 
-Revision 23 · 2026-11-22 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
+Revision 24 · 2026-11-22 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
 
 ## Design authority
 
-[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph) at interop r23 assigns the graph workspace and traversal to CoD and covers the [dependency path loan](ModuleGraph.md#first-dependency-edge) under the [prerequisite review](../../../CHANGELOG.md#k-booter-graph-edge-prerequisites-20261122). The [delegated architecture review](../../../CHANGELOG.md#h-compiler-layers-20261122), P-680/P-681, distinguishes the production graph from the native loan fixtures below. Check source-loan closure before dependency reentry and final LLVM input under the graph owner. Scoped provider lifetime and ABI checks still apply.
+[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph) at interop r24 assigns the graph workspace and traversal to CoD and covers the [dependency path loan](ModuleGraph.md#first-dependency-edge) under the [prerequisite review](../../../CHANGELOG.md#k-booter-graph-edge-prerequisites-20261122). The [delegated architecture review](../../../CHANGELOG.md#h-compiler-layers-20261122), P-680/P-681, distinguishes the production graph from the native loan fixtures below. Check source-loan closure before dependency reentry and final LLVM input under the graph owner. The [ordinary-result review](../../../CHANGELOG.md#k-booter-native-u64-result-20261122) covers exact-width output for native path preparation. Scoped provider lifetime and ABI checks still apply.
 
 [D-07-UTF8](../../../design/DesignAuthorityRegistry.md#d-07-utf8) at interop r21 covers [bounded UTF-8 entry arguments and native C string loans](../../../design/Utf8Strings.md#borrowing-text-for-a-c-call). [H-UTF8-NATIVE-TEXT-20261121](../../../CHANGELOG.md#h-utf8-native-text-20261121), P-674/P-675 apply C-80 to real output filenames. Verify direct literals, explicit `path:CString`, the selected owner through a synchronous provider call, and failure before filesystem effects. The source constructor still accepts its typed `Path` loan.
 
@@ -30,6 +30,12 @@ Checked CoD declarations define the required C behavior interfaces. The seed and
 Calls in both directions use synchronous `here` semantics. A body can use direct lexical access in its own supplying activation while that activation is live. Preserve actual owners, access permissions, bounded backing and ordinary or abrupt completion through each call. A provider keeps all lent backing valid for the entire callback, including across nested calls. A callback and its confined views cannot outlive the activation that supplies them. Ordinary feedback, provider failure and CoD abrupt completion remain distinct. Completion crosses the boundary with its original CoD meaning and observes the ordinary cleanup rules.
 
 For [enum arguments, results and normal feedback](../../../design/TypedEnums.md#generated-c-exchange), generate an exact-width carrier and namespaced constants. Validate C-originating normal values before exposing them as CoD enum values. For the [compiler status workload](../../../design/TypedEnums.md#first-workload-and-acceptance), the launcher receives codes 0–7 through the ordinary result channel.
+
+### Ordinary native u64 results
+
+A synchronous bodyless `proc "C"` with ordinary inputs may declare an independent `u64` result. Both frontends retain the result width when checking, publishing and importing the signature. Both generators emit a `uint64_t` output place in the provider contract. The native transport status stays separate; generated callers load the output only on successful transport. All 64 bits are ordinary values. For `prepare_root` and `prepare_child`, zero denotes successful preparation and a nonzero value carries the private POSIX errno.
+
+Verify generated header and stub parity, a real ordinary call returning zero, a value above 255 and a high-bit or maximum `u64`, and the existing transport-failure path. Check that ordinary `u8`, enum and void calls retain their generated contracts. The established C-entry and native `here` profiles retain their existing checks. The [canonical-key loan](ModuleGraph.md#first-edge-implementation) keeps matching `CompilerStatus` callback feedback and provider result, including protected completion.
 
 ## Native handles and C records
 
