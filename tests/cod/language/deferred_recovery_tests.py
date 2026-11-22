@@ -241,7 +241,32 @@ run();
     "bare_rethrow": (PRELUDE + '{{defer catch(e:const MissingReturnError){observe(1);};defer catch(e:const MissingReturnError){throw;};defer missing();}};', 0, '1\n', WARN),
     "named_rethrow": (PRELUDE + '{{defer catch(e:const MissingReturnError){observe(1);};defer catch(e:const MissingReturnError){throw e;};defer missing();}};', 0, '1\n', WARN),
     "sibling_exclusion": (PRELUDE + '{{defer catch(e:const MissingReturnError){observe(1);};defer catch(e:const MissingReturnError){throw;}catch(e){observe(99);};defer missing();}};', 0, '1\n', WARN),
-    "conditional_registration": (PRELUDE + 'proc f(flag:bool)->void{if(flag){defer catch(e:const MissingReturnError){observe(1);return;};}else{};defer missing();return;}f(true);try{f(false);}catch(e:const MissingReturnError){observe(2);};', 0, '1\n2\n', WARN),
+    "conditional_registration": (PRELUDE + 'using "std:exceptions" UnhandledDeferError;'
+        'proc f(flag:bool)->void{if(flag){defer catch(e:const MissingReturnError){observe(1);return;};}else{};defer missing();return;}'
+        'f(true);try{f(false);}catch(e:const MissingReturnError){observe(99);}catch(e:UnhandledDeferError){observe(2);};',
+        0, '1\n2\n', WARN),
+    "residual_aggregate_does_not_match_the_body_or_members": ('''
+using "std:exceptions" { Error, Exception, UnhandledDeferError };
+using symbol "std:io" @print;
+data MemberFailure <: Error { code:u64; }
+data BodyFailure <: Exception { code:u64; }
+
+proc fail(code:u64) -> void {
+    behave @print(code);
+    throw MemberFailure { code <- code; };
+}
+
+proc run() -> void throws BodyFailure {
+    defer fail(10u64);
+    defer fail(20u64);
+    throw BodyFailure { code <- 30u64; };
+}
+
+try { run(); }
+catch (member:MemberFailure) { behave @print(98u64); }
+catch (body:BodyFailure) { behave @print(99u64); }
+catch (aggregate:UnhandledDeferError) { behave @print(40u64); };
+''', 0, '20\n10\n40\n', ''),
     "loop_handlers": (PRELUDE + 'try{{for(i in 0..3){defer{observe(2);}catch(e:const MissingReturnError){observe(99);};};missing();{}}}catch(e:const MissingReturnError){observe(3);};', 0, '2\n2\n2\n3\n', WARN),
     "loop_zero": (PRELUDE + 'try{{for(i in 0..0){defer catch(e:const MissingReturnError){observe(99);};};missing();{}}}catch(e:const MissingReturnError){observe(1);};', 0, '1\n', WARN),
     "loop_explicit_scope": (PRELUDE + 'for(i in 0..3){{defer catch(e:const MissingReturnError){observe(1);};defer missing();}};observe(2);', 0, '1\n1\n1\n2\n', WARN),

@@ -108,15 +108,13 @@ class ScalarChecker {
   }
   static std::set<size_t> exception_value_categories(const Type &type) {
     // Until owned exception lowering is available, ordinary exception value slots are intrinsic packets.
-    if (type.kind != Type::exception || nominal_exception(type)) return {};
+    if (type.kind != Type::exception || owning_exception(type)) return {};
     if (concrete_failure(type.identity)) return {type.identity};
     std::set<size_t> result;
     for (size_t category = 1; category < exception_categories.size(); ++category)
-      if (!type.identity || !exception_categories[category].checked) result.insert(category);
+      if (concrete_failure(category) && !owning_failure(category) && (!type.identity || !exception_categories[category].checked))
+        result.insert(category);
     return result;
-  }
-  static bool owned_failure(Completion completion) {
-    return completion.exception() && nominal_failure(completion.category());
   }
   std::set<size_t> declared_exception_categories(const std::vector<Type> &types) const {
     std::set<size_t> result;
@@ -2839,7 +2837,7 @@ class ScalarChecker {
     if (type.kind != Type::exception) fail(handler.at, "catch requires a selected exception type");
     if (!handled.insert(type.identity).second) fail(handler.at, "duplicate exception category in catch clauses");
     if (nominal_exception(type)) scalar_exception_schema(type, handler.at);
-    else if (type.identity != error_root_id && handler.annotation && !handler.read_only)
+    else if (type.identity != error_root_id && !owning_exception(type) && handler.annotation && !handler.read_only)
       implementation_gap(handler.at, "writable catch of an intrinsic exception");
   }
   static void check_guarded_result(const Type &body, const Type &handler, const Location &at) {
@@ -5793,23 +5791,18 @@ class ScalarChecker {
         if (proving_ && validating_) {
           if (effects.uncovered_deferred_root)
             fail(path.at, "declared checked failure 'Exception' requires coverage within the owning pass");
-          if (effects.raises_deferred_failure && outcome.has_deferred_failure() &&
-              (owned_failure(input) || owned_failure(completion)))
-            implementation_gap(path.at, "owned exceptions interacting with deferred failures require independent failure delivery");
           if (effects.observes_return && effects.raises_deferred_failure)
             implementation_gap(path.at, "return inspection requires independent deferred failure delivery on this path");
           if (effects.needs_checked_cleanup_proof)
             implementation_gap(path.at, "checked failures involving deferred execution require coverage within the owning pass");
           if (outcome.pending_checked())
             fail(path.at, "checked deferred failure requires coverage within the owning pass");
-          if (outcome.has_deferred_failure() && (outcome.visited_multiple || (outcome.fifo && outcome.body_failure)))
-            implementation_gap(path.at, "residual deferred failures require aggregation");
         }
         applied.transform_conditions([&](const auto &clauses) {
           return CleanupEquations::substitute_boolean_payloads(clauses, resolve_boolean, true);
         });
-        auto failure = outcome.resumes_body_failure() ? pending : completion.exception() && outcome.has_deferred_failure()
-            ? applied.queued_failures.back().restricted({completion.category()}) : ExceptionFacts{};
+        const bool aggregate = outcome.has_deferred_failure() && completion.exception() && completion.category() == deferred_aggregate_id;
+        auto failure = aggregate ? ExceptionFacts{deferred_aggregate_id} : outcome.resumes_body_failure() ? pending : ExceptionFacts{};
         if (completion.exception() && failure.empty()) {
           if (!effects.unknown_thrown) continue;
           failure = {completion.category()};
@@ -5833,6 +5826,14 @@ class ScalarChecker {
           normals.push_back(std::move(state));
         } else {
           const bool retained = path.receiver_transfer_pending || (input.protected_here() && checking_method_ && checking_method_->here_inputs());
+          if (aggregate) {
+            if (proving_ && validating_) program_.deferred_aggregates = true;
+            for (const auto cause : {ExceptionCategory::out_of_memory, ExceptionCategory::invalid_capacity}) {
+              const auto category = exception_id(cause);
+              exits.push_back({state, {category}, path.at, Completion::failure(category, completion.returned),
+                               path.immediate_scope_failure, std::nullopt, retained});
+            }
+          }
           exits.push_back({std::move(state), std::move(failure), path.at, completion, path.immediate_scope_failure,
                            completion.protected_here() ? path.here_exit : std::nullopt,
                            completion.failed() && retained});
@@ -6252,7 +6253,7 @@ class ScalarChecker {
   static void signature_type(const CheckedMethod &method, const Type &type, const Location &at, bool result = false,
                              bool borrowed_target = false) {
     reject_c_type_payload(type, at);
-    if (nominal_exception(type)) implementation_gap(at, "library-defined exception arguments and results require an owner-aware signature");
+    if (owning_exception(type)) implementation_gap(at, "owned exception arguments and results require an owner-aware signature");
     if (bits_type(type) || binder(method, type) || (result && type == Type::void_type)) return;
     if (borrowed_target && (type.kind == Type::product || text_type(type) ||
                             (!result && (type.kind == Type::array || type.kind == Type::abstract_type)))) return;
@@ -7613,7 +7614,9 @@ class ScalarChecker {
       implementation_gap(expr.at, "signed minimum literal with overloaded unary negation");
     return true;
   }
-  static void check_exception_field(const Expression &expr) {
+  static void check_exception_field(const Expression &expr, const Type &type = {}) {
+    if (type.identity == deferred_aggregate_id && (expr.text == "exceptions" || expr.text == "body_exception"))
+      implementation_gap(expr.at, "access to retained failures in UnhandledDeferError");
     if (expr.text != "category" && expr.text != "site" && expr.text != "requested" && expr.text != "available" && expr.text != "cause_count")
       fail(expr.at, "unknown intrinsic exception field '" + expr.text + "'");
   }
@@ -7646,7 +7649,7 @@ class ScalarChecker {
   }
   const CheckedSchema &product_schema(const Type &type, const Location &at) const {
     reject_c_type_payload(type, at);
-    if (nominal_exception(type)) fail(at, "use exception construction for '" + type.name + "'");
+    if (owning_exception(type)) fail(at, "use exception construction for '" + type.name + "'");
     if (type.kind != Type::product) implementation_gap(at, "ordinary construction requires a supported product type");
     return program_.schemas.at(type.identity);
   }
@@ -11545,7 +11548,7 @@ class ScalarChecker {
         if (!state.validating_body) check_query_binding(expr.text, expr.at);
       }
       if (const auto found = state.bindings.find(expr.text); found != state.bindings.end() && !state.definitions.contains(expr.text)) {
-        if (state.required && found->second && nominal_exception(*found->second) && read != EvidenceRead::projection)
+        if (state.required && found->second && owning_exception(*found->second) && read != EvidenceRead::projection)
           implementation_gap(expr.at, "use of an owned exception outside direct field selection");
         view = state.views.at(expr.text);
         if (found->second && found->second->kind == Type::native_handle) {
@@ -13143,7 +13146,7 @@ class ScalarChecker {
       if (!type || type->kind != Type::exception) return {};
       require_type_initialized(state, state.target, expr.children.front()->text, expr.at);
       read_type_target(state, state.value, state.target);
-      if (state.required) check_exception_field(expr);
+      if (state.required) check_exception_field(expr, *type);
       return Type::uint64;
     }
     case K::break_value: case K::continue_value: {
@@ -13254,7 +13257,9 @@ class ScalarChecker {
       bool completes = true;
       for (size_t i = 0; i < expr.children.size(); ++i) {
         const auto &item = *expr.children[i];
-        const auto type = child(i, false, completes);
+        const bool handler = !i && expr.children.size() == 1 && item.kind == K::name &&
+            state.local_declarations.contains(item.text) && state.local_declarations.at(item.text)->kind == K::handler;
+        const auto type = child(i, false, completes, handler ? EvidenceRead::projection : EvidenceRead::payload);
         if (!i) category = type;
         completes = completes && type != Type::never;
         if (state.returns && !type) state.returns->unresolved_throw = true;
@@ -16386,7 +16391,9 @@ class ScalarChecker {
       checked_scope_owners_[&handler] = next_scope_;
       lexical_.scopes.push_back({next_scope_++, {}});
       const bool nominal = nominal_exception(type);
-      const bool owned = nominal || std::ranges::any_of(categories.possibilities(), nominal_failure);
+      const bool owned = owning_exception(type) || std::ranges::any_of(categories.possibilities(), [&](size_t category) {
+        return nominal_failure(category) || (proving_ && category == deferred_aggregate_id);
+      });
       const auto id = declare(handler.text, type, !nominal || handler.read_only, true, handler.at);
       if (nominal) for (const auto &field : scalar_exception_schema(type, handler.at).fields) {
         const auto place = declare("$caught." + std::to_string(id) + "." + field.source->name, field.type,
@@ -16397,7 +16404,7 @@ class ScalarChecker {
       }
       lexical_.scopes.back().declarations = false;
       initialize(id);
-      assign_exceptions(id, categories.empty() ? nominal ? exception_possibilities(type) : exception_value_categories(type) : categories);
+      assign_exceptions(id, categories.empty() ? owned ? exception_possibilities(type) : exception_value_categories(type) : categories);
       auto active = caught_; caught_ = id; catch_bindings_.insert(id);
       caught_inputs_[id] = std::move(category_inputs);
       AbruptFlow handler_exits{before.scopes.size(), {}};
@@ -16708,8 +16715,8 @@ class ScalarChecker {
       if (place == null_target) continue;
       if (delayed_controls_.contains(place)) fail(expr.at, "a deferred block cannot capture loop-control binding '" + expr.text + "'");
       const bool captured = capture_catch(place);
-      if ((owned_catches_.contains(place) || nominal_exception(operation.type)) &&
-          (use != BindingUse::exception_field || captured || !owned_catches_.contains(place) || !nominal_exception(operation.type)))
+      if ((owned_catches_.contains(place) || owning_exception(operation.type)) &&
+          (use != BindingUse::exception_field || captured || !owned_catches_.contains(place)))
         implementation_gap(expr.at, "use of an owned exception outside direct local field selection");
       if (captured) operation.captured_place = place;
       if (read && !operation.initialized_target())
@@ -18929,8 +18936,14 @@ class ScalarChecker {
         }
         break;
       }
-      const auto source = check(*expr.children.front(), instance, operations, false, false, nullptr,
-          ExpectedTypeUse::materialization, false, IndexedUse::immediate_target);
+      Type source;
+      const auto local = base.kind == K::name ? lexical_.lookup(base.text) : std::nullopt;
+      if (local && bindings_->at(*local).type.kind == Type::exception) {
+        auto parent = read_binding(base, false, local, BindingUse::exception_field);
+        source = parent.type;
+        operations.insert_or_assign(&base, std::move(parent));
+      } else source = check(base, instance, operations, false, false, nullptr,
+                            ExpectedTypeUse::materialization, false, IndexedUse::immediate_target);
       if (source == Type::never) {
         const auto &base = ungrouped_expression(*expr.children.front());
         const auto &checked = operations.at(&base);
@@ -18947,7 +18960,7 @@ class ScalarChecker {
       const auto &parent = operations.at(expr.children.front().get());
       if (source.kind == Type::exception) {
         read_view(parent, expr.at, expr.children.front()->text);
-        check_exception_field(expr);
+        check_exception_field(expr, source);
         operation.type = Type::uint64;
         break;
       }
@@ -19002,15 +19015,24 @@ class ScalarChecker {
         break;
       }
       Type type;
+      std::optional<size_t> forwarded;
       if (expr.children.empty()) {
         if (!caught_) fail(expr.at, "bare throw requires an active catch");
-        const bool captured = capture_catch(*caught_);
-        operation.place = caught_; type = (*storage_)[*caught_].type; operation.exceptions = lexical_.exceptions.at(*caught_);
-        if (owned_catches_.contains(*caught_)) {
+        forwarded = caught_;
+      } else if (expr.children.size() == 1 && expr.children.front()->kind == K::name) {
+        if (const auto named = lexical_.lookup(expr.children.front()->text); named && catch_bindings_.contains(*named))
+          forwarded = named;
+      }
+      if (forwarded) {
+        const bool captured = capture_catch(*forwarded);
+        operation.place = forwarded;
+        type = (*storage_)[*forwarded].type;
+        operation.exceptions = lexical_.exceptions.at(*forwarded);
+        if (owned_catches_.contains(*forwarded)) {
           if (captured) implementation_gap(expr.at, "deferred transfer of a caught exception owner");
-          if (abrupt_ != owned_catches_.at(*caught_))
+          if (abrupt_ != owned_catches_.at(*forwarded))
             implementation_gap(expr.at, "locally intercepted transfer of a caught exception owner");
-          operation.exception_owner = *caught_;
+          operation.exception_owner = forwarded;
         }
       } else {
         type = child(0); operation.exceptions = operations.at(expr.children[0].get()).exceptions;
@@ -19022,7 +19044,7 @@ class ScalarChecker {
         note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       }
       if (lexical_.live && type.kind == Type::exception && !type.identity) note_declared(declared_requirement(expr));
-      const auto binding = expr.children.empty() ? caught_ : expr.children[0]->kind == K::name ? operations.at(expr.children[0].get()).place : std::optional<size_t>{};
+      const auto binding = forwarded ? forwarded : expr.children[0]->kind == K::name ? operations.at(expr.children[0].get()).place : std::optional<size_t>{};
       // An empty provisional result summary is not a non-returning contract.
       auto thrown = operation.exceptions;
       if (thrown.empty()) thrown = operation.exception_owner ? exception_possibilities(type) : exception_value_categories(type);
@@ -20838,9 +20860,8 @@ class ScalarChecker {
       if ((form->kind != Form::Kind::using_resource && form->kind != Form::Kind::import_resource) || form->path != COD_LANG_EXCEPTION_MODULE || form->using_symbol) continue;
       if (form->selected_members) implementation_gap(form->at, "member selection outside an enum");
       const auto found = std::find_if(exception_categories.begin(), exception_categories.end(), [&](const ExceptionDescriptor &entry) { return form->name == entry.name; });
-      const bool error_root = form->name == COD_LANG_ERROR_ROOT_NAME;
-      if (!error_root && found == exception_categories.end()) fail(form->at, "unknown intrinsic exception selection '" + form->name + "'");
-      const auto type = exception_type(error_root ? error_root_id : exception_id(found->category));
+      if (found == exception_categories.end()) fail(form->at, "unknown intrinsic exception selection '" + form->name + "'");
+      const auto type = exception_type(exception_id(found->category));
       if (!module_names().types.emplace(form->alias, type).second) fail(form->at, "duplicate exception type selection");
       if (form->exporting) {
         ModuleNames::Resource resource{};

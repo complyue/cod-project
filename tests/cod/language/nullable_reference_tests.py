@@ -80,7 +80,7 @@ runner.CASES = {
     'deferred_null_read': (PRE+'proc run()->void{val a<-1;ptr p=a;'
         'defer catch(e:const NullPointerException){behave @print(4);};'
         'defer{behave @print(p);};p=null;return;}run();',0,'4\n',''),
-    'deferred_read_requires_coverage': ('{{val a<-1;ptr p=a;defer{p;};p=null;}};', 2, '', 'requires a covering catch or throws'),
+    'deferred_read_requires_coverage': ('{{val a<-1;ptr p=a;defer{p;};p=null;}};', 2, '', 'requires coverage within the owning pass'),
     'deferred_null_test': (IO + '{{val a<-1;ptr p=a;defer{behave @print((p is null));};p=null;}};', 0, 'true\n', ''),
     'deferred_target_preserves_owner': (IO+'proc run()->void{ptr p:i64=null in here;val a<-19;'
         'defer{if(p is not null){behave @print(p);}else{};};defer{p=a;};return;}run();',0,'19\n',''),

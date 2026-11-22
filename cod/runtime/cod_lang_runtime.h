@@ -26,6 +26,9 @@ void cod_lang_defer_free(void *record);
 void *cod_lang_acquire_exception_region(uint64_t capacity, uint64_t root_size, uint64_t root_alignment);
 void *cod_lang_exception_payload(void *owner);
 void cod_lang_release_exception_region(void *owner);
+void *cod_lang_acquire_deferred_aggregate(uint64_t members, uint64_t *failure_category);
+void cod_lang_retain_deferred_failure(void *aggregate, uint64_t position, uint64_t category, uint64_t site,
+                                      uint64_t requested, uint64_t available, uint64_t cause, void *owner);
 void *cod_lang_lexical_text_create(void **allocations, const void *input);
 enum cod_text_slice_status {
     COD_TEXT_SLICE_READY,
