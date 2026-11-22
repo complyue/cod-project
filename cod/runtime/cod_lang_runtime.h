@@ -23,7 +23,9 @@ void *cod_lang_callable_copy(const void *source, uint64_t *status);
 void cod_lang_callable_free(void *image);
 void *cod_lang_defer_allocate(uint64_t bytes, uint64_t *status);
 void cod_lang_defer_free(void *record);
-void cod_lang_release_exception_owner(void *owner);
+void *cod_lang_acquire_exception_region(uint64_t capacity, uint64_t root_size, uint64_t root_alignment);
+void *cod_lang_exception_payload(void *owner);
+void cod_lang_release_exception_region(void *owner);
 void *cod_lang_lexical_text_create(void **allocations, const void *input);
 enum cod_text_slice_status {
     COD_TEXT_SLICE_READY,
