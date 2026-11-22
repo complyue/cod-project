@@ -50,6 +50,7 @@ class LLVMEmission {
   llvm::StructType *exception_ = llvm::StructType::get(context_, std::vector<llvm::Type *>(5, b_.getInt64Ty()));
   llvm::StructType *scalar_ = llvm::StructType::create(context_, {b_.getInt64Ty(), b_.getInt32Ty()}, "cod.scalar");
   llvm::StructType *array_view_ = llvm::StructType::create(context_, {b_.getPtrTy(), b_.getInt64Ty()}, "cod.array.view");
+  llvm::StructType *text_view_ = llvm::StructType::create(context_, {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()}, "cod.text.view");
   llvm::StructType *outcome_ = llvm::StructType::create(context_,
       {scalar_, b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty(), b_.getInt64Ty()}, "cod.outcome");
   llvm::StructType *here_ = llvm::StructType::create(context_, {b_.getPtrTy(), b_.getPtrTy()}, "cod.here");
@@ -295,11 +296,14 @@ class LLVMEmission {
     if (type.kind == Type::array) return array_base + type.identity;
     const auto enum_base = array_base + program_->arrays.size();
     if (type.kind == Type::enumeration) return enum_base + type.identity;
+    const auto text_base = enum_base + program_->enums.size();
+    if (type.kind == Type::string) return text_base;
+    if (type.kind == Type::c_string) return text_base + 1;
     if (type.kind == Type::procedure) {
       const auto found = std::find(callable_types_.begin(), callable_types_.end(), type);
       const auto id = std::distance(callable_types_.begin(), found);
       if (found == callable_types_.end()) callable_types_.push_back(type);
-      return enum_base + program_->enums.size() + id;
+      return text_base + 2 + id;
     }
     switch (type.kind) {
     case Type::integer: return 1; case Type::uint8: return 2; case Type::uint32: return 3;
@@ -2651,6 +2655,26 @@ class LLVMEmission {
     }
     case K::typed_expression: {
       const auto &operand = *expr.children.front();
+      if (fact.type == Type::c_string) {
+        auto *view = emit_expression(operand, Projection::target);
+        if (!reachable()) return nullptr;
+        std::map<bool, std::vector<size_t>> checks;
+        for (size_t i = 0; i < contexts_.size(); ++i) checks[contexts_[i].at(&expr).check_c_string].push_back(i);
+        return contextual_value(expr, checks, "cstring.assertion", [&](bool check) -> llvm::Value * {
+          if (check) {
+            auto *bytes = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(text_view_, view, 0));
+            auto *size = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(text_view_, view, 1));
+            auto search = runtime("memchr", b_.getPtrTy(), {b_.getPtrTy(), b_.getInt32Ty(), b_.getInt64Ty()});
+            auto *zero = b_.CreateCall(search, {bytes, b_.getInt32(0), size});
+            auto *ready = block("cstring.valid"), *failed = block("cstring.invalid");
+            b_.CreateCondBr(b_.CreateIsNull(zero), ready, failed);
+            b_.SetInsertPoint(failed);
+            fail_path(ExceptionCategory::type_assertion_failed, expr.at);
+            b_.SetInsertPoint(ready);
+          }
+          return discard ? empty_scalar() : view;
+        }, discard ? static_cast<llvm::Type *>(scalar_) : b_.getPtrTy());
+      }
       std::map<Projection, std::vector<size_t>> alternatives;
       for (size_t i = 0; i < contexts_.size(); ++i)
         alternatives[result_source(contexts_[i].at(&operand))].push_back(i);
@@ -2674,6 +2698,12 @@ class LLVMEmission {
     }
     case K::integer: case K::boolean:
       return pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(fact.type)), fact.integer), fact.type);
+    case K::string_literal: {
+      if (discard) return empty_scalar();
+      auto *bytes = b_.CreateGlobalString(expr.text, "text.bytes");
+      auto *view = llvm::ConstantStruct::get(text_view_, {bytes, integer(expr.text.size()), integer(expr.text.size() + 1)});
+      return new llvm::GlobalVariable(module_, text_view_, true, llvm::GlobalValue::PrivateLinkage, view, "text.literal");
+    }
     case K::return_test: {
       std::map<CheckedOperation::ReturnFilter, std::vector<size_t>> alternatives;
       for (size_t i = 0; i < contexts_.size(); ++i) alternatives[contexts_[i].at(&expr).return_filter].push_back(i);

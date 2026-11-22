@@ -71,7 +71,8 @@ inline bool transfers_value(const Type &from, const Type &to) {
   return from.kind == Type::procedure || to.kind == Type::procedure ? from == to : transfers_bits(from, to);
 }
 inline bool accepts_argument(const Type &source, const Type &target, ArgumentMode mode) {
-  return mode == ArgumentMode::value ? transfers_value(source, target) : source == target;
+  return mode == ArgumentMode::value ? transfers_value(source, target) :
+      source == target || (mode == ArgumentMode::borrowed_ref && widens_text(source, target));
 }
 
 enum class HereExit : std::uint8_t { break_call = 1, return_supplier, failure };
@@ -126,6 +127,7 @@ struct CheckedOperation {
   std::uint64_t integer = 0;
   bool enum_literal = false;
   bool enum_assertion = false;
+  bool check_c_string = false;
   CasePattern case_pattern;
   bool case_subject_may_be_null = false;
   bool case_reaches_end = false;

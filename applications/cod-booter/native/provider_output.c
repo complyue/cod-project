@@ -17,6 +17,7 @@ enum {
     bits_u64 = 8, result_void = 9, bits_bool = 11, handle_type = 12, record_type = 13,
     constructor = 14, operation = 15, entry = 16, bits_u8 = 17, bits_u32 = 18,
     bits_i64 = 19, bits_f32 = 20, bits_f64 = 21, array_type = 22, enum_type = 26,
+    string_type = 29, c_string_type = 30,
 };
 typedef cod_native_graph_frame_use_row9 interface_row;
 
@@ -165,6 +166,10 @@ static uint32_t describe_argument(const provider_interfaces *interfaces, const i
         argument->kind = cod_provider_argument_view;
         return 0;
     }
+    if (input->value_kind == string_type || input->value_kind == c_string_type) {
+        argument->kind = input->value_kind == string_type ? cod_provider_argument_text : cod_provider_argument_c_string;
+        return 0;
+    }
     argument->enum_value = input->value_kind == enum_type;
     argument->type = argument->enum_value ? enum_name(interfaces, input) : scalar_spelling(input->value_kind);
     return argument->type ? 0 : provider_output_invalid;
@@ -183,7 +188,8 @@ static uint32_t describe_constructor(const provider_interfaces *interfaces, size
     for (size_t i = 0; i < shape->input_count; ++i) {
         const uint32_t status = describe_argument(interfaces, row + 1 + i, &interfaces->inputs[i], header, stubs);
         if (status) return status;
-        if (interfaces->inputs[i].kind == cod_provider_argument_view) return provider_output_invalid;
+        if (interfaces->inputs[i].kind == cod_provider_argument_view || cod_provider_text_argument(&interfaces->inputs[i]))
+            return provider_output_invalid;
     }
     if (row->failure_module) {
         const size_t failure = find_declaration(interfaces, row->failure_module, row->failure_identity);
@@ -292,6 +298,9 @@ static uint32_t write_callable(const provider_interfaces *interfaces, size_t at,
         }
         if (inbound && argument->kind == cod_provider_argument_handle && argument->owner_role >= shape.owner_count)
             return provider_output_invalid;
+        if (cod_provider_text_argument(argument) && (!input->target_readonly || !input->owner_readonly ||
+                (inbound ? argument->owner_role >= shape.owner_count : argument->kind != cod_provider_argument_c_string)))
+            return provider_output_invalid;
     }
     if (inbound) cod_provider_write_entry(header, stubs, &shape);
     else cod_provider_write_call(header, stubs, &shape, interfaces->views);
@@ -343,14 +352,22 @@ static uint32_t write_interface(const provider_interfaces *interfaces, size_t at
 
 static uint32_t format_files(const provider_interfaces *interfaces, cod_provider_text *header, cod_provider_text *stubs) {
     cod_provider_begin(header, stubs);
-    bool here = false, loans = false;
+    bool here = false, loans = false, incoming_text = false, outgoing_text = false;
     for (size_t i = 0; i < interfaces->count; i = next_interface(interfaces->rows, i)) {
         const interface_row *row = &interfaces->rows[i];
         here |= row->interface_kind == operation && row->has_here;
         loans |= row->interface_kind == entry && row->owner_count;
+        for (size_t j = 0; j < row->entry_count; ++j) {
+            const uint8_t kind = row[1 + j].value_kind;
+            if (kind == string_type || kind == c_string_type) {
+                incoming_text |= row->interface_kind == entry;
+                outgoing_text |= row->interface_kind == operation;
+            }
+        }
     }
     if (here) cod_provider_here_preamble(header);
     if (loans) cod_provider_loan_preamble(header);
+    cod_provider_text_preamble(header, stubs, incoming_text, outgoing_text);
 
     static const uint8_t groups[] = {constructor, entry, operation};
     for (size_t group = 0; group < sizeof(groups) / sizeof(*groups); ++group) {

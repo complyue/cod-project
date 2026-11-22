@@ -135,6 +135,8 @@ inline void emit_c_here(const CheckedProgram &program, const CheckedNativeOperat
 
 inline cod_provider_argument describe_c_argument(const CheckedNativeInput &input, const NativeEnumNames &enums) {
   if (input.type.kind == Type::array) return {nullptr, cod_provider_argument_view, false, input.owner.value_or(0), false};
+  if (text_type(input.type)) return {nullptr, input.type == Type::c_string ? cod_provider_argument_c_string : cod_provider_argument_text,
+                                    false, *input.owner, false};
   if (input.type.kind == Type::c_type_marker)
     return {input.type.name.c_str(), cod_provider_argument_handle, false, input.owner.value_or(SIZE_MAX), false};
   return {provider_value_type(input.type, enums), cod_provider_argument_scalar,
@@ -178,6 +180,11 @@ inline NativeProviderFiles emit_native_providers(const CheckedProgram &program, 
   if (std::ranges::any_of(program.native_entries, [&](const auto &entry) {
         return !program.methods.at(entry.method).source->owner_parameters.empty();
       })) cod_provider_loan_preamble(&header_text);
+  const auto has_text = [](const auto &boundary) {
+    return std::ranges::any_of(boundary.inputs, [](const auto &input) { return text_type(input.type); });
+  };
+  cod_provider_text_preamble(&header_text, &stubs_text, std::ranges::any_of(program.native_entries, has_text),
+                            std::ranges::any_of(program.native_operations, has_text));
   const auto enums = emit_c_enums(program, entry_path, header_text, stubs_text);
 
   std::set<size_t> emitted_borrows;

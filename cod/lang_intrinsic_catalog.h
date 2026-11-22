@@ -20,7 +20,8 @@
   ENTRY(unsound_runtime_typing, UnsoundRuntimeTypingError, 6, 0) \
   ENTRY(statically_unknown_type, StaticallyUnknownTypeException, 7, 1) \
   ENTRY(index_out_of_bounds, IndexOutOfBoundsError, 8, 0) \
-  ENTRY(unexpected_case, UnexpectedCaseError, 9, 0)
+  ENTRY(unexpected_case, UnexpectedCaseError, 9, 0) \
+  ENTRY(type_assertion_failed, TypeAssertionFailedError, 10, 0)
 
 /* An identity is read with its kind. These records describe publications
    during checking, independently of a compiler's runtime symbol table. */

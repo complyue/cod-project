@@ -63,10 +63,9 @@ cod_native_status cod_native_llvm_verify_impl(cod_native_LLVMSession_borrow reso
 }
 
 /* The launcher registers the native target and its assembly printer. */
-cod_native_status cod_native_llvm_emit_object_impl(cod_native_LLVMSession_borrow resource, cod_native_Path_borrow output,
+cod_native_status cod_native_llvm_emit_object_impl(cod_native_LLVMSession_borrow resource, const char *path,
                                                   uint8_t *status) {
   cod_llvm_session *session = llvm_session(resource);
-  const char *path = (const char *)(uintptr_t)output.payload;
   if (!session || !path) return COD_NATIVE_BOUNDARY_ERROR;
   cod_llvm_object_result result = cod_llvm_emit_object(session->module);
   *status = llvm_emission_failed;

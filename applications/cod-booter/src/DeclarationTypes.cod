@@ -1,14 +1,14 @@
 using "SourceStorage.cod" SourceBytes;
 using "ParserStorage.cod" {
-    ExprNodes, no_node, group_node, name_node, owned_type_node, typed_name_node, data_parent_node,
-    make_named_node, field_access_node, enum_declaration_node, type_assertion_node, literal_node,
+    ExprNodes, no_node, group_node, ungrouped, name_node, owned_type_node, typed_name_node, data_parent_node,
+    make_named_node, field_access_node, enum_declaration_node, type_assertion_node, literal_node, text_literal_node,
     narrow_integer_node, bool_node, call_node, here_call_node, compare_node, logical_not_node, logical_binary,
     case_node, case_arm_node, case_member_pattern, case_true_pattern, case_false_pattern, case_null_pattern,
 };
 using "NameResolution.cod" {
     NameBindings, NameWork, first_item, record_declaration, formal_binding, local_binding,
     ordinary_selection, record_type, native_scalar, enum_value, find_enum_member,
-    builtin_u64, builtin_u32, builtin_u8, builtin_bool,
+    builtin_u64, builtin_u32, builtin_u8, builtin_bool, builtin_string, builtin_c_string, text_type,
 };
 using "ModuleExports.cod" { SelectedExports, same_name, record_export, enum_export, enum_spelling };
 using "ModuleExportStorage.cod" { ModuleInterfaces, find_interface, write_interface_header, enum_type };
@@ -45,6 +45,8 @@ func unproved_case_subject() -> u8 { return 93u8; }
 func invalid_case_pattern_type() -> u8 { return 94u8; }
 func missing_case_member() -> u8 { return 95u8; }
 func invalid_case_guard_type() -> u8 { return 96u8; }
+func invalid_c_string_operand() -> u8 { return 97u8; }
+export func interior_nul_in_c_string() -> u8 { return 98u8; }
 
 func describe_type(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
                    annotation:u64, current_module:u64, result:DeclaredType in R) -> bool
@@ -52,7 +54,7 @@ func describe_type(nodes:const ExprNodes in N, names:const NameBindings in B, se
     if (annotation == no_node()) return false;
     val marker <- if (nodes[annotation].kind == owned_type_node()) { (nodes[annotation].left) } else { annotation };
     val kind <- names[marker].kind;
-    if (native_scalar(kind)) {
+    if (native_scalar(kind) || text_type(kind)) {
         result.kind <- kind;
         result.defining_module <- 0u64;
         result.identity <- 0u64;
@@ -116,6 +118,12 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
                 at:u64, result:DeclaredType in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner W, const owner P, const owner I, owner R} {
     val kind <- nodes[at].kind;
+    if (kind == text_literal_node()) {
+        result.kind <- builtin_string();
+        result.defining_module <- 0u64;
+        result.identity <- 0u64;
+        return true;
+    } else {};
     val boolean <- kind == bool_node() || kind == compare_node() || kind == logical_not_node() || logical_binary(kind);
     if (kind == literal_node() || kind == narrow_integer_node() || boolean) {
         result.kind <- if (boolean) { builtin_bool() } else {
@@ -211,23 +219,34 @@ func remember_type(work:NameWork in W, at:u64, type:const DeclaredType in T) -> 
     (work[at].value_identity <- type.identity):void;
 }
 
-func check_enum_assertion(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
+func check_type_assertion(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
                           selected:const SelectedExports in E, work:NameWork in W,
                           spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I,
                           at:u64, report:DeclaredExpressionResult in R) -> bool
     where {const owner S, const owner N, owner B, const owner E, owner W, const owner P, const owner I, owner R} {
     ref wanted = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
     val annotation <- nodes[at].right;
-    if (!describe_type(nodes, names, selected, annotation, 0u64, wanted) || wanted.kind != enum_type())
+    if (!describe_type(nodes, names, selected, annotation, 0u64, wanted))
         return declared_expression_failure(report, unproved_type_assertion(), annotation);
     val operand <- nodes[at].left;
+    ref actual = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
+    if (wanted.kind == builtin_c_string()) {
+        if (!trace_type(source, nodes, names, selected, work, spellings, interfaces, operand, actual) || !text_type(actual.kind))
+            return declared_expression_failure(report, invalid_c_string_operand(), operand);
+        val selected_text <- ungrouped(nodes, operand);
+        if (nodes[selected_text].kind == text_literal_node() && nodes[selected_text].number != 0u64)
+            return declared_expression_failure(report, interior_nul_in_c_string(), selected_text);
+        remember_type(work, at, wanted);
+        return true;
+    } else {};
+    if (wanted.kind != enum_type())
+        return declared_expression_failure(report, unproved_type_assertion(), annotation);
     if (nodes[operand].kind == name_node() && names[operand].kind == 0u8) {
         val code <- bind_enum_spelling(source, nodes, names, work, spellings, interfaces, operand, at, wanted);
         if (code == missing_enum_member()) return declared_expression_failure(report, code, operand);
         if (code != 0u8) return declared_expression_failure(report, code, annotation);
         (names[at].kind <- enum_value()):void;
     } else {
-        ref actual = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
         if (!trace_type(source, nodes, names, selected, work, spellings, interfaces, operand, actual))
             return declared_expression_failure(report, unproved_enum_operand(), operand);
         if (actual.kind != enum_type() || actual.defining_module != wanted.defining_module || actual.identity != wanted.identity)
@@ -302,7 +321,7 @@ export func check_declared_expressions(source:const SourceBytes in S, nodes:cons
     for (at in 0u64 .. used) {
         kind <- nodes[at].kind;
         if (kind == type_assertion_node() &&
-            !check_enum_assertion(source, nodes, names, selected, work, spellings, interfaces, at, report)) return false;
+            !check_type_assertion(source, nodes, names, selected, work, spellings, interfaces, at, report)) return false;
         if (kind == case_node() &&
             !check_case_declaration(source, nodes, names, selected, work, spellings, interfaces, at, report)) return false;
     };
@@ -319,7 +338,8 @@ export func prepare_native_operand_types(source:const SourceBytes in S, nodes:co
         kind <- nodes[at].kind;
         if ((kind == field_access_node() || (kind == name_node() && names[at].kind != 0u8)) &&
             trace_type(source, nodes, names, selected, work, spellings, interfaces, at, result)) {
-            if (result.kind == enum_type() || (kind == field_access_node() && native_scalar(result.kind))) {
+            if (result.kind == enum_type() || text_type(result.kind) ||
+                (kind == field_access_node() && native_scalar(result.kind))) {
                 work[at].value_kind <- result.kind;
                 work[at].value_module <- result.defining_module;
                 (work[at].value_identity <- result.identity):void;
