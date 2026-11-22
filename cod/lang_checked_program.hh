@@ -513,9 +513,14 @@ struct QueryEnvironment {
     std::set<std::string> same_selection_places;
     bool operator==(const ScopeSelection &) const = default;
   };
+  struct LexicalDefinition {
+    size_t definition;
+    std::map<std::string, std::string> inputs;
+    bool operator==(const LexicalDefinition &) const = default;
+  };
   std::vector<QueryBinding> bindings;
   std::map<std::string, ScopeSelection> scope_selections;
-  std::map<std::string, size_t> lexical_definitions;
+  std::map<std::string, LexicalDefinition> lexical_definitions;
   std::set<std::string> symbol_shadows;
   std::vector<std::vector<OwnerMatch>> owners;
   std::vector<std::vector<OwnerMatch>> scope_owners;
@@ -560,6 +565,7 @@ struct CheckedInstance {
   bool result_supplied = false;
   bool always_throws = false;
   AbstractSymbolTargets incoming_abstract_targets = {};
+  std::map<std::string, size_t> lexical_bindings = {};
 };
 struct CheckedHereContract {
   struct Component {
@@ -641,6 +647,12 @@ struct CheckedMethod {
       bool operator==(const PlaceAccess &) const = default;
     };
     size_t lexical_method;
+    struct NamedEntry {
+      size_t explicit_parameters;
+      std::set<std::string> bindings;
+      bool operator==(const NamedEntry &) const = default;
+    };
+    std::optional<NamedEntry> named;
     std::vector<Parameter> parameters;
     std::vector<OwnerParameter> owners;
     std::map<std::string, size_t> owner_names;

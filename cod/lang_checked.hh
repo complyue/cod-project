@@ -215,8 +215,11 @@ class ScalarChecker {
     if (parent) if (const auto found = lexical_variants_.find({form, *parent}); found != lexical_variants_.end()) return found->second;
     return lexical_methods_.at(form);
   }
+  bool named_lexical_procedure(const Form &source) const {
+    return source.kind == Form::Kind::procedure && !source.name.empty() && lexical_methods_.contains(&source);
+  }
   std::map<const Form *, size_t> lexical_methods_;
-  std::map<std::pair<size_t, std::string>, const Expression *> scope_operand_names_;
+  std::map<std::tuple<size_t, const Expression *, std::string>, const Expression *> scope_operand_names_;
   std::map<const Expression *, const Expression *> attachment_operands_;
   std::map<size_t, std::vector<size_t>> scope_profiles_;
   std::map<std::pair<size_t, std::vector<CheckedHereTarget>>, size_t> here_receiver_profiles_;
@@ -2090,6 +2093,7 @@ class ScalarChecker {
     std::vector<CheckedCaptureInput> environment;
     std::vector<Type> retained;
     size_t query = 0;
+    std::map<std::string, size_t> live_bindings = {};
   };
   std::map<size_t, DefinitionContext> definitions_;
   std::vector<DefinitionContext> retained_definitions_;
@@ -2373,7 +2377,8 @@ class ScalarChecker {
       if (state->method) {
         const auto &method = program_.methods[*state->method];
         if (lexical_methods_.contains(method.source) && name == method.source->name)
-          return {{*state->method}, nullptr, state->retained};
+          return {{method.scope_inputs && method.scope_inputs->named ?
+              method.scope_inputs->lexical_method : *state->method}, nullptr, state->retained};
       }
       const auto found = module_names().callables.find(name);
       return found == module_names().callables.end() ? NamedFamily{} : NamedFamily{family_methods(found->second)};
@@ -2383,8 +2388,10 @@ class ScalarChecker {
       if (found == definitions_.end()) return {};
       return {{found->second.method}, nullptr, {}, &found->second, found->second.declaration.get()};
     }
-    if (checking_method_ && lexical_methods_.contains(checking_method_->source) && name == checking_method_->source->name)
-      return {{checking_instance_->method}, checking_instance_};
+    if (checking_method_ && lexical_methods_.contains(checking_method_->source) && name == checking_method_->source->name) {
+      const auto &scope = checking_method_->scope_inputs;
+      return {{scope && scope->named ? scope->lexical_method : checking_instance_->method}, checking_instance_};
+    }
     const auto found = module_names().callables.find(name);
     return found == module_names().callables.end() ? NamedFamily{} : NamedFamily{family_methods(found->second)};
   }
@@ -3334,7 +3341,8 @@ class ScalarChecker {
     std::map<size_t, Projection> projected;
     std::map<size_t, ProjectionPaths> paths;
     std::map<size_t, size_t> saved_nullable_inputs;
-    bool contains(size_t input) const { return all || projected.contains(input); }
+    std::set<size_t> direct;
+    bool contains(size_t input) const { return all || direct.contains(input) || projected.contains(input); }
     const ProjectionPaths *path(size_t input) const {
       const auto found = paths.find(input);
       return found == paths.end() ? nullptr : &found->second;
@@ -3395,7 +3403,7 @@ class ScalarChecker {
           })) continue;
       for (const auto parameter : known.present) {
         const auto &view = views.at(parameter);
-        if (slots.projected.contains(parameter)) continue;
+        if (slots.direct.contains(parameter) || slots.projected.contains(parameter)) continue;
         const auto present = selected_input(view.targets);
         facts.present.insert(present.begin(), present.end());
         // Opaque views such as lexical text have no enumerated target places.
@@ -4149,6 +4157,11 @@ class ScalarChecker {
             if (const auto binding = slots.exact(parameter)) effect.selections.entry_nonnull.insert(*binding);
             continue;
           }
+          if (slots.direct.contains(parameter)) {
+            const auto selected = physical_slots(views.at(parameter).slots);
+            if (selected.size() == 1) effect.selections.entry_nonnull.insert(*selected.begin());
+            continue;
+          }
           const auto present = selected_input(views.at(parameter).targets);
           effect.present.insert(present.begin(), present.end());
         }
@@ -4161,7 +4174,7 @@ class ScalarChecker {
         }
         const auto selected = physical_slots(view.slots);
         const auto binding = slots.projected.contains(parameter) ? slots.exact(parameter) :
-            slots.all ? (selected.size() == 1 ? std::optional<size_t>{*selected.begin()} : std::nullopt) : selection(view);
+            slots.contains(parameter) ? (selected.size() == 1 ? std::optional<size_t>{*selected.begin()} : std::nullopt) : selection(view);
         if (binding) {
           if (slots.contains(parameter)) effect.selections.initialize(*binding);
           if (!slots.projected.contains(parameter)) effect.selections.refine(*binding, false);
@@ -4490,6 +4503,7 @@ class ScalarChecker {
     auto projected = operands;
     std::vector<std::optional<size_t>> stable_preparations(operands.size());
     if (at_invocation && !invocation_slots.all) for (size_t i = 0; i < operands.size(); ++i) {
+      if (invocation_slots.direct.contains(i)) continue;
       const auto &operand = operands[i];
       if (!stable_prepared_selection(operand)) continue;
       stable_preparations[i] = i;
@@ -4603,8 +4617,12 @@ class ScalarChecker {
     });
     const bool has_invocation_time_slots = !immediate_scope && !summary.bindings.empty() &&
         std::ranges::any_of(operation.arguments, [](const auto &argument) { return argument.binding_slot; });
-    const bool prepared_slots = prepared && has_invocation_time_slots;
-    InvocationSlots invocation_slots{prepared_slots, {}, {}, {}};
+    InvocationSlots invocation_slots{prepared && has_invocation_time_slots, {}, {}, {}, {}};
+    if (prepared && operation.callee) {
+      const auto &method = program_.methods[program_.instances[*operation.callee].method];
+      if (method.scope_inputs && method.scope_inputs->named) invocation_slots.direct = method.scope_inputs->live_bindings;
+    }
+    const bool prepared_slots = invocation_slots.all || !invocation_slots.direct.empty();
     if (prepared && !proving_ && !fields.empty()) discover_deferred_product_call(fields, operands, summary, expr.at);
     const auto projected = fields.empty() ? std::vector<CheckedOperation>{} :
         project_call_fields(fields, operands, expr.at, prepared && proving_, invocation_slots);
@@ -4680,7 +4698,7 @@ class ScalarChecker {
       if (arguments[i].kind != Type::procedure || contract.owners.empty() || !contract.owners[i]) continue;
       if (operation.callable_argument_targets.empty()) operation.callable_argument_targets.resize(arguments.size());
       auto &targets = operation.callable_argument_targets[i];
-      if (prepared_slots) {
+      if (invocation_slots.contains(i)) {
         // Registration retains the slot; its later valid targets can reach the call.
         for (const auto slot : physical_slots(views[i].slots)) {
           const auto &possible = possible_targets_.at(slot);
@@ -4746,6 +4764,7 @@ class ScalarChecker {
       CleanupEquations::Reads reads;
       bool checked_entry = false;
       for (size_t i = 0; i < arguments.size(); ++i) {
+        if (!invocation_slots.contains(i)) continue;
         const auto mode = operation.arguments.at(i).mode;
         if (mode == ArgumentMode::borrowed_ptr) continue;
         const auto required = prepared_binding_reads(views[i], expr.at, mode == ArgumentMode::borrowed_ref);
@@ -5931,9 +5950,10 @@ class ScalarChecker {
     return type.kind == Type::native_handle && type.identity == marker.identity;
   }
   CheckedOperation check_handle_loan(const Expression &operand, CheckedInstance *instance,
-      std::map<const Expression *, CheckedOperation> &operations) {
-    check(operand, instance, operations, false, false, nullptr, ExpectedTypeUse::materialization, false,
-          IndexedUse::value_only, NativeLoanContext::borrow);
+      std::map<const Expression *, CheckedOperation> &operations, std::optional<size_t> selected_binding = {}) {
+    if (selected_binding) operations[&operand] = read_native_loan(operand, *selected_binding);
+    else check(operand, instance, operations, false, false, nullptr, ExpectedTypeUse::materialization, false,
+               IndexedUse::value_only, NativeLoanContext::borrow);
     const auto &value = operations.at(&operand);
     if (value.type == Type::never) return value;
     if (value.type.kind != Type::native_handle || value.type.owned || !value.view || value.mixed_view || value.nullable_view)
@@ -6820,6 +6840,8 @@ class ScalarChecker {
     return demand(select_method(family, arguments, at, name, retained, access, owners), arguments, at, environment, retained, query_environment);
   }
   size_t demand_named(const Expression &expr, const NamedFamily &family, size_t method, const std::vector<Type> &arguments) {
+    if (has_lexical_places(family))
+      implementation_gap(expr.at, "lexical procedure invocation requires a checked supplying activation");
     return demand(method, arguments, expr.at,
         family.context ? family.context->environment : family.definition ? family.definition->environment : std::vector<CheckedCaptureInput>{},
         family.retained_types(), family.context ? family.context->query_environment : family.definition ? family.definition->query : 0,
@@ -7275,18 +7297,20 @@ class ScalarChecker {
     state.invocation_result_owner.reset();
     state.observed_return = {};
     state.caught_exception.reset();
-    // An ordinary retained value has invocation-local storage. A standalone
-    // here body has direct access to its supplying activation instead.
-    if (!method.source->implicit_scope) for (const auto &capture : free_bindings(*method.source).captures)
-      if (const auto found = state.views.find(capture.name);
-          found != state.views.end() && found->second.value_capture == true) {
-        found->second.owner = EvidenceOwner{};
-        found->second.place_owners = {EvidenceOwner{}};
-        found->second.storage_kind = PlaceKind::value;
-        found->second.view = found->second.value_binding = true;
-        found->second.fixed_binding = false;
-        found->second.slot_read_only = found->second.read_only;
+    // Live access retains the supplying place. Independent values have invocation storage.
+    if (!method.source->implicit_scope && !named_lexical_procedure(*method.source)) {
+      for (const auto &capture : free_bindings(*method.source).captures) {
+        const auto found = state.views.find(capture.name);
+        if (found == state.views.end() || found->second.value_capture != true) continue;
+        auto &view = found->second;
+        view.owner = EvidenceOwner{};
+        view.place_owners = {EvidenceOwner{}};
+        view.storage_kind = PlaceKind::value;
+        view.view = view.value_binding = true;
+        view.fixed_binding = false;
+        view.slot_read_only = view.read_only;
       }
+    }
     for (size_t i = 0; i < method.input_owners().size(); ++i) {
       const auto owner = EvidenceOwner::parameter(i);
       const auto &name = method.input_owners()[i].name;
@@ -8225,7 +8249,7 @@ class ScalarChecker {
   }
   bool has_type_captures(size_t method, const TypeEvidenceState &state) const {
     const auto &source = *program_.methods[method].source;
-    if (!lexical_methods_.contains(&source)) return false;
+    if (!lexical_methods_.contains(&source) || named_lexical_procedure(source)) return false;
     if (source.explicit_captures) return !source.captures.empty();
     return std::ranges::any_of(free_bindings(source).captures, [&](const Capture &capture) {
       return state.bindings.contains(capture.name) || lexical_self(capture.name, state.method);
@@ -11094,7 +11118,8 @@ class ScalarChecker {
   void check_complete_named_call(const Expression &expr, CheckedInstance *supplier,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
     const auto family = named_family(expr.text);
-    if (family.context || family.definition || &expr == prepared_call_)
+    const bool live_lexical = has_lexical_places(family);
+    if (((family.context || family.definition) && !live_lexical) || &expr == prepared_call_)
       implementation_gap(expr.at, "a named argument list for a lexical or deferred callable");
     if (family.methods.empty()) fail(expr.at, "unknown callable '" + expr.text + "'");
     const auto binding = bind_written_call(expr, family, expr.children, std::nullopt);
@@ -11115,8 +11140,14 @@ class ScalarChecker {
       operation.arguments[slot] = {binding.modes[slot], arguments[slot]};
       completes = completes && prepared_argument_completes(views[slot]);
     }
-    const auto method = select_method(binding.candidates, arguments, expr.at, expr.text, {}, access_of(views), owners_of(views));
+    const auto method = select_method(binding.candidates, arguments, expr.at, expr.text, family.retained_types(),
+                                      access_of(views), owners_of(views));
     if (!completes) complete_written_arguments(program_.methods[method], arguments, operands);
+    if (live_lexical) {
+      if (family.definition) check_query_binding(expr.text, expr.at);
+      finish_lexical_call(expr, family, method, arguments, views, supplier, operations, operation, read, discard, completes);
+      return;
+    }
     const auto callee = demand(method, arguments, expr.at, {}, {}, 0, family.declaration);
     finish_named_call(expr, arguments, views, operation, read, discard, completes, callee);
   }
@@ -13603,7 +13634,7 @@ class ScalarChecker {
   size_t retain_query_environment(CheckedMethod &method, const std::optional<ResultContract> &result = {},
                                   const TypeEvidenceState *declaration = nullptr, const std::vector<size_t> &scope_owners = {},
                                   std::map<std::string, QueryEnvironment::ScopeSelection> scope_selections = {},
-                                  std::map<std::string, size_t> lexical_definitions = {}) {
+                                  std::map<std::string, QueryEnvironment::LexicalDefinition> lexical_definitions = {}) {
     const auto &symbols = free_bindings(*method.source).symbols;
     if (method.queries.empty() && symbols.empty() && !result && lexical_definitions.empty()) return 0;
     QueryEnvironment environment;
@@ -13646,7 +13677,8 @@ class ScalarChecker {
       environment.owners.push_back(std::move(relations));
       if (!scope_owners.empty()) {
         auto &incoming = environment.scope_owners.emplace_back();
-        for (const auto other : scope_owners) incoming.push_back(compare_owners(owner, other));
+        for (const auto other : scope_owners)
+          incoming.push_back(other == null_target ? OwnerMatch::unknown : compare_owners(owner, other));
       }
     }
     const auto found = std::find(program_.query_environments.begin(), program_.query_environments.end(), environment);
@@ -14190,13 +14222,27 @@ class ScalarChecker {
   }
   size_t retain_lexical_definition(const DefinitionContext &definition, const Location &at) {
     if (!definition.captures.empty())
-      implementation_gap(at, "direct calls to a lexical definition requiring the supplying activation's live slots");
+      implementation_gap(at, "a lexical definition whose supplying activation is not available");
     const auto found = std::ranges::find_if(retained_definitions_, [&](const auto &prior) {
       return prior.method == definition.method && prior.query == definition.query && prior.retained == definition.retained;
     });
     const auto index = std::distance(retained_definitions_.begin(), found);
-    if (found == retained_definitions_.end()) retained_definitions_.push_back(definition);
+    if (found == retained_definitions_.end()) {
+      auto &retained = retained_definitions_.emplace_back(definition);
+      retained.live_bindings.clear();
+    }
     return index;
+  }
+  template <typename Supply>
+  QueryEnvironment::LexicalDefinition forward_definition(const Capture &name, const DefinitionContext &definition,
+                                                          const Supply &supply) {
+    QueryEnvironment::LexicalDefinition result{retain_lexical_definition(definition, name.at), {}};
+    for (const auto &[input, binding] : definition.live_bindings) {
+      const auto label = "$scope.definition." + name.name + "." + std::to_string(result.inputs.size());
+      supply(Capture{label, name.at}, binding);
+      result.inputs.emplace(input, label);
+    }
+    return result;
   }
   void define_callable(size_t method, const Location &at) {
     auto &definition = program_.methods[method];
@@ -14212,19 +14258,35 @@ class ScalarChecker {
         definition.lexical_definitions.push_back(capture);
         return true;
       });
-    std::map<std::string, size_t> lexical_definitions;
+    auto evidence = std::make_shared<TypeEvidenceState>(evidence_state(false, &definition_dependencies(*definition.source)));
+    DefinitionContext context{method, evidence, {}, {}, definition_retained(method, *evidence)};
+    std::map<std::string, QueryEnvironment::LexicalDefinition> lexical_definitions;
     for (const auto &name : definition.lexical_definitions) {
       const auto binding = lexical_.lookup(name.name);
       if (!binding || !definitions_.contains(*binding))
         implementation_gap(name.at, "a lexical definition without its declaration context");
-      lexical_definitions.emplace(name.name, retain_lexical_definition(definitions_.at(*binding), name.at));
+      lexical_definitions.emplace(name.name, forward_definition(name, definitions_.at(*binding),
+          [&](const Capture &input, size_t slot) { context.live_bindings.emplace(input.name, slot); }));
     }
-    auto evidence = std::make_shared<TypeEvidenceState>(evidence_state(false, &definition_dependencies(*definition.source)));
-    DefinitionContext context{method, evidence, {}, {}, definition_retained(method, *evidence)};
     for (const auto &capture : definition.captures) {
       const auto binding = lexical_.lookup(capture.name);
-      require_value_capture_source(binding, capture.at);
+      if (binding && named_lexical_procedure(*definition.source)) {
+        context.live_bindings.emplace(capture.name, *binding);
+        continue;
+      }
       const auto family = binding ? NamedFamily{} : named_family(capture.name);
+      if (family.context && named_lexical_procedure(*definition.source) &&
+          named_lexical_procedure(*program_.methods[family.methods.front()].source)) {
+        const auto enclosing_method = family.methods.front();
+        const auto &dependencies = definition_dependencies(*program_.methods[enclosing_method].source);
+        const DefinitionContext enclosing{enclosing_method,
+            std::make_shared<TypeEvidenceState>(evidence_state(true, &dependencies)), {}, family.context->environment,
+            family.context->retained_types, family.context->query_environment, family.context->lexical_bindings};
+        lexical_definitions.emplace(capture.name, forward_definition(capture, enclosing,
+            [&](const Capture &input, size_t slot) { context.live_bindings.emplace(input.name, slot); }));
+        continue;
+      }
+      require_value_capture_source(binding, capture.at);
       context.captures.push_back({binding, family.methods, family.context != nullptr});
       Expression name{}; name.kind = Expression::Kind::name; name.at = capture.at; name.text = capture.name;
       auto state = *evidence;
@@ -14235,6 +14297,8 @@ class ScalarChecker {
       const auto access = evidence->views.find(capture.name);
       context.environment.push_back({*type, access != evidence->views.end() && access->second.read_only.value_or(false)});
     }
+    if (!context.live_bindings.empty() && !context.captures.empty())
+      implementation_gap(at, "a lexical procedure with dependencies on distinct defining activations");
     context.query = retain_query_environment(definition, {}, evidence.get(), {}, {}, std::move(lexical_definitions));
     warn_captures(definition);
     const auto id = bind(definition.source->name, Type::void_type, {}, true, true, true, at);
@@ -14244,7 +14308,17 @@ class ScalarChecker {
     if (definition.source->type_parameters.empty()) {
       const auto selection = select_callable({method}, nullptr, at, false, evidence.get());
       cover_family({method}, selection.type, at, [&](size_t selected, const std::vector<Type> &arguments) {
-        demand(selected, arguments, at, bound.environment, bound.retained, bound.query, evidence.get());
+        if (bound.live_bindings.empty())
+          demand(selected, arguments, at, bound.environment, bound.retained, bound.query, evidence.get());
+        else {
+          ScopeCall call;
+          call.arguments = arguments;
+          call.views.resize(arguments.size());
+          CheckedOperation unused;
+          std::map<const Expression *, CheckedOperation> preparation;
+          const NamedFamily family{{selected}, nullptr, {}, &bound, evidence.get()};
+          demand_lexical_call(family, selected, call, at, nullptr, nullptr, preparation, unused);
+        }
       }, bound.retained);
     }
   }
@@ -14291,7 +14365,7 @@ class ScalarChecker {
     const auto state = family.declaration ? *family.declaration : evidence_state(family.context != nullptr, &dependencies);
     const auto selection = select_callable(family.methods, expected, at, definition_site, &state);
     require_ordinary_callable_type(selection.type, at);
-    if (!definition.captures.empty())
+    if (!definition.captures.empty() || has_lexical_places(family))
       fail(at, "a storable func must be capture-free");
     CheckedCallable value{selection.type};
     const auto query = family.context ? family.context->query_environment : family.definition ? family.definition->query
@@ -14339,8 +14413,8 @@ class ScalarChecker {
     }
     return materialized_value(id, at);
   }
-  const Expression &scope_operand(size_t method, const Capture &capture) {
-    const auto key = std::pair{method, capture.name};
+  const Expression &scope_operand(size_t method, const Capture &capture, const Expression *call = nullptr) {
+    const auto key = std::tuple{method, call, capture.name};
     if (const auto found = scope_operand_names_.find(key); found != scope_operand_names_.end()) return *found->second;
     auto operand = std::make_unique<Expression>();
     operand->kind = Expression::Kind::name; operand->at = capture.at; operand->text = capture.name;
@@ -14357,7 +14431,8 @@ class ScalarChecker {
       if (method.result != result || method.throws_categories != throws_categories || method.throws_types != failures ||
           method.here_group != group) continue;
       const auto &candidate = *method.scope_inputs;
-      if (candidate.owner_names != inputs.owner_names || candidate.relations != inputs.relations ||
+      if (candidate.named != inputs.named || candidate.owner_names != inputs.owner_names ||
+          candidate.relations != inputs.relations ||
           candidate.lexical_here != inputs.lexical_here ||
           candidate.here_reception != inputs.here_reception ||
           candidate.here_input_owners != inputs.here_input_owners || candidate.here_snapshots != inputs.here_snapshots ||
@@ -14382,7 +14457,8 @@ class ScalarChecker {
     method.throws_categories = std::move(throws_categories);
     method.throws_types = std::move(failures);
     method.here_group = std::move(group);
-    for (auto &parameter : inputs.parameters) {
+    const auto first_scope_input = inputs.named ? inputs.named->explicit_parameters : 0;
+    for (auto &parameter : std::span(inputs.parameters).subspan(first_scope_input)) {
       const auto name = "$scope.input." + std::to_string(method.parameters.size());
       parameter.type = Type{Type::named, name};
       method.parameters.push_back(parameter.type);
@@ -14407,9 +14483,13 @@ class ScalarChecker {
     return role;
   }
   void scope_owner_relations(CheckedMethod::ScopeInputs &inputs, const std::vector<size_t> &owners) const {
-    for (const auto a : owners) {
+    for (size_t i = 0; i < owners.size(); ++i) {
       auto &relations = inputs.relations.emplace_back();
-      for (const auto b : owners) relations.push_back(compare_owners(a, b));
+      for (size_t j = 0; j < owners.size(); ++j) {
+        if (i == j) relations.push_back(OwnerMatch::satisfied);
+        else if (owners[i] == null_target || owners[j] == null_target) relations.push_back(OwnerMatch::unknown);
+        else relations.push_back(compare_owners(owners[i], owners[j]));
+      }
     }
   }
   static std::set<std::set<size_t>> selection_groups(const std::map<size_t, size_t> &selected,
@@ -14570,6 +14650,198 @@ class ScalarChecker {
     return result;
   }
 
+  struct ScopeCall {
+    CheckedMethod::ScopeInputs inputs{};
+    std::vector<Type> arguments;
+    std::vector<CheckedOperation> views;
+    std::map<size_t, size_t> place_inputs;
+  };
+  static bool has_lexical_places(const NamedFamily &family) {
+    return (family.definition && !family.definition->live_bindings.empty()) ||
+        (family.context && !family.context->lexical_bindings.empty());
+  }
+  void append_scope_input(ScopeCall &call, const Capture &capture, const Expression &operand,
+      std::optional<size_t> binding, CheckedInstance *instance, std::map<const Expression *, CheckedOperation> &operations,
+      CheckedOperation &operation, bool selected_slot = false, bool forwarded_name = false) {
+    auto &[inputs, arguments, views, place_inputs] = call;
+    const auto *source = binding ? &bindings_->at(*binding) : nullptr;
+    const auto owner_role = [&](size_t actual, const Location &at) {
+      return scope_owner_role(inputs, operation.scope_owners, actual, at);
+    };
+    const bool independent = !source;
+    const bool live_value = !independent && (source->value_binding || source->callable_value);
+    const bool live_binding = !independent && !live_value;
+    const bool declared_place = !independent && (source->alias || !source->selection.empty() || forwarded_name);
+    Parameter parameter; parameter.name = capture.name; parameter.at = capture.at;
+    parameter.declaration_kind = independent ? "val" : !live_value && source->requires_initialized ? "ref" : "ptr";
+
+    if (source && source->type.kind == Type::native_handle) {
+      auto view = check_handle_loan(operand, instance, operations, selected_slot ? binding : std::nullopt);
+      const auto owner = *one_owner(view);
+      const auto role = scope_owner_role(inputs, operation.scope_owners, owner, capture.at, true);
+      parameter.declaration_kind = "handle";
+      parameter.owner = inputs.owners[role].name;
+      parameter.read_only = view.read_only;
+      parameter.fixed_binding = true;
+      if (source->type.owned || (view.place && scope_native_owner_places_.contains(*view.place)))
+        inputs.native_owner_inputs.insert(arguments.size());
+      inputs.nonnull.push_back(true);
+      inputs.parameters.push_back(std::move(parameter));
+      operation.argument_sources->push_back(&operand);
+      operation.arguments.push_back({ArgumentMode::borrowed_handle, view.type, false});
+      arguments.push_back(view.type);
+      views.push_back(std::move(view));
+      return;
+    }
+    auto view = selected_slot ? read_binding(operand, false, binding) : [&] {
+      check(operand, instance, operations, independent);
+      return operations.at(&operand);
+    }();
+    const auto type = view.type;
+    if (!lexical_value_type(type) && !(live_binding && (type.kind == Type::product || text_type(type))))
+      implementation_gap(capture.at, "full-scope input requires an admitted target or independent value type");
+    parameter.read_only = view.read_only;
+    if (!independent) {
+      const auto [input, inserted] = place_inputs.try_emplace(*view.binding, arguments.size());
+      const auto ordinal = input->second;
+      if (declared_place)
+        inputs.place_access.emplace(capture.name, CheckedMethod::ScopeInputs::PlaceAccess{ordinal, view.read_only, view.fixed_binding});
+      if (!inserted) {
+        if (!declared_place) inputs.parameters[ordinal].name = capture.name;
+        return;
+      }
+      if (declared_place) parameter.name = "$scope.place." + std::to_string(ordinal);
+      if (view.owners.size() != 1)
+        implementation_gap(capture.at, "full-scope reference input requires one statically provable owner");
+      require_borrow_lifetime(view, capture.at, false);
+      parameter.owner = inputs.owners[owner_role(*view.owners.begin(), capture.at)].name;
+      const auto slots = physical_slots(view.slots);
+      parameter.read_only = std::ranges::all_of(slots, [&](size_t slot) { return bindings_->at(slot).read_only; });
+      parameter.fixed_binding = std::ranges::any_of(slots, [&](size_t slot) { return bindings_->at(slot).fixed; });
+      for (const auto slot : slots) for (const auto owner : bindings_->at(slot).place_owners) {
+        if (lexical_.live && !owner_alive(owner)) fail(capture.at, "selected storage place's lexical owner has ended");
+        inputs.place_owners[ordinal].insert(owner_role(owner, capture.at));
+      }
+      // The outlined body applies each lexical name's access restrictions.
+      view.read_only = parameter.read_only;
+    } else if (type.kind == Type::procedure) {
+      note_abrupt(capture.at, {exception_id(ExceptionCategory::out_of_memory)});
+    }
+    if (selected_slot) operations[&operand] = view;
+    const auto mode = argument_mode(parameter);
+    prepare_borrow(view, mode, capture.at);
+    inputs.nonnull.push_back(!independent && !view.targets.empty() && !view.targets.contains(null_target));
+    if (live_value) inputs.live_values.insert(arguments.size());
+    if (live_binding) inputs.live_bindings.insert(arguments.size());
+    inputs.parameters.push_back(std::move(parameter));
+    operation.argument_sources->push_back(&operand);
+    operation.arguments.push_back({mode, type, live_binding});
+    arguments.push_back(type);
+    views.push_back(view);
+  }
+  size_t demand_lexical_call(const NamedFamily &family, size_t method_id, ScopeCall &call, const Location &at,
+      const Expression *expr, CheckedInstance *instance, std::map<const Expression *, CheckedOperation> &operations,
+      CheckedOperation &operation) {
+    const auto &method = program_.methods[method_id];
+    if (!method.here.empty() || variadic(method) || caller_bindings(method) || method.lexical_result)
+      implementation_gap(at, "this call form with live lexical procedure inputs");
+    const auto &places = family.definition ? family.definition->live_bindings : family.context->lexical_bindings;
+    const auto parameters = method.input_parameters();
+    auto &inputs = call.inputs;
+    inputs.lexical_method = method_id;
+    inputs.named = CheckedMethod::ScopeInputs::NamedEntry{call.arguments.size(), {}};
+    inputs.parameters.assign(parameters.begin(), parameters.end());
+    inputs.owners = method.input_owners();
+    for (const auto &owner : inputs.owners) {
+      if (!expr) {
+        // A declaration check proves the body without a particular caller's owners.
+        operation.scope_owners.push_back(null_target);
+        continue;
+      }
+      std::optional<size_t> actual;
+      bool allocation_access = false;
+      for (size_t i = 0; i < parameters.size(); ++i) if (parameters[i].owner == owner.name) {
+        const auto supplied = one_owner(call.views[i]);
+        if (!supplied) fail(at, "borrowed argument requires one statically provable owner");
+        actual = *supplied;
+        allocation_access |= argument_mode(parameters[i]) == ArgumentMode::borrowed_handle ?
+            !const_native_owner(*supplied) : !const_owner(*supplied);
+      }
+      if (!actual) implementation_gap(at, "lexical procedure owner without an input binding");
+      if (!owner.read_only && !allocation_access)
+        fail(at, "const owner cannot supply writable access for '" + owner.name + "'");
+      operation.scope_owners.push_back(*actual);
+    }
+    if (!operation.argument_sources) {
+      operation.argument_sources.emplace();
+      if (expr) for (const auto &argument : expr->children) operation.argument_sources->push_back(argument.get());
+    }
+    for (size_t i = 0; i < parameters.size(); ++i) {
+      const auto &view = call.views[i];
+      inputs.nonnull.push_back(view.view && !view.targets.empty() && !view.targets.contains(null_target));
+    }
+    for (const auto &[name, slot] : places) {
+      const auto found = std::ranges::find(method.captures, name, &Capture::name);
+      const auto capture = found == method.captures.end() ? Capture{name, at} : *found;
+      inputs.named->bindings.insert(name);
+      const auto &source = binding(slot);
+      if (source.owner_binding) {
+        if (expr && expr == prepared_call_) implementation_gap(capture.at, "lexical owner access in a prepared deferred procedure");
+        inputs.owner_names.emplace(capture.name,
+            scope_owner_role(inputs, operation.scope_owners, *source.owner_binding, capture.at));
+        continue;
+      }
+      const auto first = call.arguments.size();
+      append_scope_input(call, capture, scope_operand(method_id, capture, expr), slot,
+                         instance, operations, operation, true, found == method.captures.end());
+      if (expr && expr == prepared_call_ && call.arguments.size() != first) {
+        if (!lexical_value_type(call.arguments.back()))
+          implementation_gap(capture.at, "a prepared deferred procedure with a live aggregate or native handle");
+        if (inputs.live_bindings.contains(first) && argument_mode(inputs.parameters.back()) == ArgumentMode::borrowed_ptr)
+          inputs.nonnull.back() = false;
+        require_deferred_slots(call.views.back(), capture.at);
+      }
+      if (!operation.operand_preparation.empty() && call.arguments.size() != first)
+        operation.operand_preparation.push_back({CheckedOperation::OperandPreparation::Kind::ordinary, first});
+    }
+    scope_owner_relations(inputs, operation.scope_owners);
+    if (expr && expr != prepared_call_) scope_input_observations(inputs, call.arguments, call.views, at);
+    const auto &retained = family.retained_types();
+    auto state = family.declaration ? *family.declaration : evidence_state();
+    const std::vector<Type> explicit_types(call.arguments.begin(), call.arguments.begin() + parameters.size());
+    const auto result = require_result(method_id, explicit_types, retained, at, &state);
+    const auto base_query = family.definition ? family.definition->query : family.context->query_environment;
+    auto definitions = program_.query_environments[base_query].lexical_definitions;
+    auto selections = expr ? scope_query_selections(method, state, inputs, call.arguments, call.views, at) :
+        std::map<std::string, QueryEnvironment::ScopeSelection>{};
+    const auto profile = scope_profile(std::move(inputs), *result.contract, method.throws_types);
+    auto &target_method = program_.methods[profile];
+    const auto query = retain_query_environment(target_method, {}, &state,
+        operation.scope_owners, std::move(selections), std::move(definitions));
+    return demand(profile, call.arguments, at, {}, retained, query, &state,
+                  expr ? incoming_abstract_targets(*expr) : AbstractSymbolTargets{});
+  }
+  void finish_lexical_call(const Expression &expr, const NamedFamily &family, size_t method_id,
+      const std::vector<Type> &arguments, const std::vector<CheckedOperation> &views, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation,
+      bool read, bool discard, bool completes) {
+    if (checking_method_ && checking_method_->source->kind == Form::Kind::function)
+      fail(expr.at, "a function cannot invoke a procedure");
+    if (!completes) { operation.type = Type::never; return; }
+
+    ScopeCall call;
+    call.arguments = arguments;
+    call.views = views;
+    const auto callee = demand_lexical_call(family, method_id, call, expr.at, &expr, instance, operations, operation);
+    operation.callee = callee;
+    const auto &target = program_.instances[callee];
+    const auto &method = program_.methods[target.method];
+    for (size_t i = 0; i < target.arguments.size(); ++i) operation.arguments[i].type = target.arguments[i];
+    const auto contract = callable_type(method, target.arguments, target.result);
+    const auto &effects = read_effects(callee);
+    auto reasons = direct_call_reasons(contract, effects);
+    finish_call(expr, contract, effects, reasons, call.arguments, call.views, operation, read, discard, 0, true);
+  }
   void check_scope_call(const Expression &expr, size_t method_id, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard,
       const Type *expected, std::optional<LexicalState> *case_scan = nullptr) {
@@ -14578,16 +14850,16 @@ class ScalarChecker {
     const auto &dependencies = definition_dependencies(*method.source);
     const auto state = evidence_state(false, &dependencies, true);
     const auto retained = definition_retained(method_id, state);
-    CheckedMethod::ScopeInputs inputs{};
+    ScopeCall call;
+    auto &inputs = call.inputs;
+    auto &arguments = call.arguments;
+    auto &views = call.views;
     inputs.lexical_method = method_id;
     operation.argument_sources.emplace();
     const auto owner_role = [&](size_t actual, const Location &at) {
       return scope_owner_role(inputs, operation.scope_owners, actual, at);
     };
-    std::vector<Type> arguments;
-    std::vector<CheckedOperation> views;
-    std::map<size_t, size_t> place_inputs;
-    std::map<std::string, size_t> lexical_definitions;
+    std::map<std::string, QueryEnvironment::LexicalDefinition> lexical_definitions;
     for (const auto &capture : method.captures) {
       if (const auto slot = here_slot(capture.name)) {
         retain_lexical_here(inputs, operation.scope_here, capture, *slot, owner_role);
@@ -14596,79 +14868,21 @@ class ScalarChecker {
       const auto binding = lexical_.lookup(capture.name);
       const auto *source = binding ? &bindings_->at(*binding) : nullptr;
       if (source && source->definition) {
-        lexical_definitions.emplace(capture.name, retain_lexical_definition(definitions_.at(*binding), capture.at));
+        lexical_definitions.emplace(capture.name, forward_definition(capture, definitions_.at(*binding),
+            [&](const Capture &input, size_t slot) {
+              const auto &source = this->binding(slot);
+              if (source.owner_binding) {
+                inputs.owner_names.emplace(input.name, owner_role(*source.owner_binding, capture.at));
+              } else append_scope_input(call, input, scope_operand(method_id, input), slot,
+                                        instance, operations, operation, true, true);
+            }));
         continue;
       }
       if (source && source->owner_binding) {
         inputs.owner_names.emplace(capture.name, owner_role(named_owner(capture.name, capture.at), capture.at));
         continue;
       }
-      const bool independent = !source;
-      const bool live_value = !independent && (source->value_binding || source->callable_value);
-      const bool live_binding = !independent && !live_value;
-      const bool declared_place = !independent && (source->alias || !source->selection.empty());
-      Parameter parameter; parameter.name = capture.name; parameter.at = capture.at;
-      parameter.declaration_kind = independent ? "val" : !live_value && source->requires_initialized ? "ref" : "ptr";
-      const auto &operand = scope_operand(method_id, capture);
-      if (source && source->type.kind == Type::native_handle) {
-        auto view = check_handle_loan(operand, instance, operations);
-        const auto owner = *one_owner(view);
-        const auto role = scope_owner_role(inputs, operation.scope_owners, owner, capture.at, true);
-        parameter.declaration_kind = "handle";
-        parameter.owner = inputs.owners[role].name;
-        parameter.read_only = view.read_only;
-        parameter.fixed_binding = true;
-        if (source->type.owned || (view.place && scope_native_owner_places_.contains(*view.place)))
-          inputs.native_owner_inputs.insert(arguments.size());
-        inputs.nonnull.push_back(true);
-        inputs.parameters.push_back(std::move(parameter));
-        operation.argument_sources->push_back(&operand);
-        operation.arguments.push_back({ArgumentMode::borrowed_handle, view.type, false});
-        arguments.push_back(view.type);
-        views.push_back(std::move(view));
-        continue;
-      }
-      const auto type = check(operand, instance, operations, independent);
-      auto view = operations.at(&operand);
-      if (!lexical_value_type(type) && !(live_binding && (type.kind == Type::product || text_type(type))))
-        implementation_gap(capture.at, "full-scope input requires an admitted target or independent value type");
-      parameter.read_only = view.read_only;
-      if (!independent) {
-        const auto [input, inserted] = place_inputs.try_emplace(*view.binding, arguments.size());
-        const auto ordinal = input->second;
-        if (declared_place)
-          inputs.place_access.emplace(capture.name, CheckedMethod::ScopeInputs::PlaceAccess{ordinal, view.read_only, view.fixed_binding});
-        if (!inserted) {
-          if (!declared_place) inputs.parameters[ordinal].name = capture.name;
-          continue;
-        }
-        if (declared_place) parameter.name = "$scope.place." + std::to_string(ordinal);
-        if (view.owners.size() != 1)
-          implementation_gap(capture.at, "full-scope reference input requires one statically provable owner");
-        require_borrow_lifetime(view, capture.at, false);
-        parameter.owner = inputs.owners[owner_role(*view.owners.begin(), capture.at)].name;
-        const auto slots = physical_slots(view.slots);
-        parameter.read_only = std::ranges::all_of(slots, [&](size_t slot) { return bindings_->at(slot).read_only; });
-        parameter.fixed_binding = std::ranges::any_of(slots, [&](size_t slot) { return bindings_->at(slot).fixed; });
-        for (const auto slot : slots) for (const auto owner : bindings_->at(slot).place_owners) {
-          if (lexical_.live && !owner_alive(owner)) fail(capture.at, "selected storage place's lexical owner has ended");
-          inputs.place_owners[ordinal].insert(owner_role(owner, capture.at));
-        }
-        // The outlined body applies each lexical name's access restrictions.
-        view.read_only = parameter.read_only;
-      } else if (type.kind == Type::procedure) {
-        note_abrupt(capture.at, {exception_id(ExceptionCategory::out_of_memory)});
-      }
-      const auto mode = argument_mode(parameter);
-      prepare_borrow(view, mode, capture.at);
-      inputs.nonnull.push_back(!independent && !view.targets.empty() && !view.targets.contains(null_target));
-      if (live_value) inputs.live_values.insert(arguments.size());
-      if (live_binding) inputs.live_bindings.insert(arguments.size());
-      inputs.parameters.push_back(std::move(parameter));
-      operation.argument_sources->push_back(&operand);
-      operation.arguments.push_back({mode, type, live_binding});
-      arguments.push_back(type);
-      views.push_back(view);
+      append_scope_input(call, capture, scope_operand(method_id, capture), binding, instance, operations, operation);
     }
     for (const auto &query : method.queries)
       if (const auto slot = here_slot(query.name)) retain_lexical_here(inputs, operation.scope_here, query, *slot, owner_role);
@@ -17984,7 +18198,7 @@ class ScalarChecker {
       const auto family = named_family(expr.text);
       if (expr.kind == K::binary && expr.text == "++" && family.methods.empty())
         fail(expr.at, "no selected method family for operator '++'");
-      if (!family.methods.empty() && (family.context || family.definition)) {
+      if (!family.methods.empty() && (family.context || family.definition) && !has_lexical_places(family)) {
         operation.callable_captures = capture_values(family, expr.at);
         if (!operation.callable_captures.empty()) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       }
@@ -18057,6 +18271,12 @@ class ScalarChecker {
       }
       if (std::ranges::any_of(arguments, [](const auto &type) { return type.kind == Type::abstract_type; }))
         finish_nominal_call(expr, arguments, views, operation, completes);
+      else if (has_lexical_places(family)) {
+        if (family.definition) check_query_binding(expr.text, expr.at);
+        const auto selected = select_method(family.methods, arguments, expr.at, expr.text, family.retained_types(),
+                                            source_access, source_owners);
+        finish_lexical_call(expr, family, selected, arguments, views, instance, operations, operation, read, discard, completes);
+      }
       else {
         const auto selected = select(expr, arguments, source_access, source_owners);
         finish_named_call(expr, arguments, views, operation, read, discard, completes, selected);
@@ -19771,16 +19991,11 @@ class ScalarChecker {
     checking_method_ = &program_.methods[instance.method];
     check_flow([&](bool proving) {
       begin_check(instance.storage, instance.bindings, instance.operations, proving);
-      for (const auto &[name, index] : query_environment().lexical_definitions) {
-        const auto &definition = retained_definitions_.at(index);
-        const auto binding = bind(name, Type::void_type, {}, true, true, true, method.at);
-        bindings_->at(binding).definition = definition.method;
-        definitions_.emplace(binding, definition);
-      }
       lexical_.abstract_symbol_targets = instance.incoming_abstract_targets;
       if (const auto &group = checking_method_->here_group; group && group->supplier_return.has_value())
         (*group->supplier_return ? return_inputs_.present : return_inputs_.absent).insert(0);
       instance.frame = {};
+      instance.lexical_bindings.clear();
       // Entry bindings select fresh proof places. Seed their contract facts
       // together before deriving any facts for the body.
       auto &entry = lexical_.input_facts.at(0);
@@ -19872,6 +20087,9 @@ class ScalarChecker {
           bindings_->at(binding).nullable = canonical.nullable;
           bindings_->at(binding).callable_value = canonical.callable_value;
         }
+        if (const auto &named = checking_method_->scope_inputs->named)
+          for (const auto &name : named->bindings)
+            instance.lexical_bindings.emplace(name, lexical_.lookup(name).value());
         for (const auto &owner : checking_method_->input_owners())
           instance.frame.owners.try_emplace(external_owners_.at(owner.name), null_target);
         for (const auto [a, b] : checking_method_->scope_inputs->overlapping_input_bindings) {
@@ -19915,6 +20133,14 @@ class ScalarChecker {
           }
           lexical_.predicates[instance.frame.inputs.at(input).place] = boolean_predicate(proof);
         }
+      }
+      for (const auto &[name, dependency] : query_environment().lexical_definitions) {
+        auto definition = retained_definitions_.at(dependency.definition);
+        for (const auto &[input, supplied] : dependency.inputs)
+          definition.live_bindings.emplace(input, lexical_.lookup(supplied).value());
+        const auto binding = bind(name, Type::void_type, {}, true, true, true, method.at);
+        bindings_->at(binding).definition = definition.method;
+        definitions_.emplace(binding, std::move(definition));
       }
       if (!distinct_bindings && caller_bindings(*checking_method_)) for (const auto &a : instance.frame.inputs)
         for (const auto &b : instance.frame.inputs) {

@@ -1904,7 +1904,8 @@ class LLVMEmission {
         release_value(b_.CreateExtractValue(result, 0));
         if (contexts_.front().at(&body).callable_call) release_value(arguments.front());
         if (contexts_.front().at(&body).callee)
-          for (size_t i = body.children.size(); i < arguments.size(); ++i) release_value(arguments[i]);
+          for (size_t i = contexts_.front().at(&body).argument_count(body); i < arguments.size(); ++i)
+            release_value(arguments[i]);
         auto *replace = block("defer.failed"), *done = block("defer.completed");
         b_.CreateCondBr(abrupt_outcome(result), replace, done);
         b_.SetInsertPoint(replace); save_abrupt(result); b_.CreateBr(done);
