@@ -1264,12 +1264,18 @@ public:
   };
   // Checked deferred arrivals have a different obligation from ordinary
   // scope-body failures. Declared roots also have hypothetical arrivals.
-  enum class DeferredCoverage { none, unchecked, checked, declared_root };
+  enum class DeferredCoverage { none, checked, declared_root };
   struct DrainState {
     size_t encoded;
     DeferredCoverage coverage = DeferredCoverage::none;
-    Completion completion() const { return Completion::from(encoded); }
-    bool pending_from_defer() const { return coverage != DeferredCoverage::none; }
+    size_t body_failure = 0;
+    Completion active() const { return Completion::from(encoded); }
+    bool resumes_body_failure() const { return body_failure && !active().failed(); }
+    Completion completion() const {
+      const auto current = active();
+      return resumes_body_failure() ? Completion{body_failure, current.returned} : current;
+    }
+    bool has_deferred_failure() const { return active().failed(); }
     bool pending_checked() const { return coverage == DeferredCoverage::checked || coverage == DeferredCoverage::declared_root; }
     auto operator<=>(const DrainState &) const = default;
   };
@@ -1318,8 +1324,8 @@ private:
   std::map<QueueState, SolvedState> solved_;
   DrainState deferred_coverage(DrainState state, const Action &action, size_t action_id,
                                const Path &path, Completion outgoing, Effects &effects) const {
-    const auto incoming = state.completion();
-    const bool receives = action.bodyless_catch && state.pending_from_defer() && incoming.exception();
+    const auto incoming = state.active();
+    const bool receives = action.bodyless_catch && incoming.exception();
     const bool consumes = receives && action.catches.contains(incoming.category());
     const auto &thrown = path.effects.thrown.terms;
     const bool forwards_arrival = receives && !thrown.empty() &&
@@ -1331,14 +1337,17 @@ private:
     if ((state.pending_checked() && !consumes && !preserves) ||
         (consumes && state.coverage == DeferredCoverage::declared_root && !action.catches_root))
       effects.needs_checked_cleanup_proof = true;
-    if (preserves) return {outgoing.index(), state.coverage};
-    if (outgoing.exception() &&
-        (exception_types_[outgoing.category()].checked || !effects.declared_failures.empty())) {
-      if (incoming.failed() && !consumes) effects.needs_checked_cleanup_proof = true;
-      return {outgoing.index(), DeferredCoverage::checked};
+    state.encoded = outgoing.index();
+    if (path.completion.returned || (path.completion.reason && !path.completion.failed())) state.body_failure = 0;
+    if (!preserves) {
+      state.coverage = DeferredCoverage::none;
+      if (outgoing.exception() &&
+          (exception_types_[outgoing.category()].checked || !effects.declared_failures.empty())) {
+        if (incoming.failed() && !consumes) effects.needs_checked_cleanup_proof = true;
+        state.coverage = DeferredCoverage::checked;
+      }
     }
-    if (outgoing.failed()) return {outgoing.index(), DeferredCoverage::unchecked};
-    return {outgoing.index()};
+    return state;
   }
   static ConditionClauses intersect_reaching(const ConditionClauses &left, const ConditionClauses &right) {
     if (unconditional(left)) return right;
@@ -1563,7 +1572,9 @@ public:
   }
   void backedge(size_t header, size_t body) { solved_.clear(); queues_.at(header).previous.push_back(body); }
   const Outcomes &apply(size_t queue, Completion input) {
-    const DrainState ordinary{input.index()};
+    const DrainState ordinary = input.failed()
+        ? DrainState{Completion{0, input.returned}.index(), DeferredCoverage::none, input.reason}
+        : DrainState{input.index()};
     if (!queue) return identity(ordinary);
     const QueueState root{queue, ordinary};
     const auto [entry, inserted] = solved_.try_emplace(root);
@@ -1597,8 +1608,8 @@ public:
           changed = merge(result.outcomes, value, compose(known, effects)) || changed;
       } else {
         const auto &action = actions_.at(*node.action);
-        const auto incoming = state.completion();
-        const bool receives = action.bodyless_catch && state.pending_from_defer() && incoming.exception();
+        const auto incoming = state.active();
+        const bool receives = action.bodyless_catch && incoming.exception();
         const auto selected = deferred_input(incoming, receives, action.observes_return);
         for (const auto &path : action.paths) {
           if (path.input != selected) continue;

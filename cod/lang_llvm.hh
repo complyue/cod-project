@@ -144,6 +144,7 @@ class LLVMEmission {
   template <typename T> struct CompletionState {
     T value{}, category{}, site{}, fatal{}, requested{}, available{}, cause{}, kind{}, has_return{}, transfer{}, failure_owner{};
     auto fields() const { return std::array{value, category, site, fatal, requested, available, cause, kind, has_return, transfer, failure_owner}; }
+    auto failure_fields() const { return std::array{category, site, fatal, requested, available, cause, failure_owner}; }
     template <typename Transform> auto transform(const Transform &apply) const {
       return CompletionState<decltype(apply(value))>{apply(value), apply(category), apply(site), apply(fatal),
           apply(requested), apply(available), apply(cause), apply(kind), apply(has_return), transfer ? apply(transfer) : nullptr,
@@ -1472,8 +1473,11 @@ class LLVMEmission {
     b_.SetInsertPoint(action.exit);
     control_ = action.parent;
     auto *restore = block("cleanup.preserve"), *replace = block("cleanup.replace"), *done = block("cleanup.done");
-    auto *action_failed = b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2));
-    b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0)), restore, replace);
+    auto *kind = load(completion_.kind);
+    auto *normal = b_.CreateICmpEQ(kind, b_.getInt8(0));
+    auto *replaces_body = b_.CreateOr(load(completion_.has_return),
+        b_.CreateAnd(b_.CreateNot(normal), b_.CreateICmpNE(kind, b_.getInt8(2))));
+    b_.CreateCondBr(normal, restore, replace);
     b_.SetInsertPoint(restore);
     if (environments_) clear_value(completion_.value);
     const auto places = completion_.fields();
@@ -1512,16 +1516,25 @@ class LLVMEmission {
       discard_transfer_failure(pending.transfer, transfer);
     }
     preserve_transfer(transfer);
-    return action_failed;
+    return replaces_body;
   }
   void drain(Scope &scope) {
     b_.SetInsertPoint(scope.cleanup);
     if (scope.actions.empty()) return;
     auto *next_entry = scope.cleanup;
-    llvm::AllocaInst *deferred_failure = nullptr;
-    if (std::ranges::any_of(scope.actions, [](const auto &entry) { return entry.action && entry.action->deferred_catch(); })) {
-      deferred_failure = slot(b_.getInt1Ty(), "defer.failure");
-      b_.CreateStore(b_.getFalse(), deferred_failure);
+    llvm::AllocaInst *body_pending = nullptr;
+    CompletionState<llvm::Value *> body_outcome;
+    if (std::ranges::any_of(scope.actions, [](const auto &entry) { return !entry.native_constructor; })) {
+      // Suspend the ordinary failure for the whole pass. The active failure
+      // during the pass always comes from an invoked cleanup action.
+      body_outcome = completion_.transform([&](auto *place) { return load(place); });
+      body_pending = slot(b_.getInt1Ty(), "defer.body.pending");
+      auto *failed = b_.CreateICmpEQ(body_outcome.kind, b_.getInt8(2));
+      b_.CreateStore(failed, body_pending);
+      b_.CreateStore(b_.CreateSelect(failed, b_.getInt8(0), body_outcome.kind), completion_.kind);
+      b_.CreateStore(integer(0), completion_.category);
+      b_.CreateStore(null_pointer(), completion_.fatal);
+      if (owned_failures_) b_.CreateStore(null_pointer(), completion_.failure_owner);
       next_entry = block("defer.next");
       b_.CreateBr(next_entry);
       b_.SetInsertPoint(next_entry);
@@ -1529,15 +1542,14 @@ class LLVMEmission {
     const auto run_action = [&](const auto &emit, bool deferred_catch = false) {
       llvm::Value *arrives = nullptr;
       if (deferred_catch) {
-        auto *catchable = b_.CreateAnd(b_.CreateICmpNE(load(completion_.category), integer(0)),
-                                       b_.CreateICmpEQ(load(completion_.fatal), null_pointer()));
-        arrives = b_.CreateAnd(load(deferred_failure), catchable);
+        arrives = b_.CreateAnd(b_.CreateICmpNE(load(completion_.category), integer(0)),
+                               b_.CreateICmpEQ(load(completion_.fatal), null_pointer()));
       }
-      auto *failed = complete_cleanup(emit, CleanupBoundary::deferred, arrives);
-      if (deferred_failure) {
-        auto *still_failed = b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2));
-        b_.CreateStore(b_.CreateAnd(still_failed, b_.CreateOr(failed, load(deferred_failure))), deferred_failure);
-      }
+      auto *replaces_body = complete_cleanup(emit, CleanupBoundary::deferred, arrives);
+      auto *pending = load(body_pending);
+      if (owned_failures_)
+        release_failure_owner(b_, b_.CreateSelect(b_.CreateAnd(pending, replaces_body), body_outcome.failure_owner, null_pointer()));
+      b_.CreateStore(b_.CreateAnd(pending, b_.CreateNot(replaces_body)), body_pending);
       b_.CreateBr(next_entry);
     };
     auto *pop = block("defer.pop"), *done = block("defer.done"), *invalid = block("defer.invalid");
@@ -1637,9 +1649,24 @@ class LLVMEmission {
     if (std::ranges::none_of(scope.actions, [](const auto &action) { return action.native_constructor || action.activation_record; }))
       release_heap_record();
     save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::unsound_runtime_typing)), integer(0), null_pointer()));
-    if (deferred_failure) b_.CreateStore(b_.getTrue(), deferred_failure);
     b_.CreateBr(next_entry);
     b_.SetInsertPoint(done);
+    if (body_pending) {
+      auto *resume = block("defer.resume.body"), *discard = block("defer.discard.body"), *completed = block("defer.completed");
+      auto *deferred_failure = b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2));
+      b_.CreateCondBr(b_.CreateAnd(load(body_pending), b_.CreateNot(deferred_failure)), resume, discard);
+      b_.SetInsertPoint(resume);
+      const auto places = completion_.failure_fields();
+      const auto values = body_outcome.failure_fields();
+      for (size_t i = 0; i < places.size(); ++i) if (places[i]) b_.CreateStore(values[i], places[i]);
+      b_.CreateStore(b_.getInt8(2), completion_.kind);
+      b_.CreateBr(completed);
+      b_.SetInsertPoint(discard);
+      if (owned_failures_)
+        release_failure_owner(b_, b_.CreateSelect(load(body_pending), body_outcome.failure_owner, null_pointer()));
+      b_.CreateBr(completed);
+      b_.SetInsertPoint(completed);
+    }
   }
   llvm::Value *sequence(const std::vector<const Expression *> &expressions, Projection projection = Projection::value, bool discard_last = false) {
     llvm::Value *value = empty_scalar();
