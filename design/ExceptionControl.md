@@ -1,8 +1,10 @@
 # CoD exception control and regional cleanup
 
-Design revision: 147 · Recorded: 2026-11-21 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
+Design revision: 148 · Recorded: 2026-11-22 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
+
+[K-DEFER-AGGREGATE-AVAILABILITY-20261122](../CHANGELOG.md#k-defer-aggregate-availability-20261122) continues r147’s implementation-availability table at r148. The [aggregate ownership scope](DesignAuthorityRegistry.md#d-17-aggregate-ownership) retains the confirmed post-pass and separate body-failure requirements. [Seed coverage](../tests/cod/language/README.md#deferred-execution-and-initialization) records the implemented propagation scope. Member access, general collection operations and full native qualification retain their separate scope.
 
 [D-14-REF-ARGUMENT](DesignAuthorityRegistry.md#d-14-ref-argument) and [H-OWNER-REF-ARGUMENT-20261121](../CHANGELOG.md#h-owner-ref-argument-20261121) cover [checked NullPointerException](#checked-nullpointerexception) at r147. Explicit `not null` on a ref argument can fail in caller preparation. P-668/P-669 preserve checked coverage, failure order and pre-entry cleanup. Check a known-null selection before a later side effect.
 
@@ -131,7 +133,7 @@ For currently implemented categories, the [compiler descriptors](../cod/lang_exc
 | MissingReturnError | Unchecked | Required-value fallthrough |
 | RethrownException | Checked standard wrapper; requires a checked cause | Design only; constructor, trace and ownership integration unimplemented |
 | RethrownError | Unchecked standard wrapper; requires an unchecked cause | Design only; constructor, trace and ownership integration unimplemented |
-| UnhandledDeferError | Unchecked aggregate of residual deferred exceptions | Design only; exceptions field and propagation integration are unimplemented |
+| UnhandledDeferError | Unchecked aggregate of residual deferred exceptions | The seed delivers and forwards the aggregate after the pass. It retains FIFO members and the separate body failure internally. Source projections of retained failures and member operations remain unimplemented. |
 | UnsoundRuntimeTypingError | Unchecked | Category/vocabulary; outside-catalog typing validation remains separate |
 | NullPointerException | Checked | Nullable target access or explicit non-null argument selection |
 | StaticallyUnknownTypeException | Checked | Category/declaration obligations; outside-catalog interpretation remains separate |
