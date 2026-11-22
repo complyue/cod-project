@@ -1,4 +1,5 @@
 using "SourceStorage.cod" SourceBytes;
+using "SourceAccess.cod" same_bytes;
 using "ParserStorage.cod" {
     ExprNodes, no_node, group_node, ungrouped, name_node, owned_type_node, typed_name_node, data_parent_node,
     make_named_node, field_access_node, enum_declaration_node, type_assertion_node, literal_node, text_literal_node,
@@ -11,7 +12,7 @@ using "NameResolution.cod" {
     ordinary_selection, record_type, native_scalar, enum_value, find_enum_member,
     builtin_u64, builtin_u32, builtin_u8, builtin_bool, builtin_string, builtin_c_string, text_type, owner_binding,
 };
-using "ModuleExports.cod" { SelectedExports, same_name, record_export, enum_export, enum_spelling };
+using "ModuleExports.cod" { SelectedExports, record_export, enum_export, enum_spelling };
 using "ModuleExportStorage.cod" { ModuleInterfaces, find_interface, write_interface_header, enum_type };
 
 export func type_module(names:const NameBindings in B, selected:const SelectedExports in E,
@@ -87,7 +88,7 @@ func local_member_type(source:const SourceBytes in S, nodes:const ExprNodes in N
         if (field == no_node()) return false;
         binding <- nodes[field].right;
         spelling <- nodes[binding].left;
-        if (same_name(source, nodes[name].first, nodes[name].past, source, nodes[spelling].first, nodes[spelling].past)) {
+        if (same_bytes(source, nodes[name].first, nodes[name].past, source, nodes[spelling].first, nodes[spelling].past)) {
             return describe_type(nodes, names, selected, nodes[binding].right, 0u64, result);
         } else {};
         field <- work[field].next;
@@ -103,7 +104,7 @@ func imported_member_type(source:const SourceBytes in S, nodes:const ExprNodes i
     val first <- nodes[name].first;
     val past <- nodes[name].past;
     for (row in head + 1u64 .. head + 1u64 + interfaces[head].entry_count) {
-        if (same_name(source, first, past, spellings, interfaces[row].name_first, interfaces[row].name_past)) {
+        if (same_bytes(source, first, past, spellings, interfaces[row].name_first, interfaces[row].name_past)) {
             result.kind <- interfaces[row].value_kind;
             result.defining_module <- interfaces[row].type_module;
             result.identity <- interfaces[row].type_identity;

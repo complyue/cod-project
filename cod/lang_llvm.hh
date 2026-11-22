@@ -780,6 +780,15 @@ class LLVMEmission {
     // carries its allocation head to calls with a proved lexical destination.
     if (owner == 0 && owns_text_storage_) return lexical_text_owner();
     if (const auto found = owner_identities_.find(owner); found != owner_identities_.end()) return found->second;
+    if (is_symbol_owner(owner, program_->symbols.size())) {
+      // A selected incoming view can survive a shadow in this activation.
+      auto *binding = symbols_.at(owner - first_symbol_owner);
+      llvm::IRBuilder<> entry(&function_->getEntryBlock(), function_->getEntryBlock().begin());
+      auto *selected = entry.CreateLoad(binding->getValueType(), binding, "effect.incoming");
+      auto *identity = entry.CreateExtractValue(selected, 1, "effect.owner");
+      owner_identities_.emplace(owner, identity);
+      return identity;
+    }
     if (owner > null_target / 2) implementation_gap(at, "runtime identity for an owner without an input-bound actual context");
     // Admitted lexical cells have stable native storage. One activation-local
     // address names their owner; it is shared across all views and forwarded calls.
@@ -1610,7 +1619,8 @@ class LLVMEmission {
     for (const auto *expr : expressions) collect_effects(*expr, symbols);
     SavedEffects saved;
     for (const auto id : symbols) {
-      SavedEffect effect{id, b_.CreateLoad(scalar_, symbols_.at(id), "effect.previous")};
+      auto *binding = symbols_.at(id);
+      SavedEffect effect{id, b_.CreateLoad(binding->getValueType(), binding, "effect.previous")};
       if (program_->symbols[id].type->kind == Type::procedure) {
         effect.owned = slot(scalar_, "effect.owned"); b_.CreateStore(empty_scalar(), effect.owned);
         if (const auto outer = effect_values_.find(id); outer != effect_values_.end()) effect.parent = outer->second;
@@ -2709,12 +2719,28 @@ class LLVMEmission {
     case K::callable: return empty_scalar();
     case K::null_ref: return null_pointer();
     case K::symbol: {
-      auto *value = b_.CreateLoad(scalar_, symbols_.at(*fact.symbol), "effect.current");
+      auto *binding = symbols_.at(*fact.symbol);
+      auto *value = b_.CreateLoad(binding->getValueType(), binding, "effect.current");
+      if (program_->symbols.at(*fact.symbol).reference) {
+        auto *address = b_.CreateExtractValue(value, 0, "effect.target");
+        if (read && discard) return empty_scalar();
+        return read ? load_place(address, expr) : address;
+      }
       return fact.type.kind == Type::native_handle ? view_address(value) : value;
     }
     case K::touch: return empty_scalar();
     case K::effect: {
       if (fact.native_acquisition) return install_native_effect(expr);
+      auto *binding = symbols_.at(*fact.symbol);
+      if (program_->symbols.at(*fact.symbol).reference) {
+        const auto &source = *expr.children.front();
+        auto *target = emit_expression(source, Projection::target);
+        if (!reachable()) return nullptr;
+        auto *view = b_.CreateInsertValue(llvm::PoisonValue::get(binding->getValueType()), target, 0);
+        view = b_.CreateInsertValue(view, selected_owner(source), 1);
+        b_.CreateStore(view, binding);
+        return empty_scalar();
+      }
       auto *value = emit_expression(*expr.children.front());
       if (!reachable()) return nullptr;
       return finish_effect(fact, convert_result(expr, *expr.children.front(), value), expr.at);
@@ -3752,8 +3778,9 @@ public:
       const auto &symbol = program.symbols[i];
       llvm::GlobalVariable *slot = nullptr;
       if (used_symbols.contains(i) && symbol.type) {
-        slot = new llvm::GlobalVariable(module_, scalar_, false, llvm::GlobalValue::InternalLinkage,
-            llvm::Constant::getNullValue(scalar_), "cod.symbol." + std::to_string(i));
+        auto *layout = symbol.reference ? llvm::StructType::get(context_, {b_.getPtrTy(), b_.getPtrTy()}) : scalar_;
+        slot = new llvm::GlobalVariable(module_, layout, false, llvm::GlobalValue::InternalLinkage,
+            llvm::Constant::getNullValue(layout), "cod.symbol." + std::to_string(i));
         slot->setThreadLocalMode(llvm::GlobalVariable::GeneralDynamicTLSModel);
       }
       symbols_.push_back(slot);
