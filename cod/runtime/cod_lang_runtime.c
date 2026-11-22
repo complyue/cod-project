@@ -278,6 +278,37 @@ static void release_lexical_extent(void *allocation) {
     free(extent);
 }
 
+void *cod_lang_region_acquire(uint64_t capacity) {
+    if (capacity > PTRDIFF_MAX) return NULL;
+    cod_region_storage *region = malloc(sizeof(*region));
+    if (!region) return NULL;
+    *region = (cod_region_storage){0};
+    if (cod_region_storage_open(region, (size_t)capacity) != COD_REGION_STORAGE_OK) {
+        free(region);
+        return NULL;
+    }
+    return region;
+}
+
+uint64_t cod_lang_region_reserve(void *owner, uint64_t bytes, uint64_t alignment) {
+    if (!owner || bytes > PTRDIFF_MAX || alignment > _Alignof(max_align_t)) return UINT64_MAX;
+    cod_region_extent extent;
+    if (cod_region_storage_reserve(owner, (size_t)bytes, 1, (size_t)alignment, &extent) != COD_REGION_STORAGE_OK)
+        return UINT64_MAX;
+    return extent.offset;
+}
+
+void *cod_lang_region_address(void *owner, uint64_t offset, uint64_t bytes) {
+    if (!owner || offset > PTRDIFF_MAX || bytes > PTRDIFF_MAX) return NULL;
+    return cod_region_storage_address(owner, (cod_region_extent){(size_t)offset, (size_t)bytes});
+}
+
+void cod_lang_region_release(void *owner) {
+    if (!owner) return;
+    cod_region_storage_release(owner);
+    free(owner);
+}
+
 void *cod_lang_lexical_extent_allocate(void **allocations, uint64_t bytes, uint64_t alignment) {
     if (!allocations || bytes > SIZE_MAX || bytes > PTRDIFF_MAX || !alignment ||
         alignment > _Alignof(max_align_t) || (alignment & (alignment - 1)))

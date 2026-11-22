@@ -171,6 +171,8 @@ class LLVMEmission {
     llvm::AllocaInst *activation_record = nullptr;
     std::optional<size_t> native_symbol = {};
     std::optional<DeferredInputs> inputs = {};
+    bool region_release = false;
+    bool release_only() const { return native_constructor.has_value() || region_release; }
   };
   struct Control {
     Control *parent;
@@ -1616,6 +1618,11 @@ class LLVMEmission {
       }
     }
     if (only_native_effects) return;
+    if (expr.kind == K::region_binding) {
+      auto *layout = llvm::StructType::get(context_, {cleanup_header_, b_.getPtrTy()});
+      scope.actions.push_back({&expr, layout, {}, {}, slot(layout, "region.cleanup"), {}, {}, true});
+      return;
+    }
     if (expr.kind == Expression::Kind::native_handle_binding && expr.binding == "<-") {
       std::set<size_t> constructors;
       for (const auto &context : contexts_) constructors.insert(context.at(&expr).native_acquisition->constructor);
@@ -1980,7 +1987,7 @@ class LLVMEmission {
     llvm::AllocaInst *body_pending = nullptr;
     CompletionState<llvm::Value *> body_outcome;
     DeferredFailures failures{};
-    if (std::ranges::any_of(scope.actions, [](const auto &entry) { return !entry.native_constructor; })) {
+    if (std::ranges::any_of(scope.actions, [](const auto &entry) { return !entry.release_only(); })) {
       // Suspend the ordinary failure for the whole pass. The active failure
       // during the pass always comes from an invoked cleanup action.
       body_outcome = completion_.transform([&](auto *place) { return load(place); });
@@ -2016,6 +2023,15 @@ class LLVMEmission {
     };
     for (size_t i = 0; i < scope.actions.size(); ++i) {
       const auto &descriptor = scope.actions[i];
+      if (descriptor.region_release) {
+        auto *destroy = block("region.release");
+        dispatch->addCase(integer(i), destroy);
+        b_.SetInsertPoint(destroy);
+        auto *owner = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(descriptor.layout, record, 1));
+        b_.CreateCall(runtime("cod_lang_region_release", b_.getVoidTy(), {b_.getPtrTy()}), {owner});
+        b_.CreateBr(next_entry);
+        continue;
+      }
       if (descriptor.native_constructor) {
         auto *destroy = block("native.destroy");
         dispatch->addCase(integer(i), destroy);
@@ -2372,6 +2388,108 @@ class LLVMEmission {
     b_.CreateStore(load(resource), b_.CreateStructGEP(action->layout, record, 1));
     b_.CreateStore(record, scope_->head);
     return empty_scalar();
+  }
+  llvm::Value *region_address(llvm::Value *owner, llvm::Value *offset, llvm::Value *size) {
+    auto address = runtime("cod_lang_region_address", b_.getPtrTy(),
+        {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
+    return b_.CreateCall(address, {owner, offset, size});
+  }
+  llvm::Value *acquire_region(const Expression &binding) {
+    const auto *initializer = binding.children.front().get();
+    while (initializer->kind == Expression::Kind::grouped) initializer = initializer->children.front().get();
+    const auto &make = *initializer;
+    const auto &input = *make.children.front();
+    auto *capacity_value = emit_expression(input);
+    if (!reachable()) return nullptr;
+    auto *capacity = choose(input, {capacity_value}, choices(input, {&input}), b_.getInt64Ty(),
+        [&](const Choice &choice) { return convert(capacity_value, choice.inputs.front(), Type::uint64); });
+    using Plan = std::tuple<size_t, size_t, std::vector<size_t>>;
+    std::map<Plan, std::vector<size_t>> plans;
+    for (size_t i = 0; i < contexts_.size(); ++i) {
+      const auto &fact = contexts_[i].at(&binding);
+      if (contexts_[i].at(&input).type != Type::never)
+        plans[{*fact.region_holder, fact.operand_type.identity, fact.region_initializers}].push_back(i);
+    }
+    return contextual_value(binding, plans, "region.acquire", [&](const Plan &plan) -> llvm::Value * {
+      const auto &[holder, schema_id, order] = plan;
+      auto *layout = product_layout(schema_id);
+      const auto &roots = program_->schemas.at(schema_id).fields;
+      const auto &target = module_.getDataLayout();
+      const auto bytes = roots.empty() ? 0 : target.getTypeAllocSize(layout).getFixedValue();
+      const auto alignment = target.getABITypeAlign(layout).value();
+      constexpr auto limit = std::uint64_t{std::numeric_limits<std::ptrdiff_t>::max()};
+      if (bytes > limit || alignment > alignof(std::max_align_t))
+        implementation_gap(make.at, "target layout for region roots");
+
+      auto *valid = block("region.capacity.valid"), *invalid = block("region.capacity.invalid");
+      b_.CreateCondBr(b_.CreateICmpULE(capacity, integer(limit)), valid, invalid);
+      b_.SetInsertPoint(invalid);
+      fail_path(ExceptionCategory::invalid_capacity, make.at);
+      b_.SetInsertPoint(valid);
+      auto *allocate = block("region.allocate"), *full = block("region.capacity.full");
+      b_.CreateCondBr(b_.CreateICmpULE(integer(bytes), capacity), allocate, full);
+      b_.SetInsertPoint(full);
+      save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::region_capacity_exceeded)),
+                          integer(site(make.at)), null_pointer(), integer(bytes), capacity));
+      b_.CreateBr(control_->exit);
+      b_.SetInsertPoint(allocate);
+      auto acquire = runtime("cod_lang_region_acquire", b_.getPtrTy(), {b_.getInt64Ty()});
+      auto *owner = b_.CreateCall(acquire, {capacity}, "region.owner");
+      auto *ready = block("region.acquired"), *unavailable = block("region.unavailable");
+      b_.CreateCondBr(b_.CreateIsNotNull(owner), ready, unavailable);
+      b_.SetInsertPoint(unavailable);
+      fail_path(ExceptionCategory::out_of_memory, make.at);
+      b_.SetInsertPoint(ready);
+
+      Control construction{control_, block("region.abandoned")};
+      control_ = &construction;
+      auto reserve = runtime("cod_lang_region_reserve", b_.getInt64Ty(),
+          {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
+      auto *offset = b_.CreateCall(reserve, {owner, integer(bytes), integer(alignment)}, "region.root.offset");
+      auto *reserved = block("region.root.reserved"), *failed = block("region.root.failed");
+      b_.CreateCondBr(b_.CreateICmpEQ(offset, integer(0)), reserved, failed);
+      b_.SetInsertPoint(failed);
+      fail_path(ExceptionCategory::unsound_runtime_typing, make.at);
+      b_.SetInsertPoint(reserved);
+      const auto items = make.initializer_items();
+      if (!items.empty()) {
+        auto *root = region_address(owner, offset, integer(bytes));
+        for (size_t i = 0; i < order.size(); ++i) {
+          const auto &value = *items[i]->children.back();
+          const auto &type = roots[order[i]].type;
+          const bool aggregate = inline_aggregate_type(type);
+          auto *operand = emit_expression(value, aggregate ? Projection::target : Projection::value);
+          if (!reachable()) break;
+          auto *destination = b_.CreateStructGEP(layout, root, order[i]);
+          if (aggregate) b_.CreateCall(bits_transfer(type), {destination, checked_address(operand, value, value.at)});
+          else {
+            auto *prepared = choose(value, {operand}, choices(value, {&value}), scalar_, [&](const Choice &choice) {
+              return convert_value(operand, choice.inputs.front(), type);
+            });
+            store_place(destination, prepared, StorageFormat{type});
+          }
+        }
+      }
+      control_ = construction.parent;
+      auto *completed = reachable() ? block("region.initialized") : nullptr;
+      if (completed) b_.CreateBr(completed);
+      b_.SetInsertPoint(construction.exit);
+      b_.CreateCall(runtime("cod_lang_region_release", b_.getVoidTy(), {b_.getPtrTy()}), {owner});
+      b_.CreateBr(control_->exit);
+      if (!completed) return nullptr;
+      b_.SetInsertPoint(completed);
+
+      const auto action = std::ranges::find_if(scope_->actions, [&](const auto &entry) {
+        return entry.region_release && entry.action == &binding;
+      });
+      if (action == scope_->actions.end()) throw std::logic_error("uncollected region release");
+      auto *record = action->activation_record;
+      prepare_cleanup_record(*scope_, record, std::distance(scope_->actions.begin(), action));
+      b_.CreateStore(owner, b_.CreateStructGEP(action->layout, record, 1));
+      b_.CreateStore(record, scope_->head);
+      b_.CreateStore(owner, storage_.at(holder));
+      return empty_scalar();
+    });
   }
   llvm::Value *install_native_effect(const Expression &effect) {
     using Plan = std::pair<size_t, CheckedOperation::NativeAcquisition>;
@@ -3824,6 +3942,23 @@ class LLVMEmission {
       return !read ? address : discard ? empty_scalar() : load_place(address, expr);
     }
     case K::field: {
+      if (fact.region_holder) {
+        std::map<std::tuple<size_t, size_t, size_t>, std::vector<size_t>> projections;
+        for (size_t i = 0; i < contexts_.size(); ++i) {
+          const auto &field = contexts_[i].at(&expr);
+          if (field.region_holder)
+            projections[{field.operand_type.identity, *field.region_holder, *field.product_field}].push_back(i);
+        }
+        auto *member = contextual_value(expr, projections, "region.root.field", [&](const auto &selection) {
+          const auto [schema, holder, index] = selection;
+          auto *layout = product_layout(schema);
+          auto *owner = load(storage_.at(holder));
+          auto *address = region_address(owner, integer(0), llvm::ConstantExpr::getSizeOf(layout));
+          return b_.CreateStructGEP(layout, address, index);
+        }, b_.getPtrTy());
+        if (!read) return member;
+        return discard ? empty_scalar() : load_place(member, expr);
+      }
       if (fact.exception_owner) {
         std::map<std::tuple<size_t, size_t, size_t>, std::vector<size_t>> projections;
         for (size_t i = 0; i < contexts_.size(); ++i) {
@@ -3868,6 +4003,8 @@ class LLVMEmission {
       if (expr.text == "cause_count") field = b_.CreateCall(runtime("cod_lang_exception_count", b_.getInt64Ty(), {b_.getInt64Ty()}), {field});
       return pack(field, Type::uint64);
     }
+    case K::region_binding:
+      return temporary_scope(expr.at, scalar_, [&] { return acquire_region(expr); });
     case K::native_handle_binding: {
       if (expr.binding == "=") {
         auto *source = emit_expression(*expr.children.front(), Projection::target);
@@ -4213,6 +4350,7 @@ class LLVMEmission {
       else if (binding.type.kind == Type::sum) layout = sum_layout(binding.type.identity).storage;
       else if (binding.type.kind == Type::native_handle)
         layout = binding.type.owned ? static_cast<llvm::Type *>(b_.getInt64Ty()) : native_handle_pair();
+      else if (binding.type.kind == Type::region) layout = b_.getPtrTy();
       else if (!formats.contains(StorageFormat{}))
         layout = formats.size() == 1 ? native_type(formats.begin()->type()) : b_.getInt64Ty();
       auto *place = binding.borrowed || binding.subobject ? nullptr : slot(layout, binding.name + ".storage");
