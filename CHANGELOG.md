@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 — Preparing operands for display concatenation
+
+<a id="k-string-concat-operands-20261121"></a>
+**K-STRING-CONCAT-OPERANDS-20261121.** Design review continues the r5 evaluation and owner contract in `488436b8877f412275704e647224ee99de2aa65d:design/StringBuilding.md`, “Concatenating displayable values”. The bundled general display method prepares readonly inputs in the caller by composing scalar ref initialization, explicit scalar projection and ordinary reference arguments. This uses H-STRING-BUILD-20261121’s private library/intrinsic prototype scope. Ordinary borrow formals keep their existing admission rule. D-07-STRING-BUILD r6, P-678/P-679, registry r1046.
+
 ## 2026-11-21 — Concatenation with displayable values
 
 <a id="h-string-concat-display-20261121"></a>
