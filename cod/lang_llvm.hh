@@ -340,32 +340,6 @@ class LLVMEmission {
     default: throw std::logic_error("non-scalar native payload");
     }
   }
-  llvm::StructType *product_layout(size_t root) {
-    if (const auto found = product_layouts_.find(root); found != product_layouts_.end()) return found->second;
-    std::vector<std::pair<size_t, size_t>> pending{{root, 0}};
-    while (!pending.empty()) {
-      auto &[id, field_index] = pending.back();
-      const auto &schema = program_->schemas.at(id);
-      if (field_index < schema.fields.size()) {
-        const auto &field = schema.fields[field_index++];
-        const auto &type = field.type;
-        if (field.storage == PlaceKind::value && type.kind == Type::product && !product_layouts_.contains(type.identity))
-          pending.emplace_back(type.identity, 0);
-        continue;
-      }
-      std::vector<llvm::Type *> fields;
-      for (const auto &field : schema.fields) {
-        const auto &type = field.type;
-        if (field.stores_target()) fields.push_back(b_.getPtrTy());
-        else fields.push_back(type.kind == Type::product ? product_layouts_.at(type.identity) : native_type(type));
-      }
-      // Fieldless products still need distinct addressable targets.
-      if (fields.empty()) fields.push_back(b_.getInt8Ty());
-      product_layouts_.emplace(id, llvm::StructType::get(context_, fields));
-      pending.pop_back();
-    }
-    return product_layouts_.at(root);
-  }
   struct SumLayout {
     struct Alternative {
       llvm::StructType *payload;
@@ -375,38 +349,140 @@ class LLVMEmission {
     std::vector<Alternative> alternatives;
   };
   std::map<size_t, SumLayout> sum_layouts_;
-  const SumLayout &sum_layout(size_t identity) {
-    if (const auto found = sum_layouts_.find(identity); found != sum_layouts_.end()) return found->second;
+  llvm::Type *known_inline_layout(const Type &type) {
+    if (type.kind == Type::product) return product_layouts_.at(type.identity);
+    if (type.kind == Type::sum) return sum_layouts_.at(type.identity).storage;
+    return native_type(type);
+  }
+  void build_product_layout(size_t id) {
+    std::vector<llvm::Type *> fields;
+    for (const auto &field : program_->schemas.at(id).fields)
+      fields.push_back(field.stores_target() ? b_.getPtrTy() : known_inline_layout(field.type));
+    // Fieldless products still need distinct addressable targets.
+    if (fields.empty()) fields.push_back(b_.getInt8Ty());
+    product_layouts_.emplace(id, llvm::StructType::get(context_, fields));
+  }
+  void build_sum_layout(size_t id) {
     const auto &data = module_.getDataLayout();
     std::vector<SumLayout::Alternative> alternatives;
     llvm::Type *alignment_type = b_.getInt8Ty();
     std::uint64_t bytes = 0;
-    for (const auto &alternative : program_->sums.at(identity).alternatives) {
+    for (const auto &alternative : program_->sums.at(id).alternatives) {
       std::vector<llvm::Type *> fields;
-      for (const auto &field : alternative.fields) fields.push_back(native_type(field.type));
+      for (const auto &field : alternative.fields) fields.push_back(known_inline_layout(field.type));
       auto *payload = llvm::StructType::get(context_, fields);
       if (data.getABITypeAlign(payload) > data.getABITypeAlign(alignment_type)) alignment_type = payload;
       bytes = std::max(bytes, data.getTypeAllocSize(payload).getFixedValue());
       alternatives.push_back({payload, alternatives.size()});
     }
-    // The zero-length array supplies the ABI alignment of the most
-    // strictly aligned alternative. Unused payload bytes have no value.
+    // A zero-length array supplies the alignment of the most strictly aligned
+    // alternative. Unused payload bytes have no value.
     auto *payload = llvm::StructType::get(context_, {
         llvm::ArrayType::get(alignment_type, 0), llvm::ArrayType::get(b_.getInt8Ty(), bytes)});
     auto *storage = llvm::StructType::get(context_, {b_.getInt64Ty(), payload});
-    return sum_layouts_.emplace(identity, SumLayout{storage, std::move(alternatives)}).first->second;
+    sum_layouts_.emplace(id, SumLayout{storage, std::move(alternatives)});
+  }
+  void ensure_inline_layout(const Type &type) {
+    const auto known = [&](const Type &item) {
+      return item.kind == Type::product ? product_layouts_.contains(item.identity) :
+          item.kind == Type::sum ? sum_layouts_.contains(item.identity) : true;
+    };
+    if (known(type)) return;
+    std::vector<std::pair<Type, bool>> pending{{type, false}};
+    while (!pending.empty()) {
+      auto [item, ready] = std::move(pending.back());
+      pending.pop_back();
+      if (known(item)) continue;
+      if (ready) {
+        if (item.kind == Type::product) build_product_layout(item.identity);
+        else build_sum_layout(item.identity);
+      } else {
+        pending.emplace_back(item, true);
+        program_->visit_inline_fields(item, [&](const auto &field) {
+          if (!known(field.type)) pending.emplace_back(field.type, false);
+        });
+      }
+    }
+  }
+  llvm::StructType *product_layout(size_t id) {
+    ensure_inline_layout(Type{Type::product, {}, id});
+    return product_layouts_.at(id);
+  }
+  const SumLayout &sum_layout(size_t id) {
+    ensure_inline_layout(Type{Type::sum, {}, id});
+    return sum_layouts_.at(id);
+  }
+  llvm::Type *inline_layout(const Type &type) {
+    ensure_inline_layout(type);
+    return known_inline_layout(type);
   }
   llvm::Value *sum_field_address(llvm::Value *storage, SumConstructor constructor, size_t field) {
     const auto &layout = sum_layout(constructor.sum);
     auto *payload = b_.CreateStructGEP(layout.storage, storage, 1);
     return b_.CreateStructGEP(layout.alternatives.at(constructor.alternative).payload, payload, field);
   }
+  std::map<std::pair<Type::Kind, size_t>, llvm::Function *> bits_transfers_;
+  std::vector<Type> pending_bits_transfers_;
+  llvm::Function *bits_transfer(const Type &type) {
+    const auto key = std::pair{type.kind, type.identity};
+    if (const auto found = bits_transfers_.find(key); found != bits_transfers_.end()) return found->second;
+    auto *signature = llvm::FunctionType::get(b_.getVoidTy(), {b_.getPtrTy(), b_.getPtrTy()}, false);
+    const auto kind = type.kind == Type::product ? "product." : "sum.";
+    auto *function = llvm::Function::Create(signature, llvm::GlobalValue::InternalLinkage,
+        "cod.bits.transfer." + std::string(kind) + std::to_string(type.identity), module_);
+    bits_transfers_.emplace(key, function);
+    pending_bits_transfers_.push_back(type);
+    return function;
+  }
+  void emit_bits_transfers() {
+    for (size_t i = 0; i < pending_bits_transfers_.size(); ++i) {
+      const auto type = pending_bits_transfers_[i];
+      auto *function = bits_transfers_.at({type.kind, type.identity});
+      llvm::IRBuilder<> body(llvm::BasicBlock::Create(context_, "entry", function));
+      auto *destination = function->getArg(0);
+      auto *source = function->getArg(1);
+      const auto fields = [&](llvm::StructType *layout, const auto &declarations, llvm::Value *to, llvm::Value *from) {
+        for (size_t field = 0; field < declarations.size(); ++field) {
+          const auto &member = declarations[field].type;
+          auto *into = body.CreateStructGEP(layout, to, field);
+          auto *out_of = body.CreateStructGEP(layout, from, field);
+          if (scalar_type(member)) body.CreateStore(body.CreateLoad(native_type(member), out_of), into);
+          else body.CreateCall(bits_transfer(member), {into, out_of});
+        }
+      };
+      if (type.kind == Type::product) {
+        fields(product_layout(type.identity), program_->schemas.at(type.identity).fields, destination, source);
+        body.CreateRetVoid();
+        continue;
+      }
+
+      const auto &layout = sum_layout(type.identity);
+      const auto &alternatives = program_->sums.at(type.identity).alternatives;
+      auto *tag = body.CreateLoad(body.getInt64Ty(), body.CreateStructGEP(layout.storage, source, 0));
+      auto *from = body.CreateStructGEP(layout.storage, source, 1);
+      auto *to = body.CreateStructGEP(layout.storage, destination, 1);
+      auto *invalid = llvm::BasicBlock::Create(context_, "invalid.tag", function);
+      auto *done = llvm::BasicBlock::Create(context_, "payload.ready", function);
+      auto *select = body.CreateSwitch(tag, invalid, alternatives.size());
+      body.SetInsertPoint(invalid);
+      body.CreateUnreachable();
+      for (size_t n = 0; n < alternatives.size(); ++n) {
+        const auto &alternative = layout.alternatives[n];
+        auto *active = llvm::BasicBlock::Create(context_, "active.payload", function);
+        select->addCase(body.getInt64(alternative.tag), active);
+        body.SetInsertPoint(active);
+        fields(alternative.payload, alternatives[n].fields, to, from);
+        body.CreateBr(done);
+      }
+      body.SetInsertPoint(done);
+      body.CreateStore(tag, body.CreateStructGEP(layout.storage, destination, 0));
+      body.CreateRetVoid();
+    }
+  }
   llvm::Value *emit_array_construction(const Expression &expr, bool discard) {
     const auto &length = *expr.children.front();
     const auto &fill = *expr.children.back();
     auto *count_value = emit_expression(length);
-    if (!reachable()) return nullptr;
-    auto *fill_value = emit_expression(fill);
     if (!reachable()) return nullptr;
 
     using Allocation = CheckedOperation::LexicalAllocation;
@@ -414,16 +490,20 @@ class LLVMEmission {
     for (size_t i = 0; i < contexts_.size(); ++i) {
       const auto &context = contexts_[i];
       const auto &fact = context.at(&expr);
-      if (fact.type == Type::never) continue;
+      if (context.at(&length).type == Type::never) continue;
       const auto &allocation = fact.lexical_allocation.value();
       if (allocation.kind != Allocation::array) throw std::logic_error("inconsistent checked array constructor");
-      alternatives[{allocation.owner, fact.type.identity, StorageFormat{context.at(&length).type},
+      alternatives[{allocation.owner, fact.operand_type.identity, StorageFormat{context.at(&length).type},
                     StorageFormat{context.at(&fill).type}}].push_back(i);
     }
     auto *view = contextual_value(expr, alternatives, "array.construct", [&](const auto &selection) -> llvm::Value * {
       const auto &[owner, schema, length_format, fill_format] = selection;
       const auto &array = program_->arrays.at(schema);
-      auto *element = native_type(array.element);
+      const bool aggregate = inline_aggregate_type(array.element);
+      auto *fill_value = emit_expression(fill, aggregate ? Projection::target : Projection::value);
+      if (!reachable()) return nullptr;
+      if (aggregate) fill_value = checked_address(fill_value, fill, fill.at);
+      auto *element = inline_layout(array.element);
       const auto &layout = module_.getDataLayout();
       const auto element_alignment = layout.getABITypeAlign(element);
       const auto alignment = std::max(element_alignment, layout.getABITypeAlign(array_view_));
@@ -448,7 +528,7 @@ class LLVMEmission {
 
       b_.SetInsertPoint(ready);
       auto *data = b_.CreateGEP(b_.getInt8Ty(), storage, integer(prefix));
-      auto *value = fill_format.kind == Type::enumeration ? unpack(fill_value, array.element)
+      auto *value = aggregate ? fill_value : fill_format.kind == Type::enumeration ? unpack(fill_value, array.element)
           : convert(fill_value, fill_format.type(), array.element);
       auto *test = block("array.fill.test"), *store = block("array.fill.store"), *complete = block("array.initialized");
       b_.CreateBr(test);
@@ -457,7 +537,9 @@ class LLVMEmission {
       index->addIncoming(integer(0), ready);
       b_.CreateCondBr(b_.CreateICmpULT(index, count), store, complete);
       b_.SetInsertPoint(store);
-      b_.CreateStore(value, b_.CreateGEP(element, data, index));
+      auto *place = b_.CreateGEP(element, data, index);
+      if (aggregate) b_.CreateCall(bits_transfer(array.element), {place, value});
+      else b_.CreateStore(value, place);
       auto *next = b_.CreateAdd(index, integer(1));
       index->addIncoming(next, store);
       b_.CreateBr(test);
@@ -3091,6 +3173,10 @@ class LLVMEmission {
         const auto &receiver = *item.case_bindings[i];
         const auto &binding = contexts_.front().at(&receiver);
         auto *field = sum_field_address(selected, *pattern.constructor, checked.case_payload_fields[i]);
+        if (inline_aggregate_type(binding.operand_type)) {
+          b_.CreateCall(bits_transfer(binding.operand_type), {storage_.at(*binding.place), field});
+          continue;
+        }
         auto *payload = load_place(b_, field, StorageFormat{binding.operand_type});
         const auto conversions = choices(receiver, {});
         auto *value = choose(receiver, {}, conversions, scalar_, [&](const auto &choice) {
@@ -3215,8 +3301,7 @@ class LLVMEmission {
         b_.SetInsertPoint(valid);
       }
       auto *data = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(array_view_, view, 0), "array.data");
-      llvm::Type *element = shape.element.kind == Type::product ? product_layout(shape.element.identity) : native_type(shape.element);
-      return b_.CreateGEP(element, data, index);
+      return b_.CreateGEP(inline_layout(shape.element), data, index);
     }, b_.getPtrTy());
   }
   llvm::Value *emit_checked_expression(const Expression &expr, Projection projection, bool discard) {
@@ -3226,17 +3311,29 @@ class LLVMEmission {
     if (expr.kind == K::call && std::ranges::any_of(contexts_, [&](const auto &context) {
           return context.at(&expr).builtin == BuiltinOperation::array_transfer;
         })) {
-      std::map<bool, std::vector<size_t>> alternatives;
-      for (size_t i = 0; i < contexts_.size(); ++i)
-        alternatives[contexts_[i].at(&expr).builtin == BuiltinOperation::array_transfer].push_back(i);
-      return contextual_value(expr, alternatives, "array.transfer", [&](bool builtin) -> llvm::Value * {
+      std::map<std::tuple<bool, Type::Kind, size_t>, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < contexts_.size(); ++i) {
+        const auto &operation = contexts_[i].at(&expr);
+        const bool builtin = operation.builtin == BuiltinOperation::array_transfer;
+        auto element = Type{Type::void_type};
+        if (builtin && operation.operand_type.kind == Type::array)
+          element = program_->arrays.at(operation.operand_type.identity).element;
+        if (!inline_aggregate_type(element)) element = Type{Type::void_type};
+        alternatives[{builtin, element.kind, element.identity}].push_back(i);
+      }
+      return contextual_value(expr, alternatives, "array.transfer", [&](const auto &selected) -> llvm::Value * {
+        const auto [builtin, kind, identity] = selected;
         if (!builtin) return emit_checked_expression(expr, projection, discard);
         auto *address = emit_indexed_address(expr);
         if (!reachable()) return nullptr;
         const auto &source = *expr.children[2];
-        auto *value = emit_expression(source);
+        const bool aggregate = kind != Type::void_type;
+        auto *value = emit_expression(source, aggregate ? Projection::target : Projection::value);
         if (!reachable()) return nullptr;
-        assign_place(address, convert_result(expr, source, value, &CheckedOperation::type), expr);
+        if (aggregate) {
+          value = checked_address(value, source, source.at);
+          b_.CreateCall(bits_transfer(Type{kind, {}, identity}), {address, value});
+        } else assign_place(address, convert_result(expr, source, value, &CheckedOperation::type), expr);
         return !read ? address : discard ? empty_scalar() : load_place(address, expr);
       }, read ? static_cast<llvm::Type *>(scalar_) : b_.getPtrTy());
     }
@@ -3806,10 +3903,14 @@ class LLVMEmission {
         for (size_t i = 0; i < fact.sum_initializers.size(); ++i) {
           const auto &item = *items[i];
           const auto &input = *item.children.back();
-          auto *value = emit_expression(input);
+          const auto index = fact.sum_initializers[i];
+          const auto &type = program_->sums.at(constructor.sum).alternatives.at(constructor.alternative).fields.at(index).type;
+          const bool aggregate = inline_aggregate_type(type);
+          auto *value = emit_expression(input, aggregate ? Projection::target : Projection::value);
           if (!reachable()) return nullptr;
-          auto *field = sum_field_address(address, constructor, fact.sum_initializers[i]);
-          assign_place(field, convert_result(item, input, value), item, &CheckedOperation::operand_type);
+          auto *field = sum_field_address(address, constructor, index);
+          if (aggregate) b_.CreateCall(bits_transfer(type), {field, checked_address(value, input, input.at)});
+          else assign_place(field, convert_result(item, input, value), item, &CheckedOperation::operand_type);
         }
         const auto &layout = sum_layout(constructor.sum);
         const auto tag = layout.alternatives.at(constructor.alternative).tag;
@@ -3951,6 +4052,11 @@ class LLVMEmission {
         emit_text_transfer(*initializer, b_.CreateStructGEP(layout, address, index));
       } else if (direct && member.type.kind == Type::product) {
         emit_product_initializers(input, b_.CreateStructGEP(layout, address, index));
+      } else if (direct && member.type.kind == Type::sum) {
+        auto *value = emit_expression(input, Projection::target);
+        if (!reachable()) return;
+        auto *field = b_.CreateStructGEP(layout, address, index);
+        b_.CreateCall(bits_transfer(member.type), {field, checked_address(value, input, input.at)});
       } else {
         auto *value = emit_expression(input, direct ? Projection::value : Projection::target);
         if (!reachable()) return;
@@ -4568,6 +4674,7 @@ public:
       for (const auto &entry : program.native_entries) emit_native_entry(entry, active);
     }
     emit_sites();
+    emit_bits_transfers();
     std::string errors;
     llvm::raw_string_ostream diagnostics_out(errors);
     if (llvm::verifyModule(module_, &diagnostics_out)) throw std::logic_error("invalid emitted CoD module: " + errors);

@@ -33,6 +33,7 @@ inline bool nominal_exception(const Type &type) {
 inline bool owning_exception(const Type &type) { return type.kind == Type::exception && owning_failure(type.identity); }
 inline bool bits_type(const Type &type) { return scalar_type(type) || (type.kind == Type::exception && !owning_exception(type)); }
 inline bool lexical_value_type(const Type &type) { return bits_type(type) || type.kind == Type::procedure; }
+inline bool inline_aggregate_type(const Type &type) { return type.kind == Type::product || type.kind == Type::sum; }
 enum class BuiltinOperation {
   none, unary, binary, identity, array_length, array_transfer, reference_swap, bits_swap, print,
   builder_append, lexical_result, text_size, text_byte, text_slice
@@ -325,6 +326,7 @@ struct CheckedSchema {
   bool has_enum_storage = false;
   std::optional<size_t> abstract_parent = {};
   bool lexical_builder = false;
+  bool has_sum_storage = false;
 };
 
 struct CheckedSum {
@@ -860,6 +862,20 @@ struct CheckedProgram {
   bool exception_values = false;
   bool builder_type(const Type &type) const {
     return type.kind == Type::product && schemas.at(type.identity).lexical_builder;
+  }
+  bool bits_payload(const Type &type) const {
+    // The nominal layout check admits only direct bits fields in sums.
+    return scalar_type(type) || type.kind == Type::sum ||
+        (type.kind == Type::product && schemas.at(type.identity).bits);
+  }
+  template <typename Visit>
+  void visit_inline_fields(const Type &type, const Visit &visit) const {
+    if (type.kind == Type::product) {
+      for (const auto &field : schemas.at(type.identity).fields) if (!field.stores_target()) visit(field);
+    } else {
+      for (const auto &alternative : sums.at(type.identity).alternatives)
+        for (const auto &field : alternative.fields) visit(field);
+    }
   }
   bool conforms_to(const Type &actual, const Type &bound) const {
     if (actual == bound) return true;

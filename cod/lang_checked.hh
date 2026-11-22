@@ -2270,7 +2270,6 @@ class ScalarChecker {
     std::set<std::uint64_t> domain;
     CasePossibilities remaining;
     bool borrowed;
-    bool discriminant_can_change;
 
     CasePossibilities match(CasePattern pattern) {
       using K = CasePattern::Kind;
@@ -2284,7 +2283,7 @@ class ScalarChecker {
     void invalidate(bool may_write) {
       // A write can change the bits at the selected address. The address
       // itself, including its absence, was fixed on entry.
-      if (borrowed && discriminant_can_change && may_write && remaining.present()) remaining.codes = domain;
+      if (borrowed && may_write && remaining.present()) remaining.codes = domain;
     }
     void resume(const CasePossibilities &matched, bool may_write) {
       remaining.absent |= matched.absent;
@@ -2319,10 +2318,7 @@ class ScalarChecker {
       while (literal->kind == Expression::Kind::grouped) literal = literal->children.front().get();
       if (literal->kind == Expression::Kind::boolean) remaining = {literal->text == "true"};
     }
-    // This sum profile has no in-place whole-sum transfer. A rebind can
-    // change the source slot, but the case still selects its original target.
-    return {std::move(codes), {std::move(remaining), borrowed && presence != TargetPresence::present},
-            borrowed, subject.kind != Type::sum};
+    return {std::move(codes), {std::move(remaining), borrowed && presence != TargetPresence::present}, borrowed};
   }
   CasePattern case_pattern(const Type &subject, const Expression &arm) const {
     using K = CasePattern::Kind;
@@ -2364,7 +2360,7 @@ class ScalarChecker {
       if (found == alternative.fields.end())
         fail(item.at, "unknown field '" + item.selector + "' of '" + alternative.source->name.text + "'");
       const auto type = item.annotation ? resolve(*item.annotation) : found->type;
-      transfer_type(found->type, type, item.at);
+      bits_payload_type(found->type, type, item.at);
       result.push_back({static_cast<size_t>(found - alternative.fields.begin()), type, item.read_only || item.fixed_binding});
     }
     return result;
@@ -2820,6 +2816,15 @@ class ScalarChecker {
     if (destination.kind == Type::product) implementation_gap(at, "whole-product bits transfer");
     if (destination.kind == Type::sum) implementation_gap(at, "whole-sum bits transfer");
     if (!transfers_value(source, destination)) fail(at, "bits transfer source does not satisfy destination type");
+  }
+  void bits_payload_type(const Type &source, const Type &destination, const Location &at) const {
+    if (!inline_aggregate_type(destination)) {
+      transfer_type(source, destination, at);
+      return;
+    }
+    if (!program_.bits_payload(destination))
+      implementation_gap(at, "whole-payload transfer requires recursively bits fields");
+    if (source != destination) fail(at, "aggregate bits transfer requires the exact destination type");
   }
   static bool ordinary_callable_type(const Type &type) {
     if (type.kind != Type::procedure) return true;
@@ -6331,7 +6336,8 @@ class ScalarChecker {
     if (owning_exception(type)) implementation_gap(at, "owned exception arguments and results require an owner-aware signature");
     if (bits_type(type) || binder(method, type) || (result && type == Type::void_type)) return;
     if (borrowed_target && (type.kind == Type::product || text_type(type) ||
-                            (!result && (type.kind == Type::array || type.kind == Type::abstract_type)))) return;
+                            (!result && (type.kind == Type::array || type.kind == Type::sum ||
+                                         type.kind == Type::abstract_type)))) return;
     if (type.kind == Type::array)
       implementation_gap(at, "array parameter or result of type '" + type_name(type) + "'");
     if (type.kind == Type::procedure && type.target) {
@@ -6787,7 +6793,7 @@ class ScalarChecker {
       const auto mode = argument_mode(parameter);
       const auto &element = program_.arrays.at(arguments[i].identity).element;
       const bool writable = mode == ArgumentMode::borrowed_ref && !parameter.read_only &&
-          (scalar_type(element) || indexed_product(element, at));
+          program_.bits_payload(element);
       const bool here_borrow = definition.scope_inputs && definition.scope_inputs->here_reception &&
           i < definition.scope_inputs->here_reception->selected.size() &&
           mode == ArgumentMode::borrowed_ref && (parameter.read_only || writable);
@@ -6804,13 +6810,14 @@ class ScalarChecker {
         require_result(method, arguments, retained, at, state);
     require_ordinary_callable_type(*result.contract->type, at);
     check_aggregate_owner_roles(definition, arguments);
-    for (size_t i = 0; i < arguments.size(); ++i) if (arguments[i].kind == Type::product) {
+    for (size_t i = 0; i < arguments.size(); ++i) if (inline_aggregate_type(arguments[i])) {
       const auto &parameter = parameter_at(definition, i);
       const auto mode = argument_mode(parameter);
       const bool live_slot = definition.scope_inputs && definition.scope_inputs->live_bindings.contains(i);
       if (mode == ArgumentMode::value || (definition.scope_inputs && !live_slot) ||
           definition.source->symbolic || caller_bindings(definition))
-        implementation_gap(at, "product parameters require an ordinary borrowed target or a live lexical reference slot");
+        implementation_gap(at, std::string(arguments[i].kind == Type::product ? "product" : "sum") +
+            " parameters require an ordinary borrowed target or a live lexical reference slot");
     }
     if (result.contract->type->kind == Type::product) {
       if (!result.contract->borrowed()) implementation_gap(at, "whole-product value results");
@@ -7722,14 +7729,14 @@ class ScalarChecker {
   const CheckedArray &indexed_array(const Type &type, bool view, const Location &at) const {
     if (type.kind != Type::array) implementation_gap(at, "indexed operation on '" + type_name(type) + "'");
     const auto &array = program_.arrays.at(type.identity);
-    if (!view || (!scalar_type(array.element) && !indexed_product(array.element, at)))
-      implementation_gap(at, "indexed access requires a borrowed array of initialized scalar or numeric product elements");
+    if (!view || !program_.bits_payload(array.element))
+      implementation_gap(at, "indexed access requires a borrowed array of initialized bits elements");
     return array;
   }
   const CheckedArray &array_construction(const Type &type, const Expression &expr) const {
     const auto &array = program_.arrays.at(type.identity);
-    if (array.index != Type::uint64 || !scalar_type(array.element))
-      implementation_gap(expr.at, "named-array construction outside the u64-indexed scalar bits profile");
+    if (array.index != Type::uint64 || !program_.bits_payload(array.element))
+      implementation_gap(expr.at, "named-array construction outside the u64-indexed bits profile");
     if (!expr.constructor_arguments || expr.children.size() != 2 || expr.initializer_block)
       implementation_gap(expr.at, "named-array construction requires a length and a fill argument");
     return array;
@@ -7944,6 +7951,10 @@ class ScalarChecker {
   }
   size_t reserve_product(const Type &type, const Location &at) {
     const auto root = reserve_lexical_construction(type, at);
+    reserve_product_fields(root, at);
+    return root;
+  }
+  void reserve_product_fields(size_t root, const Location &at) {
     std::vector<size_t> pending{root};
     for (size_t next = 0; next < pending.size(); ++next) {
       const auto parent = pending[next];
@@ -7965,7 +7976,6 @@ class ScalarChecker {
         binding.nullable = field.storage == PlaceKind::pointer;
       }
     }
-    return root;
   }
   void check_query_binding(const std::string &name, const Location &at, bool owner_metadata = false) const {
     if (const auto id = lexical_.lookup(name)) {
@@ -8706,7 +8716,7 @@ class ScalarChecker {
     using K = Expression::Kind;
     const auto &subject = *expr.children.front();
     const auto type = type_evidence(subject, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, true,
-                                    EvidenceRead::target);
+                                    EvidenceRead::projection);
     if (!type || *type == Type::never) return type;
     const auto selected = state.value;
     const auto target = state.target;
@@ -9044,6 +9054,22 @@ class ScalarChecker {
         fail(expr.at, "missing initializer for field '" + alternative.fields[index].source->name + "' of '" +
                       alternative.source->name.text + "'");
   }
+  std::optional<Type> type_bits_payload(const Expression &expr, const Type &destination,
+                                       TypeEvidenceState &state, bool reached = true) const {
+    const bool aggregate = inline_aggregate_type(destination);
+    const auto source = type_evidence(expr, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, reached,
+                                      aggregate ? EvidenceRead::projection : EvidenceRead::payload);
+    if (source && *source != Type::never && state.required) {
+      bits_payload_type(*source, destination, expr.at);
+      if (aggregate) {
+        if (state.value.view != true || state.value.mixed_view)
+          implementation_gap(expr.at, "aggregate bits transfer requires one complete source target");
+        read_type_target(state, state.value, state.target);
+        require_type_initialized(state, state.target, {}, expr.at);
+      }
+    }
+    return source;
+  }
   bool query_product_initializers(const Expression &expr, const Type &type, const QueryProductPlace &product,
                                   TypeEvidenceState &state, bool track_places, bool reached = true) const {
     const auto &schema = product_schema(type, expr.at);
@@ -9078,12 +9104,11 @@ class ScalarChecker {
         completes = completes && value != Type::never;
         continue;
       }
-      const auto value = type_evidence(*item.children.back(), state, false, nullptr, nullptr,
-          ExpectedTypeUse::materialization, reached && completes, direct ? EvidenceRead::payload : EvidenceRead::target);
-      if (state.required && value && *value != Type::never) {
-        if (direct) transfer_type(*value, field.type, at);
-        else rebind_type(field.type, *value, at);
-      }
+      const auto &input = *item.children.back();
+      const auto value = direct ? type_bits_payload(input, field.type, state, reached && completes) :
+          type_evidence(input, state, false, nullptr, nullptr,
+                        ExpectedTypeUse::materialization, reached && completes, EvidenceRead::target);
+      if (state.required && !direct && value && *value != Type::never) rebind_type(field.type, *value, at);
       if (track_places && reached && completes && value && *value != Type::never) {
         if (direct) {
           if (field.type == Type::boolean) state.selections.write_boolean({member}, state.target.branches);
@@ -12045,11 +12070,10 @@ class ScalarChecker {
           fail(expr.at, "const owner cannot allocate storage");
         const auto length = type_evidence(*expr.children.front(), state);
         if (length == Type::never) return Type::never;
-        const auto fill = type_evidence(*expr.children.back(), state);
+        const auto fill = type_bits_payload(*expr.children.back(), array.element, state);
         if (fill == Type::never) return Type::never;
         if (!length || !fill) return {};
         transfer_type(*length, Type::uint64, expr.children.front()->at);
-        transfer_type(*fill, array.element, expr.children.back()->at);
         view = {false, true, {}, owner};
         target_facts.presence = TargetPresence::present;
         target_facts.initialized = true;
@@ -12067,9 +12091,8 @@ class ScalarChecker {
         const auto items = expr.initializer_items();
         for (size_t i = 0; i < order.size(); ++i) {
           const auto &input = *items[i]->children.back();
-          const auto value = type_evidence(input, state);
+          const auto value = type_bits_payload(input, fields[order[i]].type, state);
           if (!value || *value == Type::never) return value;
-          transfer_type(*value, fields[order[i]].type, input.at);
         }
         complete_sum_initialization(expr, *constructor, order);
         view = {false, true, {}, state.full_scope_owner};
@@ -12698,14 +12721,12 @@ class ScalarChecker {
         if (!index || *index == Type::never) return index;
         if (state.required) {
           check_array_index(shape, *index, expr.children[1]->at);
-          if (!scalar_type(shape.element)) implementation_gap(expr.at, "builtin indexed transfer of a non-scalar element");
           if (!array.read_only) implementation_gap(expr.at, "indexed transfer destination access is not established");
           transfer_access(*array.read_only, expr.at);
         }
         record_type_invocation(expr, state, {0, Completion::failure(exception_id(ExceptionCategory::index_out_of_bounds)).reason}, true);
-        const auto source = child(2);
+        const auto source = type_bits_payload(*expr.children[2], shape.element, state);
         if (!source || *source == Type::never) return source;
-        if (state.required) transfer_type(*source, shape.element, expr.children[2]->at);
         view = {true, true, {}, array.owner};
         target_facts.presence = TargetPresence::present;
         target_facts.initialized = true;
@@ -14907,7 +14928,7 @@ class ScalarChecker {
     }();
     const auto type = view.type;
     if (!lexical_value_type(type) &&
-        !(live_binding && (type.kind == Type::product || type.kind == Type::array || text_type(type))))
+        !(live_binding && (inline_aggregate_type(type) || type.kind == Type::array || text_type(type))))
       implementation_gap(capture.at, "full-scope input requires an admitted target or independent value type");
     parameter.read_only = view.read_only;
     if (!independent) {
@@ -17614,6 +17635,23 @@ class ScalarChecker {
     if (read) read_view(operation, expr.at, "scalar make target");
     return operation;
   }
+  Type check_bits_payload(const Expression &expr, const Type &destination, CheckedInstance *instance,
+                         std::map<const Expression *, CheckedOperation> &operations) {
+    const bool aggregate = inline_aggregate_type(destination);
+    const auto source = check(expr, instance, operations, !aggregate, false, nullptr,
+        ExpectedTypeUse::materialization, false, aggregate ? IndexedUse::immediate_target : IndexedUse::value_only);
+    if (source != Type::never) {
+      bits_payload_type(source, destination, expr.at);
+      if (aggregate) {
+        const auto &view = operations.at(&expr);
+        if (!view.view || view.mixed_view)
+          implementation_gap(expr.at, "aggregate bits transfer requires one complete source target");
+        require_live_view(view, expr.at);
+        read_view(view, expr.at, "bits payload");
+      }
+    }
+    return source;
+  }
   CheckedOperation check_sum_construction(const Expression &expr, SumConstructor constructor, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, bool read) {
     if (read) implementation_gap(expr.at, "reading a whole sum as an independent value");
@@ -17626,13 +17664,12 @@ class ScalarChecker {
     for (size_t i = 0; i < operation.sum_initializers.size(); ++i) {
       const auto &item = *items[i];
       const auto &input = *item.children.back();
-      const auto value = check(input, instance, operations);
+      const auto &type = fields[operation.sum_initializers[i]].type;
+      const auto value = check_bits_payload(input, type, instance, operations);
       if (value == Type::never) {
         operation.type = Type::never;
         return operation;
       }
-      const auto &type = fields[operation.sum_initializers[i]].type;
-      transfer_type(value, type, input.at);
       CheckedOperation initializer;
       initializer.type = Type::void_type;
       initializer.operand_type = type;
@@ -17649,17 +17686,17 @@ class ScalarChecker {
     const auto owner = construction_destination(expr, destination);
     CheckedOperation operation;
     operation.type = Type::never;
+    operation.operand_type = type;
+    operation.lexical_allocation = CheckedOperation::LexicalAllocation{owner, CheckedOperation::LexicalAllocation::array};
     const auto length = check(*expr.children.front(), instance, operations);
     if (length == Type::never) return operation;
     transfer_type(length, Type::uint64, expr.children.front()->at);
-    const auto fill = check(*expr.children.back(), instance, operations);
+    const auto fill = check_bits_payload(*expr.children.back(), array.element, instance, operations);
     if (fill == Type::never) return operation;
-    transfer_type(fill, array.element, expr.children.back()->at);
-    operation.type = operation.operand_type = type;
+    operation.type = type;
     operation.view = true;
     operation.owners = {owner};
     operation.initialization.emplace();
-    operation.lexical_allocation = CheckedOperation::LexicalAllocation{owner, CheckedOperation::LexicalAllocation::array};
     require_lexical_allocator(owner, expr.at);
     note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
     return operation;
@@ -17707,7 +17744,8 @@ class ScalarChecker {
         auto initialized = check_product_construction(nested, constructed, instance, operations, place);
         supplied = initialized.type;
         operations.insert_or_assign(&nested, std::move(initialized));
-      } else supplied = check(*item.children.back(), instance, operations, direct);
+      } else if (direct) supplied = check_bits_payload(*item.children.back(), member.type, instance, operations);
+      else supplied = check(*item.children.back(), instance, operations, false);
       field.type = supplied == Type::never ? Type{Type::never} : field.operand_type;
       operations.insert_or_assign(&item, std::move(field));
       if (supplied == Type::never) {
@@ -17716,7 +17754,6 @@ class ScalarChecker {
         continue;
       }
       if (inline_product) continue;
-      if (direct) transfer_type(supplied, member.type, at);
       if (operation.type == Type::never) continue;
       const auto &source = operations.at(item.children.back().get());
       if (!direct) {
@@ -17947,7 +17984,14 @@ class ScalarChecker {
           const auto &field = receiving[i];
           const auto place = declare(source.text, field.type, field.read_only, true, source.at);
           bindings_->at(storage(place).binding).fixed = source.fixed_binding;
-          initialize(place);
+          if (field.type.kind == Type::product) reserve_product_fields(place, source.at);
+          std::vector<size_t> targets{place};
+          for (size_t next = 0; next < targets.size(); ++next) {
+            const auto target = targets[next];
+            initialize(target);
+            const auto &children = storage(target).fields;
+            targets.insert(targets.end(), children.begin(), children.end());
+          }
           CheckedOperation binding;
           binding.type = field.type;
           binding.operand_type = sum_alternative(*header.case_pattern.constructor).fields[field.field].type;
@@ -18311,15 +18355,15 @@ class ScalarChecker {
         const auto index = child(1);
         if (index == Type::never) break;
         check_array_index(shape, index, expr.children[1]->at);
-        if (!scalar_type(shape.element)) implementation_gap(expr.at, "builtin indexed transfer of a non-scalar element");
+        if (read && !discard && inline_aggregate_type(shape.element))
+          implementation_gap(expr.at, "reading an indexed transfer result as an independent aggregate");
         transfer_access(array.read_only, expr.at);
         note_abrupt(expr.at, {exception_id(ExceptionCategory::index_out_of_bounds)});
-        const auto source = child(2);
+        operation.operand_type = type;
+        const auto source = check_bits_payload(*expr.children[2], shape.element, instance, operations);
         if (source == Type::never) break;
         require_live_view(array, expr.at);
-        transfer_type(source, shape.element, expr.children[2]->at);
         operation.type = shape.element;
-        operation.operand_type = type;
         operation.view = operation.indexed_target = operation.read_only = true;
         operation.owners = array.owners;
         operation.initialization.emplace();
@@ -18557,7 +18601,7 @@ class ScalarChecker {
           const bool borrowed_text = mode == ArgumentMode::borrowed_ref && text_type(argument);
           if (mode == ArgumentMode::value ||
               (mode != ArgumentMode::borrowed_handle && !borrowed_text &&
-               argument.kind != Type::product && argument.kind != Type::array && argument.kind != Type::abstract_type))
+               !inline_aggregate_type(argument) && argument.kind != Type::array && argument.kind != Type::abstract_type))
             require_value(argument, expr.at);
         }
         operation.arguments.push_back({mode, arguments.back()});
@@ -19501,8 +19545,8 @@ class ScalarChecker {
       const auto index = child(1);
       if (!shape || index == Type::never) { operation.type = Type::never; break; }
       check_array_index(*shape, index, expr.children[1]->at);
-      if (read && shape->element.kind == Type::product)
-        implementation_gap(expr.at, "reading a whole indexed product as an independent value");
+      if (read && inline_aggregate_type(shape->element))
+        implementation_gap(expr.at, "reading a whole indexed aggregate as an independent value");
       operation.type = shape->element;
       // Value consumers select overloads using the target's access and owner.
       const auto &array = operations.at(expr.children.front().get());
@@ -21141,8 +21185,9 @@ class ScalarChecker {
         if (!names.insert(field.name).second)
           fail(field.at, "duplicate field '" + field.name + "' in '" + alternative.source->name.text + "'");
         const auto type = resolve_type(field.type);
-        if ((!field.declaration_kind.empty() && field.declaration_kind != "val") || !scalar_type(type))
-          implementation_gap(field.at, "sum payload fields outside direct scalar bits");
+        if ((!field.declaration_kind.empty() && field.declaration_kind != "val") ||
+            (!scalar_type(type) && type.kind != Type::product && type.kind != Type::sum))
+          implementation_gap(field.at, "sum payload fields outside direct bits storage");
         alternative.fields.push_back({&field, type, PlaceKind::value});
       }
     }
@@ -21204,10 +21249,9 @@ class ScalarChecker {
         implementation_gap(array.source->at, "array index domain '" + type_name(array.index) + "'");
       if (array.element.kind == Type::procedure)
         fail(array.source->at, "callable views require lexical storage and cannot be array elements");
-      if (!scalar_type(array.element) && array.element.kind != Type::product)
+      if (!scalar_type(array.element) && array.element.kind != Type::product && array.element.kind != Type::sum)
         implementation_gap(array.source->at, "array element type '" + type_name(array.element) + "'");
     }
-    const auto count = program_.schemas.size() - first;
     auto schemas = std::span(program_.schemas).subspan(first);
     for (auto &schema : schemas) {
       if (schema.source->native_owner_type) {
@@ -21239,54 +21283,86 @@ class ScalarChecker {
         if (type.kind == Type::region_schema) fail(field.at, "a region schema does not name a field payload type");
         const bool text_place = !schema.source->c_data && schema.source->kind == Form::Kind::data &&
             storage == PlaceKind::value && type == Type::string;
-        if (!scalar_type(type) && type.kind != Type::product && !text_place)
+        if (!scalar_type(type) && type.kind != Type::product && type.kind != Type::sum && !text_place)
           implementation_gap(field.at, "field representation for type '" + type_name(type) + "'");
+        if (type.kind == Type::sum && storage != PlaceKind::value)
+          implementation_gap(field.at, "stored sum reference fields");
         schema.bits &= storage == PlaceKind::value && !text_place;
         schema.fields.push_back({&field, std::move(type), storage});
       }
     }
 
-    // Only inline payloads require the target layout. A stored reference can
-    // name its own product or another product still being checked.
-    std::vector<size_t> pending(count);
-    std::vector<std::vector<size_t>> dependents(count);
-    std::deque<size_t> ready;
-    for (size_t i = 0; i < count; ++i) {
-      for (const auto &field : schemas[i].fields) {
-        if (program_.builder_type(field.type))
-          implementation_gap(field.source->at, "storing a lexical text builder in a data field");
-        if (field.storage != PlaceKind::value || field.type.kind != Type::product) continue;
-        if (!program_.schemas[field.type.identity].bits) {
-          if (schemas[i].source->c_data)
-            fail(field.source->at, "data \"C\" requires recursively bits-only fields");
-          implementation_gap(field.source->at, "inline field with a reference-bearing product");
-        }
-        if (field.type.identity >= first) {
-          ++pending[i];
-          dependents[field.type.identity - first].push_back(i);
-        }
-      }
-      if (!pending[i]) ready.push_back(i);
-    }
+    check_nominal_layouts(first, first_sum);
     for (const auto &array : std::span(program_.arrays).subspan(first_array))
       if (program_.builder_type(array.element))
         implementation_gap(array.source->at, "storing a lexical text builder in an array");
-    while (!ready.empty()) {
-      const auto resolved = ready.front();
-      ready.pop_front();
-      auto &schema = schemas[resolved];
-      for (const auto &field : schema.fields) {
-        if (field.storage == PlaceKind::value && field.type.kind == Type::product)
-          schema.has_enum_storage |= program_.schemas[field.type.identity].has_enum_storage;
-      }
-      if (schema.source->c_data && schema.has_enum_storage)
-        implementation_gap(schema.source->at, "enumeration fields in a foreign record require a checked storage boundary");
-      for (const auto dependent : dependents[resolved])
-        if (!--pending[dependent]) ready.push_back(dependent);
+  }
+
+  void check_nominal_layouts(size_t first_product, size_t first_sum) {
+    struct Layout {
+      Type type;
+      const Form *source;
+      size_t pending = 0;
+      std::vector<size_t> dependents = {};
+    };
+    std::vector<Layout> layouts;
+    for (size_t id = first_product; id < program_.schemas.size(); ++id)
+      layouts.push_back({Type{Type::product, {}, id}, program_.schemas[id].source});
+    const auto sum_start = layouts.size();
+    for (size_t id = first_sum; id < program_.sums.size(); ++id)
+      layouts.push_back({Type{Type::sum, {}, id}, program_.sums[id].source});
+
+    for (const auto &schema : std::span(program_.schemas).subspan(first_product))
+      for (const auto &field : schema.fields) if (program_.builder_type(field.type))
+        implementation_gap(field.source->at, "storing a lexical text builder in a data field");
+
+    // Only inline fields need the child's layout. Stored referents can be recursive.
+    std::deque<size_t> ready;
+    for (size_t i = 0; i < layouts.size(); ++i) {
+      auto &layout = layouts[i];
+      program_.visit_inline_fields(layout.type, [&](const auto &field) {
+        const auto &type = field.type;
+        std::optional<size_t> field_layout;
+        if (type.kind == Type::product) {
+          if (!program_.bits_payload(type)) {
+            if (layout.source->c_data) fail(field.source->at, "data \"C\" requires recursively bits-only fields");
+            implementation_gap(field.source->at, "inline field with a reference-bearing product");
+          }
+          if (type.identity >= first_product) field_layout = type.identity - first_product;
+        } else if (type.kind == Type::sum && type.identity >= first_sum) {
+          field_layout = sum_start + type.identity - first_sum;
+        }
+        if (field_layout) {
+          ++layout.pending;
+          layouts[*field_layout].dependents.push_back(i);
+        }
+      });
+      if (!layout.pending) ready.push_back(i);
     }
-    for (size_t i = 0; i < count; ++i)
-      if (pending[i])
-        fail(schemas[i].source->at, "inline fields of '" + schemas[i].source->name + "' have no finite layout");
+    while (!ready.empty()) {
+      const auto next = ready.front();
+      ready.pop_front();
+      const auto &layout = layouts[next];
+      if (layout.type.kind == Type::product) {
+        auto &schema = program_.schemas[layout.type.identity];
+        program_.visit_inline_fields(layout.type, [&](const auto &field) {
+          if (field.type.kind == Type::sum) schema.has_sum_storage = true;
+          if (field.type.kind == Type::product) {
+            const auto &nested = program_.schemas.at(field.type.identity);
+            schema.has_sum_storage |= nested.has_sum_storage;
+            schema.has_enum_storage |= nested.has_enum_storage;
+          }
+        });
+        if (schema.source->c_data && schema.has_sum_storage)
+          implementation_gap(schema.source->at, "sum fields in a foreign record require a checked storage boundary");
+        if (schema.source->c_data && schema.has_enum_storage)
+          implementation_gap(schema.source->at, "enumeration fields in a foreign record require a checked storage boundary");
+      }
+      for (const auto dependent : layout.dependents)
+        if (!--layouts[dependent].pending) ready.push_back(dependent);
+    }
+    for (const auto &layout : layouts) if (layout.pending)
+      fail(layout.source->at, "inline fields of '" + layout.source->name + "' have no finite layout");
   }
 
   void check_native_array(const Type &type, bool read_only, const Location &at) const {
