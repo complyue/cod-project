@@ -44,7 +44,136 @@ runner.CASES = {
     'direct_lexical_definition_is_available_to_another_definition': (
         IO + 'proc run()->void{proc helper(x:u64)->void{behave @print(x);return;};'
         'proc relay(x:u64)->void{helper(x);return;};relay(8u64);return;}run();', 0, '8\n', ''),
+    'lexical_procedure_writes_each_recursive_activation': (IO + '''
+proc run(depth:u64)->u64 {
+    val n <- depth;
+    proc shift(amount:u64)->u64 { n <- n + amount; return n; };
+    if (depth == 0u64) return shift(10u64);
+    return shift(run(depth - 1u64)) + n;
 }
+behave @print(run(2u64));
+''', 0, '48\n', ''),
+    'lexical_procedure_calls_its_enclosing_definition': (IO + '''
+proc run()->u64 {
+    val n <- 0u64;
+    proc advance(depth:u64)->void {
+        n <- n + 1u64;
+        proc recurse(next:u64)->void { advance(next); return; };
+        if (depth == 0u64) return;
+        recurse(depth - 1u64);
+        return;
+    };
+    advance(3u64);
+    return n;
+}
+behave @print(run());
+''', 0, '4\n', ''),
+    'lexical_procedure_forwards_its_original_slot': (IO + '''
+proc run()->void {
+    val total <- 1u64;
+    proc update(amount:u64)->void { total <- total + amount; return; };
+    proc relay(amount:u64)->void { update(amount); return; };
+    {{ val total <- 20u64; relay(6u64); behave @print(total); }};
+    behave @print(total);
+    return;
+}
+run();
+''', 0, '20\n7\n', ''),
+    'lexical_procedure_reads_current_reference_after_argument_preparation': (IO + '''
+proc run()->void {
+    val first <- 1u64;
+    val second <- 7u64;
+    ref selected:u64 = first;
+    proc observe(old:const u64 in O,ignored:u64)->void where {const owner O} {
+        behave @print(old);
+        selected <- selected + 1u64;
+        behave @print(selected);
+        return;
+    };
+    observe(selected, { selected = second; 0u64 });
+    return;
+}
+run();
+''', 0, '1\n8\n', ''),
+    'deferred_lexical_procedure_retains_slot_and_prepared_argument': (IO + '''
+proc run()->void {
+    val first <- 1u64;
+    val second <- 7u64;
+    ref current:u64 = first;
+    proc observe(prepared:u64)->void {
+        behave @print(prepared);
+        behave @print(current);
+        return;
+    };
+    defer observe(current);
+    current = second;
+    return;
+}
+run();
+''', 0, '1\n7\n', ''),
+    'deferred_lexical_procedure_writes_current_target': (IO + '''
+proc run()->void {
+    val first <- 1u64;
+    val second <- 7u64;
+    ref current:u64 = first;
+    proc update()->void { current <- 9u64; return; };
+    defer { behave @print(first); behave @print(second); };
+    defer update();
+    current = second;
+    return;
+}
+run();
+''', 0, '1\n9\n', ''),
+    'deferred_lexical_procedure_initializes_original_storage': (IO + '''
+proc run()->void {
+    val n <- make u64;
+    proc init()->void { n <- 7u64; return; };
+    defer { behave @print(n); };
+    defer init();
+    return;
+}
+run();
+''', 0, '7\n', ''),
+    'lexical_procedure_requires_initialized_storage_for_read': (IO + '''
+proc run()->void {
+    val n <- make u64;
+    proc observe()->void { behave @print(n); return; };
+    observe();
+    return;
+}
+run();
+''', 2, '', "cannot prove initialization of 'n'"),
+    'lexical_write_survives_checked_failure': (IO + '''
+using "std:exceptions" Exception;
+data Bad <: Exception {code:u64;};
+proc run()->void {
+    val n <- 1u64;
+    proc update()->void throws Bad {n <- 7u64; throw Bad {code <- 1u64;};};
+    try { update(); } catch (e:Bad) { behave @print(n); };
+    return;
+}
+run();
+''', 0, '7\n', ''),
+    'lexical_procedure_preserves_readonly_view': ('''
+proc run()->void {
+    val value <- 1u64;
+    ref seen:const u64 = value;
+    proc forbidden()->void { seen <- 9u64; return; };
+    forbidden();
+    return;
+}
+run();
+''', 2, '', 'cannot write through a readonly destination'),
+    'unused_lexical_procedure_checks_its_return': ('''
+proc run()->u64 {
+    val value <- 1u64;
+    proc bad()->u64 { return value == 1u64; };
+    return value;
+}
+run();
+''', 2, '', "return type 'bool' does not satisfy 'u64'"),
+}
+runner.CASE_SHADOWS = {'lexical_procedure_forwards_its_original_slot': ['total']}
 runner.EXTRA_SOURCES = [Path(__file__)]
 if __name__ == '__main__':
     raise SystemExit(runner.main())
