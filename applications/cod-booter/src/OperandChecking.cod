@@ -23,6 +23,7 @@ using "NameResolution.cod" {
     builtin_void, builtin_bool, ordinary_selection, symbolic_selection, callable_binding,
     formal_binding, local_binding, loop_index, exception_binding, find_enum_member,
     record_type, find_record_field, has_exception_parent, builtin_string, builtin_c_string, builtin_u8, owner_binding,
+    definition_name, transfer_name,
 };
 using "ModuleExports.cod" {
     SelectedExports, exception_type_export, symbol_export, print_export_identity,
@@ -70,7 +71,7 @@ export data OperandFact {
     word_offset:u64;
     last_initializer:u64;
     writable_text_place:u8;
-    text_policy:u64;
+    call_definition:u64;
     text_nul:u8;
     allocation_owner:u64;
     owner_chain:u64;
@@ -163,6 +164,10 @@ export func unsupported_text_operation() -> u8 { return 37u8; }
 func wrong_text_result_owner() -> u8 { return 38u8; }
 func unproved_text_policy() -> u8 { return 39u8; }
 func text_place_needs_initializer() -> u8 { return 40u8; }
+func ambiguous_transfer() -> u8 { return 41u8; }
+func duplicate_transfer_signature() -> u8 { return 42u8; }
+export func unsupported_transfer_signature() -> u8 { return 43u8; }
+export func unproved_transfer_owner() -> u8 { return 44u8; }
 
 export func unreachable_case_item() -> u8 { return 1u8; }
 export func misses_case_arm() -> u8 { return 0u8; }
@@ -363,19 +368,21 @@ func check_formals(nodes:const ExprNodes in N, names:const NameBindings in B, li
     };
 }
 
-func check_text_result(nodes:const ExprNodes in N, names:const NameBindings in B,
-                       facts:OperandFacts in F, definition:u64, clause:u64) -> u8
+func check_borrowed_result(nodes:const ExprNodes in N, names:const NameBindings in B,
+                           facts:OperandFacts in F, definition:u64, clause:u64) -> u8
     where {const owner N, const owner B, owner F} {
     val annotation <- nodes[clause].right;
     if (nodes[annotation].kind != owned_type_node() || names[clause].declaration != no_node())
         return unsupported_text_operation();
-    val kind <- declared_borrow(names, facts, nodes[annotation].left);
+    val target <- nodes[annotation].left;
+    val kind <- declared_borrow(names, facts, target);
     val owner_site <- names[nodes[annotation].right].declaration;
-    if (!immutable_text_kind(kind) || nodes[clause].number != readonly_declaration())
-        return unsupported_text_operation();
+    val readonly <- nodes[clause].number == readonly_declaration();
+    if (kind != product_kind() && (!immutable_text_kind(kind) || !readonly))
+        return unproved_result_contract();
     if (owner_site == no_node() || nodes[owner_site].kind != owner_clause_node()) return unproved_owner();
-    set_fact(facts, definition, kind, borrowed_ref(), owner_site, 0u64, 0u8);
-    facts[definition].target_readonly <- 1u8;
+    set_fact(facts, definition, kind, borrowed_ref(), owner_site, nominal_identity(names, target), 0u8);
+    facts[definition].target_readonly <- if (readonly) { 1u8 } else { 0u8 };
     if (kind == c_string_kind()) { (facts[definition].text_nul <- nul_absent()):void; };
     return 0u8;
 }
@@ -404,7 +411,7 @@ func check_signature_clauses(nodes:const ExprNodes in N, names:const NameBinding
             };
         };
         if (nodes[clause].kind == ref_result_node()) {
-            (report.diagnostic <- check_text_result(nodes, names, facts, definition, clause)):void;
+            (report.diagnostic <- check_borrowed_result(nodes, names, facts, definition, clause)):void;
         };
         if (nodes[clause].kind == throws_clause_node()) {
             report.diagnostic <- exception_annotation(names, selected, facts, annotation, clause);
@@ -609,30 +616,162 @@ func record_owner_argument(nodes:const ExprNodes in N, facts:OperandFacts in F, 
     return 0u8;
 }
 
-func check_text_policy(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-                       facts:OperandFacts in F, owners:CallOwners in O, at:u64, place_owner:u64, first_write:bool) -> u8
+func binary_formals(nodes:const ExprNodes in N, links:const NameWork in L, definition:u64) -> u64
+    where {const owner N, const owner L} {
+    val tail <- nodes[callable_head(nodes, definition)].right;
+    if (tail == no_node()) return no_node();
+    val first <- nodes[tail].left;
+    if (first == no_node() || nodes[first].left != no_node() || links[first].next != tail) return no_node();
+    return first;
+}
+
+func owner_parameter(nodes:const ExprNodes in N, owner_site:u64) -> bool where {const owner N} {
+    return owner_site != no_node() && owner_site != static_text_owner() && nodes[owner_site].kind == owner_clause_node();
+}
+
+func shares_owner(nodes:const ExprNodes in N, facts:const OperandFacts in F, first:u64, second:u64) -> bool
+    where {const owner N, const owner F} {
+    return facts[first].owner == facts[second].owner && owner_parameter(nodes, facts[first].owner);
+}
+
+func text_conforms(actual:u8, formal:u8) -> bool {
+    return actual == formal || (actual == c_string_kind() && formal == string_kind());
+}
+
+func matching_transfer() -> u8 { return 1u8; }
+func possible_transfer() -> u8 { return 2u8; }
+
+func transfer_match(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
+                    at:u64, method:u64) -> u8 where {const owner N, const owner L, const owner F} {
+    val first <- binary_formals(nodes, links, method);
+    val second <- links[first].next;
+    val left <- nodes[at].left;
+    val right <- nodes[at].right;
+    if (!same_operand_type(facts, left, first) || !text_conforms(facts[right].kind, facts[second].kind))
+        return 0u8;
+    if (!shares_owner(nodes, facts, first, second) || facts[left].owner == facts[right].owner)
+        return matching_transfer();
+    if (owner_parameter(nodes, facts[left].owner) && owner_parameter(nodes, facts[right].owner))
+        return possible_transfer();
+    return 0u8;
+}
+
+# All admitted policies have a writable destination and readonly text input.
+# Text conformance and owner equality constrain independent parts of the domain.
+func transfer_dominates(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
+                        narrow:u64, wide:u64, match_kind:u8) -> bool
+    where {const owner N, const owner L, const owner F} {
+    val first <- binary_formals(nodes, links, narrow);
+    val other <- binary_formals(nodes, links, wide);
+    val second <- links[first].next;
+    val other_second <- links[other].next;
+    if (!text_conforms(facts[second].kind, facts[other_second].kind)) return false;
+    val narrow_owner <- shares_owner(nodes, facts, first, second);
+    val wide_owner <- shares_owner(nodes, facts, other, other_second);
+    if (wide_owner && !narrow_owner) return false;
+    if (narrow_owner && !wide_owner && match_kind != matching_transfer()) return false;
+    return narrow_owner != wide_owner || facts[second].kind != facts[other_second].kind;
+}
+
+func dominated_transfer(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
+                        at:u64, family:u64, method:u64) -> bool
+    where {const owner N, const owner L, const owner F} {
+    val other <- family;
+    val relation <- 0u8;
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        if (other == no_node()) return false;
+        if (other != method) {
+            relation <- transfer_match(nodes, links, facts, at, other);
+            if (relation != 0u8 && transfer_dominates(nodes, links, facts, other, method, relation))
+                return true;
+        };
+        other <- links[other].next_method;
+    };
+    return false;
+}
+
+func select_transfer(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
+                     at:u64, family:u64, selected:u64 in D) -> u8
+    where {const owner N, const owner L, const owner F, owner D} {
+    val method <- family;
+    val relation <- 0u8;
+    val ambiguous <- false;
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        if (method == no_node()) {
+            if (ambiguous) return ambiguous_transfer();
+            return if (selected == no_node()) { unproved_text_policy() } else { 0u8 };
+        };
+        relation <- transfer_match(nodes, links, facts, at, method);
+        if (relation != 0u8 && !dominated_transfer(nodes, links, facts, at, family, method)) {
+            if (relation == possible_transfer()) return unproved_transfer_owner();
+            if (selected != no_node()) { (ambiguous <- true):void; };
+            (selected <- method):void;
+        };
+        method <- links[method].next_method;
+    };
+    return invalid_operand_tree();
+}
+
+func supported_transfer_signature(nodes:const ExprNodes in N, links:const NameWork in L,
+                                  facts:const OperandFacts in F, definition:u64) -> bool
+    where {const owner N, const owner L, const owner F} {
+    val first <- binary_formals(nodes, links, definition);
+    if (first == no_node() || facts[definition].kind != void_result()) return false;
+    val second <- links[first].next;
+    val place <- facts[first].writable_text_place != 0u8 ||
+        (facts[first].kind == product_kind() && facts[first].target_readonly == 0u8);
+    return place && facts[first].reception == borrowed_ref() &&
+        facts[second].reception == borrowed_ref() && facts[second].writable_text_place == 0u8 &&
+        immutable_text_kind(facts[second].kind);
+}
+
+func check_transfer_signatures(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
+                               definition:u64) -> u8 where {const owner N, const owner L, const owner F} {
+    val first <- binary_formals(nodes, links, definition);
+    val second <- links[first].next;
+    val member <- links[definition].next_method;
+    val other <- no_node();
+    val other_second <- no_node();
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        if (member == no_node()) return 0u8;
+        other <- binary_formals(nodes, links, member);
+        if (is_function(nodes, definition) != is_function(nodes, member))
+            return unsupported_transfer_signature();
+        other_second <- links[other].next;
+        if (same_operand_type(facts, first, other) && same_operand_type(facts, second, other_second) &&
+            shares_owner(nodes, facts, first, second) == shares_owner(nodes, facts, other, other_second))
+            return duplicate_transfer_signature();
+        member <- links[member].next_method;
+    };
+    return invalid_operand_tree();
+}
+
+func check_transfer_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                         facts:OperandFacts in F, owners:CallOwners in O, at:u64, initializing:bool) -> u8
     where {const owner N, const owner B, const owner L, owner F, owner O} {
     if (names[at].kind != callable_binding()) return unproved_text_policy();
-    val definition <- names[at].declaration;
-    if (facts[definition].kind != void_result() || is_function(nodes, definition)) return unproved_text_policy();
-    if (is_function(nodes, enclosing_callable(nodes, names, names[at].scope))) return procedure_call_in_function();
-    val place <- first_item(nodes, nodes[callable_head(nodes, definition)].right);
-    if (place == no_node() || facts[place].writable_text_place == 0u8) return unproved_text_policy();
-    if (first_write && nodes[place].kind != init_place_parameter_node()) return text_place_needs_initializer();
-    val text <- links[place].next;
-    if (text == no_node() || links[text].next != no_node() || facts[text].writable_text_place != 0u8 ||
-        !immutable_text_kind(facts[text].kind) || facts[text].reception != borrowed_ref()) return unproved_text_policy();
+    val destination <- nodes[at].left;
     val input <- nodes[at].right;
+    if (facts[destination].kind == product_kind() &&
+        (facts[destination].target_readonly != 0u8 || facts[destination].reception != borrowed_ref()))
+        return expected_writable_place();
     if (!immutable_text_kind(facts[input].kind)) return string_operand_required();
-    if (facts[text].kind == c_string_kind() && facts[input].kind != c_string_kind() &&
-        !(nodes[ungrouped(nodes, input)].kind == text_literal_node() && facts[input].text_nul == nul_absent()))
-        return c_string_operand_required();
-    val diagnostic <- record_owner_argument(nodes, facts, owners, place, place_owner, at, at);
+    val family <- names[at].declaration;
+    val definition <- no_node();
+    val diagnostic <- select_transfer(nodes, links, facts, at, family, definition);
+    if (diagnostic != 0u8) return diagnostic;
+    val place <- binary_formals(nodes, links, definition);
+    val text <- links[place].next;
+    if (initializing && nodes[place].kind != init_place_parameter_node()) return text_place_needs_initializer();
+    if (!is_function(nodes, definition) && is_function(nodes, enclosing_callable(nodes, names, names[at].scope)))
+        return procedure_call_in_function();
+    val place_owner <- facts[destination].owner;
+    diagnostic <- record_owner_argument(nodes, facts, owners, place, place_owner, at, at);
     if (diagnostic != 0u8) return diagnostic;
     diagnostic <- record_owner_argument(nodes, facts, owners, text, facts[input].owner, input, at);
     if (diagnostic != 0u8) return diagnostic;
     set_fact(facts, at, void_result(), 0u8, place_owner, 0u64, 0u8);
-    facts[at].text_policy <- definition;
+    facts[at].call_definition <- definition;
     return 0u8;
 }
 
@@ -651,7 +790,10 @@ func check_product_initializer(source:const SourceBytes in S, nodes:const ExprNo
     val value <- nodes[assignment].right;
     val annotation <- nodes[binding].right;
     if (names[annotation].kind == builtin_string()) {
-        val diagnostic <- check_text_policy(nodes, names, links, facts, owners, assignment, names[at].scope, first);
+        val destination <- nodes[assignment].left;
+        set_fact(facts, destination, string_kind(), borrowed_ref(), names[at].scope, 0u64, 0u8);
+        facts[destination].writable_text_place <- 1u8;
+        val diagnostic <- check_transfer_call(nodes, names, links, facts, owners, assignment, true);
         if (diagnostic != 0u8) return diagnostic;
     } else {
         if (facts[value].kind == never_result()) {
@@ -821,6 +963,7 @@ func check_direct_call(nodes:const ExprNodes in N, names:const NameBindings in B
         return check_text_intrinsic(nodes, links, facts, at, selected[names[callee].declaration].kind);
     if (names[callee].kind != callable_binding()) return unproved_call_target();
     val definition <- names[callee].declaration;
+    if (links[definition].next_method != no_node()) return unsupported_transfer_signature();
     if (!is_function(nodes, definition) && is_function(nodes, enclosing_callable(nodes, names, names[at].scope)))
         return procedure_call_in_function();
     val head <- callable_head(nodes, definition);
@@ -832,10 +975,11 @@ func check_direct_call(nodes:const ExprNodes in N, names:const NameBindings in B
         if (formal == no_node() || argument == no_node()) {
             if (formal != argument) return wrong_argument_count();
             copy_fact(facts, at, definition);
-            if (immutable_text_kind(facts[definition].kind)) {
+            if (facts[definition].reception == borrowed_ref()) {
                 if (owners[result_owner].call_site != at) return unproved_owner();
                 (facts[at].owner <- owners[result_owner].actual_owner):void;
             };
+            facts[at].call_definition <- definition;
             return 0u8;
         } else {};
         diagnostic <- check_argument(nodes, facts, owners, argument, formal, at);
@@ -1511,6 +1655,15 @@ func check_return(nodes:const ExprNodes in N, names:const NameBindings in B, fac
         return 0u8;
     } else {};
     if (value == no_node()) return wrong_return_type();
+    if (facts[scope].kind == product_kind()) {
+        if (!same_operand_type(facts, value, scope) || facts[value].reception != borrowed_ref())
+            return wrong_return_type();
+        if (facts[value].owner != facts[scope].owner)
+            return owner_conflict(nodes, facts[value].owner, facts[scope].owner);
+        if (facts[value].target_readonly != 0u8 && facts[scope].target_readonly == 0u8)
+            return expected_writable_place();
+        return 0u8;
+    };
     if (immutable_text_kind(facts[scope].kind)) {
         if (!immutable_text_kind(facts[value].kind) ||
             (facts[scope].kind == c_string_kind() && facts[value].kind != c_string_kind()))
@@ -1695,12 +1848,14 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     if (kind == rebind_node()) return check_text_installation(nodes, facts, at);
     if (is_transfer(nodes, at)) {
         val destination <- nodes[at].left;
+        if (facts[destination].kind == product_kind())
+            return check_transfer_call(nodes, names, links, facts, owners, at, false);
         if (!immutable_text_kind(facts[destination].kind)) return check_transfer(nodes, facts, at);
         if (facts[destination].writable_text_place == 0u8) return expected_writable_place();
         # Reborrowing an init formal as an initialized place would expose its
         # current value before the caller's first-write proof.
         if (nodes[destination].kind == name_node()) return unsupported_text_operation();
-        return check_text_policy(nodes, names, links, facts, owners, at, facts[destination].owner, false);
+        return check_transfer_call(nodes, names, links, facts, owners, at, false);
     };
     if (kind == compare_node()) return check_comparison(nodes, facts, at);
     if (kind == logical_not_node() || logical_binary(kind)) return check_logical(nodes, facts, at);
@@ -1924,7 +2079,7 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
         facts[at].product_words <- 0u64;
         facts[at].word_offset <- 0u64;
         facts[at].last_initializer <- no_node();
-        facts[at].text_policy <- no_node();
+        facts[at].call_definition <- no_node();
         facts[at].allocation_owner <- no_node();
         facts[at].owner_chain <- no_node();
         facts[at].owner_use_next <- no_node();
@@ -1943,7 +2098,16 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
         if (nodes[at].kind == callable_node()) {
             check_signature(nodes, names, links, selected, facts, report, at, tree.used);
             if (report.diagnostic != 0u8) return false;
+            if (transfer_name(source, nodes, definition_name(nodes, at)) &&
+                !supported_transfer_signature(nodes, links, facts, at))
+                return operand_problem(report, at, unsupported_transfer_signature());
         } else {};
+    };
+    for (at in 0u64 .. tree.used) {
+        if (nodes[at].kind == callable_node() && links[at].next_method != no_node()) {
+            report.diagnostic <- check_transfer_signatures(nodes, links, facts, at);
+            if (report.diagnostic != 0u8) { report.node <- at; return false; };
+        };
     };
     val at <- no_node();
     for (offset in 0u64 .. tree.used) {

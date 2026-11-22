@@ -543,10 +543,9 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
         if (facts[at].text_intrinsic == text_byte_export())
             return route_failure(nodes, names, links, facts, sites, at, used, index_out_of_bounds_identity(), 0u8, possible_failure());
         if (facts[at].text_intrinsic != 0u8) return 0u8;
-        return check_call_completion(nodes, names, links, facts, sites, at, names[nodes[at].left].declaration, used);
     };
-    if (facts[at].text_policy != no_node())
-        return check_call_completion(nodes, names, links, facts, sites, at, facts[at].text_policy, used);
+    if (facts[at].call_definition != no_node())
+        return check_call_completion(nodes, names, links, facts, sites, at, facts[at].call_definition, used);
     if (kind == deferred_call_node() || kind == deferred_block_node()) {
         record_registration(names, sites, at);
         return 0u8;
@@ -639,10 +638,10 @@ func check_escaping_failure_paths(nodes:const ExprNodes in N, names:const NameBi
     };
     if (count == 0u64) return true;
     for (at in 0u64 .. used) {
-        if (nodes[at].kind == call_node() && can_continue(sites, at) &&
+        if (facts[at].call_definition != no_node() && can_continue(sites, at) &&
             (sites[at].registration != no_node() || (sites[at].replacing_try == no_node() &&
              matching_handler(nodes, links, facts, sites, at, category, used) == no_node()))) {
-            definition <- names[nodes[at].left].declaration;
+            definition <- facts[at].call_definition;
             sites[at].failure_user <- sites[definition].failure_user;
             sites[definition].failure_user <- at;
             {};

@@ -9,12 +9,13 @@ using "ParserStorage.cod" {
     logical_not_node, logical_and_node, logical_binary, skips_right, equal_words, return_node,
     throw_node, case_node, case_arm_node, case_fallthrough_node, case_failure_node, break_node,
     enum_declaration_node, type_assertion_node, case_null_pattern, data_record_node, field_access_node,
-    text_literal_node, narrow_integer_node, owner_clause_node, init_place_parameter_node, rebind_node,
+    text_literal_node, narrow_integer_node, owner_clause_node, init_place_parameter_node, rebind_node, export_node,
 };
 using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" { NameBindings, NameWork, first_item, callable_head, exception_binding };
 using "OperandChecking.cod" {
-    OperandFacts, scalar_kind, product_kind, immutable_text_kind, has_value_tail, independent_value, local_place, nullable_ptr,
+    OperandFacts, scalar_kind, product_kind, immutable_text_kind, has_value_tail, independent_value, local_place,
+    nullable_ptr, borrowed_ref,
     unreachable_case_item, misses_case_arm, tests_case_arm, case_guard_passes, case_guard_declines, case_guard_tests,
     case_resumes_after_cleanup, present_target, absent_target, unknown_target, selected_target_presence,
 };
@@ -301,9 +302,9 @@ func prepare_arguments(nodes:const ExprNodes in N, names:const NameBindings in B
     };
 }
 
-func invoke(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+func invoke(nodes:const ExprNodes in N, links:const NameWork in L,
              facts:const OperandFacts in F, code:NativeCommands in C, plan:NativePlan in P, call:u64) -> void
-    where {const owner N, const owner B, const owner L, const owner F, owner C, owner P} {
+    where {const owner N, const owner L, const owner F, owner C, owner P} {
     if (nodes[call].kind == behave_node()) {
         emit(code, plan, print_word(), slot(nodes[call].right), 0u64);
         return;
@@ -311,16 +312,19 @@ func invoke(nodes:const ExprNodes in N, names:const NameBindings in B, links:con
     val argument <- first_item(nodes, nodes[call].right);
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (argument == no_node()) {
-            command(code, plan, invoke_function(), names[nodes[call].left].declaration, slot(call),
+            command(code, plan, invoke_function(), facts[call].call_definition, slot(call),
                     call_category(), call_site());
             return;
         } else {};
-        emit(code, plan, pass_argument(), slot(argument), 0u64);
-        if (facts[argument].owner_chain != no_node()) {
-            emit(code, plan, pass_argument(), slot(facts[argument].owner_chain), 0u64);
-        };
+        pass_prepared_operand(code, plan, slot(argument), facts[argument].owner_chain);
         argument <- links[argument].next;
     };
+}
+
+func pass_prepared_operand(code:NativeCommands in C, plan:NativePlan in P, word:u64, chain:u64) -> void
+    where {owner C, owner P} {
+    emit(code, plan, pass_argument(), word, 0u64);
+    if (chain != no_node()) { emit(code, plan, pass_argument(), slot(chain), 0u64); };
 }
 
 func guard_word(code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R,
@@ -365,7 +369,7 @@ func lower_call(nodes:const ExprNodes in N, names:const NameBindings in B, links
         lower_text_intrinsic(nodes, links, code, plan, state, at, intrinsic_kind);
         return;
     };
-    invoke(nodes, names, links, facts, code, plan, at);
+    invoke(nodes, links, facts, code, plan, at);
     if (nodes[at].kind == behave_node()) return;
     propagate_invocation_failure(code, plan, state);
 }
@@ -381,7 +385,7 @@ func propagate_invocation_failure(code:NativeCommands in C, plan:NativePlan in P
     position(code, plan, state, ready);
 }
 
-func lower_text_policy(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+func lower_transfer_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                        facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
                        plan:NativePlan in P, state:LoweringState in R, at:u64, place:u64) -> void
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
@@ -392,11 +396,9 @@ func lower_text_policy(nodes:const ExprNodes in N, names:const NameBindings in B
     val input_chain <- facts[input].owner_chain;
     if (place_chain != no_node()) { prepare_owner_address(nodes, facts, code, plan, facts[at].owner, slot(place_chain)); };
     if (input_chain != no_node()) { prepare_owner_address(nodes, facts, code, plan, facts[input].owner, slot(input_chain)); };
-    emit(code, plan, pass_argument(), place, 0u64);
-    if (place_chain != no_node()) { emit(code, plan, pass_argument(), slot(place_chain), 0u64); };
-    emit(code, plan, pass_argument(), slot(input), 0u64);
-    if (input_chain != no_node()) { emit(code, plan, pass_argument(), slot(input_chain), 0u64); };
-    command(code, plan, invoke_function(), facts[at].text_policy, slot(at), call_category(), call_site());
+    pass_prepared_operand(code, plan, place, place_chain);
+    pass_prepared_operand(code, plan, slot(input), input_chain);
+    command(code, plan, invoke_function(), facts[at].call_definition, slot(at), call_category(), call_site());
     propagate_invocation_failure(code, plan, state);
 }
 
@@ -1040,8 +1042,8 @@ func lower_construction(nodes:const ExprNodes in N, names:const NameBindings in 
             assignment <- nodes[item].right;
             input <- nodes[assignment].right;
             command(code, plan, offset_address(), slot(assignment), slot(at), facts[assignment].word_offset, 0u64);
-            if (facts[assignment].text_policy != no_node()) {
-                lower_text_policy(nodes, names, links, facts, sites, code, plan, state, assignment, slot(assignment));
+            if (facts[assignment].call_definition != no_node()) {
+                lower_transfer_call(nodes, names, links, facts, sites, code, plan, state, assignment, slot(assignment));
             } else {
                 lower_bits(nodes, names, links, facts, sites, code, plan, state, input);
                 if (!state.live) return;
@@ -1092,7 +1094,7 @@ func lower_return(nodes:const ExprNodes in N, names:const NameBindings in B, lin
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     val value <- nodes[at].left;
     if (value != no_node()) {
-        if (state.return_slot != no_node() && !immutable_text_kind(facts[names[at].scope].kind)) {
+        if (state.return_slot != no_node() && facts[names[at].scope].reception != borrowed_ref()) {
             lower_bits(nodes, names, links, facts, sites, code, plan, state, value);
         } else {
             lower_node(nodes, names, links, facts, sites, code, plan, state, value);
@@ -1114,7 +1116,8 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (!state.live || plan.diagnostic != 0u8) return;
     plan.node <- at;
     val kind <- nodes[at].kind;
-    if (kind == using_node() || kind == callable_node() || kind == enum_declaration_node() || kind == data_record_node()) return;
+    if (kind == using_node() || kind == callable_node() || kind == enum_declaration_node() ||
+        kind == data_record_node() || kind == export_node()) return;
     if (kind == type_assertion_node()) {
         if (facts[at].enum_constant != 0u8) {
             emit(code, plan, word_constant(), slot(at), facts[at].discriminator_code);
@@ -1202,12 +1205,14 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
         };
         return;
     };
-    if (facts[at].text_policy != no_node() || kind == rebind_node()) {
+    if ((is_transfer(nodes, at) && facts[at].call_definition != no_node()) || kind == rebind_node()) {
         val place <- nodes[at].left;
-        lower_place_address(nodes, names, links, facts, sites, code, plan, state, place);
+        if (facts[place].kind == product_kind()) {
+            lower_node(nodes, names, links, facts, sites, code, plan, state, place);
+        } else { lower_place_address(nodes, names, links, facts, sites, code, plan, state, place); };
         if (!state.live || plan.diagnostic != 0u8) return;
-        if (facts[at].text_policy != no_node()) {
-            lower_text_policy(nodes, names, links, facts, sites, code, plan, state, at, slot(place));
+        if (facts[at].call_definition != no_node()) {
+            lower_transfer_call(nodes, names, links, facts, sites, code, plan, state, at, slot(place));
         } else {
             val input <- nodes[at].right;
             lower_node(nodes, names, links, facts, sites, code, plan, state, input);
@@ -1371,7 +1376,7 @@ func drain_scope(nodes:const ExprNodes in N, names:const NameBindings in B, link
             lower_delayed_block(nodes, names, links, facts, sites, code, plan, state, nodes[action].left, next);
         } else {
             invocation <- nodes[action].right;
-            invoke(nodes, names, links, facts, code, plan, invocation);
+            invoke(nodes, links, facts, code, plan, invocation);
             if (nodes[invocation].kind == call_node()) {
                 # In this admitted subset only a fatal numeric fault can escape
                 # a deferred callee. Keep the pending outcome on normal return.
@@ -1477,7 +1482,9 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
     val cleanup <- new_block(plan);
     val returned <- if (check_return) { new_block(plan) } else { cleanup };
     val return_ready <- if (check_return) { new_slot(plan) } else { no_node() };
-    val return_slot <- if (scalar_kind(facts[scope].kind) || immutable_text_kind(facts[scope].kind)) { returned_word() } else { no_node() };
+    val return_slot <- if (scalar_kind(facts[scope].kind) || facts[scope].reception == borrowed_ref()) {
+        returned_word()
+    } else { no_node() };
     ref state = make LoweringState {
         active_function <- scope; active_scope <- scope; exception_target <- cleanup;
         return_target <- returned; return_slot <- return_slot; return_ready <- return_ready;
