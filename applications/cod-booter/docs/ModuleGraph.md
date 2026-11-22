@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 1. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 2. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+
+[K-BOOTER-AST-TABLE-20261122](../../../CHANGELOG.md#k-booter-ast-table-20261122) continues that architecture for the [first indexed AST path](#first-indexed-ast-path). Its private representation uses the existing named-array constructor, valid bits transfer and constructor-pattern checks. Acceptance includes the parser, checker, lowering and emitted object.
 
 ## Layer responsibilities
 
@@ -25,6 +27,29 @@ The migration removes compiler-owned decisions from the current [C graph provide
 A suspended parent may keep its F and S. Across a child call it retains IDs and spans for graph data and reacquires views before use. An ID requires the graph it belongs to. Publish the required bytes or typed rows in G before their source owner ends. Growth must preserve actual-owner evidence. In particular, [consuming region resize](../../../design/RegionalAndLexicalStorageRefactor.md) requires accounting for the owner and all live dependent uses, including handler and cleanup bindings. A stable module ID alone cannot keep a borrow valid across replacement. The design permits storage strategies that avoid replacing a borrowed region.
 
 Use named sum alternatives for states and syntax nodes with differing payloads. For example, a literal has its value, a call has its callee and argument indices, and a return has its applicable return payload. Keep the common half-open source span, the applicable operator anchor, and the association with the owning syntax revision. A consumer matches the constructor before accessing the variant fields. Child indices retain their meaning when the backing relocates. Use enums for simple closed codes. Project initialized native command rows at the LLVM boundary; the CoD AST layout is private to the compiler.
+
+## First indexed AST path
+
+The first workload parses a module containing a named procedure that returns an integer literal and a call that consumes its result. [ExpressionParser](../src/ExpressionParser.cod) constructs literal, call and return alternatives, together with the module, callable, block and argument structure the input needs. [ParserInput](../src/ParserInput.cod) appends complete nodes. [OperandChecking](../src/OperandChecking.cod) matches the call and resolves its callee; the parser records the callee expression's node ID. [ModuleLowering](../src/ModuleLowering.cod) consumes the checked nodes and emits the corresponding constant, call and return. Node IDs identify entries in one table. That table's frame associates its spans with the particular source revision used to build it, including when a source loan ends between stages.
+
+Use a table-private slot type to keep capacity separate from valid syntax. In this source fragment, `ExprNode` has a half-open span and a typed sum payload. F is the writable workspace owner; `capacity` and `completed` are already established.
+
+```cod
+data AstSlot = Vacant {} | Occupied { node:ExprNode; };
+array AstSlots[u64]:AstSlot;
+
+ref slots = make AstSlots(capacity, make Vacant {}) in F;
+# After checking id == used and id < len(slots):
+slots[id] <- make Occupied { node <- completed; };
+```
+
+The length and the complete fill argument are each evaluated once in order, including for length zero. Each slot initially holds an independent Vacant value. The parser constructs the complete next row before publishing the new root and used count. Readers check membership of the ID in the published prefix and project fields only for the matched constructor. A physically in-bounds vacant slot cannot be consumed as a syntax node. An ordinary typed reservation can stage a chosen constructor at a known target; it supplies neither the array length nor a completed fill. [Named-array placement](../../../design/ConstructionAndAcquisition.md#source-migration) · [Reservation](../../../design/ConstructionAndAcquisition.md#typed-reservation-and-completed-construction)
+
+This application qualifies the concrete finite layout. All node and slot alternatives contain only direct, recursively bits fields, tags and indices. Transfer preserves the selected constructor and its initialized fields. Inactive fields and padding supply no payload. A native implementation may specialize fill and transfer under the same observable evaluation and failure rules. Adding a stored reference or a resource field requires revisiting this representation. [Bits classification](../../../design/ConstructionAndAcquisition.md#bits-classification-and-representation-obligations)
+
+For growth, create a filled replacement array under the live workspace owner, transfer the occupied prefix at the same indices, and change the table binding only after success. Existing references still refer to their original storage. Consumers carry IDs across the switch and obtain current views through the table. In this path published AST rows are append-only, so no consumer retains a projected field across a change of active alternative. On capacity or construction failure, the preceding published range and root remain usable. Allocation and cleanup keep their ordinary effects. Consuming a region with `resize` has a different ownership and failure contract.
+
+Verify an emitted object returns or reports the expected literal through the named call in both seed modes. Also verify zero and multiple slots, a write leaving its neighbor vacant, independent widths and aligned payloads, rejection of a non-bits element on this transfer path, wrong-table or unpublished IDs, a mismatched arm, stable IDs and spans after growth, and failure before replacement. Keep an isolated implementation until the existing production syntax coverage can switch to the typed table. Delivery uses the actual CoD compiler path and retains its provider and object workloads.
 
 ## Reentry and completion
 
