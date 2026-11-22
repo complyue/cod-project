@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Seed availability of residual deferred aggregates
+
+<a id="k-defer-aggregate-availability-20261122"></a>
+**K-DEFER-AGGREGATE-AVAILABILITY-20261122.** Editorial continuity from `a9300da9543a52c24ab82d80b0c2322e7935db0c:design/ExceptionControl.md` at r147 to r148, registry r1047. The seed coverage in that commit's `tests/cod/language/README.md` records post-pass publication, FIFO member ownership, separate body retention and release under H-537/H-538/H-550/H-551 and H-DEFER-AGGREGATE-REGION-20261118. This preserves failure identity, order and lifetime under charter §§3.3/4.1/4.3/6.3/12. Source member access, physical backing, OOM diagnostics and general collection work retain their existing qualification.
+
 ## 2026-11-21 — Preparing operands for display concatenation
 
 <a id="k-string-concat-operands-20261121"></a>
