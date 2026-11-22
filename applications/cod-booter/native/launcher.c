@@ -84,8 +84,6 @@ static const char *unsupported_source_form(uint32_t code) {
     case 71: return "unproved native here feedback type";
     case 74: return "array length query";
     case 76: return "ordinary here parameter lowering";
-    case 108: return "direct String place lowering";
-    case 109: return "reference assignment lowering";
     default: return NULL;
     }
 }
@@ -284,6 +282,10 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: this text operation is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 38)
         fputs(": error: borrowed text result does not retain its declared owner\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 39)
+        fputs(": error: a direct String field requires an applicable local '(<-)' policy\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 40)
+        fputs(": error: a first String field write requires an 'init val var' policy\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 12)
         fputs(": error: ref argument requires a proven non-null target\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 13)
@@ -294,6 +296,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: ref initialization requires a proven non-null target\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 17)
         fputs(": error: local binding is not established on every path to this use\n", stderr);
+    else if (diagnostic->stage == 5 && diagnostic->code == 19)
+        fputs(": error: 'init val var' place must be initialized on every successful exit\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == module_cycle_unproved)
         fputs(": error: cyclic module construction remains unproved\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == module_dependency_rejected)

@@ -64,6 +64,8 @@ data NameState {
     used:u64;
     first:u64;
     module_names:u64;
+    transfer_binding:u64;
+    transfer_resolved:bool;
     scope_node:u64;
     delayed:u64;
     guard:u64;
@@ -175,12 +177,12 @@ func remember(bindings:NameBindings in B, at:u64, declaration:u64, kind:u8) -> v
 
 func spelling_start(nodes:const ExprNodes in N, at:u64) -> u64 where {const owner N} {
     if (nodes[at].kind == symbol_node()) return nodes[at].first + 1u64;
-    if (nodes[at].kind == concat_node()) return nodes[at].operation_at;
+    if (nodes[at].kind == concat_node() || is_transfer(nodes, at)) return nodes[at].operation_at;
     return nodes[at].first;
 }
 
 func spelling_end(nodes:const ExprNodes in N, at:u64) -> u64 where {const owner N} {
-    if (nodes[at].kind == concat_node()) return nodes[at].operation_at + 2u64;
+    if (nodes[at].kind == concat_node() || is_transfer(nodes, at)) return nodes[at].operation_at + 2u64;
     return nodes[at].past;
 }
 
@@ -693,6 +695,18 @@ func resolve_defer(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
     return;
 }
 
+func resolve_transfer_family(source:const SourceBytes in S, nodes:const ExprNodes in N,
+                             bindings:NameBindings in B, work:const NameWork in W, state:NameState in R, at:u64) -> void
+    where {const owner S, const owner N, owner B, const owner W, owner R} {
+    if (!state.transfer_resolved) {
+        state.transfer_binding <- lookup(source, nodes, work, at, 0u64, state.module_names);
+        (state.transfer_resolved <- true):void;
+    };
+    val found <- state.transfer_binding;
+    if (found == no_node()) return;
+    remember(bindings, at, bindings[found].declaration, bindings[found].kind);
+}
+
 func resolve_record_initializer(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                                  work:NameWork in W, state:NameState in R, body:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
@@ -707,6 +721,9 @@ func resolve_record_initializer(source:const SourceBytes in S, nodes:const ExprN
             reject_name(state, field, unsupported_ordinary_construction());
             return;
         } else {};
+        bindings[field].scope <- state.scope_node;
+        bindings[field].finalizer <- state.finalizer;
+        if (is_transfer(nodes, field)) { resolve_transfer_family(source, nodes, bindings, work, state, field); };
         resolve_expression(source, nodes, bindings, work, state, nodes[field].right);
         if (state.diagnostic != 0u8 || item == tail) return;
         item <- work[item].next;
@@ -1048,6 +1065,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         resolve_value(source, nodes, bindings, work, state, at);
         if (state.diagnostic != 0u8) return;
     };
+    if (is_transfer(nodes, at)) { resolve_transfer_family(source, nodes, bindings, work, state, at); };
     if (integer_arithmetic(kind) || kind == concat_node() || kind == compare_node() || kind == index_access_node() ||
         is_transfer(nodes, at) || kind == rebind_node() ||
         logical_binary(kind)) {
@@ -1649,6 +1667,7 @@ export func resolve_module_names(source:const SourceBytes in S, nodes:const Expr
     link_entries(nodes, work, tree.used);
     ref state = make NameState {
         used <- 0u64; first <- 0u64; module_names <- 0u64; scope_node <- tree.root;
+        transfer_binding <- no_node(); transfer_resolved <- false;
         delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
         here_group <- false; handoff <- no_node(); case_target <- no_node(); case_arm <- no_node(); diagnostic <- 0u8;
         failed_node <- no_node(); enclosing_defer <- no_node();

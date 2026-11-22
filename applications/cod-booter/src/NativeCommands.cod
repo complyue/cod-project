@@ -71,6 +71,10 @@ export func text_contains_nul() -> u8 { return 34u8; }
 export func text_allocate() -> u8 { return 35u8; }
 export func text_release() -> u8 { return 36u8; }
 
+# The proof consumes this demand and publishes a category copy as a word copy.
+export func require_initialized_place() -> u8 { return 37u8; }
+export func copy_completion() -> u8 { return 38u8; }
+
 # Internal outcome words. Zero denotes success. Fatal numeric failures
 # bypass language catches and still leave through the activation cleanup.
 export func returned_word() -> u64 { return 0u64; }
@@ -90,5 +94,5 @@ export func reservation_tag(reservation:u64) -> u64 {
 
 export func initialization_access(opcode:u8) -> bool {
     return opcode == place_address() || opcode == store_target() || opcode == load_target() ||
-        opcode == copy_word() || local_binding_fact(opcode);
+        opcode == copy_word() || local_binding_fact(opcode) || opcode == require_initialized_place();
 }
