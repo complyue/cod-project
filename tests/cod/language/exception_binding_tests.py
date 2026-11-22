@@ -64,7 +64,7 @@ runner.CASES = {
     'common_preserves_actual_category': (IO+TYPES+ERROR+NULL_ERROR+COMMON+'effect @saved<-error();behave @print(@saved.category);effect @saved<-npe();'
         'try{throw @saved;}catch(e:const NullPointerException){behave @print(e.category);}catch(e){behave @print(99u64);};', 0, '5\n4\n', ''),
     'deferred_checked_recovery': (IO+TYPES+ERROR+NULL_ERROR+'symbol @saved:NullPointerException;'
-        'proc recovered()->u64{defer catch(e:const NullPointerException){return e.category;};throw @saved;}'
+        'proc recovered()->u64{defer catch(e:const NullPointerException){return e.category;};defer{throw @saved;};}'
         'effect @saved<-npe();behave @print(recovered());', 0, '4\n', ''),
 }
 for name, (source, status, output, diagnostic) in list(runner.CASES.items()):

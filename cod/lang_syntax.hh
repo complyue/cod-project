@@ -366,6 +366,9 @@ struct Expression {
   }
   // A supplied body is stored after the written operands. It binds slot one.
   bool has_here_body() const { return !children.empty() && children.back()->kind == Kind::here_body; }
+  bool deferred_catch() const {
+    return kind == Kind::deferred && binding == "fallback" && children.at(1)->kind == Kind::handler;
+  }
   bool inspects_return(bool binds_payload = false) const;
 };
 using Expr = std::unique_ptr<Expression>;
