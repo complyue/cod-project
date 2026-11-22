@@ -2,9 +2,9 @@
 
 ## Design authority
 
-[D-07-STRING-BUILD](DesignAuthorityRegistry.md#d-07-string-build), revision 2. The project user requested one lexical working type, common formatting for immutable strings and UTF-8 streams, a scoped output for deep helpers, and user-defined display and diagnostic representations. They delegated library and intrinsic design and asked mainline to validate it in the booter. [H-STRING-BUILD-20261121](../CHANGELOG.md#h-string-build-20261121) identifies that prototype authority. The API choices below are the design review’s decisions within it. P-678 derives this scope from C-36, C-55 and C-80. P-679 identifies its borrowing, text, module-world and scoped-output dependencies. Existing [UTF-8, CString and field semantics](Utf8Strings.md) govern every output. Acceptance ends at the [booter workload](#booter-prototype). Public API stability, terminal encoding for arbitrary bytes, persistence formats, and a permanent intrinsic or C ABI have separate scope.
+[D-07-STRING-BUILD](DesignAuthorityRegistry.md#d-07-string-build), revision 3. The project user requested one lexical working type, common formatting for immutable strings and UTF-8 streams, a scoped output for deep helpers, and user-defined display and diagnostic representations. They delegated library and intrinsic design and asked mainline to validate it in the booter. [H-STRING-BUILD-20261121](../CHANGELOG.md#h-string-build-20261121) identifies that prototype authority. The API choices below are the design review’s decisions within it. P-678 derives this scope from C-36, C-55 and C-80. P-679 identifies its borrowing, text, module-world and scoped-output dependencies. Existing [UTF-8, CString and field semantics](Utf8Strings.md) govern every output. Acceptance ends at the [booter workload](#booter-prototype). Public API stability, terminal encoding for arbitrary bytes, persistence formats, and a permanent intrinsic or C ABI have separate scope.
 
-[K-TEXT-PROC-RETURN](../CHANGELOG.md#k-text-proc-return) continues r1 for explicit successful procedure completion in the CoD examples under the [callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies).
+[H-STRING-SOUT-20261121](../CHANGELOG.md#h-string-sout-20261121) covers the user’s direction to omit the destination from public type formatters and name the scoped output `@sout`. The streaming and collecting family names below implement that direction under the delegated prototype scope. P-678/P-679 still apply. Verify direct output, nested collection without output leakage, and restoration after failure under the existing [reference-symbol contract](SymbolicDynamicScope.md#owner-parameter-reference-symbols-and-implementation-cost).
 
 The bundled module exposes one working type, `StringBuilder`. It builds a valid UTF-8 sequence in a full lexical scope. An immutable result belongs to the owner chosen for construction. A streaming consumer can write each piece while the producer is live. Standard operations are brought into scope through ordinary module selection.
 
@@ -24,17 +24,17 @@ The working owner comes from the use site; a lowering can pass its scratch desti
 
 ## One formatter and two destinations
 
-Use a public output protocol `Utf8StreamOut`. `StringBuilder` is a writable in-memory implementation. A file or socket writer implements the same protocol under its own resource lifetime. Expose one module-level borrowed symbol using the existing [owner-parameter reference-symbol contract](SymbolicDynamicScope.md#owner-parameter-reference-symbols-and-implementation-cost).
+The public output protocol is `Utf8StreamOut`. The module exports one borrowed symbol for **the current UTF-8 output**. Its installer can choose a memory builder, file writer, socket writer or another implementation. No default process stream is implied.
 
 ```cod
 # string.cod
-type Utf8StreamOut;
-export Utf8StreamOut;
-ref symbol @io:Utf8StreamOut in O where {owner O};
-export @io;
+export type Utf8StreamOut;
+export ref symbol @sout:Utf8StreamOut in O where {owner O};
 ```
 
-`writeUtf8(out, piece)` writes a String or the contents of a builder to an explicit destination. `emit(piece)` is an ordinary proc that calls `writeUtf8(@io, piece)`. Selection of the writer uses the installed target's actual type under ordinary [method selection](ModuleWorlds.md#actual-type-dispatch-and-concrete-type-evidence). A direct proc several calls below the installation sees the same symbol identity. Every reachable lookup needs an established binding. Different installations can borrow different live actual owners. A nested installation shadows the outer one and restores its target and owner on every exit. Installing the reference does not acquire or close the stream. A func can compose builders or append to an explicit builder. Looking up or installing `@io` requires a proc context.
+A caller selects this identity with `using symbol "string.cod" @sout;` and installs a destination with `effect @sout = writer;`. Direct procedural helpers can call `emit(piece)` at any depth. Every reachable lookup requires a live installation. Each binding borrows its own actual owner. A nested installation restores the preceding target and owner on normal and exceptional exit. The stream owner retains responsibility for flush and close.
+
+`emit(piece)` writes the bytes of a String or builder. It delegates to the public writer extension point `writeUtf8(@sout, piece)`. A new writer type implements `writeUtf8(out, piece)`; the explicit `out` selects the concrete backend by ordinary [method dispatch](ModuleWorlds.md#actual-type-dispatch-and-concrete-type-evidence). A type implementing a representation uses the one-argument rendering hooks below. A func can compose text or append to an explicit builder. Reading or installing the dynamic output requires a proc context.
 
 For example, a compiler can render an object manifest to a file or use identical bytes as an in-memory test fixture. Here `ObjectList` and the `objects` generator belong to the application. `Utf8WriteException` is the prototype library’s checked output failure.
 
@@ -53,63 +53,72 @@ proc render_manifest(list:const ObjectList in L)
 }
 ```
 
-The two calling contexts below use the same imported `@io`. Each handles or declares the formatter's checked failure. In the first, D is the allocation-capable owner chosen for the final String. In the second, `writer` is an existing writable output.
+The two calling contexts below use the same imported `@sout`. Each handles or declares the formatter's checked failure. In the first, D is the allocation-capable owner chosen for the final String. In the second, `writer` is an existing writable output.
 
 ```cod
 ref b = make StringBuilder();
 {{
-    effect @io = b;
+    effect @sout = b;
     render_manifest(list);
 }};
 ref text = make String(b) in D;
 
 {{
-    effect @io = writer;
+    effect @sout = writer;
     render_manifest(list);
 }};
 ```
 
 Each call to `emit_object` has its own lexical workspace. A synchronous stream writer consumes a line before that invocation ends. With a bounded backend, streaming needs space for the current piece and the I/O buffer; the manifest can exceed the available memory for a single String. The collecting route retains the manifest bytes by design. An ordinary for body shares its enclosing full scope. Moving a long-running loop's temporary concatenations into a per-record helper or an explicit full scope gives those temporaries a per-record lifetime.
 
-`buildString(entry.name) { render_manifest(list); };` is a candidate convenience call outside the initial prototype. Such a helper would be a **proc**: it creates a private lexical builder, installs it as `@io`, invokes the synchronous body once, then on successful completion constructs and installs the result in the destination's owner. A replaceable direct field requires a place-taking formal with a first-write contract. A bare `init tgt:String in D` initializes a selected target. Use the two primitive operations in the prototype. The public convenience signature can follow real field uses. A library offering the helper must honor nonlocal exits and prove its promised write on every normal result path.
+`buildString(entry.name) { render_manifest(list); };` is a candidate convenience call outside the initial prototype. Such a helper would be a **proc**: it creates a private lexical builder, installs it as `@sout`, invokes the synchronous body once, then on successful completion constructs and installs the result in the destination's owner. A replaceable direct field requires a place-taking formal with a first-write contract. A bare `init tgt:String in D` initializes a selected target. Use the two primitive operations in the prototype. The public convenience signature can follow real field uses. A library offering the helper must honor nonlocal exits and prove its promised write on every normal result path.
 
 ## User-defined display and diagnostic representations
 
-`str(out, value)` writes text intended for a person. `repr(out, value)` writes text a developer can use to distinguish values, including information that display may omit. Both take the destination first, finish synchronously and return void. The two outputs can be entirely different. For user-defined types, a module imports and extends the relevant callable families with ordinary methods. If both representations should be identical, one method can call the other explicitly. Missing or ambiguous interpretations use the existing checking and [module dispatch rules](ModuleWorlds.md#actual-type-dispatch-and-concrete-type-evidence). A declared checked write failure is preserved. The compiler never tries the other representation after a method throws.
+| Library call | Result and destination |
+| --- | --- |
+| `emitStr(x)` | Write the display form to the currently installed `@sout` and return void. |
+| `emitRepr(x)` | Write the diagnostic form to the currently installed `@sout` and return void. |
+| `str(x)` and `repr(x)` | Return a reference to a completed immutable String in the caller’s full lexical scope. The library collects through the corresponding streaming method. |
 
-When their standard collecting overloads are selected, the one-argument library operations `str(x)` and `repr(x)` yield a reference to a complete immutable `String` in the full lexical scope of the call. They evaluate x once, render through the selected family's two-argument method into a fresh private lexical builder, and finish into the caller's scope. This is the same use-site destination mechanism used for library concatenation. The two-argument method is selected in that family’s implementation context using ordinary overload resolution. A source-preserving import cannot see an unrelated module’s private formatter. The helper can use shorter-lived scratch before publication. Later mutation of x cannot change the completed text. The unary forms call a proc renderer and retain its proc permissions and declared failures. A generic call with a builder as destination still checks the declared writer contract. Collection does not install or require an ambient output for the explicit method.
+The type author implements the first two ordinary proc families. A method takes the value being rendered and declares its ordinary failures. It calls `emit` for literal pieces and `emitStr` or `emitRepr` for nested values. If the two representations coincide, a method can explicitly delegate. Ordinary module-world selection applies to every family. A missing or ambiguous method rejects on the required path, and a failing method propagates its exception once.
 
-Use `repr(@io, x)` to stream directly to the current output. A method calling other explicit formatters passes `out` onward. A method reusing helpers that call `emit` first installs `effect @io = out` in a nested full scope. All of its formatted bytes must reach the supplied destination even if a different output was already installed. A reference to an owner outside the method needs the ordinary proofs; a writer cannot retain a borrowed argument by formatting it. `emit` accepts text or a builder. Formatting arbitrary data remains an explicit call. Neither a `:String` assertion nor a `(<-)` transfer implicitly selects a formatter.
-
-For example, the booter already has a [SourcePosition](../applications/cod-booter/src/SourceStorage.cod) with a line and a byte column. The actual location calculation uses one-based coordinates and leaves zeroes for an unavailable position. An application-side adapter can extend both families without adding a method to the seed for this type.
+For example, the [booter adapter](../applications/cod-booter/src/DiagnosticFormatting.cod) represents a [SourcePosition](../applications/cod-booter/src/SourceStorage.cod) using a one-based line and byte column. Both coordinates are zero for an unavailable position. A receiving module can export its adapted collectors and renderers together.
 
 ```cod
-import "string.cod" { str, repr };
-using "string.cod" { Utf8StreamOut, Utf8WriteException, writeUtf8 };
+export import "string.cod" { str, repr, emitStr, emitRepr };
+using "string.cod" Utf8WriteException;
+import "string.cod" emit;
 using "SourceStorage.cod" SourcePosition;
 
-proc str(out:Utf8StreamOut in O, p:const SourcePosition in P)
-    throws Utf8WriteException where {owner O, const owner P} {
+proc emitStr(p:const SourcePosition in P) -> void
+    throws Utf8WriteException where {const owner P} {
     if (p.line == 0u64 && p.column == 0u64) {
-        writeUtf8(out, "<unknown>");
+        emit("<unknown>");
         return;
     }
-    str(out, p.line);
-    writeUtf8(out, ":");
-    str(out, p.column);
+    emitStr(p.line);
+    emit(":");
+    emitStr(p.column);
     return;
 }
 
-proc repr(out:Utf8StreamOut in O, p:const SourcePosition in P)
-    throws Utf8WriteException where {owner O, const owner P} {
-    writeUtf8(out, "SourcePosition(line=");
-    str(out, p.line);
-    writeUtf8(out, ", column=");
-    str(out, p.column);
-    writeUtf8(out, ")");
+proc emitRepr(p:const SourcePosition in P) -> void
+    throws Utf8WriteException where {const owner P} {
+    emit("SourcePosition(line=");
+    emitStr(p.line);
+    emit(", column=");
+    emitStr(p.column);
+    emit(")");
     return;
 }
 ```
+
+A standard collector evaluates its argument once under the caller’s bindings. It allocates a private lexical builder and installs that builder as `@sout` for the dynamic extent of the streaming method. On normal completion it restores the previous binding and finishes the builder into the caller’s use-site owner. An escaping failure restores the previous binding and publishes no partial String. The collector requires no pre-existing output for its own rendering. Effects of evaluating an argument before entry still follow that argument’s contract. The renderer’s declared checked failures remain caller obligations.
+
+For example, `ref text = repr(p);` leaves the outer writer alone, including when a formatter calls `repr(child)` while already streaming its parent. To contribute that collected text explicitly, use `emit(text);`. For incremental nested output use `emitRepr(child);` directly. Discarding `repr(p)` still performs collection and cleanup. Result use never switches a call from collection to streaming. A formatter that explicitly writes through a separately held writer still has its ordinary effects.
+
+The collector must resolve its corresponding hook in its selected module interpretation. Renaming a family preserves its identity. A receiver-adapted collector can use an imported and extended hook; a source-preserving collector sees its original interpretation. Qualification still needs the correct target and selected writer method when a nested proc reads `@sout`. The only compiler-supported use-site result owner here belongs to the standard collecting adapters. Streaming methods need the ordinary borrowed symbol and proc checks.
 
 The `12:7` display and `SourcePosition(line=12, column=7)` representation describe the same input. A sum can select a spelling for each constructor. A graph type can print a domain identifier or bounded summary. The core provides no field walker, automatic private-field exposure or address rendering. Custom `repr` has no parse, identity reconstruction or stability guarantee. Recursive traversal and its termination belong to the method that elects to follow edges.
 
@@ -117,7 +126,7 @@ Standard text display preserves its contents, including NUL. Standard text repre
 
 ## Library and intrinsic boundary
 
-Keep the two formatter families, user-type methods, decimal digits, quoting, output selection, segment composition and partial-write handling in ordinary library or provider code wherever their existing operations suffice. Resolve imported builtins and ordinary callables by identity. A local callable named `str`, a method named `repr`, or a renamed import receives exactly its normal module meaning. No frontend keyword, per-ADT hook, universal textual conversion, locale formatter or type-name branch is needed. Re-export the same callable identity when a consumer needs the extended family. Verify that a source-preserving view and a receiver-adapted view retain their ordinary differences.
+Keep the rendering hooks, collecting adapters, user-type methods, decimal digits, quoting, output selection, segment composition and partial-write handling in ordinary library or provider code wherever their existing operations suffice. Resolve imported builtins and ordinary callables by identity. A local callable named `str`, a method named `repr`, or a renamed import receives exactly its normal module meaning. No frontend keyword, per-ADT hook, universal textual conversion, locale formatter or type-name branch is needed. Re-export the same callable identity when a consumer needs the extended family. Verify that a source-preserving view and a receiver-adapted view retain their ordinary differences.
 
 The compiler/runtime boundary has three responsibilities that source spelling alone cannot prove:
 
@@ -135,10 +144,10 @@ A completed write contributes the supplied bytes in order, including U+0000. On 
 
 For collection, finish before installing the field. If formatting or final construction throws, that final installation has not occurred. The former field and its borrowers remain usable unless the user's code independently changed them. Ordinary cleanup still runs for scratch resources, and prior initializer or output effects keep their semantics.
 
-Verify the same manifest rendered both ways. Compare bytes for empty input, non-ASCII text and an embedded NUL. Reuse a builder after finishing and an operand after concatenation, then end the source scope and verify the finished text under D. Redirect a nested formatter to an inner builder, inject a write failure, catch it outside the installation and emit again to the restored outer target. Exercise short writes and failure following a successful prefix. Stream many records with a bounded writer and per-record scratch, without constructing the complete manifest. A formatter reached with no live binding, an escaping reference to a dead workspace, and an attempt to access the symbol from a func must reject.
+Verify the same manifest rendered both ways. Compare bytes for empty input, non-ASCII text and an embedded NUL. Reuse a builder after finishing and an operand after concatenation, then end the source scope and verify the finished text under D. Redirect a nested formatter to an inner builder, inject a write failure, catch it outside the installation and emit again to the restored outer target. Exercise short writes and failure following a successful prefix. Stream many records with a bounded writer and per-record scratch, without constructing the complete manifest. A streaming call that needs the output with no live binding, an escaping reference to a dead workspace, and an attempt to access the symbol from a func must reject.
 
 ## Booter prototype
 
 1. Exercise this on a rejected input entering the real [rejection reporting](../applications/cod-booter/src/NativeDiagnostics.cod) path. Use the coordinates it actually resolves in [SourceAccess.cod](../applications/cod-booter/src/SourceAccess.cod). A prototype adapter may format the recorded numeric facts after the source loan closes. Keep the production [launcher diagnostic record](../applications/cod-booter/docs/LLVMInterop.md#builtin-catalog-and-rejection-reporting), its stage/code, status, related position and established CLI output. Prototype renderings may be observed separately. A fabricated position alone cannot establish this integration.
-2. Render one available position, an absent position and a UTF-8 string with a quote, LF and NUL through both an in-memory builder and a bounded writer. Compare the bytes for each mode. Exercise the unary forms against explicit rendering, extend a family in another module, use a renamed family, and verify a missing or ambiguous method does not silently fall back. An output failure after a prefix must propagate once without retrying the entire formatter, and nested output must restore its predecessor.
+2. Render one available position, an absent position and a UTF-8 string with a quote, LF and NUL through both an in-memory builder and a bounded writer. Compare the bytes for each mode. Compare collection with direct streaming. Collect with no outer installation, then collect and discard a representation inside an active writer. Verify that only an explicit emit reaches that writer. Have an argument emit a marker before collector entry. Make a nested custom renderer emit a prefix and throw, catch outside the collector, and send the next marker to the restored writer. Exercise receiver-adapted and renamed renderer families and reject an uncovered source-preserving call or ambiguity. An output failure after a prefix must propagate once without retrying the entire formatter, and nested output must restore its predecessor.
 3. Demonstrate the ordinary CoD library and adapter declarations in the bootstrapping paths. Verify real behavior on the supported path and separately report parser/checker reach, generated code and actual runtime evidence for each compiler. Preserve the [compiler diagnostics boundary](../applications/cod-booter/README.md#diagnostics-by-compiler-stage). A semantic primitive used by both frontends needs one source of truth. Keep host code confined to the services it supplies, and remove parallel prototype logic when the library path replaces it. Bring a genuine owner, method or cost conflict back to design before accepting weaker semantics.

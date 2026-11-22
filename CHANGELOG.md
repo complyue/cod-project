@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 — Scoped output for public type formatters
+
+<a id="h-string-sout-20261121"></a>
+**H-STRING-SOUT-20261121.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-21 (America/Los_Angeles), the project user proposed that public representation methods omit `out` and use the scoped output, asking “也许叫 `@sout` 更贴切？ 明明单向输出，不拿输入。” Under the existing H-STRING-BUILD-20261121 delegation, the design review selected `@sout`, unary streaming hooks `emitStr`/`emitRepr`, and private output installation for the existing `str`/`repr` collectors. The explicit receiver on `writeUtf8` supplies backend dispatch. These API choices apply to D-07-STRING-BUILD r3, P-678/P-679, registry r1043. The preceding runnable prototype is at `a1c5afb8f80784697e7798ce2e378c32920cf349:cod/library/string.cod`.
+
 ## 2026-11-21 — Successful completion in text examples
 
 <a id="k-text-proc-return"></a>
