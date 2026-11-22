@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Lexical backing for the indexed AST array
+
+<a id="k-booter-lexical-extent-20261122"></a>
+**K-BOOTER-LEXICAL-EXTENT-20261122.** Under H-PROJECT-ARCHITECTURE-REVIEW-20261122, the design discussion cleared one private byte-extent operation and its direct verification in the existing shared runtime. The lexical owner supplies cleanup and the compiler retains typed initialization and table publication. This continues D-ARCH-REVIEW r2 to r3, P-682/P-683, registry r1050. The reviewed workload is at `944a8950ff2a991ad1d33fdadf4283a1afd6a41c:applications/cod-booter/docs/ModuleGraph.md`, “First indexed AST path”.
+
 ## 2026-11-22 — First indexed booter AST path
 
 <a id="k-booter-ast-table-20261122"></a>
