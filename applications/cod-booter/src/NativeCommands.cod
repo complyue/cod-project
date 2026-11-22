@@ -17,6 +17,7 @@ export array NativeCommands[u64]:NativeCommand;
 
 export data NativePlan {
     used:u64;
+    functions:u64;
     labels:u64;
     slots:u64;
     diagnostic:u8;
@@ -74,6 +75,9 @@ export func text_release() -> u8 { return 36u8; }
 # The proof consumes this demand and publishes a category copy as a word copy.
 export func require_initialized_place() -> u8 { return 37u8; }
 export func copy_completion() -> u8 { return 38u8; }
+
+# Store this unit's byte offset as an artifact-wide failure site.
+export func source_site() -> u8 { return 39u8; }
 
 # Internal outcome words. Zero denotes success. Fatal numeric failures
 # bypass language catches and still leave through the activation cleanup.

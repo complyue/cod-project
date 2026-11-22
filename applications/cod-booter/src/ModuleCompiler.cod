@@ -22,6 +22,7 @@ export func compile_module_commands(source:const SourceBytes in S, tokens:Tokens
     where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y, owner W,
            owner F, owner O, owner K, owner C, owner P, owner R} {
     plan.used <- 0u64;
+    plan.functions <- 0u64;
     plan.labels <- 0u64;
     plan.slots <- 0u64;
     plan.diagnostic <- 0u8;

@@ -37,7 +37,7 @@ proc write_object(source:const SourceBytes in S, output:const String in A, handl
     where {const owner S, const owner A, const owner W, const owner P, owner D} {
     try {
         effect @llvmSession <- make own handle LLVMSession();
-        val constructed <- llvm_construct(@llvmSession, commands, source, plan.used, plan.labels, plan.slots);
+        val constructed <- llvm_construct(@llvmSession, commands, source, plan.used, plan.functions, plan.labels, plan.slots);
         if (constructed != 0u8) {
             report_backend_error(diagnostic, constructed);
             return LoweringFailed;
@@ -78,7 +78,9 @@ proc lower_object(source:const SourceBytes in S, lines:const SourceLines in S,
         diagnostic <- 0u8;
         related_first <- no_node();
     };
-    ref plan = make NativePlan { used <- 0u64; labels <- 0u64; slots <- 0u64; diagnostic <- 0u8; node <- no_node(); };
+    ref plan = make NativePlan {
+        used <- 0u64; functions <- 0u64; labels <- 0u64; slots <- 0u64; diagnostic <- 0u8; node <- no_node();
+    };
     if (!compile_module_commands(source, tokens, nodes, spellings, exports, selected, bindings, names,
                                  facts, owners, sites, commands, plan, analysis)) {
         if (analysis.stage != 0u8) {

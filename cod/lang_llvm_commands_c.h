@@ -16,7 +16,8 @@ typedef enum cod_llvm_command_kind {
   COD_LLVM_DIVIDE, COD_LLVM_REMAINDER, COD_LLVM_BRANCH_CATCHABLE,
   COD_LLVM_ALLOCATE_WORDS = 29, COD_LLVM_OFFSET_ADDRESS, COD_LLVM_TEXT_LITERAL,
   COD_LLVM_TEXT_SIZE, COD_LLVM_TEXT_BYTE, COD_LLVM_TEXT_CONTAINS_NUL,
-  COD_LLVM_TEXT_ALLOCATE, COD_LLVM_TEXT_RELEASE
+  COD_LLVM_TEXT_ALLOCATE, COD_LLVM_TEXT_RELEASE,
+  COD_LLVM_SOURCE_SITE = 39
 } cod_llvm_command_kind;
 
 /* Arithmetic faults occupy the top of the outcome category range. */
@@ -30,10 +31,26 @@ typedef struct cod_llvm_command {
   uint64_t a, b, c, d;
 } cod_llvm_command;
 
+/* A checked command unit borrows its records and one indexed source revision
+   for construction. Block labels and slots are unit-local. Callable IDs
+   are artifact-wide. Only INVOKE may reference another unit's definition.
+   Multi-unit artifacts supply each source's display name for runtime sites. */
+typedef struct cod_llvm_command_unit {
+  const void *records;
+  size_t count, labels, slots;
+  const uint8_t *source;
+  size_t source_size;
+  const char *source_name;
+} cod_llvm_command_unit;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/* Construct a closed artifact in a fresh session. All declarations must
+   have bodies and exactly one is the entry. Release the session on failure. */
+bool cod_llvm_construct_units(cod_llvm_session *session, const cod_llvm_command_unit *units,
+                             size_t unit_count, size_t function_count);
 bool cod_llvm_construct_word_records(cod_llvm_session *session, const void *records, size_t count,
                                      size_t labels, size_t slots);
 bool cod_llvm_construct_source_records(cod_llvm_session *session, const void *records, size_t count,
