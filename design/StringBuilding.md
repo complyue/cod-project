@@ -2,11 +2,15 @@
 
 ## Design authority
 
-[D-07-STRING-BUILD](DesignAuthorityRegistry.md#d-07-string-build), revision 4. The project user requested one lexical working type, common formatting for immutable strings and UTF-8 streams, a scoped output for deep helpers, and user-defined display and diagnostic representations. They delegated library and intrinsic design and asked mainline to validate it in the booter. [H-STRING-BUILD-20261121](../CHANGELOG.md#h-string-build-20261121) identifies that prototype authority. The API choices below are the design review’s decisions within it. P-678 derives this scope from C-36, C-55 and C-80. P-679 identifies its borrowing, text, module-world and scoped-output dependencies. Existing [UTF-8, CString and field semantics](Utf8Strings.md) govern every output. Acceptance ends at the [booter workload](#booter-prototype). Public API stability, terminal encoding for arbitrary bytes, persistence formats, and a permanent intrinsic or C ABI have separate scope.
+[D-07-STRING-BUILD](DesignAuthorityRegistry.md#d-07-string-build), revision 6. The project user requested one lexical working type, common formatting for immutable strings and UTF-8 streams, a scoped output for deep helpers, and user-defined display and diagnostic representations. They delegated library and intrinsic design and asked mainline to validate it in the booter. [H-STRING-BUILD-20261121](../CHANGELOG.md#h-string-build-20261121) identifies that prototype authority. The API choices below are the design review’s decisions within it. P-678 derives this scope from C-36, C-55 and C-80. P-679 identifies its borrowing, text, module-world and scoped-output dependencies. Existing [UTF-8, CString and field semantics](Utf8Strings.md) govern every output. Acceptance ends at the [booter workload](#booter-prototype). Public API stability, terminal encoding for arbitrary bytes, persistence formats, and a permanent intrinsic or C ABI have separate scope.
 
 [H-STRING-SOUT-20261121](../CHANGELOG.md#h-string-sout-20261121) covers the user’s direction to omit the destination from public type formatters and name the scoped output `@sout`. The streaming and collecting family names below implement that direction under the delegated prototype scope. P-678/P-679 still apply. Verify direct output, nested collection without output leakage, and restoration after failure under the existing [reference-symbol contract](SymbolicDynamicScope.md#owner-parameter-reference-symbols-and-implementation-cost).
 
 [H-UTF8-WRITE-ERROR-20261121](../CHANGELOG.md#h-utf8-write-error-20261121) selects the [unchecked output failure](#failure-cleanup-and-acceptance) for the delegated prototype under the existing [exception roots and handling obligations](ExceptionControl.md#declared-handling-obligations). Verify optional typed recovery, propagation through an unannotated formatter, partial progress and restoration.
+
+[H-STRING-CONCAT-DISPLAY-20261121](../CHANGELOG.md#h-string-concat-display-20261121) extends the delegated prototype to [concatenation with displayable values](#concatenating-displayable-values). It uses the existing [operator method kinds](SymbolicDynamicScope.md#operator-and-intrinsic-overloads) and ordinary module-world selection. Test two non-text values, a custom display, missing-method rejection, operand effects and use in a func.
+
+[K-STRING-CONCAT-OPERANDS-20261121](../CHANGELOG.md#k-string-concat-operands-20261121) continues r5 for the standard display method’s [operand preparation](#preparing-display-operands). The caller uses existing reference-initialization and reference-argument rules to preserve a selected target or materialize independent bits. Acceptance compares a live scalar with its explicitly projected value across the same right-hand write. The delegation covers the bundled prototype and its private compiler support.
 
 The bundled module exposes one working type, `StringBuilder`. It builds a valid UTF-8 sequence in a full lexical scope. An immutable result belongs to the owner chosen for construction. A streaming consumer can write each piece while the producer is live. Standard operations are brought into scope through ordinary module selection.
 
@@ -18,11 +22,52 @@ Python lets a type supply a user-facing `__str__` and a diagnostic `__repr__`. I
 
 ## Building a piece of text
 
-`left ++ right` returns a builder in the full lexical scope of the operator use. The standard family accepts two builders and supplies the String/String, String/builder and builder/String combinations. A `CString` can widen to `String`. Chaining associates left at additive precedence. Evaluate each operand once in source order. Each result denotes the operands' byte sequences at concatenation time. Later appends to either input or to the result leave the others unchanged. This also defines `b ++ b`. Use `append(b, piece)` to extend a particular builder. Appending a builder to itself appends its entry contents once.
+`left ++ right` returns a builder in the full lexical scope of the operator use. The four text-only func overloads accept each pairing of String and StringBuilder. The same standard family also provides a procedural display path for other operands. A `CString` can widen to `String`. Chaining associates left at additive precedence. Evaluate each operand once in source order. For two text operands, the result contains both byte sequences as observed by the operation. Later appends to either input or to the result leave the others unchanged. This also defines `b ++ b`. Use `append(b, piece)` to extend a particular builder. Appending a builder to itself appends its entry contents once.
 
 The working owner comes from the use site; a lowering can pass its scratch destination into the operator. For a selected standard method, the result has the owner it would have in an explicit `make StringBuilder(left, right)` at that use site. An ordinary method returning a reference into its own activation would fail the lifetime check. An optimization that happens to allocate a return slot in the caller cannot by itself establish this source-level owner. A builder preserves its accumulated bytes if a shorter-lived input expires. Retain an immutable segment only with proof that its owner covers every use; otherwise materialize the contribution in the builder's own workspace. Segment layout and allocation are library choices. A sequence of appends can grow incrementally, and a chain of concatenations need not flatten every prefix. Ordinary owner checks prevent escaping the workspace. Neither a region field nor a native string argument accepts the working builder.
 
 `make String(piece) in D` is the builder overload of the existing owner-directed text construction. It consumes the current *contents* and returns a reference to complete immutable text in D. The builder remains usable. An empty builder produces the empty string. If the result is destined for a direct field in D, construct first and install with `entry.name = ready`. Earlier borrowers keep their selected text. A separately written `entry.name <- input` still selects a visible transfer method. Selecting the building operations does not install a general transfer method.
+
+### Concatenating displayable values
+
+Selecting `string.cod`’s `(++)` gives the operator a text meaning even when both operands have other types. Its general library method builds the concatenation of their display forms. A String (including a widened CString) or StringBuilder contributes its existing bytes. Each other operand must support an applicable, unambiguous `emitStr` in the selected interpretation. A `repr` spelling is requested explicitly when wanted. Use of `++` grants no general conversion for assignment, argument passing or another operator.
+
+```cod
+# In a proc with the standard operator and the position adapter’s display hooks.
+# p is a SourcePosition at line 2, byte column 1.
+ref label = "at " ++ p;                 # builder containing "at 2:1"
+ref code = 12u64 ++ 7u64;               # builder containing "127"
+ref quoted = "path=" ++ repr("a\nb");    # contains a quoted path, with an escaped newline
+```
+
+The four text-only cases keep their more-specific func methods and need no output installation. The general method is a proc because its user-defined renderer can access dynamic effects. A direct call in a func whose selected method needs `emitStr` rejects under the existing callable rules. A library may define a more-specific function using explicit inputs only. Select the unique most-specific visible operator method before checking its body. An application’s specific `(++)` method can define its own operation and result under the ordinary module rules. An ambiguity rejects. If a demanded standard formatting call lacks a display method, diagnose that call; looking for a different operator or rendering mode after failure would change dispatch. Ordinary access, owner, initialization, nullable argument and checked failure rules apply to the selected methods.
+
+For each binary call, prepare the left and right operands once in order under the caller’s existing effects. Then produce their contributions left to right, routing formatting output into a private lexical builder. Read borrowed targets with the ordinary prepared-reference semantics. The formatter for the left operand can therefore observe a payload write performed by the right operand expression. Each contribution is appended once; later mutation of an operand cannot alter the completed bytes. `a ++ b ++ c` completes the first binary call before evaluating c. A throwing operand prevents rendering for that call. A throwing renderer stops the remaining contributions, restores the prior `@sout` and returns no result. Previously executed user effects keep their ordinary behavior. The standard result belongs to the full lexical scope of the operator use. A direct write into result storage may eliminate scratch and intermediate immutable Strings when it preserves these observations, including the dynamic output loan. The operator supplies the output installation used by its renderers, so its caller can build text without first installing a writer.
+
+Verify a native writer already bound to `@sout` sees no concatenated bytes until an explicit write, and that an operand’s own output before the redirection still reaches it. Exercise a builder with a custom value on either side, two non-text values, a String/CString text-only call from a func, an absent or ambiguous display, an explicit more-specific operator, and failure/cleanup in a chained expression. An optimization may avoid repeated allocation on the ordinary path while preserving observable user formatting and order.
+
+### Preparing display operands
+
+The standard general display method can receive its two prepared operands as `left:const L in A` and `right:const R in B`. Each has its own checked owner role. For this method, prepare each operand in the caller as if initializing a fresh readonly target binding, left first. Then pass those bindings as ordinary reference arguments. A source-level model of the two steps is `ref left:const L = lhs;` followed by `ref right:const R = rhs;`, with names private to the compiler. They introduce no source-visible scope or effect installation. [Reference initialization](ScalarCallResults.md#call-site-matrix-new-declarations) and [reference arguments](RegionalOwnership.md#owner-qualified-reference-arguments) supply the two distinct rules.
+
+- An existing readable target, including a scalar variable, borrowed result or product such as SourcePosition, supplies its selected identity and actual owner. A later rebind of its source slot cannot retarget the prepared operand. A later payload write to the selected target is visible when the renderer reads it. A nullable selection needs the ordinary presence proof or an admissible explicit check.
+- An independent scalar result, including a literal, an arithmetic result or a [parenthesized scalar](SymbolicDynamicScope.md#parenthesized-value-expressions-and-operator-idioms), supplies its bits at preparation time. Materialize them under the caller’s current full lexical owner as for a fresh local ref. The compiler can keep the bits in a register when observable behavior permits. Other types retain their existing storage and construction rules. The initialized, readable target and its owner must cover each use, including across evaluation of the second operand.
+
+```cod
+proc set9(n:u64 in O) -> u64 where {owner O} {
+    n <- 9u64;
+    return 7u64;
+}
+
+ref n:u64 = 1u64;
+ref live = n ++ set9(n);          # "97": the renderer reads n after set9.
+n <- 1u64;
+ref snapshot = (n) ++ set9(n);    # "17": (n) reads 1 before set9.
+```
+
+The checker considers this preparation only for the bundled general display method, identified by its defining method identity in the selected module interpretation. It checks applicability without evaluating either operand and ranks candidates by ordinary specificity. A renamed selection carries the same contract. A more-specific application method receives its operands under its own signature. For example, a plain `proc use(x:const T in A) where {T, const owner A}` still requires an existing target for x. The use-site result-owner capability alone grants no input adaptation. The private adapter may share lowering with ordinary ref initialization. A public parameter modifier or general automatic materialization at borrow calls would require a separate language decision.
+
+Verify the two results above, literal/literal and product/literal pairs, a later rebind of the source slot, rejection of an unproved nullable input, and cleanup if the second operand fails. Exercise the same method through a renamed selection and an ordinary competing overload through its own parameter modes. Prepared input borrows and the completed builder retain their independently proved owners.
 
 ## One formatter and two destinations
 
@@ -36,7 +81,7 @@ export ref symbol @sout:Utf8StreamOut in O where {owner O};
 
 A caller selects this identity with `using symbol "string.cod" @sout;` and installs a destination with `effect @sout = writer;`. Direct procedural helpers can call `emit(piece)` at any depth. Every reachable lookup requires a live installation. Each binding borrows its own actual owner. A nested installation restores the preceding target and owner on normal and exceptional exit. The stream owner retains responsibility for flush and close.
 
-`emit(piece)` writes the bytes of a String or builder. It delegates to the public writer extension point `writeUtf8(@sout, piece)`. A new writer type implements `writeUtf8(out, piece)`; the explicit `out` selects the concrete backend by ordinary [method dispatch](ModuleWorlds.md#actual-type-dispatch-and-concrete-type-evidence). A type implementing a representation uses the one-argument rendering hooks below. A func can compose text or append to an explicit builder. Reading or installing the dynamic output requires a proc context.
+`emit(piece)` writes the bytes of a String or builder. It delegates to the public writer extension point `writeUtf8(@sout, piece)`. A new writer type implements `writeUtf8(out, piece)`; the explicit `out` selects the concrete backend by ordinary [method dispatch](ModuleWorlds.md#actual-type-dispatch-and-concrete-type-evidence). A type implementing a representation uses the one-argument rendering hooks below. The display hook also participates in general string concatenation. A func can compose text or append to an explicit builder. Reading or installing the dynamic output requires a proc context.
 
 For example, a compiler can render an object manifest to a file or use identical bytes as an in-memory test fixture. Here `ObjectList` and the `objects` generator belong to the application.
 
