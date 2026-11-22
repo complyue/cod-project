@@ -4,6 +4,17 @@ export func len(source:const SourceBytes in S) -> u64 where {const owner S} {
     return intrinsic (len)(source);
 }
 
+export func same_bytes(left:const SourceBytes in L, first:u64, past:u64,
+                       right:const SourceBytes in R, other_first:u64, other_past:u64) -> bool
+    where {const owner L, const owner R} {
+    val length <- past - first;
+    if (length != other_past - other_first) return false;
+    for (offset in 0u64 .. length) {
+        if (left[first + offset] != right[other_first + offset]) return false;
+    };
+    return true;
+}
+
 # The indexed revision supplies one row per line, including an empty
 # final line after LF. The preceding row covers the byte position of LF.
 func line_at(lines:const SourceLines in S, offset:u64, lower:u64, upper:u64) -> u64

@@ -21,10 +21,10 @@ using "ParserStorage.cod" {
     export_node, export_from_node, array_declaration_node, array_shape_node, readonly_declaration,
     enum_declaration_node, enum_member_node, enum_integer_node, retained_parent_parameter,
     import_node, local_module_selection, member_selector_node, member_selection_item_node,
-    native_symbol_declaration_node,
+    native_symbol_declaration_node, reference_symbol_declaration_node,
 };
 using "SourceStorage.cod" SourceBytes;
-using "SourceAccess.cod" len as source_len;
+using "SourceAccess.cod" { len as source_len, same_bytes };
 
 func expected_module_path() -> u8 { return 22u8; }
 func expected_parameter_list() -> u8 { return 23u8; }
@@ -565,6 +565,50 @@ func parse_native_symbol_declaration(source:const SourceBytes in S, tokens:const
     append_node(nodes, result, native_symbol_declaration_node(), first, nodes[marker].past, 0u64, name, marker, first);
 }
 
+func reference_symbol_head(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> bool
+    where {const owner S, const owner T} {
+    return at + 1u64 < past && (ref_word(source, tokens[at]) || ptr_word(source, tokens[at])) &&
+        symbol_word(source, tokens[at + 1u64]);
+}
+
+func parse_reference_symbol(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
+                            result:ParseResult in R, past:u64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val at <- result.next;
+    val first <- tokens[at].first;
+    val nullable <- ptr_word(source, tokens[at]);
+    result.next <- at + 2u64;
+    if (!parse_symbol(tokens, nodes, result, past)) return;
+    val name <- result.root;
+    if (punct_at(source, tokens, result.next, past) != 58u8) { result.diagnostic <- expected_type(); return; };
+    result.next <- result.next + 1u64;
+    val readonly <- result.next < past && const_word(source, tokens[result.next]);
+    if (readonly) { (result.next <- result.next + 1u64):void; };
+    if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
+    val target <- result.root;
+    if (result.next >= past || !in_word(source, tokens[result.next])) { result.diagnostic <- expected_owner_clause(); return; };
+    result.next <- result.next + 1u64;
+    if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) return;
+    val owner <- result.root;
+    if (result.next >= past || !where_word(source, tokens[result.next])) { result.diagnostic <- expected_owner_clause(); return; };
+    result.root <- no_node();
+    parse_owner_clauses(source, tokens, nodes, result, past);
+    if (result.diagnostic != 0u8) return;
+    val clause <- result.root;
+    val parameter <- nodes[clause].right;
+    if (nodes[clause].left != no_node() ||
+        !same_bytes(source, nodes[owner].first, nodes[owner].past, source, nodes[parameter].first, nodes[parameter].past)) {
+        result.diagnostic <- expected_owner_clause();
+        return;
+    };
+    val access <- if (readonly || nodes[clause].number == readonly_declaration()) { readonly_declaration() } else { 0u64 };
+    append_node(nodes, result, owned_type_node(), nodes[target].first, nodes[owner].past, access, target, owner, nodes[owner].first);
+    if (result.diagnostic != 0u8) return;
+    val annotation <- result.root;
+    append_node(nodes, result, reference_symbol_declaration_node(), first, tokens[result.next - 1u64].past,
+                if (nullable) { 1u64 } else { 0u64 }, name, annotation, first);
+}
+
 func parse_publication(source:const SourceBytes in S, tokens:const Tokens in T,
                        nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
@@ -694,6 +738,10 @@ func parse_module_form(source:const SourceBytes in S, tokens:const Tokens in T,
     } else {};
     val named_declaration <- at + 1u64 < past && tokens[at + 1u64].kind == identifier();
     val marked_declaration <- at + 1u64 < past && tokens[at + 1u64].kind == quoted_text();
+    if (reference_symbol_head(source, tokens, at, past)) {
+        parse_reference_symbol(source, tokens, nodes, result, past);
+        return;
+    };
     if (symbol_word(source, tokens[at])) {
         parse_native_symbol_declaration(source, tokens, nodes, result, past);
         return;
@@ -726,6 +774,7 @@ func named_definition_head(source:const SourceBytes in S, tokens:const Tokens in
     if (at + 1u64 >= past) return false;
     val next_kind <- tokens[at + 1u64].kind;
     return handle_type_head(source, tokens, at, past) ||
+        reference_symbol_head(source, tokens, at, past) ||
         (symbol_word(source, tokens[at]) && next_kind == symbol_name()) ||
         ((func_word(source, tokens[at]) || proc_word(source, tokens[at])) &&
             !callable_local_head(source, tokens, at, past)) ||

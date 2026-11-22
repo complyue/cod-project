@@ -1,4 +1,5 @@
 using "SourceStorage.cod" SourceBytes;
+using "SourceAccess.cod" same_bytes;
 using "ParserStorage.cod" {
     ExprNodes, len as syntax_len, no_node, module_node, module_item_node, using_node,
     export_from_node, callable_node, callable_head_node, c_handle_type_node, c_procedure_node,
@@ -16,7 +17,8 @@ using "ParserStorage.cod" {
     block_item_node, try_node, catch_clause_node, finally_clause_node, null_node, return_node,
     throw_node, local_storage_binding, case_node, case_arm_node, case_fallthrough_node, case_failure_node,
     enum_declaration_node, enum_member_node, enum_integer_node, type_assertion_node,
-    local_module_selection, local_resource_name, native_symbol_declaration_node, native_effect_node, text_literal_node,
+    local_module_selection, local_resource_name, native_symbol_declaration_node,
+    reference_symbol_declaration_node, effect_node, bind_effect, text_literal_node,
 };
 using "ExpressionParser.cod" ParseResult;
 using "ModuleExports.cod" { SelectedExports, record_export, enum_member_export };
@@ -103,13 +105,14 @@ export func enum_value() -> u8 { return 27u8; }
 export func native_symbol_binding() -> u8 { return 28u8; }
 export func builtin_string() -> u8 { return 29u8; }
 export func builtin_c_string() -> u8 { return 30u8; }
+export func reference_symbol_binding() -> u8 { return 31u8; }
 
 export func text_type(kind:u8) -> bool {
     return kind == builtin_string() || kind == builtin_c_string();
 }
 
 func symbol_binding(kind:u8) -> bool {
-    return kind == symbolic_selection() || kind == native_symbol_binding();
+    return kind == symbolic_selection() || kind == native_symbol_binding() || kind == reference_symbol_binding();
 }
 
 export func native_scalar(kind:u8) -> bool {
@@ -170,14 +173,8 @@ func spelling_start(nodes:const ExprNodes in N, at:u64) -> u64 where {const owne
 
 func same_name(source:const SourceBytes in S, nodes:const ExprNodes in N, left:u64, right:u64) -> bool
     where {const owner S, const owner N} {
-    val start <- spelling_start(nodes, left);
-    val other <- spelling_start(nodes, right);
-    val length <- nodes[left].past - start;
-    if (length != nodes[right].past - other) return false;
-    for (offset in 0u64 .. length) {
-        if (source[start + offset] != source[other + offset]) return false;
-    };
-    return true;
+    return same_bytes(source, spelling_start(nodes, left), nodes[left].past,
+                      source, spelling_start(nodes, right), nodes[right].past);
 }
 
 func lookup(source:const SourceBytes in S, nodes:const ExprNodes in N, work:const NameWork in W,
@@ -235,7 +232,10 @@ func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
             return;
         } else {};
     } else {
-        if (kind == native_symbol_binding()) { reject_name(state, name, expected_symbol_binding()); return; } else {};
+        if (kind == native_symbol_binding() || kind == reference_symbol_binding()) {
+            reject_name(state, name, expected_symbol_binding());
+            return;
+        };
     };
     remember(bindings, name, declaration, kind);
 }
@@ -866,13 +866,18 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         resolve_value(source, nodes, bindings, work, state, at);
         return;
     } else {};
-    if (kind == native_effect_node()) {
+    if (kind == effect_node()) {
         if (enclosing_callable(nodes, bindings, state.scope_node) == no_node() || state.delayed != no_node()) {
             reject_name(state, at, invalid_module_tree());
             return;
         } else {};
         resolve_value(source, nodes, bindings, work, state, nodes[at].left);
-        if (state.diagnostic == 0u8) { resolve_effect_initializer(source, nodes, bindings, work, state, nodes[at].right); } else {};
+        if (state.diagnostic != 0u8) return;
+        if (nodes[at].number == bind_effect()) {
+            resolve_expression(source, nodes, bindings, work, state, nodes[at].right);
+        } else {
+            resolve_effect_initializer(source, nodes, bindings, work, state, nodes[at].right);
+        };
         return;
     } else {};
     if (kind == type_assertion_node()) {
@@ -979,6 +984,7 @@ export func record_declaration(kind:u8) -> bool {
 export func declaration_requires_native_output(kind:u8) -> bool {
     return kind == c_handle_type_node() || record_declaration(kind) || kind == array_declaration_node() ||
         kind == enum_declaration_node() || kind == c_procedure_node() || kind == native_symbol_declaration_node() ||
+        kind == reference_symbol_declaration_node() ||
         kind == export_node() || kind == export_from_node();
 }
 
@@ -1025,6 +1031,9 @@ func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, 
         } else {};
         if (form_kind == native_symbol_declaration_node()) {
             declare_name(source, nodes, bindings, work, state, nodes[form].left, form, native_symbol_binding(), duplicate_binding());
+        } else {};
+        if (form_kind == reference_symbol_declaration_node()) {
+            declare_name(source, nodes, bindings, work, state, nodes[form].left, form, reference_symbol_binding(), duplicate_binding());
         } else {};
         if (local_module_selection(form_kind)) {
             name <- local_resource_name(nodes, form);
@@ -1364,6 +1373,10 @@ func resolve_module_form(source:const SourceBytes in S, nodes:const ExprNodes in
         resolve_type_name(source, nodes, bindings, work, state, nodes[form].right);
         return;
     } else {};
+    if (kind == reference_symbol_declaration_node()) {
+        resolve_type_name(source, nodes, bindings, work, state, nodes[nodes[form].right].left);
+        return;
+    };
     if (kind == export_node()) {
         val name <- nodes[form].left;
         val found <- lookup(source, nodes, work, name, 0u64, state.module_names);

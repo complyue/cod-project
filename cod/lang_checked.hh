@@ -19,16 +19,20 @@ namespace cod::language {
 using CompletionInputs = std::set<size_t>;
 
 struct LexicalState {
+  // A joined installation without a proved common actual owner carries no loan proof.
+  using SymbolBorrows = std::map<size_t, std::optional<size_t>>;
   struct Scope {
     size_t id;
     std::map<std::string, size_t> bindings;
     bool declarations = true;
     std::optional<std::set<size_t>> symbol_entry = {};
     std::map<size_t, size_t> native_symbol_entry = {};
+    SymbolBorrows borrowed_symbol_entry = {};
   };
   std::vector<Scope> scopes{{0, {}}};
   std::set<size_t> bound_symbols, required_symbols;
   std::map<size_t, size_t> native_symbol_owners;
+  SymbolBorrows borrowed_symbol_owners;
   std::set<size_t> bindings_available, available, initialized, present;
   struct InputFacts {
     std::set<size_t> initialized;
@@ -73,6 +77,14 @@ struct LexicalState {
 };
 
 class ScalarChecker {
+  template <typename Owners>
+  static void join_symbol_borrows(Owners &left, const Owners &right) {
+    for (auto &[symbol, owner] : left) {
+      const auto other = right.find(symbol);
+      if (other == right.end() || other->second != owner) owner.reset();
+    }
+    for (const auto &[symbol, owner] : right) left.try_emplace(symbol, std::nullopt);
+  }
   CheckedProgram program_;
   Type exception_type(size_t category) const { return program_.exception_type(category); }
   static std::set<size_t> concrete_categories(size_t count) {
@@ -407,7 +419,7 @@ class ScalarChecker {
   }
   bool owner_alive(size_t owner) const {
     owner = owner_lifetime_scope(owner);
-    return external_owner(owner) ||
+    return external_owner(owner) || is_symbol_owner(owner, program_.symbols.size()) ||
         std::any_of(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &scope) { return scope.id == owner; });
   }
   size_t named_owner(const std::string &name, const Location &at) const {
@@ -1745,6 +1757,7 @@ class ScalarChecker {
     }
   };
   struct TypeEvidenceState {
+    std::map<size_t, std::optional<EvidenceOwner>> borrowed_symbol_owners;
     struct Definition {
       size_t method;
       std::shared_ptr<const TypeEvidenceState> declaration;
@@ -2315,7 +2328,7 @@ class ScalarChecker {
     return found->second;
   }
   static const Type &dynamic_procedure_type(const CheckedSymbol &symbol, const Location &at) {
-    if (!symbol.type || symbol.type->kind != Type::procedure || symbol.type->pure_callable)
+    if (symbol.reference || !symbol.type || symbol.type->kind != Type::procedure || symbol.type->pure_callable)
       fail(at, "dynamic invocation requires a procedure symbol");
     return *symbol.type;
   }
@@ -3733,6 +3746,12 @@ class ScalarChecker {
     if (validating_) fail(site.at, site.diagnostic);
   }
   void require_symbol(LexicalState &state, size_t symbol, const Location &at) {
+    if (validating_ && state.live && program_.symbols[symbol].reference) {
+      if (delayed_) implementation_gap(at, "deferred lookup of a borrowed symbol");
+      const auto installed = state.borrowed_symbol_owners.find(symbol);
+      if (installed != state.borrowed_symbol_owners.end() && !installed->second)
+        implementation_gap(at, "borrowed symbol has no proved common actual owner");
+    }
     if (!proving_ || !state.live || state.bound_symbols.contains(symbol)) return;
     if (!delayed_ && !checking_instance_ && validating_)
       fail(at, "cannot prove an installed binding for symbol '" + program_.symbols[symbol].name + "'");
@@ -4262,7 +4281,8 @@ class ScalarChecker {
   }
   void require_borrow_lifetime(const CheckedOperation &view, const Location &at, bool prepared) const {
     require_live_view(view, at);
-    if (prepared) for (const auto owner : view.owners) if (!external_owner(owner)) {
+    if (prepared) for (const auto owner : view.owners)
+      if (!external_owner(owner) && !is_symbol_owner(owner, program_.symbols.size())) {
       const auto lifetime = owner_lifetime_scope(owner);
       const auto scope = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) { return entry.id == lifetime; });
       const auto cleanup = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) { return entry.id == cleanup_scope_; });
@@ -5014,6 +5034,8 @@ class ScalarChecker {
     lexical_.bindings_available = a_exits ? b.bindings_available : b_exits ? a.bindings_available : intersect(a.bindings_available, b.bindings_available);
     lexical_.available = a_exits ? b.available : b_exits ? a.available : intersect(a.available, b.available);
     lexical_.bound_symbols = a_exits ? b.bound_symbols : b_exits ? a.bound_symbols : intersect(a.bound_symbols, b.bound_symbols);
+    if (a_exits) lexical_.borrowed_symbol_owners = b.borrowed_symbol_owners;
+    else if (!b_exits) join_symbol_borrows(lexical_.borrowed_symbol_owners, b.borrowed_symbol_owners);
     if (a_exits) lexical_.native_symbol_owners = b.native_symbol_owners;
     else if (!b_exits) {
       const auto join_installation = [&](size_t symbol, const auto &other) {
@@ -5159,6 +5181,7 @@ class ScalarChecker {
     if (scope.symbol_entry) {
       state.bound_symbols = *scope.symbol_entry;
       state.native_symbol_owners = scope.native_symbol_entry;
+      state.borrowed_symbol_owners = scope.borrowed_symbol_entry;
     }
     for (const auto &[name, id] : scope.bindings) {
       state.bindings_available.erase(id);
@@ -7825,6 +7848,7 @@ class ScalarChecker {
       if (inserted || different) unavailable(name);
     }
     if (right_exits) return left;
+    join_symbol_borrows(left.borrowed_symbol_owners, right.borrowed_symbol_owners);
     auto &observed = left.observed_return;
     const auto &other_observed = right.observed_return;
     if (observed.present == false) observed.borrowed = other_observed.borrowed;
@@ -11024,7 +11048,17 @@ class ScalarChecker {
       if (state.validating_body && state.method && program_.methods[*state.method].source->kind == Form::Kind::function)
         fail(expr.at, "a function cannot access dynamic bindings");
       const auto id = resolve_symbol(expr.text, expr.at, symbol_shadowed(expr.text, state), state.method);
-      const auto &type = program_.symbols[id].type;
+      const auto &symbol = program_.symbols[id];
+      const auto &type = symbol.type;
+      if (symbol.reference) {
+        const auto &reference = *symbol.reference;
+        const auto owner = state.borrowed_symbol_owners.find(id);
+        view = {reference.read_only, true, false, owner == state.borrowed_symbol_owners.end()
+            ? std::optional{EvidenceOwner{symbol_owner_key(id)}} : owner->second};
+        view.nullable = reference.nullable;
+        if (!reference.nullable) target_facts.presence = TargetPresence::present;
+        return type;
+      }
       if (type && type->kind == Type::native_handle) {
         if (state.required && read != EvidenceRead::native_loan)
           fail(expr.at, "an owning native symbol can only supply a checked handle loan");
@@ -11038,7 +11072,14 @@ class ScalarChecker {
         fail(expr.at, "a function cannot access dynamic bindings");
       if (state.complete) {
         const auto id = resolve_symbol(expr.text, expr.at, symbol_shadowed(expr.text, state), state.method);
-        const auto &type = program_.symbols[id].type;
+        const auto &symbol = program_.symbols[id];
+        const auto &type = symbol.type;
+        if (symbol.reference && !expr.children.empty()) {
+          const auto operand = child(0, false, true, EvidenceRead::target);
+          if (operand == Type::never) return Type::never;
+          state.borrowed_symbol_owners.insert_or_assign(id, state.value.owner);
+          return Type::void_type;
+        }
         if (type && type->kind == Type::native_handle) {
           const auto &initializer = native_effect_initializer(expr);
           const Type declared{Type::c_type_marker, type->name, type->identity};
@@ -12789,6 +12830,8 @@ class ScalarChecker {
   TypeEvidenceState evidence_state(bool retained_only = false, const std::set<std::string> *names = nullptr,
                                   bool track_selection = false) const {
     TypeEvidenceState state;
+    for (const auto &[symbol, owner] : lexical_.borrowed_symbol_owners)
+      state.borrowed_symbol_owners.emplace(symbol, owner ? std::optional{EvidenceOwner{*owner}} : std::nullopt);
     state.selections.tracking = track_selection;
     if (track_selection) state.selections.observation_decisions = std::make_shared<ObservationDecisions>();
     const auto selected = [&](const std::string &name) { return !names || names->contains(name); };
@@ -13532,6 +13575,8 @@ class ScalarChecker {
     for (const auto symbol : symbols) {
       const auto &type = program_.symbols[symbol].type;
       if (type && type->kind == Type::native_handle) fail(at, "an owning native symbol must be used through a direct procedure call");
+      if (program_.symbols[symbol].reference && validating_)
+        implementation_gap(at, "capturing a borrowed symbol in a callable value");
       require_symbol(lexical_, symbol, at);
     }
     if (!captures.empty() || !symbols.empty()) note_abrupt(at, {exception_id(ExceptionCategory::out_of_memory)});
@@ -16306,6 +16351,58 @@ class ScalarChecker {
     if (first) native_owner_scopes_.emplace(next_scope_++, 0);
     return incoming->second;
   }
+  size_t borrowed_symbol_owner(size_t symbol) const {
+    const auto selected = lexical_.borrowed_symbol_owners.find(symbol);
+    if (selected == lexical_.borrowed_symbol_owners.end()) return symbol_owner_key(symbol);
+    return selected->second.value_or(symbol_owner_key(symbol));
+  }
+  void check_reference_symbol(const Expression &expr, const CheckedSymbol &symbol, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation) {
+    using K = Expression::Kind;
+    const auto id = *operation.symbol;
+    const auto &mode = *symbol.reference;
+    const auto &type = *symbol.type;
+    if (mode.nullable || !(numeric(type) || type.kind == Type::enumeration ||
+                           (mode.read_only && (type == Type::boolean || text_type(type)))))
+      implementation_gap(expr.at, "reference symbol target or mode outside the stable lexical borrow profile");
+    if (expr.kind == K::effect || expr.kind == K::procedure_effect) {
+      if (expr.binding != "=" || expr.children.empty())
+        fail(expr.at, "a reference symbol requires effect '=' with a target");
+      if (!instance || delayed_)
+        implementation_gap(expr.at, "installing a borrowed symbol outside a synchronous procedure scope");
+      const auto &operand = *expr.children.front();
+      const auto source = check(operand, instance, operations, false);
+      operation.type = source == Type::never ? Type::never : Type::void_type;
+      if (source == Type::never) return;
+      const auto &view = operations.at(&operand);
+      if (source != type && !(mode.read_only && widens_text(source, type)))
+        fail(operand.at, "effect target does not satisfy the declared reference symbol type");
+      prepare_borrow(view, ArgumentMode::borrowed_ref, operand.at);
+      require_live_view(view, operand.at);
+      if (view.read_only && !mode.read_only)
+        fail(operand.at, "readonly target cannot supply a writable reference symbol");
+      const auto owner = one_owner(view);
+      if (!owner || native_owner_scopes_.contains(*owner) || view.indexed_target)
+        implementation_gap(operand.at, "reference symbol requires one stable actual lexical owner");
+      if (!lexical_.live) return;
+      const auto boundary = std::find_if(lexical_.scopes.rbegin(), lexical_.scopes.rend(),
+          [&](const auto &scope) { return scope.symbol_entry.has_value() || scope.id == cleanup_scope_; });
+      const auto target_scope = std::find_if(lexical_.scopes.rbegin(), boundary,
+          [&](const auto &scope) { return scope.id == *owner; });
+      if (target_scope != boundary)
+        fail(operand.at, "reference symbol target does not outlive the installation scope");
+      lexical_.borrowed_symbol_owners.insert_or_assign(id, owner);
+      lexical_.bound_symbols.insert(id);
+      return;
+    }
+    require_symbol(lexical_, id, expr.at);
+    if (expr.kind == K::touch) { operation.type = Type::void_type; return; }
+    operation.type = type;
+    operation.view = true;
+    operation.read_only = mode.read_only;
+    operation.owners = {borrowed_symbol_owner(id)};
+    operation.initialization.emplace();
+  }
   void check_native_effect(const Expression &expr, const Type &type, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation) {
     if (!instance) fail(expr.at, "an owning native effect requires a procedure scope");
@@ -17192,6 +17289,10 @@ class ScalarChecker {
       const auto &symbol = program_.symbols[*operation.symbol];
       if (method && method->kind == Form::Kind::function)
         fail(expr.at, "a function cannot access dynamic bindings");
+      if (symbol.reference) {
+        check_reference_symbol(expr, symbol, instance, operations, operation);
+        break;
+      }
       if (symbol.type && symbol.type->kind == Type::native_handle) {
         if (expr.kind == K::effect || expr.kind == K::procedure_effect)
           check_native_effect(expr, *symbol.type, instance, operations, operation);
@@ -17588,7 +17689,8 @@ class ScalarChecker {
       checked_scope_owners_[&expr] = iteration_scope;
       lexical_.live = lexical_.live && body_possible;
       refresh_input_facts(lexical_);
-      lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols, lexical_.native_symbol_owners});
+      lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols, lexical_.native_symbol_owners,
+                                 lexical_.borrowed_symbol_owners});
       operation.place = declare(expr.text, index, true, true, expr.at);
       initialize(*operation.place);
       loop_controls_.insert(*operation.place);
@@ -17610,7 +17712,8 @@ class ScalarChecker {
       }
       lexical_ = before;
       lexical_.live = lexical_.live && empty_possible;
-      lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols, lexical_.native_symbol_owners});
+      lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols, lexical_.native_symbol_owners,
+                                 lexical_.borrowed_symbol_owners});
       const auto otherwise = expr.children.size() == 4 ? check_loop_body(*expr.children[3], instance, operations) : Type{Type::void_type};
       leave_scope();
       const auto empty_state = lexical_;
@@ -18209,6 +18312,7 @@ class ScalarChecker {
         deferred_action_ = action;
         lexical_.bound_symbols.clear();
         lexical_.native_symbol_owners.clear();
+        lexical_.borrowed_symbol_owners.clear();
         lexical_.required_symbols.clear();
         deferred_inputs_ = before.available;
         if (proving_) for (size_t place = 0; place < catalog_storage_.size(); ++place)
@@ -18310,6 +18414,8 @@ class ScalarChecker {
       // A deferred lookup runs after every later native installation in this
       // cleanup queue has restored its preceding binding.
       for (auto &path : summary.paths) std::erase_if(path.effects.symbols, [&](size_t symbol) {
+        if (program_.symbols[symbol].reference && validating_)
+          implementation_gap(expr.at, "deferred lookup of a borrowed symbol");
         const auto &type = program_.symbols[symbol].type;
         if (!type || type->kind != Type::native_handle) return false;
         require_symbol(lexical_, symbol, expr.at);
@@ -19800,11 +19906,11 @@ class ScalarChecker {
           type = native_handle_type(std::move(type), true);
         } else {
           CheckedMethod contract; contract.source = form.get();
-          signature_type(contract, type, form->at);
+          signature_type(contract, type, form->at, false, form->symbol_reference.has_value());
         }
         if (!module_names().symbols.emplace(form->name, program_.symbols.size()).second)
           fail(form->at, "duplicate symbol binding '" + form->name + "'");
-        program_.symbols.push_back({type, false, form->name});
+        program_.symbols.push_back({type, false, form->name, form->symbol_reference});
         continue;
       }
       if (form->kind != Form::Kind::function && form->kind != Form::Kind::procedure)
@@ -19985,6 +20091,7 @@ class ScalarChecker {
           program_.symbols.push_back({type, false, form->name});
         }
         const auto &declared = program_.symbols[*symbol];
+        if (declared.reference) fail(form->at, "a reference symbol cannot declare a procedure family");
         if (!declared.type || declared.type->kind != Type::procedure || declared.type->pure_callable)
           fail(form->at, "symbolic procedure definition requires a procedure symbol");
       }
@@ -20189,7 +20296,7 @@ public:
           implementation_gap(method.source->at, "a C entry owner supplying a lexical allocator");
         for (const auto symbol : effects.symbols) {
           const auto &binding = program_.symbols.at(symbol);
-          if (binding.type && binding.type->kind == Type::native_handle)
+          if (binding.reference || (binding.type && binding.type->kind == Type::native_handle))
             fail(method.source->at, "cannot prove an installed binding for symbol '" + binding.name + "' at C entry");
         }
       }

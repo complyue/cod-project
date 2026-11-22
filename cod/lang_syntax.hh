@@ -415,6 +415,10 @@ struct OwnerParameter {
   bool explicit_parameter = false, read_only = false;
 };
 struct SymbolOwner { std::string name; Type root; Location at; };
+struct SymbolReference {
+  bool nullable;
+  bool read_only;
+};
 struct UnitSelection { std::string source, local; Location at; };
 struct SymbolMapping {
   std::string local;
@@ -462,6 +466,7 @@ struct Form {
   std::vector<Type> throws_types;
   std::vector<OwnerParameter> owner_parameters;
   std::shared_ptr<SymbolOwner> symbol_owner;
+  std::optional<SymbolReference> symbol_reference;
   std::string result_owner;
   bool result_const = false;
   std::string result_kind;
@@ -2223,6 +2228,7 @@ public:
       auto form = std::make_unique<Form>();
       form->at = start.at;
       const auto native_handle_head = [&] { return is("handle") && is("type", 1); };
+      const auto reference_symbol_head = [&] { return (is("ref") || is("ptr")) && is("symbol", 1); };
       if (take("export")) {
         if (is("from") && tokens_[cursor_ + 1].kind == TokenKind::string) {
           expect("from");
@@ -2236,7 +2242,7 @@ public:
         const bool named_type = native_handle_head() || (is("data") && (next == TokenKind::identifier || next == TokenKind::string)) ||
             ((is("array") || is("enum")) && next == TokenKind::identifier);
         const bool named_callable = (is("func") || is("function") || is("proc") || is("procedure")) && !callable_binding();
-        if (is("import") || (is("symbol") && next == TokenKind::symbol) || named_type || named_callable) {
+        if (is("import") || (is("symbol") && next == TokenKind::symbol) || reference_symbol_head() || named_type || named_callable) {
           form->exporting = true;
         } else {
           form->kind = Form::Kind::export_resource;
@@ -2246,6 +2252,28 @@ public:
           append(std::move(form));
           continue;
         }
+      }
+      if (reference_symbol_head()) {
+        const bool nullable = take("ptr");
+        if (!nullable) expect("ref");
+        expect("symbol");
+        form->kind = Form::Kind::symbol;
+        form->name = name(TokenKind::symbol).text;
+        form->symbolic = true;
+        type_separator();
+        const bool read_only = take("const");
+        form->result_type = parse_type();
+        expect("in");
+        const auto selected = ordinary_name();
+        expect("where"); expect("{");
+        const bool const_owner = take("const");
+        expect("owner");
+        const auto owner = ordinary_name();
+        if (owner.text != selected.text) fail(selected.at, "reference symbol must name its declared owner parameter");
+        expect("}"); expect(";");
+        form->symbol_reference = SymbolReference{nullable, read_only || const_owner};
+        append(std::move(form));
+        continue;
       }
       const bool region_symbol = is("region") && is("symbol", 1);
       if (region_symbol) expect("region");

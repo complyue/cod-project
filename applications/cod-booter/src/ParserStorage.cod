@@ -130,8 +130,10 @@ export func case_fallthrough_node() -> u8 { return 106u8; }
 export func case_failure_node() -> u8 { return 107u8; }
 export func case_pattern_node() -> u8 { return 108u8; }
 export func native_symbol_declaration_node() -> u8 { return 109u8; }
-export func native_effect_node() -> u8 { return 110u8; }
+export func effect_node() -> u8 { return 110u8; }
 export func text_literal_node() -> u8 { return 111u8; }
+export func reference_symbol_declaration_node() -> u8 { return 112u8; }
+export func bind_effect() -> u64 { return 1u64; }
 export func case_member_pattern() -> u64 { return 0u64; }
 export func case_false_pattern() -> u64 { return 1u64; }
 export func case_true_pattern() -> u64 { return 2u64; }

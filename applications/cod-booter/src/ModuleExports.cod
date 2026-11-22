@@ -1,4 +1,5 @@
 using "SourceStorage.cod" SourceBytes;
+using "SourceAccess.cod" same_bytes;
 using "ParserStorage.cod" {
     ExprNodes, len as syntax_len, no_node, module_node, module_selection, symbol_node, name_node,
     import_node, member_selector_node, selected_resource_name,
@@ -51,17 +52,6 @@ func unproved_import_interpretation() -> u8 { return 12u8; }
 func invalid_member_selection() -> u8 { return 13u8; }
 func missing_enum_member() -> u8 { return 14u8; }
 func conflicting_enum_members() -> u8 { return 15u8; }
-
-export func same_name(source:const SourceBytes in S, first:u64, past:u64,
-                      spellings:const SourceBytes in B, name_first:u64, name_past:u64) -> bool
-    where {const owner S, const owner B} {
-    val length <- past - first;
-    if (length != name_past - name_first) return false;
-    for (offset in 0u64 .. length) {
-        if (source[first + offset] != spellings[name_first + offset]) return false;
-    };
-    return true;
-}
 
 func same_module_path(source:const SourceBytes in S, first:u64, past:u64,
                       spellings:const SourceBytes in B, module_first:u64, module_past:u64) -> bool
@@ -152,7 +142,7 @@ func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N
             (dependency != 0u64 ||
              (exports[at].module_first <= exports[at].module_past && exports[at].module_past <= intrinsic (len)(spellings) &&
               same_module_path(source, path_first, path_past, spellings, exports[at].module_first, exports[at].module_past)))) {
-            if (same_name(source, name_first, name_past, spellings, exports[at].name_first, exports[at].name_past)) {
+            if (same_bytes(source, name_first, name_past, spellings, exports[at].name_first, exports[at].name_past)) {
                 if (symbolic == (exports[at].kind == symbol_export())) {
                     if (nodes[site].kind == import_node() && exports[at].kind != enum_export())
                         return unproved_import_interpretation();
@@ -207,7 +197,7 @@ export func enum_spelling(source:const SourceBytes in S, first:u64, past:u64,
                            spellings:const SourceBytes in B, interfaces:const ModuleInterfaces in I,
                            head:u64) -> u64 where {const owner S, const owner B, const owner I} {
     for (row in head + 1u64 .. head + 1u64 + interfaces[head].entry_count) {
-        if (same_name(source, first, past, spellings, interfaces[row].name_first, interfaces[row].name_past))
+        if (same_bytes(source, first, past, spellings, interfaces[row].name_first, interfaces[row].name_past))
             return row;
     };
     return no_node();
@@ -223,7 +213,7 @@ func exposes_spelling(source:const SourceBytes in S, nodes:const ExprNodes in N,
     for (unused in 0u64 .. selector) {
         if (item == no_node()) return false;
         name <- nodes[item].right;
-        if (same_name(source, nodes[name].first, nodes[name].past, spellings, first, past)) return true;
+        if (same_bytes(source, nodes[name].first, nodes[name].past, spellings, first, past)) return true;
         item <- nodes[item].left;
     };
     return false;

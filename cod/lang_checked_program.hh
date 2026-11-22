@@ -692,7 +692,14 @@ struct CheckedSymbol {
   std::optional<Type> type;
   bool intrinsic_print = false;
   std::string name;
+  std::optional<SymbolReference> reference = {};
 };
+// Borrowed symbol inputs occupy a separate range from scope and formal owner roles.
+inline constexpr size_t first_symbol_owner = null_target / 2;
+inline size_t symbol_owner_key(size_t symbol) { return first_symbol_owner + symbol; }
+inline bool is_symbol_owner(size_t owner, size_t symbols) {
+  return owner >= first_symbol_owner && owner - first_symbol_owner < symbols;
+}
 struct CheckedFamily {
   std::optional<size_t> symbol;
   size_t module, origin;
