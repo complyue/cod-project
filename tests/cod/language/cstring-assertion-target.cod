@@ -1,0 +1,2 @@
+ref text = make String("original");
+(=)(text:CString, make String("replacement"):CString);

@@ -3365,7 +3365,10 @@ class ScalarChecker {
         if (slots.projected.contains(parameter)) continue;
         const auto present = selected_input(view.targets);
         facts.present.insert(present.begin(), present.end());
-        if (!slots.contains(parameter) && view.binding) facts.bindings.emplace(*view.binding, view.selection_versions);
+        // Opaque views such as lexical text have no enumerated target places.
+        // Their non-null contract needs no refinement of a caller's target set.
+        if (!slots.contains(parameter) && view.binding && !view.targets.empty())
+          facts.bindings.emplace(*view.binding, view.selection_versions);
       }
       for (const auto &value : known.exceptions) facts.exceptions.insert(value.substitute(exceptions, true));
       if (!slots.all) for (const auto &group : known.same_inputs) {
@@ -11502,6 +11505,7 @@ class ScalarChecker {
         if (!type || type == Type::never) return type;
         if (!text_type(*type)) fail(expr.at, "CString assertion requires String text");
         view = state.value;
+        view.project_target();
         target_facts = state.target;
         if (type->kind == Type::string) note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::type_assertion_failed)));
         return annotation;
@@ -11905,9 +11909,7 @@ class ScalarChecker {
         }
       }
       if (state.preparing(expr)) record_type_invocation(expr, state, {0}, true);
-      view.value_binding.reset(); view.fixed_binding.reset(); view.slot_read_only.reset();
-      view.place_owners.clear();
-      view.storage_kind.reset();
+      view.project_target();
       return type;
     }
     case K::case_expression:
@@ -17924,6 +17926,8 @@ class ScalarChecker {
         if (!text_type(type)) fail(expr.at, "CString assertion requires String text");
         prepare_borrow(operation, ArgumentMode::borrowed_ref, operand.at);
         require_live_view(operation, operand.at);
+        operation.slots.clear();
+        operation.fixed_binding = false;
         operation.type = annotation;
         operation.check_c_string = type.kind == Type::string;
         if (operation.check_c_string) note_abrupt(expr.at, {exception_id(ExceptionCategory::type_assertion_failed)});

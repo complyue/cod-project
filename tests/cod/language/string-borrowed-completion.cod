@@ -1,0 +1,19 @@
+using symbol "std:io" @print;
+using "std:exceptions" TypeAssertionFailedError;
+using "std:text-storage" utf8_size;
+
+func has_three_bytes(text:const String in O) -> bool where {const owner O} {
+    return utf8_size(text) == 3u64;
+}
+
+proc verify() -> u64 {
+    ref text = make String("x\0y");
+    if (!has_three_bytes(text)) return 1u64;
+    try {
+        ref invalid = text:CString;
+        return 2u64;
+    } catch (e:const TypeAssertionFailedError) {};
+    return 73u64;
+}
+
+behave @print(verify());

@@ -2852,6 +2852,17 @@
     "stdout": "73\n"
   },
   {
+    "file": "string-borrowed-completion.cod",
+    "exit": 0,
+    "stdout": "73\n"
+  },
+  {
+    "file": "cstring-assertion-target.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "reference operation requires a binding slot"
+  },
+  {
     "file": "abstract-symbol-call-inputs.cod",
     "exit": 0,
     "stdout": "1\n"
