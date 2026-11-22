@@ -458,8 +458,11 @@ class LLVMEmission {
   void clear_failure_owner() {
     if (owned_failures_) release_failure_owner(b_, take_failure_owner(b_, completion_.failure_owner));
   }
+  llvm::Value *here_payload_slot(llvm::IRBuilder<> &builder, llvm::Value *transfer) {
+    return builder.CreateStructGEP(here_transfer_, transfer, 1);
+  }
   llvm::Value *transfer_failure_slot(llvm::IRBuilder<> &builder, llvm::Value *transfer) {
-    return builder.CreateStructGEP(outcome_, builder.CreateStructGEP(here_transfer_, transfer, 1), failure_owner_field());
+    return builder.CreateStructGEP(outcome_, here_payload_slot(builder, transfer), failure_owner_field());
   }
   void discard_transfer_failure(llvm::Value *transfer, llvm::Value *retained) {
     if (!owned_failures_) return;
@@ -1377,7 +1380,7 @@ class LLVMEmission {
     b_.CreateBr(join);
     b_.SetInsertPoint(deliver);
     auto *kind = b_.CreateLoad(b_.getInt8Ty(), b_.CreateStructGEP(here_transfer_, target, 0));
-    auto *payload = b_.CreateLoad(outcome_, b_.CreateStructGEP(here_transfer_, target, 1));
+    auto *payload = b_.CreateLoad(outcome_, here_payload_slot(b_, target));
     if (owned_failures_) b_.CreateStore(null_pointer(), transfer_failure_slot(b_, target));
     auto *returning = block("here.supplier.return");
     b_.CreateCondBr(b_.CreateICmpEQ(kind, b_.getInt8(static_cast<unsigned>(HereExit::return_supplier))), returning, join);
@@ -1666,7 +1669,36 @@ class LLVMEmission {
     b_.CreateBr(retire);
     b_.SetInsertPoint(test_body);
     auto *publish = block("defer.residual.publish");
-    b_.CreateCondBr(b_.CreateAnd(load(body_pending), b_.CreateIsNotNull(body.fatal)), retire, publish);
+    auto *local_body = load(body_pending);
+    auto *terminal_body = b_.CreateAnd(local_body, b_.CreateIsNotNull(body.fatal));
+    llvm::Value *body_transfer = nullptr;
+    if (protected_outcomes_) {
+      // The supplier failure bypasses deferred catches. Only the completed
+      // owning pass can retain it as the aggregate's body exception.
+      auto *test_transfer = block("defer.residual.transfer"), *inspect_transfer = block("defer.residual.inspect.transfer");
+      b_.CreateCondBr(terminal_body, retire, test_transfer);
+      b_.SetInsertPoint(test_transfer);
+      auto *transfer = load(completion_.transfer);
+      b_.CreateCondBr(b_.CreateAnd(b_.CreateNot(local_body), b_.CreateIsNotNull(transfer)), inspect_transfer, publish);
+      b_.SetInsertPoint(inspect_transfer);
+      auto *kind = b_.CreateLoad(b_.getInt8Ty(), b_.CreateStructGEP(here_transfer_, transfer, 0));
+      auto *is_failure = b_.CreateICmpEQ(kind, b_.getInt8(static_cast<unsigned>(HereExit::failure)));
+      auto *payload = b_.CreateLoad(outcome_, here_payload_slot(b_, transfer));
+      auto *is_terminal = b_.CreateAnd(is_failure, b_.CreateIsNotNull(b_.CreateExtractValue(payload, 3)));
+      auto *selected = b_.CreateSelect(is_failure, transfer, null_pointer());
+      b_.CreateCondBr(is_terminal, retire, publish);
+      b_.SetInsertPoint(publish);
+      auto *incoming = b_.CreatePHI(b_.getPtrTy(), 2);
+      incoming->addIncoming(null_pointer(), test_transfer);
+      incoming->addIncoming(selected, inspect_transfer);
+      body_transfer = incoming;
+    } else b_.CreateCondBr(terminal_body, retire, publish);
+
+    const auto cancel_transfer = [&] {
+      if (!protected_outcomes_) return;
+      discard_transfer_failure(load(completion_.transfer), null_pointer());
+      b_.CreateStore(null_pointer(), completion_.transfer);
+    };
 
     const auto retain = [&](llvm::Value *owner, bool member, llvm::Value *category, llvm::Value *where,
                             llvm::Value *requested, llvm::Value *available, llvm::Value *cause, llvm::Value *child) {
@@ -1685,17 +1717,33 @@ class LLVMEmission {
       auto *where = integer(site(at));
       b_.CreateCondBr(b_.CreateIsNotNull(owner), ready, unavailable);
       b_.SetInsertPoint(unavailable);
+      cancel_transfer();
       save_abrupt(outcome(empty_scalar(), load(status), where, null_pointer()));
       b_.CreateBr(retire);
       b_.SetInsertPoint(ready);
       b_.CreateStore(owner, aggregate);
       auto *attach_body = block("defer.residual.attach.body"), *deliver = block("defer.residual.deliver");
-      b_.CreateCondBr(load(body_pending), attach_body, deliver);
+      auto *attach_supplier = body_transfer ? block("defer.residual.supplier") : deliver;
+      b_.CreateCondBr(local_body, attach_body, attach_supplier);
       b_.SetInsertPoint(attach_body);
       retain(owner, false, body.category, body.site, body.requested, body.available, body.cause, body.failure_owner);
       b_.CreateStore(b_.getFalse(), body_pending);
       b_.CreateBr(deliver);
+      if (body_transfer) {
+        b_.SetInsertPoint(attach_supplier);
+        auto *attach = block("defer.residual.attach.supplier");
+        b_.CreateCondBr(b_.CreateIsNotNull(body_transfer), attach, deliver);
+        b_.SetInsertPoint(attach);
+        auto *payload = b_.CreateLoad(outcome_, here_payload_slot(b_, body_transfer));
+        auto *child = take_failure_owner(b_, transfer_failure_slot(b_, body_transfer));
+        retain(owner, false, b_.CreateExtractValue(payload, 1), b_.CreateExtractValue(payload, 2), b_.CreateExtractValue(payload, 4),
+               b_.CreateExtractValue(payload, 5), b_.CreateExtractValue(payload, 6), child);
+        // A later receiver that catches the aggregate must not resume this transfer.
+        b_.CreateStore(null_pointer(), completion_.transfer);
+        b_.CreateBr(deliver);
+      }
       b_.SetInsertPoint(deliver);
+      cancel_transfer();
       save_abrupt(outcome(empty_scalar(), integer(deferred_aggregate_id), where, null_pointer(),
                           nullptr, nullptr, nullptr, nullptr, owner));
     } else save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::unsound_runtime_typing)), integer(0), null_pointer()));

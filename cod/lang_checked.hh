@@ -5719,12 +5719,6 @@ class ScalarChecker {
     std::optional<Type> normal_type;
     for (const auto &path : flow.paths) for (const auto origin : path.state.inputs) {
       const auto queue = path.state.input_facts.at(origin).queues.at(scope);
-      if (proving_ && checking_method_ && checking_method_->here_inputs() && !observed_.protected_defer_failure && cleanup_.has_actions(queue)) {
-        const auto &outcomes = cleanup_.apply(queue, Completion{});
-        observed_.protected_defer_failure = std::ranges::any_of(outcomes, [](const auto &outcome) {
-          return outcome.first.completion().failed();
-        });
-      }
       std::vector<Completion> inputs;
       // A scope scan is suspended as a no-return normal arrival while
       // this scope drains. Retain its origin across failure and recovery.
@@ -5829,12 +5823,12 @@ class ScalarChecker {
             for (const auto cause : {ExceptionCategory::out_of_memory, ExceptionCategory::invalid_capacity}) {
               const auto category = exception_id(cause);
               exits.push_back({state, {category}, path.at, Completion::failure(category, completion.returned),
-                               path.immediate_scope_failure, std::nullopt, retained});
+                               path.immediate_scope_failure});
             }
           }
           exits.push_back({std::move(state), std::move(failure), path.at, completion, path.immediate_scope_failure,
                            completion.protected_here() ? path.here_exit : std::nullopt,
-                           completion.failed() && retained});
+                           !aggregate && completion.failed() && retained});
         }
       }
     }
@@ -15501,8 +15495,6 @@ class ScalarChecker {
     CallEffects effects;
     if (operation.opened_source) {
       const auto &source = read_effects(*operation.opened_source);
-      if (protected_body && validating_ && source.protected_defer_failure)
-        implementation_gap(expr.at, "residual receiver defer failures across a protected here transfer");
       effects.symbols = source.symbols;
       effects.escaping_failures = source.escaping_failures;
     }
@@ -15646,8 +15638,6 @@ class ScalarChecker {
       if (!completes) { operation.type = Type::never; return; }
       const bool known = std::ranges::any_of(targets, [](const auto &target) { return target.body || target.source || target.pipeline; });
       const auto callee = known ? demand_here_receiver(selected, targets, arguments, expr.at) : demand(selected, arguments, expr.at);
-      if (proving_ && lexical_.live && read_effects(callee).protected_defer_failure)
-        observed_.protected_defer_failure = true;
       finish_named_call(expr, arguments, views, operation, read, discard, true, callee);
       return;
     }
@@ -15661,8 +15651,6 @@ class ScalarChecker {
       if (validating_ && !effects.symbols.empty())
         implementation_gap(expr.at, "dynamic binding requirements at a here invocation");
       if (program_.methods[program_.instances[body.instance].method].here_group) {
-        if (validating_ && read_effects(receiver).protected_defer_failure)
-          implementation_gap(expr.at, "residual receiver defer failures across a protected here transfer");
         for (const auto failure : effects.scope_checked_failures) {
           if (failure) note_abrupt(expr.at, {failure});
           else note_declared(declared_requirement(expr));
@@ -19984,10 +19972,6 @@ class ScalarChecker {
       }
       if (effects.propagates_outer_here_transfer && !known.propagates_outer_here_transfer) {
         known.propagates_outer_here_transfer = true;
-        changed = true;
-      }
-      if (known.protected_defer_failure != effects.protected_defer_failure) {
-        known.protected_defer_failure = effects.protected_defer_failure;
         changed = true;
       }
       if (known.booleans != effects.booleans) { known.booleans = effects.booleans; changed = true; }
