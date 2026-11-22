@@ -133,6 +133,7 @@ class ScalarChecker {
   struct ModuleNames {
     std::map<std::string, size_t> callables;
     std::map<std::string, size_t> native_operations;
+    std::set<std::string> text_append_bindings;
     std::map<size_t, size_t> imports;
     std::set<std::string> imported_aliases;
     std::map<size_t, std::map<std::string, Location>> extensions;
@@ -144,7 +145,7 @@ class ScalarChecker {
     std::map<std::string, EnumValue> enum_members;
     bool binds_other_than_enum_member(const std::string &name) const {
       return callables.contains(name) || native_operations.contains(name) || symbols.contains(name) ||
-          values.contains(name) || types.contains(name);
+          values.contains(name) || types.contains(name) || text_append_bindings.contains(name);
     }
     struct Resource {
       enum class Kind { symbol, callable, type, native_operation } kind;
@@ -5951,7 +5952,7 @@ class ScalarChecker {
       }
       if (expr.kind == K::make_borrowed_handle) use(expr.owner_name, expr.at, bound, query);
       if ((method.implicit_scope || method.supplied_scope) && expr.kind == K::make_object && expr.constructor_arguments &&
-          expr.annotation->kind == Type::string && !expr.owner_name.empty() && expr.owner_name != "here")
+          !expr.owner_name.empty() && expr.owner_name != "here")
         use(expr.owner_name, expr.at, bound, query);
       if (expr.kind == K::make_object && !expr.constructor_arguments) {
         if (expr.construction_type_query) visit(*expr.children.front(), bound, true);
@@ -10772,9 +10773,28 @@ class ScalarChecker {
       fail(expr.at, "make String requires one positional text operand");
     return *expr.children.front();
   }
-  static bool constructs_string(const Expression &expr) {
+  void validate_builder_constructor(const Expression &expr) const {
+    if (!expr.constructor_arguments || (expr.children.size() != 0 && expr.children.size() != 2) ||
+        std::ranges::any_of(expr.children, [](const auto &operand) {
+          return operand->kind == Expression::Kind::named_argument || operand->spread;
+        })) fail(expr.at, "a lexical text builder requires zero arguments or two positional text pieces");
+  }
+  bool text_piece(const Type &type) const { return text_type(type) || program_.builder_type(type); }
+  bool constructs_lexical_text(const Expression &expr, const TypeEvidenceState *state = nullptr,
+                                const CheckedInstance *instance = nullptr) const {
     const auto &source = ungrouped_expression(expr);
-    return source.kind == Expression::Kind::make_object && source.annotation && source.annotation->kind == Type::string;
+    if (source.kind != Expression::Kind::make_object || source.construction_type_query || !source.constructor_arguments)
+      return false;
+    const auto type = state ? evidence_annotation(*source.annotation, *state) : resolve_annotation(*source.annotation, instance);
+    return type == Type::string || program_.builder_type(type);
+  }
+  bool builder_append(const Expression &expr, const TypeEvidenceState *state = nullptr) const {
+    if (expr.kind != Expression::Kind::call || expr.intrinsic) return false;
+    const auto method = state ? state->method : checking_instance_ ? std::optional{checking_instance_->method} : std::nullopt;
+    if ((state ? state->bindings.contains(expr.text) || state->symbol_shadows.contains(expr.text)
+               : lexical_.lookup(expr.text).has_value()) || lexical_self(expr.text, method)) return false;
+    const ModuleLookup lookup(module_, method ? program_.methods[*method].module : module_);
+    return module_names().text_append_bindings.contains(expr.text);
   }
   CheckedOperation check_argument_expression(const Expression &operand, ArgumentMode mode, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, const Type *expected = nullptr,
@@ -10997,6 +11017,22 @@ class ScalarChecker {
                                      bool contextual, const Type *expected, std::vector<Type> *alternatives,
                                      ExpectedTypeUse expected_use, EvidenceRead read, bool joining, CaseScopeEvidence *case_scope) const {
     using K = Expression::Kind;
+    if (builder_append(expr, &state)) {
+      if (expr.children.size() != 2 || expr.has_here_body()) fail(expr.at, "text append requires a builder and one text piece");
+      for (size_t i = 0; i < 2; ++i) {
+        const auto &operand = *expr.children[i];
+        const auto type = type_evidence(operand, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, true, EvidenceRead::target);
+        if (!type || type == Type::never) return type;
+        if (state.required && (state.value.view != true || (i == 0 ? !program_.builder_type(*type) : !text_piece(*type))))
+          fail(operand.at, i == 0 ? "text append requires a lexical text builder target" : "text append requires a text piece");
+        if (state.required && i == 0 && (state.value.read_only == true ||
+            (state.value.owner && readonly_evidence_owner(*state.value.owner, state))))
+          fail(operand.at, "text append requires writable builder access");
+        require_type_initialized(state, state.target, {}, operand.at);
+      }
+      note_type_allocation(state);
+      return Type::void_type;
+    }
     if (expr.kind == K::call && !expr.intrinsic) if (const auto native = native_operation(expr.text, &state)) {
       const auto &operation = program_.native_operations[*native];
       if (operation.has_here()) {
@@ -11357,7 +11393,7 @@ class ScalarChecker {
             std::optional<Type>{evidence_annotation(*declaration->annotation, state)} : std::nullopt;
         const auto &initializer = *declaration->children.front();
         const bool reservation = reserves_value_receiver(expr, initializer);
-        const bool text_placement = declared_owner && constructs_string(initializer);
+        const bool text_placement = declared_owner && constructs_lexical_text(initializer, &state);
         if (state.required && initializer.kind == K::make_object && initializer.owner_name.empty() &&
             declared_owner && !text_placement && compare_owners(declared_owner, state.full_scope_owner, &state) != OwnerMatch::satisfied)
           implementation_gap(initializer.at, "construction in the receiver's external owner");
@@ -11366,7 +11402,7 @@ class ScalarChecker {
             ExpectedTypeUse::materialization, completes,
             !reservation && (value || declaration->binding == "<-") ? EvidenceRead::payload : EvidenceRead::target);
         const auto type = declared ? declared : initial;
-        if (text_placement && initial == Type::string) {
+        if (text_placement && initial && (initial == Type::string || program_.builder_type(*initial))) {
           if (ungrouped_expression(initializer).owner_name.empty()) state.value.owner = declared_owner;
           if (state.required && readonly_evidence_owner(*declared_owner, state))
             fail(initializer.at, "const owner cannot allocate storage");
@@ -11539,11 +11575,17 @@ class ScalarChecker {
         return {};
       }
       const bool track_places = state.checks_initialization() && state.selections.tracking;
+      const bool builder = program_.builder_type(type);
+      const bool lexical_text = type.kind == Type::string || builder;
       auto text_owner = state.full_scope_owner;
-      if (type.kind == Type::string && !expr.owner_name.empty() && expr.owner_name != "here")
+      if (lexical_text && !expr.owner_name.empty() && expr.owner_name != "here")
         text_owner = owner_evidence(expr.owner_name, state, expr.at);
-      if (type.kind == Type::string && text_owner && state.required && readonly_evidence_owner(*text_owner, state))
+      if (lexical_text && text_owner && state.required && readonly_evidence_owner(*text_owner, state))
         fail(expr.at, "const owner cannot allocate storage");
+      if (expr.constructor_arguments && !lexical_text) {
+        if (state.required) implementation_gap(expr.at, "ordinary constructor arguments");
+        return {};
+      }
       if (scalar_type(type)) {
         if (state.required && !expr.owner_name.empty() && expr.owner_name != "here") {
           const auto selected = owner_evidence(expr.owner_name, state, expr.at);
@@ -11553,14 +11595,17 @@ class ScalarChecker {
             implementation_gap(expr.at, "construction outside the current lexical owner");
         }
       }
-      if (type.kind == Type::string) {
-        const auto &input = text_constructor_input(expr);
-        const auto source = type_evidence(input, state, false, nullptr, nullptr,
-                                         ExpectedTypeUse::materialization, true, EvidenceRead::target);
-        if (!source || *source == Type::never) return source;
-        if (!text_type(*source)) fail(input.at, "make String requires a text operand");
-        require_type_initialized(state, state.target, {}, input.at);
-        view = {true, true, {}, text_owner};
+      if (lexical_text) {
+        if (builder) validate_builder_constructor(expr);
+        else text_constructor_input(expr);
+        for (const auto &input : expr.children) {
+          const auto source = type_evidence(*input, state, false, nullptr, nullptr,
+                                           ExpectedTypeUse::materialization, true, EvidenceRead::target);
+          if (!source || *source == Type::never) return source;
+          if (!text_piece(*source)) fail(input->at, builder ? "text builder construction requires a text piece" : "make String requires a text operand");
+          require_type_initialized(state, state.target, {}, input->at);
+        }
+        view = {!builder, true, {}, text_owner};
         target_facts.presence = TargetPresence::present;
         if (track_places) {
           target_facts.places.insert(&expr);
@@ -17376,6 +17421,26 @@ class ScalarChecker {
         }
         break;
       }
+      if (builder_append(expr)) {
+        if (expr.children.size() != 2 || expr.has_here_body()) fail(expr.at, "text append requires a builder and one text piece");
+        if (&expr == prepared_call_) implementation_gap(expr.at, "deferring a direct text storage intrinsic");
+        operation.type = Type::void_type;
+        operation.builtin = BuiltinOperation::builder_append;
+        for (size_t i = 0; i < 2; ++i) {
+          const auto &operand = *expr.children[i];
+          const auto prepared = check_argument_expression(operand, ArgumentMode::borrowed_ref, instance, operations);
+          if (prepared.type == Type::never) { operation.type = Type::never; break; }
+          if (i == 0 ? !program_.builder_type(prepared.type) : !text_piece(prepared.type))
+            fail(operand.at, i == 0 ? "text append requires a lexical text builder target" : "text append requires a text piece");
+          prepare_borrow(prepared, ArgumentMode::borrowed_ref, operand.at);
+          require_live_view(prepared, operand.at);
+          const auto owner = one_owner(prepared);
+          if (!owner) implementation_gap(operand.at, "text append requires one proved actual owner per operand");
+          if (i == 0 && (prepared.read_only || const_owner(*owner))) fail(operand.at, "text append requires writable builder access");
+        }
+        if (operation.type != Type::never) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
+        break;
+      }
       if (expr.intrinsic && !eager)
         implementation_gap(expr.at, "explicit intrinsic has no implemented builtin '" + expr.text + "'");
       if (expr.kind == K::call && !expr.intrinsic && std::ranges::any_of(expr.children,
@@ -17546,7 +17611,8 @@ class ScalarChecker {
     case K::grouped: {
       const auto &operand = *expr.children.front();
       operation.type = check(operand, instance, operations, false, discard, expected, expected_use,
-          false, IndexedUse::immediate_target, native_loan, constructs_string(operand) ? construction_owner : std::nullopt,
+          false, IndexedUse::immediate_target, native_loan,
+          construction_owner && constructs_lexical_text(operand, nullptr, instance) ? construction_owner : std::nullopt,
           nullptr, loop_discard);
       if (operation.type == Type::never) break;
       const auto &source = operations.at(&operand);
@@ -18288,20 +18354,35 @@ class ScalarChecker {
         return *construction_type(expr, state);
       }();
       if (type.kind == Type::abstract_type) fail(expr.at, "an abstract type has no constructible layout");
-      if (type.kind != Type::string) check_construction_owner(expr, construction_owner);
-      if (type.kind == Type::string) {
+      const bool builder = program_.builder_type(type);
+      const bool lexical_text = type.kind == Type::string || builder;
+      if (!lexical_text) {
+        if (expr.constructor_arguments) implementation_gap(expr.at, "ordinary constructor arguments");
+        check_construction_owner(expr, construction_owner);
+      }
+      if (lexical_text) {
+        if (builder) validate_builder_constructor(expr);
+        else text_constructor_input(expr);
         const auto owner = construction_destination(expr, construction_owner);
         operation.operand_type = type;
-        operation.text_storage_owner = owner;
-        const auto &input = text_constructor_input(expr);
-        const auto source = check(input, instance, operations, false);
-        if (source == Type::never) { operation.type = Type::never; break; }
-        if (!text_type(source)) fail(input.at, "make String requires a text operand");
-        const auto &selected = operations.at(&input);
-        prepare_borrow(selected, ArgumentMode::borrowed_ref, input.at);
-        require_live_view(selected, input.at);
+        using Allocation = CheckedOperation::LexicalAllocation;
+        auto allocation = Allocation{owner, builder ? Allocation::builder : Allocation::text};
         operation.type = type;
-        operation.view = operation.read_only = true;
+        for (size_t i = 0; i < expr.children.size(); ++i) {
+          const auto &input = *expr.children[i];
+          const auto source = check(input, instance, operations, false);
+          if (source == Type::never) { operation.type = Type::never; break; }
+          if (!text_piece(source)) fail(input.at, builder ? "text builder construction requires a text piece" : "make String requires a text operand");
+          const auto &selected = operations.at(&input);
+          prepare_borrow(selected, ArgumentMode::borrowed_ref, input.at);
+          require_live_view(selected, input.at);
+          if (program_.builder_type(source)) allocation.builder_inputs |= 1u << i;
+        }
+        if (!builder && allocation.builder_inputs) allocation.kind = Allocation::builder_snapshot;
+        operation.lexical_allocation = allocation;
+        if (operation.type == Type::never) break;
+        operation.view = true;
+        operation.read_only = !builder;
         require_lexical_allocator(owner, expr.at);
         operation.owners = {owner};
         operation.initialization.emplace();
@@ -19820,7 +19901,6 @@ class ScalarChecker {
         implementation_gap(array.source->at, "array element type '" + type_name(array.element) + "'");
     }
     const auto count = program_.schemas.size() - first;
-    if (!count) return;
     auto schemas = std::span(program_.schemas).subspan(first);
     for (auto &schema : schemas) {
       if (schema.source->native_owner_type) {
@@ -19836,6 +19916,14 @@ class ScalarChecker {
         const auto storage = place_kind(field.declaration_kind.empty() || field.declaration_kind == "val",
                                         field.declaration_kind == "ref");
         auto type = resolve_type(field.type);
+        if (type.kind == Type::builder_storage) {
+          if (schema.source->kind != Form::Kind::data || schema.source->c_data || schema.source->parameters.size() != 1 ||
+              storage != PlaceKind::value || !schema.bits)
+            fail(field.at, "text builder storage requires the sole inline marker of a lexical product");
+          schema.lexical_builder = true;
+          schema.bits = false;
+          continue;
+        }
         if (schema.source->c_data && storage != PlaceKind::value)
           fail(field.at, "data \"C\" requires by-value bits fields");
         schema.has_enum_storage |= type.kind == Type::enumeration;
@@ -19855,6 +19943,8 @@ class ScalarChecker {
     std::deque<size_t> ready;
     for (size_t i = 0; i < count; ++i) {
       for (const auto &field : schemas[i].fields) {
+        if (program_.builder_type(field.type))
+          implementation_gap(field.source->at, "storing a lexical text builder in a data field");
         if (field.storage != PlaceKind::value || field.type.kind != Type::product) continue;
         if (!program_.schemas[field.type.identity].bits) {
           if (schemas[i].source->c_data)
@@ -19868,6 +19958,9 @@ class ScalarChecker {
       }
       if (!pending[i]) ready.push_back(i);
     }
+    for (const auto &array : std::span(program_.arrays).subspan(first_array))
+      if (program_.builder_type(array.element))
+        implementation_gap(array.source->at, "storing a lexical text builder in an array");
     while (!ready.empty()) {
       const auto resolved = ready.front();
       ready.pop_front();
@@ -20080,6 +20173,27 @@ class ScalarChecker {
       if (const auto dependency = source.dependencies.find(form.get()); dependency != source.dependencies.end())
         select_module_resource(*form, dependency->second);
     for (const auto &form : forms) {
+      if ((form->kind == Form::Kind::using_resource || form->kind == Form::Kind::import_resource) &&
+          form->path == COD_LANG_TEXT_STORAGE_MODULE && !form->using_symbol) {
+        if (form->selected_members) implementation_gap(form->at, "member selection outside an enum");
+        if (form->name == COD_LANG_BUILDER_APPEND_NAME) {
+          if (form->exporting) implementation_gap(form->at, "re-exporting a private text storage primitive");
+          if (!module_names().text_append_bindings.insert(form->alias).second)
+            fail(form->at, "duplicate text append selection");
+          continue;
+        }
+        if (form->name != COD_LANG_BUILDER_STORAGE_NAME)
+          fail(form->at, "unknown text storage selection '" + form->name + "'");
+        const Type type{Type::builder_storage, COD_LANG_BUILDER_STORAGE_NAME};
+        if (!module_names().types.emplace(form->alias, type).second)
+          fail(form->at, "duplicate text storage selection");
+        if (form->exporting) {
+          ModuleNames::Resource resource{};
+          resource.kind = ModuleNames::Resource::Kind::type;
+          resource.type = type;
+          publish(form->alias, resource, form->at);
+        }
+      }
       if ((form->kind != Form::Kind::using_resource && form->kind != Form::Kind::import_resource) || form->path != COD_LANG_EXCEPTION_MODULE || form->using_symbol) continue;
       if (form->selected_members) implementation_gap(form->at, "member selection outside an enum");
       const auto found = std::find_if(exception_categories.begin(), exception_categories.end(), [&](const ExceptionDescriptor &entry) { return form->name == entry.name; });
@@ -20112,7 +20226,8 @@ class ScalarChecker {
           form->kind == Form::Kind::region_definition || form->kind == Form::Kind::array ||
           form->kind == Form::Kind::enumeration)
         continue;
-      if ((form->kind == Form::Kind::using_resource || form->kind == Form::Kind::import_resource) && form->path == COD_LANG_EXCEPTION_MODULE && !form->using_symbol) continue;
+      if ((form->kind == Form::Kind::using_resource || form->kind == Form::Kind::import_resource) &&
+          (form->path == COD_LANG_EXCEPTION_MODULE || form->path == COD_LANG_TEXT_STORAGE_MODULE) && !form->using_symbol) continue;
       if (form->kind == Form::Kind::using_resource && form->using_symbol && form->path == COD_LANG_IO_MODULE && form->name == COD_LANG_PRINT_NAME) {
         if (!print_symbol) {
           print_symbol = program_.symbols.size();
@@ -20389,6 +20504,10 @@ class ScalarChecker {
     for (const auto &[name, operation] : module_names().native_operations)
       if (module_names().types.contains(name) || module_names().callables.contains(name) || module_names().symbols.contains(name))
         fail(program_.native_operations[operation].contract.source->at, "native provider conflicts with the binding '" + name + "'");
+    for (const auto &name : module_names().text_append_bindings)
+      if (module_names().callables.contains(name) || module_names().types.contains(name) ||
+          module_names().symbols.contains(name) || module_names().native_operations.contains(name))
+        fail({source.path.string()}, "text storage primitive conflicts with the binding '" + name + "'");
     for (const auto &[name, member] : module_names().enum_members)
       if (module_names().binds_other_than_enum_member(name))
         fail({source.path.string()}, "selected enum member conflicts with the binding '" + name + "'");
@@ -20423,8 +20542,6 @@ class ScalarChecker {
       if (expr.kind == K::exception_binding) implementation_gap(expr.at, "owning exception local");
       if (expr.kind == K::rethrow_from) implementation_gap(expr.at, "rethrow with an explicit cause");
       if (expr.kind == K::make_exception) implementation_gap(expr.at, "owning make exception expression");
-      if (expr.kind == K::make_object && expr.constructor_arguments && expr.annotation->kind != Type::string)
-        implementation_gap(expr.at, "ordinary constructor arguments");
       if (expr.annotation)
         require_implemented_source_forms(*expr.annotation, expr.at, "owning exception callable type");
       if (expr.definition) require_implemented_source_forms(*expr.definition);

@@ -25,7 +25,11 @@ void *cod_lang_defer_allocate(uint64_t bytes, uint64_t *status);
 void cod_lang_defer_free(void *record);
 void cod_lang_release_exception_owner(void *owner);
 void *cod_lang_lexical_text_create(void **allocations, const void *input);
-void cod_lang_lexical_text_release(void *allocations);
+void *cod_lang_lexical_builder_create(void **allocations, const void *left, const void *right, uint32_t builders);
+int cod_lang_builder_append_text(void *target, const void *input);
+int cod_lang_builder_append_builder(void *target, const void *input);
+void *cod_lang_lexical_builder_finish(void **allocations, const void *input);
+void cod_lang_lexical_allocations_release(void *allocations);
 
 void cod_lang_exception_finish(void) COD_RUNTIME_NOEXCEPT;
 uint64_t cod_lang_exception_chain(uint64_t category, uint64_t site, uint64_t requested,

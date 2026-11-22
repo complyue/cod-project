@@ -136,11 +136,29 @@ struct cod_text_view {
     uint64_t size, extent;
 };
 
+struct cod_lexical_allocation {
+    struct cod_lexical_allocation *previous;
+    void (*release)(void *);
+};
+
 struct cod_lexical_text {
-    struct cod_lexical_text *previous;
+    struct cod_lexical_allocation allocation;
     struct cod_text_view text;
     uint8_t bytes[];
 };
+
+struct cod_lexical_builder {
+    struct cod_lexical_allocation allocation;
+    uint8_t *bytes;
+    size_t size, capacity;
+};
+
+static void publish_lexical_allocation(void **allocations, struct cod_lexical_allocation *allocation,
+                                       void (*release)(void *)) {
+    allocation->previous = *allocations;
+    allocation->release = release;
+    *allocations = allocation;
+}
 
 void *cod_lang_lexical_text_create(void **allocations, const void *input) {
     const struct cod_text_view *source = input;
@@ -149,18 +167,82 @@ void *cod_lang_lexical_text_create(void **allocations, const void *input) {
     if (backing > SIZE_MAX - sizeof(struct cod_lexical_text)) return NULL;
     struct cod_lexical_text *object = malloc(sizeof(*object) + (size_t)backing);
     if (!object) return NULL;
-    memcpy(object->bytes, source->bytes, (size_t)size);
+    if (size)
+        memcpy(object->bytes, source->bytes, (size_t)size);
     object->text = (struct cod_text_view){object->bytes, size, size};
-    object->previous = *allocations;
-    *allocations = object;
+    publish_lexical_allocation(allocations, &object->allocation, free);
     return &object->text;
 }
 
-void cod_lang_lexical_text_release(void *allocations) {
-    struct cod_lexical_text *object = allocations;
+static void release_builder(void *object) {
+    struct cod_lexical_builder *builder = object;
+    free(builder->bytes);
+    free(builder);
+}
+
+static int append_builder_bytes(struct cod_lexical_builder *builder, const uint8_t *bytes, uint64_t size, int self) {
+    if (size == 0)
+        return 1;
+    if (size > SIZE_MAX - builder->size)
+        return 0;
+    const size_t end = builder->size + (size_t)size;
+    if (end > builder->capacity) {
+        size_t capacity = builder->capacity ? builder->capacity : 16;
+        if (capacity < end)
+            capacity = capacity <= SIZE_MAX / 2 ? capacity * 2 : end;
+        if (capacity < end)
+            capacity = end;
+        uint8_t *grown = realloc(builder->bytes, capacity);
+        if (!grown)
+            return 0;
+        builder->bytes = grown;
+        builder->capacity = capacity;
+    }
+    memcpy(builder->bytes + builder->size, self ? builder->bytes : bytes, (size_t)size);
+    builder->size = end;
+    return 1;
+}
+
+int cod_lang_builder_append_text(void *target, const void *input) {
+    const struct cod_text_view *source = input;
+    return append_builder_bytes(target, source->bytes, source->size, 0);
+}
+
+int cod_lang_builder_append_builder(void *target, const void *input) {
+    const struct cod_lexical_builder *source = input;
+    return append_builder_bytes(target, source->bytes, source->size, target == input);
+}
+
+void *cod_lang_lexical_builder_create(void **allocations, const void *left, const void *right, uint32_t builders) {
+    struct cod_lexical_builder *builder = calloc(1, sizeof(*builder));
+    if (!builder)
+        return NULL;
+    const void *pieces[] = {left, right};
+    for (unsigned i = 0; i != 2; ++i) {
+        if (!pieces[i])
+            continue;
+        const int appended = builders & (1u << i) ? cod_lang_builder_append_builder(builder, pieces[i])
+                                                 : cod_lang_builder_append_text(builder, pieces[i]);
+        if (!appended) {
+            release_builder(builder);
+            return NULL;
+        }
+    }
+    publish_lexical_allocation(allocations, &builder->allocation, release_builder);
+    return builder;
+}
+
+void *cod_lang_lexical_builder_finish(void **allocations, const void *input) {
+    const struct cod_lexical_builder *builder = input;
+    const struct cod_text_view view = {builder->bytes, builder->size, builder->size};
+    return cod_lang_lexical_text_create(allocations, &view);
+}
+
+void cod_lang_lexical_allocations_release(void *allocations) {
+    struct cod_lexical_allocation *object = allocations;
     while (object) {
-        struct cod_lexical_text *previous = object->previous;
-        free(object);
+        struct cod_lexical_allocation *previous = object->previous;
+        object->release(object);
         object = previous;
     }
 }

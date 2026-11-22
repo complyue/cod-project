@@ -8,6 +8,9 @@
 #define COD_LANG_EXCEPTION_MODULE "std:exceptions"
 #define COD_LANG_IO_MODULE "std:io"
 #define COD_LANG_PRINT_NAME "print"
+#define COD_LANG_TEXT_STORAGE_MODULE "std:text-storage"
+#define COD_LANG_BUILDER_STORAGE_NAME "Utf8BuilderStorage"
+#define COD_LANG_BUILDER_APPEND_NAME "append_utf8"
 
 /* Keep runtime categories and their public type facts in one definition. */
 #define COD_LANG_INTRINSIC_EXCEPTIONS(ENTRY) \
@@ -27,7 +30,9 @@
    during checking, independently of a compiler's runtime symbol table. */
 enum cod_lang_export_kind {
   COD_LANG_EXCEPTION_TYPE_EXPORT = 1,
-  COD_LANG_SYMBOL_EXPORT = 2
+  COD_LANG_SYMBOL_EXPORT = 2,
+  COD_LANG_BUILDER_STORAGE_EXPORT = 11,
+  COD_LANG_BUILDER_APPEND_EXPORT = 12
 };
 
 enum cod_lang_intrinsic_symbol {
@@ -49,6 +54,9 @@ typedef struct cod_lang_intrinsic_spellings {
   char exceptions[sizeof(COD_LANG_EXCEPTION_MODULE)];
   char io[sizeof(COD_LANG_IO_MODULE)];
   char print[sizeof(COD_LANG_PRINT_NAME)];
+  char text_storage[sizeof(COD_LANG_TEXT_STORAGE_MODULE)];
+  char builder_storage[sizeof(COD_LANG_BUILDER_STORAGE_NAME)];
+  char builder_append[sizeof(COD_LANG_BUILDER_APPEND_NAME)];
 #define COD_LANG_SPELLING_FIELD(key, spelling, id, checked) char key[sizeof(#spelling)];
   COD_LANG_INTRINSIC_EXCEPTIONS(COD_LANG_SPELLING_FIELD)
 #undef COD_LANG_SPELLING_FIELD
@@ -56,6 +64,7 @@ typedef struct cod_lang_intrinsic_spellings {
 
 static const cod_lang_intrinsic_spellings cod_lang_intrinsic_names = {
     COD_LANG_EXCEPTION_MODULE, COD_LANG_IO_MODULE, COD_LANG_PRINT_NAME,
+    COD_LANG_TEXT_STORAGE_MODULE, COD_LANG_BUILDER_STORAGE_NAME, COD_LANG_BUILDER_APPEND_NAME,
 #define COD_LANG_SPELLING_VALUE(key, spelling, id, checked) #spelling,
     COD_LANG_INTRINSIC_EXCEPTIONS(COD_LANG_SPELLING_VALUE)
 #undef COD_LANG_SPELLING_VALUE
@@ -73,6 +82,10 @@ static const cod_lang_intrinsic_export cod_lang_intrinsic_exports[] = {
 #undef COD_LANG_EXCEPTION_EXPORT
     {COD_LANG_SPELLING_SPAN(io, COD_LANG_IO_MODULE), COD_LANG_SPELLING_SPAN(print, COD_LANG_PRINT_NAME),
         COD_LANG_PRINT_SYMBOL, COD_LANG_SYMBOL_EXPORT, 0, 0, 0, 0, 0, 0},
+    {COD_LANG_SPELLING_SPAN(text_storage, COD_LANG_TEXT_STORAGE_MODULE), COD_LANG_SPELLING_SPAN(builder_storage, COD_LANG_BUILDER_STORAGE_NAME),
+        0, COD_LANG_BUILDER_STORAGE_EXPORT, 0, 0, 0, 0, 0, 0},
+    {COD_LANG_SPELLING_SPAN(text_storage, COD_LANG_TEXT_STORAGE_MODULE), COD_LANG_SPELLING_SPAN(builder_append, COD_LANG_BUILDER_APPEND_NAME),
+        0, COD_LANG_BUILDER_APPEND_EXPORT, 0, 0, 0, 0, 0, 0},
 };
 
 #undef COD_LANG_SPELLING_SPAN
