@@ -246,6 +246,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: a direct place parameter requires writable val var String storage\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 110)
         fputs(": error: a direct String place requires a String or CString source\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 111)
+        fputs(": error: dependency initialization is outside the supported object profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 20)
         fputs(": error: narrow integer execution is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 21)
@@ -294,6 +296,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: selected transfer form is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 44)
         fputs(": error: transfer method selection requires an unproved owner equality\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 45)
+        fputs(": error: selected callable has no supported native import signature\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 12)
         fputs(": error: ref argument requires a proven non-null target\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 13)
@@ -310,6 +314,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: cyclic module construction remains unproved\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == module_dependency_rejected)
         fputs(": error: selected source dependency could not be checked\n", stderr);
+    else if (diagnostic->stage == 2 && diagnostic->code == module_dependency_unsupported)
+        fputs(": error: selected source dependency is outside the supported object profile\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == module_graph_storage_failed)
         fputs(": error: could not allocate dependency graph storage\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == module_depth_unproved)

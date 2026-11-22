@@ -27,9 +27,9 @@ using "NameResolution.cod" {
 };
 using "ModuleExports.cod" {
     SelectedExports, exception_type_export, symbol_export, print_export_identity,
-    exception_root_identity, text_size_export, text_byte_export,
+    exception_root_identity, text_size_export, text_byte_export, callable_export, ordinary_callable_shape,
 };
-using "ModuleExportStorage.cod" enum_type;
+using "ModuleExportStorage.cod" { enum_type, ModuleInterfaces, find_interface, write_interface_header };
 
 # An owner is a lexical scope or an owner parameter's declaration. Exception
 # type identity alone does not establish the incoming object's owner.
@@ -168,6 +168,7 @@ func ambiguous_transfer() -> u8 { return 41u8; }
 func duplicate_transfer_signature() -> u8 { return 42u8; }
 export func unsupported_transfer_signature() -> u8 { return 43u8; }
 export func unproved_transfer_owner() -> u8 { return 44u8; }
+export func unsupported_imported_call() -> u8 { return 45u8; }
 
 export func unreachable_case_item() -> u8 { return 1u8; }
 export func misses_case_arm() -> u8 { return 0u8; }
@@ -959,8 +960,11 @@ func check_direct_call(nodes:const ExprNodes in N, names:const NameBindings in B
                        owners:CallOwners in O, at:u64, used:u64) -> u8
     where {const owner N, const owner B, const owner L, const owner E, owner F, owner O} {
     val callee <- nodes[at].left;
-    if (names[callee].kind == ordinary_selection())
-        return check_text_intrinsic(nodes, links, facts, at, selected[names[callee].declaration].kind);
+    if (names[callee].kind == ordinary_selection()) {
+        val site <- names[callee].declaration;
+        if (selected[site].kind == callable_export()) return check_imported_call(nodes, names, links, facts, at, used);
+        return check_text_intrinsic(nodes, links, facts, at, selected[site].kind);
+    };
     if (names[callee].kind != callable_binding()) return unproved_call_target();
     val definition <- names[callee].declaration;
     if (links[definition].next_method != no_node()) return unsupported_transfer_signature();
@@ -988,6 +992,132 @@ func check_direct_call(nodes:const ExprNodes in N, names:const NameBindings in B
         argument <- links[argument].next;
     };
     return invalid_operand_tree();
+}
+
+func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                         facts:OperandFacts in F, at:u64, used:u64) -> u8
+    where {const owner N, const owner B, const owner L, owner F} {
+    if (links[at].imported_function == no_node()) return unsupported_imported_call();
+    if (links[at].imported_procedure != 0u8 && is_function(nodes, enclosing_callable(nodes, names, names[at].scope)))
+        return procedure_call_in_function();
+    val argument <- first_item(nodes, nodes[at].right);
+    val kind <- 0u8;
+    val diagnostic <- 0u8;
+    for (unused in 0u64 .. used) {
+        if (argument == no_node()) {
+            set_result(facts, at, links[at].imported_kind);
+            return 0u8;
+        };
+        if (checked_ref_argument(nodes, argument)) return checked_selection_requires_ref();
+        kind <- links[argument].imported_kind;
+        diagnostic <- require_typed_bits(nodes, facts, nodes[argument].right, kind);
+        if (diagnostic != 0u8) return diagnostic;
+        set_fact(facts, argument, kind, independent_value(), no_node(), 0u64, 0u8);
+        argument <- links[argument].next;
+    };
+    return invalid_operand_tree();
+}
+
+func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contracts:const ModuleInterfaces in I,
+                        at:u64, header:u64) -> bool where {const owner N, owner L, const owner I} {
+    val argument <- first_item(nodes, nodes[at].right);
+    for (index in 0u64 .. contracts[header].entry_count) {
+        if (argument == no_node()) return false;
+        links[argument].imported_kind <- contracts[header + 1u64 + index].value_kind;
+        argument <- links[argument].next;
+    };
+    return argument == no_node();
+}
+
+export func prepare_imported_calls(nodes:const ExprNodes in N, names:const NameBindings in B,
+                                  selected:const SelectedExports in E, links:NameWork in L,
+                                  contracts:const ModuleInterfaces in I, used:u64, report:OperandCheckResult in R) -> bool
+    where {const owner N, const owner B, const owner E, owner L, const owner I, owner R} {
+    val callee <- no_node();
+    val site <- no_node();
+    val header <- no_node();
+    for (at in 0u64 .. used) {
+        if (nodes[at].kind == call_node()) {
+            callee <- nodes[at].left;
+            if (names[callee].kind == ordinary_selection()) {
+                site <- names[callee].declaration;
+                if (selected[site].kind == callable_export() && selected[site].shape == ordinary_callable_shape()) {
+                    header <- find_interface(contracts, selected[site].origin_module, selected[site].identity);
+                    if (header != no_node() && contracts[header].native_function != no_node()) {
+                        if (!bind_imported_call(nodes, links, contracts, at, header))
+                            return operand_problem(report, at, wrong_argument_count());
+                        links[at].imported_function <- contracts[header].native_function;
+                        links[at].imported_kind <- contracts[header].result_kind;
+                        (links[at].imported_procedure <- contracts[header].native_procedure):void;
+                    };
+                };
+            };
+        };
+    };
+    return true;
+}
+
+func native_scalar(kind:u8) -> bool { return scalar_kind(kind) && kind != scalar_enum(); }
+
+func native_callable_arity(nodes:const ExprNodes in N, links:const NameWork in L,
+                           facts:const OperandFacts in F, definition:u64) -> u64
+    where {const owner N, const owner L, const owner F} {
+    val kind <- facts[definition].kind;
+    if (!native_scalar(kind) && kind != void_result()) return no_node();
+    val head <- callable_head(nodes, definition);
+    val clause <- links[head].next;
+    for (unused in 0u64 .. definition) {
+        if (clause == no_node()) return scalar_parameter_count(nodes, links, facts, head);
+        if (nodes[clause].kind == throws_clause_node()) return no_node();
+        clause <- links[clause].next;
+    };
+    return no_node();
+}
+
+func scalar_parameter_count(nodes:const ExprNodes in N, links:const NameWork in L,
+                            facts:const OperandFacts in F, head:u64) -> u64
+    where {const owner N, const owner L, const owner F} {
+    val formal <- first_item(nodes, nodes[head].right);
+    val count <- 0u64;
+    val mode <- 0u8;
+    for (unused in 0u64 .. head + 1u64) {
+        if (formal == no_node()) return count;
+        mode <- nodes[formal].kind;
+        if (mode != parameter_node() && mode != val_parameter_node()) return no_node();
+        if (!native_scalar(facts[formal].kind) || facts[formal].reception != local_place()) return no_node();
+        count <- count + 1u64;
+        formal <- links[formal].next;
+    };
+    return no_node();
+}
+
+export func publish_native_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B,
+                                     links:const NameWork in L, facts:const OperandFacts in F, used:u64,
+                                     module_id:u64, base:u64, contracts:ModuleInterfaces in I) -> u64
+    where {const owner N, const owner B, const owner L, const owner F, owner I} {
+    val count <- 0u64;
+    val arity <- no_node();
+    val formal <- no_node();
+    for (at in 0u64 .. used) {
+        if (nodes[at].kind == callable_node() && names[at].declaration == at && links[at].next_method == no_node()) {
+            arity <- native_callable_arity(nodes, links, facts, at);
+            if (arity != no_node()) {
+                if (arity + 1u64 > intrinsic (len)(contracts) - count) return no_node();
+                write_interface_header(contracts[count], module_id, at, callable_binding(), facts[at].kind, arity);
+                contracts[count].native_function <- base + at;
+                contracts[count].native_procedure <- if (is_function(nodes, at)) { 0u8 } else { 1u8 };
+                count <- count + 1u64;
+                formal <- first_item(nodes, nodes[callable_head(nodes, at)].right);
+                for (parameter in 0u64 .. arity) {
+                    write_interface_header(contracts[count], 0u64, 0u64, 0u8, 0u8, 0u64);
+                    contracts[count].value_kind <- facts[formal].kind;
+                    count <- count + 1u64;
+                    (formal <- links[formal].next):void;
+                };
+            };
+        };
+    };
+    return count;
 }
 
 func check_symbolic_call(nodes:const ExprNodes in N, names:const NameBindings in B,

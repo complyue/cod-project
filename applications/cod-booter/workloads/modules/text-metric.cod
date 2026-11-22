@@ -1,0 +1,9 @@
+using "std:text-storage" utf8_size;
+
+func prefix_size() -> u64 {
+    return utf8_size("éλ🚀");
+}
+
+export func measured_size(extra:u64) -> u64 {
+    return prefix_size() + extra;
+}

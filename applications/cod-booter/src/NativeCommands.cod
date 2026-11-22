@@ -18,6 +18,7 @@ export array NativeCommands[u64]:NativeCommand;
 export data NativePlan {
     used:u64;
     functions:u64;
+    function_base:u64;
     labels:u64;
     slots:u64;
     diagnostic:u8;

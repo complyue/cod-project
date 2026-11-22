@@ -42,6 +42,8 @@ export data ModuleInterfaceRow {
     name_first:u64;
     name_past:u64;
     enum_code:u64;
+    native_function:u64;
+    native_procedure:u8;
 }
 export array ModuleInterfaces[u64]:ModuleInterfaceRow;
 
@@ -65,7 +67,9 @@ export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:
     row.failure_identity <- 0u64;
     row.name_first <- 0u64;
     row.name_past <- 0u64;
-    (row.enum_code <- 0u64):void;
+    row.enum_code <- 0u64;
+    row.native_function <- no_node();
+    (row.native_procedure <- 0u8):void;
 }
 
 export func find_interface(interfaces:const ModuleInterfaces in I, defining_module:u64, declaration:u64) -> u64
