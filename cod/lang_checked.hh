@@ -2018,10 +2018,9 @@ class ScalarChecker {
       std::set<size_t> reasons;
       TypeEvidenceState state;
       TypeReturned result;
-      bool retained_return = false;
       std::optional<CaseBreakEvidence> case_result = {};
 
-      bool returned() const { return retained_return || reasons.contains(1); }
+      bool returned() const { return reasons.contains(1); }
     };
     // Outcomes of one operation begin with the same source evidence.
     // A handler consumes only the matching reasons from each path.
@@ -8184,17 +8183,17 @@ class ScalarChecker {
     return merge_evidence(std::move(left), right, right_exits && !left_exits);
   }
   static void merge_type_exits(TypeEvidenceExits &flow, std::set<size_t> reasons, const TypeEvidenceState &state,
-                               TypeReturned result = {}, bool retained_return = false,
+                               TypeReturned result = {},
                                std::optional<CaseBreakEvidence> case_result = {}) {
     if (reasons.empty()) return;
     if (result.borrowed) result.borrowed->initialize(state.selections);
     if (result.boolean) result.advance_boolean(state.selections);
     const auto entry = std::ranges::find_if(flow.paths, [&](const auto &path) {
-      return path.reasons == reasons && path.retained_return == retained_return &&
-          path.case_result == case_result && path.result.saved_selection() == result.saved_selection();
+      return path.reasons == reasons && path.case_result == case_result &&
+          path.result.saved_selection() == result.saved_selection();
     });
     if (entry == flow.paths.end()) {
-      flow.paths.push_back({std::move(reasons), state, std::move(result), retained_return, std::move(case_result)});
+      flow.paths.push_back({std::move(reasons), state, std::move(result), std::move(case_result)});
       flow.paths.back().state.exits = nullptr;
     } else {
       entry->state = merge_evidence(std::move(entry->state), state);
@@ -8337,8 +8336,8 @@ class ScalarChecker {
     return outcomes;
   }
   static void register_type_defer(TypeEvidenceState &state, const Expression &source, const Expression *entry,
-                                  bool may_replace, TypeDeferredEffects effects) {
-    if (source.repeated_defer_registration) note_type_allocation(state);
+                                  bool may_replace, TypeDeferredEffects effects, bool registration_recorded = false) {
+    if (source.repeated_defer_registration && !registration_recorded) note_type_allocation(state);
     state.has_deferred_action = true;
     state.selections.deferred_writes.merge(effects.payloads);
     state.selections.deferred_writes.unknown |= !effects.outcomes.empty() && effects.opaque;
@@ -9044,7 +9043,7 @@ class ScalarChecker {
     return selected;
   }
   static void forward_type_exit(TypeEvidenceExits &outgoing, TypeEvidenceExits::Path &path) {
-    merge_type_exits(outgoing, std::move(path.reasons), path.state, std::move(path.result), path.retained_return, path.case_result);
+    merge_type_exits(outgoing, std::move(path.reasons), path.state, std::move(path.result), path.case_result);
   }
   static void observe_type_return(TypeEvidenceState &state, const TypeReturned *result) {
     state.observed_return.present = result != nullptr;
@@ -9052,7 +9051,7 @@ class ScalarChecker {
         std::optional{result->borrowed->observe(state.selections)} : std::nullopt;
   }
   std::optional<Type> complete_type_finalizer(const Expression &handler, TypeEvidenceExits::Path &pending,
-                                              TypeEvidenceExits &outgoing, CleanupBoundary boundary) const {
+                                              TypeEvidenceExits &outgoing) const {
     TypeEvidenceExits exits{{}, outgoing.case_control};
     const auto inherited = pending.state.observed_return;
     if (pending.returned() && handler.inspects_return()) observe_type_return(pending.state, &pending.result);
@@ -9062,10 +9061,6 @@ class ScalarChecker {
     pending.state.observed_return = inherited;
     for (auto &path : exits.paths) {
       path.state.observed_return = inherited;
-      if (boundary == CleanupBoundary::deferred && !path.returned() && pending.returned()) {
-        path.retained_return = true;
-        path.result = pending.result;
-      }
       forward_type_exit(outgoing, path);
     }
     return pending.state.selections.initialization_reachable ? type : std::optional<Type>{Type::never};
@@ -9077,19 +9072,24 @@ class ScalarChecker {
     enter_type_defer(state);
     observe_type_return(state, pending);
     state.exits = &incoming;
+    const auto &body = entry.kind == K::block ? entry : *entry.children.front();
     if (pending_error)
       merge_type_exits(incoming, {pending_error}, state);
-    else if (type_evidence(*entry.children.front(), state, false, nullptr, nullptr,
+    else if (type_evidence(body, state, false, nullptr, nullptr,
                            ExpectedTypeUse::materialization, true, EvidenceRead::discarded) != Type::never &&
              state.selections.initialization_reachable)
       merge_type_exits(outgoing, {0}, state);
 
+    if (entry.kind == K::block) {
+      for (auto &path : incoming.paths) forward_type_exit(outgoing, path);
+      return outgoing;
+    }
     const Expression *finalizer = nullptr;
     std::set<size_t> handled;
     for (size_t i = 1; i < entry.children.size(); ++i) {
       const auto &handler = *entry.children[i];
       if (handler.kind == K::block) {
-        finalizer = &handler;
+        if (!entry.deferred_catch()) finalizer = &handler;
         break;
       }
       const auto type = handler.annotation ? evidence_annotation(*handler.annotation, state) : exception_type(0);
@@ -9112,8 +9112,7 @@ class ScalarChecker {
 
     TypeEvidenceExits completed;
     for (auto &path : outgoing.paths)
-      if (complete_type_finalizer(*finalizer, path, completed,
-          entry.deferred_catch() ? CleanupBoundary::deferred : CleanupBoundary::ordinary_finally) != Type::never)
+      if (complete_type_finalizer(*finalizer, path, completed) != Type::never)
         forward_type_exit(completed, path);
     return completed;
   }
@@ -9297,17 +9296,22 @@ class ScalarChecker {
       invocation.prepared_call.reset();
       invocation.deferred = nullptr;
       // The declaration supplies names. The queue supplies the live values.
-      const bool receives = deferred_error > Completion::exception_base && action.entry->deferred_catch();
+      const bool receives = deferred_error > Completion::exception_base && action.entry->deferred_catch() &&
+          std::ranges::any_of(std::span{action.entry->children}.subspan(1), [&](const auto &clause) {
+            if (clause->kind != Expression::Kind::handler) return false;
+            const auto type = clause->annotation ? evidence_annotation(*clause->annotation, invocation) : exception_type(0);
+            return matches_failure(program_.exception_types, Completion{deferred_error}.category(), type.identity);
+          });
       auto completed = replay_type_defer(*action.entry, std::move(invocation), receives ? deferred_error : 0, returned ? &result : nullptr);
       for (auto &path : completed.paths) {
         const bool replacement = path.returned();
         const auto &proof = replacement ? path.result : result;
         if (!guards_errors) enqueue(action.earlier, replacement || returned, 0, 0, std::move(path.state), proof);
         else for (const auto reason : path.reasons) {
-          const bool preserves = reason == 0 && !receives;
+          const bool preserves = !Completion{reason}.failed() && !receives;
           const auto retained_body = replacement || (reason && !Completion{reason}.failed()) ? 0 : body_exit;
           enqueue(action.earlier, replacement || returned, retained_body,
-                  reason >= 2 ? reason : preserves ? deferred_error : 0, path.state, proof);
+                  preserves && deferred_error ? deferred_error : reason >= 2 ? reason : 0, path.state, proof);
         }
       }
     }
@@ -12019,7 +12023,7 @@ class ScalarChecker {
         std::optional<CaseProjectionEvidence> projection;
         if (state.required && view.view == true)
           projection = case_projection_evidence(*expr.children.front(), view, state.target, state);
-        merge_type_exits(*state.exits, {Completion::case_break}, state, std::move(prepared), false,
+        merge_type_exits(*state.exits, {Completion::case_break}, state, std::move(prepared),
                          CaseBreakEvidence{type, view, projection});
       }
       return Type::never;
@@ -12128,42 +12132,53 @@ class ScalarChecker {
           register_type_defer(state, expr, nullptr, false, std::move(effects));
           return Type::void_type;
         }
-        auto delayed = state;
-        delayed.abstract_symbol_targets.clear();
-        delayed.initialization = TypeEvidenceState::InitializationCheck::suppressed;
-        TypeEvidenceExits delayed_exits;
-        delayed.exits = state.selections.tracking ? &delayed_exits : nullptr;
-        delayed.deferred = nullptr;
-        delayed.selections.forget();
-        delayed.selections.payload_writes = {};
-        delayed.selections.deferred_writes = {};
-        delayed.selections.deferred_return = false;
-        enter_type_defer(delayed);
-        const auto delayed_entry = delayed.selections.writes;
-        bool may_replace = false;
-        TypeDeferredEffects effects;
-        const auto include_writes = [&](const TypeEvidenceState &path) {
-          effects.payloads.merge(path.selections.payload_writes);
-          effects.payloads.merge(path.selections.deferred_writes);
-          effects.opaque |= path.selections.writes != delayed_entry;
-          may_replace |= path.selections.deferred_return;
+        const auto record = [&](const Expression *finalizer, bool registration_recorded) {
+          auto delayed = state;
+          delayed.abstract_symbol_targets.clear();
+          delayed.initialization = TypeEvidenceState::InitializationCheck::suppressed;
+          TypeEvidenceExits delayed_exits;
+          delayed.exits = state.selections.tracking ? &delayed_exits : nullptr;
+          delayed.deferred = nullptr;
+          delayed.selections.forget();
+          delayed.selections.payload_writes = {};
+          delayed.selections.deferred_writes = {};
+          delayed.selections.deferred_return = false;
+          enter_type_defer(delayed);
+          const auto delayed_entry = delayed.selections.writes;
+          bool may_replace = false;
+          TypeDeferredEffects effects;
+          const auto include_writes = [&](const TypeEvidenceState &path) {
+            effects.payloads.merge(path.selections.payload_writes);
+            effects.payloads.merge(path.selections.deferred_writes);
+            effects.opaque |= path.selections.writes != delayed_entry;
+            may_replace |= path.selections.deferred_return;
+          };
+          if (finalizer) type_evidence(*finalizer, delayed);
+          else {
+            type_evidence(action, delayed);
+            std::set<size_t> handled;
+            for (size_t i = 1; i < expr.children.size(); ++i) {
+              const auto &handler = *expr.children[i];
+              if (handler.kind == K::block) {
+                if (!expr.deferred_catch()) type_evidence(handler, delayed);
+                break;
+              }
+              auto caught = catch_evidence(handler, delayed, handled);
+              type_evidence(*handler.children.front(), caught);
+              include_writes(caught);
+            }
+          }
+          include_writes(delayed);
+          for (const auto &path : delayed_exits.paths) {
+            include_writes(path.state);
+            may_replace |= path.returned();
+          }
+          const auto *entry = finalizer ? finalizer : expr.deferred_catch() && !state.tracks_target_places() ? nullptr : &expr;
+          register_type_defer(state, expr, entry, may_replace, std::move(effects), registration_recorded);
         };
-        type_evidence(action, delayed);
-        std::set<size_t> handled;
-        for (size_t i = 1; i < expr.children.size(); ++i) {
-          const auto &handler = *expr.children[i];
-          if (handler.kind == K::block) { type_evidence(handler, delayed); continue; }
-          auto caught = catch_evidence(handler, delayed, handled);
-          type_evidence(*handler.children.front(), caught);
-          include_writes(caught);
-        }
-        include_writes(delayed);
-        for (const auto &path : delayed_exits.paths) {
-          include_writes(path.state);
-          may_replace |= path.returned();
-        }
-        register_type_defer(state, expr, expr.deferred_catch() && !state.tracks_target_places() ? nullptr : &expr,
-                            may_replace, std::move(effects));
+        const auto *finalizer = expr.deferred_finalizer();
+        if (finalizer) record(finalizer, false);
+        record(nullptr, finalizer != nullptr);
         return Type::void_type;
       }
       if (!state.returns || expr.children.front()->kind != K::block) {
@@ -12282,12 +12297,12 @@ class ScalarChecker {
         if (project_paths) {
           if (result != Type::never) {
             TypeEvidenceExits::Path normal{{0}, std::move(state), {}};
-            if (complete_type_finalizer(*finalizer, normal, *outer, CleanupBoundary::ordinary_finally) == Type::never)
+            if (complete_type_finalizer(*finalizer, normal, *outer) == Type::never)
               result = Type::never;
             state = std::move(normal.state);
           } else state = std::move(entry);
           for (auto &path : outgoing.paths)
-            if (complete_type_finalizer(*finalizer, path, *outer, CleanupBoundary::ordinary_finally) != Type::never)
+            if (complete_type_finalizer(*finalizer, path, *outer) != Type::never)
               forward_type_exit(*outer, path);
         } else if (finalizer_entry) {
           if (cleanup == Type::never || result == Type::never) state = std::move(*finalizer_entry);
@@ -16310,7 +16325,10 @@ class ScalarChecker {
     const Expression *finalizer = nullptr;
     for (size_t i = 1; i < expr.children.size(); ++i) {
       const auto &handler = *expr.children[i];
-      if (handler.kind == Expression::Kind::block) { finalizer = &handler; break; }
+      if (handler.kind == Expression::Kind::block) {
+        if (!expr.deferred_catch()) finalizer = &handler;
+        break;
+      }
       program_.exception_values = true;
       const auto type = handler.annotation ? resolve_annotation(*handler.annotation, instance) : exception_type(0);
       check_catch_category(type, handled, handler);
@@ -16532,12 +16550,11 @@ class ScalarChecker {
       };
 
       for (const auto &replacement : final_exits.paths) {
-        const bool retain = expr.deferred_catch() && replacement.completion.reason != 1;
         using Outcome = std::tuple<size_t, bool, bool>;
         std::map<Outcome, LexicalState> outcomes;
         for (const auto &entry : pending) {
-          if (!resume(entry, replacement.state, retain)) continue;
-          const bool returned = replacement.completion.returned || (retain && entry.returned());
+          if (!resume(entry, replacement.state, false)) continue;
+          const bool returned = replacement.completion.returned;
           const bool carries_transfer = entry.abrupt && checking_method_ && checking_method_->here_inputs() &&
               (entry.abrupt->completion.protected_here() || entry.abrupt->receiver_transfer_pending);
           const bool displaced = carries_transfer && replacement.completion.failed();
@@ -18998,6 +19015,9 @@ class ScalarChecker {
     case K::deferred: {
       const auto action = cleanup_.action();
       CleanupEquations::Action summary;
+      const auto *finalizer = expr.deferred_finalizer();
+      std::optional<size_t> finalizer_action;
+      CleanupEquations::Action finalizer_summary;
       if (expr.children.front()->kind == K::block) {
         const auto before = lexical_;
         // Delayed bodies contribute effects to the cleanup sequence. Writes
@@ -19032,63 +19052,79 @@ class ScalarChecker {
         lexical_.exception_conditions.clear();
         lexical_.uninitialized.clear();
         lexical_.predicate_conditions = {CleanupEquations::ConditionFacts{}};
-        const auto boolean_entry = incoming_booleans(action);
-        for (const auto &[place, value] : boolean_entry) lexical_.predicates[place] = boolean_predicate(value);
-        lexical_.payload_writes.clear();
-        const auto incoming = incoming_payloads(action);
-        lexical_.exceptions = incoming;
-        summary.observes_return = expr.inspects_return();
-        return_inputs_ = {{}, {0}};
-        lexical_.inputs = {0};
-        if (summary.observes_return) {
-          lexical_.inputs.insert(cleanup_.deferred_return_offset());
-          return_inputs_.present.insert(cleanup_.deferred_return_offset());
-          if (instance && instance->result.borrowed())
-            return_inputs_.borrowed_selection = CleanupEquations::Targets{{}, {}, {CleanupEquations::pending_return_selection}};
-        }
-        lexical_.selections = {};
-        lexical_.input_facts = {{0, {lexical_.initialized, {}, incoming, {{cleanup_scope_, 0}}, lexical_.present}}};
-        if (summary.observes_return)
-          lexical_.input_facts.emplace(cleanup_.deferred_return_offset(), lexical_.input_facts.at(0));
-        lexical_.requirements.clear();
-        lexical_.returned = {};
-        lexical_.live = true;
-        AbruptFlow flow{lexical_.scopes.size(), {}};
-        abrupt_ = &flow;
-        const auto completed = expr.children.size() > 1
-            ? check_guarded(expr, instance, operations, true, true, nullptr, action).type : child(0, true, true);
-        if (completed != Type::never && lexical_.live) flow.paths.push_back({lexical_, {}, expr.at, {0, false}});
-        for (const auto &path : flow.paths) {
-          for (const auto input : path.state.inputs) {
-            const auto queue = path.state.input_facts.at(input).queues.at(cleanup_scope_);
-            auto effects = cleanup_.preserve_pending(CleanupEquations::Effects{{}, path.state.input_facts.at(input).initialized,
-                path.state.returned, path.state.input_facts.at(input).selections});
-            effects.action_reaching = CleanupEquations::boolean_conditions(path_conditions(path.state));
-            for (const auto place : path.state.available) if (!effects.initialized.contains(place)) {
-              auto missing = missing_initialization(path.state, place);
-              if (missing != CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}})
-                effects.uninitialized.emplace(place, std::move(missing));
-            }
-            effects.symbols = path.state.required_symbols;
-            effects.payload_writes = path.state.payload_writes;
-            effects.present = path.state.input_facts.at(input).present;
-            effects.declared_failures = flow.declared;
-            for (const auto place : path.state.payload_writes) if (boolean_entry.contains(place)) {
-              const auto proof = path.state.predicates.find(place);
-              effects.booleans[place] = snapshot_boolean(proof == path.state.predicates.end() ? nullptr : proof->second, path.state, expr.at);
-            }
-            effects.returned.initialize(effects.initialized, effects.selections);
-            for (const auto &[target, value] : payload_changes(incoming, path.state.input_facts.at(input).exceptions))
-              if (incoming.contains(target)) effects.payloads.emplace(target, value);
-            for (const auto &[read, requirement] : path.state.requirements) if (requirement.inputs.contains(input))
-              effects.reads.emplace(read, requirement.before);
-            if (path.exceptions.empty()) summary.paths.push_back({input, path.completion, queue, effects});
-            else for (const auto category : path.exceptions.possibilities()) {
-              auto failed = effects;
-              failed.thrown = path.exceptions.restricted({category});
-              summary.paths.push_back({input, Completion::failure(category, path.completion.returned), queue, std::move(failed)});
+        const auto phase_entry = lexical_;
+        const auto summarize = [&](size_t phase, const Expression &source, CleanupEquations::Action &result,
+                                   const auto &emit) {
+          lexical_ = phase_entry;
+          deferred_action_ = phase;
+          const auto boolean_entry = incoming_booleans(phase);
+          for (const auto &[place, value] : boolean_entry) lexical_.predicates[place] = boolean_predicate(value);
+          lexical_.payload_writes.clear();
+          const auto incoming = incoming_payloads(phase);
+          lexical_.exceptions = incoming;
+          result.observes_return = source.inspects_return();
+          return_inputs_ = {{}, {0}};
+          lexical_.inputs = {0};
+          if (result.observes_return) {
+            lexical_.inputs.insert(cleanup_.deferred_return_offset());
+            return_inputs_.present.insert(cleanup_.deferred_return_offset());
+            if (instance && instance->result.borrowed())
+              return_inputs_.borrowed_selection = CleanupEquations::Targets{{}, {}, {CleanupEquations::pending_return_selection}};
+          }
+          lexical_.selections = {};
+          lexical_.input_facts = {{0, {lexical_.initialized, {}, incoming, {{cleanup_scope_, 0}}, lexical_.present}}};
+          if (result.observes_return)
+            lexical_.input_facts.emplace(cleanup_.deferred_return_offset(), lexical_.input_facts.at(0));
+          lexical_.requirements.clear();
+          lexical_.returned = {};
+          lexical_.live = true;
+          AbruptFlow flow{lexical_.scopes.size(), {}};
+          abrupt_ = &flow;
+          const auto completed = emit();
+          if (completed != Type::never && lexical_.live) flow.paths.push_back({lexical_, {}, source.at, {0, false}});
+          for (const auto &path : flow.paths) {
+            for (const auto input : path.state.inputs) {
+              const auto queue = path.state.input_facts.at(input).queues.at(cleanup_scope_);
+              auto effects = cleanup_.preserve_pending(CleanupEquations::Effects{{}, path.state.input_facts.at(input).initialized,
+                  path.state.returned, path.state.input_facts.at(input).selections});
+              effects.action_reaching = CleanupEquations::boolean_conditions(path_conditions(path.state));
+              for (const auto place : path.state.available) if (!effects.initialized.contains(place)) {
+                auto missing = missing_initialization(path.state, place);
+                if (missing != CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}})
+                  effects.uninitialized.emplace(place, std::move(missing));
+              }
+              effects.symbols = path.state.required_symbols;
+              effects.payload_writes = path.state.payload_writes;
+              effects.present = path.state.input_facts.at(input).present;
+              effects.declared_failures = flow.declared;
+              for (const auto place : path.state.payload_writes) if (boolean_entry.contains(place)) {
+                const auto proof = path.state.predicates.find(place);
+                effects.booleans[place] = snapshot_boolean(proof == path.state.predicates.end() ? nullptr : proof->second, path.state, source.at);
+              }
+              effects.returned.initialize(effects.initialized, effects.selections);
+              for (const auto &[target, value] : payload_changes(incoming, path.state.input_facts.at(input).exceptions))
+                if (incoming.contains(target)) effects.payloads.emplace(target, value);
+              for (const auto &[read, requirement] : path.state.requirements) if (requirement.inputs.contains(input))
+                effects.reads.emplace(read, requirement.before);
+              if (path.exceptions.empty()) result.paths.push_back({input, path.completion, queue, effects});
+              else for (const auto category : path.exceptions.possibilities()) {
+                auto failed = effects;
+                failed.thrown = path.exceptions.restricted({category});
+                result.paths.push_back({input, Completion::failure(category, path.completion.returned), queue, std::move(failed)});
+              }
             }
           }
+          abrupt_ = outer;
+        };
+        summarize(action, expr, summary, [&] {
+          return expr.children.size() > 1
+              ? check_guarded(expr, instance, operations, true, true, nullptr, action).type : child(0, true, true);
+        });
+        if (finalizer) {
+          finalizer_action = cleanup_.action();
+          summarize(*finalizer_action, *finalizer, finalizer_summary, [&] {
+            return check(*finalizer, instance, operations, true, true);
+          });
         }
         lexical_ = before;
         active_loops_ = std::move(registering_loops);
@@ -19118,24 +19154,28 @@ class ScalarChecker {
           }
         } else summary.paths.push_back({0, {0, false}, 0, cleanup_.preserve_pending({})});
       }
-      // A deferred lookup runs after every later native installation in this
-      // cleanup queue has restored its preceding binding.
-      for (auto &path : summary.paths) std::erase_if(path.effects.symbols, [&](size_t symbol) {
-        if (program_.symbols[symbol].reference && validating_)
-          implementation_gap(expr.at, "deferred lookup of a borrowed symbol");
-        const auto &type = program_.symbols[symbol].type;
-        if (!type || type->kind != Type::native_handle) return false;
-        require_symbol(lexical_, symbol, expr.at);
-        CheckedOperation loan;
-        loan.owners = {native_symbol_owner(lexical_, symbol)};
-        require_borrow_lifetime(loan, expr.at, true);
-        return true;
-      });
-      if (proving_ && validating_ && std::ranges::any_of(summary.paths, [&](const auto &path) {
-            return owned_failure(path.completion) && std::ranges::any_of(path.effects.thrown.terms, [&](const auto &term) {
-              return term.first.kind != ExceptionFacts::Origin::Kind::arrival || term.first.action != action;
-            });
-          })) implementation_gap(expr.at, "escaping owned exceptions from deferred actions require independent failure delivery");
+      const auto validate_phase = [&](size_t phase, CleanupEquations::Action &part) {
+        // A deferred lookup runs after every later native installation in this
+        // cleanup queue has restored its preceding binding.
+        for (auto &path : part.paths) std::erase_if(path.effects.symbols, [&](size_t symbol) {
+          if (program_.symbols[symbol].reference && validating_)
+            implementation_gap(expr.at, "deferred lookup of a borrowed symbol");
+          const auto &type = program_.symbols[symbol].type;
+          if (!type || type->kind != Type::native_handle) return false;
+          require_symbol(lexical_, symbol, expr.at);
+          CheckedOperation loan;
+          loan.owners = {native_symbol_owner(lexical_, symbol)};
+          require_borrow_lifetime(loan, expr.at, true);
+          return true;
+        });
+        if (proving_ && validating_ && std::ranges::any_of(part.paths, [&](const auto &path) {
+              return owned_failure(path.completion) && std::ranges::any_of(path.effects.thrown.terms, [&](const auto &term) {
+                return term.first.kind != ExceptionFacts::Origin::Kind::arrival || term.first.action != phase;
+              });
+            })) implementation_gap(expr.at, "escaping owned exceptions from deferred actions require independent failure delivery");
+      };
+      validate_phase(action, summary);
+      if (finalizer_action) validate_phase(*finalizer_action, finalizer_summary);
       summary.bodyless_catch = expr.deferred_catch();
       if (summary.bodyless_catch) for (const auto &clause : std::span{expr.children}.subspan(1)) {
         if (clause->kind != K::handler) break;
@@ -19143,19 +19183,24 @@ class ScalarChecker {
         summary.catches_root |= !type.identity;
         summary.catches.merge(exception_possibilities(type));
       }
-      const bool writes_storage = std::ranges::any_of(summary.paths, [](const auto &path) {
-        return !path.effects.payload_writes.empty() &&
-            (!path.effects.initialized.empty() || !path.effects.uninitialized.empty());
-      });
+      const auto writes_storage = [](const CleanupEquations::Action &part) {
+        return std::ranges::any_of(part.paths, [](const auto &path) {
+          return !path.effects.payload_writes.empty() &&
+              (!path.effects.initialized.empty() || !path.effects.uninitialized.empty());
+        });
+      };
+      const bool writes = writes_storage(summary) || writes_storage(finalizer_summary);
       cleanup_.define(action, std::move(summary));
+      if (finalizer_action) cleanup_.define(*finalizer_action, std::move(finalizer_summary));
       if (expr.repeated_defer_registration) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       if (lexical_.live) {
         const auto reaching = CleanupEquations::stable_input_conditions(path_conditions(lexical_));
         // When only the present arm registers a writer, the missing write
         // on the other arm is conditional on the corresponding entry value.
-        if (writes_storage) cleanup_.observe_input_conditions(reaching, false);
+        if (writes) cleanup_.observe_input_conditions(reaching, false);
         for (const auto input : lexical_.inputs) {
           auto &queue = lexical_.input_facts.at(input).queues.at(cleanup_scope_);
+          if (finalizer_action) queue = cleanup_.push(queue, *finalizer_action, reaching);
           queue = cleanup_.push(queue, action, reaching);
         }
       }
