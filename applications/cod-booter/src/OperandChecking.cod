@@ -19,7 +19,7 @@ using "ParserStorage.cod" {
 };
 using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" {
-    NameBindings, NameWork, first_item, callable_head, enclosing_callable, builtin_u64,
+    NameBindings, NameWork, first_item, callable_head, signature_clause, enclosing_callable, builtin_u64,
     builtin_void, builtin_bool, ordinary_selection, symbolic_selection, callable_binding,
     formal_binding, local_binding, loop_index, exception_binding, find_enum_member,
     record_type, find_record_field, has_exception_parent, builtin_string, builtin_c_string, builtin_u8, owner_binding,
@@ -1087,6 +1087,8 @@ func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contrac
     links[at].imported_procedure <- contracts[header].native_procedure;
     links[at].imported_target_readonly <- contracts[header].target_readonly;
     links[at].imported_owner_argument <- argument_at_position(links, first, contracts[header].owner_role);
+    links[at].imported_failure <- contracts[header].failure_identity;
+    links[at].imported_failure_checked <- contracts[header].failure_checked;
     return true;
 }
 
@@ -1140,13 +1142,7 @@ func native_callable_arity(nodes:const ExprNodes in N, links:const NameWork in L
     } else {
         if (!native_scalar(kind) && kind != void_result()) return no_node();
     };
-    val clause <- links[head].next;
-    for (unused in 0u64 .. definition) {
-        if (clause == no_node()) return native_parameter_count(nodes, links, facts, head);
-        if (nodes[clause].kind == throws_clause_node()) return no_node();
-        clause <- links[clause].next;
-    };
-    return no_node();
+    return native_parameter_count(nodes, links, facts, head);
 }
 
 func native_parameter_count(nodes:const ExprNodes in N, links:const NameWork in L,
@@ -1183,6 +1179,7 @@ export func publish_native_interfaces(nodes:const ExprNodes in N, names:const Na
     val arity <- no_node();
     val formal <- no_node();
     val first <- no_node();
+    val failure <- no_node();
     for (at in 0u64 .. used) {
         if (nodes[at].kind == callable_node() && names[at].declaration == at && links[at].next_method == no_node()) {
             arity <- native_callable_arity(nodes, links, facts, at);
@@ -1191,6 +1188,11 @@ export func publish_native_interfaces(nodes:const ExprNodes in N, names:const Na
                 write_interface_header(contracts[count], module_id, at, callable_binding(), facts[at].kind, arity);
                 contracts[count].native_function <- base + at;
                 contracts[count].native_procedure <- if (is_function(nodes, at)) { 0u8 } else { 1u8 };
+                failure <- signature_clause(nodes, nodes[at].left, throws_clause_node());
+                # The root Exception has an identity of its own. Use an absent
+                # node for an ordinary callable with no declared failure.
+                contracts[count].failure_identity <- if (failure == no_node()) { no_node() } else { (facts[failure].identity) };
+                if (failure != no_node()) { (contracts[count].failure_checked <- facts[failure].checked_exception):void; };
                 first <- first_item(nodes, nodes[callable_head(nodes, at)].right);
                 if (facts[at].reception == borrowed_ref()) {
                     contracts[count].target_readonly <- facts[at].target_readonly;
