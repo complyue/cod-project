@@ -3313,20 +3313,44 @@ class ScalarChecker {
     if (conditions == CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}}) return proof;
     return constrain_predicate(proof, CleanupEquations::BooleanValue{{false, conditions}, {true, conditions}});
   }
+  template <typename Observe>
+  static void observe_boolean_conditions(const LexicalState &state, const Observe &observe) {
+    for (auto facts : path_conditions(state)) {
+      for (const auto &[binding, targets] : state.targets) if (!targets.empty()) {
+        if (!targets.contains(null_target)) facts.bindings.emplace(binding, state.target_versions.at(binding));
+        else if (targets.size() == 1) facts.absent_bindings.emplace(binding, state.target_versions.at(binding));
+      }
+      observe(std::move(facts));
+    }
+  }
   CleanupEquations::BooleanValue snapshot_boolean(const std::shared_ptr<const CheckedOperation::Predicate> &proof,
       const LexicalState &state, const Location &at) {
-    const auto before = lexical_, input = state;
+    if (!state.live) return {};
     CleanupEquations::BooleanValue value;
+    if (!proof || (proof->results.empty() && !proof->complete_results)) {
+      using Kind = CheckedOperation::Predicate::Kind;
+      const auto kind = proof ? proof->kind : Kind::presence;
+      if (kind == Kind::abrupt) return {};
+      const bool admits_false = kind == Kind::presence || kind == Kind::constant_false;
+      const bool admits_true = kind == Kind::presence || kind == Kind::constant_true;
+      if (admits_false || admits_true) {
+        const bool result = !admits_false;
+        observe_boolean_conditions(state, [&](CleanupEquations::ConditionFacts facts) {
+          CleanupEquations::add_condition(value[result], std::move(facts));
+        });
+        // Two unrefined outcomes have identical evidence. Preserve an
+        // absent outcome key and an observed key with no surviving clauses.
+        if (admits_false && admits_true && value.contains(false)) value.emplace(true, value.at(false));
+        return value;
+      }
+    }
+    const auto before = lexical_, input = state;
     for (const bool result : {false, true}) {
       lexical_ = input;
       predicate_paths(proof, result, at, [&] {
-        for (auto facts : path_conditions(lexical_)) {
-          for (const auto &[binding, targets] : lexical_.targets) if (!targets.empty()) {
-            if (!targets.contains(null_target)) facts.bindings.emplace(binding, lexical_.target_versions.at(binding));
-            else if (targets.size() == 1) facts.absent_bindings.emplace(binding, lexical_.target_versions.at(binding));
-          }
+        observe_boolean_conditions(lexical_, [&](CleanupEquations::ConditionFacts facts) {
           CleanupEquations::add_condition(value[result], std::move(facts));
-        }
+        });
       });
     }
     lexical_ = before;
