@@ -60,6 +60,11 @@ export func bind_local() -> u8 { return 27u8; }
 export func use_local() -> u8 { return 28u8; }
 export func local_binding_fact(opcode:u8) -> bool { return opcode >= unbind_local() && opcode <= use_local(); }
 
+# A lexical product reserves contiguous backing in its activation. Projection
+# uses the layout's word offset relative to an already selected address.
+export func allocate_words() -> u8 { return 29u8; }
+export func offset_address() -> u8 { return 30u8; }
+
 # Internal outcome words. Zero denotes success. Fatal numeric failures
 # bypass language catches and still leave through the activation cleanup.
 export func returned_word() -> u64 { return 0u64; }

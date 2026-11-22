@@ -67,7 +67,6 @@ static const char *unsupported_source_form(uint32_t code) {
     case 35: return "borrowed reference result";
     case 36: return "writable owning exception catch";
     case 37: return "ordinary construction";
-    case 38: return "field selection";
     case 39: return "subscript expression";
     case 40: return "bodyless deferred exception handler";
     case 41: return "lexical callable value";
@@ -267,6 +266,14 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: no such member in the enum\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 29)
         fputs(": error: incompatible enum type\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 30)
+        fputs(": error: product storage form is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 31)
+        fputs(": error: no such field in the product\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 32)
+        fputs(": error: readonly field is initialized more than once\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 33)
+        fputs(": error: product construction is missing a field initializer\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 12)
         fputs(": error: ref argument requires a proven non-null target\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 13)

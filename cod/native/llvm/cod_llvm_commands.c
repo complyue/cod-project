@@ -31,16 +31,19 @@ static inline LLVMValueRef cod_llvm_word(cod_llvm_construction *state, uint64_t 
   return LLVMConstInt(state->word, number, 0);
 }
 
+static inline LLVMValueRef cod_llvm_allocate_words(cod_llvm_construction *state, uint64_t count) {
+  LLVMBuilderRef builder = state->session->builder;
+  LLVMBasicBlockRef current = LLVMGetInsertBlock(builder);
+  LLVMValueRef first = LLVMGetFirstInstruction(state->entry);
+  if (first) LLVMPositionBuilderBefore(builder, first);
+  else LLVMPositionBuilderAtEnd(builder, state->entry);
+  LLVMValueRef address = LLVMBuildArrayAlloca(builder, state->word, cod_llvm_word(state, count), "");
+  LLVMPositionBuilderAtEnd(builder, current);
+  return address;
+}
+
 static inline LLVMValueRef cod_llvm_slot(cod_llvm_construction *state, uint64_t index) {
-  if (!state->slots[index]) {
-    LLVMBuilderRef builder = state->session->builder;
-    LLVMBasicBlockRef current = LLVMGetInsertBlock(builder);
-    LLVMValueRef first = LLVMGetFirstInstruction(state->entry);
-    if (first) LLVMPositionBuilderBefore(builder, first);
-    else LLVMPositionBuilderAtEnd(builder, state->entry);
-    state->slots[index] = LLVMBuildAlloca(builder, state->word, "");
-    LLVMPositionBuilderAtEnd(builder, current);
-  }
+  if (!state->slots[index]) state->slots[index] = cod_llvm_allocate_words(state, 1);
   return state->slots[index];
 }
 
@@ -214,6 +217,18 @@ static inline bool cod_llvm_construct_command(cod_llvm_construction *state, cod_
       if (a >= slots) return false;
       cod_llvm_write_word(state, a, cod_llvm_word(state, b));
       return true;
+    case COD_LLVM_ALLOCATE_WORDS:
+      if (a >= slots || b == 0 || b > PTRDIFF_MAX / sizeof(uint64_t)) return false;
+      cod_llvm_write_word(state, a, LLVMBuildPtrToInt(builder, cod_llvm_allocate_words(state, b), state->word, ""));
+      return true;
+    case COD_LLVM_OFFSET_ADDRESS: {
+      if (a >= slots || b >= slots || c >= PTRDIFF_MAX / sizeof(uint64_t)) return false;
+      LLVMValueRef base = cod_llvm_read_address(state, b);
+      LLVMValueRef offset = cod_llvm_word(state, c);
+      LLVMValueRef address = LLVMBuildGEP2(builder, state->word, base, &offset, 1, "");
+      cod_llvm_write_word(state, a, LLVMBuildPtrToInt(builder, address, state->word, ""));
+      return true;
+    }
     case COD_LLVM_COPY:
     case COD_LLVM_ADDRESS:
     case COD_LLVM_LOAD_TARGET:

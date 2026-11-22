@@ -8,12 +8,12 @@ using "ParserStorage.cod" {
     conditional_node, range_node, literal_range, nonempty_literal_range, less_words,
     logical_not_node, logical_and_node, logical_binary, skips_right, equal_words, return_node,
     throw_node, case_node, case_arm_node, case_fallthrough_node, case_failure_node, break_node,
-    enum_declaration_node, type_assertion_node, case_null_pattern,
+    enum_declaration_node, type_assertion_node, case_null_pattern, data_record_node, field_access_node,
 };
 using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" { NameBindings, NameWork, first_item, callable_head, exception_binding };
 using "OperandChecking.cod" {
-    OperandFacts, scalar_kind, has_value_tail, independent_value, local_place, nullable_ptr,
+    OperandFacts, scalar_kind, product_kind, has_value_tail, independent_value, local_place, nullable_ptr,
     unreachable_case_item, misses_case_arm, tests_case_arm, case_guard_passes, case_guard_declines, case_guard_tests,
     case_resumes_after_cleanup, present_target, absent_target, unknown_target, selected_target_presence,
 };
@@ -28,7 +28,7 @@ using "NativeCommands.cod" {
     store_target, checked_add, checked_multiply, checked_subtract, checked_divide,
     checked_remainder, receive_parameter, pass_argument, invoke_function, print_word,
     return_outcome, finish_program, returned_word, pending_category, pending_site, call_category,
-    call_site, arithmetic_fault, slot, reservation_tag,
+    call_site, arithmetic_fault, slot, reservation_tag, allocate_words, offset_address,
 };
 
 data LoweringState {
@@ -937,6 +937,24 @@ func lower_construction(nodes:const ExprNodes in N, names:const NameBindings in 
                         plan:NativePlan in P, state:LoweringState in R, at:u64) -> void
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     val body <- construction_body(nodes, at);
+    val words <- facts[at].product_words;
+    if (words != 0u64) {
+        emit(code, plan, allocate_words(), slot(at), words);
+        val item <- first_item(nodes, nodes[body].left);
+        val assignment <- no_node();
+        val input <- no_node();
+        for (unused in 0u64 .. syntax_len(nodes)) {
+            if (item == no_node() || !state.live || plan.diagnostic != 0u8) return;
+            assignment <- nodes[item].right;
+            input <- nodes[assignment].right;
+            lower_bits(nodes, names, links, facts, sites, code, plan, state, input);
+            if (!state.live) return;
+            command(code, plan, offset_address(), slot(assignment), slot(at), facts[assignment].word_offset, 0u64);
+            emit(code, plan, store_target(), slot(assignment), slot(input));
+            item <- links[item].next;
+        };
+        return;
+    };
     # The payload row supplies storage indexed separately from the result address.
     val storage <- slot(nodes[at].right);
     if (body == no_node()) {
@@ -976,7 +994,7 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (!state.live || plan.diagnostic != 0u8) return;
     plan.node <- at;
     val kind <- nodes[at].kind;
-    if (kind == using_node() || kind == callable_node() || kind == enum_declaration_node()) return;
+    if (kind == using_node() || kind == callable_node() || kind == enum_declaration_node() || kind == data_record_node()) return;
     if (kind == type_assertion_node()) {
         if (facts[at].enum_constant != 0u8) {
             emit(code, plan, word_constant(), slot(at), facts[at].discriminator_code);
@@ -994,7 +1012,7 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (kind == null_node()) { emit(code, plan, word_constant(), slot(at), 0u64); return; } else {};
     if (kind == name_node()) {
         val declaration <- names[at].declaration;
-        if (!scalar_kind(facts[at].kind)) { plan.diagnostic <- native_unsupported(); return; } else {};
+        if (!scalar_kind(facts[at].kind) && facts[at].kind != product_kind()) { plan.diagnostic <- native_unsupported(); return; };
         if (declaration != no_node() && names[declaration].guarded_local != 0u8) {
             storage_operation(code, plan, use_local(), 0u64, 0u64, declaration, at);
         } else {};
@@ -1040,6 +1058,14 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
         lower_construction(nodes, names, links, facts, sites, code, plan, state, at);
         return;
     } else {};
+    if (kind == field_access_node()) {
+        val receiver <- nodes[at].left;
+        lower_node(nodes, names, links, facts, sites, code, plan, state, receiver);
+        if (state.live) {
+            command(code, plan, offset_address(), slot(at), slot(receiver), facts[at].word_offset, 0u64);
+        };
+        return;
+    };
     if (integer_arithmetic(kind) || is_transfer(nodes, at) || kind == compare_node()) {
         lower_binary(nodes, names, links, facts, sites, code, plan, state, at);
         return;

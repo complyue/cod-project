@@ -402,6 +402,18 @@ export func first_item(nodes:const ExprNodes in N, tail:u64) -> u64 where {const
     return no_node();
 }
 
+export func find_record_field(source:const SourceBytes in S, nodes:const ExprNodes in N,
+                              work:const NameWork in W, record:u64, name:u64) -> u64
+    where {const owner S, const owner N, const owner W} {
+    val field <- first_item(nodes, nodes[record].right);
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        if (field == no_node()) return no_node();
+        if (same_name(source, nodes, name, nodes[nodes[field].right].left)) return field;
+        field <- work[field].next;
+    };
+    return no_node();
+}
+
 export func signature_head(nodes:const ExprNodes in N, tail:u64) -> u64 where {const owner N} {
     val header <- tail;
     for (unused in 0u64 .. tail + 1u64) {
@@ -691,7 +703,7 @@ func resolve_record_initializer(source:const SourceBytes in S, nodes:const ExprN
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (item == no_node()) return;
         field <- nodes[item].right;
-        if (nodes[field].kind != initializer_assignment_node() || nodes[nodes[field].left].kind != name_node()) {
+        if (nodes[field].kind != initializer_assignment_node() || nodes[ungrouped(nodes, nodes[field].left)].kind != name_node()) {
             reject_name(state, field, unsupported_ordinary_construction());
             return;
         } else {};

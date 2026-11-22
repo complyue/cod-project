@@ -1,0 +1,65 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+
+enum Route:u64 { Primary = 17; Secondary = 24; }
+
+data Packet {
+    quantity:u64;
+    ready:bool;
+    route:const Route;
+}
+
+proc observe(value:u64) -> u64 {
+    behave @print(value);
+    return value;
+}
+
+proc add(value:u64 in D) -> void where {owner D} {
+    value <- value + 4u64;
+    return;
+}
+
+proc update(packet:Packet in D) -> void where {owner D} {
+    add(packet.quantity);
+    packet.ready <- true;
+    return;
+}
+
+func read(packet:const Packet in D) -> u64 where {const owner D} {
+    if (!packet.ready || packet.route != (Primary:Route)) return 0u64;
+    return packet.quantity;
+}
+
+proc fail() -> u64 throws NullPointerException {
+    ptr absent:u64 = null in here;
+    return absent;
+}
+
+ref first = make Packet {
+    ready <- false;
+    (quantity) <- observe(1u64);
+    route <- (Primary:Route);
+    quantity <- observe(3u64);
+};
+ref second = make Packet in here {
+    route <- (Primary:Route);
+    ready <- true;
+    quantity <- 9u64;
+};
+ref held = first.quantity;
+update(first);
+behave @print(held);
+behave @print(read(first));
+behave @print(read(second));
+
+try {
+    ref failed = make Packet {
+        ready <- false;
+        quantity <- fail();
+        route <- (Primary:Route);
+        quantity <- observe(99u64);
+    };
+    behave @print(read(failed));
+} catch (error:const NullPointerException) {
+    behave @print(42u64);
+};
