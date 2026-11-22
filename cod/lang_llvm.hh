@@ -16,12 +16,15 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/Support/MathExtras.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/TargetParser/Host.h>
 
 #include <array>
+#include <cstddef>
 #include <functional>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <new>
 #include <string>
@@ -397,6 +400,73 @@ class LLVMEmission {
     const auto &layout = sum_layout(constructor.sum);
     auto *payload = b_.CreateStructGEP(layout.storage, storage, 1);
     return b_.CreateStructGEP(layout.alternatives.at(constructor.alternative).payload, payload, field);
+  }
+  llvm::Value *emit_array_construction(const Expression &expr, bool discard) {
+    const auto &length = *expr.children.front();
+    const auto &fill = *expr.children.back();
+    auto *count_value = emit_expression(length);
+    if (!reachable()) return nullptr;
+    auto *fill_value = emit_expression(fill);
+    if (!reachable()) return nullptr;
+
+    using Allocation = CheckedOperation::LexicalAllocation;
+    std::map<std::tuple<size_t, size_t, StorageFormat, StorageFormat>, std::vector<size_t>> alternatives;
+    for (size_t i = 0; i < contexts_.size(); ++i) {
+      const auto &context = contexts_[i];
+      const auto &fact = context.at(&expr);
+      if (fact.type == Type::never) continue;
+      const auto &allocation = fact.lexical_allocation.value();
+      if (allocation.kind != Allocation::array) throw std::logic_error("inconsistent checked array constructor");
+      alternatives[{allocation.owner, fact.type.identity, StorageFormat{context.at(&length).type},
+                    StorageFormat{context.at(&fill).type}}].push_back(i);
+    }
+    auto *view = contextual_value(expr, alternatives, "array.construct", [&](const auto &selection) -> llvm::Value * {
+      const auto &[owner, schema, length_format, fill_format] = selection;
+      const auto &array = program_->arrays.at(schema);
+      auto *element = native_type(array.element);
+      const auto &layout = module_.getDataLayout();
+      const auto element_alignment = layout.getABITypeAlign(element);
+      const auto alignment = std::max(element_alignment, layout.getABITypeAlign(array_view_));
+      const auto stride = layout.getTypeAllocSize(element).getFixedValue();
+      const auto prefix = llvm::alignTo(layout.getTypeAllocSize(array_view_).getFixedValue(), element_alignment);
+      constexpr auto limit = std::uint64_t{std::numeric_limits<std::ptrdiff_t>::max()};
+      if (alignment.value() > alignof(std::max_align_t) || !stride || prefix > limit)
+        implementation_gap(expr.at, "target layout for lexical array backing");
+
+      auto *count = convert(count_value, length_format.type(), Type::uint64);
+      auto *fits = block("array.size.valid"), *failed = block("array.allocation.failed");
+      b_.CreateCondBr(b_.CreateICmpULE(count, integer((limit - prefix) / stride)), fits, failed);
+      b_.SetInsertPoint(fits);
+      auto *bytes = b_.CreateAdd(integer(prefix), b_.CreateMul(count, integer(stride)));
+      auto allocate = runtime("cod_lang_lexical_extent_allocate", b_.getPtrTy(),
+          {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
+      auto *storage = b_.CreateCall(allocate, {owner_identity(owner, expr.at), bytes, integer(alignment.value())});
+      auto *ready = block("array.allocation.ready");
+      b_.CreateCondBr(b_.CreateIsNotNull(storage), ready, failed);
+      b_.SetInsertPoint(failed);
+      fail_path(ExceptionCategory::out_of_memory, expr.at);
+
+      b_.SetInsertPoint(ready);
+      auto *data = b_.CreateGEP(b_.getInt8Ty(), storage, integer(prefix));
+      auto *value = fill_format.kind == Type::enumeration ? unpack(fill_value, array.element)
+          : convert(fill_value, fill_format.type(), array.element);
+      auto *test = block("array.fill.test"), *store = block("array.fill.store"), *complete = block("array.initialized");
+      b_.CreateBr(test);
+      b_.SetInsertPoint(test);
+      auto *index = b_.CreatePHI(b_.getInt64Ty(), 2, "array.fill.index");
+      index->addIncoming(integer(0), ready);
+      b_.CreateCondBr(b_.CreateICmpULT(index, count), store, complete);
+      b_.SetInsertPoint(store);
+      b_.CreateStore(value, b_.CreateGEP(element, data, index));
+      auto *next = b_.CreateAdd(index, integer(1));
+      index->addIncoming(next, store);
+      b_.CreateBr(test);
+      b_.SetInsertPoint(complete);
+      b_.CreateStore(data, b_.CreateStructGEP(array_view_, storage, 0));
+      b_.CreateStore(count, b_.CreateStructGEP(array_view_, storage, 1));
+      return storage;
+    }, b_.getPtrTy());
+    return discard ? empty_scalar() : view;
   }
   llvm::Value *pack(llvm::IRBuilder<> &builder, llvm::Value *value, const Type &type) {
     if (type.kind == Type::exception) {
@@ -3113,10 +3183,63 @@ class LLVMEmission {
     auto *address = view_address(result);
     return projection == Projection::target ? address : load_place(checked_address(address, expr, expr.at), expr);
   }
+  llvm::Value *emit_indexed_address(const Expression &expr) {
+    const auto &array = *expr.children[0];
+    auto *view = emit_expression(array, Projection::target);
+    if (!reachable()) return nullptr;
+    view = checked_address(view, array, expr.at);
+    const auto &index_expr = *expr.children[1];
+    auto *index_value = emit_expression(index_expr);
+    if (!reachable()) return nullptr;
+    std::map<std::pair<size_t, Type::Kind>, std::vector<size_t>> alternatives;
+    for (size_t i = 0; i < contexts_.size(); ++i) {
+      const auto &type = contexts_[i].at(&array).type;
+      const auto index = contexts_[i].at(&index_expr).type.kind;
+      if (type.kind == Type::array && index != Type::never) alternatives[{type.identity, index}].push_back(i);
+    }
+    return contextual_value(expr, alternatives, "array.element", [&](const auto &selection) -> llvm::Value * {
+      const auto &[schema, index_kind] = selection;
+      const auto &shape = program_->arrays.at(schema);
+      auto *index = b_.CreateZExtOrTrunc(convert(index_value, Type{index_kind}, shape.index), b_.getInt64Ty());
+      if (bounds_checks_) {
+        auto *length = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(array_view_, view, 1), "array.length");
+        auto *in_range = b_.CreateICmpULT(index, length);
+        if (shape.index == Type::integer)
+          in_range = b_.CreateAnd(in_range, b_.CreateICmpSGE(index, integer(0)));
+        auto *valid = block("bounds.valid"), *invalid = block("bounds.failure");
+        b_.CreateCondBr(in_range, valid, invalid);
+        b_.SetInsertPoint(invalid);
+        save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::index_out_of_bounds)),
+                           integer(site(expr.at)), null_pointer(), index, length));
+        b_.CreateBr(control_->exit);
+        b_.SetInsertPoint(valid);
+      }
+      auto *data = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(array_view_, view, 0), "array.data");
+      llvm::Type *element = shape.element.kind == Type::product ? product_layout(shape.element.identity) : native_type(shape.element);
+      return b_.CreateGEP(element, data, index);
+    }, b_.getPtrTy());
+  }
   llvm::Value *emit_checked_expression(const Expression &expr, Projection projection, bool discard) {
     const bool read = carries_value(projection);
     using K = Expression::Kind;
     const auto &fact = contexts_.front().at(&expr);
+    if (expr.kind == K::call && std::ranges::any_of(contexts_, [&](const auto &context) {
+          return context.at(&expr).builtin == BuiltinOperation::array_transfer;
+        })) {
+      std::map<bool, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < contexts_.size(); ++i)
+        alternatives[contexts_[i].at(&expr).builtin == BuiltinOperation::array_transfer].push_back(i);
+      return contextual_value(expr, alternatives, "array.transfer", [&](bool builtin) -> llvm::Value * {
+        if (!builtin) return emit_checked_expression(expr, projection, discard);
+        auto *address = emit_indexed_address(expr);
+        if (!reachable()) return nullptr;
+        const auto &source = *expr.children[2];
+        auto *value = emit_expression(source);
+        if (!reachable()) return nullptr;
+        assign_place(address, convert_result(expr, source, value, &CheckedOperation::type), expr);
+        return !read ? address : discard ? empty_scalar() : load_place(address, expr);
+      }, read ? static_cast<llvm::Type *>(scalar_) : b_.getPtrTy());
+    }
     if (fact.enum_literal) {
       std::map<std::pair<size_t, std::uint64_t>, std::vector<size_t>> alternatives;
       for (size_t i = 0; i < contexts_.size(); ++i) {
@@ -3599,42 +3722,9 @@ class LLVMEmission {
       return nullptr;
     }
     case K::index: {
-      const auto &array = *expr.children[0];
-      auto *view = emit_expression(array, Projection::target);
+      auto *address = emit_indexed_address(expr);
       if (!reachable()) return nullptr;
-      view = checked_address(view, array, expr.at);
-      const auto &index_expr = *expr.children[1];
-      auto *index_value = emit_expression(index_expr);
-      if (!reachable()) return nullptr;
-      std::map<std::pair<size_t, Type::Kind>, std::vector<size_t>> alternatives;
-      for (size_t i = 0; i < contexts_.size(); ++i) {
-        const auto &access = contexts_[i].at(&expr);
-        if (access.type != Type::never)
-          alternatives[{access.operand_type.identity, contexts_[i].at(&index_expr).type.kind}].push_back(i);
-      }
-      return contextual_value(expr, alternatives, "array.element", [&](const auto &selection) -> llvm::Value * {
-        const auto &[schema, index_kind] = selection;
-        const auto &shape = program_->arrays.at(schema);
-        auto *index = b_.CreateZExtOrTrunc(convert(index_value, Type{index_kind}, shape.index), b_.getInt64Ty());
-        if (bounds_checks_) {
-          auto *length = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(array_view_, view, 1), "array.length");
-          auto *in_range = b_.CreateICmpULT(index, length);
-          if (shape.index == Type::integer)
-            in_range = b_.CreateAnd(in_range, b_.CreateICmpSGE(index, integer(0)));
-          auto *valid = block("bounds.valid"), *invalid = block("bounds.failure");
-          b_.CreateCondBr(in_range, valid, invalid);
-          b_.SetInsertPoint(invalid);
-          save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::index_out_of_bounds)),
-                             integer(site(expr.at)), null_pointer(), index, length));
-          b_.CreateBr(control_->exit);
-          b_.SetInsertPoint(valid);
-        }
-        if (read && discard) return empty_scalar();
-        auto *data = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(array_view_, view, 0), "array.data");
-        llvm::Type *element = shape.element.kind == Type::product ? product_layout(shape.element.identity) : native_type(shape.element);
-        auto *address = b_.CreateGEP(element, data, index);
-        return read ? pack(b_.CreateLoad(element, address), shape.element) : address;
-      }, read ? static_cast<llvm::Type *>(scalar_) : b_.getPtrTy());
+      return !read ? address : discard ? empty_scalar() : load_place(address, expr);
     }
     case K::field: {
       if (fact.exception_owner) {
@@ -3707,6 +3797,8 @@ class LLVMEmission {
     case K::make_borrowed_handle:
       return emit_attached_native_handle(expr);
     case K::make_object: {
+      if (fact.lexical_allocation && fact.lexical_allocation->kind == CheckedOperation::LexicalAllocation::array)
+        return emit_array_construction(expr, discard);
       if (fact.sum_constructor) {
         const auto constructor = *fact.sum_constructor;
         auto *address = storage_.at(*fact.place);

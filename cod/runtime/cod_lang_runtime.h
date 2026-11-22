@@ -30,6 +30,7 @@ void *cod_lang_acquire_deferred_aggregate(uint64_t members, uint64_t *failure_ca
 void cod_lang_retain_deferred_failure(void *aggregate, uint64_t position, uint64_t category, uint64_t site,
                                       uint64_t requested, uint64_t available, uint64_t cause, void *owner);
 void *cod_lang_lexical_text_create(void **allocations, const void *input);
+void *cod_lang_lexical_extent_allocate(void **allocations, uint64_t bytes, uint64_t alignment);
 enum cod_text_slice_status {
     COD_TEXT_SLICE_READY,
     COD_TEXT_SLICE_INVALID,

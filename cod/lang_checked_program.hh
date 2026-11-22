@@ -34,7 +34,7 @@ inline bool owning_exception(const Type &type) { return type.kind == Type::excep
 inline bool bits_type(const Type &type) { return scalar_type(type) || (type.kind == Type::exception && !owning_exception(type)); }
 inline bool lexical_value_type(const Type &type) { return bits_type(type) || type.kind == Type::procedure; }
 enum class BuiltinOperation {
-  none, unary, binary, identity, array_length, reference_swap, bits_swap, print,
+  none, unary, binary, identity, array_length, array_transfer, reference_swap, bits_swap, print,
   builder_append, lexical_result, text_size, text_byte, text_slice
 };
 // Nominal schema identities for a selected abstract target. An empty set carries no narrowing.
@@ -160,7 +160,7 @@ struct CheckedOperation {
   bool check_c_string = false;
   struct LexicalAllocation {
     size_t owner;
-    enum Kind { text, builder_snapshot, builder, text_slice } kind;
+    enum Kind { text, builder_snapshot, builder, text_slice, array } kind;
     unsigned builder_inputs = 0;
     auto operator<=>(const LexicalAllocation &) const = default;
   };
