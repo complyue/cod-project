@@ -46,6 +46,7 @@ export array NameBindings[u64]:NameBinding;
 export data NameWorkSlot {
     active:u64;
     next:u64;
+    next_method:u64;
     enum_code:u64;
     value_module:u64;
     value_identity:u64;
@@ -387,6 +388,7 @@ func link_entries(nodes:const ExprNodes in N, work:NameWork in W, used:u64) -> v
     val previous <- no_node();
     for (at in 0u64 .. used) {
         work[at].next <- no_node();
+        work[at].next_method <- no_node();
         if (list_entry(nodes[at].kind)) {
             previous <- nodes[at].left;
             if (previous != no_node()) { work[previous].next <- at; {}; } else {};
@@ -1167,6 +1169,12 @@ func extensible_selection(nodes:const ExprNodes in N, selected:const SelectedExp
         selected[site].shape == ordinary_callable_shape();
 }
 
+export func transfer_name(source:const SourceBytes in S, nodes:const ExprNodes in N, name:u64) -> bool
+    where {const owner S, const owner N} {
+    val first <- nodes[name].first;
+    return nodes[name].past == first + 2u64 && source[first] == 60u8 && source[first + 1u64] == 45u8;
+}
+
 func register_callables(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                          selected:const SelectedExports in E, work:NameWork in W, state:NameState in R,
                          first:u64, allow_families:bool) -> void
@@ -1175,18 +1183,26 @@ func register_callables(source:const SourceBytes in S, nodes:const ExprNodes in 
     val form <- no_node();
     val name <- no_node();
     val found <- no_node();
+    val family <- no_node();
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (item == no_node()) return;
         form <- nodes[item].right;
         if (nodes[form].kind == callable_node()) {
             name <- definition_name(nodes, form);
             found <- lookup(source, nodes, work, name, 0u64, state.used);
-            if (allow_families && found != no_node() && (bindings[found].kind == callable_binding() ||
-                (bindings[found].kind == ordinary_selection() &&
-                 extensible_selection(nodes, selected, bindings[found].declaration)))) {
-                remember(bindings, name, bindings[found].declaration, bindings[found].kind);
+            if (found != no_node() && bindings[found].kind == callable_binding() &&
+                (allow_families || transfer_name(source, nodes, name))) {
+                family <- bindings[found].declaration;
+                work[form].next_method <- work[family].next_method;
+                work[family].next_method <- form;
+                remember(bindings, name, family, callable_binding());
             } else {
-                declare_name(source, nodes, bindings, work, state, name, form, callable_binding(), unproved_module_binding());
+                if (allow_families && found != no_node() && bindings[found].kind == ordinary_selection() &&
+                    extensible_selection(nodes, selected, bindings[found].declaration)) {
+                    remember(bindings, name, bindings[found].declaration, ordinary_selection());
+                } else {
+                    declare_name(source, nodes, bindings, work, state, name, form, callable_binding(), unproved_module_binding());
+                };
             };
             if (state.diagnostic != 0u8) return;
             remember(bindings, form, bindings[name].declaration, callable_binding());

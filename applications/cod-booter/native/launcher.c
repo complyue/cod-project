@@ -283,9 +283,17 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
     else if (diagnostic->stage == 4 && diagnostic->code == 38)
         fputs(": error: borrowed text result does not retain its declared owner\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 39)
-        fputs(": error: a direct String field requires an applicable local '(<-)' policy\n", stderr);
+        fputs(": error: this transfer requires an applicable local '(<-)' policy\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 40)
         fputs(": error: a first String field write requires an 'init val var' policy\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 41)
+        fputs(": error: ambiguous '(<-)' method selection\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 42)
+        fputs(": error: duplicate signature in '(<-)' family\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 43)
+        fputs(": error: selected transfer form is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 44)
+        fputs(": error: transfer method selection requires an unproved owner equality\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 12)
         fputs(": error: ref argument requires a proven non-null target\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 13)
