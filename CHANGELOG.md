@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 — Successful completion in text examples
+
+<a id="k-text-proc-return"></a>
+**K-TEXT-PROC-RETURN.** Editorial continuity from `3ae2706f5dd59e92abf5d0162db2bac162dc77a3:design/StringBuilding.md` and the field methods in `design/Utf8Strings.md` at that commit. StringBuilding r2 and UTF-8 strings r4 supply the explicit successful void returns required by the existing callable contract. D-07-STRING-BUILD, D-07-UTF8 and D-07-STRING-FIELDS retain their scopes (registry r1042).
+
 ## 2026-11-21 — Direct text places and lexical string building
 
 <a id="h-string-build-20261121"></a>
