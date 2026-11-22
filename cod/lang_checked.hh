@@ -5734,7 +5734,7 @@ class ScalarChecker {
       const bool scan_requested = case_scan && path.completion.reason == Completion::case_scan;
       if (path.exceptions.empty()) inputs.push_back(scan_requested ? Completion{} : path.completion);
       else for (const auto category : path.exceptions.possibilities()) inputs.push_back(Completion::failure(category, path.completion.returned));
-      for (const auto input : inputs) for (const auto &[outcome, effects] : cleanup_.apply(queue, input)) {
+      for (const auto input : inputs) for (const auto &[outcome, effects] : cleanup_.apply(queue, input, proving_)) {
         const auto completion = outcome.completion();
         auto state = path.state;
         state.inputs = {origin};
@@ -5803,12 +5803,16 @@ class ScalarChecker {
             implementation_gap(path.at, "return inspection requires independent deferred failure delivery on this path");
           if (effects.needs_checked_cleanup_proof)
             implementation_gap(path.at, "checked failures involving deferred execution require coverage within the owning pass");
+          if (outcome.pending_checked())
+            fail(path.at, "checked deferred failure requires coverage within the owning pass");
+          if (outcome.has_deferred_failure() && (outcome.visited_multiple || (outcome.fifo && outcome.body_failure)))
+            implementation_gap(path.at, "residual deferred failures require aggregation");
         }
         applied.transform_conditions([&](const auto &clauses) {
           return CleanupEquations::substitute_boolean_payloads(clauses, resolve_boolean, true);
         });
-        auto failure = outcome.resumes_body_failure() ? pending :
-            completion.exception() ? applied.thrown.restricted({completion.category()}) : ExceptionFacts{};
+        auto failure = outcome.resumes_body_failure() ? pending : completion.exception() && outcome.has_deferred_failure()
+            ? applied.queued_failures.back().restricted({completion.category()}) : ExceptionFacts{};
         if (completion.exception() && failure.empty()) {
           if (!effects.unknown_thrown) continue;
           failure = {completion.category()};
@@ -5819,8 +5823,6 @@ class ScalarChecker {
           refresh_targets(state, false);
           if (!state.live) continue;
         }
-        if (proving_ && validating_ && outcome.pending_checked())
-          fail(path.at, "checked deferred failure requires coverage within the owning pass");
         state.input_facts.at(origin).queues[scope] = 0;
         if (!completion.reason) {
           if (scan_requested) {
@@ -9150,15 +9152,28 @@ class ScalarChecker {
       TypeEvidenceState state;
       TypeReturned result;
     };
-    const bool guards_errors = completed || body.tracks_target_places() || std::ranges::any_of(flow.entries, [](const auto &entry) {
+    const bool keeps_fifo = std::ranges::any_of(flow.entries, [](const auto &entry) {
       const auto *action = std::get_if<TypeDeferredFlow::Action>(&entry);
       return action && action->entry && action->entry->deferred_catch();
     });
-    using WorkKey = std::tuple<size_t, bool, size_t, size_t, const Expression *>;
+    const bool guards_errors = completed || body.tracks_target_places() || keeps_fifo;
+    const bool cyclic = std::ranges::any_of(flow.entries, [](const auto &entry) {
+      return std::holds_alternative<TypeDeferredFlow::Loop>(entry);
+    });
+    using Failures = std::vector<size_t>;
+    using WorkKey = std::tuple<size_t, bool, size_t, Failures, const Expression *>;
+    const auto append_failure = [&](Failures entries, size_t reason) {
+      if (reason < 2) return entries;
+      if (!keeps_fifo) entries.clear();
+      entries.push_back(reason);
+      return entries;
+    };
     std::map<WorkKey, Pending> pending, loop_inputs;
-    const auto enqueue = [&](size_t queue, bool returned, size_t body_exit, size_t deferred_error, TypeEvidenceState state,
+    const auto enqueue = [&](size_t queue, bool returned, size_t body_exit, Failures failures, TypeEvidenceState state,
                              TypeReturned result) {
       if (body.checks_initialization() && !state.selections.initialization_reachable) return;
+      // The independent completion proof diagnoses a growing failure queue.
+      if (cyclic && failures.size() > CleanupEquations::deferred_proof_depth) return;
       state.exits = nullptr;
       state.deferred = nullptr;
       if (returned) {
@@ -9175,7 +9190,7 @@ class ScalarChecker {
         }
       }
       const auto key = std::tuple{queue, returned, guards_errors ? body_exit : 0,
-                                  guards_errors ? deferred_error : 0, result.saved_selection()};
+                                  guards_errors ? std::move(failures) : Failures{}, result.saved_selection()};
       if (const auto entry = pending.find(key); entry != pending.end()) {
         entry->second.state = merge_evidence(std::move(entry->second.state), state);
         entry->second.result.merge(result);
@@ -9183,20 +9198,20 @@ class ScalarChecker {
       } else pending.emplace(key, Pending{std::move(state), std::move(result)});
     };
     for (const auto &path : exits.paths) {
-      if (!guards_errors) enqueue(path.state.deferred_queue, path.returned(), 0, 0, path.state, path.result);
+      if (!guards_errors) enqueue(path.state.deferred_queue, path.returned(), 0, {}, path.state, path.result);
       else for (const auto reason : path.reasons)
-        enqueue(path.state.deferred_queue, path.returned(), reason >= 2 ? reason : 0, 0, path.state, path.result);
+        enqueue(path.state.deferred_queue, path.returned(), reason >= 2 ? reason : 0, {}, path.state, path.result);
     }
-    if (falls_through) enqueue(body.deferred_queue, false, 0, 0, body, {});
+    if (falls_through) enqueue(body.deferred_queue, false, 0, {}, body, {});
 
     // Reverse registration order visits older tails first within each path.
     // Loop headers also feed earlier iterations until their input stabilizes.
     while (!pending.empty()) {
       auto next = pending.extract(std::prev(pending.end()));
-      const auto [queue, returned, body_exit, deferred_error, saved_selection] = next.key();
+      const auto [queue, returned, body_exit, failures, saved_selection] = next.key();
       auto &[state, result] = next.mapped();
       if (!queue) {
-        const auto reason = deferred_error ? deferred_error : body_exit;
+        const auto reason = failures.empty() ? body_exit : failures.back();
         if (completed) merge_type_exits(*completed, {reason ? reason : returned ? 1u : 0u}, state, result);
         if (returned && !reason && !body.borrowed_return) collect(result.boolean);
         continue;
@@ -9220,8 +9235,8 @@ class ScalarChecker {
               previous.possible_overlap == current.possible_overlap && joined_result == input.result) continue;
           input = {std::move(joined), std::move(joined_result)};
         }
-        enqueue(loop->entry, returned, body_exit, deferred_error, input.state, input.result);
-        if (loop->backedge) enqueue(loop->backedge, returned, body_exit, deferred_error, input.state, input.result);
+        enqueue(loop->entry, returned, body_exit, failures, input.state, input.result);
+        if (loop->backedge) enqueue(loop->backedge, returned, body_exit, failures, input.state, input.result);
         continue;
       }
       if (const auto *choice = std::get_if<TypeDeferredFlow::Choice>(&entry)) {
@@ -9232,7 +9247,7 @@ class ScalarChecker {
           selected.selections.assume(condition, true);
           for (const auto &slot : arm->initialized_entry_targets)
             selected.selections.initialize_selection(selected.selections.selected_target({slot, {slot}}));
-          enqueue(arm->queue, returned, body_exit, deferred_error, std::move(selected), result);
+          enqueue(arm->queue, returned, body_exit, failures, std::move(selected), result);
         }
         continue;
       }
@@ -9246,7 +9261,7 @@ class ScalarChecker {
             auto completed = state;
             if (const auto outcome = summary.product_effects.find(reason); outcome != summary.product_effects.end())
               outcome->second.apply(completed.selections, call.operands, completed.repeated_observations.has_value());
-            enqueue(action.earlier, returned, body_exit, reason ? reason : deferred_error, std::move(completed), result);
+            enqueue(action.earlier, returned, body_exit, append_failure(failures, reason), std::move(completed), result);
           }
           continue;
         }
@@ -9254,7 +9269,7 @@ class ScalarChecker {
         if (exact && effects.outcomes.contains(0)) {
           auto normal = state;
           apply_type_builtin(normal.selections, effects.builtin);
-          enqueue(action.earlier, returned, body_exit, deferred_error, std::move(normal), result);
+          enqueue(action.earlier, returned, body_exit, failures, std::move(normal), result);
           if (effects.outcomes.size() == 1) continue;
         }
         if (effects.opaque || effects.slots.unknown) {
@@ -9270,50 +9285,72 @@ class ScalarChecker {
           const bool prepared = !effects.outcomes.empty();
           for (const auto outcome : prepared ? effects.outcomes : deferred_outcomes()) {
             if (exact && !outcome) continue;
-            const auto next_error = outcome ? outcome : deferred_error;
+            const auto next_failures = append_failure(failures, outcome);
             auto completed = state;
             if (!outcome) {
               for (const auto &place : effects.initialized) completed.selections.uninitialized.erase(place);
               for (const auto &slot : effects.initialized_selections)
                 completed.selections.initialize_if_present(completed.selections.selected_target({slot, {slot}}));
             }
-            if (action.may_replace) enqueue(action.earlier, true, 0, next_error, completed, {});
-            enqueue(action.earlier, returned, body_exit, next_error, std::move(completed), result);
+            if (action.may_replace) enqueue(action.earlier, true, 0, next_failures, completed, {});
+            enqueue(action.earlier, returned, body_exit, next_failures, std::move(completed), result);
           }
         } else {
-          if (action.may_replace) enqueue(action.earlier, true, 0, 0, state, {});
-          enqueue(action.earlier, returned, 0, 0, std::move(state), std::move(result));
+          if (action.may_replace) enqueue(action.earlier, true, 0, {}, state, {});
+          enqueue(action.earlier, returned, 0, {}, std::move(state), std::move(result));
         }
         continue;
       }
 
-      auto invocation = *action.declaration;
-      auto bindings = std::move(invocation.selections.bindings);
-      auto places = std::move(invocation.selections.value_places);
-      invocation.selections = std::move(state.selections);
-      invocation.selections.bindings = std::move(bindings);
-      invocation.selections.value_places = std::move(places);
-      invocation.prepared_call.reset();
-      invocation.deferred = nullptr;
-      // The declaration supplies names. The queue supplies the live values.
-      const bool receives = deferred_error > Completion::exception_base && action.entry->deferred_catch() &&
-          std::ranges::any_of(std::span{action.entry->children}.subspan(1), [&](const auto &clause) {
-            if (clause->kind != Expression::Kind::handler) return false;
-            const auto type = clause->annotation ? evidence_annotation(*clause->annotation, invocation) : exception_type(0);
-            return matches_failure(program_.exception_types, Completion{deferred_error}.category(), type.identity);
-          });
-      auto completed = replay_type_defer(*action.entry, std::move(invocation), receives ? deferred_error : 0, returned ? &result : nullptr);
-      for (auto &path : completed.paths) {
-        const bool replacement = path.returned();
-        const auto &proof = replacement ? path.result : result;
-        if (!guards_errors) enqueue(action.earlier, replacement || returned, 0, 0, std::move(path.state), proof);
-        else for (const auto reason : path.reasons) {
-          const bool preserves = !Completion{reason}.failed() && !receives;
-          const auto retained_body = replacement || (reason && !Completion{reason}.failed()) ? 0 : body_exit;
-          enqueue(action.earlier, replacement || returned, retained_body,
-                  preserves && deferred_error ? deferred_error : reason >= 2 ? reason : 0, path.state, proof);
+      struct Visit {
+        TypeEvidenceState state;
+        TypeReturned result;
+        Failures failures;
+        size_t body_exit;
+        bool returned;
+      };
+      const auto invoke = [&](const Visit &before, std::optional<size_t> selected, std::vector<Visit> &done) {
+        auto invocation = *action.declaration;
+        auto bindings = std::move(invocation.selections.bindings);
+        auto places = std::move(invocation.selections.value_places);
+        invocation.selections = before.state.selections;
+        invocation.selections.bindings = std::move(bindings);
+        invocation.selections.value_places = std::move(places);
+        invocation.prepared_call.reset();
+        invocation.deferred = nullptr;
+        const auto arrival = selected ? before.failures[*selected] : 0;
+        auto rest = before.failures;
+        if (selected) rest.erase(rest.begin() + *selected);
+        auto paths = replay_type_defer(*action.entry, std::move(invocation), arrival,
+                                       before.returned ? &before.result : nullptr);
+        for (auto &path : paths.paths) for (const auto reason : path.reasons) {
+          const bool replacement = path.returned();
+          const auto body_exit = replacement || (reason && !Completion{reason}.failed()) ? 0 : before.body_exit;
+          done.push_back({path.state, replacement ? path.result : before.result, append_failure(rest, reason),
+                          body_exit, replacement || before.returned});
         }
-      }
+      };
+      const Visit start{std::move(state), std::move(result), failures, body_exit, returned};
+      std::vector<Visit> visited;
+      if (action.entry->deferred_catch()) {
+        visited.push_back(start);
+        size_t cursor = 0;
+        for (const auto error : failures) {
+          const Completion occurrence{error};
+          const bool matches = occurrence.exception() &&
+              std::ranges::any_of(std::span{action.entry->children}.subspan(1), [&](const auto &clause) {
+                if (clause->kind != Expression::Kind::handler) return false;
+                const auto type = clause->annotation ? evidence_annotation(*clause->annotation, *action.declaration) : exception_type(0);
+                return matches_failure(program_.exception_types, occurrence.category(), type.identity);
+              });
+          if (!matches) { ++cursor; continue; }
+          std::vector<Visit> next;
+          for (const auto &before : visited) invoke(before, cursor, next);
+          visited = std::move(next);
+        }
+      } else invoke(start, {}, visited);
+      for (auto &path : visited)
+        enqueue(action.earlier, path.returned, path.body_exit, std::move(path.failures), std::move(path.state), std::move(path.result));
     }
     return returning ? proof : std::nullopt;
   }
@@ -12173,7 +12210,7 @@ class ScalarChecker {
             include_writes(path.state);
             may_replace |= path.returned();
           }
-          const auto *entry = finalizer ? finalizer : expr.deferred_catch() && !state.tracks_target_places() ? nullptr : &expr;
+          const auto *entry = finalizer ? finalizer : &expr;
           register_type_defer(state, expr, entry, may_replace, std::move(effects), registration_recorded);
         };
         const auto *finalizer = expr.deferred_finalizer();
@@ -19154,7 +19191,7 @@ class ScalarChecker {
           }
         } else summary.paths.push_back({0, {0, false}, 0, cleanup_.preserve_pending({})});
       }
-      const auto validate_phase = [&](size_t phase, CleanupEquations::Action &part) {
+      const auto validate_phase = [&](CleanupEquations::Action &part) {
         // A deferred lookup runs after every later native installation in this
         // cleanup queue has restored its preceding binding.
         for (auto &path : part.paths) std::erase_if(path.effects.symbols, [&](size_t symbol) {
@@ -19168,14 +19205,9 @@ class ScalarChecker {
           require_borrow_lifetime(loan, expr.at, true);
           return true;
         });
-        if (proving_ && validating_ && std::ranges::any_of(part.paths, [&](const auto &path) {
-              return owned_failure(path.completion) && std::ranges::any_of(path.effects.thrown.terms, [&](const auto &term) {
-                return term.first.kind != ExceptionFacts::Origin::Kind::arrival || term.first.action != phase;
-              });
-            })) implementation_gap(expr.at, "escaping owned exceptions from deferred actions require independent failure delivery");
       };
-      validate_phase(action, summary);
-      if (finalizer_action) validate_phase(*finalizer_action, finalizer_summary);
+      validate_phase(summary);
+      if (finalizer_action) validate_phase(finalizer_summary);
       summary.bodyless_catch = expr.deferred_catch();
       if (summary.bodyless_catch) for (const auto &clause : std::span{expr.children}.subspan(1)) {
         if (clause->kind != K::handler) break;
