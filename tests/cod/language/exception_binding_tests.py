@@ -25,8 +25,10 @@ runner.CASES = {
     'prepared_defer_snapshot': (IO+TYPES+ERROR+CHAIN+S+'proc show(e:MissingReturnError)->void{behave @print(e.cause_count);return;}'
         'effect @saved<-chain(error(),error());defer show(@saved);effect @saved<-error();', 0, '1\n', ''),
     'delayed_defer_current': (IO+TYPES+ERROR+CHAIN+S+'effect @saved<-chain(error(),error());defer{behave @print(@saved.cause_count);};effect @saved<-error();', 0, '0\n', ''),
-    'cleanup_replaces_exception': (IO+TYPES+ERROR+CHAIN+S+'proc fail()->void{effect @saved<-chain(error(),error());defer{throw @saved;};throw error();}'
-        'try{fail();}catch(e:const MissingReturnError){behave @print(e.cause_count);};', 0, '1\n', ''),
+    'cleanup_aggregates_residual_exception': (IO+TYPES+ERROR+CHAIN+S+'using "std:exceptions" UnhandledDeferError;'
+        'proc fail()->void{effect @saved<-chain(error(),error());defer{throw @saved;};throw error();}'
+        'try{fail();}catch(e:const MissingReturnError){behave @print(99u64);}'
+        'catch(e:UnhandledDeferError){behave @print(e.cause_count);};', 0, '0\n', ''),
     'current_and_captured': (IO+TYPES+ERROR+CHAIN+S+P+'effect @saved<-chain(error(),error());effect @p=depth;effect @saved<-error();'
         'behave @print(behave @p());behave @print(perform @p());behave @print(@saved.cause_count);', 0, '0\n1\n0\n', ''),
     'capture_outlives_binding_scope': (IO+TYPES+ERROR+CHAIN+COMMON+P+'proc build()->proc()->u64{effect @saved<-chain(error(),error());return depth;}'

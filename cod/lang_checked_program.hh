@@ -30,7 +30,8 @@ inline bool scalar_type(const Type &type) { return numeric(type) || type == Type
 inline bool nominal_exception(const Type &type) {
   return type.kind == Type::exception && nominal_failure(type.identity);
 }
-inline bool bits_type(const Type &type) { return scalar_type(type) || (type.kind == Type::exception && !nominal_exception(type)); }
+inline bool owning_exception(const Type &type) { return type.kind == Type::exception && owning_failure(type.identity); }
+inline bool bits_type(const Type &type) { return scalar_type(type) || (type.kind == Type::exception && !owning_exception(type)); }
 inline bool lexical_value_type(const Type &type) { return bits_type(type) || type.kind == Type::procedure; }
 enum class BuiltinOperation {
   none, unary, binary, identity, array_length, reference_swap, bits_swap, print,
@@ -79,7 +80,7 @@ inline bool accepts_exception(const Type &source, const Type &target) {
        !exception_categories[source.identity].checked);
 }
 inline bool transfers_bits(const Type &source, const Type &target) {
-  return !nominal_exception(source) && !nominal_exception(target) &&
+  return !owning_exception(source) && !owning_exception(target) &&
       (widens(source, target) || accepts_exception(source, target));
 }
 inline bool transfers_value(const Type &from, const Type &to) {
@@ -790,6 +791,7 @@ struct CheckedEnum {
 
 struct CheckedProgram {
   struct Initializer { size_t module; const Expression *expression; };
+  bool deferred_aggregates = false;
   std::vector<CheckedExceptionCategory> exception_types = intrinsic_exception_types();
   Type exception_type(size_t category) const {
     return {Type::exception, std::string(exception_types.at(category).name), category};

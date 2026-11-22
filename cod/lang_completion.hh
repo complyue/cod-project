@@ -1294,12 +1294,13 @@ public:
     bool fifo = false;
     bool cyclic = false;
     bool unproved = false;
-    bool visited_multiple = false;
     Completion active() const { return Completion::from(encoded); }
     bool resumes_body_failure() const { return body_failure && pending.empty(); }
     Completion completion() const {
       const auto current = active();
-      if (!pending.empty()) return {pending.back().reason, current.returned};
+      if (body_failure == 2 || std::ranges::any_of(pending, [](const auto &entry) { return entry.reason == 2; }))
+        return {2, current.returned};
+      if (!pending.empty()) return Completion::failure(deferred_aggregate_id, current.returned);
       return body_failure ? Completion{body_failure, current.returned} : current;
     }
     bool has_deferred_failure() const { return !pending.empty(); }
@@ -1402,11 +1403,14 @@ private:
     const auto coverage = completed.exception() &&
         (exception_types_[completed.category()].checked || !effects.declared_failures.empty())
         ? DeferredCoverage::checked : DeferredCoverage::none;
+    auto reason = completed.reason;
     if (!state.fifo && !state.pending.empty()) {
-      // Without a handler the existing residual outcome is the last one.
-      // An earlier checked failure still requires coverage in this pass.
+      // A pass without a deferred handler only needs residual presence,
+      // terminal status and checked obligations. Native delivery retains
+      // the complete ordered sequence.
       if (state.pending_checked() || coverage != DeferredCoverage::none)
         effects.needs_checked_cleanup_proof = true;
+      if (state.pending.front().reason == 2) reason = 2;
       state.pending.clear();
       effects.queued_failures.clear();
     }
@@ -1415,8 +1419,7 @@ private:
       effects.needs_checked_cleanup_proof = true;
       return;
     }
-    state.pending.push_back({completed.reason, coverage});
-    state.visited_multiple |= state.pending.size() > 1;
+    state.pending.push_back({reason, coverage});
     effects.queued_failures.push_back(completed.exception() ? effects.thrown : ExceptionFacts{});
   }
   static ConditionClauses intersect_reaching(const ConditionClauses &left, const ConditionClauses &right) {

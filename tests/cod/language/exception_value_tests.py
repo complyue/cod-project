@@ -16,7 +16,9 @@ runner.CASES = {
     "catch_all_rethrow": (ERROR + 'val e<-error();try{try{throw e;}catch(x){behave @print(x.category);throw;}}catch(x:const Exception){behave @print(x.category);};', 0, "5\n5\n", WARN),
     "catch_sibling_exclusion": (ERROR + 'val e<-error();try{try{throw e;}catch(x:const MissingReturnError){throw;}catch(x){behave @print(99);}}catch(x){behave @print(1);};', 0, "1\n", WARN),
     "catch_scope_cleanup": (ERROR + 'try{{defer{behave @print(1);};missing();{}}}catch(e){behave @print(2);}finally{behave @print(3);};', 0, "1\n2\n3\n", WARN),
-    "catch_deferred_failure": (ERROR + 'try{{defer{missing();};}}catch(e:const MissingReturnError){behave @print(1);};', 0, "1\n", WARN),
+    "catch_deferred_failure": (ERROR + 'using "std:exceptions" UnhandledDeferError;'
+        'try{{defer{missing();};}}catch(e:const MissingReturnError){behave @print(99);}'
+        'catch(e:UnhandledDeferError){behave @print(1);};', 0, "1\n", WARN),
     "exception_copy": (ERROR + 'val e<-error();val common:Exception<-e;val copy<-common;try{throw copy;}catch(x:const Exception){behave @print(x.category);};', 0, "5\n", WARN),
     "exception_store": (ERROR + 'val e<-error();val saved<-make local Exception;saved<-e;try{throw saved;}catch(x){behave @print(x.category);};', 0, "5\n", WARN),
     "exception_generic": (ERROR + 'func keep(x:T)->const T where T{return x;} val e<-keep(error());behave @print(e.category);behave @print(keep(3u64));', 0, "5\n3\n", WARN),

@@ -6,8 +6,8 @@
 #include <stdint.h>
 
 #define COD_LANG_EXCEPTION_MODULE "std:exceptions"
-#define COD_LANG_ERROR_ROOT_NAME "Error"
 #define COD_LANG_ERROR_ROOT_ID 11
+#define COD_LANG_EXCEPTION_REGION_DEFAULT (100 * 1024 * 1024)
 #define COD_LANG_IO_MODULE "std:io"
 #define COD_LANG_PRINT_NAME "print"
 #define COD_LANG_TEXT_STORAGE_MODULE "std:text-storage"
@@ -32,7 +32,9 @@
   ENTRY(statically_unknown_type, StaticallyUnknownTypeException, 7, 1) \
   ENTRY(index_out_of_bounds, IndexOutOfBoundsError, 8, 0) \
   ENTRY(unexpected_case, UnexpectedCaseError, 9, 0) \
-  ENTRY(type_assertion_failed, TypeAssertionFailedError, 10, 0)
+  ENTRY(type_assertion_failed, TypeAssertionFailedError, 10, 0) \
+  ENTRY(error_root, Error, COD_LANG_ERROR_ROOT_ID, 0) \
+  ENTRY(unhandled_defer, UnhandledDeferError, 12, 0)
 
 /* An identity is read with its kind. These records describe publications
    during checking, independently of a compiler's runtime symbol table. */
@@ -61,7 +63,6 @@ typedef struct cod_lang_intrinsic_export {
    Each span excludes the C string terminator. */
 typedef struct cod_lang_intrinsic_spellings {
   char exceptions[sizeof(COD_LANG_EXCEPTION_MODULE)];
-  char error_root[sizeof(COD_LANG_ERROR_ROOT_NAME)];
   char io[sizeof(COD_LANG_IO_MODULE)];
   char print[sizeof(COD_LANG_PRINT_NAME)];
   char text_storage[sizeof(COD_LANG_TEXT_STORAGE_MODULE)];
@@ -74,7 +75,7 @@ typedef struct cod_lang_intrinsic_spellings {
 } cod_lang_intrinsic_spellings;
 
 static const cod_lang_intrinsic_spellings cod_lang_intrinsic_names = {
-    COD_LANG_EXCEPTION_MODULE, COD_LANG_ERROR_ROOT_NAME, COD_LANG_IO_MODULE, COD_LANG_PRINT_NAME,
+    COD_LANG_EXCEPTION_MODULE, COD_LANG_IO_MODULE, COD_LANG_PRINT_NAME,
     COD_LANG_TEXT_STORAGE_MODULE,
 #define COD_LANG_TEXT_VALUE(key, spelling, kind, id) #spelling,
     COD_LANG_TEXT_INTRINSICS(COD_LANG_TEXT_VALUE)
@@ -94,8 +95,6 @@ static const cod_lang_intrinsic_export cod_lang_intrinsic_exports[] = {
       id, COD_LANG_EXCEPTION_TYPE_EXPORT, checked, 0, 0, 0, 0, 0},
     COD_LANG_INTRINSIC_EXCEPTIONS(COD_LANG_EXCEPTION_EXPORT)
 #undef COD_LANG_EXCEPTION_EXPORT
-    {COD_LANG_SPELLING_SPAN(exceptions, COD_LANG_EXCEPTION_MODULE), COD_LANG_SPELLING_SPAN(error_root, COD_LANG_ERROR_ROOT_NAME),
-        COD_LANG_ERROR_ROOT_ID, COD_LANG_EXCEPTION_TYPE_EXPORT, 0, 0, 0, 0, 0, 0},
     {COD_LANG_SPELLING_SPAN(io, COD_LANG_IO_MODULE), COD_LANG_SPELLING_SPAN(print, COD_LANG_PRINT_NAME),
         COD_LANG_PRINT_SYMBOL, COD_LANG_SYMBOL_EXPORT, 0, 0, 0, 0, 0, 0},
 #define COD_LANG_TEXT_EXPORT(key, spelling, kind, id) \

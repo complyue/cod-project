@@ -577,7 +577,7 @@ class LLVMEmission {
   template <typename Initialize>
   void raise_constructed_exception(const Location &at, size_t category, const Initialize &emit_fields) {
     auto *layout = product_layout(*program_->exception_types.at(category).schema);
-    auto *capacity = integer(100 * 1024 * 1024);
+    auto *capacity = integer(COD_LANG_EXCEPTION_REGION_DEFAULT);
     auto *size = llvm::ConstantExpr::getSizeOf(layout);
     auto *alignment = integer(module_.getDataLayout().getABITypeAlign(layout).value());
     auto *allocate = block("exception.allocate"), *insufficient = block("exception.capacity");
@@ -1633,31 +1633,102 @@ class LLVMEmission {
     b_.CreateBr(next);
     b_.SetInsertPoint(next);
   }
-  void restore_deferred_residual(const DeferredFailures &queue) {
-    auto *tail = load(queue.tail);
-    auto *residual = block("defer.residual"), *scan = block("defer.residual.next"), *done = block("defer.residual.done");
-    b_.CreateCondBr(b_.CreateIsNull(tail), done, residual);
-    b_.SetInsertPoint(residual);
-    // Residual aggregation has its own source and ownership contract. Retain
-    // the existing terminal outcome for the admitted residual boundary.
-    save_abrupt(b_.CreateLoad(outcome_, deferred_failure_field(tail, failure_outcome)));
-    b_.CreateBr(scan);
+  void finish_deferred_residuals(const DeferredFailures &queue, const Location &at, llvm::AllocaInst *body_pending,
+                                 const CompletionState<llvm::Value *> &body) {
+    auto *current = slot(b_.getPtrTy(), "defer.residual.current");
+    auto *terminal = slot(b_.getPtrTy(), "defer.residual.terminal");
+    auto *count = slot(b_.getInt64Ty(), "defer.residual.count");
+    auto *aggregate = slot(b_.getPtrTy(), "defer.residual.aggregate");
+    b_.CreateStore(load(queue.head), current);
+    b_.CreateStore(null_pointer(), terminal);
+    b_.CreateStore(null_pointer(), aggregate);
+    b_.CreateStore(integer(0), count);
+    auto *scan = block("defer.residual.scan"), *inspect = block("defer.residual.inspect"), *classify = block("defer.residual.classify");
+    auto *retire = block("defer.residual.retire"), *release = block("defer.residual.release"), *done = block("defer.residual.done");
+    b_.CreateCondBr(b_.CreateIsNull(load(current)), done, scan);
     b_.SetInsertPoint(scan);
-    auto *node = load(queue.head);
-    auto *release = block("defer.residual.release");
-    b_.CreateCondBr(b_.CreateIsNull(node), done, release);
-    b_.SetInsertPoint(release);
-    b_.CreateStore(b_.CreateLoad(b_.getPtrTy(), deferred_failure_field(node, failure_next)), queue.head);
-    if (owned_failures_) {
-      auto *old = b_.CreateLoad(outcome_, deferred_failure_field(node, failure_outcome));
-      release_failure_owner(b_, b_.CreateSelect(b_.CreateICmpEQ(node, tail), null_pointer(),
-                                                 b_.CreateExtractValue(old, failure_owner_field())));
-    }
-    retire_deferred_failure(node);
+    auto *node = load(current);
+    b_.CreateCondBr(b_.CreateIsNull(node), classify, inspect);
+    b_.SetInsertPoint(inspect);
+    auto *failure = b_.CreateLoad(outcome_, deferred_failure_field(node, failure_outcome));
+    auto *fatal = b_.CreateIsNotNull(b_.CreateExtractValue(failure, 3));
+    b_.CreateStore(b_.CreateSelect(fatal, node, load(terminal)), terminal);
+    b_.CreateStore(b_.CreateAdd(load(count), b_.CreateZExt(b_.CreateNot(fatal), b_.getInt64Ty())), count);
+    b_.CreateStore(b_.CreateLoad(b_.getPtrTy(), deferred_failure_field(node, failure_next)), current);
     b_.CreateBr(scan);
+
+    b_.SetInsertPoint(classify);
+    auto *last_terminal = load(terminal);
+    auto *deliver_fatal = block("defer.residual.fatal"), *test_body = block("defer.residual.body");
+    b_.CreateCondBr(b_.CreateIsNotNull(last_terminal), deliver_fatal, test_body);
+    b_.SetInsertPoint(deliver_fatal);
+    save_abrupt(b_.CreateLoad(outcome_, deferred_failure_field(last_terminal, failure_outcome)));
+    b_.CreateBr(retire);
+    b_.SetInsertPoint(test_body);
+    auto *publish = block("defer.residual.publish");
+    b_.CreateCondBr(b_.CreateAnd(load(body_pending), b_.CreateIsNotNull(body.fatal)), retire, publish);
+
+    const auto retain = [&](llvm::Value *owner, bool member, llvm::Value *category, llvm::Value *where,
+                            llvm::Value *requested, llvm::Value *available, llvm::Value *cause, llvm::Value *child) {
+      std::vector<llvm::Type *> types{b_.getPtrTy()};
+      types.insert(types.end(), 6, b_.getInt64Ty());
+      types.push_back(b_.getPtrTy());
+      b_.CreateCall(runtime("cod_lang_retain_deferred_failure", b_.getVoidTy(), types),
+                    {owner, integer(member), category, where, requested, available, cause, child});
+    };
+    b_.SetInsertPoint(publish);
+    if (program_->deferred_aggregates) {
+      auto *status = slot(b_.getInt64Ty(), "defer.residual.status");
+      auto acquire = runtime("cod_lang_acquire_deferred_aggregate", b_.getPtrTy(), {b_.getInt64Ty(), b_.getPtrTy()});
+      auto *owner = b_.CreateCall(acquire, {load(count), status});
+      auto *ready = block("defer.residual.ready"), *unavailable = block("defer.residual.unavailable");
+      auto *where = integer(site(at));
+      b_.CreateCondBr(b_.CreateIsNotNull(owner), ready, unavailable);
+      b_.SetInsertPoint(unavailable);
+      save_abrupt(outcome(empty_scalar(), load(status), where, null_pointer()));
+      b_.CreateBr(retire);
+      b_.SetInsertPoint(ready);
+      b_.CreateStore(owner, aggregate);
+      auto *attach_body = block("defer.residual.attach.body"), *deliver = block("defer.residual.deliver");
+      b_.CreateCondBr(load(body_pending), attach_body, deliver);
+      b_.SetInsertPoint(attach_body);
+      retain(owner, false, body.category, body.site, body.requested, body.available, body.cause, body.failure_owner);
+      b_.CreateStore(b_.getFalse(), body_pending);
+      b_.CreateBr(deliver);
+      b_.SetInsertPoint(deliver);
+      save_abrupt(outcome(empty_scalar(), integer(deferred_aggregate_id), where, null_pointer(),
+                          nullptr, nullptr, nullptr, nullptr, owner));
+    } else save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::unsound_runtime_typing)), integer(0), null_pointer()));
+    b_.CreateBr(retire);
+
+    b_.SetInsertPoint(retire);
+    auto *pending = load(queue.head);
+    b_.CreateCondBr(b_.CreateIsNull(pending), done, release);
+    b_.SetInsertPoint(release);
+    b_.CreateStore(b_.CreateLoad(b_.getPtrTy(), deferred_failure_field(pending, failure_next)), queue.head);
+    if (owned_failures_) {
+      auto *old = b_.CreateLoad(outcome_, deferred_failure_field(pending, failure_outcome));
+      auto *child = b_.CreateExtractValue(old, failure_owner_field());
+      if (program_->deferred_aggregates) {
+        auto *owner = load(aggregate);
+        auto *retain_member = block("defer.residual.attach.member"), *drop = block("defer.residual.drop");
+        auto *retained = block("defer.residual.retained");
+        b_.CreateCondBr(b_.CreateIsNotNull(owner), retain_member, drop);
+        b_.SetInsertPoint(retain_member);
+        retain(owner, true, b_.CreateExtractValue(old, 1), b_.CreateExtractValue(old, 2), b_.CreateExtractValue(old, 4),
+               b_.CreateExtractValue(old, 5), b_.CreateExtractValue(old, 6), child);
+        b_.CreateBr(retained);
+        b_.SetInsertPoint(drop);
+        release_failure_owner(b_, child);
+        b_.CreateBr(retained);
+        b_.SetInsertPoint(retained);
+      } else release_failure_owner(b_, child);
+    }
+    retire_deferred_failure(pending);
+    b_.CreateBr(retire);
     b_.SetInsertPoint(done);
   }
-  void drain(Scope &scope) {
+  void drain(Scope &scope, const Location &at) {
     b_.SetInsertPoint(scope.cleanup);
     if (scope.actions.empty()) return;
     auto *next_entry = scope.cleanup;
@@ -1799,7 +1870,7 @@ class LLVMEmission {
     b_.CreateBr(next_entry);
     b_.SetInsertPoint(done);
     if (body_pending) {
-      restore_deferred_residual(failures);
+      finish_deferred_residuals(failures, at, body_pending, body_outcome);
       auto *resume = block("defer.resume.body"), *discard = block("defer.discard.body"), *completed = block("defer.completed");
       auto *deferred_failure = b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2));
       b_.CreateCondBr(b_.CreateAnd(load(body_pending), b_.CreateNot(deferred_failure)), resume, discard);
@@ -1906,7 +1977,7 @@ class LLVMEmission {
     auto *value = emit_expression(expr, Projection::value, discard);
     if (reachable()) { b_.CreateStore(value, result); b_.CreateBr(control.exit); }
     b_.SetInsertPoint(control.exit);
-    if (!native.actions.empty()) drain(native);
+    if (!native.actions.empty()) drain(native, expr.at);
     native_effect_scope_ = outer_native;
     restore_effects(saved);
     control_ = control.parent;
@@ -1954,7 +2025,7 @@ class LLVMEmission {
       b_.CreateBr(draining);
       scope.cleanup = draining;
     }
-    drain(scope); release_values(scope.values); restore_effects(effects);
+    drain(scope, at); release_values(scope.values); restore_effects(effects);
     if (lexical_allocations_) {
       auto *head = load(lexical_allocations_);
       auto *release_storage = block("storage.release"), *done = block("storage.released");
@@ -3566,7 +3637,7 @@ class LLVMEmission {
           return construct_exception(expr, category);
         });
       }
-      llvm::Value *value = expr.children.empty() ? load(storage_.at(*fact.place)) : emit_expression(*expr.children[0]);
+      llvm::Value *value = fact.place ? load(storage_.at(*fact.place)) : emit_expression(*expr.children[0]);
       if (!reachable()) return nullptr;
       value = unpack(value, program_->exception_type(0));
       if (expr.children.size() == 2) {
@@ -3586,7 +3657,7 @@ class LLVMEmission {
         b_.SetInsertPoint(ready);
         value = b_.CreateInsertValue(value, handle, 4);
       }
-      auto *owner = fact.exception_owner ? take_failure_owner(b_, caught_owners_.at(*fact.exception_owner)) : nullptr;
+      auto *owner = owned_failures_ && fact.exception_owner ? take_failure_owner(b_, caught_owners_.at(*fact.exception_owner)) : nullptr;
       raise_exception(value, owner);
       return nullptr;
     }
@@ -4005,7 +4076,7 @@ class LLVMEmission {
     if (owned_failures_) {
       clear_failure_owner();
       auto *intrinsic = block("uncaught.intrinsic");
-      const auto first_nominal = error_root_id + 1;
+      const auto first_nominal = exception_categories.size();
       auto *select = b_.CreateSwitch(category, intrinsic, program_->exception_types.size() - first_nominal);
       auto report = runtime("cod_lang_uncaught_nominal", b_.getVoidTy(), {b_.getPtrTy(), b_.getInt64Ty()});
       for (size_t i = first_nominal; i < program_->exception_types.size(); ++i) {
@@ -4117,7 +4188,7 @@ public:
       return allocates_lexically(instance.operations);
     });
     protected_outcomes_ = std::ranges::any_of(program.methods, [](const auto &method) { return method.here_group && !method.instances.empty(); });
-    owned_failures_ = program.exception_types.size() > error_root_id + 1;
+    owned_failures_ = program.deferred_aggregates || program.exception_types.size() > exception_categories.size();
     case_scope_outcomes_ = std::ranges::any_of(program.methods, [](const auto &method) {
       return method.source->case_scan_scope && !method.instances.empty();
     });

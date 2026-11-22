@@ -131,6 +131,18 @@ void cod_lang_defer_free(void *record) {
 struct cod_exception_owner {
     cod_region_storage storage;
     cod_region_extent root;
+    struct cod_exception_owner *release_next;
+    int aggregate;
+};
+
+struct cod_retained_exception {
+    uint64_t category, site, requested, available, cause;
+    struct cod_exception_owner *owner;
+};
+
+struct cod_deferred_aggregate {
+    size_t retained;
+    struct cod_retained_exception body;
 };
 
 void *cod_lang_acquire_exception_region(uint64_t capacity, uint64_t root_size, uint64_t root_alignment) {
@@ -151,6 +163,7 @@ void *cod_lang_acquire_exception_region(uint64_t capacity, uint64_t root_size, u
     }
     owner->storage.used = used;
     owner->root = root;
+    owner->aggregate = 0;
     return owner;
 }
 
@@ -159,12 +172,70 @@ void *cod_lang_exception_payload(void *handle) {
     return cod_region_storage_address(&owner->storage, owner->root);
 }
 
+static struct cod_retained_exception *deferred_members(struct cod_deferred_aggregate *aggregate) {
+    return (struct cod_retained_exception *)(aggregate + 1);
+}
+
+void *cod_lang_acquire_deferred_aggregate(uint64_t members, uint64_t *failure_category) {
+    const size_t header = sizeof(struct cod_deferred_aggregate);
+    if (members > ((size_t)PTRDIFF_MAX - header) / sizeof(struct cod_retained_exception)) {
+        *failure_category = COD_EXCEPTION_invalid_capacity;
+        return NULL;
+    }
+    const size_t bytes = header + (size_t)members * sizeof(struct cod_retained_exception);
+    const size_t capacity = bytes > COD_LANG_EXCEPTION_REGION_DEFAULT ? bytes : COD_LANG_EXCEPTION_REGION_DEFAULT;
+#ifdef __cplusplus
+    const size_t alignment = alignof(struct cod_deferred_aggregate);
+#else
+    const size_t alignment = _Alignof(struct cod_deferred_aggregate);
+#endif
+    struct cod_exception_owner *owner = (struct cod_exception_owner *)cod_lang_acquire_exception_region(
+        capacity, bytes, alignment);
+    if (!owner) {
+        *failure_category = COD_EXCEPTION_out_of_memory;
+        return NULL;
+    }
+    owner->aggregate = 1;
+    struct cod_deferred_aggregate *aggregate = (struct cod_deferred_aggregate *)cod_lang_exception_payload(owner);
+    aggregate->retained = 0;
+    aggregate->body.owner = NULL;
+    aggregate->body.category = 0;
+    *failure_category = 0;
+    return owner;
+}
+
+void cod_lang_retain_deferred_failure(void *handle, uint64_t position, uint64_t category, uint64_t site,
+                                      uint64_t requested, uint64_t available, uint64_t cause, void *owner) {
+    // The emitter reserves the exact member array, writes it in order and
+    // hands off each original region once. Position zero is the body field.
+    struct cod_deferred_aggregate *aggregate = (struct cod_deferred_aggregate *)cod_lang_exception_payload(handle);
+    struct cod_retained_exception *entry = position ? deferred_members(aggregate) + aggregate->retained++ : &aggregate->body;
+    struct cod_retained_exception value = {category, site, requested, available, cause, (struct cod_exception_owner *)owner};
+    *entry = value;
+}
+
+static void schedule_exception_release(struct cod_exception_owner **pending, struct cod_exception_owner *owner) {
+    if (owner) {
+        owner->release_next = *pending;
+        *pending = owner;
+    }
+}
+
 void cod_lang_release_exception_region(void *handle) {
-    if (!handle)
-        return;
-    struct cod_exception_owner *owner = (struct cod_exception_owner *)handle;
-    cod_region_storage_release(&owner->storage);
-    free(owner);
+    struct cod_exception_owner *pending = NULL;
+    schedule_exception_release(&pending, (struct cod_exception_owner *)handle);
+    while (pending) {
+        struct cod_exception_owner *owner = pending;
+        pending = owner->release_next;
+        if (owner->aggregate) {
+            struct cod_deferred_aggregate *aggregate = (struct cod_deferred_aggregate *)cod_lang_exception_payload(owner);
+            for (size_t i = 0; i < aggregate->retained; ++i)
+                schedule_exception_release(&pending, deferred_members(aggregate)[i].owner);
+            schedule_exception_release(&pending, aggregate->body.owner);
+        }
+        cod_region_storage_release(&owner->storage);
+        free(owner);
+    }
 }
 
 struct cod_text_view {

@@ -25,7 +25,9 @@ runner.CASES = {
     "late_local_and_snapshot": (ERROR + 'val n<-0;' + LOOP + '{defer{behave @print(e.cause_count);behave @print(n);};n<-n+1;};};', 0, "3\n3\n2\n3\n1\n3\n", WARN),
     "nested_registration": (ERROR + LOOP + '{defer{defer{behave @print(e.cause_count);};};};};', 0, "3\n2\n1\n", WARN),
     "nested_prepared_call": (ERROR + 'proc observe(e:Exception)->void{behave @print(e.cause_count);}' + LOOP + '{defer{defer observe(e);};};};', 0, "3\n2\n1\n", WARN),
-    "captured_bare_rethrow": (ERROR + 'proc run()->void{try{throw chain(error());}catch(caught:const MissingReturnError){defer{throw;};};}try{run();}catch(resumed:const MissingReturnError){behave @print(resumed.cause_count);};', 0, "1\n", WARN),
+    "captured_bare_rethrow": (ERROR + 'proc run()->void{'
+        'defer catch(resumed:const MissingReturnError){behave @print(resumed.cause_count);};'
+        'try{throw chain(error());}catch(caught:const MissingReturnError){defer{throw;};};return;}run();', 0, "1\n", WARN),
     "nested_bare_rethrow": (ERROR + 'try{{try{throw chain(error());}catch(e){defer{defer{throw;};};};}}catch(e){behave @print(e.cause_count);};', 0, "1\n", WARN),
     "bare_rethrow_each_record": (ERROR + LOOP + '{defer{try{throw;}catch(x){behave @print(x.cause_count);};};};};', 0, "3\n2\n1\n", WARN),
     "named_rethrow_each_record": (ERROR + LOOP + '{defer{try{throw e;}catch(x){behave @print(x.cause_count);};};};};', 0, "3\n2\n1\n", WARN),
