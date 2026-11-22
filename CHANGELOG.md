@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — First CoD-owned dependency edge
+
+<a id="k-booter-first-edge-20261122"></a>
+**K-BOOTER-FIRST-EDGE-20261122.** Under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122, delegated review cleared the bounded path provider, regional seed and named arrays, writable table holders and same-site scoped dependency dispatch, with first-root, growth and failure acceptance. The prerequisite decision is at `3f2466920124670d9245f7e5dae19f26b4bf2f0a:applications/cod-booter/docs/ModuleGraph.md`, “First dependency edge”. D-20-MODULE-GRAPH r6 to r7, D-ARCH-REVIEW r7 to r8, P-680–P-683, registry r1056.
+
 ## 2026-11-22 — Dependency path owners and graph storage
 
 <a id="k-booter-graph-edge-prerequisites-20261122"></a>

@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 7. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 8. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
 
 [K-BOOTER-AST-TABLE-20261122](../CHANGELOG.md#k-booter-ast-table-20261122) records the delegated review of the indexed AST workload and its seed prerequisites under the [work-method decision](../CHANGELOG.md#h-booter-work-method-20261122).
 
@@ -13,6 +13,8 @@ The [node identity clearance](../CHANGELOG.md#k-booter-ast-membership-20261122) 
 The [single-file route clearance](../CHANGELOG.md#k-booter-typed-object-20261122) covers the isolated activation and existing native assembly. The [consumer clearance](../CHANGELOG.md#k-booter-syntax-consumers-20261122) covers direct migration of the shared compiler passes to the typed AST.
 
 The [seed Boolean observation clearance](../CHANGELOG.md#k-seed-boolean-observation-20261122) covers the private checker operation used during semantic checking of the typed CompilerCLI.
+
+The [first dependency-edge clearance](../CHANGELOG.md#k-booter-first-edge-20261122) covers scoped changes to the path providers, the regional seed path, holder forwarding and definition-installed dispatch.
 
 ## Before coding
 
@@ -52,6 +54,7 @@ The review compared all 1,630 tracked paths on published commit `5c12421e9a68bfb
 - **AST node identity in the booter.** Cleared for graph-local key issuance on source open, frame and table state, parser construction of bits IDs, lookup by the checker and lowering, and focused isolation probes. The [frame and node identity contract](../applications/cod-booter/docs/ModuleGraph.md#frame-and-node-identity) specifies ownership, failure and acceptance for both the isolated route and its production interfaces.
 - **Single-file typed booter object route.** Cleared for the actual CompilerCLI, CoD frame activation, existing compiler stages, generated host entry, existing provider implementations and the direct file-to-object acceptance in an isolated build. The [single-file contract](../applications/cod-booter/docs/ModuleGraph.md#single-file-object-route) specifies buffer owners, status translation and the distinction from final graph publication. Production build configuration retains its separate authorization.
 - **Existing booter syntax producers and consumers.** The [module inventory and acceptance](../applications/cod-booter/docs/ModuleGraph.md#typed-syntax-consumers) cover the isolated direct migration by syntax family, required CoD caller signatures and focused regressions. Each pass keeps its current semantic checks. New grammar, changes to native contracts and the graph traversal cutover have independent review scopes.
+- **First booter dependency edge.** The [implementation and verification scope](../applications/cod-booter/docs/ModuleGraph.md#first-edge-implementation) covers the native path owner and stubs, the CoD graph and common operations on both placements, direct bits region construction, owner-relative named arrays, writable lexical table-slot forwarding, and a single nested symbolic definition site. The ordinary source parser, registration, checker, emitter and shared C storage service retain their existing responsibilities. Wider handler family composition, general region transport and production cutover have separate review scopes.
 
 ### Read-only Boolean observation in the seed checker
 
