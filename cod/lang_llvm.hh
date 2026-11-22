@@ -450,7 +450,10 @@ class LLVMEmission {
     return owner;
   }
   void release_failure_owner(llvm::IRBuilder<> &builder, llvm::Value *owner) {
-    if (owner) builder.CreateCall(runtime("cod_lang_release_exception_owner", builder.getVoidTy(), {builder.getPtrTy()}), {owner});
+    if (owner) builder.CreateCall(runtime("cod_lang_release_exception_region", builder.getVoidTy(), {builder.getPtrTy()}), {owner});
+  }
+  llvm::Value *exception_payload(llvm::Value *owner) {
+    return b_.CreateCall(runtime("cod_lang_exception_payload", b_.getPtrTy(), {b_.getPtrTy()}), {owner});
   }
   void clear_failure_owner() {
     if (owned_failures_) release_failure_owner(b_, take_failure_owner(b_, completion_.failure_owner));
@@ -576,6 +579,7 @@ class LLVMEmission {
     auto *layout = product_layout(*program_->exception_types.at(category).schema);
     auto *capacity = integer(100 * 1024 * 1024);
     auto *size = llvm::ConstantExpr::getSizeOf(layout);
+    auto *alignment = integer(module_.getDataLayout().getABITypeAlign(layout).value());
     auto *allocate = block("exception.allocate"), *insufficient = block("exception.capacity");
     b_.CreateCondBr(b_.CreateICmpULE(size, capacity), allocate, insufficient);
     b_.SetInsertPoint(insufficient);
@@ -583,7 +587,8 @@ class LLVMEmission {
                         integer(site(at)), null_pointer(), size, capacity));
     b_.CreateBr(control_->exit);
     b_.SetInsertPoint(allocate);
-    auto *owner = b_.CreateCall(runtime("malloc", b_.getPtrTy(), {b_.getInt64Ty()}), {capacity}, "exception.region");
+    auto acquire = runtime("cod_lang_acquire_exception_region", b_.getPtrTy(), std::vector<llvm::Type *>(3, b_.getInt64Ty()));
+    auto *owner = b_.CreateCall(acquire, {capacity, size, alignment}, "exception.owner");
     auto *initialize = block("exception.initialize"), *unavailable = block("exception.unavailable");
     b_.CreateCondBr(b_.CreateIsNotNull(owner), initialize, unavailable);
     b_.SetInsertPoint(unavailable);
@@ -591,7 +596,7 @@ class LLVMEmission {
     b_.SetInsertPoint(initialize);
     Control construction{control_, block("exception.abandoned")};
     control_ = &construction;
-    emit_fields(layout, owner);
+    emit_fields(layout, exception_payload(owner));
     control_ = construction.parent;
     if (reachable()) {
       save_abrupt(outcome(empty_scalar(), integer(category), integer(site(at)), null_pointer(),
@@ -603,13 +608,13 @@ class LLVMEmission {
     b_.CreateBr(control_->exit);
   }
   llvm::Value *construct_exception(const Expression &expr, size_t category) {
-    raise_constructed_exception(expr.at, category, [&](llvm::StructType *layout, llvm::Value *owner) {
+    raise_constructed_exception(expr.at, category, [&](llvm::StructType *layout, llvm::Value *payload) {
       for (const auto &initializer : expr.children) {
         const auto &input = *initializer->children.front();
         auto *value = emit_expression(input);
         if (!reachable()) break;
         const auto index = *contexts_.front().at(initializer.get()).product_field;
-        assign_place(b_.CreateStructGEP(layout, owner, index), convert_result(*initializer, input, value),
+        assign_place(b_.CreateStructGEP(layout, payload, index), convert_result(*initializer, input, value),
                      *initializer, &CheckedOperation::operand_type);
       }
     });
@@ -2018,13 +2023,13 @@ class LLVMEmission {
       auto *failed = block("native.failure");
       select->addCase(b_.getInt32(static_cast<unsigned>(NativeStatus::failure)), failed);
       b_.SetInsertPoint(failed);
-      auto *payload = llvm::cast<llvm::StructType>(error->getAllocatedType());
-      raise_constructed_exception(expr.at, constructor.failure->identity, [&](llvm::StructType *layout, llvm::Value *owner) {
+      auto *native_layout = llvm::cast<llvm::StructType>(error->getAllocatedType());
+      raise_constructed_exception(expr.at, constructor.failure->identity, [&](llvm::StructType *layout, llvm::Value *payload) {
         for (size_t i = 0; i < failure->fields.size(); ++i) {
           const auto &type = failure->fields[i].type;
-          llvm::Value *value = b_.CreateLoad(c_scalar_type(type), b_.CreateStructGEP(payload, error, i));
+          llvm::Value *value = b_.CreateLoad(c_scalar_type(type), b_.CreateStructGEP(native_layout, error, i));
           if (type == Type::boolean) value = b_.CreateTrunc(value, b_.getInt1Ty());
-          b_.CreateStore(value, b_.CreateStructGEP(layout, owner, i));
+          b_.CreateStore(value, b_.CreateStructGEP(layout, payload, i));
         }
       });
     }
@@ -3449,7 +3454,7 @@ class LLVMEmission {
         auto *member = contextual_value(expr, projections, "exception.field", [&](const auto &selection) -> llvm::Value * {
           const auto &[category, holder, index] = selection;
           auto *layout = product_layout(*program_->exception_types.at(category).schema);
-          return b_.CreateStructGEP(layout, load(caught_owners_.at(holder)), index);
+          return b_.CreateStructGEP(layout, exception_payload(load(caught_owners_.at(holder))), index);
         }, b_.getPtrTy());
         if (!read) return member;
         return discard ? empty_scalar() : load_place(member, expr);

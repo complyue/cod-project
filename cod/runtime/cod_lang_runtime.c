@@ -1,5 +1,6 @@
 #include "cod_lang_runtime.h"
 
+#include "../../include/cod_region_storage.h"
 #include "../lang_intrinsic_catalog.h"
 
 #include <inttypes.h>
@@ -127,7 +128,42 @@ void cod_lang_defer_free(void *record) {
     free(record);
 }
 
-void cod_lang_release_exception_owner(void *owner) {
+struct cod_exception_owner {
+    cod_region_storage storage;
+    cod_region_extent root;
+};
+
+void *cod_lang_acquire_exception_region(uint64_t capacity, uint64_t root_size, uint64_t root_alignment) {
+    if (capacity > PTRDIFF_MAX || root_size > capacity || root_alignment > SIZE_MAX)
+        return NULL;
+    size_t used = 0;
+    cod_region_extent root;
+    if (cod_region_layout_reserve(&used, (size_t)capacity, (size_t)root_size, 1,
+                                  (size_t)root_alignment, &root) != COD_REGION_STORAGE_OK)
+        return NULL;
+    struct cod_exception_owner *owner = (struct cod_exception_owner *)malloc(sizeof(*owner));
+    if (!owner)
+        return NULL;
+    owner->storage.bytes = NULL;
+    if (cod_region_storage_open(&owner->storage, (size_t)capacity) != COD_REGION_STORAGE_OK) {
+        free(owner);
+        return NULL;
+    }
+    owner->storage.used = used;
+    owner->root = root;
+    return owner;
+}
+
+void *cod_lang_exception_payload(void *handle) {
+    struct cod_exception_owner *owner = (struct cod_exception_owner *)handle;
+    return cod_region_storage_address(&owner->storage, owner->root);
+}
+
+void cod_lang_release_exception_region(void *handle) {
+    if (!handle)
+        return;
+    struct cod_exception_owner *owner = (struct cod_exception_owner *)handle;
+    cod_region_storage_release(&owner->storage);
     free(owner);
 }
 
