@@ -30,11 +30,11 @@ runner.CASES={
  'callable_arity_still_checked':(VIEW+'func f()->const i64{func invoke=first;return invoke({return 7;});}f();',2,'','argument count'),
  'aborted_invocation_has_no_throws_obligation':(IO+'using "std:exceptions" NullPointerException;func target(x:i64)->const i64 throws NullPointerException{return x;}func f()->const i64{func invoke=target;return invoke({return 7;});}behave @print(f());',0,'7\n',''),
  'surviving_invocation_keeps_throws_obligation':('using "std:exceptions" NullPointerException;func target(x:i64)->const i64 throws NullPointerException{return x;}func f(flag:bool)->const i64{func invoke=target;return invoke(if(flag){return 7;}else{8});}f(true);',2,'','requires a covering catch'),
- 'deferred_preparation_returns':(OBS+'proc show(x:i64,y:i64)->void{observe(x+y);return;}proc f()->const i64{proc invoke=show;defer observe(1);defer invoke({observe(2);0},{return 7;});return 8;}behave @print(f());',0,'2\n1\n7\n',''),
- 'deferred_preparation_throws':(OBS+EX+'proc show(x:i64)->void{observe(x);return;}proc f()->void{proc invoke=show;defer observe(1);defer invoke({throw error();});observe(99);}try{f();}catch(e:const MissingReturnError){observe(3);};',0,'1\n3\n','[-Wmissing-return]'),
- 'deferred_preparation_prior_registration':(OBS+'proc show(x:i64)->void{observe(x);return;}proc f()->const i64{proc invoke=show;defer invoke(1);defer invoke({return 7;});return 8;}behave @print(f());',0,'1\n7\n',''),
- 'contextual_deferred_preparation':(CONTEXT+'proc run(tag:T,ref x:i64 in O)->void throws NullPointerException where {T,owner O}{ptr p=x;p=null;proc invoke=show;defer invoke({pick(tag,p)});return;}' + RUN_CONTEXT,0,'8\n7\n',''),
- 'contextual_ordinary_preparation':(CONTEXT+'proc run(tag:T,ref x:i64 in O)->void throws NullPointerException where {T,owner O}{ptr p=x;p=null;proc invoke=show;invoke({pick(tag,p)});return;}' + RUN_CONTEXT,0,'8\n7\n',''),
+ 'deferred_preparation_returns':(OBS+'proc show(x:i64,y:i64)->void{observe(x+y);return;}proc f()->const i64{defer observe(1);defer show({observe(2);0},{return 7;});return 8;}behave @print(f());',0,'2\n1\n7\n',''),
+ 'deferred_preparation_throws':(OBS+EX+'proc show(x:i64)->void{observe(x);return;}proc f()->void{defer observe(1);defer show({throw error();});observe(99);}try{f();}catch(e:const MissingReturnError){observe(3);};',0,'1\n3\n','[-Wmissing-return]'),
+ 'deferred_preparation_prior_registration':(OBS+'proc show(x:i64)->void{observe(x);return;}proc f()->const i64{defer show(1);defer show({return 7;});return 8;}behave @print(f());',0,'1\n7\n',''),
+ 'contextual_deferred_preparation':(CONTEXT+'proc run(tag:T,ref x:i64 in O)->void throws NullPointerException where {T,owner O}{ptr p=x;p=null;defer show({pick(tag,p)});return;}' + RUN_CONTEXT,0,'8\n7\n',''),
+ 'contextual_ordinary_preparation':(CONTEXT+'proc run(tag:T,ref x:i64 in O)->void throws NullPointerException where {T,owner O}{ptr p=x;p=null;show({pick(tag,p)});return;}' + RUN_CONTEXT,0,'8\n7\n',''),
  'contextual_print_operand':(CONTEXT+'proc run(tag:T,ref x:i64 in O)->void throws NullPointerException where {T,owner O}{ptr p=x;p=null;behave @print({pick(tag,p)});return;}' + RUN_CONTEXT,0,'8\n7\n',''),
  'contextual_transfer_rhs':(CONTEXT+'proc run(tag:T,ref x:i64 in O)->void throws NullPointerException where {T,owner O}{ptr p=x;p=null;x<-{pick(tag,p)};behave @print(x);return;}' + RUN_CONTEXT,0,'8\n7\n',''),
  'print_operand_return':(OBS+'proc f()->const i64{defer observe(1);behave @print({return 7;});return 8;}behave @print(f());',0,'1\n7\n',''),
@@ -52,7 +52,6 @@ for kind, declaration in {
     'ref': 'ref pending=',
     'ptr': 'ptr pending=',
     'func': 'func pending=',
-    'proc': 'proc pending=',
 }.items():
     runner.CASES[f'{kind}_declaration_initializer_return'] = (
         OBS+'proc finish()->const i64{defer observe(1);'+declaration+
@@ -76,7 +75,7 @@ runner.CASES.update({
  'declaration_initializer_prior_read_required':('func finish()->const i64{val cell<-make local i64;val pending<-{cell;return 7;};}finish();',2,'','before definite initialization'),
  'declaration_initializer_wrong_return_rejects':('func finish()->const i64{val pending<-{return false;};}finish();',2,'','return type'),
  'declaration_initializer_void_value_rejects':('proc finish()->void{val pending<-{};}finish();',2,'','non-value or abruptly completing operand'),
- 'declaration_initializer_known_kind_rejects':('func finish()->const i64{func pending:proc()->void={return 7;};}finish();',2,'','matching func/proc value'),
+ 'declaration_initializer_known_kind_rejects':('func finish()->const i64{func pending:proc()->void={return 7;};}finish();',2,'','procedure signatures cannot occupy ordinary value or reference storage'),
  'declaration_initializer_known_annotation_required':('func finish()->const i64{val pending:UnknownType<-{return 7;};}finish();',2,'','UnknownType'),
  'declaration_initializer_duplicate_rejects':('func finish()->const i64{val pending<-{return 7;};val pending<-8;}finish();',2,'','duplicate declaration'),
  'declaration_initializer_recovery_does_not_publish':(EX+'proc finish()->void{try{val pending<-{throw error();};}catch(failure:const MissingReturnError){};pending;}finish();',2,'',"binding 'pending' is not available on every reaching path"),

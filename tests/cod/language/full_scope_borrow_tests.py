@@ -2,6 +2,7 @@
 """Immediate scope bodies use live reference slots and ordinary target owners."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;'
 NPE = 'using "std:exceptions" NullPointerException;'
@@ -301,5 +302,12 @@ for name, body, expected, diagnostic in (
     runner.CASES['query_'+name] = (prefix+query(body)+'return queried;'+calls, status, '' if diagnostic else '4\n', diagnostic)
 
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'escape_through_returned_callable_rejected',
+    'live_holder_observes_write_through_borrow',
+    'generic_default_parameter_roles',
+), 'a storable func must be capture-free')
+
 if __name__ == '__main__':
     raise SystemExit(runner.main())

@@ -2,6 +2,7 @@
 """Anonymous declaration queries preserve signature checks without constructing values."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO='using symbol "std:io" @print;'
 APPLY='func apply(f:func(T)->const T,x:T)->const T where T{return f(x);}'
@@ -59,5 +60,10 @@ runner.CASE_SHADOWS = {
     'explicit_callable_capture_not_constructed': ['x'],
 }
 runner.EXTRA_SOURCES=[Path(__file__)]
+
+expect_source_rejections(runner, (
+    'runtime_value_capture',
+), 'a storable func must be capture-free')
+
 if __name__=='__main__':
  raise SystemExit(runner.main())

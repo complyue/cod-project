@@ -2,6 +2,7 @@
 """Symbolic families preserve actual inputs, complete captures and source identity."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;'
 F = 'symbol @f:proc(u64)->u64;proc @f(x:u64)->u64{return 1u64;}proc @f(x:T)->u64 where T{return 7u64;}'
@@ -55,6 +56,23 @@ runner.CASE_SHADOWS = {
     'deferred_argument_snapshot': ['x'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'source_family_not_destination',
+    'selected_context_1_7_1',
+    'copy_retains_source_and_capture',
+    'recursive_dynamic_family',
+    'scope_restores_complete_value',
+    'deferred_family_snapshot',
+    'callee_before_argument_effect',
+    'method_outside_slot_signature',
+    'nearest_source_binding',
+), 'procedure symbols require definition activation')
+expect_source_rejections(runner, (
+    'holder_and_forwarding',
+    'lexical_source_symbol_is_not_a_capture',
+    'family_return',
+), 'procedure signatures cannot occupy ordinary value or reference storage')
 
 if __name__ == '__main__':
     raise SystemExit(runner.main())

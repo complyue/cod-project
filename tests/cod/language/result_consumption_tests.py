@@ -14,10 +14,10 @@ NULL = '''func pick(tag:bool,ptr x:i64 in O)->ptr i64 in O where {owner O}{retur
 func pick(tag:i64,ptr x:i64 in O)->const i64 where {owner O}{return 7;}
 '''
 CALLABLES = '''func base(x:u64)->const u64{return x;}
-func other(x:u64)->const u64{return x+10u64;}
-func wrap(f:func(u64)->const u64)->func(u64)->const u64{return func[f](x:u64)->const u64{return f(x)+1u64;};}
-func pick_fn(tag:bool,ref f:func(u64)->const u64 in O)->(func(u64)->const u64) in O where {owner O}{defer{f<-wrap(other);};return f;}
-func pick_fn(tag:i64,ref f:func(u64)->const u64 in O)->func(u64)->const u64 where {owner O}{defer{f<-wrap(other);};return f;}
+func plus_one(x:u64)->const u64{return x+1u64;}
+func plus_eleven(x:u64)->const u64{return x+11u64;}
+func pick_fn(tag:bool,ref f:func(u64)->const u64 in O)->(func(u64)->const u64) in O where {owner O}{defer{f<-plus_eleven;};return f;}
+func pick_fn(tag:i64,ref f:func(u64)->const u64 in O)->func(u64)->const u64 where {owner O}{defer{f<-plus_eleven;};return f;}
 func read_fn(tag:T,ref f:func(u64)->const u64 in O)->func(u64)->const u64 where {T,owner O}{return pick_fn(tag,f);}
 '''
 runner.CASES = {
@@ -69,10 +69,10 @@ runner.CASES = {
  'borrowed_result_does_not_adopt_value_contract':(PICK+'func read(tag:T,ref x:i64 in O)->ref i64 in O where {T,owner O}{return pick(tag,x);}val x<-1;read(false,x);read(0,x);',2,'','fresh ordinary borrowed results'),
  'read_for_argument_preparation_modes':(IO+PICK+'func take(tag:bool,ref x:i64 in O)->const i64 where {owner O}{x<-9;return x;}func take(tag:i64,x:i64)->const i64{return x;}func read(tag:T,ref x:i64 in O)->const i64 where {T,owner O}{return take(tag,pick(tag,x));}val x<-1;behave @print(read(false,x));behave @print(x);x<-1;behave @print(read(0,x));behave @print(x);',0,'9\n9\n1\n2\n',''),
  'borrowed_operator_or_builtin_result':(IO+'func (+)(ref x:i64 in O,y:i64)->ref i64 in O where {owner O}{x<-intrinsic (+)(x,y);return x;}func read(ref x:T in O,y:T)->const T where {T,owner O}{return x+y;}val x<-1,y<-1u64;behave @print(read(x,2));behave @print(read(y,2u64));behave @print(x);behave @print(y);',0,'3\n3\n3\n1\n',''),
- 'complete_callable_result_contracts':(IO+CALLABLES+'{{func f=wrap(base);func g=read_fn(false,f);f<-base;behave @print(g(1u64));}};{{func f=wrap(base);func g=read_fn(0,f);f<-base;behave @print(g(1u64));}};',0,'12\n2\n',''),
- 'immediate_callable_result_invocation':(IO+CALLABLES+'{{func f=wrap(base);behave @print(read_fn(false,f)(1u64));}};{{func f=wrap(base);behave @print(read_fn(0,f)(1u64));}};',0,'12\n2\n',''),
- 'callable_result_saved_before_later_effect':(IO+CALLABLES+'func apply(f:func(u64)->const u64,n:u64)->const u64{return f(n);}func read(tag:T,ref f:func(u64)->const u64 in O)->const u64 where {T,owner O}{return apply(pick_fn(tag,f),{f<-base;1u64});}{{func f=wrap(base);behave @print(read(false,f));}};{{func f=wrap(base);behave @print(read(0,f));}};',0,'12\n2\n',''),
- 'captured_type_result_context':(IO+CALLABLES+'func truth()->const bool{return false;}func number()->const i64{return 0;}func factory(g:func()->const T)->func(func(u64)->const u64)->func(u64)->const u64 where T{return func[g](f:func(u64)->const u64)->func(u64)->const u64{return pick_fn(g(),f);};}func a=factory(truth);func b=factory(number);behave @print(a(wrap(base))(1u64));behave @print(b(wrap(base))(1u64));',0,'12\n2\n',''),
+ 'complete_callable_result_contracts':(IO+CALLABLES+'{{func f=plus_one;func g=read_fn(false,f);f<-base;behave @print(g(1u64));}};{{func f=plus_one;func g=read_fn(0,f);f<-base;behave @print(g(1u64));}};',0,'12\n2\n',''),
+ 'immediate_callable_result_invocation':(IO+CALLABLES+'{{func f=plus_one;behave @print(read_fn(false,f)(1u64));}};{{func f=plus_one;behave @print(read_fn(0,f)(1u64));}};',0,'12\n2\n',''),
+ 'callable_result_saved_before_later_effect':(IO+CALLABLES+'func apply(f:func(u64)->const u64,n:u64)->const u64{return f(n);}func read(tag:T,ref f:func(u64)->const u64 in O)->const u64 where {T,owner O}{return apply(pick_fn(tag,f),{f<-base;1u64});}{{func f=plus_one;behave @print(read(false,f));}};{{func f=plus_one;behave @print(read(0,f));}};',0,'12\n2\n',''),
+ 'explicit_type_result_context':(IO+CALLABLES+'func truth()->const bool{return false;}func number()->const i64{return 0;}func select(g:func()->const T,f:func(u64)->const u64)->func(u64)->const u64 where T{return read_fn(g(),f);}behave @print(select(truth,plus_one)(1u64));behave @print(select(number,plus_one)(1u64));',0,'12\n2\n',''),
  'exception_payload_result_context':(IO+'using "std:exceptions" MissingReturnError;func missing()->const i64{}func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}func pick(tag:bool,ref e:MissingReturnError in O)->ref MissingReturnError in O where {owner O}{return e;}func pick(tag:i64,ref e:MissingReturnError in O)->const MissingReturnError where {owner O}{return e;}func read(tag:T,ref e:MissingReturnError in O)->const MissingReturnError where {T,owner O}{return pick(tag,e);}val e<-error();behave @print(read(false,e).category);behave @print(read(0,e).category);',0,'5\n5\n','[-Wmissing-return]'),
 
 }

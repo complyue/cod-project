@@ -2,6 +2,7 @@
 """Family input domains preserve concrete exceptions, complete values and borrows."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;'
 NPE = 'using "std:exceptions" NullPointerException;'
@@ -66,6 +67,17 @@ runner.CASE_SHADOWS = {
     'borrowed_deferred_late_payload': ['x'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'borrowed_exception_adaptation_is_unproved',
+), 'procedure symbols require definition activation')
+expect_source_rejections(runner, (
+    'captured_callable_parameter',
+), 'a storable func must be capture-free')
+expect_source_rejections(runner, (
+    'callback_dynamic_projection',
+    'unused_callback_requires_capture',
+), 'procedure signatures cannot occupy ordinary value or reference storage')
 
 if __name__ == '__main__':
     raise SystemExit(runner.main())

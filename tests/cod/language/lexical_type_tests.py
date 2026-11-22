@@ -2,6 +2,7 @@
 """Nested definitions preserve compile-time type context through native calls."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO='using symbol "std:io" @print;\n'
 ID='func id(x:T)->const T where T{return x;}\n'
@@ -36,5 +37,12 @@ runner.CASES.update({
  'generic_name_shadows_exception':('using "std:exceptions" Exception;func factory(x:Exception)->func(Exception)->const Exception where Exception{return func[](y:Exception)->const Exception{return y;};}factory(1)(2);',0,'',''),
 })
 runner.EXTRA_SOURCES=[Path(__file__)]
+
+expect_source_rejections(runner, (
+    'inherited_capture',
+    'reference_capture_requires_proof',
+    'retained_void_completion',
+), 'a storable func must be capture-free')
+
 if __name__=='__main__':
  raise SystemExit(runner.main())

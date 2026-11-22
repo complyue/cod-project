@@ -2,6 +2,7 @@
 """Lexical callable coverage retains actual inputs, captures and enclosing types."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;'
 TAGS = ''.join(f'func tag(x:{kind})->u64{{return {value}u64;}}' for kind, value in
@@ -98,6 +99,14 @@ runner.CASE_SHADOWS = {
     'common_exception_actual_identity': ['e', 'e', 'e', 'e'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'ordinary_value_capture',
+), 'a storable func must be capture-free')
+expect_source_rejections(runner, (
+    'dynamic_capture_covers_unused_inputs',
+    'unused_dynamic_capture_required',
+), 'procedure signatures cannot occupy ordinary value or reference storage')
 
 if __name__ == '__main__':
     raise SystemExit(runner.main())

@@ -2,6 +2,7 @@
 """Eager operators share semantic method selection and checked builtin delegation."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;\n'
 BOOL = 'func (+)(x:bool,y:bool)->const bool{return x||y;}'
@@ -68,5 +69,10 @@ runner.CASE_SHADOWS = {
     'borrowed_operator_method': ['x', 'y'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'callable_operand_and_result',
+), 'a storable func must be capture-free')
+
 if __name__ == '__main__':
     raise SystemExit(runner.main())

@@ -2,6 +2,7 @@
 """Named values and capture operands respect the nearest lexical identity."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;'
 MODULE = 'func recur(n:u64)->u64{return 999u64;}'
@@ -64,6 +65,15 @@ runner.CASE_SHADOWS = {
     'nested_capture_uses_shadowing_parameter': ['recur', 'recur', 'n'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'inferred_nested_capture_does_not_select_module',
+    'explicit_nested_capture_does_not_select_module',
+    'unused_self_definition_capture_retained',
+    'nested_capture_uses_shadowing_parameter',
+    'module_capture_still_materializes',
+    'local_capture_still_snapshots_value',
+), 'a storable func must be capture-free')
 
 if __name__ == '__main__':
     raise SystemExit(runner.main())

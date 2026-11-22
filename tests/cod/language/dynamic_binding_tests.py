@@ -2,6 +2,7 @@
 """Typed dynamic bindings compose with calls, cleanup and iteration restoration."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;'
 X = 'symbol @x:u64;'
@@ -86,6 +87,11 @@ for name, (source, status, output, diagnostic) in list(runner.CASES.items()):
         runner.CASES[name] = (source, status, output, '[-Wmissing-return]')
 runner.CASE_ARGUMENTS = {}
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'locally_bound_callable',
+    'dynamic_capture_current_call',
+), 'procedure signatures cannot occupy ordinary value or reference storage')
 
 if __name__ == '__main__':
     raise SystemExit(runner.main())

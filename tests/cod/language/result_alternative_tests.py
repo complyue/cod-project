@@ -2,6 +2,7 @@
 """Independent return alternatives anchor recursion without operand guesses."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;'
 MISSING = 'using "std:exceptions" MissingReturnError;'
@@ -36,6 +37,10 @@ runner.CASE_SHADOWS = {
     'nested_callable_capture': ['f'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'nested_callable_capture',
+), 'a storable func must be capture-free')
 
 if __name__ == '__main__':
     raise SystemExit(runner.main())

@@ -2,6 +2,7 @@
 """Caller-slot methods preserve complete callable targets and invocation evidence."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;'
 OUT = lambda value: 'behave @print('+value+');'
@@ -54,5 +55,10 @@ runner.CASES = {
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {}
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'function_cannot_call_procedure',
+), 'procedure signatures cannot occupy ordinary value or reference storage')
+
 if __name__ == '__main__':
     raise SystemExit(runner.main())

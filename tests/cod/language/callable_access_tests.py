@@ -2,6 +2,7 @@
 """Callable views constrain target access while retaining actual input identities."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;'
 OUT = lambda expression: 'behave @print(' + expression + ');'
@@ -106,6 +107,10 @@ runner.CASES['independent_parameter_access'] = (IO + f'func first({parameters})-
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {}
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'deferred_borrow_reads_late',
+), 'procedure signatures cannot occupy ordinary value or reference storage')
 
 if __name__ == '__main__':
     raise SystemExit(runner.main())

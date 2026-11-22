@@ -2,6 +2,7 @@
 """Definition identity, fresh captures, stored snapshots and nonexecuting queries."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;'
 BITS = 'func one()->u64{return 1u64;}func two()->u64{return 2u64;}'
@@ -62,5 +63,10 @@ runner.CASE_SHADOWS = {
     'self_parameter_shadow': ['recur'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'function_symbol_capture_rejected',
+), 'procedure signatures cannot occupy ordinary value or reference storage')
+
 if __name__ == '__main__':
     raise SystemExit(runner.main())

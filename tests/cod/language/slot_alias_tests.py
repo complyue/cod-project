@@ -2,6 +2,7 @@
 """Declared place aliases share slots while retaining independent access paths."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 from language_test_support import observe_after_cleanup
 
 IO = 'using symbol "std:io" @print;\n'
@@ -105,5 +106,12 @@ runner.CASE_SHADOWS = {
     'borrowed_parameter_alias': ['x', 'y'],
 }
 runner.EXTRA_SOURCES = [Path(__file__), Path(__file__).with_name('language_test_support.py')]
+
+expect_source_rejections(runner, (
+    'explicit_callable_value_from_place',
+    'callable_place_capture_unproved',
+    'alias_does_not_promote_cell_capture',
+), 'a storable func must be capture-free')
+
 if __name__ == '__main__':
     raise SystemExit(runner.main())

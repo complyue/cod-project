@@ -10,7 +10,7 @@ behave @print(add(3u64));
 }};
 behave @print(@gain);
 {{
-  proc saved=proc()->const u64 {return @gain;};
+  proc saved()->const u64 {return @gain;};
   {{
     val gain:u64 <- 99u64;
     behave @print(saved());

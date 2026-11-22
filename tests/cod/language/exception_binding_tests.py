@@ -2,6 +2,7 @@
 """Exception bindings preserve immutable bits, causes and checked obligations."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;'
 TYPES = 'using "std:exceptions" MissingReturnError;using "std:exceptions" Exception;using "std:exceptions" NullPointerException;using "std:exceptions" OutOfMemoryError;'
@@ -29,7 +30,7 @@ runner.CASES = {
         'proc fail()->void{effect @saved<-chain(error(),error());defer{throw @saved;};throw error();}'
         'try{fail();}catch(e:const MissingReturnError){behave @print(99u64);}'
         'catch(e:UnhandledDeferError){behave @print(e.cause_count);};', 0, '0\n', ''),
-    'current_and_captured': (IO+TYPES+ERROR+CHAIN+S+P+'effect @saved<-chain(error(),error());effect @p=depth;effect @saved<-error();'
+    'current_and_captured': (IO+TYPES+ERROR+CHAIN+S+P+'effect @saved<-chain(error(),error());effect @p()->u64{return depth();};effect @saved<-error();'
         'behave @print(behave @p());behave @print(perform @p());behave @print(@saved.cause_count);', 0, '0\n1\n0\n', ''),
     'capture_outlives_binding_scope': (IO+TYPES+ERROR+CHAIN+COMMON+P+'proc build()->proc()->u64{effect @saved<-chain(error(),error());return depth;}'
         'effect @p=build();behave @print(perform @p());', 0, '1\n', ''),
@@ -59,10 +60,10 @@ runner.CASES = {
     'checked_native_delivery': (IO+TYPES+ERROR+NULL_ERROR+'symbol @saved:NullPointerException;proc fail()->void throws NullPointerException{throw @saved;}'
         'effect @saved<-npe();try{fail();}catch(e:const NullPointerException){behave @print(e.category);};', 0, '4\n', ''),
     'checked_captured_delivery': (IO+TYPES+ERROR+NULL_ERROR+'symbol @saved:NullPointerException,@p:proc()->void throws NullPointerException;'
-        'proc fail()->void throws NullPointerException{throw @saved;}effect @saved<-npe();effect @p=fail;'
+        'proc fail()->void throws NullPointerException{throw @saved;}effect @saved<-npe();effect @p()->void throws NullPointerException{fail();return;};'
         'try{perform @p();}catch(e:const NullPointerException){behave @print(e.category);};', 0, '4\n', ''),
     'checked_perform_requires_handler': (TYPES+ERROR+NULL_ERROR+'symbol @saved:NullPointerException,@p:proc()->void throws NullPointerException;'
-        'proc fail()->void throws NullPointerException{throw @saved;}effect @saved<-npe();effect @p=fail;perform @p();', 2, '', 'requires a covering catch or throws declaration'),
+        'proc fail()->void throws NullPointerException{throw @saved;}effect @saved<-npe();effect @p()->void throws NullPointerException{fail();return;};perform @p();', 2, '', 'requires a covering catch or throws declaration'),
     'common_preserves_actual_category': (IO+TYPES+ERROR+NULL_ERROR+COMMON+'effect @saved<-error();behave @print(@saved.category);effect @saved<-npe();'
         'try{throw @saved;}catch(e:const NullPointerException){behave @print(e.category);}catch(e){behave @print(99u64);};', 0, '5\n4\n', ''),
     'deferred_checked_recovery': (IO+TYPES+ERROR+NULL_ERROR+'symbol @saved:NullPointerException;'
@@ -77,6 +78,16 @@ runner.CASE_SHADOWS = {
     'checked_captured_delivery': ['p'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'capture_outlives_binding_scope',
+    'nested_capture',
+    'touch_capture',
+    'checked_dynamic_body_rejects',
+), 'procedure signatures cannot occupy ordinary value or reference storage')
+expect_source_rejections(runner, (
+    'unbound_capture',
+), 'procedure symbols require definition activation')
 
 if __name__ == '__main__':
     raise SystemExit(runner.main())

@@ -2,6 +2,7 @@
 """Ordinary module callable values retain family dispatch and complete coverage."""
 from pathlib import Path
 import foundation_tests as runner
+from language_test_support import expect_source_rejections
 
 IO = 'using symbol "std:io" @print;'
 F = 'func select(x:u64)->u64{return 1u64;}func select(x:T)->u64 where T{return 7u64;}'
@@ -70,6 +71,15 @@ runner.CASE_SHADOWS = {
     'deferred_snapshot': ['x', 'x'],
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
+
+expect_source_rejections(runner, (
+    'nested_capture_retains_family',
+), 'a storable func must be capture-free')
+expect_source_rejections(runner, (
+    'deferred_snapshot',
+    'complete_dynamic_capture',
+    'unused_alternative_requires_capture',
+), 'procedure signatures cannot occupy ordinary value or reference storage')
 
 if __name__ == '__main__':
     raise SystemExit(runner.main())

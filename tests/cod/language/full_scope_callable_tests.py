@@ -325,7 +325,7 @@ proc choose() -> func() -> u64 {
     return fallback;
 }
 func result = choose();
-''', 2, '', 'protected here results require capture-free func values'),
+''', 2, '', 'a storable func must be capture-free'),
     'here_group_rejects_procedure_valued_result': ('''
 proc relay(here step() -> void) -> void { step(); return; }
 proc chosen() -> u64 { return 41u64; }
@@ -334,7 +334,7 @@ proc choose() -> proc() -> u64 {
     return chosen;
 }
 proc result = choose();
-''', 2, '', 'protected here results cannot carry procedure values'),
+''', 2, '', 'procedure signatures cannot occupy ordinary value or reference storage'),
     'return_inspection_calls_known_forwarded_group': (IO+
         'func relay(here body()->void)->void{body();}'
         'func forward(here body()->void)->void{relay(body);}'
@@ -1374,7 +1374,7 @@ proc result = choose();
         query('val n<-make local u64;{{defer (<-)(n,9u64);}};return n;')+'behave @print(result);', 0, '4\n', ''),
     'query_read_outer_slot_before_its_cleanup_write': (
         query('val n<-make local u64;return {{defer (<-)(n,9u64);return n;}};'), 2, '', 'initialization'),
-    'returned_complete_value': (IO+'func factory(val seed:u64)->func()->const u64{return {{seed<-seed+1u64;return func[seed]()->const u64{return seed;};}};}func saved=factory(4u64);behave @print(saved());behave @print(saved());', 0, '5\n5\n', ''),
+    'returned_complete_value': (IO+'func five()->u64{return 5u64;}func zero()->u64{return 0u64;}func factory(val seed:u64)->func()->u64{return {{seed<-seed+1u64;if(seed==5u64)return five;return zero;}};}func saved=factory(4u64);behave @print(saved());behave @print(saved());', 0, '5\n5\n', ''),
     'query_has_no_effects': (IO+'proc run()->void{val n<-make local u64;val result<-make local typeof({{behave @print(n);return 7u64;}}){8u64};behave @print(result);return;}run();', 0, '8\n', ''),
     'query_product_field_inspection_leaves_outer_payload_unevaluated': (
         IO + QUERY_PAIR + 'ptr item=make Pair;' + query('ptr local=make Pair;return item.second;') +
