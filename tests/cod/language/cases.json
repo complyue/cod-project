@@ -2863,6 +2863,28 @@
     "stderr_contains": "reference operation requires a binding slot"
   },
   {
+    "file": "string-field-transfer.cod",
+    "exit": 0,
+    "stdout": "11\n41\n42\n22\n33\n73\n"
+  },
+  {
+    "file": "string-field-transfer-failure.cod",
+    "exit": 0,
+    "stdout": "73\n"
+  },
+  {
+    "file": "string-field-init-write.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "init String place must be written on every successful completion"
+  },
+  {
+    "file": "string-field-missing-policy.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a direct String field requires a visible '<-' method"
+  },
+  {
     "file": "abstract-symbol-call-inputs.cod",
     "exit": 0,
     "stdout": "1\n"

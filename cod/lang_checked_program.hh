@@ -55,6 +55,7 @@ struct CheckedArgument {
   bool operator==(const CheckedArgument &) const = default;
 };
 inline ArgumentMode argument_mode(const Parameter &parameter) {
+  if (parameter.selects_caller_place()) return ArgumentMode::borrowed_ptr;
   if (parameter.owner.empty()) return ArgumentMode::value;
   if (parameter.declaration_kind == "handle") return ArgumentMode::borrowed_handle;
   if (parameter.declaration_kind == "ptr") return ArgumentMode::borrowed_ptr;
@@ -302,6 +303,9 @@ struct CheckedSchema {
     const Parameter *source;
     Type type;
     PlaceKind storage;
+    bool direct_text_place() const { return storage == PlaceKind::value && type == Type::string; }
+    bool stores_target() const { return storage != PlaceKind::value || direct_text_place(); }
+    bool readonly_target() const { return source->read_only || direct_text_place(); }
   };
   const Form *source;
   std::vector<Field> fields;
@@ -364,6 +368,7 @@ struct CheckedBinding {
   std::set<size_t> overlaps = {};
   bool nullable = false;
   const Expression *pipeline = nullptr;
+  bool direct_text_place = false;
   PlaceKind kind() const { return place_kind(value_binding, requires_initialized); }
 };
 
@@ -464,12 +469,14 @@ struct ViewEvidence {
   std::set<EvidenceOwner> place_owners = {};
   std::optional<PlaceKind> storage_kind = {};
   NominalTargets nominal_targets = {};
+  bool direct_text_place = false;
   void project_target() {
     value_binding.reset();
     fixed_binding.reset();
     slot_read_only.reset();
     place_owners.clear();
     storage_kind.reset();
+    direct_text_place = false;
   }
   template <typename Map> void map_owners(Map map) {
     if (owner) owner = map(*owner);

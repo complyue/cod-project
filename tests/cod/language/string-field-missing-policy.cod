@@ -1,0 +1,2 @@
+data Entry { name:String; }
+ptr entry = make Entry { name <- "literal image"; };

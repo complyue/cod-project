@@ -344,7 +344,7 @@ class LLVMEmission {
       std::vector<llvm::Type *> fields;
       for (const auto &field : schema.fields) {
         const auto &type = field.type;
-        if (field.storage != PlaceKind::value) fields.push_back(b_.getPtrTy());
+        if (field.stores_target()) fields.push_back(b_.getPtrTy());
         else fields.push_back(type.kind == Type::product ? product_layouts_.at(type.identity) : native_type(type));
       }
       // Fieldless products still need distinct addressable targets.
@@ -2109,7 +2109,7 @@ class LLVMEmission {
     return contextual_value(child, alternatives, "argument", prepare);
   }
   std::vector<llvm::Value *> prepare_arguments(const Expression &expr, bool deferred = false,
-                                               std::span<llvm::Value *> here_values = {}) {
+                                               std::span<llvm::Value *> here_values = {}, llvm::Value *first_place = nullptr) {
     using Preparation = CheckedOperation::OperandPreparation;
     std::vector<llvm::Value *> arguments;
     const auto &fact = contexts_.front().at(&expr);
@@ -2142,12 +2142,19 @@ class LLVMEmission {
       if (kind == Preparation::Kind::here) {
         if (slot >= here_values.size()) throw std::logic_error("missing checked here operand slot");
         here_values[slot] = prepare_here_argument(expr, slot);
-      } else arguments[first + slot] = prepare_argument(expr, slot, !offset || slot || protect);
+      } else if (first_place && slot == 0) arguments[first] = pack_view(first_place, fact.argument(expr, 0));
+      else arguments[first + slot] = prepare_argument(expr, slot, !offset || slot || protect);
       if (!reachable()) return {};
     }
     check_destination_arguments(expr, arguments);
     arguments.insert(arguments.end(), captured.begin(), captured.end());
     return arguments;
+  }
+  llvm::Value *emit_text_transfer(const Expression &expr, llvm::Value *destination = nullptr) {
+    return temporary_scope(expr.at, scalar_, [&]() -> llvm::Value * {
+      const auto arguments = prepare_arguments(expr, false, {}, destination);
+      return reachable() ? propagate(invoke(expr, arguments)) : nullptr;
+    });
   }
   llvm::StructType *prepared_producer_layout(size_t operands, size_t owners) {
     std::vector<llvm::Type *> fields(operands, scalar_);
@@ -3147,11 +3154,27 @@ class LLVMEmission {
     }
     case K::transfer: case K::rebind: {
       if (projection == Projection::slot) throw std::logic_error("assignment result has no binding slot");
-      const auto arguments = prepare_arguments(expr);
-      if (!reachable()) return nullptr;
-      auto *address = assign_prepared(expr, arguments);
-      if (expr.kind == K::transfer) return read ? load_place(address, expr) : address;
-      return !read ? address : discard ? empty_scalar() : load_place(checked_address(address, expr, expr.at), expr);
+      const auto assignment = [&](bool policy) -> llvm::Value * {
+        if (policy) {
+          auto *value = emit_text_transfer(expr);
+          return !reachable() || read ? value : null_pointer();
+        }
+        const auto arguments = prepare_arguments(expr);
+        if (!reachable()) return nullptr;
+        auto *address = assign_prepared(expr, arguments);
+        if (expr.kind == K::transfer) return read ? load_place(address, expr) : address;
+        return !read ? address : discard ? empty_scalar() : load_place(checked_address(address, expr, expr.at), expr);
+      };
+      if (expr.kind == K::rebind) return assignment(false);
+      const auto selected_policy = [&](const auto &context) {
+        const auto &operation = context.at(&expr);
+        return operation.callee || operation.arguments.front().binding_slot;
+      };
+      if (!std::ranges::any_of(contexts_, selected_policy)) return assignment(false);
+      std::map<bool, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < contexts_.size(); ++i) alternatives[selected_policy(contexts_[i])].push_back(i);
+      return contextual_value(expr, alternatives, "transfer", assignment,
+          read ? static_cast<llvm::Type *>(scalar_) : b_.getPtrTy());
     }
     case K::return_tail: {
       std::map<bool, std::vector<size_t>> completion;
@@ -3262,7 +3285,7 @@ class LLVMEmission {
         auto *field = contextual_value(expr, projections, "product.field", [&](const auto &member) -> llvm::Value * {
           const auto [schema, number] = member;
           auto *slot = b_.CreateStructGEP(product_layout(schema), address, number);
-          if (projection != Projection::slot && program_->schemas[schema].fields[number].storage != PlaceKind::value)
+          if (projection != Projection::slot && program_->schemas[schema].fields[number].stores_target())
             return b_.CreateLoad(b_.getPtrTy(), slot);
           return slot;
         }, b_.getPtrTy());
@@ -3434,7 +3457,9 @@ class LLVMEmission {
       const auto index = *contexts_.front().at(initializer.get()).product_field;
       const auto &member = schema.fields[index];
       const bool direct = member.storage == PlaceKind::value;
-      if (direct && member.type.kind == Type::product) {
+      if (member.direct_text_place()) {
+        emit_text_transfer(*initializer, b_.CreateStructGEP(layout, address, index));
+      } else if (direct && member.type.kind == Type::product) {
         emit_product_initializers(input, b_.CreateStructGEP(layout, address, index));
       } else {
         auto *value = emit_expression(input, direct ? Projection::value : Projection::target);
