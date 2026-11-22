@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Isolated typed booter file-to-object route
+
+<a id="k-booter-typed-object-20261122"></a>
+**K-BOOTER-TYPED-OBJECT-20261122.** Under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122, design review cleared the real one-file CompilerCLI activation, frame-owned workspace and synchronous LLVM construction through the existing generated interface. Full graph publication and production cutover retain their acceptance at `ed9f6d5c0b8978098c613d7257fcc37c17c5393f:applications/cod-booter/docs/ModuleGraph.md`. D-20-MODULE-GRAPH r3 to r4, D-ARCH-REVIEW r4 to r5, P-680–P-683, registry r1052.
+
 ## 2026-11-22 — Node identity in the booter's typed AST
 
 <a id="k-booter-ast-membership-20261122"></a>
