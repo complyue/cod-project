@@ -32,7 +32,7 @@ inline bool nominal_exception(const Type &type) {
 }
 inline bool bits_type(const Type &type) { return scalar_type(type) || (type.kind == Type::exception && !nominal_exception(type)); }
 inline bool lexical_value_type(const Type &type) { return bits_type(type) || type.kind == Type::procedure; }
-enum class BuiltinOperation { none, unary, binary, identity, array_length, reference_swap, bits_swap, print };
+enum class BuiltinOperation { none, unary, binary, identity, array_length, reference_swap, bits_swap, print, builder_append };
 inline bool eager_operation(std::string_view name) {
   return name == "+" || name == "-" || name == "*" || name == "/" || name == "%" || name == "!" ||
       name == "==" || name == "!=" || name == "<" || name == ">" || name == "<=" || name == ">=";
@@ -134,7 +134,13 @@ struct CheckedOperation {
   bool enum_literal = false;
   bool enum_assertion = false;
   bool check_c_string = false;
-  std::optional<size_t> text_storage_owner;
+  struct LexicalAllocation {
+    size_t owner;
+    enum Kind { text, builder_snapshot, builder } kind;
+    unsigned builder_inputs = 0;
+    auto operator<=>(const LexicalAllocation &) const = default;
+  };
+  std::optional<LexicalAllocation> lexical_allocation;
   CasePattern case_pattern;
   bool case_subject_may_be_null = false;
   bool case_reaches_end = false;
@@ -287,6 +293,7 @@ struct CheckedSchema {
   std::optional<size_t> native_owner = {};
   bool has_enum_storage = false;
   std::optional<size_t> abstract_parent = {};
+  bool lexical_builder = false;
 };
 
 struct CheckedAbstractType {
@@ -776,6 +783,9 @@ struct CheckedProgram {
   std::vector<CheckedStorage> entry_storage;
   std::vector<CheckedBinding> entry_bindings;
   bool exception_values = false;
+  bool builder_type(const Type &type) const {
+    return type.kind == Type::product && schemas.at(type.identity).lexical_builder;
+  }
   bool conforms_to(const Type &actual, const Type &bound) const {
     if (actual == bound) return true;
     if (bound.kind != Type::abstract_type) return false;

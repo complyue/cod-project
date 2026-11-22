@@ -5,11 +5,12 @@ using "ParserStorage.cod" {
     make_named_node, field_access_node, enum_declaration_node, type_assertion_node, literal_node, text_literal_node,
     narrow_integer_node, bool_node, call_node, here_call_node, compare_node, logical_not_node, logical_binary,
     case_node, case_arm_node, case_member_pattern, case_true_pattern, case_false_pattern, case_null_pattern,
-    readonly_declaration, local_storage_binding,
+    readonly_declaration, local_storage_binding, positional_construction,
 };
 using "NameResolution.cod" {
     NameBindings, NameWork, first_item, record_declaration, formal_binding, local_binding,
     ordinary_selection, record_type, native_scalar, enum_value, find_enum_member,
+    is_lexical_builder, lexical_builder_record, lexical_builder_type,
     builtin_u64, builtin_u32, builtin_u8, builtin_bool, builtin_string, builtin_c_string, text_type, owner_binding,
 };
 using "ModuleExports.cod" { SelectedExports, record_export, enum_export, enum_spelling };
@@ -65,6 +66,12 @@ func describe_type(nodes:const ExprNodes in N, names:const NameBindings in B, se
         return true;
     } else {};
     val nominal <- kind;
+    if (is_lexical_builder(nodes, names, marker)) {
+        result.kind <- lexical_builder_type();
+        result.defining_module <- type_module(names, selected, marker, current_module);
+        result.identity <- type_identity(names, selected, marker);
+        return true;
+    };
     if (kind == ordinary_selection()) {
         val exported <- selected[names[marker].declaration].kind;
         if (exported == record_export()) { (nominal <- record_type()):void; } else {
@@ -256,11 +263,22 @@ func check_text_construction(source:const SourceBytes in S, nodes:const ExprNode
     val owner_name <- nodes[payload].right;
     if (readonly_owner_name(nodes, names, owner_name))
         return declared_expression_failure(report, readonly_string_owner(), owner_name);
-    val operand <- nodes[first_item(nodes, nodes[payload].left)].right;
+    val tail <- nodes[payload].left;
+    val first <- first_item(nodes, tail);
+    if (first == no_node()) return true;
     ref actual = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
-    if (!trace_type(source, nodes, names, selected, work, spellings, interfaces, operand, actual) || !text_type(actual.kind))
-        return declared_expression_failure(report, invalid_string_operand(), operand);
-    return true;
+    val item <- first;
+    val operand <- no_node();
+    for (unused in 0u64 .. 2u64) {
+        if (item == no_node()) return true;
+        operand <- nodes[item].right;
+        if (!trace_type(source, nodes, names, selected, work, spellings, interfaces, operand, actual) ||
+            (!text_type(actual.kind) && actual.kind != lexical_builder_type()))
+            return declared_expression_failure(report, invalid_string_operand(), operand);
+        if (item == tail) return true;
+        item <- work[item].next;
+    };
+    return false;
 }
 
 func check_type_assertion(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
@@ -365,7 +383,8 @@ export func check_declared_expressions(source:const SourceBytes in S, nodes:cons
     for (at in 0u64 .. used) {
         kind <- nodes[at].kind;
         if (local_storage_binding(kind) && !check_text_receiver(nodes, names, at, report)) return false;
-        if (kind == make_named_node() && names[nodes[at].left].kind == builtin_string() &&
+        if (kind == make_named_node() && positional_construction(nodes, at) &&
+            (names[nodes[at].left].kind == builtin_string() || is_lexical_builder(nodes, names, nodes[at].left)) &&
             !check_text_construction(source, nodes, names, selected, work, spellings, interfaces, at, report)) return false;
         if (kind == type_assertion_node() &&
             !check_type_assertion(source, nodes, names, selected, work, spellings, interfaces, at, report)) return false;
@@ -398,6 +417,7 @@ export func prepare_native_operand_types(source:const SourceBytes in S, nodes:co
 func stage_record(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
                   work:const NameWork in W, record:u64, defining_module:u64, count:u64, interfaces:ModuleInterfaces in I)
     -> u64 where {const owner N, const owner B, const owner E, const owner W, owner I} {
+    if (lexical_builder_record(nodes, names, record)) return count;
     val limit <- intrinsic (len)(interfaces);
     if (count >= limit) return no_node();
     val field <- first_item(nodes, nodes[record].right);

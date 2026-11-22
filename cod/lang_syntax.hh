@@ -171,7 +171,7 @@ enum class ArgumentMode { value, borrowed_read, borrowed_ref, borrowed_ptr, borr
 struct Type {
   enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64,
               named, unit, quantity, product, region_schema, region, regional, array, reference, null_ref, abstract_type, arguments, parameter,
-              exception, never, c_type_marker, native_handle, exception_holder, enumeration, string, c_string };
+              exception, never, c_type_marker, native_handle, exception_holder, enumeration, string, c_string, builder_storage };
   Kind kind;
   std::string name;
   size_t identity = 0;
@@ -283,7 +283,7 @@ inline std::string type_name(const Type &type) {
   case Type::quantity: return type_name(*type.target) + "(" + type.name + ")";
   case Type::unit: return type.name;
   case Type::named: case Type::product: case Type::region_schema: case Type::regional: case Type::array:
-  case Type::abstract_type: case Type::c_type_marker: case Type::enumeration: return type.name;
+  case Type::abstract_type: case Type::c_type_marker: case Type::enumeration: case Type::builder_storage: return type.name;
   case Type::region: return std::string(type.owned ? "own " : "") + "region" +
                            (type.target ? " :" + type_name(*type.target) : "");
   case Type::reference: return "stored reference to " + type_name(*type.target);

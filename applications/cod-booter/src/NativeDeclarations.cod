@@ -19,13 +19,13 @@ using "NameResolution.cod" {
     c_handle_type, handle_binding, formal_binding, local_binding, loop_index, enclosing_callable,
     record_type, array_type, c_constructor, c_operation, c_entry, callable_binding, owner_binding,
     ordinary_selection, symbolic_selection, native_symbol_binding, reference_symbol_binding, abstract_type_binding,
-    has_exception_parent, definition_name, native_scalar, builtin_bool,
+    has_exception_parent, lexical_builder_record, is_lexical_builder, definition_name, native_scalar, builtin_bool,
     builtin_u8, builtin_u32, builtin_u64, builtin_i64, builtin_void, builtin_c_string, text_type,
 };
 using "ModuleExports.cod" {
     SelectedExports, ModuleExports, exception_type_export, exception_root_identity,
     native_handle_export, record_export, array_export, nominal_exception_export, callable_export, enum_export,
-    symbol_export, abstract_type_export,
+    symbol_export, abstract_type_export, lexical_builder_export,
 };
 using "ModuleExportStorage.cod" { ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header, enum_type };
 using "DeclarationTypes.cod" { type_module, type_identity, interior_nul_in_c_string };
@@ -180,7 +180,7 @@ func visit_record(nodes:const ExprNodes in N, names:NameBindings in B, work:Name
 func check_record(nodes:const ExprNodes in N, names:NameBindings in B, work:NameWork in W, selected:const SelectedExports in E,
                   start:u64, used:u64, report:NativeDeclarationResult in R) -> void
     where {const owner N, owner B, owner W, const owner E, owner R} {
-    if (names[start].kind != 0u8) return;
+    if (names[start].kind != 0u8 || lexical_builder_record(nodes, names, start)) return;
     visit_record(nodes, names, work, start, no_node());
     val record <- start;
     val field <- no_node();
@@ -206,7 +206,8 @@ func check_record(nodes:const ExprNodes in N, names:NameBindings in B, work:Name
                 return;
             } else {};
             target <- names[declared_type].declaration;
-            if (kind == record_type() && has_exception_parent(nodes, names, target)) {
+            if (kind == record_type() &&
+                (has_exception_parent(nodes, names, target) || lexical_builder_record(nodes, names, target))) {
                 reject_declaration(report, declared_type, invalid_record_field());
                 return;
             } else {};
@@ -289,7 +290,7 @@ func check_type_declaration(nodes:const ExprNodes in N, names:const NameBindings
         val integral <- index == builtin_u8() || index == builtin_u32() || index == builtin_u64() || index == builtin_i64();
         val product <- (element_kind == record_type() && !has_exception_parent(nodes, names, names[element].declaration)) ||
             imported_kind(names, selected, element) == record_export();
-        if (!integral || (!native_scalar(element_kind) && !product)) {
+        if (!integral || is_lexical_builder(nodes, names, element) || (!native_scalar(element_kind) && !product)) {
             reject_declaration(report, shape, invalid_array_shape());
         } else {};
         return;
@@ -1586,6 +1587,10 @@ func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in
         return true;
     };
     if (kind == record_type()) {
+        if (lexical_builder_record(nodes, names, target)) {
+            exports[at].kind <- lexical_builder_export();
+            return true;
+        };
         if (has_exception_parent(nodes, names, target)) {
             exports[at].kind <- nominal_exception_export();
             exports[at].checked <- 1u8;

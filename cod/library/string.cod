@@ -1,0 +1,30 @@
+using "std:text-storage" { Utf8BuilderStorage, append_utf8 as append_piece };
+using "std:exceptions" Exception;
+
+export type Utf8StreamOut;
+export data Utf8WriteException <: Exception { code:u64; }
+export ref symbol @io:Utf8StreamOut in O where {owner O};
+
+export data StringBuilder <: Utf8StreamOut { storage:Utf8BuilderStorage; }
+
+export func append(target:StringBuilder in D, piece:const String in S) -> void
+    where {owner D, const owner S} {
+    append_piece(target, piece);
+}
+
+func append(target:StringBuilder in D, piece:const StringBuilder in S) -> void
+    where {owner D, const owner S} {
+    append_piece(target, piece);
+}
+
+export proc writeUtf8(out:StringBuilder in D, piece:const String in S) -> void
+    where {owner D, const owner S} {
+    append(out, piece);
+    return;
+}
+
+proc writeUtf8(out:StringBuilder in D, piece:const StringBuilder in S) -> void
+    where {owner D, const owner S} {
+    append(out, piece);
+    return;
+}
