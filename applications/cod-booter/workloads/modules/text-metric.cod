@@ -7,3 +7,7 @@ func prefix_size() -> u64 {
 export func measured_size(extra:u64) -> u64 {
     return prefix_size() + extra;
 }
+
+export func selected_text(input:const String in O) -> ref const String in O where {const owner O} {
+    return input;
+}

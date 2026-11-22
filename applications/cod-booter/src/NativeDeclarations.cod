@@ -835,7 +835,7 @@ func check_constructor_arguments(nodes:const ExprNodes in N, names:const NameBin
         type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node(); target_readonly <- 0u8; owner_readonly <- 0u8;
         has_here <- 0u8; failure_module <- 0u64; failure_identity <- 0u64;
         name_first <- 0u64; name_past <- 0u64; enum_code <- 0u64;
-        native_function <- no_node(); native_procedure <- 0u8;
+        native_function <- no_node(); native_procedure <- 0u8; native_reception <- 0u8; native_passes_owner <- 0u8;
     };
     val operand <- no_node();
     val owner <- no_node();
@@ -1098,7 +1098,7 @@ func check_local_here(nodes:const ExprNodes in N, names:const NameBindings in B,
         type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node(); target_readonly <- 0u8; owner_readonly <- 0u8;
         has_here <- 0u8; failure_module <- 0u64; failure_identity <- 0u64;
         name_first <- 0u64; name_past <- 0u64; enum_code <- 0u64;
-        native_function <- no_node(); native_procedure <- 0u8;
+        native_function <- no_node(); native_procedure <- 0u8; native_reception <- 0u8; native_passes_owner <- 0u8;
     };
     describe_parameter(nodes, names, selected, work[callback].next, 0u64, true, parameter);
     if (!match_handle_parameter(nodes, names, selected, parameter, operand, loan, report)) return;

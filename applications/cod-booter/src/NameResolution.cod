@@ -48,8 +48,13 @@ export data NameWorkSlot {
     next:u64;
     next_method:u64;
     imported_function:u64;
+    imported_owner_argument:u64;
     imported_kind:u8;
     imported_procedure:u8;
+    imported_reception:u8;
+    imported_target_readonly:u8;
+    imported_owner_readonly:u8;
+    imported_passes_owner:u8;
     enum_code:u64;
     value_module:u64;
     value_identity:u64;
@@ -393,8 +398,13 @@ func link_entries(nodes:const ExprNodes in N, work:NameWork in W, used:u64) -> v
         work[at].next <- no_node();
         work[at].next_method <- no_node();
         work[at].imported_function <- no_node();
+        work[at].imported_owner_argument <- no_node();
         work[at].imported_kind <- 0u8;
         work[at].imported_procedure <- 0u8;
+        work[at].imported_reception <- 0u8;
+        work[at].imported_target_readonly <- 0u8;
+        work[at].imported_owner_readonly <- 0u8;
+        work[at].imported_passes_owner <- 0u8;
         if (list_entry(nodes[at].kind)) {
             previous <- nodes[at].left;
             if (previous != no_node()) { work[previous].next <- at; {}; } else {};
