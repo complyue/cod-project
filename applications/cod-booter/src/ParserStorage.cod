@@ -195,6 +195,10 @@ export func construction_body(nodes:const ExprNodes in N, at:u64) -> u64 where {
     return no_node();
 }
 
+export func positional_construction(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+    return nodes[nodes[at].right].number == 1u64;
+}
+
 export func reserves_storage(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
     return nodes[at].kind == make_named_node() && nodes[nodes[at].right].number == 0u64;
 }

@@ -2,10 +2,10 @@ using "ParserStorage.cod" {
     callable_local_node, throw_with_cause_node, throw_named_node, rethrow_from_node,
     named_argument_node, exception_local_node, bodyless_defer_node, exception_parameter_node,
     exception_result_node, ref_result_node, make_exception_node, make_named_node, construction_body,
-    reserves_storage, construction_type_query_node, name_node, literal_node, bool_node,
+    reserves_storage, positional_construction, construction_type_query_node, name_node, literal_node, bool_node,
     field_access_node, index_access_node, array_length_node, catch_binding_node, handle_local,
     handle_construction, handle_parameter_node, here_parameter_node, here_call_node, Tokens,
-    ExprNodes, no_node, enum_declaration_node,
+    ExprNodes, no_node, enum_declaration_node, readonly_declaration,
 };
 using "SourceStorage.cod" SourceBytes;
 using "Frontend.cod" { FrontendResult, read_module };
@@ -17,7 +17,7 @@ using "ModuleExports.cod" {
 using "NameResolution.cod" {
     NameBindings, NameWork, NameResolutionResult, unsupported_module_declaration,
     unsupported_ordinary_construction, declaration_requires_native_output, first_item,
-    resolve_module_names,
+    resolve_module_names, text_type, owner_binding,
 };
 using "NativeDeclarations.cod" {
     NativeDeclarationResult, check_native_declarations, declared_exception_type,
@@ -108,8 +108,9 @@ func unsupported_source_form(nodes:const ExprNodes in N, at:u64, emit_object:boo
     if (kind == exception_parameter_node()) return 29u8;
     if (kind == exception_result_node()) return 30u8;
     if (kind == make_exception_node()) return 33u8;
-    if (kind == ref_result_node()) return 35u8;
-    if (kind == make_named_node() && !supported_construction_shape(nodes, at)) return unsupported_ordinary_construction();
+    if (emit_object && kind == ref_result_node()) return 35u8;
+    if (kind == make_named_node() && !supported_construction_shape(nodes, at) &&
+        (emit_object || !positional_construction(nodes, at))) return unsupported_ordinary_construction();
     if (emit_object && kind == field_access_node()) return 38u8;
     if (emit_object && kind == index_access_node()) return 39u8;
     if (emit_object && kind == array_length_node()) return unsupported_array_length();
@@ -174,6 +175,17 @@ export func bind_selected_module(source:const SourceBytes in S, nodes:const Expr
         return false;
     } else {};
     for (at in 0u64 .. result.frontend.tree.used) {
+        if (nodes[at].kind == ref_result_node()) {
+            if (!text_type(bindings[nodes[nodes[at].right].left].kind)) {
+                binding_diagnostic(nodes, result, module_binding_failed(), 35u8, at);
+                return false;
+            } else {};
+            if (nodes[at].number != readonly_declaration() ||
+                bindings[nodes[nodes[at].right].right].kind != owner_binding()) {
+                binding_diagnostic(nodes, result, module_binding_failed(), 101u8, at);
+                return false;
+            } else {};
+        } else {};
         if (nodes[at].kind == catch_binding_node() && nodes[at].right != no_node() &&
             !declared_exception_type(nodes, bindings, selected, nodes[at].right)) {
             binding_diagnostic(nodes, result, module_binding_failed(), invalid_catch_annotation(), nodes[at].right);

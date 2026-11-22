@@ -173,6 +173,7 @@ class LLVMEmission {
     llvm::AllocaInst *head;
     std::vector<CleanupAction> actions;
     Lifetime values;
+    llvm::AllocaInst *lexical_texts = nullptr;
   };
   llvm::StructType *cleanup_header_ = llvm::StructType::get(context_, {b_.getPtrTy(), b_.getInt64Ty()});
   Scope *scope_ = nullptr;
@@ -1703,6 +1704,10 @@ class LLVMEmission {
       scope.cleanup = draining;
     }
     drain(scope); release_values(scope.values); restore_effects(effects);
+    if (scope.lexical_texts) {
+      auto release = runtime("cod_lang_lexical_text_release", b_.getVoidTy(), {b_.getPtrTy()});
+      b_.CreateCall(release, {load(scope.lexical_texts)});
+    }
     scope_ = scope.parent; native_effect_scope_ = outer_native; control_ = control.parent; temporaries_ = outer_temporaries;
     if (requires_return) {
       auto *missing = block("return.missing");
@@ -3101,6 +3106,24 @@ class LLVMEmission {
     case K::make_borrowed_handle:
       return emit_attached_native_handle(expr);
     case K::make_object: {
+      if (fact.operand_type.kind == Type::string) {
+        auto *source = emit_expression(*expr.children.front(), Projection::target);
+        if (!reachable()) return nullptr;
+        if (!scope_->lexical_texts) {
+          scope_->lexical_texts = slot(b_.getPtrTy(), "scope.texts");
+          auto *head = scope_->lexical_texts;
+          llvm::IRBuilder<> entry(head->getParent(), std::next(head->getIterator()));
+          entry.CreateStore(null_pointer(), head);
+        }
+        auto create = runtime("cod_lang_lexical_text_create", b_.getPtrTy(), {b_.getPtrTy(), b_.getPtrTy()});
+        auto *value = b_.CreateCall(create, {scope_->lexical_texts, source}, "text.created");
+        auto *ready = block("text.ready"), *failed = block("text.failed");
+        b_.CreateCondBr(b_.CreateIsNotNull(value), ready, failed);
+        b_.SetInsertPoint(failed);
+        fail_path(ExceptionCategory::out_of_memory, expr.at);
+        b_.SetInsertPoint(ready);
+        return discard ? empty_scalar() : value;
+      }
       auto *address = storage_.at(*fact.place);
       if (fact.operand_type.kind == Type::product) emit_product_initializers(expr, address);
       else if (const auto *initializer = expr.construction_initializer()) {
