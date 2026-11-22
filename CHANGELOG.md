@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Work-method counterexample for the booter AST
+
+<a id="h-booter-work-method-20261122"></a>
+**H-BOOTER-WORK-METHOD-20261122.** On 2026-11-22 (America/Los_Angeles), the project user [classified this as a failure to follow the work principle](codex://threads/01a2045b-ce41-7f20-b43a-6b1caca20e27) and requested preventive changes to the project rules. The first parser used a byte tag and shared payload fields while the seed lacked the confirmed nominal sum support. Later passes adopted that representation. See `a01fe18a4bbdb88d776ce392c115320fe1f262ae:applications/cod-booter/src/ParserStorage.cod` and H-DCTOR-SOURCE-20261118. Apply H-BOOTER-DRIVEN-SEED-20261119 at review time. Start from the intended idiomatic workload, plan the missing seed increment with it, and keep any temporary probe out of delivery evidence.
+
 ## 2026-11-22 — Implementation architecture review
 
 <a id="h-compiler-layers-20261122"></a>
