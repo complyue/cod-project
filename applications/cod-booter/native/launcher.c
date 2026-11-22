@@ -85,6 +85,8 @@ static const char *unsupported_source_form(uint32_t code) {
     case 71: return "unproved native here feedback type";
     case 74: return "array length query";
     case 76: return "ordinary here parameter lowering";
+    case 108: return "direct String place lowering";
+    case 109: return "reference assignment lowering";
     default: return NULL;
     }
 }
@@ -243,6 +245,10 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: invalid nominal parent type\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 106)
         fputs(": error: abstract parent declarations form a cycle\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 107)
+        fputs(": error: a direct place parameter requires writable val var String storage\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 110)
+        fputs(": error: a direct String place requires a String or CString source\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 20)
         fputs(": error: narrow integer execution is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 21)

@@ -6,6 +6,7 @@ using "ParserStorage.cod" {
     field_access_node, index_access_node, array_length_node, catch_binding_node, handle_local,
     handle_construction, handle_parameter_node, here_parameter_node, here_call_node, Tokens,
     ExprNodes, no_node, enum_declaration_node, readonly_declaration, type_parameter_node,
+    direct_place_parameter, rebind_node,
 };
 using "SourceStorage.cod" SourceBytes;
 using "Frontend.cod" { FrontendResult, read_module };
@@ -45,6 +46,8 @@ export func module_completion_failed() -> u8 { return 5u8; }
 func unsupported_array_length() -> u8 { return 74u8; }
 func unsupported_ordinary_here() -> u8 { return 76u8; }
 func invalid_catch_annotation() -> u8 { return 77u8; }
+func unsupported_string_place() -> u8 { return 108u8; }
+func unsupported_rebind() -> u8 { return 109u8; }
 
 export func rejected_unsupported_declaration(result:const ModuleBindingResult in R) -> bool where {const owner R} {
     if (result.stage == module_operands_failed())
@@ -52,6 +55,7 @@ export func rejected_unsupported_declaration(result:const ModuleBindingResult in
     if (result.stage == module_completion_failed()) return result.diagnostic == unsupported_case_transfer();
     return result.stage == module_binding_failed() &&
         (result.diagnostic == unsupported_module_declaration() || result.diagnostic == unsupported_array_length() ||
+         result.diagnostic == unsupported_string_place() || result.diagnostic == unsupported_rebind() ||
          (result.diagnostic >= 28u8 && result.diagnostic <= 40u8));
 }
 
@@ -104,6 +108,8 @@ func supported_construction_shape(nodes:const ExprNodes in N, at:u64) -> bool wh
 # Declaration checking can resolve projection operands without emitting an address.
 func unsupported_source_form(nodes:const ExprNodes in N, at:u64, emit_object:bool) -> u8 where {const owner N} {
     val kind <- nodes[at].kind;
+    if (emit_object && direct_place_parameter(kind)) return unsupported_string_place();
+    if (emit_object && kind == rebind_node()) return unsupported_rebind();
     if (kind == exception_local_node()) return 28u8;
     if (kind == exception_parameter_node()) return 29u8;
     if (kind == exception_result_node()) return 30u8;

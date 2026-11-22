@@ -1,0 +1,31 @@
+using symbol "std:io" @print;
+using "std:text-storage" { utf8_size, utf8_byte };
+
+export data Entry { name:String; }
+
+export proc (<-)(init val var out:String in D, input:const String in D) -> void
+    where {const owner D} {
+    out = input;
+    return;
+}
+
+proc (<-)(init val var out:String in D, input:const String in S) -> void
+    where {owner D, const owner S} {
+    out = make String(input) in D;
+    return;
+}
+
+proc inspect(init:u64) -> u64 {
+    ref first = make String("old");
+    ref entry = make Entry { name <- first; };
+    ref previous = entry.name:CString;
+    {{
+        ref replacement = make String("x\0y");
+        entry.name <- replacement;
+    }};
+    if (utf8_size(previous) != 3u64 || utf8_byte(previous, 0u64) != 111u8) return 1u64;
+    if (utf8_size(entry.name) != 3u64 || utf8_byte(entry.name, 1u64) != 0u8) return 2u64;
+    return init;
+}
+
+behave @print(inspect(73u64));
