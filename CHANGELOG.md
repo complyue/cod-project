@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 — Direct text places and lexical string building
+
+<a id="h-string-build-20261121"></a>
+**H-STRING-BUILD-20261121.** On 2026-11-21 (America/Los_Angeles) in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user proposed `val var tgt:String` for direct text places, lexical StringBuilder intermediates, shared String/UTF-8 output and a symbol usable from deep helpers. They requested customizable representations inspired by Python’s str/repr and explicitly delegated the scope: “这整个 string.cod 内置包括 intrinsic 配合机制，你自主推进打磨设计，让开发主线程去结合 booter 开发做原型使用验证。” D-07-STRING-BUILD / StringBuilding r1 records the resulting prototype contract (P-678/P-679, registry r1041). Method spellings, fallback policy and the SourcePosition workload are the design review’s choices. The delegation covers prototype use; it does not establish permanent ABI or runtime evidence. UTF-8 strings r3 / construction r67 / callable places r134 apply the direct-place spelling. The earlier confirmed field contract is at `a7bd62211309b6ef5d4203ae0bf5438741781950:design/Utf8Strings.md`, “Direct String fields”.
+
 ## 2026-11-21 — Library transfer policies for text
 
 <a id="h-string-transfer-policy-20261121"></a>
