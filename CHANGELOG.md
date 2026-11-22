@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Typed syntax across the booter compiler passes
+
+<a id="k-booter-syntax-consumers-20261122"></a>
+**K-BOOTER-SYNTAX-CONSUMERS-20261122.** Under H-PROJECT-ARCHITECTURE-REVIEW-20261122 and H-BOOTER-WORK-METHOD-20261122, design review cleared the direct migration of the booter's existing syntax producers and consumers, including native declaration checking and same-frame work tables. The prior file-to-object contract is at `3436f52a0b92ec51172c83a9859672684dc9b902:applications/cod-booter/docs/ModuleGraph.md`, “Single-file object route”. D-20-MODULE-GRAPH r4 to r5, D-ARCH-REVIEW r5 to r6, P-680–P-683, registry r1053.
+
 ## 2026-11-22 — Isolated typed booter file-to-object route
 
 <a id="k-booter-typed-object-20261122"></a>
