@@ -2,13 +2,15 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 4. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 5. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
 
 [K-BOOTER-AST-TABLE-20261122](../CHANGELOG.md#k-booter-ast-table-20261122) records the delegated review of the indexed AST workload and its seed prerequisites under the [work-method decision](../CHANGELOG.md#h-booter-work-method-20261122).
 
 The [lexical backing clearance](../CHANGELOG.md#k-booter-lexical-extent-20261122) covers the private shared-runtime operation used by that workload.
 
 The [node identity clearance](../CHANGELOG.md#k-booter-ast-membership-20261122) covers the CoD graph, visit frame and consumers in that same workload.
+
+The [single-file route clearance](../CHANGELOG.md#k-booter-typed-object-20261122) covers the isolated activation and existing native assembly.
 
 ## Before coding
 
@@ -46,6 +48,7 @@ The review compared all 1,630 tracked paths on published commit `5c12421e9a68bfb
 - **First executable seed sum r1.** The syntax, checked program, checker and LLVM emitter may implement cross-module nominal dctor selection, fresh lexical construction of direct bits fields and constructor-pattern reception. The checked representation owns sum/dctor identity, field schema, owner, initialization and match evidence. LLVM computes discriminant storage, maximum payload alignment and size for the selected target. Check a fieldless and differently aligned alternative, matching before projection, partial initialization, ordinary visibility and case coverage in both native modes. Production AST arrays, non-bits payloads, foreign layout and constructor overload execution retain separate review scopes.
 - **First indexed booter AST path.** Cleared for the [private initialized slot array](../applications/cod-booter/docs/ModuleGraph.md#first-indexed-ast-path), the actual literal/call/return producer, enclosing syntax, binding, checking and native command consumer, and their direct fixtures. The seed checker, checked program and emitter may implement the named-array length/fill, aggregate field placement, indexing and valid bits transfer required by these concrete layouts. Reuse existing syntax, nominal and owner evidence and allocation services. The distinct storage owner and source revision, successful-only publication, payload projection and real emitted result are acceptance obligations. No general resizable collection, uninitialized-array form or native AST ABI is implied. Other alternatives and broader production migrations require scoped structural review.
 - **AST node identity in the booter.** Cleared for graph-local key issuance on source open, frame and table state, parser construction of bits IDs, lookup by the checker and lowering, and focused isolation probes. The [frame and node identity contract](../applications/cod-booter/docs/ModuleGraph.md#frame-and-node-identity) specifies ownership, failure and acceptance for both the isolated route and its production interfaces.
+- **Single-file typed booter object route.** Cleared for the actual CompilerCLI, CoD frame activation, existing compiler stages, generated host entry, existing provider implementations and the direct file-to-object acceptance in an isolated build. The [single-file contract](../applications/cod-booter/docs/ModuleGraph.md#single-file-object-route) specifies buffer owners, status translation and the distinction from final graph publication. Production build configuration retains its separate authorization.
 
 ### Lexical backing for the indexed AST array
 
