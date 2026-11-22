@@ -14795,11 +14795,14 @@ class ScalarChecker {
       append_scope_input(call, capture, scope_operand(method_id, capture, expr), slot,
                          instance, operations, operation, true, found == method.captures.end());
       if (expr && expr == prepared_call_ && call.arguments.size() != first) {
-        if (!lexical_value_type(call.arguments.back()))
-          implementation_gap(capture.at, "a prepared deferred procedure with a live aggregate or native handle");
-        if (inputs.live_bindings.contains(first) && argument_mode(inputs.parameters.back()) == ArgumentMode::borrowed_ptr)
+        const auto mode = argument_mode(inputs.parameters.back());
+        if (!lexical_value_type(call.arguments.back()) && mode != ArgumentMode::borrowed_handle)
+          implementation_gap(capture.at, "a prepared deferred procedure with a live aggregate");
+        if (inputs.live_bindings.contains(first) && mode == ArgumentMode::borrowed_ptr)
           inputs.nonnull.back() = false;
-        require_deferred_slots(call.views.back(), capture.at);
+        // A fixed handle loan retains the selected resource words. Its actual
+        // owner must survive cleanup, but the handle's local slot need not.
+        if (mode != ArgumentMode::borrowed_handle) require_deferred_slots(call.views.back(), capture.at);
       }
       if (!operation.operand_preparation.empty() && call.arguments.size() != first)
         operation.operand_preparation.push_back({CheckedOperation::OperandPreparation::Kind::ordinary, first});
@@ -18214,8 +18217,6 @@ class ScalarChecker {
         // input evidence without pre-analyzing every normally producing operand.
         auto before = declared_builtin && !preparation.type ? std::optional{evidence_state()} : std::nullopt;
         const auto &operand = *expr.children[i];
-        if (mode == ArgumentMode::borrowed_handle && &expr == prepared_call_)
-          implementation_gap(operand.at, "native handles in deferred call operands");
         const auto prepared = check_argument_expression(operand, mode, instance, operations,
             preparation.type ? &*preparation.type : nullptr,
             mode == ArgumentMode::value ? IndexedUse::value_only : IndexedUse::immediate_target);

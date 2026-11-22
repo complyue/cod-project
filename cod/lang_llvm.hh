@@ -155,6 +155,11 @@ class LLVMEmission {
   std::vector<Location> sites_;
   enum class Projection { value, target, slot, receiver };
   static bool carries_value(Projection projection) { return projection == Projection::value || projection == Projection::receiver; }
+  struct DeferredInputs {
+    size_t count;
+    std::map<size_t, size_t> handle_arguments;
+    auto operator<=>(const DeferredInputs &) const = default;
+  };
   struct CleanupAction {
     const Expression *action;
     llvm::StructType *layout;
@@ -162,6 +167,7 @@ class LLVMEmission {
     std::optional<size_t> native_constructor = {};
     llvm::AllocaInst *activation_record = nullptr;
     std::optional<size_t> native_symbol = {};
+    std::optional<DeferredInputs> inputs = {};
   };
   struct Control {
     Control *parent;
@@ -1432,18 +1438,20 @@ class LLVMEmission {
     const auto &body = *expr.children.front();
     if (body.kind != Expression::Kind::block && std::all_of(contexts_.begin(), contexts_.end(),
         [&](const auto &context) { return context.at(&body).type == Type::never; })) return;
-    std::set<std::set<size_t>> layouts;
-    for (const auto &context : contexts_) layouts.insert(context.at(&expr).captures);
-    for (const auto &captures : layouts) {
+    std::set<std::pair<std::set<size_t>, std::optional<DeferredInputs>>> layouts;
+    for (const auto &context : contexts_) {
+      auto inputs = deferred_inputs(body, context.at(&body));
+      if (body.kind == K::block || inputs) layouts.emplace(context.at(&expr).captures, std::move(inputs));
+    }
+    for (const auto &[captures, inputs] : layouts) {
       std::vector<llvm::Type *> fields{cleanup_header_, deferred_failure_layout()};
-      const auto &call = contexts_.front().at(&body);
-      if (body.kind != K::block && call.native_call) {
-        for (const auto &input : program_->native_operations.at(*call.native_call).inputs)
-          fields.push_back(input.type.kind == Type::c_type_marker ? native_handle_pair() : static_cast<llvm::Type *>(scalar_));
-      } else fields.insert(fields.end(), body.kind == K::block ? captures.size() : prepared_count(body), scalar_);
+      if (inputs) {
+        for (size_t i = 0; i < inputs->count; ++i)
+          fields.push_back(inputs->handle_arguments.contains(i) ? native_handle_pair() : scalar_);
+      } else fields.insert(fields.end(), captures.size(), scalar_);
       auto *layout = llvm::StructType::get(context_, fields);
       auto *backing = expr.repeated_defer_registration ? nullptr : slot(layout, "defer.record");
-      scope.actions.push_back({&expr, layout, captures, {}, backing});
+      scope.actions.push_back({&expr, layout, captures, {}, backing, {}, inputs});
     }
   }
   void prepare_cleanup_record(Scope &scope, llvm::Value *record, size_t action) {
@@ -1849,7 +1857,8 @@ class LLVMEmission {
       const ContextSelection selection(contexts_);
       for (const auto &context : selection.all())
         if (context.at(descriptor.action).captures == descriptor.captures &&
-            (body.kind == Expression::Kind::block || context.at(&body).type != Type::never))
+            deferred_inputs(body, context.at(&body)) == descriptor.inputs &&
+            (body.kind == Expression::Kind::block || descriptor.inputs))
           contexts_.push_back(context);
       if (body.kind == Expression::Kind::block) {
         std::vector<std::pair<size_t, llvm::AllocaInst *>> bindings;
@@ -1876,13 +1885,14 @@ class LLVMEmission {
         continue;
       }
       std::vector<llvm::Value *> arguments;
-      for (size_t j = 0; j < prepared_count(body); ++j) {
+      for (size_t j = 0; j < descriptor.inputs->count; ++j) {
         auto *field = descriptor.layout->getElementType(j + first_deferred_operand);
         auto *value = b_.CreateLoad(field, b_.CreateStructGEP(descriptor.layout, record, j + first_deferred_operand));
         if (field == native_handle_pair()) {
           auto *loan = slot(field, "defer.native.loan");
           b_.CreateStore(value, loan);
-          arguments.push_back(pack_view(loan, *body.children[j]));
+          const auto argument = descriptor.inputs->handle_arguments.at(j);
+          arguments.push_back(pack_view(loan, contexts_.front().at(&body).argument(body, argument)));
         } else arguments.push_back(value);
       }
       if (contexts_.front().at(&body).native_call) {
@@ -2313,10 +2323,15 @@ class LLVMEmission {
       return callable ? context.at(&expr).callable_nullable : context.at(&expr).targets.contains(null_target);
     }), at);
   }
-  size_t prepared_count(const Expression &expr) const {
-    const auto &fact = contexts_.front().at(&expr);
-    return fact.argument_count(expr) + (expr.kind != Expression::Kind::value_call && fact.callable_call ? 1 : 0)
-        + (fact.callee ? fact.callable_captures.size() : 0);
+  static std::optional<DeferredInputs> deferred_inputs(const Expression &expr, const CheckedOperation &fact) {
+    if (expr.kind == Expression::Kind::block || fact.type == Type::never) return {};
+    const size_t prefix = expr.kind != Expression::Kind::value_call && fact.callable_call ? 1 : 0;
+    DeferredInputs result{fact.argument_count(expr) + prefix +
+        (fact.callee ? fact.callable_captures.size() : 0), {}};
+    for (size_t i = 0; i < fact.arguments.size(); ++i)
+      if (fact.arguments[i].mode == ArgumentMode::borrowed_handle)
+        result.handle_arguments.emplace(prefix + i, i);
+    return result;
   }
   static bool inert_argument(const Expression &expr) {
     using K = Expression::Kind;
@@ -3712,18 +3727,20 @@ class LLVMEmission {
     }
     case K::try_scope: return emit_finally(expr, projection, discard);
     case K::deferred: {
-      std::map<std::set<size_t>, std::vector<size_t>> alternatives;
-      for (size_t i = 0; i < contexts_.size(); ++i) alternatives[contexts_[i].at(&expr).captures].push_back(i);
+      const auto &body = *expr.children.front();
+      using Layout = std::pair<std::set<size_t>, std::optional<DeferredInputs>>;
+      std::map<Layout, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < contexts_.size(); ++i)
+        alternatives[{contexts_[i].at(&expr).captures, deferred_inputs(body, contexts_[i].at(&body))}].push_back(i);
       if (alternatives.size() > 1)
         return contextual_value(expr, alternatives, "defer", [&](const auto &) { return emit_expression(expr, projection, discard); });
       return temporary_scope(expr.at, scalar_, [&]() -> llvm::Value * {
-      const auto &body = *expr.children.front();
       std::vector<llvm::Value *> arguments;
       if (body.kind == K::block) for (const auto id : fact.captures) arguments.push_back(load(storage_.at(id)));
       else arguments = prepare_arguments(body, true);
       if (!reachable()) return nullptr;
       auto record = std::find_if(scope_->actions.begin(), scope_->actions.end(), [&](const CleanupAction &entry) {
-        return entry.action == &expr && entry.captures == fact.captures;
+        return entry.action == &expr && entry.captures == fact.captures && entry.inputs == alternatives.begin()->first.second;
       });
       if (record == scope_->actions.end()) throw std::logic_error("uncollected deferred action");
       llvm::Value *prepared = record->activation_record;
