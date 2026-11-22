@@ -41,6 +41,7 @@ export func abstract_type_export() -> u8 { return 10u8; }
 export func builder_storage_export() -> u8 { return 11u8; }
 export func lexical_builder_export() -> u8 { return 13u8; }
 export func lexical_result_export() -> u8 { return 14u8; }
+export func ordinary_callable_shape() -> u8 { return 1u8; }
 export func print_export_identity() -> u64 { return 0u64; }
 export func exception_root_identity() -> u64 { return 0u64; }
 export func null_pointer_identity() -> u64 { return 4u64; }
@@ -126,7 +127,7 @@ func select_export(exports:const ModuleExports in E, row:u64, selected:SelectedE
 
 func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N, site:u64,
                        spellings:const SourceBytes in B, exports:const ModuleExports in E,
-                       selected:SelectedExports in R) -> u8
+                       selected:SelectedExports in R, declarations_only:bool) -> u8
     where {const owner S, const owner N, const owner B, const owner E, owner R} {
     val path <- nodes[site].left;
     val name <- selected_resource_name(nodes, site);
@@ -148,7 +149,9 @@ func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N
               same_module_path(source, path_first, path_past, spellings, exports[at].module_first, exports[at].module_past)))) {
             if (same_bytes(source, name_first, name_past, spellings, exports[at].name_first, exports[at].name_past)) {
                 if (symbolic == (exports[at].kind == symbol_export())) {
-                    if (nodes[site].kind == import_node() && exports[at].kind != enum_export())
+                    if (nodes[site].kind == import_node() && exports[at].kind != enum_export() &&
+                        !(declarations_only && exports[at].kind == callable_export() &&
+                          exports[at].shape == ordinary_callable_shape()))
                         return unproved_import_interpretation();
                     if (nodes[nodes[site].right].kind == member_selector_node() && exports[at].kind != enum_export())
                         return invalid_member_selection();
@@ -169,7 +172,7 @@ func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N
 # On failure only the diagnostic is available.
 export func resolve_module_exports(source:const SourceBytes in S, nodes:const ExprNodes in N, tree:const ParseResult in T,
                                    spellings:const SourceBytes in B, exports:const ModuleExports in E,
-                                   selected:SelectedExports in X, report:ExportResolutionResult in R) -> bool
+                                   selected:SelectedExports in X, declarations_only:bool, report:ExportResolutionResult in R) -> bool
     where {const owner S, const owner N, const owner T, const owner B, const owner E, owner X, owner R} {
     report.node <- no_node();
     report.diagnostic <- invalid_export_tree();
@@ -182,7 +185,7 @@ export func resolve_module_exports(source:const SourceBytes in S, nodes:const Ex
     for (at in 0u64 .. tree.used) {
         clear_selection(selected, at);
         if (module_selection(nodes[at].kind)) {
-            report.diagnostic <- resolve_selection(source, nodes, at, spellings, exports, selected);
+            report.diagnostic <- resolve_selection(source, nodes, at, spellings, exports, selected, declarations_only);
             if (report.diagnostic != 0u8) {
                 report.node <- if (report.diagnostic == unproved_module_exports()) {
                     (nodes[at].left)

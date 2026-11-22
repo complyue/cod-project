@@ -24,7 +24,7 @@ using "NameResolution.cod" {
 };
 using "ModuleExports.cod" {
     SelectedExports, ModuleExports, exception_type_export, exception_root_identity,
-    native_handle_export, record_export, array_export, nominal_exception_export, callable_export, enum_export,
+    native_handle_export, record_export, array_export, nominal_exception_export, callable_export, enum_export, ordinary_callable_shape,
     symbol_export, abstract_type_export, lexical_builder_export,
 };
 using "ModuleExportStorage.cod" { ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header, enum_type };
@@ -1617,7 +1617,12 @@ func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in
         exports[at].shape <- names[nodes[target].number].kind;
         return true;
     } else {};
-    if (kind == c_operation() || kind == c_entry() || kind == callable_binding()) {
+    if (kind == callable_binding()) {
+        exports[at].kind <- callable_export();
+        (exports[at].shape <- ordinary_callable_shape()):void;
+        return true;
+    };
+    if (kind == c_operation() || kind == c_entry()) {
         exports[at].kind <- callable_export();
         return true;
     } else {};

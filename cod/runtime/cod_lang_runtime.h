@@ -25,6 +25,13 @@ void *cod_lang_defer_allocate(uint64_t bytes, uint64_t *status);
 void cod_lang_defer_free(void *record);
 void cod_lang_release_exception_owner(void *owner);
 void *cod_lang_lexical_text_create(void **allocations, const void *input);
+enum cod_text_slice_status {
+    COD_TEXT_SLICE_READY,
+    COD_TEXT_SLICE_INVALID,
+    COD_TEXT_SLICE_OUT_OF_MEMORY,
+};
+int cod_lang_lexical_text_slice(void **allocations, const void *input, uint64_t first, uint64_t past,
+                               void **result);
 void *cod_lang_lexical_builder_create(void **allocations, const void *left, const void *right, uint32_t builders);
 int cod_lang_builder_append_text(void *target, const void *input);
 int cod_lang_builder_append_builder(void *target, const void *input);

@@ -16,7 +16,7 @@ using "ParserStorage.cod" {
     len as token_len, no_node, module_node, module_item_node, using_node, module_path_node,
     callable_node, callable_head_node, procedure_definition, function_definition, parameter_node,
     ref_parameter_node, ptr_parameter_node, val_parameter_node, result_clause_node,
-    throws_clause_node, owner_clause_node, owned_type_node, c_handle_type_node, c_procedure_node,
+    throws_clause_node, owner_clause_node, type_parameter_node, owned_type_node, c_handle_type_node, c_procedure_node,
     handle_parameter_node, here_parameter_node, data_record_node, c_record_node, data_parent_node,
     export_node, export_from_node, array_declaration_node, array_shape_node, readonly_declaration,
     enum_declaration_node, enum_member_node, enum_integer_node, retained_parent_parameter,
@@ -416,18 +416,33 @@ func parse_owner_clause(source:const SourceBytes in S, tokens:const Tokens in T,
     return result.diagnostic == 0u8;
 }
 
-func parse_owner_clauses(source:const SourceBytes in S, tokens:const Tokens in T,
-                         nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+func parse_constraint(source:const SourceBytes in S, tokens:const Tokens in T,
+                      nodes:ExprNodes in A, result:ParseResult in R, past:u64, ordinary:bool) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    val at <- result.next;
+    if (!ordinary || at >= past || owner_word(source, tokens[at]) || const_word(source, tokens[at]))
+        return parse_owner_clause(source, tokens, nodes, result, past);
+    val previous <- result.root;
+    if (!parse_module_name(source, tokens, nodes, result, past)) return false;
+    val name <- result.root;
+    append_node(nodes, result, type_parameter_node(), nodes[name].first, nodes[name].past,
+                0u64, previous, name, nodes[name].first);
+    return result.diagnostic == 0u8;
+}
+
+func parse_constraints(source:const SourceBytes in S, tokens:const Tokens in T,
+                       nodes:ExprNodes in A, result:ParseResult in R, past:u64, ordinary:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
     result.next <- result.next + 1u64;
     if (punct_at(source, tokens, result.next, past) != 123u8) { # '{'
+        if (ordinary) { parse_constraint(source, tokens, nodes, result, past, ordinary):void; return; };
         result.diagnostic <- expected_owner_clause();
         return;
     } else {};
     result.next <- result.next + 1u64;
     val delimiter <- 0u8;
     for (unused in result.next .. past) {
-        if (!parse_owner_clause(source, tokens, nodes, result, past)) return;
+        if (!parse_constraint(source, tokens, nodes, result, past, ordinary)) return;
         delimiter <- punct_at(source, tokens, result.next, past);
         if (delimiter == 125u8) { result.next <- result.next + 1u64; return; } else {}; # '}'
         if (delimiter != 44u8) { result.diagnostic <- expected_owner_clause(); return; } else {}; # ','
@@ -459,7 +474,7 @@ func parse_callable(source:const SourceBytes in S, tokens:const Tokens in T,
         if (!parse_type_clause(source, tokens, nodes, result, past, throws_clause_node())) return;
     } else {};
     if (result.next < past && where_word(source, tokens[result.next])) {
-        parse_owner_clauses(source, tokens, nodes, result, past);
+        parse_constraints(source, tokens, nodes, result, past, !native);
         if (result.diagnostic != 0u8) return;
     } else {};
     if (!leading_throws && result.next < past && throws_word(source, tokens[result.next])) {
@@ -618,7 +633,7 @@ func parse_reference_symbol(source:const SourceBytes in S, tokens:const Tokens i
     val owner <- result.root;
     if (result.next >= past || !where_word(source, tokens[result.next])) { result.diagnostic <- expected_owner_clause(); return; };
     result.root <- no_node();
-    parse_owner_clauses(source, tokens, nodes, result, past);
+    parse_constraints(source, tokens, nodes, result, past, false);
     if (result.diagnostic != 0u8) return;
     val clause <- result.root;
     val parameter <- nodes[clause].right;

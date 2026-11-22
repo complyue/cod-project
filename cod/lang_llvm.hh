@@ -5,6 +5,7 @@
 #include "lang_checked_program.hh"
 #include "lang_exceptions.hh"
 #include "lang_llvm_c.h"
+#include "runtime/cod_lang_runtime.h"
 
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/DiagnosticOptions.h>
@@ -2382,6 +2383,55 @@ class LLVMEmission {
       return empty_scalar();
     });
   }
+  llvm::Value *emit_text_access(const Expression &expr, BuiltinOperation operation, bool discard) {
+    auto *view = emit_expression(*expr.children[0], Projection::target);
+    if (!reachable()) return nullptr;
+    if (operation == BuiltinOperation::text_size) {
+      auto *size = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(text_view_, view, 1));
+      return pack(size, Type::uint64);
+    }
+    auto *first = emit_expression(*expr.children[1]);
+    if (!reachable()) return nullptr;
+    first = unpack(first, Type::uint64);
+    if (operation == BuiltinOperation::text_byte) {
+      auto *size = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(text_view_, view, 1));
+      auto *ready = block("text.byte.ready"), *invalid = block("text.byte.invalid");
+      b_.CreateCondBr(b_.CreateICmpULT(first, size), ready, invalid);
+      b_.SetInsertPoint(invalid);
+      save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::index_out_of_bounds)),
+                         integer(site(expr.at)), null_pointer(), first, size));
+      b_.CreateBr(control_->exit);
+      b_.SetInsertPoint(ready);
+      auto *bytes = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(text_view_, view, 0));
+      auto *byte = b_.CreateLoad(b_.getInt8Ty(), b_.CreateGEP(b_.getInt8Ty(), bytes, first));
+      return pack(byte, Type::uint8);
+    }
+    auto *past = emit_expression(*expr.children[2]);
+    if (!reachable()) return nullptr;
+    past = unpack(past, Type::uint64);
+    auto *result = slot(b_.getPtrTy(), "text.slice");
+    std::map<size_t, std::vector<size_t>> owners;
+    for (size_t i = 0; i < contexts_.size(); ++i) {
+      const auto &access = contexts_[i].at(&expr);
+      if (access.type != Type::never) owners[access.lexical_allocation->owner].push_back(i);
+    }
+    auto *owner = contextual_value(expr, owners, "text.slice.owner", [&](size_t actual) {
+      return owner_identity(actual, expr.at);
+    }, b_.getPtrTy());
+    auto slice = runtime("cod_lang_lexical_text_slice", b_.getInt32Ty(),
+        {b_.getPtrTy(), b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy()});
+    auto *status = b_.CreateCall(slice, {owner, view, first, past, result});
+    auto *ready = block("text.slice.ready"), *invalid = block("text.slice.invalid"), *failed = block("text.slice.failed");
+    auto *completion = b_.CreateSwitch(status, failed, 2);
+    completion->addCase(b_.getInt32(COD_TEXT_SLICE_READY), ready);
+    completion->addCase(b_.getInt32(COD_TEXT_SLICE_INVALID), invalid);
+    b_.SetInsertPoint(invalid);
+    fail_path(ExceptionCategory::type_assertion_failed, expr.at);
+    b_.SetInsertPoint(failed);
+    fail_path(ExceptionCategory::out_of_memory, expr.at);
+    b_.SetInsertPoint(ready);
+    return discard ? empty_scalar() : load(result);
+  }
   llvm::Value *emit_expression(const Expression &expr, Projection projection = Projection::value, bool discard = false) {
     if (discard && projection == Projection::value &&
         std::ranges::any_of(contexts_, [&](const auto &context) { return context.at(&expr).discarded_loop_view; })) {
@@ -2851,6 +2901,9 @@ class LLVMEmission {
     case K::value_call: case K::call: case K::behave: case K::perform: case K::pipeline: case K::processor_composition: {
       if (fact.builtin == BuiltinOperation::lexical_result)
         return emit_expression(*expr.children.front(), projection, discard);
+      if (fact.builtin == BuiltinOperation::text_size || fact.builtin == BuiltinOperation::text_byte ||
+          fact.builtin == BuiltinOperation::text_slice)
+        return emit_text_access(expr, fact.builtin, discard);
       if (fact.builtin == BuiltinOperation::builder_append) {
         const auto &source = *expr.children[1];
         auto *builder = emit_expression(*expr.children[0], Projection::target);

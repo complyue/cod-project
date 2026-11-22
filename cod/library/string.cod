@@ -1,4 +1,7 @@
-using "std:text-storage" { Utf8BuilderStorage, append_utf8 as append_piece, result_in_scope };
+using "std:text-storage" {
+    Utf8BuilderStorage, append_utf8 as append_piece, result_in_scope,
+    utf8_size, utf8_byte, utf8_slice,
+};
 using "std:exceptions" Exception;
 
 export type Utf8StreamOut;
@@ -59,4 +62,121 @@ proc emit(piece:const StringBuilder in S) -> void
     throws Utf8WriteException where {const owner S} {
     writeUtf8(@io, piece);
     return;
+}
+
+export proc str(out:Utf8StreamOut in O, value:const String in S) -> void
+    throws Utf8WriteException where {owner O, const owner S} {
+    writeUtf8(out, value);
+    return;
+}
+
+proc write_hex_digit(out:Utf8StreamOut in O, digit:u64) -> void
+    throws Utf8WriteException where {owner O} {
+    writeUtf8(out, utf8_slice("0123456789ABCDEF", digit, digit + 1u64));
+    return;
+}
+
+proc str(out:Utf8StreamOut in O, number:u64) -> void
+    throws Utf8WriteException where {owner O} {
+    if (number >= 10u64) { str(out, number / 10u64); };
+    write_hex_digit(out, number % 10u64);
+    return;
+}
+
+proc str(value:const T in V) -> ref const String in D
+    throws Utf8WriteException where {T, const owner V, owner D} {
+    ref scratch = make StringBuilder();
+    str(scratch, value);
+    return result_in_scope(make String(scratch) in D);
+}
+
+proc str(number:u64) -> ref const String in D
+    throws Utf8WriteException where {owner D} {
+    ref scratch = make StringBuilder();
+    str(scratch, number);
+    return result_in_scope(make String(scratch) in D);
+}
+
+export proc repr(out:Utf8StreamOut in O, number:u64) -> void
+    throws Utf8WriteException where {owner O} {
+    str(out, number);
+    return;
+}
+
+proc write_escape(out:Utf8StreamOut in O, codepoint:u64) -> void
+    throws Utf8WriteException where {owner O} {
+    if (codepoint == 0u64) { writeUtf8(out, "\\0"); return; };
+    if (codepoint == 9u64) { writeUtf8(out, "\\t"); return; };
+    if (codepoint == 10u64) { writeUtf8(out, "\\n"); return; };
+    if (codepoint == 13u64) { writeUtf8(out, "\\r"); return; };
+    if (codepoint == 34u64) { writeUtf8(out, "\\\""); return; };
+    if (codepoint == 92u64) { writeUtf8(out, "\\\\"); return; };
+    writeUtf8(out, "\\u{");
+    if (codepoint >= 16u64) { write_hex_digit(out, codepoint / 16u64); };
+    write_hex_digit(out, codepoint % 16u64);
+    writeUtf8(out, "}");
+    return;
+}
+
+proc write_text_span(out:Utf8StreamOut in O, value:const String in S, first:u64, past:u64) -> void
+    throws Utf8WriteException where {owner O, const owner S} {
+    if (first != past) { writeUtf8(out, utf8_slice(value, first, past)); };
+    return;
+}
+
+proc repr(out:Utf8StreamOut in O, value:const String in S) -> void
+    throws Utf8WriteException where {owner O, const owner S} {
+    writeUtf8(out, "\"");
+    val first <- 0u64;
+    val byte <- 0u8;
+    val codepoint <- 0u64;
+    val width <- 1u64;
+    val escaped <- false;
+    val size <- utf8_size(value);
+    for (at in 0u64 .. size) {
+        if (at >= first) {
+            byte <- utf8_byte(value, at);
+            if (byte < 128u8 || byte >= 192u8) {
+                # Flush at a scalar boundary and release each piece after its write.
+                if (at - first >= 4096u64) {
+                    write_text_span(out, value, first, at);
+                    (first <- at):void;
+                };
+                escaped <- byte < 32u8 || byte == 34u8 || byte == 92u8 || byte == 127u8;
+                codepoint <- byte;
+                width <- 1u64;
+                # The two-byte form for U+0080 through U+009F begins with C2.
+                if (byte == 194u8) {
+                    byte <- utf8_byte(value, at + 1u64);
+                    if (byte < 160u8) {
+                        escaped <- true;
+                        codepoint <- byte;
+                        (width <- 2u64):void;
+                    };
+                };
+                if (escaped) {
+                    write_text_span(out, value, first, at);
+                    write_escape(out, codepoint);
+                    first <- at + width;
+                };
+            };
+        };
+    };
+    write_text_span(out, value, first, size);
+    writeUtf8(out, "\"");
+    return;
+}
+
+proc repr(value:const T in V) -> ref const String in D
+    throws Utf8WriteException where {T, const owner V, owner D} {
+    ref scratch = make StringBuilder();
+    repr(scratch, value);
+    return result_in_scope(make String(scratch) in D);
+}
+
+proc repr(number:u64) -> ref const String in D
+    throws Utf8WriteException where {owner D} {
+    ref scratch = make StringBuilder();
+    repr(scratch, number);
+    return result_in_scope(make String(scratch) in D);
 }

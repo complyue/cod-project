@@ -1,0 +1,36 @@
+using symbol "std:io" @print;
+using "std:text-storage" { utf8_size, utf8_byte };
+using "../../../cod/library/string.cod" Utf8WriteException;
+using "../../../applications/cod-booter/src/SourceStorage.cod" SourcePosition;
+import "../../../applications/cod-booter/src/DiagnosticFormatting.cod" { str as display, repr as debug };
+
+func same_text(left:const String in L, right:const String in R) -> bool
+    where {const owner L, const owner R} {
+    val size <- utf8_size(left);
+    if (size != utf8_size(right)) return false;
+    for (at in 0u64 .. size) {
+        if (utf8_byte(left, at) != utf8_byte(right, at)) return false;
+    };
+    return true;
+}
+
+proc verify() -> u64 throws Utf8WriteException {
+    ref position = make SourcePosition { line <- 12u64; column <- 7u64; };
+    ref absent = make SourcePosition { line <- 0u64; column <- 0u64; };
+    ref display_before_edit = display(position);
+    if (!same_text(display_before_edit, "12:7")) return 1u64;
+    if (!same_text(debug(position), "SourcePosition(line=12, column=7)")) return 2u64;
+    position.line <- 42u64;
+    if (!same_text(display_before_edit, "12:7")) return 8u64;
+    if (!same_text(display(absent), "<unknown>")) return 3u64;
+    if (!same_text(display(18446744073709551615u64), "18446744073709551615")) return 4u64;
+    if (!same_text(display("é\"\n\0"), "é\"\n\0")) return 5u64;
+    if (!same_text(debug("é\"\n\0\u{1f}\u{80}"), "\"é\\\"\\n\\0\\u{1F}\\u{80}\"")) return 6u64;
+    for (digit in 2u64 .. 3u64) {
+        if (!same_text(display(digit), "2")) return 7u64;
+    };
+    return 73u64;
+}
+
+try { behave @print(verify()); }
+catch (error:const Utf8WriteException) { behave @print(9u64); };

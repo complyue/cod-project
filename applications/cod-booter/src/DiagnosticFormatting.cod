@@ -1,0 +1,25 @@
+export import "../../../cod/library/string.cod" { str, repr };
+using "../../../cod/library/string.cod" { Utf8StreamOut, Utf8WriteException, writeUtf8 };
+using "SourceStorage.cod" SourcePosition;
+
+proc str(out:Utf8StreamOut in O, position:const SourcePosition in P) -> void
+    throws Utf8WriteException where {owner O, const owner P} {
+    if (position.line == 0u64 && position.column == 0u64) {
+        writeUtf8(out, "<unknown>");
+        return;
+    };
+    str(out, position.line);
+    writeUtf8(out, ":");
+    str(out, position.column);
+    return;
+}
+
+proc repr(out:Utf8StreamOut in O, position:const SourcePosition in P) -> void
+    throws Utf8WriteException where {owner O, const owner P} {
+    writeUtf8(out, "SourcePosition(line=");
+    str(out, position.line);
+    writeUtf8(out, ", column=");
+    str(out, position.column);
+    writeUtf8(out, ")");
+    return;
+}

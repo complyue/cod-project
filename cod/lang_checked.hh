@@ -6707,8 +6707,11 @@ class ScalarChecker {
         if (stricter_owners && match_owners(alternative, owners, state) != OwnerMatch::satisfied) return false;
         bool strict = !implies(definition, alternative, widening) || stricter_owners;
         for (size_t i = 0; i < alternative.parameters.size(); ++i) {
-          const auto exact = alternative.input_parameters()[i].read_only;
-          if (exact == definition.input_parameters()[i].read_only) continue;
+          const auto &narrow = parameter_at(alternative, i);
+          const auto &broad = parameter_at(definition, i);
+          // A bits input's local qualifier does not constrain source target access.
+          if (narrow.owner.empty() || broad.owner.empty() || narrow.read_only == broad.read_only) continue;
+          const auto exact = narrow.read_only;
           if (i >= access.size() || !access[i] || exact != *access[i]) return false;
           strict = true;
         }
@@ -10861,14 +10864,29 @@ class ScalarChecker {
     const auto type = state ? evidence_annotation(*source.annotation, *state) : resolve_annotation(*source.annotation, instance);
     return type == Type::string || program_.builder_type(type);
   }
-  bool text_primitive(const Expression &expr, cod_lang_export_kind kind, const TypeEvidenceState *state = nullptr) const {
-    if (expr.kind != Expression::Kind::call || expr.intrinsic) return false;
+  std::optional<cod_lang_export_kind> text_primitive(const Expression &expr, const TypeEvidenceState *state = nullptr) const {
+    if (expr.kind != Expression::Kind::call || expr.intrinsic) return {};
     const auto method = state ? state->method : checking_instance_ ? std::optional{checking_instance_->method} : std::nullopt;
     if ((state ? state->bindings.contains(expr.text) || state->symbol_shadows.contains(expr.text)
-               : lexical_.lookup(expr.text).has_value()) || lexical_self(expr.text, method)) return false;
+               : lexical_.lookup(expr.text).has_value()) || lexical_self(expr.text, method)) return {};
     const ModuleLookup lookup(module_, method ? program_.methods[*method].module : module_);
     const auto selected = module_names().text_primitives.find(expr.text);
-    return selected != module_names().text_primitives.end() && selected->second == kind;
+    if (selected == module_names().text_primitives.end()) return {};
+    return selected->second;
+  }
+  static std::optional<BuiltinOperation> text_access(std::optional<cod_lang_export_kind> primitive) {
+    if (primitive == COD_LANG_TEXT_SIZE_EXPORT) return BuiltinOperation::text_size;
+    if (primitive == COD_LANG_TEXT_BYTE_EXPORT) return BuiltinOperation::text_byte;
+    if (primitive == COD_LANG_TEXT_SLICE_EXPORT) return BuiltinOperation::text_slice;
+    return {};
+  }
+  static Type text_access_result(BuiltinOperation operation, const Expression &expr) {
+    const size_t arity = operation == BuiltinOperation::text_size ? 1 : operation == BuiltinOperation::text_byte ? 2 : 3;
+    if (expr.children.size() != arity || expr.has_here_body())
+      fail(expr.at, "text access requires a String and its byte offsets, if any");
+    if (operation == BuiltinOperation::text_size) return Type::uint64;
+    if (operation == BuiltinOperation::text_byte) return Type::uint8;
+    return Type::string;
   }
   CheckedOperation check_argument_expression(const Expression &operand, ArgumentMode mode, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, const Type *expected = nullptr,
@@ -11098,7 +11116,33 @@ class ScalarChecker {
       target_facts = state.target;
       return result;
     }
-    if (text_primitive(expr, COD_LANG_BUILDER_APPEND_EXPORT, &state)) {
+    const auto primitive = text_primitive(expr, &state);
+    if (const auto operation = text_access(primitive)) {
+      const auto result = text_access_result(*operation, expr);
+      const auto &source = *expr.children.front();
+      const auto input = type_evidence(source, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, true, EvidenceRead::target);
+      if (!input || *input == Type::never) return input;
+      if (!text_type(*input) || (state.required && state.value.view != true))
+        fail(source.at, "text access requires a readable String");
+      require_type_initialized(state, state.target, {}, source.at);
+      for (size_t i = 1; i < expr.children.size(); ++i) {
+        const auto &offset = *expr.children[i];
+        const auto type = type_evidence(offset, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, true, EvidenceRead::payload);
+        if (!type || *type == Type::never) return type;
+        if (*type != Type::uint64) fail(offset.at, "text byte offset must have type u64");
+      }
+      if (*operation == BuiltinOperation::text_byte)
+        note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::index_out_of_bounds)));
+      if (*operation == BuiltinOperation::text_slice) {
+        note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::type_assertion_failed)));
+        note_type_allocation(state);
+        view = {true, true, {}, state.full_scope_owner};
+        target_facts.presence = TargetPresence::present;
+        target_facts.initialized = true;
+      }
+      return result;
+    }
+    if (primitive == COD_LANG_BUILDER_APPEND_EXPORT) {
       if (expr.children.size() != 2 || expr.has_here_body()) fail(expr.at, "text append requires a builder and one text piece");
       for (size_t i = 0; i < 2; ++i) {
         const auto &operand = *expr.children[i];
@@ -17549,7 +17593,39 @@ class ScalarChecker {
         operation.builtin = BuiltinOperation::lexical_result;
         break;
       }
-      if (text_primitive(expr, COD_LANG_BUILDER_APPEND_EXPORT)) {
+      const auto primitive = text_primitive(expr);
+      if (const auto access = text_access(primitive)) {
+        if (&expr == prepared_call_) implementation_gap(expr.at, "deferring a direct text storage intrinsic");
+        operation.type = text_access_result(*access, expr);
+        operation.builtin = *access;
+        const auto &source = *expr.children.front();
+        const auto prepared = check_argument_expression(source, ArgumentMode::borrowed_ref, instance, operations);
+        if (prepared.type == Type::never) { operation.type = Type::never; break; }
+        if (!text_type(prepared.type)) fail(source.at, "text access requires a readable String");
+        prepare_borrow(prepared, ArgumentMode::borrowed_ref, source.at);
+        require_live_view(prepared, source.at);
+        for (size_t i = 1; i < expr.children.size(); ++i) {
+          const auto &offset = *expr.children[i];
+          const auto type = check(offset, instance, operations, true);
+          if (type == Type::never) { operation.type = Type::never; break; }
+          if (type != Type::uint64) fail(offset.at, "text byte offset must have type u64");
+        }
+        if (operation.type == Type::never) break;
+        if (*access == BuiltinOperation::text_byte)
+          note_abrupt(expr.at, {exception_id(ExceptionCategory::index_out_of_bounds)});
+        if (*access == BuiltinOperation::text_slice) {
+          using Allocation = CheckedOperation::LexicalAllocation;
+          operation.view = true;
+          operation.read_only = true;
+          operation.owners = {cleanup_scope_};
+          operation.initialization.emplace();
+          operation.lexical_allocation = Allocation{cleanup_scope_, Allocation::text_slice};
+          require_lexical_allocator(cleanup_scope_, expr.at);
+          note_abrupt(expr.at, {exception_id(ExceptionCategory::type_assertion_failed), exception_id(ExceptionCategory::out_of_memory)});
+        }
+        break;
+      }
+      if (primitive == COD_LANG_BUILDER_APPEND_EXPORT) {
         if (expr.children.size() != 2 || expr.has_here_body()) fail(expr.at, "text append requires a builder and one text piece");
         if (&expr == prepared_call_) implementation_gap(expr.at, "deferring a direct text storage intrinsic");
         operation.type = Type::void_type;
@@ -20383,6 +20459,12 @@ class ScalarChecker {
       fail(marker.at, "a use-site text result requires a dedicated writable result owner and readonly borrowed inputs");
     method.lexical_result = CheckedMethod::LexicalResult{&marker, static_cast<size_t>(owner - owners.begin())};
   }
+  static std::optional<cod_lang_export_kind> text_storage_kind(std::string_view name) {
+#define COD_LANG_TEXT_KIND(key, spelling, kind, id) if (name == #spelling) return COD_LANG_ ## kind ## _EXPORT;
+    COD_LANG_TEXT_INTRINSICS(COD_LANG_TEXT_KIND)
+#undef COD_LANG_TEXT_KIND
+    return {};
+  }
   void register_module(const SourceModule &source, std::optional<size_t> &print_symbol,
                        std::optional<Location> &unsupported_here) {
     const auto &forms = source.forms;
@@ -20393,16 +20475,15 @@ class ScalarChecker {
       if ((form->kind == Form::Kind::using_resource || form->kind == Form::Kind::import_resource) &&
           form->path == COD_LANG_TEXT_STORAGE_MODULE && !form->using_symbol) {
         if (form->selected_members) implementation_gap(form->at, "member selection outside an enum");
-        if (form->name == COD_LANG_BUILDER_APPEND_NAME || form->name == COD_LANG_LEXICAL_RESULT_NAME) {
+        const auto kind = text_storage_kind(form->name);
+        if (!kind) fail(form->at, "unknown text storage selection '" + form->name + "'");
+        if (kind != COD_LANG_BUILDER_STORAGE_EXPORT) {
           if (form->exporting) implementation_gap(form->at, "re-exporting a private text storage primitive");
-          const auto kind = form->name == COD_LANG_BUILDER_APPEND_NAME ? COD_LANG_BUILDER_APPEND_EXPORT : COD_LANG_LEXICAL_RESULT_EXPORT;
-          if (!module_names().text_primitives.emplace(form->alias, kind).second)
+          if (!module_names().text_primitives.emplace(form->alias, *kind).second)
             fail(form->at, "duplicate text storage selection");
           continue;
         }
-        if (form->name != COD_LANG_BUILDER_STORAGE_NAME)
-          fail(form->at, "unknown text storage selection '" + form->name + "'");
-        const Type type{Type::builder_storage, COD_LANG_BUILDER_STORAGE_NAME};
+        const Type type{Type::builder_storage, form->name};
         if (!module_names().types.emplace(form->alias, type).second)
           fail(form->at, "duplicate text storage selection");
         if (form->exporting) {
@@ -20846,9 +20927,16 @@ class ScalarChecker {
         });
       });
       const auto &first = program_.instances[method.instances.front()];
-      for (const auto id : method.instances) for (size_t p = 0; p < method.parameters.size(); ++p)
-        if (method.parameters[p].kind == Type::abstract_type && first.arguments[p] != program_.instances[id].arguments[p])
+      for (const auto id : method.instances) for (size_t p = 0; p < method.parameters.size(); ++p) {
+        const auto &actual = program_.instances[id].arguments[p];
+        const auto &baseline = first.arguments[p];
+        if (actual == baseline) continue;
+        // A selected product borrow can contribute different checked field places.
+        const bool product_borrow = !method.type_parameters.empty() && !parameter_at(method, p).owner.empty() &&
+            (actual.kind == Type::product || baseline.kind == Type::product);
+        if (method.parameters[p].kind == Type::abstract_type || product_borrow)
           method.separate_native_frames = true;
+      }
       if (method.separate_native_frames) continue;
       for (const auto id : method.instances) {
         const auto &instance = program_.instances[id];
