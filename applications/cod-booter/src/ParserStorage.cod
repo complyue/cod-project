@@ -139,6 +139,7 @@ export func type_parameter_node() -> u8 { return 115u8; }
 export func place_parameter_node() -> u8 { return 116u8; }
 export func init_place_parameter_node() -> u8 { return 117u8; }
 export func rebind_node() -> u8 { return 118u8; }
+export func lexical_callable_node() -> u8 { return 119u8; }
 
 export func direct_place_parameter(kind:u8) -> bool {
     return kind == place_parameter_node() || kind == init_place_parameter_node();
@@ -246,7 +247,8 @@ export func ungrouped(nodes:const ExprNodes in N, at:u64) -> u64 where {const ow
 }
 
 export func is_function(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
-    return at != no_node() && nodes[at].kind == callable_node() && nodes[at].number == function_definition();
+    return at != no_node() && (nodes[at].kind == callable_node() || nodes[at].kind == lexical_callable_node()) &&
+        nodes[at].number == function_definition();
 }
 
 export func len(tokens:const Tokens in T) -> u64 where {const owner T} {

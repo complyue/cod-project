@@ -4,7 +4,7 @@ using "ParserStorage.cod" {
     ExprNodes, len as syntax_len, no_node, module_node, module_selection, symbol_node, name_node,
     import_node, member_selector_node, selected_resource_name,
 };
-using "ExpressionParser.cod" ParseResult;
+using "ParserInput.cod" ParseResult;
 using "ModuleExportStorage.cod" { ModuleExport, ModuleExports, ModuleInterfaces, find_interface, enum_type };
 
 export data SelectedExport {

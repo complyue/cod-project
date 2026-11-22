@@ -1,0 +1,306 @@
+using "Lexer.cod" {
+    const_word, exception_word, handle_word, here_word, init_word, in_word, own_word, owner_word,
+    ptr_word, ref_word, reserved_lexical_binder, reserved_module_name, throws_word, val_word, var_word,
+    where_word, within_word,
+};
+using "ParserInput.cod" {
+    ParseResult, append_node, exception_binder_width, expected_name, expected_type, parse_binding_name,
+    parse_identifier, parse_module_name, parse_resource_name, punct_at, punct_pair_at,
+};
+using "ParserStorage.cod" {
+    ExprNodes, Tokens, callable_head_node, exception_parameter_node, exception_result_node, handle_parameter_node,
+    here_parameter_node, init_place_parameter_node, no_node, owned_type_node, owner_clause_node, parameter_node,
+    place_parameter_node, ptr_parameter_node, readonly_declaration, ref_parameter_node, ref_result_node,
+    result_clause_node, retained_parent_parameter, throws_clause_node, type_parameter_node, val_parameter_node,
+};
+using "SourceStorage.cod" SourceBytes;
+
+func expected_parameter_list() -> u8 { return 23u8; }
+export func expected_owner_clause() -> u8 { return 24u8; }
+func invalid_exception_owner() -> u8 { return 35u8; }
+func invalid_value_parameter_owner() -> u8 { return 41u8; }
+
+func direct_place_head(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> bool
+    where {const owner S, const owner T} {
+    return at + 2u64 < past && val_word(source, tokens[at]) && var_word(source, tokens[at + 1u64]) &&
+        punct_at(source, tokens, at + 2u64, past) != 58u8;
+}
+
+# Formal parameters link to their preceding parameter and retain the typed name.
+export func parse_parameter(source:const SourceBytes in S, tokens:const Tokens in T,
+                     nodes:ExprNodes in A, result:ParseResult in R,
+                     past:u64, previous:u64, field:bool) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    val at <- result.next;
+    if (at >= past) { result.diagnostic <- expected_name(); return false; } else {};
+    val kind <- parameter_node();
+    val width <- exception_binder_width(source, tokens, at, past);
+    if (width != 0u64) {
+        kind <- exception_parameter_node();
+        (result.next <- at + width):void;
+    } else {
+        if (!field && init_word(source, tokens[at]) && direct_place_head(source, tokens, at + 1u64, past)) {
+            kind <- init_place_parameter_node();
+            (result.next <- at + 3u64):void;
+        } else {
+            if (!field && direct_place_head(source, tokens, at, past)) {
+                kind <- place_parameter_node();
+                (result.next <- at + 2u64):void;
+            } else {
+                if (ref_word(source, tokens[at])) { (kind <- ref_parameter_node()):void; } else {};
+                if (ptr_word(source, tokens[at])) { (kind <- ptr_parameter_node()):void; } else {};
+                if (val_word(source, tokens[at])) { (kind <- val_parameter_node()):void; } else {};
+                if (handle_word(source, tokens[at]) && punct_at(source, tokens, at + 1u64, past) != 58u8) {
+                    (kind <- handle_parameter_node()):void;
+                } else {};
+                if (kind != parameter_node()) { (result.next <- at + 1u64):void; } else {};
+            };
+        };
+    };
+    if (!parse_binding_name(source, tokens, nodes, result, past, true, true, field))
+        return false;
+    val binding <- result.root;
+    val qualified <- nodes[nodes[binding].right].kind == owned_type_node();
+    if (kind == exception_parameter_node() && qualified) {
+        result.diagnostic <- invalid_exception_owner();
+        return false;
+    } else {};
+    if (kind == val_parameter_node() && qualified) {
+        result.diagnostic <- invalid_value_parameter_owner();
+        return false;
+    } else {};
+    if (!field && kind == parameter_node() && qualified) { (kind <- ref_parameter_node()):void; } else {};
+    val first <- tokens[at].first;
+    val mode <- if (kind == handle_parameter_node() && !qualified && within_word(source, tokens[at + 1u64])) {
+        retained_parent_parameter()
+    } else { 0u64 };
+    append_node(nodes, result, kind, first, nodes[binding].past, mode, previous, binding, first);
+    return result.diagnostic == 0u8;
+}
+
+func parse_parameters(source:const SourceBytes in S, tokens:const Tokens in T,
+                      nodes:ExprNodes in A, result:ParseResult in R,
+                      past:u64, allow_here:bool, multiple_here:bool) -> u64
+    where {const owner S, const owner T, owner A, owner R} {
+    val last <- no_node();
+    if (punct_at(source, tokens, result.next, past) == 41u8) return last; # ')'
+    val at <- result.next;
+    val delimiter <- 0u8;
+    for (unused in result.next .. past) {
+        at <- result.next;
+        if (allow_here && (last == no_node() || (multiple_here && nodes[last].kind == here_parameter_node())) &&
+            at < past && here_word(source, tokens[at]) && punct_at(source, tokens, at + 1u64, past) != 58u8) {
+            parse_here_parameter(source, tokens, nodes, result, past, last);
+            if (result.diagnostic != 0u8) return no_node();
+        } else {
+            if (!parse_parameter(source, tokens, nodes, result, past, last, false)) return no_node();
+        };
+        last <- result.root;
+        delimiter <- punct_at(source, tokens, result.next, past);
+        if (delimiter == 41u8) return last; # ')'
+        if (delimiter != 44u8) { result.diagnostic <- expected_parameter_list(); return no_node(); } else {}; # ','
+        result.next <- result.next + 1u64;
+    };
+    result.diagnostic <- expected_parameter_list();
+    return no_node();
+}
+
+func start_parameter_list(source:const SourceBytes in S, tokens:const Tokens in T,
+                          nodes:ExprNodes in A, result:ParseResult in R, past:u64, lexical:bool, operators:bool) -> u64
+    where {const owner S, const owner T, owner A, owner R} {
+    val at <- result.next;
+    val reserved <- at < past && (if (lexical) { reserved_lexical_binder(source, tokens[at]) }
+                                  else { reserved_module_name(source, tokens[at]) });
+    if (reserved) { result.diagnostic <- expected_name(); return no_node(); } else {};
+    if (operators) {
+        if (!parse_resource_name(source, tokens, nodes, result, past)) return no_node();
+    } else {
+        if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) return no_node();
+    };
+    val name <- result.root;
+    val open <- result.next;
+    if (punct_at(source, tokens, open, past) != 40u8) { # '('
+        result.diagnostic <- expected_parameter_list();
+        return no_node();
+    } else {};
+    result.next <- open + 1u64;
+    return name;
+}
+
+func finish_callable_head(tokens:const Tokens in T, nodes:ExprNodes in A, result:ParseResult in R,
+                          name:u64, parameters:u64, open:u64) -> void
+    where {const owner T, owner A, owner R} {
+    val close <- result.next;
+    append_node(nodes, result, callable_head_node(), nodes[name].first, tokens[close].past,
+                0u64, name, parameters, open);
+    if (result.diagnostic == 0u8) { (result.next <- close + 1u64):void; } else {};
+}
+
+# Each header clause links to the preceding header node and its own operand.
+func parse_type_clause(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
+                       result:ParseResult in R, past:u64, kind:u8) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    val previous <- result.root;
+    val first <- tokens[result.next].first;
+    result.next <- result.next + 1u64;
+    val clause_kind <- kind;
+    if (kind == result_clause_node() && result.next < past) {
+        val at <- result.next;
+        val width <- 0u64;
+        if (exception_word(source, tokens[at]) && punct_at(source, tokens, at + 1u64, past) == 58u8) {
+            (width <- 1u64):void;
+        } else {
+            if (own_word(source, tokens[at]) && at + 1u64 < past && exception_word(source, tokens[at + 1u64])) {
+                (width <- 2u64):void;
+            } else {};
+        };
+        if (width != 0u64) {
+            result.next <- at + width;
+            if (punct_at(source, tokens, result.next, past) != 58u8) { result.diagnostic <- expected_type(); return false; } else {};
+            result.next <- result.next + 1u64;
+            (clause_kind <- exception_result_node()):void;
+        } else {
+            if (ref_word(source, tokens[at])) {
+                result.next <- at + 1u64;
+                (clause_kind <- ref_result_node()):void;
+            } else {};
+        };
+    } else {};
+    val readonly <- kind == result_clause_node() && result.next < past && const_word(source, tokens[result.next]);
+    if (readonly) { (result.next <- result.next + 1u64):void; } else {};
+    if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return false;
+    val annotation <- result.root;
+    if (clause_kind == result_clause_node() && result.next < past && in_word(source, tokens[result.next])) {
+        (clause_kind <- ref_result_node()):void;
+    } else {};
+    if (clause_kind == ref_result_node()) {
+        if (result.next >= past || !in_word(source, tokens[result.next])) {
+            result.diagnostic <- expected_owner_clause();
+            return false;
+        } else {};
+        val site <- tokens[result.next].first;
+        result.next <- result.next + 1u64;
+        if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) return false;
+        val owner_name <- result.root;
+        append_node(nodes, result, owned_type_node(), nodes[annotation].first, nodes[owner_name].past,
+                    0u64, annotation, owner_name, site);
+        if (result.diagnostic != 0u8) return false;
+        (annotation <- result.root):void;
+    } else {};
+    append_node(nodes, result, clause_kind, first, nodes[annotation].past,
+                if (readonly) { readonly_declaration() } else { 0u64 }, previous, annotation, first);
+    return result.diagnostic == 0u8;
+}
+
+func parse_here_parameter(source:const SourceBytes in S, tokens:const Tokens in T,
+                          nodes:ExprNodes in A, result:ParseResult in R, past:u64, previous:u64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val first <- tokens[result.next].first;
+    result.next <- result.next + 1u64;
+    val name <- start_parameter_list(source, tokens, nodes, result, past, true, false);
+    if (name == no_node()) return;
+    val open <- tokens[result.next - 1u64].first;
+    val parameters <- parse_parameters(source, tokens, nodes, result, past, false, false);
+    if (result.diagnostic != 0u8) return;
+    finish_callable_head(tokens, nodes, result, name, parameters, open);
+    if (result.diagnostic != 0u8) return;
+    if (!punct_pair_at(source, tokens, result.next, past, 45u8, 62u8)) {
+        result.diagnostic <- expected_type();
+        return;
+    } else {};
+    if (!parse_type_clause(source, tokens, nodes, result, past, result_clause_node())) return;
+    if (result.next < past && throws_word(source, tokens[result.next])) {
+        if (!parse_type_clause(source, tokens, nodes, result, past, throws_clause_node())) return;
+    } else {};
+    val signature <- result.root;
+    append_node(nodes, result, here_parameter_node(), first, nodes[signature].past,
+                0u64, previous, signature, first);
+}
+
+func parse_callable_head(source:const SourceBytes in S, tokens:const Tokens in T,
+                         nodes:ExprNodes in A, result:ParseResult in R, past:u64, native:bool, operators:bool) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val name <- start_parameter_list(source, tokens, nodes, result, past, false, operators);
+    if (name == no_node()) return;
+    val open <- tokens[result.next - 1u64].first;
+    val parameters <- parse_parameters(source, tokens, nodes, result, past, true, !native);
+    if (result.diagnostic != 0u8) return;
+    finish_callable_head(tokens, nodes, result, name, parameters, open);
+}
+
+func parse_owner_clause(source:const SourceBytes in S, tokens:const Tokens in T,
+                        nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    val at <- result.next;
+    val readonly <- at < past && const_word(source, tokens[at]);
+    val owner_at <- if (readonly) { at + 1u64 } else { at };
+    if (owner_at >= past || !owner_word(source, tokens[owner_at])) {
+        result.diagnostic <- expected_owner_clause();
+        return false;
+    } else {};
+    val previous <- result.root;
+    result.next <- owner_at + 1u64;
+    if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) return false;
+    val owner_name <- result.root;
+    val first <- tokens[at].first;
+    append_node(nodes, result, owner_clause_node(), first, nodes[owner_name].past,
+                if (readonly) { readonly_declaration() } else { 0u64 }, previous, owner_name, first);
+    return result.diagnostic == 0u8;
+}
+
+func parse_constraint(source:const SourceBytes in S, tokens:const Tokens in T,
+                      nodes:ExprNodes in A, result:ParseResult in R, past:u64, ordinary:bool) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    val at <- result.next;
+    if (!ordinary || at >= past || owner_word(source, tokens[at]) || const_word(source, tokens[at]))
+        return parse_owner_clause(source, tokens, nodes, result, past);
+    val previous <- result.root;
+    if (!parse_module_name(source, tokens, nodes, result, past)) return false;
+    val name <- result.root;
+    append_node(nodes, result, type_parameter_node(), nodes[name].first, nodes[name].past,
+                0u64, previous, name, nodes[name].first);
+    return result.diagnostic == 0u8;
+}
+
+export func parse_constraints(source:const SourceBytes in S, tokens:const Tokens in T,
+                       nodes:ExprNodes in A, result:ParseResult in R, past:u64, ordinary:bool) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    result.next <- result.next + 1u64;
+    if (punct_at(source, tokens, result.next, past) != 123u8) { # '{'
+        if (ordinary) { parse_constraint(source, tokens, nodes, result, past, ordinary):void; return; };
+        result.diagnostic <- expected_owner_clause();
+        return;
+    } else {};
+    result.next <- result.next + 1u64;
+    val delimiter <- 0u8;
+    for (unused in result.next .. past) {
+        if (!parse_constraint(source, tokens, nodes, result, past, ordinary)) return;
+        delimiter <- punct_at(source, tokens, result.next, past);
+        if (delimiter == 125u8) { result.next <- result.next + 1u64; return; } else {}; # '}'
+        if (delimiter != 44u8) { result.diagnostic <- expected_owner_clause(); return; } else {}; # ','
+        result.next <- result.next + 1u64;
+    };
+    (result.diagnostic <- expected_owner_clause()):void;
+}
+
+export func parse_callable_signature(source:const SourceBytes in S, tokens:const Tokens in T,
+                                     nodes:ExprNodes in A, result:ParseResult in R, past:u64, native:bool,
+                                     operators:bool) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    parse_callable_head(source, tokens, nodes, result, past, native, operators);
+    if (result.diagnostic != 0u8) return;
+    if (punct_pair_at(source, tokens, result.next, past, 45u8, 62u8)) { # '->'
+        if (!parse_type_clause(source, tokens, nodes, result, past, result_clause_node())) return;
+    } else {};
+    val leading_throws <- result.next < past && throws_word(source, tokens[result.next]);
+    if (leading_throws) {
+        if (!parse_type_clause(source, tokens, nodes, result, past, throws_clause_node())) return;
+    } else {};
+    if (result.next < past && where_word(source, tokens[result.next])) {
+        parse_constraints(source, tokens, nodes, result, past, !native);
+        if (result.diagnostic != 0u8) return;
+    } else {};
+    if (!leading_throws && result.next < past && throws_word(source, tokens[result.next])) {
+        if (!parse_type_clause(source, tokens, nodes, result, past, throws_clause_node())) return;
+    } else {};
+}

@@ -17,7 +17,7 @@ using "ParserStorage.cod" {
     case_member_pattern, case_null_pattern, data_record_node, field_access_node, initializer_assignment_node,
     ungrouped, text_literal_node, positional_construction, rebind_node,
 };
-using "ExpressionParser.cod" ParseResult;
+using "ParserInput.cod" ParseResult;
 using "NameResolution.cod" {
     NameBindings, NameWork, first_item, callable_head, signature_clause, enclosing_callable, builtin_u64,
     builtin_void, builtin_bool, ordinary_selection, symbolic_selection, callable_binding,

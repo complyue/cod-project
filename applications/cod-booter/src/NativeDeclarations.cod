@@ -1,7 +1,8 @@
 using "SourceStorage.cod" SourceBytes;
 using "SourceAccess.cod" same_bytes;
 using "ParserStorage.cod" {
-    ExprNodes, no_node, c_handle_type_node, c_record_node, c_procedure_node, callable_node, callable_head_node,
+    ExprNodes, no_node, c_handle_type_node, c_record_node, c_procedure_node, callable_node, lexical_callable_node,
+    callable_head_node,
     array_declaration_node, export_node, export_from_node, module_item_node, symbol_node,
     data_parent_node, owned_type_node, ref_parameter_node, ptr_parameter_node, parameter_node,
     val_parameter_node, handle_parameter_node, here_parameter_node, checked_ref_argument,
@@ -1385,7 +1386,7 @@ export func check_native_declarations(nodes:const ExprNodes in N, names:NameBind
         if (nodes[at].kind == c_procedure_node()) {
             check_c_procedure(nodes, names, work, selected, at, report);
         } else {
-            if (nodes[at].kind == callable_node()) {
+            if (nodes[at].kind == callable_node() || nodes[at].kind == lexical_callable_node()) {
                 definition <- names[at].declaration;
                 if (definition != at) { (work[definition].active <- at):void; } else {};
                 check_handle_formals(nodes, names, work, selected, at, report);

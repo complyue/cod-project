@@ -2,7 +2,7 @@ using "SourceStorage.cod" SourceBytes;
 using "SourceAccess.cod" same_bytes;
 using "ParserStorage.cod" {
     ExprNodes, len as syntax_len, no_node, module_node, module_item_node, using_node,
-    export_from_node, callable_node, callable_head_node, c_handle_type_node, c_procedure_node,
+    export_from_node, callable_node, lexical_callable_node, callable_head_node, c_handle_type_node, c_procedure_node,
     data_record_node, c_record_node, data_parent_node, export_node, handle_parameter_node,
     here_parameter_node, array_declaration_node, is_function, parameter_node, ref_parameter_node,
     ptr_parameter_node, val_parameter_node, direct_place_parameter, result_clause_node, ref_result_node, throws_clause_node,
@@ -20,7 +20,7 @@ using "ParserStorage.cod" {
     local_module_selection, local_resource_name, import_node, native_symbol_declaration_node,
     reference_symbol_declaration_node, abstract_type_node, effect_node, bind_effect, text_literal_node,
 };
-using "ExpressionParser.cod" ParseResult;
+using "ParserInput.cod" ParseResult;
 using "ModuleExports.cod" {
     SelectedExports, record_export, enum_member_export, exception_type_export,
     builder_storage_export, lexical_builder_export, lexical_result_export, callable_export, ordinary_callable_shape,
@@ -75,6 +75,7 @@ data NameState {
     used:u64;
     first:u64;
     module_names:u64;
+    runtime_floor:u64;
     transfer_binding:u64;
     transfer_resolved:bool;
     scope_node:u64;
@@ -231,6 +232,16 @@ func handle_available(nodes:const ExprNodes in N, bindings:const NameBindings in
     return guard == no_node() || (nodes[guard].first <= nodes[use].first && nodes[use].past <= nodes[guard].past);
 }
 
+# A lexical function can use its own declarations and the module namespace.
+# Looking up the nearest declaration first still rejects a hidden runtime name.
+func visible_runtime_name(source:const SourceBytes in S, nodes:const ExprNodes in N, work:const NameWork in W,
+                          state:const NameState in R, name:u64, found:u64) -> bool
+    where {const owner S, const owner N, const owner W, const owner R} {
+    if (state.runtime_floor == 0u64) return true;
+    if (lookup(source, nodes, work, name, state.runtime_floor, state.used) != no_node()) return true;
+    return lookup(source, nodes, work, name, 0u64, state.module_names) == found;
+}
+
 func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                     work:const NameWork in W, state:NameState in R, name:u64) -> void
     where {const owner S, const owner N, owner B, const owner W, owner R} {
@@ -241,6 +252,10 @@ func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
         };
         return;
     } else {};
+    if (!visible_runtime_name(source, nodes, work, state, name, found)) {
+        reject_name(state, name, unresolved_name());
+        return;
+    };
     val kind <- bindings[found].kind;
     val declaration <- bindings[found].declaration;
     if (kind == c_handle_type() || kind == record_type() || kind == array_type() ||
@@ -320,7 +335,9 @@ func builtin_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N
 func scoped_type_parameter(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:const NameBindings in B,
                            scope:u64, name:u64) -> u64 where {const owner S, const owner N, const owner B} {
     val definition <- enclosing_callable(nodes, bindings, scope);
-    if (definition == no_node() || nodes[definition].kind != callable_node()) return no_node();
+    if (definition == no_node()) return no_node();
+    val kind <- nodes[definition].kind;
+    if (kind != callable_node() && kind != lexical_callable_node()) return no_node();
     val clause <- nodes[definition].left;
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (nodes[clause].kind == callable_head_node()) return no_node();
@@ -619,7 +636,10 @@ func resolve_handle_owner(source:const SourceBytes in S, nodes:const ExprNodes i
                           work:const NameWork in W, state:NameState in R, name:u64, lexical:bool) -> void
     where {const owner S, const owner N, owner B, const owner W, owner R} {
     val found <- lookup(source, nodes, work, name, 0u64, state.used);
-    if (found == no_node()) { reject_name(state, name, unresolved_name()); return; } else {};
+    if (found == no_node() || !visible_runtime_name(source, nodes, work, state, name, found)) {
+        reject_name(state, name, unresolved_name());
+        return;
+    };
     val declaration <- bindings[found].declaration;
     val kind <- bindings[found].kind;
     if (kind == handle_binding() && !handle_available(nodes, bindings, declaration, name)) {
@@ -1009,6 +1029,10 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         resolve_expression(source, nodes, bindings, work, state, operand);
         return;
     } else {};
+    if (kind == lexical_callable_node()) {
+        resolve_lexical_callable(source, nodes, bindings, work, state, at);
+        return;
+    };
     if (kind == block_node()) { resolve_list(source, nodes, bindings, work, state, nodes[at].left); return; } else {};
     if (kind == full_scope_node()) { resolve_full_scope(source, nodes, bindings, work, state, at, state.used, no_node()); return; } else {};
     if (kind == try_node()) { resolve_try(source, nodes, bindings, work, state, at); return; } else {};
@@ -1120,7 +1144,8 @@ func type_declaration_name(nodes:const ExprNodes in N, form:u64) -> u64 where {c
 }
 
 export func definition_name(nodes:const ExprNodes in N, form:u64) -> u64 where {const owner N} {
-    if (nodes[form].kind == callable_node() || nodes[form].kind == c_procedure_node())
+    if (nodes[form].kind == callable_node() || nodes[form].kind == c_procedure_node() ||
+        nodes[form].kind == lexical_callable_node())
         return nodes[callable_head(nodes, form)].left;
     return type_declaration_name(nodes, form);
 }
@@ -1441,13 +1466,11 @@ func check_owner_inputs(nodes:const ExprNodes in N, bindings:const NameBindings 
     };
 }
 
-func resolve_callable(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+func resolve_callable_body(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                       work:NameWork in W, state:NameState in R, definition:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val head <- callable_head(nodes, definition);
     val native <- nodes[definition].kind == c_procedure_node();
-    val enclosing <- state.scope_node;
-    state.scope_node <- definition;
     register_constraints(source, nodes, bindings, work, state, head);
     if (state.diagnostic != 0u8) return;
     resolve_header_types(source, nodes, bindings, work, state, head);
@@ -1465,8 +1488,42 @@ func resolve_callable(source:const SourceBytes in S, nodes:const ExprNodes in N,
         };
         check_owner_inputs(nodes, bindings, work, state, head, result_owner);
     };
+}
+
+func resolve_callable(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                      work:NameWork in W, state:NameState in R, definition:u64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    val enclosing <- state.scope_node;
+    state.scope_node <- definition;
+    resolve_callable_body(source, nodes, bindings, work, state, definition);
     state.scope_node <- enclosing;
     (state.used <- state.module_names):void;
+}
+
+func resolve_lexical_callable(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                              work:NameWork in W, state:NameState in R, definition:u64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    val mark <- state.used;
+    declare_name(source, nodes, bindings, work, state, definition_name(nodes, definition),
+                 definition, callable_binding(), duplicate_binding());
+    if (state.diagnostic != 0u8) return;
+    remember(bindings, definition, definition, callable_binding());
+
+    # The active declarations stay visible. Control destinations and new
+    # declarations belong to the nested activation and never enter its caller.
+    ref body = make NameState {
+        used <- state.used; first <- state.used; module_names <- state.module_names; scope_node <- definition;
+        runtime_floor <- if (is_function(nodes, definition)) { mark } else { (state.runtime_floor) };
+        transfer_binding <- no_node(); transfer_resolved <- false;
+        delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
+        here_group <- false; handoff <- no_node(); case_target <- no_node(); case_arm <- no_node(); diagnostic <- 0u8;
+        failed_node <- no_node(); enclosing_defer <- no_node();
+    };
+    resolve_callable_body(source, nodes, bindings, work, body, definition);
+    if (body.diagnostic != 0u8) {
+        reject_name(state, body.failed_node, body.diagnostic);
+        (state.enclosing_defer <- body.enclosing_defer):void;
+    };
 }
 
 export func find_enum_member(source:const SourceBytes in S, nodes:const ExprNodes in N, name:u64, tail:u64) -> u64
@@ -1702,7 +1759,7 @@ export func resolve_module_names(source:const SourceBytes in S, nodes:const Expr
     };
     link_entries(nodes, work, tree.used);
     ref state = make NameState {
-        used <- 0u64; first <- 0u64; module_names <- 0u64; scope_node <- tree.root;
+        used <- 0u64; first <- 0u64; module_names <- 0u64; runtime_floor <- 0u64; scope_node <- tree.root;
         transfer_binding <- no_node(); transfer_resolved <- false;
         delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
         here_group <- false; handoff <- no_node(); case_target <- no_node(); case_arm <- no_node(); diagnostic <- 0u8;

@@ -9,7 +9,7 @@ using "ParserStorage.cod" {
     export_node, export_from_node, local_module_selection,
 };
 using "TokenBuffer.cod" ScanResult;
-using "ExpressionParser.cod" ParseResult;
+using "ParserInput.cod" ParseResult;
 using "Frontend.cod" { FrontendResult, read_module };
 using "ModuleExportStorage.cod" { ModuleExports, ModuleInterfaces };
 using "ModuleExports.cod" {
