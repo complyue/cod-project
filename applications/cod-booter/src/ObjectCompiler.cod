@@ -15,27 +15,22 @@ proc verify_active_session() -> u8 {
 proc write_object(handle graph:NativeGraph in G, output:const String in A,
                   handle diagnostic:DiagnosticDestination in D) -> CompilerStatus
     where {const owner G, const owner A, owner D} {
+    proc report_failure(code:u8, status:CompilerStatus) -> CompilerStatus {
+        report_backend_error(diagnostic, code);
+        return status;
+    };
+
     try {
         effect @llvmSession <- make own handle LLVMSession();
         val constructed <- construct_native_graph(graph, @llvmSession);
-        if (constructed != 0u8) {
-            report_backend_error(diagnostic, constructed);
-            return LoweringFailed;
-        };
+        if (constructed != 0u8) return report_failure(constructed, LoweringFailed);
         val verified <- verify_active_session();
-        if (verified != 0u8) {
-            report_backend_error(diagnostic, verified);
-            return FinishFailed;
-        };
+        if (verified != 0u8) return report_failure(verified, FinishFailed);
         val emitted <- llvm_emit_object(@llvmSession, output:CString);
-        if (emitted != 0u8) {
-            report_backend_error(diagnostic, emitted);
-            return FinishFailed;
-        };
+        if (emitted != 0u8) return report_failure(emitted, FinishFailed);
         return Complete;
     } catch (error:LLVMOpenException) {
-        report_backend_error(diagnostic, error.status);
-        return OpenFailed;
+        return report_failure(error.status, OpenFailed);
     }
 }
 
