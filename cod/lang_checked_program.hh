@@ -33,6 +33,9 @@ inline bool nominal_exception(const Type &type) {
 inline bool bits_type(const Type &type) { return scalar_type(type) || (type.kind == Type::exception && !nominal_exception(type)); }
 inline bool lexical_value_type(const Type &type) { return bits_type(type) || type.kind == Type::procedure; }
 enum class BuiltinOperation { none, unary, binary, identity, array_length, reference_swap, bits_swap, print, builder_append };
+// Nominal schema identities for a selected abstract target. An empty set carries no narrowing.
+using NominalTargets = std::set<size_t>;
+using AbstractSymbolTargets = std::map<size_t, NominalTargets>;
 inline bool eager_operation(std::string_view name) {
   return name == "+" || name == "-" || name == "*" || name == "/" || name == "%" || name == "!" ||
       name == "==" || name == "!=" || name == "<" || name == ">" || name == "<=" || name == ">=";
@@ -130,6 +133,7 @@ struct CheckedOperation {
   bool indexed_target = false;
   // The result may retain a ptr carrier even if the current target is present.
   bool nullable_view = false;
+  NominalTargets nominal_targets;
   std::uint64_t integer = 0;
   bool enum_literal = false;
   bool enum_assertion = false;
@@ -447,6 +451,7 @@ struct ViewEvidence {
   bool nullable = false;
   std::set<EvidenceOwner> place_owners = {};
   std::optional<PlaceKind> storage_kind = {};
+  NominalTargets nominal_targets = {};
   template <typename Map> void map_owners(Map map) {
     if (owner) owner = map(*owner);
     std::set<EvidenceOwner> mapped;
