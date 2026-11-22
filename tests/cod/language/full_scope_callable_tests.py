@@ -280,23 +280,24 @@ runner.CASES = {
         'proc run()->u64{relay(){return 7u64;};return 0u64;}behave @print(run());',0,'41\n42\n7\n',''),
     'here_callable_return_and_break_have_distinct_destinations': ('''
 using symbol "std:io" @print;
-proc receive(here step() -> void) -> proc() -> u64 {
+func first() -> u64 { return 41u64; }
+func second() -> u64 { return 9u64; }
+func fallback() -> u64 { return 99u64; }
+proc receive(here step() -> void) -> func() -> u64 {
     try { step(); }
     finally { behave @print(3u64); };
-    return proc() -> u64 { return 99u64; };
+    return fallback;
 }
-proc choose(val selector:u64) -> proc() -> u64 {
-    val first <- 41u64;
-    val second <- 9u64;
-    proc reached = receive() {
-        if (selector == 0u64) return proc[first]() -> u64 { return first; };
-        break proc[second]() -> u64 { return second; };
+proc choose(val selector:u64) -> func() -> u64 {
+    func reached = receive() {
+        if (selector == 0u64) return first;
+        break second;
     };
     behave @print(4u64);
     return reached;
 }
-proc a = choose(0u64);
-proc b = choose(1u64);
+func a = choose(0u64);
+func b = choose(1u64);
 behave @print(a());
 behave @print(b());
 ''', 0, '3\n3\n4\n41\n9\n', ''),
@@ -315,17 +316,25 @@ proc choose() -> func() -> u64 {
 func result = choose();
 behave @print(result());
 ''', 0, '41\n41\n', ''),
-    'here_callable_break_query_does_not_execute_receiver': ('''
-using symbol "std:io" @print;
-proc selected() -> u64 { return 41u64; }
-proc choose(here step() -> void) -> proc() -> u64 {
-    behave @print(99u64);
-    step();
-    return selected;
+    'here_group_rejects_captured_function_result': ('''
+proc relay(here step() -> void) -> void { step(); return; }
+func fallback() -> u64 { return 99u64; }
+proc choose() -> func() -> u64 {
+    val captured <- 41u64;
+    relay() { return func[captured]() -> u64 { return captured; }; };
+    return fallback;
 }
-val observed <- make typeof({ choose() { break selected; }; 0u64 }) { 7u64 };
-behave @print(observed);
-''', 0, '7\n', ''),
+func result = choose();
+''', 2, '', 'protected here results require capture-free func values'),
+    'here_group_rejects_procedure_valued_result': ('''
+proc relay(here step() -> void) -> void { step(); return; }
+proc chosen() -> u64 { return 41u64; }
+proc choose() -> proc() -> u64 {
+    relay() { return chosen; };
+    return chosen;
+}
+proc result = choose();
+''', 2, '', 'protected here results cannot carry procedure values'),
     'return_inspection_calls_known_forwarded_group': (IO+
         'func relay(here body()->void)->void{body();}'
         'func forward(here body()->void)->void{relay(body);}'
