@@ -321,7 +321,7 @@ static inline bool cod_llvm_construct_command(cod_llvm_construction *state, cod_
       if (a >= slots || b >= slots || c >= slots) return false;
       cod_llvm_supply_exception_site(state);
       LLVMTypeRef types[] = {state->pointer, state->pointer};
-      LLVMValueRef args[] = {cod_llvm_slot(state, c), cod_llvm_read_address(state, b)};
+      LLVMValueRef args[] = {cod_llvm_read_address(state, c), cod_llvm_read_address(state, b)};
       LLVMValueRef text = cod_llvm_runtime_call(state, "cod_lang_lexical_text_create", state->pointer, types, args, 2);
       cod_llvm_write_word(state, a, LLVMBuildPtrToInt(builder, text, state->word, ""));
       return true;

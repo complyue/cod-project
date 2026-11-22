@@ -4,8 +4,8 @@ using "ParserStorage.cod" {
     block_item_node, full_scope_node, try_node, catch_clause_node, catch_handler_node,
     finally_clause_node, callable_node, is_function, parameter_node, ref_parameter_node,
     ptr_parameter_node, val_parameter_node, owner_clause_node, readonly_declaration,
-    result_clause_node, throws_clause_node, catch_binding_node, typed_name_node, owned_type_node,
-    val_binding_node, ptr_binding_node, local_storage_binding, literal_node, name_node, null_node,
+    result_clause_node, ref_result_node, throws_clause_node, catch_binding_node, typed_name_node, owned_type_node,
+    val_binding_node, ptr_binding_node, ref_local_node, local_storage_binding, literal_node, name_node, null_node,
     group_node, integer_arithmetic, is_transfer, make_named_node, construction_body,
     construction_type_query_node, reserves_storage, call_node, checked_ref_argument, behave_node,
     return_node, throw_node, deferred_call_node, deferred_block_node, discarded_guard_result,
@@ -68,7 +68,10 @@ export data OperandFact {
     word_offset:u64;
     last_initializer:u64;
     text_nul:u8;
-    text_allocation:u8;
+    allocation_owner:u64;
+    owner_chain:u64;
+    owner_use_next:u64;
+    passes_owner:u8;
     text_assertion:u8;
     text_intrinsic:u8;
 }
@@ -77,6 +80,7 @@ export array OperandFacts[u64]:OperandFact;
 export data OwnerEvidence {
     call_site:u64;
     actual_owner:u64;
+    uses:u64;
 }
 export array CallOwners[u64]:OwnerEvidence;
 
@@ -152,6 +156,7 @@ func string_operand_required() -> u8 { return 34u8; }
 func c_string_operand_required() -> u8 { return 35u8; }
 func interior_literal_nul() -> u8 { return 36u8; }
 export func unsupported_text_operation() -> u8 { return 37u8; }
+func wrong_text_result_owner() -> u8 { return 38u8; }
 
 export func unreachable_case_item() -> u8 { return 1u8; }
 export func misses_case_arm() -> u8 { return 0u8; }
@@ -249,9 +254,10 @@ func declared_borrow(names:const NameBindings in B, facts:const OperandFacts in 
     where {const owner B, const owner F} {
     if (names[annotation].kind == record_type() && facts[names[annotation].declaration].product_words != 0u64)
         return product_kind();
-    if (names[annotation].kind == builtin_string()) return string_kind();
-    if (names[annotation].kind == builtin_c_string()) return c_string_kind();
-    return declared_scalar(names[annotation].kind);
+    val kind <- names[annotation].kind;
+    if (kind == builtin_string()) return string_kind();
+    if (kind == builtin_c_string()) return c_string_kind();
+    return declared_scalar(kind);
 }
 
 func prepare_product_layout(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
@@ -318,6 +324,10 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
         if (reception == nullable_ptr()) { (facts[formal].selection <- formal):void; } else {};
         facts[formal].target_readonly <- readonly;
         if (borrowed_kind == c_string_kind()) { (facts[formal].text_nul <- nul_absent()):void; };
+        if (nodes[owner_site].number != readonly_declaration() && facts[owner_site].passes_owner == 0u8) {
+            facts[owner_site].passes_owner <- 1u8;
+            (facts[formal].passes_owner <- 1u8):void;
+        };
         return 0u8;
     } else {};
     if (form != parameter_node() && form != val_parameter_node() && form != ref_parameter_node() &&
@@ -342,6 +352,23 @@ func check_formals(nodes:const ExprNodes in N, names:const NameBindings in B, li
     };
 }
 
+func check_text_result(nodes:const ExprNodes in N, names:const NameBindings in B,
+                       facts:OperandFacts in F, definition:u64, clause:u64) -> u8
+    where {const owner N, const owner B, owner F} {
+    val annotation <- nodes[clause].right;
+    if (nodes[annotation].kind != owned_type_node() || names[clause].declaration != no_node())
+        return unsupported_text_operation();
+    val kind <- declared_borrow(names, facts, nodes[annotation].left);
+    val owner_site <- names[nodes[annotation].right].declaration;
+    if (!immutable_text_kind(kind) || nodes[clause].number != readonly_declaration())
+        return unsupported_text_operation();
+    if (owner_site == no_node() || nodes[owner_site].kind != owner_clause_node()) return unproved_owner();
+    set_fact(facts, definition, kind, borrowed_ref(), owner_site, 0u64, 0u8);
+    facts[definition].target_readonly <- 1u8;
+    if (kind == c_string_kind()) { (facts[definition].text_nul <- nul_absent()):void; };
+    return 0u8;
+}
+
 func check_signature_clauses(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                              selected:const SelectedExports in E, facts:OperandFacts in F,
                              report:OperandCheckResult in R, definition:u64, first:u64, used:u64) -> void
@@ -364,12 +391,15 @@ func check_signature_clauses(nodes:const ExprNodes in N, names:const NameBinding
                 } else {};
                 set_fact(facts, definition, kind, independent_value(), no_node(), nominal_identity(names, annotation), 0u8);
             };
-        } else {
-            if (nodes[clause].kind == throws_clause_node()) {
-                report.diagnostic <- exception_annotation(names, selected, facts, annotation, clause);
-                if (report.diagnostic != 0u8) { report.node <- annotation; return; } else {};
-            } else {};
         };
+        if (nodes[clause].kind == ref_result_node()) {
+            (report.diagnostic <- check_text_result(nodes, names, facts, definition, clause)):void;
+        };
+        if (nodes[clause].kind == throws_clause_node()) {
+            report.diagnostic <- exception_annotation(names, selected, facts, annotation, clause);
+            if (report.diagnostic != 0u8) { report.node <- annotation; return; };
+        };
+        if (report.diagnostic != 0u8) { report.node <- clause; return; };
         clause <- links[clause].next;
     };
 }
@@ -416,9 +446,11 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, fact
     if (declared_kind == scalar_enum() && facts[initializer].kind == scalar_enum() &&
         identity != facts[initializer].identity) return incompatible_enum_type();
     if (facts[initializer].kind == never_result()) {
-        if (required_owner != no_node() && nodes[initializer].kind == make_named_node() &&
-            required_owner != names[initializer].scope)
-            return owner_conflict(nodes, names[initializer].scope, required_owner);
+        if (required_owner != no_node() && nodes[initializer].kind == make_named_node()) {
+            val placement <- facts[initializer].allocation_owner;
+            val actual <- if (placement == no_node()) { (names[initializer].scope) } else { placement };
+            if (required_owner != actual) return owner_conflict(nodes, actual, required_owner);
+        };
         set_result(facts, at, never_result());
         return 0u8;
     } else {};
@@ -485,15 +517,14 @@ func check_text_construction(nodes:const ExprNodes in N, names:const NameBinding
     if (!positional_construction(nodes, at) || tail == no_node() || nodes[tail].left != no_node())
         return unsupported_text_operation();
     val source <- nodes[tail].right;
-    val owner_site <- names[at].scope;
     val placement <- nodes[payload].right;
-    if (placement != no_node() && names[placement].declaration != owner_site) {
-        if (names[placement].kind == owner_binding() &&
-            nodes[names[placement].declaration].number == readonly_declaration()) return readonly_owner_argument();
-        return unsupported_text_operation();
-    };
-    facts[at].text_allocation <- 1u8;
-    (facts[owner_site].text_allocation <- 1u8):void;
+    val owner_site <- facts[at].allocation_owner;
+    if (placement != no_node()) { (owner_site <- names[placement].declaration):void; };
+    if (owner_site == no_node()) { (owner_site <- names[at].scope):void; };
+    if (nodes[owner_site].kind == owner_clause_node() && nodes[owner_site].number == readonly_declaration())
+        return readonly_owner_argument();
+    facts[at].allocation_owner <- owner_site;
+    (facts[owner_site].owner_chain <- 0u64):void;
     if (facts[source].kind == never_result()) { set_result(facts, at, never_result()); return 0u8; };
     if (!immutable_text_kind(facts[source].kind)) return string_operand_required();
     set_fact(facts, at, string_kind(), borrowed_ref(), owner_site, 0u64, 0u8);
@@ -681,6 +712,10 @@ func check_argument(nodes:const ExprNodes in N, facts:OperandFacts in F, owners:
     owners[owner_parameter].call_site <- invocation;
     owners[owner_parameter].actual_owner <- actual_owner;
     set_fact(facts, argument, kind, wanted, actual_owner, facts[formal].identity, 0u8);
+    if (facts[formal].passes_owner != 0u8) {
+        facts[argument].owner_use_next <- owners[owner_parameter].uses;
+        (owners[owner_parameter].uses <- argument):void;
+    };
     return 0u8;
 }
 
@@ -721,11 +756,16 @@ func check_direct_call(nodes:const ExprNodes in N, names:const NameBindings in B
     val head <- callable_head(nodes, definition);
     val formal <- first_item(nodes, nodes[head].right);
     val argument <- first_item(nodes, nodes[at].right);
+    val result_owner <- facts[definition].owner;
     val diagnostic <- 0u8;
     for (unused in 0u64 .. used) {
         if (formal == no_node() || argument == no_node()) {
             if (formal != argument) return wrong_argument_count();
             copy_fact(facts, at, definition);
+            if (immutable_text_kind(facts[definition].kind)) {
+                if (owners[result_owner].call_site != at) return unproved_owner();
+                (facts[at].owner <- owners[result_owner].actual_owner):void;
+            };
             return 0u8;
         } else {};
         diagnostic <- check_argument(nodes, facts, owners, argument, formal, at);
@@ -1399,6 +1439,13 @@ func check_return(nodes:const ExprNodes in N, names:const NameBindings in B, fac
         return 0u8;
     } else {};
     if (value == no_node()) return wrong_return_type();
+    if (immutable_text_kind(facts[scope].kind)) {
+        if (!immutable_text_kind(facts[value].kind) ||
+            (facts[scope].kind == c_string_kind() && facts[value].kind != c_string_kind()))
+            return wrong_return_type();
+        if (facts[value].owner != facts[scope].owner) return wrong_text_result_owner();
+        return 0u8;
+    };
     val diagnostic <- require_matching_bits(nodes, facts, value, scope);
     if (diagnostic == wrong_operand_type()) return wrong_return_type();
     return diagnostic;
@@ -1695,6 +1742,60 @@ func prepare_result_use(nodes:const ExprNodes in N, facts:OperandFacts in F, at:
     } else {};
 }
 
+# A declared receiving reference supplies placement for a directly
+# contained text construction. Explicit placement is checked separately.
+func prepare_text_receiver(nodes:const ExprNodes in N, names:const NameBindings in B,
+                           facts:OperandFacts in F, at:u64) -> void
+    where {const owner N, const owner B, owner F} {
+    if (nodes[at].kind != ref_local_node()) return;
+    val destination <- nodes[at].left;
+    if (nodes[destination].kind != typed_name_node()) return;
+    val annotation <- nodes[destination].right;
+    if (nodes[annotation].kind != owned_type_node() || names[nodes[annotation].left].kind != builtin_string()) return;
+    val construction <- ungrouped(nodes, nodes[at].right);
+    if (nodes[construction].kind == make_named_node() && names[nodes[construction].left].kind == builtin_string()) {
+        (facts[construction].allocation_owner <- names[nodes[annotation].right].declaration):void;
+    };
+}
+
+# Revisit a writable formal only when it reaches an allocation. Its
+# incoming argument edges retain the actual owner from each checked call.
+func demand_owner_inputs(facts:OperandFacts in F, owners:CallOwners in O, owner_site:u64, pending:u64 in P)
+    -> void where {owner F, owner O, owner P} {
+    val argument <- owners[owner_site].uses;
+    val actual <- no_node();
+    for (unused in 0u64 .. intrinsic (len)(facts)) {
+        if (argument == no_node()) return;
+        facts[argument].owner_chain <- 0u64;
+        actual <- facts[argument].owner;
+        if (facts[actual].owner_chain == no_node()) {
+            facts[actual].owner_chain <- 0u64;
+            owners[actual].call_site <- pending;
+            (pending <- actual):void;
+        };
+        argument <- facts[argument].owner_use_next;
+    };
+}
+
+func close_allocation_owners(facts:OperandFacts in F, owners:CallOwners in O, used:u64) -> void
+    where {owner F, owner O} {
+    # Invocation substitutions are complete. Reuse their call-site words as work links.
+    val pending <- no_node();
+    for (site in 0u64 .. used) {
+        if (facts[site].owner_chain != no_node()) {
+            owners[site].call_site <- pending;
+            (pending <- site):void;
+        };
+    };
+    val site <- no_node();
+    for (unused in 0u64 .. used) {
+        if (pending == no_node()) return;
+        site <- pending;
+        pending <- owners[site].call_site;
+        demand_owner_inputs(facts, owners, site, pending);
+    };
+}
+
 # Operands and declarations refer to the bound syntax and its owner sites.
 # Target-access demands are recorded for the completion pass, where flow can
 # prove a target present or propagate a possible checked failure.
@@ -1738,11 +1839,15 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
         facts[at].product_words <- 0u64;
         facts[at].word_offset <- 0u64;
         facts[at].last_initializer <- no_node();
-        facts[at].text_allocation <- 0u8;
+        facts[at].allocation_owner <- no_node();
+        facts[at].owner_chain <- no_node();
+        facts[at].owner_use_next <- no_node();
+        facts[at].passes_owner <- 0u8;
         facts[at].text_assertion <- 0u8;
         facts[at].text_intrinsic <- 0u8;
         owners[at].call_site <- no_node();
         owners[at].actual_owner <- no_node();
+        owners[at].uses <- no_node();
     };
     report.diagnostic <- 0u8;
     for (at in 0u64 .. tree.used) {
@@ -1758,10 +1863,21 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
     for (offset in 0u64 .. tree.used) {
         at <- tree.used - 1u64 - offset;
         prepare_result_use(nodes, facts, at);
+        prepare_text_receiver(nodes, names, facts, at);
         if (nodes[at].kind == case_node() && names[at].scope != no_node()) {
             (facts[nodes[at].left].case_after_subject <- at):void;
         } else {};
     };
-    return check_operand_range(source, nodes, names, links, selected, facts, owners, report,
-                               0u64, tree.used, tree.used, no_node());
+    if (!check_operand_range(source, nodes, names, links, selected, facts, owners, report,
+                             0u64, tree.used, tree.used, no_node())) return false;
+    close_allocation_owners(facts, owners, tree.used);
+    # Number reserved allocation-chain words after the syntax-indexed words.
+    val next <- tree.used;
+    for (site in 0u64 .. tree.used) {
+        if (facts[site].owner_chain != no_node()) {
+            facts[site].owner_chain <- next;
+            next <- next + 1u64;
+        };
+    };
+    return true;
 }

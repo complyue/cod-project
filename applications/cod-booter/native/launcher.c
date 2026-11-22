@@ -282,6 +282,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: text contains an interior NUL and cannot supply CString\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 37)
         fputs(": error: this text operation is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 38)
+        fputs(": error: borrowed text result does not retain its declared owner\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 12)
         fputs(": error: ref argument requires a proven non-null target\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 13)
