@@ -93,7 +93,60 @@ func drain() -> u64 {''').replace(
     '    defer force(missing);\n    return 0u64;', 1).replace(
     'proc run() -> void {', 'proc run() -> void {\n    func invoke = drain;').replace(
     '              drain();', '              behave @print(invoke());')
+OBSERVE_RETURN = CHECKED_READ + '''
+proc run() -> u64 {
+    ptr missing:u64 = null in here;
+    defer catch (failure:const NullPointerException) { behave @print(42u64); };
+    defer {
+        if returning (val selected:u64) { behave @print(selected); read(missing); };
+    };
+    return 7u64;
+}
+behave @print(run());
+'''
 runner.CASES = {
+    "inspection_keeps_result_through_covered_failure": (OBSERVE_RETURN, 0, '7\n42\n7\n', ''),
+    "inspection_does_not_cover_checked_failure": (OBSERVE_RETURN.replace(
+        '    defer catch (failure:const NullPointerException) { behave @print(42u64); };\n', ''),
+        2, '', 'coverage within the owning pass'),
+    "each_visit_observes_the_latest_return": (CHECKED_READ + '''
+proc run() -> u64 {
+    ptr missing:u64 = null in here;
+    defer catch (failure:const NullPointerException) {
+        if returning (val prior:u64) {
+            behave @print(prior);
+            if (prior == 7u64) return 8u64;
+            return 9u64;
+        };
+    } finally {
+        if returning (val last:u64) { behave @print(last); };
+    };
+    defer read(missing);
+    defer read(missing);
+    return 7u64;
+}
+behave @print(run());
+''', 0, '7\n8\n9\n9\n', ''),
+    "failed_deferred_replacement_preserves_selected_target": (CHECKED_READ + '''
+proc run(ref first:u64 in O, ref other:u64 in O) -> ref u64 in O where {owner O} {
+    ptr missing:u64 = null in here;
+    defer catch (failure:const NullPointerException) {
+        if returning (ref selected:u64 in O) { (selected <- 72u64):void; };
+    };
+    defer {
+        if returning (ref prior:u64 in O) {
+            behave @print(prior);
+            return { read(missing); other };
+        };
+    };
+    return first;
+}
+val initial <- 7u64;
+val alternative <- 44u64;
+behave @print(run(initial, alternative));
+behave @print(initial);
+behave @print(alternative);
+''', 0, '7\n72\n72\n44\n', ''),
     "direct_call_to_independent_drain": (INDEPENDENT_DRAIN, 0, '1\n9\n2\n1\n9\n2\n3\n', ''),
     "closed_callable_to_independent_drain": (CLOSED_DRAIN, 0, '1\n9\n2\n1\n9\n2\n3\n', ''),
     "protected_callback_to_independent_drain": (INDEPENDENT_DRAIN.replace(

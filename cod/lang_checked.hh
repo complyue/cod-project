@@ -5791,8 +5791,6 @@ class ScalarChecker {
         if (proving_ && validating_) {
           if (effects.uncovered_deferred_root)
             fail(path.at, "declared checked failure 'Exception' requires coverage within the owning pass");
-          if (effects.observes_return && effects.raises_deferred_failure)
-            implementation_gap(path.at, "return inspection requires independent deferred failure delivery on this path");
           if (effects.needs_checked_cleanup_proof)
             implementation_gap(path.at, "checked failures involving deferred execution require coverage within the owning pass");
           if (outcome.pending_checked())
