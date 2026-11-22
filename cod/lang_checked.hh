@@ -4342,18 +4342,18 @@ class ScalarChecker {
   std::set<size_t> call_reasons(const Type &contract) const {
     return call_reasons(declared_exception_categories(contract.throws_types));
   }
-  std::set<size_t> direct_call_reasons(const Type &contract, const CallEffects &effects) {
-    auto reasons = call_reasons(contract);
-    if (!proving_) return reasons;
-    if (effects.requires_deferred_failure_delivery) {
-      if (lexical_.live) observed_.requires_deferred_failure_delivery = true;
-    } else std::erase_if(reasons, [&](size_t reason) {
-      // The declaration supplies checked obligations independently of the
-      // concrete body's executable failures.
+  void retain_call_failures(std::set<size_t> &reasons, const CallEffects &effects, bool protected_here = false) const {
+    std::erase_if(reasons, [&](size_t reason) {
+      // The declaration supplies checked obligations. A protected callback
+      // carries executable failures through the supplier's transfer channel.
       const auto completion = Completion{reason};
       const bool checked = completion.exception() && program_.exception_types.at(completion.category()).checked;
-      return completion.failed() && !checked && !effects.escaping_failures.contains(reason);
+      return completion.failed() && !checked && (protected_here || !effects.escaping_failures.contains(reason));
     });
+  }
+  std::set<size_t> direct_call_reasons(const Type &contract, const CallEffects &effects) const {
+    auto reasons = call_reasons(contract);
+    if (proving_) retain_call_failures(reasons, effects);
     return reasons;
   }
   bool capture_free_callable(size_t id) const {
@@ -4407,7 +4407,6 @@ class ScalarChecker {
         effects.symbols.insert(next.symbols.begin(), next.symbols.end());
         effects.written_inputs.insert(next.written_inputs.begin(), next.written_inputs.end());
         effects.escaping_failures.insert(next.escaping_failures.begin(), next.escaping_failures.end());
-        effects.requires_deferred_failure_delivery |= next.requires_deferred_failure_delivery;
         for (auto &[reason, known] : effects.initialized) {
           const auto found = next.initialized.find(reason);
           const auto missing = next.uninitialized.find(reason);
@@ -5791,15 +5790,13 @@ class ScalarChecker {
           const auto reaching = CleanupEquations::substitute_boolean_payloads(effects.action_reaching, resolve_boolean, false, true);
           if (CleanupEquations::conjoin_conditions(reaching, CleanupEquations::boolean_conditions(path_conditions(state))).empty()) continue;
         }
-        const bool needs_deferred_delivery = effects.raises_deferred_failure;
-        if (proving_) observed_.requires_deferred_failure_delivery |= needs_deferred_delivery;
         if (proving_ && validating_) {
           if (effects.uncovered_deferred_root)
             fail(path.at, "declared checked failure 'Exception' requires coverage within the owning pass");
           if (effects.raises_deferred_failure && outcome.has_deferred_failure() &&
               (owned_failure(input) || owned_failure(completion)))
             implementation_gap(path.at, "owned exceptions interacting with deferred failures require independent failure delivery");
-          if (effects.observes_return && needs_deferred_delivery)
+          if (effects.observes_return && effects.raises_deferred_failure)
             implementation_gap(path.at, "return inspection requires independent deferred failure delivery on this path");
           if (effects.needs_checked_cleanup_proof)
             implementation_gap(path.at, "checked failures involving deferred execution require coverage within the owning pass");
@@ -14707,13 +14704,8 @@ class ScalarChecker {
     if (const auto callback = operation.invokes_here && proving_ ? here_target(*checking_method_, *operation.invokes_here).body : std::nullopt; callback) {
       const auto &body = read_effects(*callback);
       const bool protected_here = program_.methods[program_.instances[*callback].method].here_group.has_value();
-      if (lexical_.live && body.requires_deferred_failure_delivery) observed_.requires_deferred_failure_delivery = true;
-      if (protected_here || !body.requires_deferred_failure_delivery) std::erase_if(reasons, [&](size_t reason) {
-        const auto completion = Completion{reason};
-        const bool checked = completion.exception() && program_.exception_types.at(completion.category()).checked;
-        return completion.failed() && !checked && (protected_here || !body.escaping_failures.contains(reason));
-      });
-      if (body.propagates_here_transfer || (protected_here && (!body.escaping_failures.empty() || body.requires_deferred_failure_delivery)))
+      retain_call_failures(reasons, body, protected_here);
+      if (body.propagates_here_transfer || (protected_here && !body.escaping_failures.empty()))
         reasons.insert(Completion::protected_transfer);
     }
     finish_call(expr, contract, effects, reasons, arguments, views,
@@ -15510,7 +15502,6 @@ class ScalarChecker {
         implementation_gap(expr.at, "residual receiver defer failures across a protected here transfer");
       effects.symbols = source.symbols;
       effects.escaping_failures = source.escaping_failures;
-      effects.requires_deferred_failure_delivery = source.requires_deferred_failure_delivery;
     }
     auto reasons = operation.opened_source ? direct_call_reasons(contract, effects) : call_reasons(contract);
     if (protected_body) {
@@ -15518,8 +15509,7 @@ class ScalarChecker {
         if (failure) note_abrupt(expr.at, {failure});
         else note_declared(declared_requirement(expr));
       }
-      if (proving_ && (body_effects->propagates_here_transfer || !body_effects->escaping_failures.empty() ||
-                      body_effects->requires_deferred_failure_delivery))
+      if (proving_ && (body_effects->propagates_here_transfer || !body_effects->escaping_failures.empty()))
         reasons.insert(Completion::protected_transfer);
     } else if (body_effects) {
       // The ordinary callback's failures return to the producer and are
@@ -19952,10 +19942,6 @@ class ScalarChecker {
       const auto failure_count = known.escaping_failures.size();
       known.escaping_failures.insert(effects.escaping_failures.begin(), effects.escaping_failures.end());
       changed |= known.escaping_failures.size() != failure_count;
-      if (effects.requires_deferred_failure_delivery && !known.requires_deferred_failure_delivery) {
-        known.requires_deferred_failure_delivery = true;
-        changed = true;
-      }
       if (known.initialized != effects.initialized) { known.initialized = effects.initialized; changed = true; }
       if (known.uninitialized != effects.uninitialized) { known.uninitialized = effects.uninitialized; changed = true; }
       if (known.present != effects.present) { known.present = effects.present; changed = true; }

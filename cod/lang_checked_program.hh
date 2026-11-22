@@ -427,7 +427,6 @@ struct CallEffects {
   std::set<size_t> lexical_allocations;
   // Possible failures on completed paths, including conservative bounds for unresolved calls.
   std::set<size_t> escaping_failures;
-  bool requires_deferred_failure_delivery = false;
   // Checked obligations of an immediate scope after local completion. Zero
   // represents the declared Exception root independently of payload evidence.
   std::set<size_t> scope_checked_failures;
