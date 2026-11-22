@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 6. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 7. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
 
 [K-BOOTER-AST-TABLE-20261122](../CHANGELOG.md#k-booter-ast-table-20261122) records the delegated review of the indexed AST workload and its seed prerequisites under the [work-method decision](../CHANGELOG.md#h-booter-work-method-20261122).
 
@@ -11,6 +11,8 @@ The [lexical backing clearance](../CHANGELOG.md#k-booter-lexical-extent-20261122
 The [node identity clearance](../CHANGELOG.md#k-booter-ast-membership-20261122) covers the CoD graph, visit frame and consumers in that same workload.
 
 The [single-file route clearance](../CHANGELOG.md#k-booter-typed-object-20261122) covers the isolated activation and existing native assembly. The [consumer clearance](../CHANGELOG.md#k-booter-syntax-consumers-20261122) covers direct migration of the shared compiler passes to the typed AST.
+
+The [seed Boolean observation clearance](../CHANGELOG.md#k-seed-boolean-observation-20261122) covers the private checker operation used during semantic checking of the typed CompilerCLI.
 
 ## Before coding
 
@@ -50,6 +52,14 @@ The review compared all 1,630 tracked paths on published commit `5c12421e9a68bfb
 - **AST node identity in the booter.** Cleared for graph-local key issuance on source open, frame and table state, parser construction of bits IDs, lookup by the checker and lowering, and focused isolation probes. The [frame and node identity contract](../applications/cod-booter/docs/ModuleGraph.md#frame-and-node-identity) specifies ownership, failure and acceptance for both the isolated route and its production interfaces.
 - **Single-file typed booter object route.** Cleared for the actual CompilerCLI, CoD frame activation, existing compiler stages, generated host entry, existing provider implementations and the direct file-to-object acceptance in an isolated build. The [single-file contract](../applications/cod-booter/docs/ModuleGraph.md#single-file-object-route) specifies buffer owners, status translation and the distinction from final graph publication. Production build configuration retains its separate authorization.
 - **Existing booter syntax producers and consumers.** The [module inventory and acceptance](../applications/cod-booter/docs/ModuleGraph.md#typed-syntax-consumers) cover the isolated direct migration by syntax family, required CoD caller signatures and focused regressions. Each pass keeps its current semantic checks. New grammar, changes to native contracts and the graph traversal cutover have independent review scopes.
+
+### Read-only Boolean observation in the seed checker
+
+In [the seed checker](../cod/lang_checked.hh), `snapshot_boolean` asks which path conditions accompany each Boolean result in a supplied `LexicalState`. Both call preparation and completion summaries consume this evidence. One private helper may project it from the supplied state. Reuse the existing `path_conditions`, the present or absent facts for the current versions of definitely non-null or definitely null bindings, and the existing insertion and normalization of `ConditionFacts`. The exploring fallback applies the same projection to each state reached by `predicate_paths`. Branch refinement keeps its current join, reachability and condition rules.
+
+Select the observational path before taking any full-state snapshot. A dead input produces no outcomes. A live input with no predicate admits both truth values. For a predicate with an empty `results` map and `complete_results == false`, plain presence admits both, either constant admits its stated value, and abrupt completion admits neither. Admit the projection only for these cases. A complete result map can exclude a truth even when it has no entry for that truth. Null tests, compositions and proofs carrying result clauses retain the existing exploration. Use the supplied state even when it differs from the checker's current frame. Preserve the input and the checker's state across every observation. Any loop that enumerates state owned by the checker needs a stable input while the fallback temporarily replaces that state.
+
+Verify equality of the complete normalized `BooleanValue` against the existing exploring computation on identical inputs, including liveness, both constants, unrestricted presence, versioned nullable bindings, and conditions tied to initialization or a selected target. Cover absent outcome keys, empty clause sets and an unconditional clause, and exercise a constrained presence or constant with a complete result set. Run direct call, rebinding and cleanup cases in both seed modes, preserving their accepted results and rejection of unsafe reads. Measure the actual typed CompilerCLI with the same source, mode, configuration and host before attributing a speed improvement. Its generated providers, linked object, rejections and cleanup still require the [single-file workload](../applications/cod-booter/docs/ModuleGraph.md#single-file-object-route). Changes to general predicate solving, the representation of mutable state, or the completion solver require separate review.
 
 ### Lexical backing for the indexed AST array
 

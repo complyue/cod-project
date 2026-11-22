@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Read-only Boolean observation in the seed checker
+
+<a id="k-seed-boolean-observation-20261122"></a>
+**K-SEED-BOOLEAN-OBSERVATION-20261122.** Under H-PROJECT-ARCHITECTURE-REVIEW-20261122 and H-BOOTER-DRIVEN-SEED-20261119, delegated review cleared read-only projection for plain Boolean proofs during seed checking of the typed CompilerCLI. Complex proofs retain the exploring implementation at `0eb4123561849578a87499baea674228e36a938f:cod/lang_checked.hh`, `snapshot_boolean` and `predicate_paths`. D-ARCH-REVIEW r6 to r7, P-682/P-683, registry r1054.
+
 ## 2026-11-22 — Typed syntax across the booter compiler passes
 
 <a id="k-booter-syntax-consumers-20261122"></a>
