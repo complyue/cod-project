@@ -2826,6 +2826,11 @@
     "stderr_contains": "checked exception 'NullPointerException' requires a covering catch or throws declaration"
   },
   {
+    "file": "abstract-symbol-call-inputs.cod",
+    "exit": 0,
+    "stdout": "1\n"
+  },
+  {
     "file": "abstract-symbol-local-targets.cod",
     "exit": 0,
     "stdout": "13\n60\n8\n110\n"
