@@ -26,6 +26,15 @@ runner.CASES = {
         BASE + 'func f=base;func g=func[](x:i64)->i64{return f(x);};', 2, '', 'explicit capture list omits'),
     'duplicate_explicit_capture_diagnostic': (
         BASE + 'func f=base;func g=func[f,f](x:i64)->i64{return f(x);};', 2, '', 'duplicate callable capture'),
+    'direct_named_function_cannot_access_enclosing_value': (
+        'proc run()->u64{val n<-1u64;func f()->u64{return n;};n<-7u64;return f();}run();',
+        2, '', "an ordinary func cannot access enclosing runtime binding 'n'"),
+    'direct_named_function_uses_enclosing_static_definition': (
+        IO + 'proc run()->u64{func left(n:u64)->u64{return n+1u64;};'
+        'func right(n:u64)->u64{return left(n);};return right(7u64);}behave @print(run());', 0, '8\n', ''),
+    'named_function_uses_enclosing_type_evidence': (
+        IO + 'proc run()->u64{val n<-1u64;func produce()->u64{val result<-make typeof(n){7u64};'
+        'return result;};return produce();}behave @print(run());', 0, '7\n', ''),
     'selection_survives_later_operand_replacement': (
         IO + BASE + 'func chosen=base;behave @print(chosen({chosen<-other;6}));behave @print(chosen(6));',
         0, '6\n16\n', ''),
