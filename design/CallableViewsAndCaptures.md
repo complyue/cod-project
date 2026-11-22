@@ -1,8 +1,10 @@
 # Function values, here callables and declared place aliases
 
-Design revision: 133 · Recorded: 2026-11-19 · Status: scoped callable contract; implementation boundaries recorded separately.
+Design revision: 134 · Recorded: 2026-11-21 · Status: scoped callable contract; implementation boundaries recorded separately.
 
 ## Design authority
+
+[D-07-STRING-FIELDS](DesignAuthorityRegistry.md#d-07-string-fields) covers [direct text places](Utf8Strings.md#direct-string-fields) under [H-STRING-BUILD-20261121](../CHANGELOG.md#h-string-build-20261121). The r134 string prototype distinguishes `val var` for a direct String place from `ref var` for a declared reference slot. Check exact place kind, actual owner and permitted updates through either name. Callable access and lifetime contracts continue.
 
 [H-FUNCTOR-ARGUMENT-20261119](../CHANGELOG.md#h-functor-argument-20261119) continues D-18-HERE at r133 for receiver selection in the [existing here-callable inventory](#forms-of-here-callable). Apply the actual owner and access checks to the target selected at argument preparation, including during synchronous forwarding.
 
@@ -110,7 +112,7 @@ proc distinguish(ref x:u64 in O, ref y:u64 in O) where {owner O} {
 }
 ```
 
-If x and y happen to select the same target, the writes naturally alias that target; they still do not merge p and q's slots. `a = y` does not retarget the alias a to y's slot: a remains a name for p's slot. `var b -> a` denotes that same place, without adding a proxy chain. For a val place, `<-` writes that place and builtin `=` has no reference slot to rebind. Alias const restricts access through the alias, not other names. An alias type assertion cannot convert the selected storage, alter ptr/ref mode or upgrade permissions.
+If x and y happen to select the same target, the writes naturally alias that target; they still do not merge p and q's slots. `a = y` does not retarget the alias a to y's slot: a remains a name for p's slot. `var b -> a` denotes that same place, without adding a proxy chain. For a direct bits place, `<-` writes its payload and builtin `=` has no reference slot to rebind. For the prototype’s `val var tgt:String`, `tgt = ready` performs the direct String field’s same-owner installation. The declared place alias continues to name the same field. Alias const restricts access through the alias, not other names. An alias type assertion cannot convert the selected storage, alter ptr/ref mode or upgrade permissions.
 
 Selecting `var element -> items[index]` evaluates the selection once. Later index changes or rebinding items do not select a different element. Backing movement follows the selected owner's current resolution information; logical target removal/reuse still needs the container's validity contract. An alias neither pins native addresses nor extends storage lifetime. It need not read a payload merely to name an admitted uninitialized place; later reads/writes retain ordinary definite-initialization rules.
 

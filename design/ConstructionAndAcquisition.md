@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 66 · Recorded: 2026-11-21 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 67 · Recorded: 2026-11-21 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+[D-07-STRING-FIELDS](DesignAuthorityRegistry.md#d-07-string-fields) records the r67 prototype spelling `val var tgt:String` for a direct place under [H-STRING-BUILD-20261121](../CHANGELOG.md#h-string-build-20261121). Verify first initialization, replacement and stable prior borrows. The `in` annotation selects the place owner, and the text remains non-bits. [String field contract](Utf8Strings.md#direct-string-fields).
 
 [D-10-OWN-QUALIFIER](DesignAuthorityRegistry.md#d-10-own-qualifier) and [H-CONTEXTUAL-OWN-20261121](../CHANGELOG.md#h-contextual-own-20261121) cover the ownership qualifier in the construction and receiving examples at r66.
 
@@ -323,7 +325,8 @@ The destination's ordinary role determines the promised write. Init does not mea
 
 | Parameter role | A successful initialization establishes | What does not discharge it |
 | --- | --- | --- |
-| `init val var x:T` | A valid bits write to the selected caller place before reading that init payload. | The caller having initialized x earlier; initializing an unrelated callee-local value. |
+| `init val var tgt:String in D` (text prototype) | Install completed immutable text owned by D in the selected writable direct String place. | Reading the place before the required write, rebinding a different ref slot, or installing text from another owner. |
+| `init val var x:T` for bits T | A valid bits write to the selected caller place before reading that init payload. | The caller having initialized x earlier; initializing an unrelated callee-local value. |
 | `init ref var r:T in O` | A reference-slot write satisfying its declared non-null owner/access contract, with required target readiness by successful completion. | Merely writing through its old binding; rebinding a separate local ref; writing null. |
 | `init ptr var p:T in O` | A nullable reference-slot write preserving O and declared access/readiness obligations for any selected target. | Leaving the old slot untouched, even if already null. |
 | `init ref x:T in O` / shorthand `init x:T in O` | Initialization of the originally selected target under its declared obligations. | Establishing identity alone; rebinding the parameter locally to another target. |
