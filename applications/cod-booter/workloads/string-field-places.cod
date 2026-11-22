@@ -1,0 +1,65 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+using "std:text-storage" { utf8_size, utf8_byte };
+
+data Entry { name:String; }
+
+proc reject() -> void throws NullPointerException {
+    ptr missing:u64 = null in here;
+    behave @print(missing);
+    return;
+}
+
+proc (<-)(init val var out:String in D, input:const String in S) -> void
+    throws NullPointerException where {owner D, const owner S} {
+    if (utf8_size(input) == 0u64) { reject(); };
+    out = make String(input) in D;
+    if (utf8_size(input) == 2u64) { reject(); };
+    return;
+}
+
+proc inspect(entry:const Entry in D) -> u64 where {const owner D} {
+    return utf8_size(entry.name);
+}
+
+proc exercise() -> u64 {
+    try {
+        ref rejected_before_write = make Entry { name <- ""; };
+        behave @print(inspect(rejected_before_write));
+    } catch (error:const NullPointerException) {
+        behave @print(10u64);
+    };
+    try {
+        ref rejected_after_write = make Entry { name <- "ok"; };
+        behave @print(inspect(rejected_after_write));
+    } catch (error:const NullPointerException) {
+        behave @print(20u64);
+    };
+
+    try {
+        ref initial = make String("first");
+        ref entry = make Entry { name <- initial; };
+        ref previous = entry.name:CString;
+        {{
+            ref replacement = make String("x\0y");
+            entry.name <- replacement;
+        }};
+        if (utf8_size(previous) != 5u64 || utf8_byte(previous, 0u64) != 102u8) return 1u64;
+        if (utf8_byte(entry.name, 1u64) != 0u8) return 2u64;
+
+        try {
+            entry.name <- "";
+        } catch (error:const NullPointerException) {};
+        if (inspect(entry) != 3u64) return 3u64;
+        try {
+            entry.name <- "ok";
+        } catch (error:const NullPointerException) {};
+        if (inspect(entry) != 2u64 || utf8_byte(entry.name, 0u64) != 111u8) return 4u64;
+        if (utf8_byte(previous, 4u64) != 116u8) return 5u64;
+    } catch (error:const NullPointerException) {
+        return 6u64;
+    };
+    return 73u64;
+}
+
+behave @print(exercise());

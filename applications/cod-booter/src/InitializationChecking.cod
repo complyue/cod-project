@@ -4,6 +4,7 @@ using "NativeCommands.cod" {
     copy_word, position_block, word_constant, jump, branch_equal, branch_catchable, begin_function,
     declare_function, return_outcome, finish_program, write_flow_flag, branch_on_flow_flag,
     unbind_local, bind_local, use_local, local_binding_fact,
+    require_initialized_place, copy_completion, pending_category,
 };
 
 export data InitializationResult {
@@ -15,9 +16,11 @@ func unproved_initialization() -> u8 { return 13u8; }
 func initialization_storage_exhausted() -> u8 { return 14u8; }
 func invalid_initialization_flow() -> u8 { return 15u8; }
 func unproved_local_binding() -> u8 { return 17u8; }
+func incomplete_place_initialization() -> u8 { return 19u8; }
 
 func needs_initialization(opcode:u8) -> bool {
-    return opcode == load_target() || opcode == copy_word() || opcode == use_local();
+    return opcode == load_target() || opcode == copy_word() || opcode == use_local() ||
+        opcode == require_initialized_place();
 }
 
 func resets_initialization(opcode:u8) -> bool {
@@ -29,6 +32,7 @@ func establishes_initialization(opcode:u8) -> bool {
 }
 
 func unready_diagnostic(opcode:u8) -> u8 {
+    if (opcode == require_initialized_place()) return incomplete_place_initialization();
     return if (opcode == use_local()) { unproved_local_binding() } else { unproved_initialization() };
 }
 
@@ -161,6 +165,32 @@ func record_flag(code:NativeCommands in C, flow:FlagFlow in F,
     return true;
 }
 
+func unknown_failure_category() -> u64 { return no_node() - 1u64; }
+
+func known_branch_value(code:const NativeCommands in C, history:u64, at:u64) -> u64 where {const owner C} {
+    val opcode <- code[at].opcode;
+    if (opcode == branch_on_flow_flag()) return flag_value(code, history, code[at].a);
+    if (opcode == branch_equal() && code[at].a == pending_category()) {
+        val category <- flag_value(code, history, pending_category());
+        if (category == unknown_failure_category() && code[at].b != 0u64) return no_node();
+        return category;
+    };
+    return no_node();
+}
+
+func record_control_write(code:NativeCommands in C, flow:FlagFlow in F, history:u64 in H, at:u64) -> bool
+    where {owner C, owner F, owner H} {
+    val opcode <- code[at].opcode;
+    if (opcode == write_flow_flag() || (opcode == word_constant() && code[at].a == pending_category()))
+        return record_flag(code, flow, history, code[at].a, code[at].b);
+    if (opcode == copy_completion()) {
+        val value <- if (code[at].c != 0u64) { unknown_failure_category() }
+                     else { flag_value(code, history, code[at].b) };
+        return record_flag(code, flow, history, code[at].a, value);
+    };
+    return true;
+}
+
 # A path row holds the current instruction, the flag history and the
 # readiness of this binding or payload. Separate links index visited paths for the
 # instruction and pending work. A history may be shared without a copy.
@@ -239,11 +269,11 @@ func check_flag_paths(code:NativeCommands in C, plan:const NativePlan in P,
             if (establishes_initialization(opcode)) { (ready <- 1u8):void; } else {};
             if (resets_initialization(opcode)) { (ready <- 0u8):void; } else {};
         } else {};
-        if (opcode == write_flow_flag() && !record_flag(code, flow, history, code[at].a, code[at].b)) {
+        if (!record_control_write(code, flow, history, at)) {
             result.diagnostic <- initialization_storage_exhausted();
             return false;
         } else {};
-        known_flag <- if (opcode == branch_on_flow_flag()) { flag_value(code, history, code[at].a) } else { no_node() };
+        known_flag <- known_branch_value(code, history, at);
         if (!schedule_path(code, plan, flow, successor(code, plan, at, false, known_flag), history, ready) ||
             !schedule_path(code, plan, flow, successor(code, plan, at, true, known_flag), history, ready)) {
             if (flow.free_row == intrinsic (len)(code)) { (result.diagnostic <- initialization_storage_exhausted()):void; } else {};
@@ -293,10 +323,14 @@ func publish_commands(code:NativeCommands in C, plan:NativePlan in P) -> void
     where {owner C, owner P} {
     val next <- 0u64;
     for (at in 0u64 .. plan.used) {
-        if (!local_binding_fact(code[at].opcode)) {
+        if (!local_binding_fact(code[at].opcode) && code[at].opcode != require_initialized_place()) {
             if (initialization_access(code[at].opcode)) { code[at].c <- 0u64; (code[at].d <- 0u64):void; } else {};
             if (code[at].opcode == write_flow_flag()) { (code[at].opcode <- word_constant()):void; } else {};
-            if (code[at].opcode == branch_on_flow_flag()) { (code[at].opcode <- branch_equal()):void; } else {};
+            if (code[at].opcode == branch_on_flow_flag()) { (code[at].opcode <- branch_equal()):void; };
+            if (code[at].opcode == copy_completion()) {
+                code[at].opcode <- copy_word();
+                (code[at].c <- 0u64):void;
+            };
             if (next != at) {
                 code[next].opcode <- code[at].opcode;
                 code[next].a <- code[at].a;
@@ -319,14 +353,15 @@ export func check_native_initialization(code:NativeCommands in C, plan:NativePla
     if (plan.used > intrinsic (len)(code)) return false;
     val demand <- false;
     val annotated <- false;
-    val registrations <- false;
+    val tracks_control <- false;
     for (at in 0u64 .. plan.used) {
         if (initialization_access(code[at].opcode) && code[at].c != 0u64) {
             annotated <- true;
             (demand <- demand || needs_initialization(code[at].opcode)):void;
         } else {};
-        if (code[at].opcode == branch_on_flow_flag() || code[at].opcode == write_flow_flag()) {
-            (registrations <- true):void;
+        if (code[at].opcode == branch_on_flow_flag() || code[at].opcode == write_flow_flag() ||
+            code[at].opcode == require_initialized_place() || code[at].opcode == copy_completion()) {
+            (tracks_control <- true):void;
         } else {};
     };
     if (demand) {
@@ -339,14 +374,14 @@ export func check_native_initialization(code:NativeCommands in C, plan:NativePla
                     result.diagnostic <- invalid_initialization_flow();
                     result.node <- no_node();
                     if (!check_unready_paths(code, plan, result, at)) {
-                        if (!registrations || result.diagnostic == invalid_initialization_flow() ||
+                        if (!tracks_control || result.diagnostic == invalid_initialization_flow() ||
                             !check_flag_paths(code, plan, result, at)) return false;
                     } else {};
                 } else {};
             } else {};
         };
     } else {};
-    if (annotated || registrations) {
+    if (annotated || tracks_control) {
         publish_commands(code, plan);
     } else {};
     result.diagnostic <- 0u8;
