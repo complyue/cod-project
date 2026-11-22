@@ -60,7 +60,55 @@ proc run() -> void {
 
 run();
 '''
+INDEPENDENT_DRAIN = CHECKED_READ + '''
+proc drain() -> void {
+    ptr missing:u64 = null in here;
+    defer catch (error:const NullPointerException) { behave @print(9u64); };
+    defer read(missing);
+    return;
+}
+
+proc run() -> void {
+    ptr missing:u64 = null in here;
+    defer catch (error:const NullPointerException) {
+              behave @print(1u64);
+              drain();
+              behave @print(2u64);
+          } finally { behave @print(3u64); };
+    defer read(missing);
+    defer read(missing);
+    return;
+}
+run();
+'''
+CLOSED_DRAIN = INDEPENDENT_DRAIN.replace('proc drain() -> void {', '''
+func force(ptr value:const u64 in O) -> u64 throws NullPointerException where {const owner O} {
+    return value;
+}
+
+func drain() -> u64 {''').replace(
+    '    defer catch (error:const NullPointerException) { behave @print(9u64); };\n'
+    '    defer read(missing);\n    return;',
+    '    defer catch (error:const NullPointerException) { return 9u64; };\n'
+    '    defer force(missing);\n    return 0u64;', 1).replace(
+    'proc run() -> void {', 'proc run() -> void {\n    func invoke = drain;').replace(
+    '              drain();', '              behave @print(invoke());')
 runner.CASES = {
+    "direct_call_to_independent_drain": (INDEPENDENT_DRAIN, 0, '1\n9\n2\n1\n9\n2\n3\n', ''),
+    "closed_callable_to_independent_drain": (CLOSED_DRAIN, 0, '1\n9\n2\n1\n9\n2\n3\n', ''),
+    "protected_callback_to_independent_drain": (INDEPENDENT_DRAIN.replace(
+        'proc run() -> void {', 'proc relay(here action() -> void) -> void { action(); return; }\n\n'
+        'proc run() -> void {').replace('              drain();', '              relay() { drain(); };'),
+        0, '1\n9\n2\n1\n9\n2\n3\n', ''),
+    "independent_drain_preserves_declared_checked_failure": (INDEPENDENT_DRAIN.replace(
+        'proc drain() -> void {', 'proc drain() -> void throws NullPointerException {'),
+        2, '', 'checked deferred failure requires coverage within the owning pass'),
+    "independent_drain_preserves_escaping_unchecked_failure": ((
+        'using "std:exceptions" MissingReturnError;\nfunc missing_result() -> u64 {}\n' + INDEPENDENT_DRAIN
+    ).replace('    defer read(missing);\n    return;\n}', '    defer read(missing);\n    missing_result():void;\n    return;\n}', 1).replace(
+        'proc run() -> void {', 'proc run() -> void {\n'
+        '    defer catch (error:const MissingReturnError) { behave @print(4u64); };'),
+        0, '1\n9\n1\n9\n3\n4\n4\n', WARN),
     "attached_catch_keeps_deferred_failure_pending": (CHECKED_READ + '''
 proc run() -> void {
     ptr missing:u64 = null in here;
