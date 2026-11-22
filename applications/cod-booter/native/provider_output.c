@@ -285,7 +285,8 @@ static uint32_t write_callable(const provider_interfaces *interfaces, size_t at,
         .result = enum_result ? enum_name(interfaces, row) : scalar_spelling(row->result_kind),
         .owner_count = (size_t)row->owner_count, .enum_result = enum_result};
     if ((!shape.result && row->result_kind != result_void) ||
-        (!inbound && shape.result && row->result_kind != bits_u8 && !enum_result)) return provider_output_invalid;
+        (!inbound && shape.result && row->result_kind != bits_u8 &&
+         row->result_kind != bits_u64 && !enum_result)) return provider_output_invalid;
     for (size_t i = 0; i < shape.count; ++i) {
         const interface_row *input = row + 1 + i;
         cod_provider_argument *argument = interfaces->inputs + i;
