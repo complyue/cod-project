@@ -809,7 +809,8 @@ class LLVMEmission {
     return identity;
   }
   llvm::Value *selected_owner(const Expression &expr, const Expression *call = nullptr,
-                              std::optional<size_t> method = {}, const Type *callable_view = nullptr) {
+                              std::optional<size_t> method = {}, const Type *callable_view = nullptr,
+                              std::optional<size_t> argument = {}) {
     std::map<size_t, std::vector<size_t>> alternatives;
     for (size_t i = 0; i < contexts_.size(); ++i) {
       if (call) {
@@ -820,6 +821,13 @@ class LLVMEmission {
       }
       const auto &fact = contexts_[i].at(&expr);
       if (fact.type == Type::never) continue;
+      if (argument) {
+        const auto &storage = contexts_[i].at(call).arguments.at(*argument).reference_storage;
+        if (storage) {
+          alternatives[storage->owner].push_back(i);
+          continue;
+        }
+      }
       if (fact.owners.size() != 1) throw std::logic_error("unchecked reference owner reached native transport");
       alternatives[*fact.owners.begin()].push_back(i);
     }
@@ -1045,8 +1053,9 @@ class LLVMEmission {
           return owner_identity(actual, expr.at);
         }, b_.getPtrTy()));
       } else {
-        const auto &operand = invocation.argument(expr, input + offset);
-        prepared.push_back(nominal ? selected_owner(operand) : selected_owner(operand, &expr, method, callable_view));
+        const auto index = input + offset;
+        const auto &operand = invocation.argument(expr, index);
+        prepared.push_back(nominal ? selected_owner(operand) : selected_owner(operand, &expr, method, callable_view, index));
       }
     }
     if (captured.size() != layout.captures) throw std::logic_error("native call lacks its lexical captures");
@@ -2056,8 +2065,22 @@ class LLVMEmission {
   }
   llvm::Value *prepare_argument(const Expression &expr, size_t index, bool copy) {
     const auto &child = contexts_.front().at(&expr).argument(expr, index);
-    const auto prepare = [&](const std::pair<ArgumentMode, bool> &plan) -> llvm::Value * {
-      const auto [mode, binding_slot] = plan;
+    using Preparation = std::tuple<ArgumentMode, bool, std::optional<size_t>, bool>;
+    const auto prepare = [&](const Preparation &plan) -> llvm::Value * {
+      const auto [mode, binding_slot, reference_storage, mixed] = plan;
+      if (reference_storage) {
+        auto *storage = storage_.at(*reference_storage);
+        const auto construct = [&](llvm::Value *value) { store_incoming(*reference_storage, value); };
+        llvm::Value *target = storage;
+        if (mixed)
+          target = initialize_reference_target(child, storage, construct);
+        else {
+          auto *value = emit_expression(child);
+          if (!reachable()) return nullptr;
+          construct(value);
+        }
+        return reachable() ? pack_view(target, child) : nullptr;
+      }
       if (contexts_.front().at(&child).type.kind == Type::abstract_type) {
         const auto *source = &child;
         while (source->kind == Expression::Kind::grouped) source = source->children.front().get();
@@ -2076,10 +2099,12 @@ class LLVMEmission {
       value = prepare_value(expr, index, value);
       return copy ? copy_temporary(value, child.at) : value;
     };
-    std::map<std::pair<ArgumentMode, bool>, std::vector<size_t>> alternatives;
+    std::map<Preparation, std::vector<size_t>> alternatives;
     for (size_t i = 0; i < contexts_.size(); ++i) {
       const auto &argument = contexts_[i].at(&expr).arguments.at(index);
-      alternatives[{argument.mode, argument.binding_slot}].push_back(i);
+      const auto &storage = argument.reference_storage;
+      alternatives[{argument.mode, argument.binding_slot, storage ? std::optional{storage->place} : std::nullopt,
+                    storage && contexts_[i].at(&child).mixed_view}].push_back(i);
     }
     return contextual_value(child, alternatives, "argument", prepare);
   }
@@ -2351,6 +2376,21 @@ class LLVMEmission {
     }
     return b_.CreateInsertValue(value, image, environment_field_);
   }
+  template <typename Construct>
+  llvm::Value *initialize_reference_target(const Expression &source, llvm::Value *storage, const Construct &initialize) {
+    auto *value = emit_expression(source, Projection::receiver);
+    if (!reachable()) return nullptr;
+    auto *existing = b_.GetInsertBlock(), *construct = block("storage.construct"), *ready = block("storage.ready");
+    auto *target = view_address(value);
+    b_.CreateCondBr(b_.CreateICmpEQ(b_.CreateExtractValue(value, 1), b_.getInt32(0)), ready, construct);
+    b_.SetInsertPoint(construct);
+    initialize(value);
+    auto *constructed = b_.GetInsertBlock(); b_.CreateBr(ready);
+    b_.SetInsertPoint(ready);
+    auto *selected = b_.CreatePHI(b_.getPtrTy(), 2, "storage.target");
+    selected->addIncoming(target, existing); selected->addIncoming(storage, constructed);
+    return selected;
+  }
   llvm::Value *declare_local(const Expression &declaration) {
     std::map<std::tuple<bool, bool, bool>, std::vector<size_t>> alternatives;
     for (size_t i = 0; i < contexts_.size(); ++i) {
@@ -2366,18 +2406,10 @@ class LLVMEmission {
       if (environments_ && binding.place && storage_.at(*binding.place)->getAllocatedType() == scalar_)
         scope_->values.values.push_back(storage_.at(*binding.place));
       if (mixed) {
-        auto *value = emit_expression(*declaration.children.front(), Projection::receiver);
+        address = initialize_reference_target(*declaration.children.front(), address, [&](llvm::Value *value) {
+          assign_place(address, value, declaration, &CheckedOperation::operand_type);
+        });
         if (!reachable()) return static_cast<llvm::Value *>(nullptr);
-        auto *existing = b_.GetInsertBlock(), *construct = block("storage.construct"), *ready = block("storage.ready");
-        auto *target = view_address(value);
-        b_.CreateCondBr(b_.CreateICmpEQ(b_.CreateExtractValue(value, 1), b_.getInt32(0)), ready, construct);
-        b_.SetInsertPoint(construct);
-        assign_place(address, value, declaration, &CheckedOperation::operand_type);
-        auto *constructed = b_.GetInsertBlock(); b_.CreateBr(ready);
-        b_.SetInsertPoint(ready);
-        auto *selected = b_.CreatePHI(b_.getPtrTy(), 2, "storage.target");
-        selected->addIncoming(target, existing); selected->addIncoming(address, constructed);
-        address = selected;
       } else if (borrowed || same_place) {
         address = emit_expression(*declaration.children.front(), Projection::target);
         if (!reachable()) return static_cast<llvm::Value *>(nullptr);

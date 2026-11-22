@@ -1,5 +1,5 @@
 using "std:text-storage" {
-    Utf8BuilderStorage, append_utf8 as append_piece, result_in_scope,
+    Utf8BuilderStorage, append_utf8 as append_piece, result_in_scope, prepare_display_operands,
     utf8_size, utf8_byte, utf8_slice,
 };
 using "std:exceptions" Error;
@@ -28,6 +28,32 @@ func (++)(left:const String in A, right:const StringBuilder in B) -> ref StringB
 func (++)(left:const StringBuilder in A, right:const StringBuilder in B) -> ref StringBuilder in D
     where {const owner A, const owner B, owner D} {
     return result_in_scope(make StringBuilder(left, right) in D);
+}
+
+proc (++)(left:const L in A, right:const R in B) -> ref StringBuilder in D
+    where {L, R, const owner A, const owner B, owner D} {
+    ref scratch = make StringBuilder();
+    {{
+        effect @sout = scratch;
+        emit_concat_piece(left);
+        emit_concat_piece(right);
+    }};
+    return result_in_scope(prepare_display_operands(make StringBuilder(scratch, "") in D));
+}
+
+proc emit_concat_piece(piece:const String in S) -> void where {const owner S} {
+    emit(piece);
+    return;
+}
+
+proc emit_concat_piece(piece:const StringBuilder in S) -> void where {const owner S} {
+    emit(piece);
+    return;
+}
+
+proc emit_concat_piece(value:const T in V) -> void where {T, const owner V} {
+    emitStr(value);
+    return;
 }
 
 export func append(target:StringBuilder in D, piece:const String in S) -> void

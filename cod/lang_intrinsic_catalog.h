@@ -17,7 +17,8 @@
   ENTRY(lexical_result, result_in_scope, LEXICAL_RESULT, 14) \
   ENTRY(text_size, utf8_size, TEXT_SIZE, 15) \
   ENTRY(text_byte, utf8_byte, TEXT_BYTE, 16) \
-  ENTRY(text_slice, utf8_slice, TEXT_SLICE, 17)
+  ENTRY(text_slice, utf8_slice, TEXT_SLICE, 17) \
+  ENTRY(display_operands, prepare_display_operands, DISPLAY_OPERANDS, 18)
 
 /* Keep runtime categories and their public type facts in one definition. */
 #define COD_LANG_INTRINSIC_EXCEPTIONS(ENTRY) \
