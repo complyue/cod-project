@@ -464,6 +464,13 @@ struct ViewEvidence {
   std::set<EvidenceOwner> place_owners = {};
   std::optional<PlaceKind> storage_kind = {};
   NominalTargets nominal_targets = {};
+  void project_target() {
+    value_binding.reset();
+    fixed_binding.reset();
+    slot_read_only.reset();
+    place_owners.clear();
+    storage_kind.reset();
+  }
   template <typename Map> void map_owners(Map map) {
     if (owner) owner = map(*owner);
     std::set<EvidenceOwner> mapped;
