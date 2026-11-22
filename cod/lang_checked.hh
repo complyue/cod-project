@@ -20775,6 +20775,8 @@ class ScalarChecker {
     const auto first = program_.schemas.size();
     const auto first_array = program_.arrays.size();
     for (const auto &form : source.forms) {
+      if (form->kind == Form::Kind::sum_data)
+        implementation_gap(form->at, "nominal sum type representation and checking");
       const bool product = form->kind == Form::Kind::data;
       const bool array = form->kind == Form::Kind::array;
       if (form->kind == Form::Kind::enumeration) {
