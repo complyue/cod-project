@@ -1,0 +1,19 @@
+using "fallible-count.cod" read_count as read;
+using "std:exceptions" NullPointerException;
+using symbol "std:io" @print;
+
+val active <- 0u64;
+ptr missing:u64 = null in here;
+try {
+    behave @print(read(missing, active));
+} catch (failure:const NullPointerException) {
+    behave @print(active);
+};
+
+val stored <- 11u64;
+try {
+    behave @print(read(stored, active));
+} catch (failure:const NullPointerException) {
+    behave @print(99u64);
+};
+behave @print(active);

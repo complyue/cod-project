@@ -1,6 +1,6 @@
 using "ParserStorage.cod" {
     ExprNodes, len as syntax_len, no_node, module_node, module_item_node, callable_node,
-    callable_head_node, is_function, throws_clause_node, block_node, full_scope_node,
+    is_function, throws_clause_node, block_node, full_scope_node,
     block_item_node, argument_node, checked_ref_argument, try_node, catch_clause_node,
     catch_handler_node, finally_clause_node, deferred_call_node, deferred_block_node, discard_node,
     compare_node, conditional_node, range_node, range_header_node, literal_range,
@@ -13,7 +13,7 @@ using "ParserStorage.cod" {
 };
 using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" {
-    NameBindings, NameWork, first_item, enclosing_callable, exception_binding,
+    NameBindings, NameWork, first_item, signature_clause, enclosing_callable, exception_binding,
 };
 using "OperandChecking.cod" {
     OperandFacts, nullable_ptr, borrowed_ref, never_result, void_result, has_value_tail,
@@ -244,16 +244,6 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
     } else {};
 }
 
-func declared_throw(nodes:const ExprNodes in N, definition:u64) -> u64 where {const owner N} {
-    val clause <- nodes[definition].left;
-    for (unused in 0u64 .. definition) {
-        if (nodes[clause].kind == throws_clause_node()) return clause;
-        if (nodes[clause].kind == callable_head_node()) return no_node();
-        clause <- nodes[clause].left;
-    };
-    return no_node();
-}
-
 func covers(caught:u64, category:u64) -> bool {
     return caught == no_node() || caught == exception_root_identity() || caught == category;
 }
@@ -381,12 +371,9 @@ func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSit
 
 func check_call_completion(nodes:const ExprNodes in N, names:const NameBindings in B,
                            links:const NameWork in L, facts:const OperandFacts in F,
-                           sites:CompletionSites in X, at:u64, definition:u64, used:u64) -> u8
+                           sites:CompletionSites in X, at:u64, category:u64, checked:u8, used:u64) -> u8
     where {const owner N, const owner B, const owner L, const owner F, owner X} {
-    val declaration <- sites[definition].throws_clause;
-    if (declaration == no_node()) return 0u8;
-    val category <- facts[declaration].identity;
-    val checked <- facts[declaration].checked_exception;
+    if (category == no_node()) return 0u8;
     if (sites[at].registration != no_node()) {
         if (checked != 0u8 || category == exception_root_identity()) return uncovered_deferred_failure();
         # Unchecked deferred failures need the separate residual-error pass.
@@ -540,15 +527,25 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
     if (kind == make_named_node() && facts[at].allocation_owner != no_node())
         return route_failure(nodes, names, links, facts, sites, at, used, out_of_memory_identity(), 0u8, possible_failure());
     if (kind == call_node()) {
-        if (links[at].imported_function != no_node() &&
-            (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8))
-            return unproved_deferred_error();
+        if (links[at].imported_function != no_node()) {
+            val diagnostic <- check_call_completion(nodes, names, links, facts, sites, at, links[at].imported_failure,
+                                                    links[at].imported_failure_checked, used);
+            if (diagnostic != 0u8) return diagnostic;
+            # The declaration alone cannot prove coverage of residual
+            # failures raised while draining an imported deferred call.
+            if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8) return unproved_deferred_error();
+            return 0u8;
+        };
         if (facts[at].text_intrinsic == text_byte_export())
             return route_failure(nodes, names, links, facts, sites, at, used, index_out_of_bounds_identity(), 0u8, possible_failure());
         if (facts[at].text_intrinsic != 0u8) return 0u8;
     };
-    if (facts[at].call_definition != no_node())
-        return check_call_completion(nodes, names, links, facts, sites, at, facts[at].call_definition, used);
+    if (facts[at].call_definition != no_node()) {
+        val declaration <- sites[facts[at].call_definition].throws_clause;
+        if (declaration == no_node()) return 0u8;
+        return check_call_completion(nodes, names, links, facts, sites, at, facts[declaration].identity,
+                                     facts[declaration].checked_exception, used);
+    };
     if (kind == deferred_call_node() || kind == deferred_block_node()) {
         record_registration(names, sites, at);
         return 0u8;
@@ -684,7 +681,7 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
     for (at in 0u64 .. tree.used) {
         initialize_site(sites, at);
         if (nodes[at].kind == callable_node()) {
-            sites[at].throws_clause <- declared_throw(nodes, at);
+            sites[at].throws_clause <- signature_clause(nodes, nodes[at].left, throws_clause_node());
             {};
         } else {};
     };
