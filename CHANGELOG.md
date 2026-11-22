@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 — Concatenation with displayable values
+
+<a id="h-string-concat-display-20261121"></a>
+**H-STRING-CONCAT-DISPLAY-20261121.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-21 (America/Los_Angeles), the project user asked “`++` 是不是可以也用于任意类型拼接字符串？” Under the H-STRING-BUILD-20261121 prototype delegation the design review selects ordinary display-based concatenation, including two non-text operands, preserving the existing text-only func methods. H-155 supplies the func/proc operator boundary and H-STRING-SOUT-20261121 supplies the display hook. StringBuilding r5, D-07-STRING-BUILD, registry r1045, P-678/P-679. Prior text cases are at `88841cf05afc6be58e1ef431e9c847932570e18a:design/StringBuilding.md`.
+
 ## 2026-11-21 — Unchecked UTF-8 output failure
 
 <a id="h-utf8-write-error-20261121"></a>
