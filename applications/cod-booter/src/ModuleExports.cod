@@ -40,6 +40,7 @@ export func enum_member_export() -> u8 { return 9u8; }
 export func abstract_type_export() -> u8 { return 10u8; }
 export func builder_storage_export() -> u8 { return 11u8; }
 export func lexical_builder_export() -> u8 { return 13u8; }
+export func lexical_result_export() -> u8 { return 14u8; }
 export func print_export_identity() -> u64 { return 0u64; }
 export func exception_root_identity() -> u64 { return 0u64; }
 export func null_pointer_identity() -> u64 { return 4u64; }

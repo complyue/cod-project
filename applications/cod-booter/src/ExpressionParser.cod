@@ -7,7 +7,7 @@ using "ParserStorage.cod" {
     owning_handle_local_node, borrowed_handle_local_node, make_own_handle_node,
     make_borrowed_handle_node, here_call_node, here_body_node, here_receiver_node, continue_node,
     break_node, narrow_integer_node, Tokens, ExprNode, ExprNodes, len, literal_node, add_node,
-    multiply_node, subtract_node, divide_node, remainder_node, group_node, name_node, call_node,
+    multiply_node, subtract_node, divide_node, remainder_node, concat_node, group_node, name_node, call_node,
     argument_node, deferred_call_node, deferred_block_node, block_node, full_scope_node,
     block_item_node, try_node, catch_clause_node, catch_handler_node, catch_binding_node,
     finally_clause_node, symbol_node, behave_node, throw_node, transfer_node, typed_name_node,
@@ -1717,6 +1717,10 @@ func parse_infix(source:const SourceBytes in S, tokens:const Tokens in T,
     if (op == 47u8) { kind <- divide_node(); (binding <- 6u8):void; } else {};
     if (op == 37u8) { kind <- remainder_node(); (binding <- 6u8):void; } else {};
     if (op == 43u8) { kind <- add_node(); (binding <- 5u8):void; } else {};
+    if (punct_pair_at(source, tokens, result.next, past, 43u8, 43u8)) {
+        kind <- concat_node();
+        (binding <- 5u8):void;
+    } else {};
     if (op == 45u8) { kind <- subtract_node(); (binding <- 5u8):void; } else {};
     if (predicate != no_node()) {
         binding <- if (predicate <= unequal_words()) { 3u8 } else { 4u8 };

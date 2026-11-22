@@ -11,6 +11,7 @@
 #define COD_LANG_TEXT_STORAGE_MODULE "std:text-storage"
 #define COD_LANG_BUILDER_STORAGE_NAME "Utf8BuilderStorage"
 #define COD_LANG_BUILDER_APPEND_NAME "append_utf8"
+#define COD_LANG_LEXICAL_RESULT_NAME "result_in_scope"
 
 /* Keep runtime categories and their public type facts in one definition. */
 #define COD_LANG_INTRINSIC_EXCEPTIONS(ENTRY) \
@@ -32,7 +33,8 @@ enum cod_lang_export_kind {
   COD_LANG_EXCEPTION_TYPE_EXPORT = 1,
   COD_LANG_SYMBOL_EXPORT = 2,
   COD_LANG_BUILDER_STORAGE_EXPORT = 11,
-  COD_LANG_BUILDER_APPEND_EXPORT = 12
+  COD_LANG_BUILDER_APPEND_EXPORT = 12,
+  COD_LANG_LEXICAL_RESULT_EXPORT = 14
 };
 
 enum cod_lang_intrinsic_symbol {
@@ -57,6 +59,7 @@ typedef struct cod_lang_intrinsic_spellings {
   char text_storage[sizeof(COD_LANG_TEXT_STORAGE_MODULE)];
   char builder_storage[sizeof(COD_LANG_BUILDER_STORAGE_NAME)];
   char builder_append[sizeof(COD_LANG_BUILDER_APPEND_NAME)];
+  char lexical_result[sizeof(COD_LANG_LEXICAL_RESULT_NAME)];
 #define COD_LANG_SPELLING_FIELD(key, spelling, id, checked) char key[sizeof(#spelling)];
   COD_LANG_INTRINSIC_EXCEPTIONS(COD_LANG_SPELLING_FIELD)
 #undef COD_LANG_SPELLING_FIELD
@@ -64,7 +67,7 @@ typedef struct cod_lang_intrinsic_spellings {
 
 static const cod_lang_intrinsic_spellings cod_lang_intrinsic_names = {
     COD_LANG_EXCEPTION_MODULE, COD_LANG_IO_MODULE, COD_LANG_PRINT_NAME,
-    COD_LANG_TEXT_STORAGE_MODULE, COD_LANG_BUILDER_STORAGE_NAME, COD_LANG_BUILDER_APPEND_NAME,
+    COD_LANG_TEXT_STORAGE_MODULE, COD_LANG_BUILDER_STORAGE_NAME, COD_LANG_BUILDER_APPEND_NAME, COD_LANG_LEXICAL_RESULT_NAME,
 #define COD_LANG_SPELLING_VALUE(key, spelling, id, checked) #spelling,
     COD_LANG_INTRINSIC_EXCEPTIONS(COD_LANG_SPELLING_VALUE)
 #undef COD_LANG_SPELLING_VALUE
@@ -86,6 +89,8 @@ static const cod_lang_intrinsic_export cod_lang_intrinsic_exports[] = {
         0, COD_LANG_BUILDER_STORAGE_EXPORT, 0, 0, 0, 0, 0, 0},
     {COD_LANG_SPELLING_SPAN(text_storage, COD_LANG_TEXT_STORAGE_MODULE), COD_LANG_SPELLING_SPAN(builder_append, COD_LANG_BUILDER_APPEND_NAME),
         0, COD_LANG_BUILDER_APPEND_EXPORT, 0, 0, 0, 0, 0, 0},
+    {COD_LANG_SPELLING_SPAN(text_storage, COD_LANG_TEXT_STORAGE_MODULE), COD_LANG_SPELLING_SPAN(lexical_result, COD_LANG_LEXICAL_RESULT_NAME),
+        0, COD_LANG_LEXICAL_RESULT_EXPORT, 0, 0, 0, 0, 0, 0},
 };
 
 #undef COD_LANG_SPELLING_SPAN

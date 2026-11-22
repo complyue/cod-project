@@ -32,7 +32,7 @@ inline bool nominal_exception(const Type &type) {
 }
 inline bool bits_type(const Type &type) { return scalar_type(type) || (type.kind == Type::exception && !nominal_exception(type)); }
 inline bool lexical_value_type(const Type &type) { return bits_type(type) || type.kind == Type::procedure; }
-enum class BuiltinOperation { none, unary, binary, identity, array_length, reference_swap, bits_swap, print, builder_append };
+enum class BuiltinOperation { none, unary, binary, identity, array_length, reference_swap, bits_swap, print, builder_append, lexical_result };
 // Nominal schema identities for a selected abstract target. An empty set carries no narrowing.
 using NominalTargets = std::set<size_t>;
 using AbstractSymbolTargets = std::map<size_t, NominalTargets>;
@@ -145,6 +145,7 @@ struct CheckedOperation {
     auto operator<=>(const LexicalAllocation &) const = default;
   };
   std::optional<LexicalAllocation> lexical_allocation;
+  std::optional<size_t> lexical_result_owner;
   CasePattern case_pattern;
   bool case_subject_may_be_null = false;
   bool case_reaches_end = false;
@@ -576,6 +577,11 @@ struct CheckedMethod {
   std::vector<size_t> instances;
   std::vector<Type> parameters;
   ResultContract result;
+  struct LexicalResult {
+    const Expression *marker;
+    size_t owner;
+  };
+  std::optional<LexicalResult> lexical_result;
   std::set<size_t> throws_categories;
   std::vector<Type> throws_types;
   std::vector<Capture> captures;

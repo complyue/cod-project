@@ -1,0 +1,24 @@
+using symbol "std:io" @print;
+using "../../../cod/library/string.cod" { (++), (++) as concatenate, append };
+
+proc operand(trace:u64 in W, order:u64, piece:const String in P) -> ref const String in P
+    where {owner W, const owner P} {
+    trace <- trace * 10u64 + order;
+    return piece;
+}
+
+proc verify() -> void {
+    val trace <- 0u64;
+    ref piece = operand(trace, 1u64, "é") ++ operand(trace, 2u64, "\0");
+    ref combined = concatenate("[" :CString, piece) ++ piece ++ "]";
+    append(piece, "unused");
+    {{
+        ref shorter = make String("extra");
+        append(combined, shorter ++ "!");
+    }};
+    ref finished = make String(combined);
+    behave @print(trace);
+    return;
+}
+
+verify();

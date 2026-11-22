@@ -17,7 +17,7 @@ using "ModuleExports.cod" {
 using "NameResolution.cod" {
     NameBindings, NameWork, NameResolutionResult, unsupported_module_declaration,
     unsupported_ordinary_construction, declaration_requires_native_output, first_item,
-    resolve_module_names, text_type, owner_binding,
+    resolve_module_names, text_type, is_lexical_builder, owner_binding,
 };
 using "NativeDeclarations.cod" {
     NativeDeclarationResult, check_native_declarations, declared_exception_type,
@@ -174,13 +174,17 @@ export func bind_selected_module(source:const SourceBytes in S, nodes:const Expr
         if (names.enclosing_defer != no_node()) { result.related_first <- nodes[names.enclosing_defer].first; {}; } else {};
         return false;
     } else {};
+    val marker <- no_node();
+    val text <- false;
     for (at in 0u64 .. result.frontend.tree.used) {
         if (nodes[at].kind == ref_result_node()) {
-            if (!text_type(bindings[nodes[nodes[at].right].left].kind)) {
+            marker <- nodes[nodes[at].right].left;
+            text <- text_type(bindings[marker].kind);
+            if (!text && (bindings[at].declaration == no_node() || !is_lexical_builder(nodes, bindings, marker))) {
                 binding_diagnostic(nodes, result, module_binding_failed(), 35u8, at);
                 return false;
             } else {};
-            if (nodes[at].number != readonly_declaration() ||
+            if ((text && nodes[at].number != readonly_declaration()) ||
                 bindings[nodes[nodes[at].right].right].kind != owner_binding()) {
                 binding_diagnostic(nodes, result, module_binding_failed(), 101u8, at);
                 return false;
