@@ -57,7 +57,6 @@ class LLVMEmission {
   llvm::StructType *here_ = llvm::StructType::create(context_, {b_.getPtrTy(), b_.getPtrTy()}, "cod.here");
   llvm::StructType *here_transfer_ = llvm::StructType::create(context_, "cod.here.transfer");
   bool protected_outcomes_ = false;
-  bool here_callable_backing_ = false;
   bool owned_failures_ = false;
   bool case_scope_outcomes_ = false;
   llvm::AllocaInst *case_scan_request_ = nullptr;
@@ -261,21 +260,14 @@ class LLVMEmission {
   void take_value(llvm::Value *value) {
     if (const auto found = value_owners_.find(value); found != value_owners_.end()) b_.CreateStore(empty_scalar(), found->second);
   }
-  llvm::Value *prepare_owned_value(llvm::Value *value, const Location &at) {
-    if (!environments_) return value;
-    if (!value_owners_.contains(value)) return copy_value(value, at);
-    take_value(value);
-    return value;
-  }
   llvm::Value *copy_temporary(llvm::Value *value, const Location &at) {
-    return own_value(prepare_owned_value(value, at));
-  }
-  void replace_owned_value(llvm::Value *address, llvm::Value *value) {
-    if (environments_) release_value(b_.CreateLoad(scalar_, address));
-    b_.CreateStore(value, address);
+    if (value_owners_.contains(value)) take_value(value); else value = copy_value(value, at);
+    return own_value(value);
   }
   void assign_value(llvm::Value *address, llvm::Value *value, const Location &at) {
-    replace_owned_value(address, prepare_owned_value(value, at));
+    if (!environments_) { b_.CreateStore(value, address); return; }
+    if (value_owners_.contains(value)) take_value(value); else value = copy_value(value, at);
+    release_value(b_.CreateLoad(scalar_, address)); b_.CreateStore(value, address);
   }
   llvm::Value *convert_value(llvm::Value *value, const Type &from, const Type &to) {
     return to.kind == Type::procedure ? value : pack(convert(value, from, to), to);
@@ -290,7 +282,7 @@ class LLVMEmission {
     auto *value = emit();
     if (reachable()) {
       if (result_type == scalar_) {
-        value = prepare_owned_value(value, at);
+        if (value_owners_.contains(value)) take_value(value); else value = copy_value(value, at);
         clear_value(saved);
       }
       b_.CreateStore(value, saved); b_.CreateBr(control.exit);
@@ -469,27 +461,15 @@ class LLVMEmission {
   llvm::Value *here_payload_slot(llvm::IRBuilder<> &builder, llvm::Value *transfer) {
     return builder.CreateStructGEP(here_transfer_, transfer, 1);
   }
-  bool owns_here_payloads() const { return here_callable_backing_ || owned_failures_; }
-  llvm::Value *take_here_payload(llvm::IRBuilder<> &builder, llvm::Value *transfer) {
-    auto *payload = builder.CreateLoad(outcome_, here_payload_slot(builder, transfer));
-    if (owns_here_payloads()) builder.CreateStore(llvm::Constant::getNullValue(here_transfer_), transfer);
-    return payload;
+  llvm::Value *transfer_failure_slot(llvm::IRBuilder<> &builder, llvm::Value *transfer) {
+    return builder.CreateStructGEP(outcome_, here_payload_slot(builder, transfer), failure_owner_field());
   }
-  void release_here_payload(llvm::IRBuilder<> &builder, llvm::Value *transfer) {
-    if (!owns_here_payloads()) return;
-    auto *payload = take_here_payload(builder, transfer);
-    if (here_callable_backing_) {
-      auto *image = builder.CreateExtractValue(payload, {0, environment_field_});
-      builder.CreateCall(runtime("cod_lang_callable_free", builder.getVoidTy(), {builder.getPtrTy()}), {image});
-    }
-    if (owned_failures_) release_failure_owner(builder, builder.CreateExtractValue(payload, failure_owner_field()));
-  }
-  void discard_here_transfer(llvm::Value *transfer, llvm::Value *retained) {
-    if (!owns_here_payloads()) return;
-    auto *release = block("here.release"), *done = block("here.released");
+  void discard_transfer_failure(llvm::Value *transfer, llvm::Value *retained) {
+    if (!owned_failures_) return;
+    auto *release = block("here.release.failure"), *done = block("here.failure.released");
     b_.CreateCondBr(b_.CreateAnd(b_.CreateIsNotNull(transfer), b_.CreateICmpNE(transfer, retained)), release, done);
     b_.SetInsertPoint(release);
-    release_here_payload(b_, transfer);
+    release_failure_owner(b_, take_failure_owner(b_, transfer_failure_slot(b_, transfer)));
     b_.CreateBr(done);
     b_.SetInsertPoint(done);
   }
@@ -529,7 +509,7 @@ class LLVMEmission {
     }
     auto *inner = load(completion_.transfer);
     auto *pending = b_.CreateSelect(b_.CreateIsNull(inner), outer, inner);
-    discard_here_transfer(previous, pending);
+    discard_transfer_failure(previous, pending);
     b_.CreateStore(pending, completion_.transfer);
     auto *leaves = b_.CreateAnd(b_.CreateIsNotNull(pending), b_.CreateICmpNE(kind, b_.getInt8(2)));
     b_.CreateStore(b_.CreateSelect(leaves, b_.getInt8(3), kind), completion_.kind);
@@ -549,13 +529,13 @@ class LLVMEmission {
       auto *incoming = b_.CreateExtractValue(result, 7);
       auto *previous = load(completion_.transfer);
       auto *retained = b_.CreateSelect(b_.CreateIsNotNull(incoming), incoming, previous);
-      discard_here_transfer(previous, retained);
+      discard_transfer_failure(previous, retained);
       b_.CreateStore(retained, completion_.transfer);
       b_.CreateStore(b_.CreateSelect(failed(result), b_.getInt8(2), b_.getInt8(3)), completion_.kind);
     } else b_.CreateStore(b_.getInt8(2), completion_.kind);
   }
-  void save_local_completion(llvm::Value *value, unsigned kind, bool returned) {
-    replace_owned_value(completion_.value, value);
+  void save_local_completion(llvm::Value *value, const Location &at, unsigned kind, bool returned) {
+    assign_value(completion_.value, value, at);
     clear_failure_owner();
     b_.CreateStore(integer(0), completion_.category);
     b_.CreateStore(null_pointer(), completion_.fatal);
@@ -563,7 +543,7 @@ class LLVMEmission {
     b_.CreateStore(b_.getInt8(kind), completion_.kind);
   }
   void save_return(llvm::Value *value, const Location &at) {
-    save_local_completion(prepare_owned_value(value, at), 1, !here_destination_);
+    save_local_completion(value, at, 1, !here_destination_);
   }
   llvm::Value *observed_return() {
     if (!suspended_return_.present) throw std::logic_error("return inspection has no suspended completion");
@@ -877,10 +857,9 @@ class LLVMEmission {
       return b_.CreateInsertValue(value, null_pointer(), 1);
     auto *activation = slot(entry.activation, "here.activation");
     const auto &method = program_->methods[program_->instances[body.instance].method];
-    const bool observes_return = method.here_group && method.here_group->binds_return_payload;
-    if (entry.group && (owns_here_payloads() || observes_return))
-      b_.CreateStore(llvm::Constant::getNullValue(here_transfer_), activation);
-    if (observes_return) {
+    if (entry.group && owned_failures_) b_.CreateStore(llvm::Constant::getNullValue(here_transfer_), activation);
+    if (method.here_group && method.here_group->binds_return_payload) {
+      if (!owned_failures_) b_.CreateStore(llvm::Constant::getNullValue(here_transfer_), activation);
       b_.CreateStore(observed_return_value(), b_.CreateStructGEP(here_return_header(), activation, 1));
     }
     const auto &inputs = *method.scope_inputs;
@@ -1043,7 +1022,7 @@ class LLVMEmission {
       result->addIncoming(ordinary_result, success);
       llvm::Value *completed = result;
       if (here_entries_.at(body.instance).group)
-        completed = consume_here_transfer(result, b_.CreateExtractValue(callback, 1));
+        completed = consume_here_transfer(result, b_.CreateExtractValue(callback, 1), expr.at);
       return propagate(completed);
     });
   }
@@ -1386,7 +1365,7 @@ class LLVMEmission {
       return outcome(empty_scalar(), integer(0), integer(0), null_pointer());
     });
   }
-  llvm::Value *consume_here_transfer(llvm::Value *result, llvm::Value *here_site) {
+  llvm::Value *consume_here_transfer(llvm::Value *result, llvm::Value *here_site, const Location &at) {
     auto *target = b_.CreateExtractValue(result, 7);
     auto *matched = block("here.leaves"), *ordinary = block("here.call.outcome"), *join = block("here.outcome");
     b_.CreateCondBr(b_.CreateAnd(b_.CreateIsNotNull(target), b_.CreateICmpEQ(target, here_site)), matched, ordinary);
@@ -1396,16 +1375,17 @@ class LLVMEmission {
     auto *cancel = block("here.cleanup.failed"), *deliver = block("here.deliver");
     b_.CreateCondBr(failed(result), cancel, deliver);
     b_.SetInsertPoint(cancel);
-    release_here_payload(b_, target);
+    if (owned_failures_) release_failure_owner(b_, take_failure_owner(b_, transfer_failure_slot(b_, target)));
     auto *cleanup_failure = b_.CreateInsertValue(result, null_pointer(), 7);
     b_.CreateBr(join);
     b_.SetInsertPoint(deliver);
     auto *kind = b_.CreateLoad(b_.getInt8Ty(), b_.CreateStructGEP(here_transfer_, target, 0));
-    auto *payload = take_here_payload(b_, target);
+    auto *payload = b_.CreateLoad(outcome_, here_payload_slot(b_, target));
+    if (owned_failures_) b_.CreateStore(null_pointer(), transfer_failure_slot(b_, target));
     auto *returning = block("here.supplier.return");
     b_.CreateCondBr(b_.CreateICmpEQ(kind, b_.getInt8(static_cast<unsigned>(HereExit::return_supplier))), returning, join);
     b_.SetInsertPoint(returning);
-    save_local_completion(b_.CreateExtractValue(payload, 0), 1, !here_destination_);
+    save_return(b_.CreateExtractValue(payload, 0), at);
     b_.CreateBr(control_->exit);
     b_.SetInsertPoint(join);
     auto *outcome = b_.CreatePHI(outcome_, 3);
@@ -1541,7 +1521,7 @@ class LLVMEmission {
                                    b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2)));
       auto *local = b_.CreateICmpEQ(transfer, here_destination_);
       transfer = b_.CreateSelect(b_.CreateAnd(replaced, local), null_pointer(), transfer);
-      discard_here_transfer(pending.transfer, transfer);
+      discard_transfer_failure(pending.transfer, transfer);
     }
     preserve_transfer(transfer);
     return replaces_body;
@@ -1716,7 +1696,7 @@ class LLVMEmission {
 
     const auto cancel_transfer = [&] {
       if (!protected_outcomes_) return;
-      discard_here_transfer(load(completion_.transfer), null_pointer());
+      discard_transfer_failure(load(completion_.transfer), null_pointer());
       b_.CreateStore(null_pointer(), completion_.transfer);
     };
 
@@ -1754,8 +1734,8 @@ class LLVMEmission {
         auto *attach = block("defer.residual.attach.supplier");
         b_.CreateCondBr(b_.CreateIsNotNull(body_transfer), attach, deliver);
         b_.SetInsertPoint(attach);
-        auto *payload = take_here_payload(b_, body_transfer);
-        auto *child = b_.CreateExtractValue(payload, failure_owner_field());
+        auto *payload = b_.CreateLoad(outcome_, here_payload_slot(b_, body_transfer));
+        auto *child = take_failure_owner(b_, transfer_failure_slot(b_, body_transfer));
         retain(owner, false, b_.CreateExtractValue(payload, 1), b_.CreateExtractValue(payload, 2), b_.CreateExtractValue(payload, 4),
                b_.CreateExtractValue(payload, 5), b_.CreateExtractValue(payload, 6), child);
         // A later receiver that catches the aggregate must not resume this transfer.
@@ -3322,7 +3302,7 @@ class LLVMEmission {
           b_.CreateStore(null_pointer(), here_site);
         }
         auto *result = invoke(expr, arguments, here_site, here_values);
-        if (here_site) result = consume_here_transfer(result, load(here_site));
+        if (here_site) result = consume_here_transfer(result, load(here_site), expr.at);
         auto *value = propagate(result);
         if (!fact.borrowed_result) return own_value(value);
         auto *address = view_address(value);
@@ -3361,7 +3341,7 @@ class LLVMEmission {
       }
       if (!reachable()) return nullptr;
       const auto kind = expr.kind == K::case_break ? Completion::case_break : Completion::case_scan;
-      save_local_completion(prepare_owned_value(value, expr.at), kind, false);
+      save_local_completion(value, expr.at, kind, false);
       b_.CreateBr(control_->exit);
       return nullptr;
     }
@@ -3530,13 +3510,14 @@ class LLVMEmission {
       }
       if (fact.here_exit) {
         if (!here_destination_) throw std::logic_error("here group has no protected destination");
-        if (here_callable_backing_) value = prepare_owned_value(value, expr.at);
         clear_failure_owner();
-        discard_here_transfer(load(completion_.transfer), here_destination_);
-        release_here_payload(b_, here_destination_);
+        if (owned_failures_) {
+          discard_transfer_failure(load(completion_.transfer), here_destination_);
+          release_failure_owner(b_, take_failure_owner(b_, transfer_failure_slot(b_, here_destination_)));
+        }
         auto *payload = outcome(value, integer(0), integer(0), null_pointer());
         b_.CreateStore(b_.getInt8(static_cast<unsigned>(*fact.here_exit)), b_.CreateStructGEP(here_transfer_, here_destination_, 0));
-        b_.CreateStore(payload, here_payload_slot(b_, here_destination_));
+        b_.CreateStore(payload, b_.CreateStructGEP(here_transfer_, here_destination_, 1));
         b_.CreateStore(here_destination_, completion_.transfer);
         b_.CreateStore(b_.getInt1(*fact.here_exit == HereExit::return_supplier), completion_.has_return);
         b_.CreateStore(b_.getInt8(3), completion_.kind);
@@ -3897,10 +3878,10 @@ class LLVMEmission {
     body.SetInsertPoint(completed);
     body.CreateRet(result);
     body.SetInsertPoint(forward);
-    release_here_payload(body, borrowed);
+    if (owned_failures_) release_failure_owner(body, take_failure_owner(body, transfer_failure_slot(body, borrowed)));
     body.CreateStore(body.getInt8(static_cast<unsigned>(HereExit::failure)), body.CreateStructGEP(here_transfer_, borrowed, 0));
     auto *plain_failure = body.CreateInsertValue(result, null_pointer(), 7);
-    body.CreateStore(plain_failure, here_payload_slot(body, borrowed));
+    body.CreateStore(plain_failure, body.CreateStructGEP(here_transfer_, borrowed, 1));
     body.CreateRet(body.CreateInsertValue(llvm::Constant::getNullValue(outcome_), borrowed, 7));
   }
   void begin(llvm::Function *function, const std::vector<CheckedStorage> &storage, const std::vector<CheckedBinding> &bindings,
@@ -4211,7 +4192,7 @@ class LLVMEmission {
     b_.CreateCondBr(abrupt_outcome(outcome), finish_, completed);
     b_.SetInsertPoint(finish_);
     save_abrupt(outcome);
-    if (protected_outcomes_) discard_here_transfer(load(completion_.transfer), null_pointer());
+    if (protected_outcomes_) discard_transfer_failure(load(completion_.transfer), null_pointer());
     b_.SetInsertPoint(emit_exit_diagnostics("entry.escaped.transfer"));
     b_.CreateCall(runtime("cod_lang_fail", b_.getVoidTy(), {b_.getPtrTy()}),
         {b_.CreateGlobalString("protected completion escaped its supplying call")});
@@ -4268,11 +4249,6 @@ public:
     if (protected_outcomes_) here_transfer_->setBody({b_.getInt8Ty(), outcome_});
     environments_ = std::any_of(program.methods.begin(), program.methods.end(), [](const auto &method) { return !method.captures.empty(); }) ||
         std::any_of(program.callables.begin(), program.callables.end(), [&](const auto &value) { return !program.captured_symbols(value).empty(); });
-    here_callable_backing_ = environments_ && std::ranges::any_of(program.methods, [](const auto &method) {
-      return method.here_group && !method.instances.empty() &&
-          (method.here_group->receiving_call.kind == Type::procedure ||
-           (method.here_group->supplier && method.here_group->supplier->kind == Type::procedure));
-    });
     std::vector<llvm::Type *> fields{b_.getInt64Ty(), b_.getInt32Ty()};
     if (program.exception_values) fields.push_back(exception_);
     if (environments_) { environment_field_ = fields.size(); fields.push_back(b_.getPtrTy()); }

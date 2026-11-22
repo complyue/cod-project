@@ -4369,6 +4369,12 @@ class ScalarChecker {
   bool capture_free_callables(const std::set<size_t> *choices) const {
     return choices && !choices->empty() && std::ranges::all_of(*choices, [&](size_t id) { return capture_free_callable(id); });
   }
+  void require_here_function_value(const Expression &expr) const {
+    if (!proving_ || !validating_ || !lexical_.live) return;
+    const auto *choices = observed_callables(expr);
+    if (!choices || choices->empty()) implementation_gap(expr.at, "unproved function value at a protected here boundary");
+    if (!capture_free_callables(choices)) fail(expr.at, "protected here results require capture-free func values");
+  }
   struct CallableInvocationEffects {
     CallEffects effects;
     bool closed;
@@ -11111,6 +11117,11 @@ class ScalarChecker {
         implementation_gap(operands[i]->at, "cannot establish a scalar parameter type for an abruptly completing operand");
     }
   }
+  static bool function_result_type(const Type &type) {
+    if (type.kind != Type::procedure) return true;
+    return type.pure_callable && type.target && function_result_type(*type.target) &&
+        std::ranges::all_of(type.parameters, function_result_type);
+  }
   static bool supported_here_exit_result(const ResultContract &result) {
     return !result.borrowed() && result.type &&
         (*result.type == Type::void_type || scalar_type(*result.type) || result.type->kind == Type::procedure);
@@ -11164,8 +11175,8 @@ class ScalarChecker {
       implementation_gap(supplied.at, "return inspection in a queried here group");
     const auto contract = here_value_signature(receiver, signature, *match(receiver, arguments, {}, true), supplied.at);
     const auto receiving = require_result(selected, arguments, {}, expr.at, &state).contract.value();
-    if (!supported_here_exit_result(receiving))
-      implementation_gap(supplied.at, "type inspection requires a scalar, callable or void result for a here call");
+    if (receiving.borrowed() || (receiving.type != Type::void_type && !scalar_type(*receiving.type)))
+      implementation_gap(supplied.at, "type inspection of a here call with a borrowed or non-scalar result");
     if (supplied.receiving->from_for && receiving.type != Type::void_type)
       fail(supplied.at, "a generator loop requires a receiver with a void result");
 
@@ -13151,10 +13162,7 @@ class ScalarChecker {
       const auto &contract = breaking ? state.here_control->receiving : state.here_control->feedback;
       if (contract == Type::void_type && !expr.children.empty())
         fail(expr.at, breaking ? "void receiving calls require bare break" : "void here feedback requires bare continue");
-      const auto value = expr.children.empty() ? std::optional{Type{Type::void_type}} :
-          breaking && contract.kind == Type::procedure
-              ? type_evidence(*expr.children.front(), state, false, &contract, nullptr, ExpectedTypeUse::callable_result)
-              : child(0);
+      const auto value = expr.children.empty() ? std::optional{Type{Type::void_type}} : child(0);
       if (value && *value != Type::never && !transfers_value(*value, contract))
         fail(expr.at, std::string(breaking ? "break" : "continue") + " requires '" + type_name(contract) + "'");
       return Type::never;
@@ -13166,8 +13174,7 @@ class ScalarChecker {
       if (tail && !state.checks_reaching_paths())
         return child(0, false, false, EvidenceRead::discarded) == Type::never ? Type{Type::never} : Type{Type::void_type};
       const auto *expected_return = state.invocation_result ? &*state.invocation_result : nullptr;
-      const auto expected_use = state.here_control || state.supplied_invocation_result
-          ? ExpectedTypeUse::callable_result : ExpectedTypeUse::materialization;
+      const auto expected_use = state.supplied_invocation_result ? ExpectedTypeUse::callable_result : ExpectedTypeUse::materialization;
       std::vector<Type> tail_types;
       auto *evidence = !state.returns ? nullptr : tail ? &tail_types : &state.returns->types;
       const bool native_result = expected_return && expected_return->kind == Type::native_handle;
@@ -14925,8 +14932,10 @@ class ScalarChecker {
       if (checking_method_ && checking_method_->here_group) implementation_gap(body.at, "a single-brace here body supplied inside a here group");
       if (body.receiving->from_for && receiving.type != Type::void_type)
         fail(body.at, "a generator loop requires a receiver with a void result");
+      if (!function_result_type(*receiving.type) || (supplier && !function_result_type(*supplier->result.type)))
+        fail(body.at, "protected here results cannot carry procedure values");
       if (!supported_here_exit_result(receiving) || (supplier && !supported_here_exit_result(supplier->result)))
-        implementation_gap(body.at, "single-brace here completion requires a scalar, callable or void supplier and receiving result");
+        implementation_gap(body.at, "single-brace here completion requires a scalar, func or void supplier and receiving result");
       group = CheckedMethod::HereGroupResults{supplier ? supplier->result.type : std::nullopt, *receiving.type, {}};
       if (definition.body->inspects_return()) group->supplier_return = false;
       group->binds_return_payload = definition.body->inspects_return(true);
@@ -15665,6 +15674,8 @@ class ScalarChecker {
       }
       call.supplied_here = body;
       finish_named_call(expr, arguments, views, call, read, discard, true, receiver);
+      if (call.type.kind == Type::procedure && program_.methods[program_.instances[body.instance].method].here_group)
+        require_here_function_value(expr);
       if (effects.breaks_here_call) call.predicate.reset();
     };
     if (!returning) { finish_here(operation, body_call); return; }
@@ -18739,8 +18750,7 @@ class ScalarChecker {
             check(*expr.children.front(), instance, operations, true, false, &*expected, ExpectedTypeUse::callable_result);
         if (value != Type::never && !transfers_value(value, *expected))
           fail(expr.at, std::string(breaking ? "break" : "supplier return") + " requires '" + type_name(*expected) + "'");
-        if (value.kind == Type::procedure && (!proving_ || !capture_free_callables(observed_callables(expr))))
-          note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
+        if (value.kind == Type::procedure) require_here_function_value(expr);
         operation.type = Type::never;
         operation.operand_type = *expected;
         operation.here_exit = breaking ? HereExit::break_call : HereExit::return_supplier;
@@ -19388,7 +19398,10 @@ class ScalarChecker {
           const auto connect = [&](size_t instance) {
             const auto &body = contexts.at(instance + 1);
             if (body.supplier_result) flow.link(*body.supplier_result, contexts[c].result);
-            if (body.break_result) flow.link(*body.break_result, node);
+            if (body.break_result) {
+              flow.link(*body.break_result, node);
+              contexts[c].observations.emplace(expr, node);
+            }
             if (body.observed_return) flow.link(contexts[c].result, *body.observed_return);
           };
           connect(fact.supplied_here->instance);
@@ -19396,6 +19409,9 @@ class ScalarChecker {
         }
         if (fact.callee && fact.type != Type::never) {
           for (const auto &[from, to] : invocation(c, *expr, fact, *fact.callee + 1, 0)) flow.link(from, to);
+          if (fact.supplied_here && fact.supplied_here->returning && fact.type.kind == Type::procedure)
+            for (const auto &[from, to] : invocation(c, *expr, fact, fact.supplied_here->returning->receiver + 1, 0))
+              flow.link(from, to);
         } else if (!fact.nominal_calls.empty() && fact.type != Type::never) {
           for (const auto &call : fact.nominal_calls)
             for (const auto &[from, to] : invocation(c, *expr, fact, call.callee + 1, 0)) flow.link(from, to);
