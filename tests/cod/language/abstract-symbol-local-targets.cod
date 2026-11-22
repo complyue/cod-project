@@ -1,0 +1,42 @@
+using symbol "std:io" @print;
+
+type Output;
+data First <: Output { writes:u64; }
+data Second <: Output { marker:u32; writes:u64; }
+data Unused <: Output { marker:u64; }
+
+ref symbol @out:Output in O where {owner O};
+
+proc write(endpoint:First in O, piece:u64) -> void where {owner O} {
+    endpoint.writes <- endpoint.writes + piece;
+    return;
+}
+proc write(endpoint:Second in O, piece:u64) -> void where {owner O} {
+    endpoint.writes <- endpoint.writes + piece * 10u64;
+    return;
+}
+
+proc test(first_selected:bool) -> void {
+    ref first = make First { writes <- 0u64; };
+    ref second = make Second { marker <- 1u32; writes <- 0u64; };
+    effect @out = first;
+    write(@out, 1u64);
+    {{
+        effect @out = second;
+        write(@out, 2u64);
+    }};
+    write(@out, 3u64);
+    for (unused in 0u64 .. 2u64) {
+        effect @out = second;
+        write(@out, 2u64);
+    };
+    write(@out, 4u64);
+    if (first_selected) { effect @out = first; } else { effect @out = second; };
+    write((@out), 5u64);
+    behave @print(first.writes);
+    behave @print(second.writes);
+    return;
+}
+
+test(true);
+test(false);

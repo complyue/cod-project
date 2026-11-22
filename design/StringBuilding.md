@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-07-STRING-BUILD](DesignAuthorityRegistry.md#d-07-string-build), revision 1. The project user requested one lexical working type, common formatting for immutable strings and UTF-8 streams, a scoped output for deep helpers, and user-defined display and diagnostic representations. They delegated library and intrinsic design and asked mainline to validate it in the booter. [H-STRING-BUILD-20261121](../CHANGELOG.md#h-string-build-20261121) identifies that prototype authority. The API choices below are the design review’s decisions within it. P-678 derives this scope from C-36, C-55 and C-80. P-679 identifies its borrowing, text, module-world and scoped-output dependencies. Existing [UTF-8, CString and field semantics](Utf8Strings.md) govern every output. Acceptance ends at the [booter workload](#booter-prototype). Public API stability, terminal encoding for arbitrary bytes, persistence formats, and a permanent intrinsic or C ABI have separate scope.
+[D-07-STRING-BUILD](DesignAuthorityRegistry.md#d-07-string-build), revision 2. The project user requested one lexical working type, common formatting for immutable strings and UTF-8 streams, a scoped output for deep helpers, and user-defined display and diagnostic representations. They delegated library and intrinsic design and asked mainline to validate it in the booter. [H-STRING-BUILD-20261121](../CHANGELOG.md#h-string-build-20261121) identifies that prototype authority. The API choices below are the design review’s decisions within it. P-678 derives this scope from C-36, C-55 and C-80. P-679 identifies its borrowing, text, module-world and scoped-output dependencies. Existing [UTF-8, CString and field semantics](Utf8Strings.md) govern every output. Acceptance ends at the [booter workload](#booter-prototype). Public API stability, terminal encoding for arbitrary bytes, persistence formats, and a permanent intrinsic or C ABI have separate scope.
+
+[K-TEXT-PROC-RETURN](../CHANGELOG.md#k-text-proc-return) continues r1 for explicit successful procedure completion in the CoD examples under the [callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies).
 
 The bundled module exposes one working type, `StringBuilder`. It builds a valid UTF-8 sequence in a full lexical scope. An immutable result belongs to the owner chosen for construction. A streaming consumer can write each piece while the producer is live. Standard operations are brought into scope through ordinary module selection.
 
@@ -40,12 +42,14 @@ For example, a compiler can render an object manifest to a file or use identical
 proc emit_object(dir:const String in D, file:const String in F)
     throws Utf8WriteException where {const owner D, const owner F} {
     emit(dir ++ "/" ++ file ++ "\n");
+    return;
 }
 
 proc render_manifest(list:const ObjectList in L)
     throws Utf8WriteException where {const owner L} {
     emit("objects\n");
     for ref item = objects(list) { emit_object(item.dir, item.file); }
+    return;
 }
 ```
 
@@ -93,6 +97,7 @@ proc str(out:Utf8StreamOut in O, p:const SourcePosition in P)
     str(out, p.line);
     writeUtf8(out, ":");
     str(out, p.column);
+    return;
 }
 
 proc repr(out:Utf8StreamOut in O, p:const SourcePosition in P)
@@ -102,6 +107,7 @@ proc repr(out:Utf8StreamOut in O, p:const SourcePosition in P)
     writeUtf8(out, ", column=");
     str(out, p.column);
     writeUtf8(out, ")");
+    return;
 }
 ```
 

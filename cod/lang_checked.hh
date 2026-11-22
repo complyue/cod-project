@@ -28,11 +28,13 @@ struct LexicalState {
     std::optional<std::set<size_t>> symbol_entry = {};
     std::map<size_t, size_t> native_symbol_entry = {};
     SymbolBorrows borrowed_symbol_entry = {};
+    AbstractSymbolTargets abstract_symbol_entry = {};
   };
   std::vector<Scope> scopes{{0, {}}};
   std::set<size_t> bound_symbols, required_symbols;
   std::map<size_t, size_t> native_symbol_owners;
   SymbolBorrows borrowed_symbol_owners;
+  AbstractSymbolTargets abstract_symbol_targets;
   std::set<size_t> bindings_available, available, initialized, present;
   struct InputFacts {
     std::set<size_t> initialized;
@@ -84,6 +86,13 @@ class ScalarChecker {
       if (other == right.end() || other->second != owner) owner.reset();
     }
     for (const auto &[symbol, owner] : right) left.try_emplace(symbol, std::nullopt);
+  }
+  static void join_abstract_symbol_targets(AbstractSymbolTargets &left, const AbstractSymbolTargets &right) {
+    std::erase_if(left, [&](const auto &entry) { return !right.contains(entry.first); });
+    for (auto &[symbol, targets] : left) {
+      const auto &other = right.at(symbol);
+      targets.insert(other.begin(), other.end());
+    }
   }
   CheckedProgram program_;
   Type exception_type(size_t category) const { return program_.exception_type(category); }
@@ -1761,6 +1770,7 @@ class ScalarChecker {
   };
   struct TypeEvidenceState {
     std::map<size_t, std::optional<EvidenceOwner>> borrowed_symbol_owners;
+    AbstractSymbolTargets abstract_symbol_targets;
     struct Definition {
       size_t method;
       std::shared_ptr<const TypeEvidenceState> declaration;
@@ -2193,7 +2203,12 @@ class ScalarChecker {
     }
     return result;
   }
-  struct ArgumentEvidence { std::optional<Type> type; std::optional<bool> read_only; std::optional<EvidenceOwner> owner; };
+  struct ArgumentEvidence {
+    std::optional<Type> type;
+    std::optional<bool> read_only;
+    std::optional<EvidenceOwner> owner;
+    NominalTargets nominal_targets = {};
+  };
   struct ArgumentPreparation {
     ArgumentMode mode = ArgumentMode::value;
     std::optional<Type> type;
@@ -2391,9 +2406,10 @@ class ScalarChecker {
     while (operand->kind == Expression::Kind::grouped) operand = operand->children.front().get();
     return operand->kind == Expression::Kind::string_literal ? operand : nullptr;
   }
-  std::vector<Type> concrete_targets(const Type &bound) const {
+  std::vector<Type> concrete_targets(const Type &bound, const NominalTargets &selected) const {
     std::vector<Type> types;
     for (size_t i = 0; i < program_.schemas.size(); ++i) {
+      if (!selected.empty() && !selected.contains(i)) continue;
       const auto &schema = program_.schemas[i];
       if (!schema.abstract_parent) continue;
       Type candidate{Type::product, schema.source->name, i};
@@ -2401,11 +2417,13 @@ class ScalarChecker {
     }
     return types;
   }
-  template <typename Validate>
-  void cover_nominal_call(const Expression &expr, const std::vector<Type> &arguments, const Validate &validate) const {
+  template <typename Operand, typename Validate>
+  void cover_nominal_call(const Expression &expr, const std::vector<Type> &arguments,
+                          const std::vector<Operand> &operands, const Validate &validate) const {
     InputPlan plan;
-    for (const auto &type : arguments) {
-      auto domain = type.kind == Type::abstract_type ? concrete_targets(type) : std::vector{type};
+    for (size_t i = 0; i < arguments.size(); ++i) {
+      const auto &type = arguments[i];
+      auto domain = type.kind == Type::abstract_type ? concrete_targets(type, operands[i].nominal_targets) : std::vector{type};
       if (domain.empty()) implementation_gap(expr.at, "unproved native coverage for abstract target '" + type_name(type) + "'");
       plan.domains.push_back(std::move(domain));
     }
@@ -2442,7 +2460,7 @@ class ScalarChecker {
       for (const auto &type : arguments) types.push_back(type.value_or(Type{Type::never}));
       std::optional<ArgumentPreparation> common;
       bool compatible = true;
-      cover_nominal_call(expr, types, [&](const auto &actual) {
+      cover_nominal_call(expr, types, evidence, [&](const auto &actual) {
         if (complete) select_nominal_method(expr, named_family(expr.text, state), actual, access, owners, state);
         auto selected_evidence = evidence;
         for (size_t i = 0; i < actual.size(); ++i)
@@ -5092,6 +5110,8 @@ class ScalarChecker {
     lexical_.bound_symbols = a_exits ? b.bound_symbols : b_exits ? a.bound_symbols : intersect(a.bound_symbols, b.bound_symbols);
     if (a_exits) lexical_.borrowed_symbol_owners = b.borrowed_symbol_owners;
     else if (!b_exits) join_symbol_borrows(lexical_.borrowed_symbol_owners, b.borrowed_symbol_owners);
+    if (a_exits) lexical_.abstract_symbol_targets = b.abstract_symbol_targets;
+    else if (!b_exits) join_abstract_symbol_targets(lexical_.abstract_symbol_targets, b.abstract_symbol_targets);
     if (a_exits) lexical_.native_symbol_owners = b.native_symbol_owners;
     else if (!b_exits) {
       const auto join_installation = [&](size_t symbol, const auto &other) {
@@ -5238,6 +5258,7 @@ class ScalarChecker {
       state.bound_symbols = *scope.symbol_entry;
       state.native_symbol_owners = scope.native_symbol_entry;
       state.borrowed_symbol_owners = scope.borrowed_symbol_entry;
+      state.abstract_symbol_targets = scope.abstract_symbol_entry;
     }
     for (const auto &[name, id] : scope.bindings) {
       state.bindings_available.erase(id);
@@ -6805,7 +6826,7 @@ class ScalarChecker {
     std::optional<LexicalState> continuation;
     std::optional<Type> result;
     auto preparation = operation.arguments;
-    cover_nominal_call(expr, arguments, [&](const auto &actual) {
+    cover_nominal_call(expr, arguments, views, [&](const auto &actual) {
       lexical_ = before;
       auto selected_views = views;
       for (size_t i = 0; i < views.size(); ++i)
@@ -7750,8 +7771,8 @@ class ScalarChecker {
     return result;
   }
   enum class GroupResult { value, target, unsupported };
-  static GroupResult group_result(const Type &type, bool view, bool nullable, bool mixed) {
-    if (nullable || (view && (text_type(type) || type.kind == Type::abstract_type)))
+  GroupResult group_result(const Type &type, bool view, bool nullable, bool mixed) const {
+    if (nullable || (view && (text_type(type) || type.kind == Type::abstract_type || program_.builder_type(type))))
       return mixed ? GroupResult::unsupported : GroupResult::target;
     if (!view || scalar_type(type) || type.kind == Type::procedure) return GroupResult::value;
     return GroupResult::unsupported;
@@ -7967,6 +7988,7 @@ class ScalarChecker {
     }
     if (right_exits) return left;
     join_symbol_borrows(left.borrowed_symbol_owners, right.borrowed_symbol_owners);
+    join_abstract_symbol_targets(left.abstract_symbol_targets, right.abstract_symbol_targets);
     auto &observed = left.observed_return;
     const auto &other_observed = right.observed_return;
     if (observed.present == false) observed.borrowed = other_observed.borrowed;
@@ -11211,6 +11233,8 @@ class ScalarChecker {
         const auto owner = state.borrowed_symbol_owners.find(id);
         view = {reference.read_only, true, false, owner == state.borrowed_symbol_owners.end()
             ? std::optional{EvidenceOwner{symbol_owner_key(id)}} : owner->second};
+        if (const auto targets = state.abstract_symbol_targets.find(id); targets != state.abstract_symbol_targets.end())
+          view.nominal_targets = targets->second;
         view.nullable = reference.nullable;
         if (!reference.nullable) target_facts.presence = TargetPresence::present;
         return type;
@@ -11234,6 +11258,11 @@ class ScalarChecker {
           const auto operand = child(0, false, true, EvidenceRead::target);
           if (operand == Type::never) return Type::never;
           state.borrowed_symbol_owners.insert_or_assign(id, state.value.owner);
+          if (type && type->kind == Type::abstract_type) {
+            if (operand && operand->kind == Type::product && program_.conforms_to(*operand, *type))
+              state.abstract_symbol_targets.insert_or_assign(id, NominalTargets{operand->identity});
+            else state.abstract_symbol_targets.erase(id);
+          }
           return Type::void_type;
         }
         if (type && type->kind == Type::native_handle) {
@@ -11319,6 +11348,7 @@ class ScalarChecker {
       }
       if (result == GroupResult::target) {
         view = {source.read_only, true, {}, source.owner, false, {}, {}, {}, source.nullable};
+        view.nominal_targets = source.nominal_targets;
         target_facts = state.target;
         target_facts.selection.footprint.clear();
       } else {
@@ -11869,6 +11899,7 @@ class ScalarChecker {
           return Type::void_type;
         }
         auto delayed = state;
+        delayed.abstract_symbol_targets.clear();
         delayed.initialization = TypeEvidenceState::InitializationCheck::suppressed;
         TypeEvidenceExits delayed_exits;
         delayed.exits = state.selections.tracking ? &delayed_exits : nullptr;
@@ -12094,6 +12125,7 @@ class ScalarChecker {
       if (header && body != Type::never) state.deferred->backedge(header, iteration.deferred_queue);
       const auto leave_iteration = [&](TypeEvidenceState &path) {
         restore_type_binding(path, state, expr.text);
+        path.abstract_symbol_targets = state.abstract_symbol_targets;
         if (reach.repeat) path.selections.forget_observations(first_iteration_observation);
         path.repeated_observations = state.repeated_observations;
       };
@@ -12104,10 +12136,12 @@ class ScalarChecker {
         if (reach.repeat) path.result.forget_observations(first_iteration_observation);
         forward_type_exit(*state.exits, path);
       }
+      const auto incoming_symbol_targets = state.abstract_symbol_targets;
       const auto otherwise = expr.children.size() == 4
           ? type_evidence(*expr.children[3], state, false, nullptr, nullptr, ExpectedTypeUse::materialization,
                           reach.empty, loop_read)
           : std::optional<Type>{Type::void_type};
+      state.abstract_symbol_targets = incoming_symbol_targets;
       const bool body_exits = !reach.body || body == Type::never;
       const bool empty_exits = !reach.empty || otherwise == Type::never;
       state = merge_reaching_evidence(std::move(state), std::move(iteration), empty_exits, body_exits);
@@ -12225,6 +12259,7 @@ class ScalarChecker {
                                          true, EvidenceRead::target);
         if (state.returns && evidence[i].type == Type::never) return Type::never;
         evidence[i].read_only = probe.value.read_only; evidence[i].owner = probe.value.owner;
+        evidence[i].nominal_targets = probe.value.nominal_targets;
         hinted_views[i] = probe.value;
         if (!hinted_targets.empty()) hinted_targets[i] = probe.target;
         if (!evidence[i].type) unresolved.emplace(i, std::move(before));
@@ -12493,7 +12528,7 @@ class ScalarChecker {
       if (!local && std::ranges::any_of(arguments, [](const auto &type) { return type.kind == Type::abstract_type; })) {
         std::optional<Type> result;
         std::optional<TypeEvidenceState> continuation;
-        cover_nominal_call(expr, arguments, [&](const auto &actual) {
+        cover_nominal_call(expr, arguments, views, [&](const auto &actual) {
           const auto id = select_nominal_method(expr, family, actual, access, owners, &state);
           const auto &method = program_.methods[id];
           const auto contract = infer_result(id, actual, retained, family.declaration ? family.declaration : &state).contract;
@@ -13025,6 +13060,7 @@ class ScalarChecker {
   TypeEvidenceState evidence_state(bool retained_only = false, const std::set<std::string> *names = nullptr,
                                   bool track_selection = false) const {
     TypeEvidenceState state;
+    state.abstract_symbol_targets = lexical_.abstract_symbol_targets;
     for (const auto &[symbol, owner] : lexical_.borrowed_symbol_owners)
       state.borrowed_symbol_owners.emplace(symbol, owner ? std::optional{EvidenceOwner{*owner}} : std::nullopt);
     state.selections.tracking = track_selection;
@@ -13269,6 +13305,7 @@ class ScalarChecker {
       result[i].type = type_evidence(*expr.children[i], state, true, nullptr, nullptr, ExpectedTypeUse::callable_result);
       result[i].read_only = state.value.read_only;
       result[i].owner = state.value.owner;
+      result[i].nominal_targets = state.value.nominal_targets;
     }
     return result;
   }
@@ -16608,6 +16645,8 @@ class ScalarChecker {
       if (target_scope != boundary)
         fail(operand.at, "reference symbol target does not outlive the installation scope");
       lexical_.borrowed_symbol_owners.insert_or_assign(id, owner);
+      if (type.kind == Type::abstract_type)
+        lexical_.abstract_symbol_targets.insert_or_assign(id, NominalTargets{source.identity});
       lexical_.bound_symbols.insert(id);
       return;
     }
@@ -16617,6 +16656,8 @@ class ScalarChecker {
       implementation_gap(expr.at, "an abstract symbol outside direct borrowed argument preparation");
     operation.type = type;
     operation.view = true;
+    if (const auto targets = lexical_.abstract_symbol_targets.find(id); targets != lexical_.abstract_symbol_targets.end())
+      operation.nominal_targets = targets->second;
     operation.read_only = mode.read_only;
     operation.owners = {borrowed_symbol_owner(id)};
     operation.initialization.emplace();
@@ -17157,6 +17198,7 @@ class ScalarChecker {
       operation.targets = source.targets;
       operation.null_sources = source.null_sources;
       operation.owners = source.owners;
+      operation.nominal_targets = source.nominal_targets;
       operation.origins = source.origins;
       operation.selection_versions = source.selection_versions;
       operation.initialization = source.initialization;
@@ -17507,7 +17549,8 @@ class ScalarChecker {
             text_literal_operand(*expr.children[i]);
         if (views[i].type != Type::never && ((evidence[i].type && *evidence[i].type != arguments[i] && !contextual_text) ||
             (evidence[i].read_only && *evidence[i].read_only != views[i].read_only) ||
-            (evidence[i].owner && checked_owner(*evidence[i].owner) != one_owner(views[i]))))
+            (evidence[i].owner && checked_owner(*evidence[i].owner) != one_owner(views[i])) ||
+            evidence[i].nominal_targets != views[i].nominal_targets))
           implementation_gap(expr.children[i]->at, "operand type/access/owner evidence depends on completion or contextual inference");
       }
       if (eager && (expr.intrinsic || !applicable_operation(expr.text, arguments, access_of(views), owners_of(views)))) {
@@ -17931,7 +17974,7 @@ class ScalarChecker {
       lexical_.live = lexical_.live && body_possible;
       refresh_input_facts(lexical_);
       lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols, lexical_.native_symbol_owners,
-                                 lexical_.borrowed_symbol_owners});
+                                 lexical_.borrowed_symbol_owners, lexical_.abstract_symbol_targets});
       operation.place = declare(expr.text, index, true, true, expr.at);
       initialize(*operation.place);
       loop_controls_.insert(*operation.place);
@@ -17954,7 +17997,7 @@ class ScalarChecker {
       lexical_ = before;
       lexical_.live = lexical_.live && empty_possible;
       lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols, lexical_.native_symbol_owners,
-                                 lexical_.borrowed_symbol_owners});
+                                 lexical_.borrowed_symbol_owners, lexical_.abstract_symbol_targets});
       const auto otherwise = expr.children.size() == 4 ? check_loop_body(*expr.children[3], instance, operations) : Type{Type::void_type};
       leave_scope();
       const auto empty_state = lexical_;
@@ -18570,6 +18613,7 @@ class ScalarChecker {
         lexical_.bound_symbols.clear();
         lexical_.native_symbol_owners.clear();
         lexical_.borrowed_symbol_owners.clear();
+        lexical_.abstract_symbol_targets.clear();
         lexical_.required_symbols.clear();
         deferred_inputs_ = before.available;
         if (proving_) for (size_t place = 0; place < catalog_storage_.size(); ++place)

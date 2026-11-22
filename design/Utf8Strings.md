@@ -1,6 +1,6 @@
 # UTF-8 strings and C string arguments
 
-Design revision 3 · 2026-11-21 · Qualified for UTF-8 text, owner-bound ADT fields and the first synchronous native argument profile.
+Design revision 4 · 2026-11-21 · Qualified for UTF-8 text, owner-bound ADT fields and the first synchronous native argument profile.
 
 ## Design authority
 
@@ -9,6 +9,8 @@ Design revision 3 · 2026-11-21 · Qualified for UTF-8 text, owner-bound ADT fie
 [D-07-STRING-FIELDS](DesignAuthorityRegistry.md#d-07-string-fields) covers the r2 baseline for [field storage and transfer policy](#storage-and-transfer-policies). [H-STRING-TRANSFER-POLICY-20261121](../CHANGELOG.md#h-string-transfer-policy-20261121) records the user’s direction and their choice to require a visible method. P-676/P-677 apply C-55, D-22-INIT-PLACES, D-22-TRANSFER and D-28-ADT. Test a field installation, replacement while a prior CString is live, cross-owner materialization, and rejection when no applicable method exists. Libraries choose their allocation strategies. The r3 prototype applies the user’s proposed `val var` to a direct text place and `init val var` to a promised first write under H-STRING-BUILD-20261121. The qualified r2 place and lifetime requirements continue.
 
 [D-07-STRING-BUILD](DesignAuthorityRegistry.md#d-07-string-build) records the user's authorization of the [string.cod prototype](StringBuilding.md) and its booter workload under [H-STRING-BUILD-20261121](../CHANGELOG.md#h-string-build-20261121). The library owns rendering policy. The UTF-8 and field contracts here supply its text and destination guarantees.
+
+[K-TEXT-PROC-RETURN](../CHANGELOG.md#k-text-proc-return) continues r3 for explicit successful completion in the field-transfer method examples.
 
 ## Source text
 
@@ -32,6 +34,7 @@ data ManifestEntry { ref filename:const String; }
 proc (<-)(dst:ManifestEntry in D, src:const String in S) -> void
     where {region D:FilenamePool, const owner S} {
     dst.filename = intern_filename(D, src);
+    return;
 }
 ```
 
@@ -49,6 +52,7 @@ data Finding = Named { name:String; } | Missing {};
 proc (<-)(init val var out:String in D, text:const String in D)
     -> void where {const owner D} {
     out = text;
+    return;
 }
 ```
 
@@ -72,6 +76,7 @@ For example, a general library can select the following policy for a writable en
 proc (<-)(dst:Entry in D, input:const String in S) -> void
     where {owner D, const owner S} {
     dst.name = make String(input) in D;
+    return;
 }
 ```
 
