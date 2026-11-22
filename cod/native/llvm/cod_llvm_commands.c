@@ -1,4 +1,5 @@
 #include "../../lang_llvm_commands_c.h"
+#include "../../lang_text_literal.h"
 
 #include <inttypes.h>
 #include <limits.h>
@@ -17,13 +18,15 @@ typedef struct cod_llvm_function {
 
 typedef struct cod_llvm_construction {
   cod_llvm_session *session;
-  LLVMTypeRef word, result;
+  LLVMTypeRef word, result, text, pointer;
   cod_llvm_function *functions;
   LLVMValueRef *slots, *arguments;
   LLVMBasicBlockRef *blocks;
   LLVMValueRef current, print, format;
   LLVMBasicBlockRef entry;
   size_t label_count, slot_count, functions_to_begin;
+  const uint8_t *source;
+  size_t source_size;
   unsigned argument_count, argument_capacity;
 } cod_llvm_construction;
 
@@ -56,8 +59,62 @@ static inline void cod_llvm_write_word(cod_llvm_construction *state, uint64_t in
 }
 
 static inline LLVMValueRef cod_llvm_read_address(cod_llvm_construction *state, uint64_t index) {
-  LLVMTypeRef pointer = LLVMPointerTypeInContext(state->session->context, 0);
-  return LLVMBuildIntToPtr(state->session->builder, cod_llvm_read_word(state, index), pointer, "");
+  return LLVMBuildIntToPtr(state->session->builder, cod_llvm_read_word(state, index), state->pointer, "");
+}
+
+static LLVMValueRef cod_llvm_text_member(cod_llvm_construction *state, uint64_t slot, unsigned member) {
+  const LLVMBuilderRef builder = state->session->builder;
+  LLVMValueRef descriptor = cod_llvm_read_address(state, slot);
+  LLVMValueRef address = LLVMBuildStructGEP2(builder, state->text, descriptor, member, "");
+  return LLVMBuildLoad2(builder, member ? state->word : state->pointer, address, "");
+}
+
+static LLVMValueRef cod_llvm_text_global(cod_llvm_construction *state, LLVMValueRef value) {
+  LLVMValueRef global = LLVMAddGlobal(state->session->module, LLVMTypeOf(value), "text");
+  LLVMSetInitializer(global, value);
+  LLVMSetGlobalConstant(global, true);
+  LLVMSetLinkage(global, LLVMPrivateLinkage);
+  return global;
+}
+
+static LLVMValueRef cod_llvm_text_literal(cod_llvm_construction *state, uint64_t first, uint64_t past) {
+  if (!state->source || past > state->source_size || first > past || past - first < 2 ||
+      state->source[first] != '"' || state->source[past - 1] != '"') return NULL;
+  const size_t width = (size_t)(past - first) - 2;
+  uint8_t *bytes = malloc(width ? width : 1);
+  if (!bytes) return NULL;
+  size_t length;
+  if (cod_decode_text_literal(state->source + first + 1, width, bytes, &length)) {
+    free(bytes);
+    return NULL;
+  }
+  LLVMValueRef contents = LLVMConstStringInContext2(state->session->context, (const char *)bytes, length, false);
+  free(bytes);
+  LLVMValueRef fields[] = {cod_llvm_text_global(state, contents), cod_llvm_word(state, length), cod_llvm_word(state, length + 1)};
+  return cod_llvm_text_global(state, LLVMConstNamedStruct(state->text, fields, 3));
+}
+
+static LLVMValueRef cod_llvm_runtime_call(cod_llvm_construction *state, const char *name, LLVMTypeRef result,
+                                         LLVMTypeRef *parameters, LLVMValueRef *arguments, unsigned count) {
+  LLVMModuleRef module = state->session->module;
+  LLVMTypeRef type = LLVMFunctionType(result, parameters, count, false);
+  LLVMValueRef function = LLVMGetNamedFunction(module, name);
+  if (!function) function = LLVMAddFunction(module, name, type);
+  return LLVMBuildCall2(state->session->builder, type, function, arguments, count, "");
+}
+
+/* This object reports byte positions directly in its own entry function.
+   The shared runtime's optional source-context hook has no prefix here. */
+static void cod_llvm_supply_exception_site(cod_llvm_construction *state) {
+  LLVMModuleRef module = state->session->module;
+  if (LLVMGetNamedFunction(module, "cod_lang_exception_site")) return;
+  LLVMTypeRef type = LLVMFunctionType(state->pointer, &state->word, 1, false);
+  LLVMValueRef function = LLVMAddFunction(module, "cod_lang_exception_site", type);
+  LLVMBuilderRef builder = state->session->builder;
+  LLVMBasicBlockRef current = LLVMGetInsertBlock(builder);
+  LLVMPositionBuilderAtEnd(builder, LLVMAppendBasicBlockInContext(state->session->context, function, ""));
+  LLVMBuildRet(builder, LLVMConstNull(state->pointer));
+  LLVMPositionBuilderAtEnd(builder, current);
 }
 
 static inline bool cod_llvm_local_block(cod_llvm_construction *state, uint64_t index) {
@@ -229,6 +286,54 @@ static inline bool cod_llvm_construct_command(cod_llvm_construction *state, cod_
       cod_llvm_write_word(state, a, LLVMBuildPtrToInt(builder, address, state->word, ""));
       return true;
     }
+    case COD_LLVM_TEXT_LITERAL: {
+      if (a >= slots) return false;
+      LLVMValueRef descriptor = cod_llvm_text_literal(state, b, c);
+      if (!descriptor) return false;
+      cod_llvm_write_word(state, a, LLVMConstPtrToInt(descriptor, state->word));
+      return true;
+    }
+    case COD_LLVM_TEXT_SIZE:
+      if (a >= slots || b >= slots) return false;
+      cod_llvm_write_word(state, a, cod_llvm_text_member(state, b, 1));
+      return true;
+    case COD_LLVM_TEXT_BYTE: {
+      if (a >= slots || b >= slots || c >= slots) return false;
+      LLVMTypeRef byte = LLVMInt8TypeInContext(state->session->context);
+      LLVMValueRef data = cod_llvm_text_member(state, b, 0);
+      LLVMValueRef index = cod_llvm_read_word(state, c);
+      LLVMValueRef address = LLVMBuildGEP2(builder, byte, data, &index, 1, "");
+      LLVMValueRef value = LLVMBuildLoad2(builder, byte, address, "");
+      cod_llvm_write_word(state, a, LLVMBuildZExt(builder, value, state->word, ""));
+      return true;
+    }
+    case COD_LLVM_TEXT_CONTAINS_NUL: {
+      if (a >= slots || b >= slots) return false;
+      LLVMTypeRef integer = LLVMInt32TypeInContext(state->session->context);
+      LLVMTypeRef types[] = {state->pointer, integer, state->word};
+      LLVMValueRef args[] = {cod_llvm_text_member(state, b, 0), LLVMConstNull(integer), cod_llvm_text_member(state, b, 1)};
+      LLVMValueRef found = cod_llvm_runtime_call(state, "memchr", state->pointer, types, args, 3);
+      LLVMValueRef contains = LLVMBuildIsNotNull(builder, found, "");
+      cod_llvm_write_word(state, a, LLVMBuildZExt(builder, contains, state->word, ""));
+      return true;
+    }
+    case COD_LLVM_TEXT_ALLOCATE: {
+      if (a >= slots || b >= slots || c >= slots) return false;
+      cod_llvm_supply_exception_site(state);
+      LLVMTypeRef types[] = {state->pointer, state->pointer};
+      LLVMValueRef args[] = {cod_llvm_slot(state, c), cod_llvm_read_address(state, b)};
+      LLVMValueRef text = cod_llvm_runtime_call(state, "cod_lang_lexical_text_create", state->pointer, types, args, 2);
+      cod_llvm_write_word(state, a, LLVMBuildPtrToInt(builder, text, state->word, ""));
+      return true;
+    }
+    case COD_LLVM_TEXT_RELEASE: {
+      if (a >= slots) return false;
+      cod_llvm_supply_exception_site(state);
+      LLVMValueRef allocations = LLVMBuildLoad2(builder, state->pointer, cod_llvm_slot(state, a), "");
+      cod_llvm_runtime_call(state, "cod_lang_lexical_allocations_release",
+                            LLVMVoidTypeInContext(state->session->context), &state->pointer, &allocations, 1);
+      return true;
+    }
     case COD_LLVM_COPY:
     case COD_LLVM_ADDRESS:
     case COD_LLVM_LOAD_TARGET:
@@ -305,8 +410,8 @@ static inline cod_llvm_command cod_llvm_word_record(const void *records, size_t 
    Construct one checked program in a fresh LLVM session. Every declared
    function has a body, including the entry. The caller releases the session
    on failure. Object emission verifies complete blocks and the resulting IR. */
-bool cod_llvm_construct_word_records(cod_llvm_session *session, const void *records,
-    size_t count, size_t labels, size_t slots) {
+bool cod_llvm_construct_source_records(cod_llvm_session *session, const void *records,
+    size_t count, size_t labels, size_t slots, const uint8_t *source, size_t source_size) {
   if (!session || !session->builder || !session->context || !session->module ||
       LLVMGetFirstFunction(session->module) || !records || !count || count > PTRDIFF_MAX / sizeof(cod_llvm_command) ||
       !labels || !slots) return false;
@@ -319,10 +424,13 @@ bool cod_llvm_construct_word_records(cod_llvm_session *session, const void *reco
   }
   cod_llvm_construction state = {
     .session = session, .word = LLVMInt64TypeInContext(session->context),
-    .label_count = labels, .slot_count = slots, .argument_capacity = arity
+    .label_count = labels, .slot_count = slots, .argument_capacity = arity,
+    .pointer = LLVMPointerTypeInContext(session->context, 0), .source = source, .source_size = source_size
   };
   LLVMTypeRef fields[] = {state.word, state.word, state.word};
   state.result = LLVMStructTypeInContext(session->context, fields, 3, 0);
+  fields[0] = state.pointer;
+  state.text = LLVMStructTypeInContext(session->context, fields, 3, 0);
   state.functions = calloc(labels, sizeof(*state.functions));
   state.blocks = calloc(labels, sizeof(*state.blocks));
   state.slots = calloc(slots, sizeof(*state.slots));
@@ -369,6 +477,11 @@ done:
   free(state.blocks);
   free(state.functions);
   return success;
+}
+
+bool cod_llvm_construct_word_records(cod_llvm_session *session, const void *records,
+    size_t count, size_t labels, size_t slots) {
+  return cod_llvm_construct_source_records(session, records, count, labels, slots, NULL, 0);
 }
 
 bool cod_llvm_construct_words(cod_llvm_session *session, const cod_llvm_command *commands,

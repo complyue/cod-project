@@ -41,14 +41,17 @@ static cod_llvm_session *llvm_session(cod_native_LLVMSession_borrow handle) {
 
 cod_native_status cod_native_llvm_construct_impl(cod_native_LLVMSession_borrow resource,
                                                 cod_native_llvm_construct_view1 commands,
+                                                cod_native_llvm_construct_view2 source,
                                                 uint64_t used, uint64_t labels, uint64_t slots, uint8_t *status) {
   cod_llvm_session *session = llvm_session(resource);
   if (!session) return COD_NATIVE_BOUNDARY_ERROR;
-  if (used > commands.count || (uint64_t)(size_t)labels != labels || (uint64_t)(size_t)slots != slots) {
+  if (used > commands.count || (uint64_t)(size_t)labels != labels || (uint64_t)(size_t)slots != slots ||
+      (uint64_t)(size_t)source.count != source.count) {
     *status = llvm_invalid_command_range;
     return COD_NATIVE_OK;
   }
-  *status = cod_llvm_construct_word_records(session, commands.base, (size_t)used, (size_t)labels, (size_t)slots)
+  *status = cod_llvm_construct_source_records(session, commands.base, (size_t)used, (size_t)labels, (size_t)slots,
+                                              source.base, (size_t)source.count)
       ? llvm_ok : llvm_construction_failed;
   return COD_NATIVE_OK;
 }

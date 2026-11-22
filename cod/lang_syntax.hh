@@ -3,10 +3,9 @@
 
 #include "lang_source.hh"
 
-#include <cod_utf8.h>
+#include "lang_text_literal.h"
 #include <algorithm>
 #include <cctype>
-#include <charconv>
 #include <compare>
 #include <filesystem>
 #include <map>
@@ -749,38 +748,12 @@ class Parser {
     return result;
   }
   static std::string text_literal(const Token &token) {
-    std::string result;
-    const auto raw = std::string_view(token.text);
-    for (size_t i = 0; i < raw.size(); ++i) {
-      const auto byte = raw[i];
-      if (byte == '\r') fail(token.at, "newline in text literal");
-      if (byte != '\\') { result.push_back(byte); continue; }
-      switch (raw[++i]) {
-      case '"': case '\\': result.push_back(raw[i]); break;
-      case 'n': result.push_back('\n'); break;
-      case 'r': result.push_back('\r'); break;
-      case 't': result.push_back('\t'); break;
-      case '0': result.push_back('\0'); break;
-      case 'u': {
-        if (i + 1 >= raw.size() || raw[i + 1] != '{') fail(token.at, "expected '{' in Unicode scalar escape");
-        const auto first = i + 2;
-        const auto close = raw.find('}', first);
-        if (close == raw.npos) fail(token.at, "unterminated Unicode scalar escape");
-        uint32_t value = 0;
-        const auto [end, status] = std::from_chars(raw.data() + first, raw.data() + close, value, 16);
-        if (status != std::errc{} || end != raw.data() + close || !cod_unicode_scalar(value))
-          fail(token.at, "invalid Unicode scalar escape");
-        uint8_t bytes[4];
-        const auto width = cod_utf8_encode(value, bytes);
-        result.append(reinterpret_cast<const char *>(bytes), width);
-        i = close;
-        break;
-      }
-      default: fail(token.at, "unknown text literal escape");
-      }
-    }
-    if (!cod_utf8_valid(reinterpret_cast<const uint8_t *>(result.data()), result.size()))
-      fail(token.at, "invalid UTF-8 in text literal");
+    std::string result(token.text.size(), '\0');
+    std::size_t written = 0;
+    if (const auto *error = cod_decode_text_literal(reinterpret_cast<const uint8_t *>(token.text.data()),
+            token.text.size(), reinterpret_cast<uint8_t *>(result.data()), &written))
+      fail(token.at, error);
+    result.resize(written);
     return result;
   }
   void resource_selection(Form &form, bool symbolic) {

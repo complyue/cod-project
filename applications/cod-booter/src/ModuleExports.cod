@@ -41,13 +41,18 @@ export func abstract_type_export() -> u8 { return 10u8; }
 export func builder_storage_export() -> u8 { return 11u8; }
 export func lexical_builder_export() -> u8 { return 13u8; }
 export func lexical_result_export() -> u8 { return 14u8; }
+export func text_size_export() -> u8 { return 15u8; }
+export func text_byte_export() -> u8 { return 16u8; }
 export func ordinary_callable_shape() -> u8 { return 1u8; }
 export func print_export_identity() -> u64 { return 0u64; }
 export func exception_root_identity() -> u64 { return 0u64; }
 export func error_root_identity() -> u64 { return 11u64; }
 export func null_pointer_identity() -> u64 { return 4u64; }
+export func out_of_memory_identity() -> u64 { return 1u64; }
 export func missing_return_identity() -> u64 { return 5u64; }
+export func index_out_of_bounds_identity() -> u64 { return 8u64; }
 export func unexpected_case_identity() -> u64 { return 9u64; }
+export func type_assertion_failed_identity() -> u64 { return 10u64; }
 
 export func unproved_module_exports() -> u8 { return 1u8; }
 export func missing_module_export() -> u8 { return 2u8; }

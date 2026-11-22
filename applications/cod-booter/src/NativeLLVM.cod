@@ -1,5 +1,6 @@
 using "std:exceptions" Exception;
 using "NativeCommands.cod" NativeCommands;
+using "SourceStorage.cod" SourceBytes;
 
 export handle type LLVMSession;
 export symbol @llvmSession :own handle LLVMSession;
@@ -7,7 +8,8 @@ export data LLVMOpenException <: Exception { status:u8; }
 
 proc "C" LLVMSession() throws LLVMOpenException;
 export proc "C" llvm_construct(handle session:LLVMSession in L, ref rows:const NativeCommands in W,
-                               used:u64, labels:u64, slots:u64) -> u8 where {owner L, const owner W};
+                               ref source:const SourceBytes in S, used:u64, labels:u64, slots:u64) -> u8
+    where {owner L, const owner W, const owner S};
 export proc "C" llvm_verify(handle session:LLVMSession in L) -> u8 where {const owner L};
 export proc "C" llvm_emit_object(handle session:LLVMSession in L, output:const CString in A) -> u8
     where {owner L, const owner A};

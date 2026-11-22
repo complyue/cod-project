@@ -274,6 +274,14 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: readonly field is initialized more than once\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 33)
         fputs(": error: product construction is missing a field initializer\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 34)
+        fputs(": error: operation requires immutable String or CString text\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 35)
+        fputs(": error: argument or binding requires a proved CString\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 36)
+        fputs(": error: text contains an interior NUL and cannot supply CString\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 37)
+        fputs(": error: this text operation is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 12)
         fputs(": error: ref argument requires a proven non-null target\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 13)
