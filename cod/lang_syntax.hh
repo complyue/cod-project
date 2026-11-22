@@ -440,6 +440,7 @@ struct Form {
   bool explicit_alias = false;
   bool using_symbol = false;
   bool exporting = false;
+  bool owning_handle_symbol = false;
   bool conversion = false;
   bool operation = false;
   bool alias_operation = false;
@@ -471,7 +472,7 @@ struct Form {
   SourceSpan span = {};
 
   bool publishes_definition() const {
-    return exporting && (kind == Kind::data || kind == Kind::native_handle_type || kind == Kind::array || kind == Kind::enumeration ||
+    return exporting && (kind == Kind::symbol || kind == Kind::data || kind == Kind::native_handle_type || kind == Kind::array || kind == Kind::enumeration ||
                          kind == Kind::function || kind == Kind::procedure);
   }
   bool requires_explicit_return() const { return kind == Kind::procedure && !implicit_scope && !supplied_scope; }
@@ -2179,7 +2180,7 @@ public:
         const bool named_type = native_handle_head() || (is("data") && (next == TokenKind::identifier || next == TokenKind::string)) ||
             ((is("array") || is("enum")) && next == TokenKind::identifier);
         const bool named_callable = (is("func") || is("function") || is("proc") || is("procedure")) && !callable_binding();
-        if (is("import") || named_type || named_callable) {
+        if (is("import") || (is("symbol") && next == TokenKind::symbol) || named_type || named_callable) {
           form->exporting = true;
         } else {
           form->kind = Form::Kind::export_resource;
@@ -2206,16 +2207,21 @@ public:
             const auto token = peek().kind == TokenKind::symbol ? name(TokenKind::symbol) : ordinary_name();
             declaration->name = token.text;
             declaration->at = token.at;
+            declaration->symbolic = true;
+            declaration->exporting = form->exporting;
             if (region_symbol) {
               declaration->result_type = region_annotation(false);
             } else {
               if (!is("::") && !is(":")) fail(peek().at, "a symbol declaration requires an explicit type");
               type_separator();
+              declaration->owning_handle_symbol = ownership_qualifier("handle");
+              if (declaration->owning_handle_symbol) { expect("own"); expect("handle"); }
               declaration->result_type = parse_type();
             }
             const auto owner = take("in") ? ordinary_name().text : std::string{};
             declarations.emplace_back(declaration.get(), owner);
             append(std::move(declaration));
+            if (form->exporting && is(",")) fail(peek().at, "export requires a single named symbol declaration");
           } while (take(","));
           if (take("where")) {
             expect("{"); expect("region");

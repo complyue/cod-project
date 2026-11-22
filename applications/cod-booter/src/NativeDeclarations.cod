@@ -9,18 +9,19 @@ using "ParserStorage.cod" {
     typed_name_node, val_binding_node, here_call_node, call_node, full_scope_node, continue_node,
     break_node, return_node, narrow_integer_node, is_function, owner_clause_node,
     result_clause_node, throws_clause_node, field_access_node, import_node, local_resource_name,
-    retained_parent_parameter,
+    retained_parent_parameter, native_symbol_declaration_node, native_effect_node,
 };
 using "NameResolution.cod" {
     NameBindings, NameWork, first_item, signature_head, signature_clause, record_declaration,
     c_handle_type, handle_binding, formal_binding, local_binding, loop_index, enclosing_callable,
     record_type, array_type, c_constructor, c_operation, c_entry, callable_binding, owner_binding,
-    ordinary_selection, symbolic_selection, definition_name, native_scalar, builtin_bool,
+    ordinary_selection, symbolic_selection, native_symbol_binding, definition_name, native_scalar, builtin_bool,
     builtin_u8, builtin_u32, builtin_u64, builtin_i64, builtin_void,
 };
 using "ModuleExports.cod" {
     SelectedExports, same_name, ModuleExports, exception_type_export, exception_root_identity,
     native_handle_export, record_export, array_export, nominal_exception_export, callable_export, enum_export,
+    symbol_export,
 };
 using "ModuleExportStorage.cod" { ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header, enum_type };
 using "DeclarationTypes.cod" { type_module, type_identity };
@@ -229,6 +230,13 @@ func check_type_declaration(nodes:const ExprNodes in N, names:const NameBindings
                             report:NativeDeclarationResult in R) -> void
     where {const owner N, const owner B, const owner E, owner R} {
     val kind <- nodes[form].kind;
+    if (kind == native_symbol_declaration_node()) {
+        val marker <- nodes[form].right;
+        if (!is_owning_handle(nodes, names, selected, marker)) {
+            reject_declaration(report, marker, invalid_native_owner_type());
+        } else {};
+        return;
+    } else {};
     if (kind == c_handle_type_node()) {
         val owner <- nodes[form].right;
         if (owner != no_node() && !is_owning_handle(nodes, names, selected, owner)) {
@@ -850,15 +858,31 @@ func check_handle_local(nodes:const ExprNodes in N, names:const NameBindings in 
     } else {};
 }
 
+func native_symbol_matches(nodes:const ExprNodes in N, names:const NameBindings in B,
+                           selected:const SelectedExports in E, name:u64, marker:u64) -> bool
+    where {const owner N, const owner B, const owner E} {
+    val declaration <- names[name].declaration;
+    if (!is_owning_handle(nodes, names, selected, marker)) return false;
+    if (names[name].kind == native_symbol_binding())
+        return same_native_type(names, selected, nodes[declaration].right, marker);
+    return names[name].kind == symbolic_selection() && selected[declaration].kind == symbol_export() &&
+        selected[declaration].shape == owning_handle() && selected[declaration].owner_module == type_module(names, selected, marker, 0u64) &&
+        selected[declaration].owner_identity == type_identity(names, selected, marker);
+}
+
 func check_handle_expressions(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
                               work:NameWork in W, used:u64, emit_object:bool, report:NativeDeclarationResult in R) -> bool
     where {const owner N, const owner B, const owner E, owner W, owner R} {
     val initializer <- no_node();
     for (at in 0u64 .. used) {
-        if (nodes[at].kind == owning_handle_local_node()) {
+        if (nodes[at].kind == owning_handle_local_node() || nodes[at].kind == native_effect_node()) {
             initializer <- ungrouped(nodes, nodes[at].right);
             if (nodes[initializer].kind != make_own_handle_node()) {
                 reject_declaration(report, initializer, invalid_handle_initializer());
+                return false;
+            } else {};
+            if (nodes[at].kind == native_effect_node() && !native_symbol_matches(nodes, names, selected, nodes[at].left, nodes[initializer].left)) {
+                reject_declaration(report, initializer, mismatched_handle_type());
                 return false;
             } else {};
             work[initializer].active <- at;
@@ -1408,6 +1432,14 @@ func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in
     (exports[at].shape <- 0u8):void;
     if (kind == ordinary_selection() || kind == symbolic_selection())
         return publish_selection(selected, target, exports, at);
+    if (kind == native_symbol_binding()) {
+        val marker <- nodes[target].right;
+        exports[at].kind <- symbol_export();
+        exports[at].shape <- owning_handle();
+        exports[at].owner_module <- type_module(names, selected, marker, publication.module_identity);
+        exports[at].owner_identity <- type_identity(names, selected, marker);
+        return true;
+    } else {};
     if (kind == c_handle_type()) {
         ref root = make NativeOwnerType { origin <- 0u64; identity <- 0u64; };
         handle_owner(nodes, names, selected, name, root);

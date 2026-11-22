@@ -155,6 +155,14 @@ export func symbol_word(source:const SourceBytes in S, token:const Token in T) -
         source[first + 4u64] == 111u8 && source[first + 5u64] == 108u8; # o l
 }
 
+export func effect_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val at <- token.first;
+    return identifier_width(token, 6u64) && source[at] == 101u8 && source[at + 1u64] == 102u8 &&
+        source[at + 2u64] == 102u8 && source[at + 3u64] == 101u8 &&
+        source[at + 4u64] == 99u8 && source[at + 5u64] == 116u8;
+}
+
 export func proc_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     if (!identifier_width(token, 4u64)) return false;
@@ -313,8 +321,7 @@ export func reserved_lexical_binder(source:const SourceBytes in S, token:const T
             source[at + 3u64] == 101u8 && source[at + 4u64] == 102u8;
     } else {};
     if (width == 6u64)
-        return (source[at] == 101u8 && source[at + 1u64] == 102u8 && source[at + 2u64] == 102u8 && # effect
-            source[at + 3u64] == 101u8 && source[at + 4u64] == 99u8 && source[at + 5u64] == 116u8) ||
+        return effect_word(source, token) ||
             (source[at] == 103u8 && source[at + 1u64] == 108u8 && source[at + 2u64] == 111u8 && # global
             source[at + 3u64] == 98u8 && source[at + 4u64] == 97u8 && source[at + 5u64] == 108u8) ||
             (source[at] == 115u8 && source[at + 1u64] == 99u8 && source[at + 2u64] == 97u8 && # scalar

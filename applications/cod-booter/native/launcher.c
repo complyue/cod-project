@@ -149,7 +149,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
     else if (diagnostic->stage == 3 && diagnostic->code == 50)
         fputs(": error: a function cannot call a native handle constructor\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 52)
-        fputs(": error: owning native construction requires a lexical own handle binding, and a borrowed initializer requires a live handle\n", stderr);
+        fputs(": error: owning native construction requires fresh acquisition in a lexical own handle initializer or owning effect. "
+              "A borrowed initializer requires a live handle\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 53)
         fputs(": error: native handle CType does not match the required type\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 54)

@@ -24,9 +24,11 @@ struct LexicalState {
     std::map<std::string, size_t> bindings;
     bool declarations = true;
     std::optional<std::set<size_t>> symbol_entry = {};
+    std::map<size_t, size_t> native_symbol_entry = {};
   };
   std::vector<Scope> scopes{{0, {}}};
   std::set<size_t> bound_symbols, required_symbols;
+  std::map<size_t, size_t> native_symbol_owners;
   std::set<size_t> bindings_available, available, initialized, present;
   struct InputFacts {
     std::set<size_t> initialized;
@@ -225,6 +227,7 @@ class ScalarChecker {
   std::map<size_t, std::vector<size_t>> scope_storage_;
   std::map<size_t, size_t> native_resource_owners_, native_owner_scopes_;
   std::set<size_t> scope_native_owner_places_;
+  std::map<size_t, size_t> incoming_native_symbol_owners_;
   std::map<const Expression *, size_t> checked_scope_owners_;
   bool proving_ = false;
   bool validating_ = false;
@@ -384,8 +387,12 @@ class ScalarChecker {
   bool const_owner(size_t owner) const {
     return native_owner_scopes_.contains(owner) || const_native_owner(owner);
   }
+  size_t owner_lifetime_scope(size_t owner) const {
+    const auto found = native_owner_scopes_.find(owner);
+    return found == native_owner_scopes_.end() ? owner : found->second;
+  }
   bool owner_alive(size_t owner) const {
-    if (const auto found = native_owner_scopes_.find(owner); found != native_owner_scopes_.end()) owner = found->second;
+    owner = owner_lifetime_scope(owner);
     return external_owner(owner) ||
         std::any_of(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &scope) { return scope.id == owner; });
   }
@@ -4205,7 +4212,8 @@ class ScalarChecker {
   void require_borrow_lifetime(const CheckedOperation &view, const Location &at, bool prepared) const {
     require_live_view(view, at);
     if (prepared) for (const auto owner : view.owners) if (!external_owner(owner)) {
-      const auto scope = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) { return entry.id == owner; });
+      const auto lifetime = owner_lifetime_scope(owner);
+      const auto scope = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) { return entry.id == lifetime; });
       const auto cleanup = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) { return entry.id == cleanup_scope_; });
       if (scope > cleanup) fail(at, "deferred borrowed argument does not outlive its cleanup scope");
     }
@@ -4947,6 +4955,23 @@ class ScalarChecker {
     lexical_.bindings_available = a_exits ? b.bindings_available : b_exits ? a.bindings_available : intersect(a.bindings_available, b.bindings_available);
     lexical_.available = a_exits ? b.available : b_exits ? a.available : intersect(a.available, b.available);
     lexical_.bound_symbols = a_exits ? b.bound_symbols : b_exits ? a.bound_symbols : intersect(a.bound_symbols, b.bound_symbols);
+    if (a_exits) lexical_.native_symbol_owners = b.native_symbol_owners;
+    else if (!b_exits) {
+      const auto join_installation = [&](size_t symbol, const auto &other) {
+        auto &owner = lexical_.native_symbol_owners[symbol];
+        const auto found = other.find(symbol);
+        const auto alternative = found == other.end() ? 0 : found->second;
+        if (owner == alternative) return;
+        const auto lifetime = std::max(owner_lifetime_scope(owner), owner_lifetime_scope(alternative));
+        owner = next_scope_++;
+        native_owner_scopes_.emplace(owner, lifetime);
+      };
+      for (const auto &[symbol, owner] : a.native_symbol_owners) join_installation(symbol, b.native_symbol_owners);
+      for (const auto &[symbol, owner] : b.native_symbol_owners) if (!a.native_symbol_owners.contains(symbol)) {
+        lexical_.native_symbol_owners.emplace(symbol, owner);
+        join_installation(symbol, a.native_symbol_owners);
+      }
+    }
     lexical_.required_symbols.insert(b.required_symbols.begin(), b.required_symbols.end());
     lexical_.initialized = a_exits ? b.initialized : b_exits ? a.initialized : intersect(a.initialized, b.initialized);
     lexical_.returned = a_exits ? b.returned : a.returned;
@@ -5072,7 +5097,10 @@ class ScalarChecker {
   }
   void retire_scope(LexicalState &state) {
     const auto &scope = state.scopes.back();
-    if (scope.symbol_entry) state.bound_symbols = *scope.symbol_entry;
+    if (scope.symbol_entry) {
+      state.bound_symbols = *scope.symbol_entry;
+      state.native_symbol_owners = scope.native_symbol_entry;
+    }
     for (const auto &[name, id] : scope.bindings) {
       state.bindings_available.erase(id);
       state.returned.selection_bindings.erase(id);
@@ -5619,6 +5647,14 @@ class ScalarChecker {
     const auto &initializer = ungrouped_expression(*binding.children.front());
     if (initializer.kind != Expression::Kind::make_owned_handle)
       implementation_gap(initializer.at, "an owned C handle initializer other than direct acquisition");
+    return initializer;
+  }
+  static const Expression &native_effect_initializer(const Expression &effect) {
+    if (effect.kind != Expression::Kind::effect || effect.binding != "<-" || effect.children.empty())
+      fail(effect.at, "an owning native handle effect requires '<-' and fresh 'make own handle' construction");
+    const auto &initializer = ungrouped_expression(*effect.children.front());
+    if (initializer.kind != Expression::Kind::make_owned_handle)
+      fail(initializer.at, "an owning native handle effect requires fresh 'make own handle' construction");
     return initializer;
   }
   size_t select_native_constructor(const Type &declared, const Type &constructed, const Expression &expr) const {
@@ -10892,11 +10928,30 @@ class ScalarChecker {
       if (state.validating_body && state.method && program_.methods[*state.method].source->kind == Form::Kind::function)
         fail(expr.at, "a function cannot access dynamic bindings");
       const auto id = resolve_symbol(expr.text, expr.at, symbol_shadowed(expr.text, state), state.method);
-      return program_.symbols[id].type;
+      const auto &type = program_.symbols[id].type;
+      if (type && type->kind == Type::native_handle) {
+        if (state.required && read != EvidenceRead::native_loan)
+          fail(expr.at, "an owning native symbol can only supply a checked handle loan");
+        view = {false, true, false};
+        return native_handle_type(*type, false);
+      }
+      return type;
     }
     case K::procedure_effect: case K::effect: {
       if (state.validating_body && state.method && program_.methods[*state.method].source->kind == Form::Kind::function)
         fail(expr.at, "a function cannot access dynamic bindings");
+      if (state.complete) {
+        const auto id = resolve_symbol(expr.text, expr.at, symbol_shadowed(expr.text, state), state.method);
+        const auto &type = program_.symbols[id].type;
+        if (type && type->kind == Type::native_handle) {
+          const auto &initializer = native_effect_initializer(expr);
+          const Type declared{Type::c_type_marker, type->name, type->identity};
+          const auto constructed = evidence_annotation(*initializer.annotation, state);
+          if (!state.required && constructed.kind != Type::c_type_marker) return {};
+          const auto &constructor = program_.native_constructors[select_native_constructor(declared, constructed, initializer)];
+          return native_constructor_evidence(constructor, initializer, state) ? Type{Type::void_type} : Type{Type::never};
+        }
+      }
       const auto operand = expr.children.empty() ? std::optional<Type>{} : child(0);
       if (operand && operand->kind == Type::procedure) note_type_allocation(state);
       return operand == Type::never ? Type{Type::never} : Type{Type::void_type};
@@ -13334,7 +13389,11 @@ class ScalarChecker {
     }
     if (!symbols.empty() && checking_method_ && checking_method_->source->kind == Form::Kind::function)
       fail(at, "a function cannot capture dynamic bindings");
-    for (const auto symbol : symbols) require_symbol(lexical_, symbol, at);
+    for (const auto symbol : symbols) {
+      const auto &type = program_.symbols[symbol].type;
+      if (type && type->kind == Type::native_handle) fail(at, "an owning native symbol must be used through a direct procedure call");
+      require_symbol(lexical_, symbol, at);
+    }
     if (!captures.empty() || !symbols.empty()) note_abrupt(at, {exception_id(ExceptionCategory::out_of_memory)});
     CheckedOperation value; value.type = program_.callables[id].type; value.callable = id; value.callable_captures = std::move(captures);
     return value;
@@ -15953,8 +16012,7 @@ class ScalarChecker {
     const auto &form = *native.contract.source;
     if (expr.has_here_body() || expr.children.size() != native.inputs.size())
       fail(expr.at, "arguments do not match the C provider declaration");
-    if (&expr == prepared_call_ || delayed_)
-      implementation_gap(expr.at, "deferred invocation of a C provider");
+    const bool prepared = &expr == prepared_call_;
     CheckedOperation operation;
     operation.type = *native.contract.result.type;
     operation.native_call = id;
@@ -15971,14 +16029,18 @@ class ScalarChecker {
       const auto &input = native.inputs[i];
       if (input.type.kind == Type::c_type_marker) {
         const auto value = check_provider_loan(operand, input.type, form.owner_parameters[*input.owner], instance, operations);
+        operation.arguments.push_back({ArgumentMode::borrowed_handle, value.type});
         if (value.type == Type::never) {
           operation.type = Type::never;
           lexical_.live = false;
           continue;
         }
+        require_borrow_lifetime(value, operand.at, prepared);
         bind(*input.owner, one_owner(value), operand.at);
       } else {
         const bool array = input.type.kind == Type::array;
+        if (array && (prepared || delayed_)) implementation_gap(operand.at, "deferred C array loan");
+        operation.arguments.push_back({array ? ArgumentMode::borrowed_ref : ArgumentMode::value, input.type});
         const auto type = check(operand, instance, operations, !array);
         if (type == Type::never) {
           operation.type = Type::never;
@@ -16079,6 +16141,33 @@ class ScalarChecker {
       note_abrupt(initializer.at, {constructor.failure->identity, exception_id(ExceptionCategory::out_of_memory),
                                    exception_id(ExceptionCategory::region_capacity_exceeded)});
     return completes;
+  }
+  size_t native_symbol_owner(const LexicalState &state, size_t symbol) {
+    if (const auto installed = state.native_symbol_owners.find(symbol); installed != state.native_symbol_owners.end())
+      return installed->second;
+    const auto [incoming, first] = incoming_native_symbol_owners_.try_emplace(symbol, next_scope_);
+    if (first) native_owner_scopes_.emplace(next_scope_++, 0);
+    return incoming->second;
+  }
+  void check_native_effect(const Expression &expr, const Type &type, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation) {
+    if (!instance) fail(expr.at, "an owning native effect requires a procedure scope");
+    const auto &initializer = native_effect_initializer(expr);
+    const Type marker{Type::c_type_marker, type.name, type.identity};
+    const auto constructed = resolve_annotation(*initializer.annotation, instance);
+    CheckedOperation::NativeAcquisition acquisition{select_native_constructor(marker, constructed, initializer), &initializer};
+    const auto completes = prepare_native_acquisition(acquisition, instance, operations);
+    operation.native_acquisition = std::move(acquisition);
+    operation.operand_type = type;
+    operation.type = completes ? Type{Type::void_type} : Type{Type::never};
+    if (!completes || !lexical_.live) return;
+    const auto lifetime = std::find_if(lexical_.scopes.rbegin(), lexical_.scopes.rend(),
+        [](const auto &scope) { return scope.symbol_entry.has_value(); });
+    const auto scope = lifetime == lexical_.scopes.rend() ? cleanup_scope_ : lifetime->id;
+    const auto owner = next_scope_++;
+    native_owner_scopes_.emplace(owner, scope);
+    lexical_.native_symbol_owners.insert_or_assign(*operation.symbol, owner);
+    lexical_.bound_symbols.insert(*operation.symbol);
   }
   CheckedOperation check_attached_native_acquisition(const Expression &expr, CheckedInstance *instance,
                                                      std::map<const Expression *, CheckedOperation> &operations) {
@@ -16925,10 +17014,24 @@ class ScalarChecker {
           lexical_.lookup(expr.text).has_value() || active_here(expr.text) || query_environment().symbol_shadows.contains(expr.text),
           instance ? std::optional<size_t>{instance->method} : std::nullopt);
       const auto &symbol = program_.symbols[*operation.symbol];
-      if (!symbol.type || !lexical_value_type(*symbol.type))
-        implementation_gap(expr.at, "runtime symbol payload outside supported bits and complete-callable values");
       if (method && method->kind == Form::Kind::function)
         fail(expr.at, "a function cannot access dynamic bindings");
+      if (symbol.type && symbol.type->kind == Type::native_handle) {
+        if (expr.kind == K::effect || expr.kind == K::procedure_effect)
+          check_native_effect(expr, *symbol.type, instance, operations, operation);
+        else {
+          require_symbol(lexical_, *operation.symbol, expr.at);
+          if (expr.kind == K::touch) { operation.type = Type::void_type; break; }
+          if (native_loan != NativeLoanContext::borrow)
+            fail(expr.at, "an owning native symbol can only supply a checked handle loan");
+          operation.type = native_handle_type(*symbol.type, false);
+          operation.view = true;
+          operation.owners = {native_symbol_owner(lexical_, *operation.symbol)};
+        }
+        break;
+      }
+      if (!symbol.type || !lexical_value_type(*symbol.type))
+        implementation_gap(expr.at, "runtime symbol payload outside supported bits and complete-callable values");
       if (expr.kind == K::effect || expr.kind == K::procedure_effect) {
         const bool cancelled = !instance && cancels_module_installation(*operation.symbol) &&
             std::ranges::none_of(lexical_.scopes, [](const auto &scope) { return scope.symbol_entry.has_value(); });
@@ -17296,7 +17399,7 @@ class ScalarChecker {
       checked_scope_owners_[&expr] = iteration_scope;
       lexical_.live = lexical_.live && body_possible;
       refresh_input_facts(lexical_);
-      lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols});
+      lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols, lexical_.native_symbol_owners});
       operation.place = declare(expr.text, index, true, true, expr.at);
       initialize(*operation.place);
       loop_controls_.insert(*operation.place);
@@ -17318,7 +17421,7 @@ class ScalarChecker {
       }
       lexical_ = before;
       lexical_.live = lexical_.live && empty_possible;
-      lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols});
+      lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols, lexical_.native_symbol_owners});
       const auto otherwise = expr.children.size() == 4 ? check_loop_body(*expr.children[3], instance, operations) : Type{Type::void_type};
       leave_scope();
       const auto empty_state = lexical_;
@@ -17896,6 +17999,7 @@ class ScalarChecker {
         delayed_ = true;
         deferred_action_ = action;
         lexical_.bound_symbols.clear();
+        lexical_.native_symbol_owners.clear();
         lexical_.required_symbols.clear();
         deferred_inputs_ = before.available;
         if (proving_) for (size_t place = 0; place < catalog_storage_.size(); ++place)
@@ -17994,6 +18098,17 @@ class ScalarChecker {
           }
         } else summary.paths.push_back({0, {0, false}, 0, cleanup_.preserve_pending({})});
       }
+      // A deferred lookup runs after every later native installation in this
+      // cleanup queue has restored its preceding binding.
+      for (auto &path : summary.paths) std::erase_if(path.effects.symbols, [&](size_t symbol) {
+        const auto &type = program_.symbols[symbol].type;
+        if (!type || type->kind != Type::native_handle) return false;
+        require_symbol(lexical_, symbol, expr.at);
+        CheckedOperation loan;
+        loan.owners = {native_symbol_owner(lexical_, symbol)};
+        require_borrow_lifetime(loan, expr.at, true);
+        return true;
+      });
       if (proving_ && validating_ && std::ranges::any_of(summary.paths, [&](const auto &path) {
             return owned_failure(path.completion) && std::ranges::any_of(path.effects.thrown.terms, [&](const auto &term) {
               return term.first.kind != ExceptionFacts::Origin::Kind::arrival || term.first.action != action;
@@ -18203,6 +18318,7 @@ class ScalarChecker {
     }
     lexical_ = {}; cleanup_ = CleanupEquations{program_.exception_types}; scope_storage_.clear(); checked_scope_owners_.clear(); read_sites_.clear(); external_owners_.clear();
     native_resource_owners_.clear(); native_owner_scopes_.clear(); scope_native_owner_places_.clear();
+    incoming_native_symbol_owners_.clear();
     declared_sites_.clear(); declared_requirements_.clear();
     deferred_actions_with_checked_scopes_.clear();
     loop_controls_.clear(); delayed_controls_.clear(); deferred_inputs_.clear(); active_loops_.clear();
@@ -19460,9 +19576,15 @@ class ScalarChecker {
       if (form->kind == Form::Kind::symbol) {
         if (form->symbol_owner) implementation_gap(form->at, "regional symbol ownership contracts");
         if (module_names().types.contains(form->name)) implementation_gap(form->at, "same-scope type and symbol declarations");
-        const auto type = resolve_type(*form->result_type);
-        CheckedMethod contract; contract.source = form.get();
-        signature_type(contract, type, form->at);
+        auto type = resolve_type(*form->result_type);
+        if (form->owning_handle_symbol) {
+          if (type.kind != Type::c_type_marker || program_.schemas.at(type.identity).native_owner)
+            fail(form->at, "an owning native symbol requires an owning 'handle type'");
+          type = native_handle_type(std::move(type), true);
+        } else {
+          CheckedMethod contract; contract.source = form.get();
+          signature_type(contract, type, form->at);
+        }
         if (!module_names().symbols.emplace(form->name, program_.symbols.size()).second)
           fail(form->at, "duplicate symbol binding '" + form->name + "'");
         program_.symbols.push_back({type, false, form->name});
@@ -19839,6 +19961,11 @@ public:
       const auto &method = program_.methods.at(entry.method);
       if (!method.captures.empty() || !method.retained_types.empty() || method.declaration_context())
         implementation_gap(method.source->at, "a C entry with an additional lexical calling context");
+      for (const auto instance : method.instances) for (const auto symbol : program_.instances.at(instance).effects.symbols) {
+        const auto &binding = program_.symbols.at(symbol);
+        if (binding.type && binding.type->kind == Type::native_handle)
+          fail(method.source->at, "cannot prove an installed binding for symbol '" + binding.name + "' at C entry");
+      }
     }
     return std::move(program_);
   }
