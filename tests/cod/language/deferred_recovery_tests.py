@@ -48,6 +48,44 @@ proc run() -> void throws NullPointerException {
 }
 try { run(); } catch (failure:const NullPointerException) { behave @print(5u64); };
 ''', 0, '2\n3\n4\n1\n5\n', ''),
+    "handled_deferred_failure_resumes_body_failure": (CHECKED_READ + '''
+proc run() -> void throws NullPointerException {
+    ptr missing:u64 = null in here;
+    defer catch (failure:const NullPointerException) { behave @print(1u64); }
+          finally { behave @print(2u64); };
+    defer read(missing);
+    read(missing);
+    return;
+}
+try { run(); } catch (failure:const NullPointerException) { behave @print(3u64); };
+''', 0, '1\n2\n3\n', ''),
+    "deferred_handler_can_replace_body_failure_with_return": (CHECKED_READ + '''
+proc run() -> u64 throws NullPointerException {
+    ptr missing:u64 = null in here;
+    defer { behave @print(3u64); };
+    defer catch (failure:const NullPointerException) { behave @print(1u64); return 42u64; }
+          finally { behave @print(2u64); };
+    defer read(missing);
+    read(missing);
+    return 0u64;
+}
+try { behave @print(run()); } catch (failure:const NullPointerException) { behave @print(99u64); };
+''', 0, '1\n2\n3\n42\n', ''),
+    "deferred_handler_writes_visible_to_body_failure_catch": (CHECKED_READ + '''
+proc run() -> void {
+    val result <- make u64;
+    ptr missing:u64 = null in here;
+    try { read(missing); } catch (caught:const NullPointerException) {
+        try {{
+            defer catch (failure:const NullPointerException) { result <- 42u64; };
+            defer { throw caught; };
+            throw caught;
+        }} catch (failure:const NullPointerException) { behave @print(result); };
+    };
+    return;
+}
+run();
+''', 0, '42\n', ''),
     "pending_return": (PRELUDE + 'proc f()->const i64{defer observe(1);defer catch(e:const MissingReturnError){observe(2);};defer missing();return 7;}observe(f());', 0, '2\n1\n7\n', WARN),
     "attached_body_runs_during_failure": (PRELUDE + 'try{{defer{observe(1);}catch(e:const MissingReturnError){observe(99);}finally{observe(2);};missing();{}}}catch(e:const MissingReturnError){observe(3);};', 0, '1\n2\n3\n', WARN),
     "own_body_failure": (PRELUDE + '{{defer{observe(1);missing();}catch(e:const MissingReturnError){observe(2);}finally{observe(3);};}};observe(4);', 0, '1\n2\n3\n4\n', WARN),
