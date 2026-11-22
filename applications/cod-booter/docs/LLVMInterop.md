@@ -1,10 +1,10 @@
 # Native C providers, LLVM bindings and scoped cleanup
 
-Revision 22 · 2026-11-22 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
+Revision 23 · 2026-11-22 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
 
 ## Design authority
 
-[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph) at interop r22 assigns the graph workspace and traversal to CoD. The [delegated architecture review](../../../CHANGELOG.md#h-compiler-layers-20261122), P-680/P-681, distinguishes the production graph from the native loan fixtures below. Check source-loan closure before dependency reentry and final LLVM input under the graph owner. Scoped provider lifetime and ABI checks still apply.
+[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph) at interop r23 assigns the graph workspace and traversal to CoD and covers the [dependency path loan](ModuleGraph.md#first-dependency-edge) under the [prerequisite review](../../../CHANGELOG.md#k-booter-graph-edge-prerequisites-20261122). The [delegated architecture review](../../../CHANGELOG.md#h-compiler-layers-20261122), P-680/P-681, distinguishes the production graph from the native loan fixtures below. Check source-loan closure before dependency reentry and final LLVM input under the graph owner. Scoped provider lifetime and ABI checks still apply.
 
 [D-07-UTF8](../../../design/DesignAuthorityRegistry.md#d-07-utf8) at interop r21 covers [bounded UTF-8 entry arguments and native C string loans](../../../design/Utf8Strings.md#borrowing-text-for-a-c-call). [H-UTF8-NATIVE-TEXT-20261121](../../../CHANGELOG.md#h-utf8-native-text-20261121), P-674/P-675 apply C-80 to real output filenames. Verify direct literals, explicit `path:CString`, the selected owner through a synchronous provider call, and failure before filesystem effects. The source constructor still accepts its typed `Path` loan.
 
@@ -63,13 +63,13 @@ A borrow's C representation supplies its own opaque payload and the actual owner
 The launcher can use ordinary fieldless CTypes for the owners of foreign-supplied borrows.
 
 ```cod
-handle type LauncherPaths;
-handle type Path in LauncherPaths;
+handle type PathOwner;
+handle type Path in PathOwner;
 handle type LauncherDiagnostics;
 handle type DiagnosticDestination in LauncherDiagnostics;
 ```
 
-The private marker names describe what C owns during this invocation. In the [launcher entry](../src/CompilerCLI.cod), the input `Path in A` constrains A to `LauncherPaths`. The launcher can also lend the [bounded output filename](../../../design/Utf8Strings.md#borrowing-text-for-a-c-call) under that same actual A. It supplies a separate writable record owner D. The diagnostic parameter constrains D to `LauncherDiagnostics`. The generated adapter binds the incoming owner evidence for A and D separately and checks agreement for the two uses of A. The native caller supplies truthful typed provenance and valid backing and keeps both loans live through the synchronous call. The boundary words alone cannot authenticate arbitrary C input. Merely naming an owner CType grants no constructor, allocation or disposal permission. The entry borrows both owners. The launcher retains responsibility for their storage. A host payload may differ from its owner word, as it does for a path; equality for the current diagnostic record is a private provider convention.
+The launcher supplies a ready path and keeps its backing live during this invocation. The OS path provider can also stage a child path under a separately acquired instance of the same nominal CType, as specified in the [dependency-edge design](ModuleGraph.md#first-dependency-edge). In the [launcher entry](../src/CompilerCLI.cod), the input `Path in A` constrains A to `PathOwner`. The launcher can also lend the [bounded output filename](../../../design/Utf8Strings.md#borrowing-text-for-a-c-call) under that same actual A. It supplies a separate writable record owner D. The diagnostic parameter constrains D to `LauncherDiagnostics`. The generated adapter binds the incoming owner evidence for A and D separately and checks agreement for the two uses of A. The native caller supplies truthful typed provenance and valid backing and keeps both loans live through the synchronous call. The boundary words alone cannot authenticate arbitrary C input. Merely naming an owner CType grants no constructor, allocation or disposal permission. The entry borrows both owners. The launcher retains responsibility for their storage. A host payload may differ from its owner word, as it does for a path; equality for the current diagnostic record is a private provider convention.
 
 ### Dependent owning handle construction
 
@@ -193,8 +193,8 @@ The first generated boundary serves the indexed source, scratch and LLVM operati
 **Direction of a checked declaration.** A bodyless `proc "C"` declares a C-provided operation. A `proc "C"` with a CoD body defines an entry that C can call through its generated adapter. Ordinary module lookup resolves the declaration and signature, and the generator diagnoses conflicting definitions of the same boundary identity. An unmarked CoD declaration or module export alone has no C linkage. A bodyless constructor named for a `handle type` declares its admitted arguments and failures. The generator also emits one disposal hook per owning CType for the provider to implement.
 
 ```cod
-handle type LauncherPaths;
-handle type Path in LauncherPaths;
+handle type PathOwner;
+handle type Path in PathOwner;
 handle type SourceRevision;
 data SourceOpenException <: Exception { os_error:u64; }
 
