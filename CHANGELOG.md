@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Node identity in the booter's typed AST
+
+<a id="k-booter-ast-membership-20261122"></a>
+**K-BOOTER-AST-MEMBERSHIP-20261122.** Under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122, delegated design review cleared the CoD graph's revision key, its frame and source association, bits node IDs and same-invocation lookup. The prior table contract is at `944a8950ff2a991ad1d33fdadf4283a1afd6a41c:applications/cod-booter/docs/ModuleGraph.md`, “First indexed AST path”. D-20-MODULE-GRAPH r2 to r3, D-ARCH-REVIEW r3 to r4, P-680–P-683, registry r1051.
+
 ## 2026-11-22 — Lexical backing for the indexed AST array
 
 <a id="k-booter-lexical-extent-20261122"></a>

@@ -2,9 +2,11 @@
 
 ## Design authority
 
-[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 2. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 3. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
 
 [K-BOOTER-AST-TABLE-20261122](../../../CHANGELOG.md#k-booter-ast-table-20261122) continues that architecture for the [first indexed AST path](#first-indexed-ast-path). Its private representation uses the existing named-array constructor, valid bits transfer and constructor-pattern checks. Acceptance includes the parser, checker, lowering and emitted object.
+
+The [frame and node identity clearance](../../../CHANGELOG.md#k-booter-ast-membership-20261122) covers revision issuance, table lookup and nested invocation isolation.
 
 ## Layer responsibilities
 
@@ -39,8 +41,8 @@ data AstSlot = Vacant {} | Occupied { node:ExprNode; };
 array AstSlots[u64]:AstSlot;
 
 ref slots = make AstSlots(capacity, make Vacant {}) in F;
-# After checking id == used and id < len(slots):
-slots[id] <- make Occupied { node <- completed; };
+# At the next unpublished index, after checking index == used and index < len(slots):
+slots[index] <- make Occupied { node <- completed; };
 ```
 
 The length and the complete fill argument are each evaluated once in order, including for length zero. Each slot initially holds an independent Vacant value. The parser constructs the complete next row before publishing the new root and used count. Readers check membership of the ID in the published prefix and project fields only for the matched constructor. A physically in-bounds vacant slot cannot be consumed as a syntax node. An ordinary typed reservation can stage a chosen constructor at a known target; it supplies neither the array length nor a completed fill. [Named-array placement](../../../design/ConstructionAndAcquisition.md#source-migration) · [Reservation](../../../design/ConstructionAndAcquisition.md#typed-reservation-and-completed-construction)
@@ -50,6 +52,16 @@ This application qualifies the concrete finite layout. All node and slot alterna
 For growth, create a filled replacement array under the live workspace owner, transfer the occupied prefix at the same indices, and change the table binding only after success. Existing references still refer to their original storage. Consumers carry IDs across the switch and obtain current views through the table. In this path published AST rows are append-only, so no consumer retains a projected field across a change of active alternative. On capacity or construction failure, the preceding published range and root remain usable. Allocation and cleanup keep their ordinary effects. Consuming a region with `resize` has a different ownership and failure contract.
 
 Verify an emitted object returns or reports the expected literal through the named call in both seed modes. Also verify zero and multiple slots, a write leaving its neighbor vacant, independent widths and aligned payloads, rejection of a non-bits element on this transfer path, wrong-table or unpublished IDs, a mismatched arm, stable IDs and spans after growth, and failure before replacement. Keep an isolated implementation until the existing production syntax coverage can switch to the typed table. Delivery uses the actual CoD compiler path and retains its provider and object workloads.
+
+### Frame and node identity
+
+When a visit opens its owning source revision S, the CoD compilation graph G issues a fresh invocation-local revision key. Frame F associates that key with S, one logical AST table and its published count. The stored bits type is `data NodeId { revision:u64; index:u64; }`. A constructor with an optional child represents absence separately, so row zero is usable. Growth preserves this table’s key and indices. Independently rebuilding a table requires a fresh key. A new open gets a fresh key even for the same path, bytes or backing address. Keys issued in G stay spent through failed visits and retries. Check for exhaustion before reuse or wrap and follow the existing failure and cleanup path before publishing a frame.
+
+The parser issues IDs for published rows. Given the originating compilation and a live frame, lookup checks the ID's revision against F, its index against the published count, and the slot's `Occupied` constructor before projecting its node. For a source span the visit borrows bytes and the line index together from F's actual S. Resolve the span within that loan. A parent can reopen a loan on its own S after child reentry.
+
+Two compilations may both issue `(revision = 1, index = 0)`. Their IDs are meaningful only inside their originating G. Keep IDs private to that compilation's parser, checker and lowering data flow. A nested compilation starts with its own inputs and returns its ordinary output or status. Its caller resumes with the original frame. Any interface that could mix IDs from independent invocations must establish their origin separately before lookup. A numeric match supplies neither that evidence nor access to storage. Native interfaces receive their existing source loans or completed outputs. A process-wide key allocator is unnecessary.
+
+Exercise two real frames in one compilation whose occupied rows have the same index, and reject each foreign ID before projection. Reopen the same path and check that the old ID fails. In nested independent compilations, exercise colliding numeric pairs and verify that each call resolves its own source span and restores the outer frame. Keep the valid-ID growth and failed-publication checks in the parser-to-object workload.
 
 ## Reentry and completion
 
