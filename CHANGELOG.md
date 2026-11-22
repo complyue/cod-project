@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Named-array transport for the first dependency edge
+
+<a id="k-booter-array-transport-20261122"></a>
+**K-BOOTER-ARRAY-TRANSPORT-20261122.** Delegated pre-code review under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122 continues the first-edge workload at `98dcf9ee72649b70e8f264ae0ca4537a4cc5b8dc:applications/cod-booter/docs/ModuleGraph.md`. Clearance covers inline bits arrays, transient native loans, actual-owner allocation evidence and initialized lexical holder forwarding. D-20-MODULE-GRAPH r8 to r9, D-ARCH-REVIEW r9 to r10, P-680–P-683, registry r1058.
+
 ## 2026-11-22 — Ordinary native path results and key-loan feedback
 
 <a id="k-booter-native-u64-result-20261122"></a>

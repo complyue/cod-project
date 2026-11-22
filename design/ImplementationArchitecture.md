@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 9. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 10. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
 
 [K-BOOTER-AST-TABLE-20261122](../CHANGELOG.md#k-booter-ast-table-20261122) records the delegated review of the indexed AST workload and its seed prerequisites under the [work-method decision](../CHANGELOG.md#h-booter-work-method-20261122).
 
@@ -14,7 +14,7 @@ The [single-file route clearance](../CHANGELOG.md#k-booter-typed-object-20261122
 
 The [seed Boolean observation clearance](../CHANGELOG.md#k-seed-boolean-observation-20261122) covers the private checker operation used during semantic checking of the typed CompilerCLI.
 
-The [first dependency-edge clearance](../CHANGELOG.md#k-booter-first-edge-20261122) covers scoped changes to the path providers, the regional seed path, holder forwarding and definition-installed dispatch. The [ordinary-result correction](../CHANGELOG.md#k-booter-native-u64-result-20261122) covers declaration checking and existing generated output transport for native path preparation.
+The [first dependency-edge clearance](../CHANGELOG.md#k-booter-first-edge-20261122) covers scoped changes to the path providers, the regional seed path, holder forwarding and definition-installed dispatch. The [ordinary-result correction](../CHANGELOG.md#k-booter-native-u64-result-20261122) covers declaration checking and existing generated output transport for native path preparation. The [array transport review](../CHANGELOG.md#k-booter-array-transport-20261122) covers the first edge’s checked allocation roles, LLVM array views and initialized caller slots.
 
 ## Before coding
 
@@ -63,6 +63,10 @@ In [the seed checker](../cod/lang_checked.hh), `snapshot_boolean` asks which pat
 Select the observational path before taking any full-state snapshot. A dead input produces no outcomes. A live input with no predicate admits both truth values. For a predicate with an empty `results` map and `complete_results == false`, plain presence admits both, either constant admits its stated value, and abrupt completion admits neither. Admit the projection only for these cases. A complete result map can exclude a truth even when it has no entry for that truth. Null tests, compositions and proofs carrying result clauses retain the existing exploration. Use the supplied state even when it differs from the checker's current frame. Preserve the input and the checker's state across every observation. Any loop that enumerates state owned by the checker needs a stable input while the fallback temporarily replaces that state.
 
 Verify equality of the complete normalized `BooleanValue` against the existing exploring computation on identical inputs, including liveness, both constants, unrestricted presence, versioned nullable bindings, and conditions tied to initialization or a selected target. Cover absent outcome keys, empty clause sets and an unconditional clause, and exercise a constrained presence or constant with a complete result set. Run direct call, rebinding and cleanup cases in both seed modes, preserving their accepted results and rejection of unsafe reads. Measure the actual typed CompilerCLI with the same source, mode, configuration and host before attributing a speed improvement. Its generated providers, linked object, rejections and cleanup still require the [single-file workload](../applications/cod-booter/docs/ModuleGraph.md#single-file-object-route). Changes to general predicate solving, the representation of mutable state, or the completion solver require separate review.
+
+### Seed array layout and caller slots
+
+The [first-edge transport clearance](../applications/cod-booter/docs/ModuleGraph.md#named-array-transport-for-the-first-edge) covers the checked program, checker, LLVM emitter and their direct fixtures. The checker owns actual-owner and allocation-class requirements, lexical place selection, access and completion effects. The emitter uses one private layout for the admitted CoD-allocated arrays, projects transient native views at the existing C boundary and forwards an initialized `ref var` as the selected caller slot. Reuse the existing raw storage and cleanup services. The CoD graph retains responsibility for table replacement, membership and publication. Acceptance includes old borrows, observable slot writes on exceptional exits and the real typed booter.
 
 ### Lexical backing for the indexed AST array
 
