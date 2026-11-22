@@ -231,6 +231,12 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: C provider requires a proved CString argument\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 100)
         fputs(": error: C provider requires a proved String argument\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 101)
+        fputs(": error: text results require a readonly, non-null owner-qualified reference\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 102)
+        fputs(": error: make String requires a text operand\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 103)
+        fputs(": error: const owner cannot allocate storage\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 20)
         fputs(": error: narrow integer execution is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 21)

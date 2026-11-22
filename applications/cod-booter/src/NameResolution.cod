@@ -4,10 +4,10 @@ using "ParserStorage.cod" {
     export_from_node, callable_node, callable_head_node, c_handle_type_node, c_procedure_node,
     data_record_node, c_record_node, data_parent_node, export_node, handle_parameter_node,
     here_parameter_node, array_declaration_node, is_function, parameter_node, ref_parameter_node,
-    ptr_parameter_node, val_parameter_node, result_clause_node, throws_clause_node,
+    ptr_parameter_node, val_parameter_node, result_clause_node, ref_result_node, throws_clause_node,
     owner_clause_node, readonly_declaration, typed_name_node, owned_type_node, name_node,
     field_access_node, index_access_node, array_length_node, symbol_node, literal_node, group_node,
-    integer_arithmetic, is_transfer, make_named_node, construction_body,
+    integer_arithmetic, is_transfer, make_named_node, construction_body, positional_construction,
     construction_type_query_node, initializer_assignment_node, call_node, behave_node,
     argument_node, deferred_call_node, deferred_block_node, discard_node, bool_node, compare_node,
     conditional_node, range_node, handle_local, handle_construction, owning_handle_local_node,
@@ -308,11 +308,9 @@ func resolve_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N
     remember(bindings, name, bindings[found].declaration, kind);
 }
 
-func resolve_annotation(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
-                         work:const NameWork in W, state:NameState in R, binding:u64) -> void
+func resolve_type_annotation(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                              work:const NameWork in W, state:NameState in R, annotation:u64) -> void
     where {const owner S, const owner N, owner B, const owner W, owner R} {
-    if (nodes[binding].kind != typed_name_node()) return;
-    val annotation <- nodes[binding].right;
     if (nodes[annotation].kind != owned_type_node()) {
         resolve_type_name(source, nodes, bindings, work, state, annotation);
         return;
@@ -321,6 +319,13 @@ func resolve_annotation(source:const SourceBytes in S, nodes:const ExprNodes in 
     if (state.diagnostic == 0u8) {
         resolve_owner(source, nodes, bindings, work, state, nodes[annotation].right);
     } else {};
+}
+
+func resolve_annotation(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                         work:const NameWork in W, state:NameState in R, binding:u64) -> void
+    where {const owner S, const owner N, owner B, const owner W, owner R} {
+    if (nodes[binding].kind != typed_name_node()) return;
+    resolve_type_annotation(source, nodes, bindings, work, state, nodes[binding].right);
 }
 
 func binder_name(nodes:const ExprNodes in N, binding:u64) -> u64 where {const owner N} {
@@ -337,7 +342,7 @@ func formal(kind:u8) -> bool {
 func list_entry(kind:u8) -> bool {
     return kind == module_item_node() || kind == block_item_node() || kind == argument_node() ||
         kind == catch_clause_node() || kind == finally_clause_node() ||
-        kind == result_clause_node() || kind == throws_clause_node() || kind == owner_clause_node() ||
+        kind == result_clause_node() || kind == ref_result_node() || kind == throws_clause_node() || kind == owner_clause_node() ||
         kind == here_receiver_node() || kind == enum_member_node() || formal(kind);
 }
 
@@ -674,6 +679,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
     if (state.here_group) { reject_name(state, at, unsupported_here_group_storage()); return; } else {};
     val requested <- nodes[at].left;
     val record_initializer <- false;
+    val text_initializer <- false;
     if (nodes[requested].kind == construction_type_query_node()) {
         resolve_expression(source, nodes, bindings, work, state, nodes[requested].left);
     } else {
@@ -681,18 +687,29 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         if (state.diagnostic != 0u8) return;
         val kind <- bindings[requested].kind;
         val definition <- bindings[requested].declaration;
+        text_initializer <- kind == builtin_string();
         record_initializer <- (kind == record_type() && nodes[nodes[definition].left].kind != data_parent_node()) ||
             (kind == ordinary_selection() && bindings[definition].imported_kind == record_export());
-        if (!record_initializer && !native_scalar(kind) && kind != builtin_void() && kind != enum_type()) {
+        if (!text_initializer && !record_initializer && !native_scalar(kind) && kind != builtin_void() && kind != enum_type()) {
             reject_name(state, at, unsupported_ordinary_construction());
             return;
         } else {};
     };
     if (state.diagnostic != 0u8) return;
-    val owner_name <- nodes[nodes[at].right].right;
+    val payload <- nodes[at].right;
+    val owner_name <- nodes[payload].right;
     if (owner_name != no_node()) {
         resolve_owner(source, nodes, bindings, work, state, owner_name);
         if (state.diagnostic != 0u8) return;
+    } else {};
+    if (positional_construction(nodes, at) || text_initializer) {
+        val first <- first_item(nodes, nodes[payload].left);
+        if (!text_initializer || !positional_construction(nodes, at) || first == no_node() || work[first].next != no_node()) {
+            reject_name(state, at, unsupported_ordinary_construction());
+            return;
+        } else {};
+        resolve_expression(source, nodes, bindings, work, state, nodes[first].right);
+        return;
     } else {};
     val body <- construction_body(nodes, at);
     if (record_initializer) {
@@ -1091,7 +1108,7 @@ func resolve_header_types(source:const SourceBytes in S, nodes:const ExprNodes i
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (clause == no_node()) return;
         if (nodes[clause].kind != owner_clause_node()) {
-            resolve_type_name(source, nodes, bindings, work, state, nodes[clause].right);
+            resolve_type_annotation(source, nodes, bindings, work, state, nodes[clause].right);
             if (state.diagnostic != 0u8) return;
         } else {};
         clause <- work[clause].next;

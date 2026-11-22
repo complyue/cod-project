@@ -131,6 +131,40 @@ void cod_lang_release_exception_owner(void *owner) {
     free(owner);
 }
 
+struct cod_text_view {
+    const uint8_t *bytes;
+    uint64_t size, extent;
+};
+
+struct cod_lexical_text {
+    struct cod_lexical_text *previous;
+    struct cod_text_view text;
+    uint8_t bytes[];
+};
+
+void *cod_lang_lexical_text_create(void **allocations, const void *input) {
+    const struct cod_text_view *source = input;
+    const uint64_t size = source->size;
+    const uint64_t backing = size ? size : 1;
+    if (backing > SIZE_MAX - sizeof(struct cod_lexical_text)) return NULL;
+    struct cod_lexical_text *object = malloc(sizeof(*object) + (size_t)backing);
+    if (!object) return NULL;
+    memcpy(object->bytes, source->bytes, (size_t)size);
+    object->text = (struct cod_text_view){object->bytes, size, size};
+    object->previous = *allocations;
+    *allocations = object;
+    return &object->text;
+}
+
+void cod_lang_lexical_text_release(void *allocations) {
+    struct cod_lexical_text *object = allocations;
+    while (object) {
+        struct cod_lexical_text *previous = object->previous;
+        free(object);
+        object = previous;
+    }
+}
+
 static int grow_cause_history(void) {
     const size_t limit = SIZE_MAX / sizeof(*cod_causes.records);
     if (cod_causes.capacity == limit)

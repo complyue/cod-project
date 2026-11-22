@@ -8,7 +8,7 @@ using "ParserStorage.cod" {
     make_borrowed_handle_node, handle_construction, ungrouped, name_node, literal_node, bool_node,
     typed_name_node, val_binding_node, here_call_node, call_node, full_scope_node, continue_node,
     break_node, return_node, narrow_integer_node, is_function, owner_clause_node,
-    result_clause_node, throws_clause_node, field_access_node, import_node, local_resource_name,
+    result_clause_node, ref_result_node, throws_clause_node, field_access_node, import_node, local_resource_name,
     retained_parent_parameter, native_symbol_declaration_node, native_effect_node,
     text_literal_node,
 };
@@ -499,6 +499,11 @@ func check_c_procedure(nodes:const ExprNodes in N, names:const NameBindings in B
     val header <- nodes[form].left;
     val head <- signature_head(nodes, header);
     val result <- signature_clause(nodes, header, result_clause_node());
+    val borrowed_result <- signature_clause(nodes, header, ref_result_node());
+    if (borrowed_result != no_node()) {
+        reject_declaration(report, borrowed_result, invalid_native_result());
+        return;
+    } else {};
     val failure <- signature_clause(nodes, header, throws_clause_node());
     val result_kind <- builtin_void();
     if (result != no_node()) { (result_kind <- native_value_kind(names, selected, nodes[result].right)):void; } else {};
@@ -926,7 +931,12 @@ func declared_call_result(nodes:const ExprNodes in N, names:const NameBindings i
         if (binding != c_operation() && binding != c_entry()) return 0u8;
     };
     val result <- signature_clause(nodes, nodes[definition].left, result_clause_node());
-    if (result == no_node()) return builtin_void();
+    if (result == no_node()) {
+        val borrowed <- signature_clause(nodes, nodes[definition].left, ref_result_node());
+        if (borrowed == no_node()) return builtin_void();
+        val text <- names[nodes[nodes[borrowed].right].left].kind;
+        return if (binding == callable_binding() && text_type(text)) { text } else { 0u8 };
+    } else {};
     val kind <- native_value_kind(names, selected, nodes[result].right);
     if (native_scalar(kind) || kind == builtin_void() || kind == enum_type()) return kind;
     return 0u8;

@@ -317,6 +317,9 @@ func parse_type_clause(source:const SourceBytes in S, tokens:const Tokens in T, 
     if (readonly) { (result.next <- result.next + 1u64):void; } else {};
     if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return false;
     val annotation <- result.root;
+    if (clause_kind == result_clause_node() && result.next < past && in_word(source, tokens[result.next])) {
+        (clause_kind <- ref_result_node()):void;
+    } else {};
     if (clause_kind == ref_result_node()) {
         if (result.next >= past || !in_word(source, tokens[result.next])) {
             result.diagnostic <- expected_owner_clause();

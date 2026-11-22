@@ -2651,6 +2651,13 @@ class ScalarChecker {
     if (type == Type::null_ref) fail(declaration.at, "a null initializer requires an explicit target type");
     if (initial == Type::never && !declaration.annotation) return;
     const auto &kind = group.declaration_kind;
+    if (text_type(type)) {
+      if (kind != "ref" || (initial != Type::never && borrowed != true))
+        fail(declaration.at, "text requires a readonly reference to existing storage");
+      if (initial != Type::never && initial != type && !widens_text(initial, type))
+        fail(declaration.at, "reference initializer requires the declared text type");
+      return;
+    }
     if (type.kind == Type::product) {
       if ((kind != "ref" && kind != "ptr") || (initial != Type::never && borrowed != true))
         implementation_gap(declaration.at, "materializing a whole product as an independent value");
@@ -5720,10 +5727,10 @@ class ScalarChecker {
     return value;
   }
   Type resolve_local_type(const Type &type, const CheckedInstance *instance, const Location &at,
-                          bool product_view = false) const {
+                          bool borrowed_target = false) const {
     auto resolved = resolve_annotation(type, instance);
     reject_c_type_payload(resolved, at);
-    if (!lexical_value_type(resolved) && !(product_view && resolved.kind == Type::product))
+    if (!lexical_value_type(resolved) && !(borrowed_target && (resolved.kind == Type::product || text_type(resolved))))
       implementation_gap(at, "non-value local storage type '" + type_name(type) + "'");
     return resolved;
   }
@@ -6028,7 +6035,7 @@ class ScalarChecker {
     reject_c_type_payload(type, at);
     if (nominal_exception(type)) implementation_gap(at, "library-defined exception arguments and results require an owner-aware signature");
     if (bits_type(type) || binder(method, type) || (result && type == Type::void_type)) return;
-    if (borrowed_target && (type.kind == Type::product || (!result && (type.kind == Type::array || text_type(type))))) return;
+    if (borrowed_target && (type.kind == Type::product || text_type(type) || (!result && type.kind == Type::array))) return;
     if (type.kind == Type::array)
       implementation_gap(at, "array parameter or result of type '" + type_name(type) + "'");
     if (type.kind == Type::procedure && type.target) {
@@ -6484,6 +6491,9 @@ class ScalarChecker {
     }
     if (result.contract->type->kind == Type::array)
       implementation_gap(at, "array results");
+    if (text_type(*result.contract->type) &&
+        (result.contract->mode != ResultMode::borrowed_ref || !result.contract->read_only))
+      fail(at, "text results require a readonly, non-null owner-qualified reference");
     check_declared_results(definition, *result.contract, declared);
     definition.contextual_result = definition.contextual_result || supplied.has_value();
     const auto id = program_.instances.size();
@@ -10571,6 +10581,12 @@ class ScalarChecker {
     if (expr.text.find('\0') != std::string::npos) fail(expr.at, "text literal contains an interior NUL and cannot supply CString");
     return Type::c_string;
   }
+  static const Expression &text_constructor_input(const Expression &expr) {
+    if (!expr.constructor_arguments || expr.children.size() != 1 ||
+        expr.children.front()->kind == Expression::Kind::named_argument || expr.children.front()->spread)
+      fail(expr.at, "make String requires one positional text operand");
+    return *expr.children.front();
+  }
   CheckedOperation check_argument_expression(const Expression &operand, ArgumentMode mode, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, const Type *expected = nullptr,
       IndexedUse indexed_use = IndexedUse::value_only) {
@@ -11153,8 +11169,10 @@ class ScalarChecker {
           check_initializer_type(expr, *declaration, *initial, *type, borrowed);
           if (reservation && *initial != *type)
             fail(declaration->at, "scalar reservation requires the val's exact type");
-          if (type->kind == Type::product && state.value.mixed_view)
-            implementation_gap(initializer.at, "a product initializer mixing a target and an independent value");
+          if ((type->kind == Type::product || text_type(*type)) && state.value.mixed_view)
+            implementation_gap(initializer.at, type->kind == Type::product
+                ? "a product initializer mixing a target and an independent value"
+                : "a text initializer mixing a target and an independent value");
           if (*initial != Type::never && borrowed == true)
             check_initializer_access(*declaration, state.value.read_only.value_or(false));
           if (proving_ && validating_ && expr.declaration_kind == "ref" && *initial != Type::never &&
@@ -11302,7 +11320,7 @@ class ScalarChecker {
       if (!constructed) return {};
       const auto &type = *constructed;
       const bool track_places = state.checks_initialization() && state.selections.tracking;
-      if (scalar_type(type)) {
+      if (type.kind == Type::string || scalar_type(type)) {
         if (state.required && !expr.owner_name.empty() && expr.owner_name != "here") {
           const auto selected = owner_evidence(expr.owner_name, state, expr.at);
           if (selected && selected->kind == EvidenceOwner::Kind::checked && const_owner(selected->id))
@@ -11310,6 +11328,24 @@ class ScalarChecker {
           if (compare_owners(selected, state.full_scope_owner, &state) != OwnerMatch::satisfied)
             implementation_gap(expr.at, "construction outside the current lexical owner");
         }
+      }
+      if (type.kind == Type::string) {
+        const auto &input = text_constructor_input(expr);
+        const auto source = type_evidence(input, state, false, nullptr, nullptr,
+                                         ExpectedTypeUse::materialization, true, EvidenceRead::target);
+        if (!source || *source == Type::never) return source;
+        if (!text_type(*source)) fail(input.at, "make String requires a text operand");
+        require_type_initialized(state, state.target, {}, input.at);
+        view = {true, true, {}, state.full_scope_owner};
+        target_facts.presence = TargetPresence::present;
+        if (track_places) {
+          target_facts.places.insert(&expr);
+          state.selections.initialize(target_facts.places);
+        }
+        note_type_allocation(state);
+        return type;
+      }
+      if (scalar_type(type)) {
         if (const auto *initializer = expr.construction_initializer()) {
           const auto value = type_evidence(*initializer, state);
           if (value == Type::never) return Type::never;
@@ -12501,7 +12537,8 @@ class ScalarChecker {
           const bool valid_owner = compare_owners(state.value.owner, owner, &state) == OwnerMatch::satisfied;
           if (contract.nullable() && result == Type::null_ref && (valid_owner || !state.value.owner))
             returned.borrowed = TypeBorrowedReturn::capture(state.target, state.selections);
-          else if (result == contract.type && state.value.view == true && !state.value.mixed_view && valid_owner &&
+          else if (result && (*result == *contract.type || widens_text(*result, *contract.type)) &&
+                   state.value.view == true && !state.value.mixed_view && valid_owner &&
                    (contract.read_only || state.value.read_only == false) &&
                    (contract.nullable() || !state.value.nullable || state.target.presence == TargetPresence::present) &&
                    (!state.target.places.empty() || state.target.presence == TargetPresence::absent)) {
@@ -17542,8 +17579,10 @@ class ScalarChecker {
         const auto &source = operations.at(&initializer);
         const bool borrowed = !copy && source.view;
         const bool mixed = borrowed && source.mixed_view;
-        if (type.kind == Type::product && mixed)
-          implementation_gap(initializer.at, "a product initializer mixing a target and an independent value");
+        if ((type.kind == Type::product || text_type(type)) && mixed)
+          implementation_gap(initializer.at, type.kind == Type::product
+              ? "a product initializer mixing a target and an independent value"
+              : "a text initializer mixing a target and an independent value");
         if (completes && owner)
           check_initializer_owner(borrowed, mixed, std::any_of(source.owners.begin(), source.owners.end(),
               [&](size_t actual) { return actual != *owner; }), declaration->at);
@@ -17837,7 +17876,8 @@ class ScalarChecker {
         if (expr.children.empty()) fail(expr.at, "borrowed result requires an explicit target view");
         const auto &selected = operations.at(expr.children.front().get());
         if (!selected.view || selected.mixed_view) implementation_gap(expr.at, "fresh ordinary borrowed results require a separate storage contract");
-        if (value != Type::null_ref && value != *instance->result.type) fail(expr.at, "borrowed return requires the exact target type");
+        if (value != Type::null_ref && value != *contract.type && !widens_text(value, *contract.type))
+          fail(expr.at, "borrowed return requires the exact target type");
         if (!contract.read_only && selected.read_only) fail(expr.at, "readonly target cannot supply a writable borrowed result");
         const auto owner = external_owners_.at(contract.owner);
         if (!selected.owners.empty() && selected.owners != std::set<size_t>{owner})
@@ -17900,7 +17940,20 @@ class ScalarChecker {
         state.required = true;
         return *construction_type(expr, state);
       }();
-      if (scalar_type(type))
+      if (type.kind == Type::string) {
+        const auto &input = text_constructor_input(expr);
+        const auto source = check(input, instance, operations, false);
+        if (source == Type::never) { operation.type = Type::never; break; }
+        if (!text_type(source)) fail(input.at, "make String requires a text operand");
+        const auto &selected = operations.at(&input);
+        prepare_borrow(selected, ArgumentMode::borrowed_ref, input.at);
+        require_live_view(selected, input.at);
+        operation.type = operation.operand_type = type;
+        operation.view = operation.read_only = true;
+        operation.owners = {cleanup_scope_};
+        operation.initialization.emplace();
+        note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
+      } else if (scalar_type(type))
         operation = check_scalar_construction(expr, type, instance, operations, read && !discard, reservation_receiver);
       else {
         if (reservation_receiver) implementation_gap(expr.at, "reserving a non-scalar val with make");
@@ -19786,6 +19839,9 @@ class ScalarChecker {
             form->result_kind == "ptr" ? ResultMode::borrowed_ptr : ResultMode::borrowed_ref;
         prepared.result.read_only = form->result_const;
       }
+      if (prepared.result.type && text_type(*prepared.result.type) &&
+          (prepared.result.mode != ResultMode::borrowed_ref || !prepared.result.read_only))
+        fail(form->at, "text results require a readonly, non-null owner-qualified reference");
       if (form->result_kind == "val" && prepared.result.type && !scalar_type(*prepared.result.type))
         implementation_gap(form->at, "explicit val results for non-scalar or generic types");
       if (prepared.result.type && !prepared.result.borrowed() && *prepared.result.type != Type::void_type && prepared.result.type->kind != Type::procedure && !scalar_type(*prepared.result.type)) {
@@ -19959,7 +20015,7 @@ class ScalarChecker {
       if (expr.kind == K::exception_binding) implementation_gap(expr.at, "owning exception local");
       if (expr.kind == K::rethrow_from) implementation_gap(expr.at, "rethrow with an explicit cause");
       if (expr.kind == K::make_exception) implementation_gap(expr.at, "owning make exception expression");
-      if (expr.kind == K::make_object && expr.constructor_arguments)
+      if (expr.kind == K::make_object && expr.constructor_arguments && expr.annotation->kind != Type::string)
         implementation_gap(expr.at, "ordinary constructor arguments");
       if (expr.annotation)
         require_implemented_source_forms(*expr.annotation, expr.at, "owning exception callable type");
