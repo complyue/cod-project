@@ -8,7 +8,7 @@ using "ParserStorage.cod" {
     readonly_declaration, local_storage_binding, positional_construction, rebind_node, direct_place_parameter,
 };
 using "NameResolution.cod" {
-    NameBindings, NameWork, first_item, record_declaration, formal_binding, local_binding,
+    NameBindings, NameWork, first_item, find_record_field, record_declaration, formal_binding, local_binding,
     ordinary_selection, record_type, native_scalar, enum_value, find_enum_member,
     is_lexical_builder, lexical_builder_record, lexical_builder_type,
     builtin_u64, builtin_u32, builtin_u8, builtin_bool, builtin_string, builtin_c_string, text_type, owner_binding,
@@ -89,19 +89,8 @@ func describe_type(nodes:const ExprNodes in N, names:const NameBindings in B, se
 func local_member_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
                        selected:const SelectedExports in E, work:const NameWork in W, name:u64, result:DeclaredType in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner W, owner R} {
-    val field <- first_item(nodes, nodes[result.identity].right);
-    val binding <- no_node();
-    val spelling <- no_node();
-    for (unused in 0u64 .. intrinsic (len)(nodes)) {
-        if (field == no_node()) return false;
-        binding <- nodes[field].right;
-        spelling <- nodes[binding].left;
-        if (same_bytes(source, nodes[name].first, nodes[name].past, source, nodes[spelling].first, nodes[spelling].past)) {
-            return describe_type(nodes, names, selected, nodes[binding].right, 0u64, result);
-        } else {};
-        field <- work[field].next;
-    };
-    return false;
+    val field <- find_record_field(source, nodes, work, result.identity, name);
+    return field != no_node() && describe_type(nodes, names, selected, nodes[nodes[field].right].right, 0u64, result);
 }
 
 func imported_member_type(source:const SourceBytes in S, nodes:const ExprNodes in N, spellings:const SourceBytes in P,

@@ -90,6 +90,7 @@ func reference_symbol_shape(nullable:bool, readonly:bool) -> u8 {
 func bits_record() -> u8 { return 1u8; }
 func numeric_record() -> u8 { return 2u8; }
 func non_bits_record() -> u8 { return 3u8; }
+func cod_bits_record() -> u8 { return 4u8; }
 func readonly_numeric_array() -> u8 { return 1u8; }
 func numeric_record_array() -> u8 { return 2u8; }
 func scalar_exception() -> u8 { return 1u8; }
@@ -169,6 +170,8 @@ func visiting_bits() -> u8 { return 23u8; }
 func visiting_non_bits() -> u8 { return 24u8; }
 func finite_bits() -> u8 { return 25u8; }
 func finite_non_bits() -> u8 { return 26u8; }
+func visiting_cod_bits() -> u8 { return 34u8; }
+func finite_cod_bits() -> u8 { return 35u8; }
 
 func visit_record(nodes:const ExprNodes in N, names:NameBindings in B, work:NameWork in W,
                   record:u64, parent:u64) -> void where {const owner N, owner B, owner W} {
@@ -190,23 +193,30 @@ func check_record(nodes:const ExprNodes in N, names:NameBindings in B, work:Name
     val imported_record <- false;
     val text_field <- false;
     val non_bits <- false;
+    val c_layout <- true;
+    val imported <- 0u8;
+    val enum_field <- false;
     # A field can be visited twice, once before and once after its dependency.
     for (unused in 0u64 .. used * 2u64) {
         if (record == no_node()) return;
         field <- work[record].next;
         if (field == no_node()) {
-            names[record].kind <- if (names[record].kind == visiting_bits()) { finite_bits() } else { finite_non_bits() };
+            names[record].kind <- if (names[record].kind == visiting_bits()) { finite_bits() }
+                else { if (names[record].kind == visiting_cod_bits()) { finite_cod_bits() } else { finite_non_bits() } };
             (record <- work[record].active):void;
         } else {
             declared_type <- nodes[nodes[field].right].right;
             kind <- names[declared_type].kind;
-            imported_record <- imported_kind(names, selected, declared_type) == record_export();
+            imported <- imported_kind(names, selected, declared_type);
+            imported_record <- imported == record_export();
+            enum_field <- kind == enum_type() || imported == enum_export();
             text_field <- kind == builtin_string() &&
                 (nodes[field].kind == parameter_node() || nodes[field].kind == val_parameter_node()) &&
                 !has_exception_parent(nodes, names, record);
             # Direct String holds a selection of immutable text and is non-bits.
             non_bits <- text_field || passed_by_reference(nodes[field].kind);
-            if (!native_scalar(kind) && kind != record_type() && !imported_record && !text_field) {
+            c_layout <- !non_bits && !enum_field;
+            if (!native_scalar(kind) && kind != record_type() && !imported_record && !text_field && !enum_field) {
                 reject_declaration(report, declared_type, invalid_record_field());
                 return;
             } else {};
@@ -221,18 +231,28 @@ func check_record(nodes:const ExprNodes in N, names:NameBindings in B, work:Name
                 (record <- target):void;
             } else {
                 if (kind == record_type() && !non_bits) {
-                    if (names[target].kind == visiting_bits() || names[target].kind == visiting_non_bits()) {
+                    if (names[target].kind == visiting_bits() || names[target].kind == visiting_non_bits() ||
+                        names[target].kind == visiting_cod_bits()) {
                         reject_declaration(report, declared_type, recursive_record_layout());
                         return;
                     } else {};
-                    (non_bits <- names[target].kind == finite_non_bits()):void;
-                } else {};
-                if (imported_record && selected[target].shape == non_bits_record()) { (non_bits <- true):void; } else {};
-                if (non_bits && nodes[record].kind == c_record_node()) {
+                    non_bits <- names[target].kind == finite_non_bits();
+                    (c_layout <- names[target].kind == finite_bits()):void;
+                };
+                if (imported_record) {
+                    non_bits <- non_bits || selected[target].shape == non_bits_record();
+                    (c_layout <- c_layout && !non_bits && selected[target].shape != cod_bits_record()):void;
+                };
+                # Closed enum payloads are bits in CoD. A C layout also needs
+                # a checked transport for every element of that record.
+                if (!c_layout && nodes[record].kind == c_record_node()) {
                     reject_declaration(report, field, invalid_record_field());
                     return;
                 } else {};
-                if (non_bits) { (names[record].kind <- visiting_non_bits()):void; } else {};
+                if (non_bits) { (names[record].kind <- visiting_non_bits()):void; };
+                if (!c_layout && names[record].kind == visiting_bits()) {
+                    (names[record].kind <- visiting_cod_bits()):void;
+                };
                 (work[record].next <- work[field].next):void;
             };
         };
@@ -1606,12 +1626,14 @@ func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in
             if (scalar_failure(nodes, names, selected, name)) { (exports[at].shape <- scalar_exception()):void; } else {};
         } else {
             exports[at].kind <- record_export();
-            if (names[target].kind == finite_non_bits()) {
-                (exports[at].shape <- non_bits_record()):void;
-            } else {
-                exports[at].shape <- if (nodes[target].right != no_node() &&
-                    uses_direct_scalars(nodes, names, nodes[target].right, true)) { numeric_record() } else { bits_record() };
-                {};
+            if (names[target].kind == finite_non_bits()) { (exports[at].shape <- non_bits_record()):void; }
+            else {
+                if (names[target].kind == finite_cod_bits()) { (exports[at].shape <- cod_bits_record()):void; }
+                else {
+                    exports[at].shape <- if (nodes[target].right != no_node() &&
+                        uses_direct_scalars(nodes, names, nodes[target].right, true)) { numeric_record() } else { bits_record() };
+                    {};
+                };
             };
         };
         return true;
