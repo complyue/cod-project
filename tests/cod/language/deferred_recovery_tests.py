@@ -320,6 +320,43 @@ catch (member:MemberFailure) { behave @print(98u64); }
 catch (body:BodyFailure) { behave @print(99u64); }
 catch (aggregate:UnhandledDeferError) { behave @print(40u64); };
 ''', 0, '20\n10\n40\n', ''),
+    "receiver_aggregate_replaces_protected_supplier_return": ('''
+using "std:exceptions" { Error, UnhandledDeferError };
+using symbol "std:io" @print;
+data CleanupFailure <: Error { code:u64; }
+
+proc source() yields u64 {
+    defer { behave @print(2u64); throw CleanupFailure { code <- 22u64; }; };
+    yield(1u64);
+}
+
+proc run() -> u64 {
+    for val n <- source() { behave @print(n); return 7u64; };
+    return 90u64;
+}
+
+try { behave @print(run()); }
+catch (aggregate:UnhandledDeferError) { behave @print(3u64); };
+''', 0, '1\n2\n3\n', ''),
+    "caught_receiver_aggregate_does_not_resume_protected_supplier_failure": ('''
+using "std:exceptions" { Error, Exception, UnhandledDeferError };
+using symbol "std:io" @print;
+data CleanupFailure <: Error { code:u64; }
+data SupplierFailure <: Exception { code:u64; }
+
+proc receive(here step() -> void) -> void {
+    try {{
+        defer { behave @print(2u64); throw CleanupFailure { code <- 22u64; }; };
+        step();
+    }} catch (aggregate:UnhandledDeferError) { behave @print(3u64); };
+    behave @print(4u64);
+    return;
+}
+
+try {
+    receive() { behave @print(1u64); throw SupplierFailure { code <- 11u64; }; };
+} catch (supplier:SupplierFailure) { behave @print(99u64); };
+''', 0, '1\n2\n3\n4\n', ''),
     "loop_handlers": (PRELUDE + 'try{{for(i in 0..3){defer{observe(2);}catch(e:const MissingReturnError){observe(99);};};missing();{}}}catch(e:const MissingReturnError){observe(3);};', 0, '2\n2\n2\n3\n', WARN),
     "loop_zero": (PRELUDE + 'try{{for(i in 0..0){defer catch(e:const MissingReturnError){observe(99);};};missing();{}}}catch(e:const MissingReturnError){observe(1);};', 0, '1\n', WARN),
     "loop_explicit_scope": (PRELUDE + 'for(i in 0..3){{defer catch(e:const MissingReturnError){observe(1);};defer missing();}};observe(2);', 0, '1\n1\n1\n2\n', WARN),
