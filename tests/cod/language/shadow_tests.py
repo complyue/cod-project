@@ -61,7 +61,7 @@ CASES = {
     'catch_parameter': (IO + NPE + 'val e<-7u64;ptr empty:u64=null in here;try{empty;{}}'
         'catch(e:const NullPointerException){behave @print(1u64);};behave @print(e);', '1\n7\n', ['e']),
     'deferred_catch_parameter': (IO + NPE + 'val e<-7u64;{{defer catch(e:const NullPointerException)'
-        '{behave @print(1u64);};ptr empty:u64=null in here;empty;}};behave @print(e);', '1\n7\n', ['e']),
+        '{behave @print(1u64);};ptr empty:u64=null in here;defer {empty;};}};behave @print(e);', '1\n7\n', ['e']),
     'two_source_declarations': (IO + 'val x<-1u64;{{val x<-2u64;behave @print(x);}};'
         '{{val x<-3u64;behave @print(x);}};', '2\n3\n', ['x', 'x']),
     'generic_instances_once': (IO + 'func f(x:T)->const T where T{{{val x<-x;return x;}}}'
