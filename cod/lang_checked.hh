@@ -254,6 +254,11 @@ class ScalarChecker {
   std::vector<CheckedBinding> *bindings_ = nullptr;
   std::map<size_t, std::vector<size_t>> scope_storage_;
   std::map<size_t, size_t> native_resource_owners_, native_owner_scopes_;
+  struct RegionOwner {
+    size_t holder, lifetime;
+    bool read_only;
+  };
+  std::map<size_t, RegionOwner> region_owners_;
   std::set<size_t> scope_native_owner_places_;
   std::map<size_t, size_t> incoming_native_symbol_owners_;
   std::optional<size_t> literal_text_owner_;
@@ -415,7 +420,9 @@ class ScalarChecker {
     return checking_method_ && external_owner(owner) && checking_method_->input_owners().at(null_target - 1 - owner).read_only;
   }
   bool const_owner(size_t owner) const {
-    return native_owner_scopes_.contains(owner) || const_native_owner(owner);
+    const auto region = region_owners_.find(owner);
+    return native_owner_scopes_.contains(owner) || const_native_owner(owner) ||
+        (region != region_owners_.end() && region->second.read_only);
   }
   void require_lexical_allocator(std::optional<size_t> actual, const Location &at) {
     if (!lexical_.live || actual == cleanup_scope_) return;
@@ -431,6 +438,8 @@ class ScalarChecker {
     observed_.lexical_allocations.insert(null_target - 1 - *actual);
   }
   size_t owner_lifetime_scope(size_t owner) const {
+    if (const auto region = region_owners_.find(owner); region != region_owners_.end())
+      return region->second.lifetime;
     const auto found = native_owner_scopes_.find(owner);
     return found == native_owner_scopes_.end() ? owner : found->second;
   }
@@ -6161,6 +6170,14 @@ class ScalarChecker {
       if ((method.implicit_scope || method.supplied_scope) && expr.kind == K::make_object && expr.constructor_arguments &&
           !expr.owner_name.empty() && expr.owner_name != "here")
         use(expr.owner_name, expr.at, bound, query);
+      if (expr.kind == K::make_region && expr.annotation) {
+        visit(*expr.children.front(), bound, query);
+        auto construction = bound;
+        if (!expr.owner_name.empty()) construction.insert(expr.owner_name);
+        for (const auto &item : expr.initializer_items())
+          visit(item->initializer_field_label() ? *item->children.back() : *item, construction, query);
+        return;
+      }
       if (expr.kind == K::make_object && !expr.constructor_arguments) {
         if (expr.construction_type_query) visit(*expr.children.front(), bound, true);
         if (const auto *block = expr.construction_initializer()) {
@@ -6203,7 +6220,8 @@ class ScalarChecker {
         }
         return;
       }
-      if (expr.kind == K::alias || expr.kind == K::here_binding || expr.kind == K::native_handle_binding) {
+      if (expr.kind == K::alias || expr.kind == K::here_binding || expr.kind == K::native_handle_binding ||
+          expr.kind == K::region_binding) {
         for (const auto &child : expr.children) visit(*child, bound, query);
         if (!expr.owner_name.empty() && expr.owner_name != "here") use(expr.owner_name, expr.at, bound, query);
         bound.insert(expr.text);
@@ -7959,6 +7977,36 @@ class ScalarChecker {
     for (size_t i = 0; i < schema.fields.size(); ++i)
       if (!initialized.contains(i))
         fail(at, "product construction is missing initialization of field '" + schema.fields[i].source->name + "'");
+  }
+  const Expression &region_initializer(const Expression &binding) const {
+    const auto &initializer = ungrouped_expression(*binding.children.front());
+    if (!binding.annotation->owned)
+      implementation_gap(binding.at, "a borrowed region binding");
+    if (initializer.kind != Expression::Kind::make_region || !initializer.annotation)
+      implementation_gap(initializer.at, "an owning region declaration requires a fresh 'make region Root(...)' initializer");
+    if (!initializer.owner_name.empty())
+      implementation_gap(initializer.at, "initialization through a construction-local region name");
+    return initializer;
+  }
+  const CheckedSchema &direct_region_roots(const Type &schema, const Location &at) const {
+    if (schema.kind != Type::region_schema) fail(at, "make region requires a named region root schema");
+    const auto &roots = program_.schemas.at(schema.identity);
+    for (const auto &root : roots.fields)
+      if (root.stores_target() || !program_.bits_payload(root.type))
+        implementation_gap(root.source->at, "region roots outside direct bits storage");
+    return roots;
+  }
+  static std::vector<size_t> region_initializers(const CheckedSchema &roots, const Expression &expr) {
+    for (const auto &item : expr.initializer_items())
+      if (!item->initializer_field_label())
+        implementation_gap(item->at, "region initialization outside the direct root initializer form");
+    return product_initializers(roots, expr);
+  }
+  static Type owned_region_type(const Type &schema) {
+    Type type{Type::region};
+    type.owned = true;
+    type.target = std::make_shared<Type>(schema);
+    return type;
   }
   std::vector<size_t> exception_initializers(const Type &type, const Expression &expr) const {
     const auto &schema = scalar_exception_schema(type, expr.at);
@@ -12029,6 +12077,41 @@ class ScalarChecker {
         state.selections.declare_place(expr.text, &expr, state.target);
       return Type::void_type;
     }
+    case K::region_binding: {
+      if (!expr.annotation->owned || !ungrouped_expression(*expr.children.front()).annotation) {
+        if (state.required) region_initializer(expr);
+        return {};
+      }
+      const auto &make = region_initializer(expr);
+      const auto schema = evidence_annotation(*make.annotation, state);
+      if (!state.required && schema.kind != Type::region_schema) return {};
+      const auto &roots = direct_region_roots(schema, make.at);
+      if (expr.annotation->target && evidence_annotation(*expr.annotation->target, state) != schema)
+        fail(make.at, "constructed region does not match the declared root schema");
+      const auto capacity = type_evidence(*make.children.front(), state);
+      if (!capacity || *capacity == Type::never) return capacity;
+      transfer_type(*capacity, Type::uint64, make.children.front()->at);
+      note_type_allocation(state);
+      note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::invalid_capacity)));
+      note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::region_capacity_exceeded)));
+      const auto order = region_initializers(roots, make);
+      const auto items = make.initializer_items();
+      for (size_t i = 0; i < order.size(); ++i) {
+        const auto value = type_bits_payload(*items[i]->children.back(), roots.fields[order[i]].type, state);
+        if (!value || *value == Type::never) return value;
+      }
+      complete_product(roots, order, make.at);
+      state.bindings[expr.text] = owned_region_type(schema);
+      state.views[expr.text] = {expr.read_only, true, false};
+      state.local_declarations[expr.text] = &expr;
+      state.owner_bindings[expr.text] = EvidenceOwner::for_scope(expr);
+      state.definitions.erase(expr.text);
+      state.selections.remove_binding(expr.text);
+      return Type::void_type;
+    }
+    case K::make_region:
+      if (state.required) implementation_gap(expr.at, "region construction outside a direct lexical owning region initializer");
+      return {};
     case K::native_handle_binding: {
       const auto declared = evidence_annotation(*expr.annotation, state);
       if (declared.kind != Type::c_type_marker) {
@@ -13365,6 +13448,22 @@ class ScalarChecker {
       return shape->element;
     }
     case K::field: {
+      const auto &base = *expr.children.front();
+      if (base.kind == K::name) {
+        const auto root = state.bindings.find(base.text);
+        if (root != state.bindings.end() && root->second && root->second->kind == Type::region) {
+          check_type_capture(state, base.text, base.at);
+          const auto owner = owner_evidence(base.text, state, base.at);
+          if (!owner || !root->second->target) return {};
+          const auto &roots = direct_region_roots(*root->second->target, expr.at);
+          const auto &field = roots.fields[product_field(roots, expr)];
+          view = {state.views.at(base.text).read_only.value_or(true) || readonly_field(field), true, true, owner};
+          view.storage_kind = PlaceKind::value;
+          target_facts.initialized = true;
+          target_facts.presence = TargetPresence::present;
+          return field.type;
+        }
+      }
       const auto type = child(0, false, true, EvidenceRead::projection);
       if (type == Type::never) return Type::never;
       if (type && nominal_exception(*type)) {
@@ -17725,6 +17824,45 @@ class ScalarChecker {
     note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
     return operation;
   }
+  CheckedOperation check_region_acquisition(const Expression &expr, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations) {
+    const auto &make = region_initializer(expr);
+    const auto schema = resolve_annotation(*make.annotation, instance);
+    const auto &roots = direct_region_roots(schema, make.at);
+    if (expr.annotation->target && resolve_annotation(*expr.annotation->target, instance) != schema)
+      fail(make.at, "constructed region does not match the declared root schema");
+    if (delayed_ || declaration_scope(expr.text, expr.at).id != cleanup_scope_ ||
+        std::ranges::any_of(active_loops_, [&](const auto *loop) { return cleanup_scope_ < loop_states_.at(loop).first; }))
+      implementation_gap(expr.at, "owning region acquisition requires a full lexical lifetime scope");
+    const auto order = region_initializers(roots, make);
+    CheckedOperation operation;
+    operation.operand_type = schema;
+    operation.region_initializers = order;
+    const auto capacity = check(*make.children.front(), instance, operations);
+    bool completes = capacity != Type::never;
+    if (completes) {
+      transfer_type(capacity, Type::uint64, make.children.front()->at);
+      note_abrupt(make.at, {exception_id(ExceptionCategory::invalid_capacity),
+                          exception_id(ExceptionCategory::region_capacity_exceeded), exception_id(ExceptionCategory::out_of_memory)});
+      const auto items = make.initializer_items();
+      for (size_t i = 0; completes && i < order.size(); ++i) {
+        const auto &input = *items[i]->children.back();
+        completes = check_bits_payload(input, roots.fields[order[i]].type, instance, operations) != Type::never;
+      }
+    }
+    if (completes) complete_product(roots, order, make.at);
+    const auto place = declare(expr.text, owned_region_type(schema), expr.read_only, true, expr.at);
+    const auto owner = next_scope_++;
+    checked_scope_owners_[&expr] = owner;
+    region_owners_.emplace(owner, RegionOwner{place, storage(place).scope, expr.read_only});
+    const auto binding = storage(place).binding;
+    bindings_->at(binding).owner_binding = owner;
+    bindings_->at(binding).fixed = true;
+    if (completes) initialize(place);
+    operation.region_holder = place;
+    operation.type = completes ? Type{Type::void_type} : Type{Type::never};
+    return operation;
+  }
   CheckedOperation check_product_construction(const Expression &expr, const Type &type, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, std::optional<size_t> destination = {}, bool read = false) {
     const auto &schema = product_schema(type, expr.at);
@@ -19484,6 +19622,11 @@ class ScalarChecker {
       note_abrupt(expr.at, {}, {1, true});
       break;
     }
+    case K::region_binding:
+      operation = check_region_acquisition(expr, instance, operations);
+      break;
+    case K::make_region:
+      implementation_gap(expr.at, "region construction outside a direct lexical owning region initializer");
     case K::native_handle_binding:
       operation = expr.binding == "<-" ? check_native_acquisition(expr, instance, operations)
                                        : check_native_borrow_binding(expr, instance, operations);
@@ -19584,6 +19727,24 @@ class ScalarChecker {
     }
     case K::field: {
       const auto &base = *expr.children.front();
+      if (base.kind == K::name) if (const auto binding = lexical_.lookup(base.text);
+          binding && bindings_->at(*binding).type.kind == Type::region) {
+        const auto owner = named_owner(base.text, base.at);
+        const auto &region = region_owners_.at(owner);
+        const auto &schema = *bindings_->at(*binding).type.target;
+        const auto &roots = direct_region_roots(schema, expr.at);
+        const auto index = product_field(roots, expr);
+        const auto &field = roots.fields[index];
+        operation.type = field.type;
+        operation.operand_type = schema;
+        operation.product_field = index;
+        operation.region_holder = region.holder;
+        operation.owners = {owner};
+        operation.view = operation.indexed_target = true;
+        operation.read_only = region.read_only || readonly_field(field);
+        operation.initialization.emplace();
+        break;
+      }
       if (base.kind == K::name) if (const auto binding = lexical_.lookup(base.text);
           binding && nominal_exception(bindings_->at(*binding).type)) {
         const auto parent = read_binding(base, false, binding, BindingUse::exception_field);
@@ -20130,7 +20291,7 @@ class ScalarChecker {
       rebound_.clear(); payload_writes_ = {}; loop_states_.clear(); deferred_product_writes_.clear();
     }
     lexical_ = {}; cleanup_ = CleanupEquations{program_.exception_types}; scope_storage_.clear(); checked_scope_owners_.clear(); read_sites_.clear(); external_owners_.clear();
-    native_resource_owners_.clear(); native_owner_scopes_.clear(); scope_native_owner_places_.clear();
+    native_resource_owners_.clear(); native_owner_scopes_.clear(); scope_native_owner_places_.clear(); region_owners_.clear();
     incoming_native_symbol_owners_.clear();
     abstract_input_bindings_.clear();
     abstract_operand_ = nullptr;

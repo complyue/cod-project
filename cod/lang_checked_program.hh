@@ -128,6 +128,8 @@ struct CheckedOperation {
   std::optional<size_t> place;
   std::optional<size_t> product_field;
   std::optional<size_t> exception_owner;
+  std::optional<size_t> region_holder;
+  std::vector<size_t> region_initializers;
   struct NativeAcquisition {
     size_t constructor;
     const Expression *initializer;

@@ -349,12 +349,12 @@ struct Expression {
   // An explicit placement operand follows the initializer operands in children.
   ExceptionPlacement exception_placement = ExceptionPlacement::default_region;
   const Expression *construction_initializer() const {
-    const auto index = construction_type_query ? 1u : 0u;
+    const auto index = construction_type_query || kind == Kind::make_region ? 1u : 0u;
     return initializer_block && children.size() > index && children[index]->kind == Kind::block
         ? children[index].get() : nullptr;
   }
   std::span<const std::unique_ptr<Expression>> initializer_items() const {
-    if (kind != Kind::make_object) return children;
+    if (kind != Kind::make_object && (kind != Kind::make_region || !annotation)) return children;
     const auto *block = construction_initializer();
     if (!block) return {};
     return block->children;
@@ -1465,6 +1465,23 @@ class Parser {
     return expr;
   }
 
+  Expr region_construction(const Token &token) {
+    auto result = make(Expression::Kind::make_region, token);
+    const auto name = ordinary_name();
+    if (take(":")) {
+      result->owner_name = name.text;
+      result->annotation = parse_type();
+    } else result->annotation = Type{Type::named, name.text};
+    expect("(");
+    result->children.push_back(expression(0, HereAttachment::initializer_operand, false));
+    expect("->");
+    expect("capacity");
+    expect(")");
+    result->initializer_block = true;
+    result->children.push_back(block(true));
+    return result;
+  }
+
   Expr catch_handler(bool &catch_all) {
     expect("(");
     auto handler = make(Expression::Kind::handler, value_name());
@@ -1613,6 +1630,10 @@ class Parser {
       return expr;
     }
     if (take("make")) {
+      if (is("region") && tokens_[cursor_ + 1].kind == TokenKind::identifier && !is("in", 1)) {
+        expect("region");
+        return region_construction(token);
+      }
       if (is("exception") && tokens_[cursor_ + 1].kind == TokenKind::identifier && !is("in", 1)) {
         expect("exception");
         return exception_construction(token);
