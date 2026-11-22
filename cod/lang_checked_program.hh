@@ -128,6 +128,7 @@ struct CheckedOperation {
   bool enum_literal = false;
   bool enum_assertion = false;
   bool check_c_string = false;
+  std::optional<size_t> text_storage_owner;
   CasePattern case_pattern;
   bool case_subject_may_be_null = false;
   bool case_reaches_end = false;
@@ -382,6 +383,8 @@ struct CallEffects {
   std::map<size_t, CleanupEquations::BooleanValues> booleans;
   CleanupEquations::Returned returned;
   std::set<size_t> symbols; // Required current symbol identities, not operand positions.
+  // Declared owner indices, translated to the actual owners at each call.
+  std::set<size_t> lexical_allocations;
   // Possible failures on completed paths, including conservative bounds for unresolved calls.
   std::set<size_t> escaping_failures;
   bool requires_deferred_failure_delivery = false;

@@ -388,6 +388,19 @@ class ScalarChecker {
   bool const_owner(size_t owner) const {
     return native_owner_scopes_.contains(owner) || const_native_owner(owner);
   }
+  void require_lexical_allocator(std::optional<size_t> actual, const Location &at) {
+    if (!lexical_.live || actual == cleanup_scope_) return;
+    if (!actual || !external_owner(*actual)) {
+      if (validating_) implementation_gap(at, "allocation without a proved full lexical owner");
+      return;
+    }
+    if (const_owner(*actual)) fail(at, "const owner cannot allocate storage");
+    if (checking_method_->here_inputs()) {
+      if (validating_) implementation_gap(at, "allocating into a caller owner through a higher-order here receiver");
+      return;
+    }
+    observed_.lexical_allocations.insert(null_target - 1 - *actual);
+  }
   size_t owner_lifetime_scope(size_t owner) const {
     const auto found = native_owner_scopes_.find(owner);
     return found == native_owner_scopes_.end() ? owner : found->second;
@@ -4188,6 +4201,13 @@ class ScalarChecker {
     CallEffects effects;
     bool closed;
   };
+  static size_t first_owner_operand(const CheckedMethod &method, size_t owner) {
+    const auto &name = method.input_owners().at(owner).name;
+    const auto inputs = method.input_parameters();
+    const auto found = std::ranges::find(inputs, name, &Parameter::owner);
+    if (found == inputs.end()) throw std::logic_error("owner without an ordinary input");
+    return std::distance(inputs.begin(), found);
+  }
   CallableInvocationEffects callable_effects(const Type &contract, const std::vector<Type> &arguments,
                                              const std::optional<std::set<size_t>> &choices) const {
     callable_effect_consumers_.insert(checking_context_);
@@ -4200,7 +4220,15 @@ class ScalarChecker {
       ++covered;
       for (const auto &[inputs, target] : callable.alternatives(arguments)) {
         const auto &next = read_effects(target);
-        if (first) { effects = next; first = false; continue; }
+        // Different definitions can declare their owners in different orders.
+        // Translate each effect to the owner slot of the shared callable type.
+        std::set<size_t> owners;
+        for (const auto owner : next.lexical_allocations) {
+          const auto &method = program_.methods[program_.instances[target].method];
+          owners.insert(contract.owners.at(first_owner_operand(method, owner)));
+        }
+        if (first) { effects = next; effects.lexical_allocations = std::move(owners); first = false; continue; }
+        effects.lexical_allocations.merge(owners);
         effects.reads.insert(next.reads.begin(), next.reads.end());
         effects.symbols.insert(next.symbols.begin(), next.symbols.end());
         effects.written_inputs.insert(next.written_inputs.begin(), next.written_inputs.end());
@@ -4444,6 +4472,13 @@ class ScalarChecker {
       if (!readonly && view.read_only) fail(operation.argument(expr, i + offset).at, "readonly argument cannot supply a writable borrowed parameter");
       if (arguments[i] != contract.parameters[i] && !widens_text(arguments[i], contract.parameters[i]))
         implementation_gap(operation.argument(expr, i + offset).at, "borrowed exception upcasts");
+    }
+    for (const auto owner : summary.lexical_allocations) {
+      if (immediate_scope) require_lexical_allocator(operation.scope_owners.at(owner), expr.at);
+      else if (operation.callee) {
+        const auto &callee = program_.methods[program_.instances[*operation.callee].method];
+        require_lexical_allocator(one_owner(views.at(first_owner_operand(callee, owner))), expr.at);
+      } else require_lexical_allocator(owners.at(owner), expr.at);
     }
     operation.type = *contract.target;
     if (operation.type.kind == Type::exception)
@@ -5837,6 +5872,9 @@ class ScalarChecker {
         return;
       }
       if (expr.kind == K::make_borrowed_handle) use(expr.owner_name, expr.at, bound, query);
+      if ((method.implicit_scope || method.supplied_scope) && expr.kind == K::make_object && expr.constructor_arguments &&
+          expr.annotation->kind == Type::string && !expr.owner_name.empty() && expr.owner_name != "here")
+        use(expr.owner_name, expr.at, bound, query);
       if (expr.kind == K::make_object && !expr.constructor_arguments) {
         if (expr.construction_type_query) visit(*expr.children.front(), bound, true);
         if (const auto *block = expr.construction_initializer()) {
@@ -7763,6 +7801,12 @@ class ScalarChecker {
     if (const auto found = state.owner_bindings.find(name); found != state.owner_bindings.end()) return found->second;
     if (state.required) fail(at, state.bindings.contains(name) ? "nearest binding '" + name + "' is not an owner" : "unknown owner '" + name + "'");
     return {};
+  }
+  bool readonly_evidence_owner(const EvidenceOwner &owner, const TypeEvidenceState &state) const {
+    if (owner.kind == EvidenceOwner::Kind::checked) return const_owner(owner.id);
+    if (owner.kind == EvidenceOwner::Kind::parameter && state.method)
+      return program_.methods[*state.method].input_owners().at(owner.id).read_only;
+    return false;
   }
   static TypeEvidenceState merge_evidence(TypeEvidenceState left, const TypeEvidenceState &right, bool right_exits = false) {
     const auto unavailable = [&](const std::string &name) {
@@ -10587,6 +10631,10 @@ class ScalarChecker {
       fail(expr.at, "make String requires one positional text operand");
     return *expr.children.front();
   }
+  static bool constructs_string(const Expression &expr) {
+    const auto &source = ungrouped_expression(expr);
+    return source.kind == Expression::Kind::make_object && source.annotation && source.annotation->kind == Type::string;
+  }
   CheckedOperation check_argument_expression(const Expression &operand, ArgumentMode mode, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, const Type *expected = nullptr,
       IndexedUse indexed_use = IndexedUse::value_only) {
@@ -11148,14 +11196,20 @@ class ScalarChecker {
             std::optional<Type>{evidence_annotation(*declaration->annotation, state)} : std::nullopt;
         const auto &initializer = *declaration->children.front();
         const bool reservation = reserves_value_receiver(expr, initializer);
+        const bool text_placement = declared_owner && constructs_string(initializer);
         if (state.required && initializer.kind == K::make_object && initializer.owner_name.empty() &&
-            declared_owner && compare_owners(declared_owner, state.full_scope_owner, &state) != OwnerMatch::satisfied)
+            declared_owner && !text_placement && compare_owners(declared_owner, state.full_scope_owner, &state) != OwnerMatch::satisfied)
           implementation_gap(initializer.at, "construction in the receiver's external owner");
         const auto initial = type_evidence(initializer, state, declared.has_value(),
             declared && declared->kind == Type::procedure ? &*declared : nullptr, nullptr,
             ExpectedTypeUse::materialization, completes,
             !reservation && (value || declaration->binding == "<-") ? EvidenceRead::payload : EvidenceRead::target);
         const auto type = declared ? declared : initial;
+        if (text_placement && initial == Type::string) {
+          if (ungrouped_expression(initializer).owner_name.empty()) state.value.owner = declared_owner;
+          if (state.required && readonly_evidence_owner(*declared_owner, state))
+            fail(initializer.at, "const owner cannot allocate storage");
+        }
         if (initial == Type::never) completes = false;
         const auto borrowed = value || declaration->binding == "<-" ? std::optional{false} : state.value.view;
         if (completes && type && type->kind == Type::procedure && (borrowed != true || state.value.mixed_view))
@@ -11320,7 +11374,12 @@ class ScalarChecker {
       if (!constructed) return {};
       const auto &type = *constructed;
       const bool track_places = state.checks_initialization() && state.selections.tracking;
-      if (type.kind == Type::string || scalar_type(type)) {
+      auto text_owner = state.full_scope_owner;
+      if (type.kind == Type::string && !expr.owner_name.empty() && expr.owner_name != "here")
+        text_owner = owner_evidence(expr.owner_name, state, expr.at);
+      if (type.kind == Type::string && text_owner && state.required && readonly_evidence_owner(*text_owner, state))
+        fail(expr.at, "const owner cannot allocate storage");
+      if (scalar_type(type)) {
         if (state.required && !expr.owner_name.empty() && expr.owner_name != "here") {
           const auto selected = owner_evidence(expr.owner_name, state, expr.at);
           if (selected && selected->kind == EvidenceOwner::Kind::checked && const_owner(selected->id))
@@ -11336,7 +11395,7 @@ class ScalarChecker {
         if (!source || *source == Type::never) return source;
         if (!text_type(*source)) fail(input.at, "make String requires a text operand");
         require_type_initialized(state, state.target, {}, input.at);
-        view = {true, true, {}, state.full_scope_owner};
+        view = {true, true, {}, text_owner};
         target_facts.presence = TargetPresence::present;
         if (track_places) {
           target_facts.places.insert(&expr);
@@ -14383,6 +14442,12 @@ class ScalarChecker {
     }
     const auto profile = scope_profile(std::move(inputs), ResultContract{*contract.target}, failures, std::move(group));
     supplied.instance = demand(profile, std::move(arguments), body.at);
+    const auto check_allocations = [&](size_t instance) {
+      for (const auto role : read_effects(instance).lexical_allocations)
+        require_lexical_allocator(owners.at(role), body.at);
+    };
+    check_allocations(supplied.instance);
+    if (returning) check_allocations(*returning);
     if (validating_ && (!read_effects(supplied.instance).binding_sources.empty() ||
                         (returning && !read_effects(*returning).binding_sources.empty())))
       implementation_gap(body.at, "rebinding a supplier reference slot from a repeatedly callable here body");
@@ -16344,7 +16409,7 @@ class ScalarChecker {
     result.place = place;
     return result;
   }
-  void check_construction_owner(const Expression &expr, std::optional<size_t> required) const {
+  size_t construction_destination(const Expression &expr, std::optional<size_t> required) const {
     auto owner = required.value_or(cleanup_scope_);
     if (!expr.owner_name.empty()) {
       const auto selected = expr.owner_name == "here" ? cleanup_scope_ : named_owner(expr.owner_name, expr.at);
@@ -16353,6 +16418,10 @@ class ScalarChecker {
       owner = selected;
     }
     if (const_owner(owner)) fail(expr.at, "const owner cannot allocate storage");
+    return owner;
+  }
+  void check_construction_owner(const Expression &expr, std::optional<size_t> required) const {
+    const auto owner = construction_destination(expr, required);
     if (owner != cleanup_scope_) implementation_gap(expr.at, "construction outside the current lexical owner");
   }
   CheckedOperation construction_target(size_t place, const Type &type) const {
@@ -17201,7 +17270,8 @@ class ScalarChecker {
     case K::grouped: {
       const auto &operand = *expr.children.front();
       operation.type = check(operand, instance, operations, false, discard, expected, expected_use,
-          false, IndexedUse::immediate_target, native_loan, {}, nullptr, loop_discard);
+          false, IndexedUse::immediate_target, native_loan, constructs_string(operand) ? construction_owner : std::nullopt,
+          nullptr, loop_discard);
       if (operation.type == Type::never) break;
       const auto &source = operations.at(&operand);
       if ((native_loan != NativeLoanContext::none || discard) && operation.type.kind == Type::native_handle) {
@@ -17933,14 +18003,17 @@ class ScalarChecker {
       operation = check_attached_native_acquisition(expr, instance, operations);
       break;
     case K::make_object: {
-      check_construction_owner(expr, construction_owner);
       const auto type = [&] {
         if (!expr.construction_type_query) return resolve_annotation(*expr.annotation, instance);
         auto state = evidence_state(false, nullptr, true);
         state.required = true;
         return *construction_type(expr, state);
       }();
+      if (type.kind != Type::string) check_construction_owner(expr, construction_owner);
       if (type.kind == Type::string) {
+        const auto owner = construction_destination(expr, construction_owner);
+        operation.operand_type = type;
+        operation.text_storage_owner = owner;
         const auto &input = text_constructor_input(expr);
         const auto source = check(input, instance, operations, false);
         if (source == Type::never) { operation.type = Type::never; break; }
@@ -17948,9 +18021,10 @@ class ScalarChecker {
         const auto &selected = operations.at(&input);
         prepare_borrow(selected, ArgumentMode::borrowed_ref, input.at);
         require_live_view(selected, input.at);
-        operation.type = operation.operand_type = type;
+        operation.type = type;
         operation.view = operation.read_only = true;
-        operation.owners = {cleanup_scope_};
+        require_lexical_allocator(owner, expr.at);
+        operation.owners = {owner};
         operation.initialization.emplace();
         note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       } else if (scalar_type(type))
@@ -18955,9 +19029,11 @@ class ScalarChecker {
       if (known.reads != effects.reads) { known.reads = effects.reads; changed = true; }
       if (known.symbols != effects.symbols) { known.symbols = effects.symbols; changed = true; }
     } else {
+      const auto allocations = known.lexical_allocations.size();
+      known.lexical_allocations.insert(effects.lexical_allocations.begin(), effects.lexical_allocations.end());
       const auto written_count = known.written_inputs.size();
       known.written_inputs.insert(effects.written_inputs.begin(), effects.written_inputs.end());
-      changed = known.written_inputs.size() != written_count;
+      changed = known.written_inputs.size() != written_count || known.lexical_allocations.size() != allocations;
       const auto failure_count = known.escaping_failures.size();
       known.escaping_failures.insert(effects.escaping_failures.begin(), effects.escaping_failures.end());
       changed |= known.escaping_failures.size() != failure_count;
@@ -20107,10 +20183,15 @@ public:
       const auto &method = program_.methods.at(entry.method);
       if (!method.captures.empty() || !method.retained_types.empty() || method.declaration_context())
         implementation_gap(method.source->at, "a C entry with an additional lexical calling context");
-      for (const auto instance : method.instances) for (const auto symbol : program_.instances.at(instance).effects.symbols) {
-        const auto &binding = program_.symbols.at(symbol);
-        if (binding.type && binding.type->kind == Type::native_handle)
-          fail(method.source->at, "cannot prove an installed binding for symbol '" + binding.name + "' at C entry");
+      for (const auto instance : method.instances) {
+        const auto &effects = program_.instances.at(instance).effects;
+        if (!effects.lexical_allocations.empty())
+          implementation_gap(method.source->at, "a C entry owner supplying a lexical allocator");
+        for (const auto symbol : effects.symbols) {
+          const auto &binding = program_.symbols.at(symbol);
+          if (binding.type && binding.type->kind == Type::native_handle)
+            fail(method.source->at, "cannot prove an installed binding for symbol '" + binding.name + "' at C entry");
+        }
       }
     }
     return std::move(program_);
