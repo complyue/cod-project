@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Dependency path owners and graph storage
+
+<a id="k-booter-graph-edge-prerequisites-20261122"></a>
+**K-BOOTER-GRAPH-EDGE-PREREQUISITES-20261122.** Under H-COMPILER-LAYERS-20261122, H-BOOTER-HANDLE-OWNER-CTYPE-20261120 and H-BOOTER-NATIVE-MINIMUM-20261119, delegated review accepted a common path owner CType for foreign and CoD-owned instances, immutable bounded key loans and lexical arrays for isolated traversal evidence. Regional G remains a delivery requirement. See `652249488c429035dfbf761058899b8726fb5def:applications/cod-booter/docs/ModuleGraph.md`, “Owners across a visit”, and the initial seed delivery scope in the booter README at that revision. D-20-MODULE-GRAPH r5 to r6, interop r22 to r23, P-680/P-681, registry r1055. Concrete provider and regional table code awaits structural review.
+
 ## 2026-11-22 — Read-only Boolean observation in the seed checker
 
 <a id="k-seed-boolean-observation-20261122"></a>
