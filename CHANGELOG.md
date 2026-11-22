@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Live activation for the dependency handler
+
+<a id="k-booter-visit-activation-20261122"></a>
+**K-BOOTER-VISIT-ACTIVATION-20261122.** Delegated review under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122 clears the private per-visit record and scoped dispatch for the workload at `a1928783223641150ecce85d0996ccca2d3c1380:applications/cod-booter/docs/ModuleGraph.md`, “Reentry and completion”. D-10-HANDLER-INSTALL supplies binding, snapshot and restoration semantics. D-20-MODULE-GRAPH r10 to r11, D-ARCH-REVIEW r11 to r12, P-680–P-683, registry r1060.
+
 ## 2026-11-22 — Writable supplier array in the path-key consumer
 
 <a id="k-booter-path-key-consumer-20261122"></a>
