@@ -47,6 +47,11 @@ struct CheckedArgument {
   ArgumentMode mode;
   Type type;
   bool binding_slot = false;
+  struct ReferenceStorage {
+    size_t place, owner;
+    auto operator<=>(const ReferenceStorage &) const = default;
+  };
+  std::optional<ReferenceStorage> reference_storage = {};
   bool operator==(const CheckedArgument &) const = default;
 };
 inline ArgumentMode argument_mode(const Parameter &parameter) {
@@ -586,8 +591,11 @@ struct CheckedMethod {
   struct LexicalResult {
     const Expression *marker;
     size_t owner;
+    const Expression *display_operands = nullptr;
+    bool marks(const Expression &expr) const { return marker == &expr || display_operands == &expr; }
   };
   std::optional<LexicalResult> lexical_result;
+  bool prepares_display_operands() const { return lexical_result && lexical_result->display_operands; }
   std::set<size_t> throws_categories;
   std::vector<Type> throws_types;
   std::vector<Capture> captures;

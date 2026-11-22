@@ -1,0 +1,87 @@
+using symbol "std:io" @print;
+using "std:text-storage" { utf8_byte, utf8_size };
+using "../../../cod/library/string.cod" { StringBuilder, Utf8WriteError };
+using symbol "../../../cod/library/string.cod" @sout;
+import "../../../cod/library/string.cod" { (++), (++) as concatenate, emit };
+import "../../../applications/cod-booter/src/DiagnosticFormatting.cod" emitStr;
+using "../../../applications/cod-booter/src/SourceStorage.cod" SourcePosition;
+
+data BrokenDisplay { code:u64; }
+
+proc emitStr(value:const BrokenDisplay in O) -> void where {const owner O} {
+    emit("private");
+    throw Utf8WriteError { code <- value.code; };
+}
+
+func (++)(left:bool, right:bool) -> u64 {
+    if (left && !right) return 42u64;
+    return 0u64;
+}
+
+func text_length(left:const CString in L, right:const String in R) -> u64
+    where {const owner L, const owner R} {
+    return utf8_size(make String(left ++ right));
+}
+
+func same_text(left:const String in L, right:const String in R) -> bool
+    where {const owner L, const owner R} {
+    val size <- utf8_size(left);
+    if (size != utf8_size(right)) return false;
+    for (at in 0u64 .. size) {
+        if (utf8_byte(left, at) != utf8_byte(right, at)) return false;
+    };
+    return true;
+}
+
+proc set9(n:u64 in O) -> u64 where {owner O} {
+    n <- 9u64;
+    return 7u64;
+}
+
+proc output_operand() -> u64 {
+    emit("operand");
+    return 7u64;
+}
+
+proc fail_operand() -> u64 {
+    emit("failure");
+    throw Utf8WriteError { code <- 3u64; };
+}
+
+proc verify() -> u64 {
+    ref position = make SourcePosition { line <- 2u64; column <- 1u64; };
+    ref writer = make StringBuilder();
+    effect @sout = writer;
+    if (!same_text(make String(12u64 ++ 7u64), "127")) return 1u64;
+    if (!same_text(make String("at " ++ position), "at 2:1")) return 2u64;
+    if (!same_text(make String(position ++ ("!" ++ "?")), "2:1!?")) return 3u64;
+    if (!same_text(make String(("!" ++ "?") ++ position), "!?2:1")) return 4u64;
+    if (!same_text(make String(concatenate(position, 7u64)), "2:17")) return 5u64;
+    if ((true ++ false) != 42u64 || text_length("é":CString, "!") != 3u64) return 6u64;
+
+    ref n:u64 = 1u64;
+    ref live = n ++ set9(n);
+    n <- 1u64;
+    ref snapshot = (n) ++ set9(n);
+    if (!same_text(make String(live), "97") || !same_text(make String(snapshot), "17")) return 7u64;
+    ref first:u64 = 2u64;
+    ref replacement:u64 = 4u64;
+    ptr selected = first;
+    ref retained = concatenate(selected, if (true) { selected = replacement; 7u64 } else { 0u64 });
+    if (!same_text(make String(retained), "27") || selected != 4u64) return 12u64;
+    if (!same_text(make String(12u64 ++ output_operand()), "127")) return 8u64;
+
+    ref broken = make BrokenDisplay { code <- 5u64; };
+    try { broken ++ fail_operand():void; } catch (e:Utf8WriteError) {
+        if (e.code != 3u64) return 9u64;
+        emit(":right");
+    };
+    try { broken ++ 7u64 ++ output_operand():void; } catch (e:Utf8WriteError) {
+        if (e.code != 5u64) return 10u64;
+        emit(":left");
+    };
+    if (!same_text(make String(writer), "operandfailure:right:left")) return 11u64;
+    return 73u64;
+}
+
+behave @print(verify());

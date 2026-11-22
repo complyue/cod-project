@@ -2217,6 +2217,7 @@ class ScalarChecker {
   struct ArgumentPreparation {
     ArgumentMode mode = ArgumentMode::value;
     std::optional<Type> type;
+    bool display_operand = false;
   };
   struct NamedFamily {
     std::vector<size_t> methods;
@@ -2487,7 +2488,7 @@ class ScalarChecker {
         const std::vector<Type> selected_prefix(actual.begin(), actual.begin() + prefix.size());
         auto prepared = argument_preparation(expr, operation, selected_prefix, selected_evidence, prefix_access, prefix_owners, required, state);
         if (!common) common = std::move(prepared);
-        else if (common->mode != prepared.mode) compatible = false;
+        else if (common->mode != prepared.mode || common->display_operand != prepared.display_operand) compatible = false;
         else if (common->type != prepared.type) common->type.reset();
       });
       if (!compatible && required)
@@ -2516,17 +2517,20 @@ class ScalarChecker {
           })) ambiguous_methods(expr.at, expr.text, applicable);
     }
     std::optional<ArgumentMode> mode;
+    bool display_operand = false;
     std::optional<Type> type;
     bool consistent_type = true;
     // Without complete type evidence, an eager operation may still use its value-taking builtin.
     if (eager_operation(operation) && !complete) mode = ArgumentMode::value;
     const auto accumulate = [&](const CheckedMethod &candidate, const Substitutions &substitutions) {
       const auto passing = argument_mode(parameter_at(candidate, prefix.size()));
-      if (mode && *mode != passing) {
+      const bool display = candidate.prepares_display_operands();
+      if (mode && (*mode != passing || display_operand != display)) {
         if (!required) return false;
         implementation_gap(expr.children[prefix.size()]->at, "overloads with different argument preparation contracts without sufficient operand type evidence");
       }
       mode = passing;
+      display_operand = display;
       const auto expected = substitute(candidate.parameters[parameter_index(candidate, prefix.size())], candidate, substitutions, true);
       if (nested_binder(candidate, expected) || (type && *type != expected))
         consistent_type = false;
@@ -2548,7 +2552,7 @@ class ScalarChecker {
         if (!accumulate(declaration, *substitutions)) return {};
       }
     }
-    return {mode.value_or(ArgumentMode::value), consistent_type ? type : std::nullopt};
+    return {mode.value_or(ArgumentMode::value), consistent_type ? type : std::nullopt, display_operand};
   }
 
   LexicalState::Scope &declaration_scope(const std::string &name, const Location &at) {
@@ -4274,6 +4278,29 @@ class ScalarChecker {
     if (mode == ArgumentMode::borrowed_ref && proving_ && validating_ && lexical_.live && view.targets.contains(null_target))
       fail(at, "ref argument requires a proven non-null target");
     if (mode == ArgumentMode::borrowed_ref) require_initialized(view, at, "ref argument");
+  }
+  std::optional<CheckedArgument::ReferenceStorage> prepare_display_operand(CheckedOperation &view, const Location &at) {
+    if (view.view) {
+      require_live_view(view, at);
+      if (view.owners.size() != 1) fail(at, "reference initializer requires one statically provable owner");
+    }
+    view.read_only = true;
+    if (view.view && !view.mixed_view) return {};
+    if (!scalar_type(view.type)) implementation_gap(at, "materializing a non-scalar display operand");
+    if (view.mixed_view && !view.owners.contains(cleanup_scope_))
+      fail(at, "reference initializer joins different owners");
+    const auto name = "$display." + std::to_string(storage_->size());
+    const auto place = declare(name, view.type, true, true, at, false);
+    if (storage(place).scope != cleanup_scope_)
+      throw std::logic_error("display operand storage outside the current full scope");
+    initialize(place);
+    auto targets = view.view ? view.targets : std::set<size_t>{};
+    targets.insert(place);
+    select_targets(view, targets);
+    view.owners = {cleanup_scope_};
+    view.view = true;
+    view.mixed_view = false;
+    return CheckedArgument::ReferenceStorage{place, cleanup_scope_};
   }
   static void check_ref_selection_mode(const Expression &operand, ArgumentMode mode) {
     if (operand.checked_ref_argument && mode != ArgumentMode::borrowed_ref)
@@ -6307,7 +6334,8 @@ class ScalarChecker {
     if (method.parameters[index].kind == Type::abstract_type &&
         argument_mode(method.input_parameters()[index]) == ArgumentMode::borrowed_ref &&
         !caller_bindings(method) && program_.conforms_to(argument, method.parameters[index])) return true;
-    if (widening && argument_mode(method.input_parameters()[index]) == ArgumentMode::borrowed_ref &&
+    // CString supplies the same immutable text target under its original owner.
+    if (argument_mode(method.input_parameters()[index]) == ArgumentMode::borrowed_ref &&
         widens_text(argument, method.parameters[index])) return true;
     if (!widening || argument_mode(method.input_parameters()[index]) != ArgumentMode::value) return false;
     auto target = method.parameters[index];
@@ -11112,7 +11140,7 @@ class ScalarChecker {
                                      ExpectedTypeUse expected_use, EvidenceRead read, bool joining, CaseScopeEvidence *case_scope) const {
     using K = Expression::Kind;
     if (state.method && program_.methods[*state.method].lexical_result &&
-        program_.methods[*state.method].lexical_result->marker == &expr) {
+        program_.methods[*state.method].lexical_result->marks(expr)) {
       const auto result = type_evidence(*expr.children.front(), state, contextual, expected, alternatives, expected_use, true, read, joining);
       view = state.value;
       target_facts = state.target;
@@ -12378,6 +12406,7 @@ class ScalarChecker {
       std::vector<size_t> operand_revisions;
       std::map<size_t, size_t> shared_targets;
       std::vector<ArgumentMode> prepared_modes;
+      std::vector<bool> display_operands;
       const auto readable_borrow = [](ArgumentMode mode) {
         return mode == ArgumentMode::borrowed_ref || mode == ArgumentMode::borrowed_read;
       };
@@ -12411,11 +12440,32 @@ class ScalarChecker {
         } else if (expected_argument && expected_argument->kind == Type::c_string && type == Type::string) {
           if (const auto *literal = text_literal_operand(*expr.children[i])) type = string_literal_type(*literal, expected_argument);
         }
+        access.push_back(selected.read_only);
+        owners.push_back(selected.owner);
+        if (parameter.display_operand && type && type != Type::never) {
+          if (selected.view == false || selected.mixed_view) {
+            if (state.required && !scalar_type(*type))
+              implementation_gap(expr.children[i]->at, "materializing a non-scalar display operand");
+            if (state.required && selected.mixed_view &&
+                compare_owners(selected.owner, state.full_scope_owner, &state) == OwnerMatch::mismatch)
+              fail(expr.children[i]->at, "reference initializer joins different owners");
+            selected.owner = state.full_scope_owner;
+            if (selected.view == false) {
+              selected_target = {};
+              selected_target.initialized = true;
+              selected_target.presence = TargetPresence::present;
+            }
+            selected.view = true;
+            selected.mixed_view = false;
+          }
+          selected.read_only = true;
+        }
         complete = complete && type.has_value();
         exits = exits || type == Type::never;
-        arguments.push_back(type.value_or(Type::never)); access.push_back(selected.read_only); owners.push_back(selected.owner);
+        arguments.push_back(type.value_or(Type::never));
         views.push_back(selected);
         prepared_modes.push_back(parameter.mode);
+        display_operands.push_back(parameter.display_operand);
         if (state.selections.tracking) {
           if (!local && state.checks_initialization() && parameter.mode == ArgumentMode::borrowed_ptr)
             for (size_t prior = 0; prior < operand_targets.size(); ++prior) {
@@ -12708,6 +12758,9 @@ class ScalarChecker {
       std::optional<Type> result;
       for (const auto id : best) {
         const auto &method = program_.methods[id];
+        const bool display = method.prepares_display_operands();
+        if (state.required && std::ranges::any_of(display_operands, [&](bool prepared) { return prepared != display; }))
+          implementation_gap(expr.at, "selected method requires unproved display operand preparation");
         if (product_operands.empty()) {
           for (size_t i = 0; i < operand_targets.size(); ++i) {
             const auto &parameter = parameter_at(method, i);
@@ -17588,7 +17641,7 @@ class ScalarChecker {
         break;
       }
       if (instance && program_.methods[instance->method].lexical_result &&
-          program_.methods[instance->method].lexical_result->marker == &expr) {
+          program_.methods[instance->method].lexical_result->marks(expr)) {
         const auto &operand = *expr.children.front();
         operation.type = check(operand, instance, operations, false);
         if (operation.type != Type::never) view(operations.at(&operand));
@@ -17668,8 +17721,12 @@ class ScalarChecker {
         if (!operation.callable_captures.empty()) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       }
       auto evidence = argument_evidence(expr);
+      // Rank the source operands before the selected adapter adds readonly
+      // views or full-scope storage. Only transport uses the prepared owners.
+      Access source_access;
+      Owners source_owners;
       for (size_t i = 0; i < expr.children.size(); ++i) {
-        auto preparation = argument_preparation(expr, name, arguments, evidence, access_of(views), owners_of(views));
+        auto preparation = argument_preparation(expr, name, arguments, evidence, source_access, source_owners);
         const auto mode = preparation.mode;
         // A builtin's passing mode is established. Retain context for missing
         // input evidence without pre-analyzing every normally producing operand.
@@ -17685,7 +17742,7 @@ class ScalarChecker {
         if (argument == Type::never) {
           if (before) {
             evidence = argument_evidence(expr, std::move(*before), i);
-            preparation = argument_preparation(expr, name, arguments, evidence, access_of(views), owners_of(views));
+            preparation = argument_preparation(expr, name, arguments, evidence, source_access, source_owners);
           }
           if (!preparation.type && !builtin_signature) {
             if (!eager && !expr.intrinsic && named_family(expr.text).methods.empty())
@@ -17708,18 +17765,22 @@ class ScalarChecker {
         if (mode == ArgumentMode::value && argument.kind == Type::procedure)
           note_abrupt(expr.children[i]->at, {exception_id(ExceptionCategory::out_of_memory)});
         views.push_back(prepared);
+        source_access.push_back(access_of(prepared));
+        source_owners.emplace_back(one_owner(prepared));
+        if (argument != Type::never && preparation.display_operand)
+          operation.arguments.back().reference_storage = prepare_display_operand(views.back(), operand.at);
         if (argument != Type::never) prepare_borrow(views.back(), mode, expr.children[i]->at);
       }
       for (size_t i = 0; i < arguments.size(); ++i) {
         const bool contextual_text = arguments[i] == Type::c_string && evidence[i].type == Type::string &&
             text_literal_operand(*expr.children[i]);
         if (views[i].type != Type::never && ((evidence[i].type && *evidence[i].type != arguments[i] && !contextual_text) ||
-            (evidence[i].read_only && *evidence[i].read_only != views[i].read_only) ||
-            (evidence[i].owner && checked_owner(*evidence[i].owner) != one_owner(views[i])) ||
+            (evidence[i].read_only && evidence[i].read_only != source_access[i]) ||
+            (evidence[i].owner && checked_owner(*evidence[i].owner) != source_owners[i]) ||
             evidence[i].nominal_targets != views[i].nominal_targets))
           implementation_gap(expr.children[i]->at, "operand type/access/owner evidence depends on completion or contextual inference");
       }
-      if (eager && (expr.intrinsic || !applicable_operation(expr.text, arguments, access_of(views), owners_of(views)))) {
+      if (eager && (expr.intrinsic || !applicable_operation(expr.text, arguments, source_access, source_owners))) {
         if (std::any_of(operation.arguments.begin(), operation.arguments.end(), [](const auto &argument) { return argument.mode != ArgumentMode::value; }))
           implementation_gap(expr.at, "builtin fallback requires value preparation before later operand effects");
         check_eager(expr, name, arguments, views, operation);
@@ -17728,7 +17789,10 @@ class ScalarChecker {
       }
       if (std::ranges::any_of(arguments, [](const auto &type) { return type.kind == Type::abstract_type; }))
         finish_nominal_call(expr, arguments, views, operation, completes);
-      else finish_named_call(expr, arguments, views, operation, read, discard, completes);
+      else {
+        const auto selected = select(expr, arguments, source_access, source_owners);
+        finish_named_call(expr, arguments, views, operation, read, discard, completes, selected);
+      }
       break;
     }
     case K::symbol: case K::procedure_effect: case K::effect: case K::touch: {
@@ -20449,7 +20513,9 @@ class ScalarChecker {
     const auto &marker = ungrouped_expression(*tail.children.front());
     const auto binding = module_names().text_primitives.find(marker.text);
     if (marker.kind != K::call || marker.intrinsic || binding == module_names().text_primitives.end() ||
-        binding->second != COD_LANG_LEXICAL_RESULT_EXPORT || free_bindings(form).declarations.contains(marker.text)) return;
+        binding->second != COD_LANG_LEXICAL_RESULT_EXPORT) return;
+    const auto declarations = free_bindings(form).declarations;
+    if (declarations.contains(marker.text)) return;
     const auto &owners = method.input_owners();
     const auto owner = std::ranges::find(owners, method.result.owner, &OwnerParameter::name);
     if (marker.children.size() != 1 || marker.has_here_body() || form.c_linkage || form.symbolic ||
@@ -20461,6 +20527,20 @@ class ScalarChecker {
         }))
       fail(marker.at, "a use-site text result requires a dedicated writable result owner and readonly borrowed inputs");
     method.lexical_result = CheckedMethod::LexicalResult{&marker, static_cast<size_t>(owner - owners.begin())};
+    const auto &prepared = ungrouped_expression(*marker.children.front());
+    const auto preparation = module_names().text_primitives.find(prepared.text);
+    if (prepared.kind != K::call || prepared.intrinsic || preparation == module_names().text_primitives.end() ||
+        preparation->second != COD_LANG_DISPLAY_OPERANDS_EXPORT || declarations.contains(prepared.text)) return;
+    const auto &inputs = method.input_parameters();
+    if (prepared.children.size() != 1 || prepared.has_here_body() || form.kind != Form::Kind::procedure ||
+        inputs.size() != 2 || inputs[0].owner == inputs[1].owner ||
+        !std::ranges::all_of(inputs, [&](const auto &input) {
+          const auto role = std::ranges::find(owners, input.owner, &OwnerParameter::name);
+          return argument_mode(input) == ArgumentMode::borrowed_ref && input.read_only &&
+              role != owners.end() && role->read_only;
+        }))
+      fail(prepared.at, "display operand preparation requires two readonly ref inputs with independent const owners");
+    method.lexical_result->display_operands = &prepared;
   }
   static std::optional<cod_lang_export_kind> text_storage_kind(std::string_view name) {
 #define COD_LANG_TEXT_KIND(key, spelling, kind, id) if (name == #spelling) return COD_LANG_ ## kind ## _EXPORT;
