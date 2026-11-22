@@ -21,7 +21,7 @@ using "ParserStorage.cod" {
     export_node, export_from_node, array_declaration_node, array_shape_node, readonly_declaration,
     enum_declaration_node, enum_member_node, enum_integer_node, retained_parent_parameter,
     import_node, local_module_selection, member_selector_node, member_selection_item_node,
-    native_symbol_declaration_node, reference_symbol_declaration_node, abstract_type_node,
+    native_symbol_declaration_node, reference_symbol_declaration_node, abstract_type_node, name_node,
 };
 using "SourceStorage.cod" SourceBytes;
 using "SourceAccess.cod" { len as source_len, same_bytes };
@@ -46,6 +46,23 @@ func parse_module_name(source:const SourceBytes in S, tokens:const Tokens in T,
         return false;
     } else {};
     return parse_identifier(source, tokens, nodes, result, past, expected_name());
+}
+
+func parse_resource_name(source:const SourceBytes in S, tokens:const Tokens in T,
+                        nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    val at <- result.next;
+    if (punct_at(source, tokens, at, past) != 40u8)
+        return parse_module_name(source, tokens, nodes, result, past);
+    if (!punct_pair_at(source, tokens, at + 1u64, past, 43u8, 43u8) ||
+        punct_at(source, tokens, at + 2u64, past) != 41u8) {
+        result.diagnostic <- expected_name();
+        return false;
+    } else {};
+    val first <- tokens[at + 1u64].first;
+    append_node(nodes, result, name_node(), first, tokens[at + 1u64].past, 0u64, no_node(), no_node(), first);
+    result.next <- at + 3u64;
+    return result.diagnostic == 0u8;
 }
 
 func parse_member_selector(source:const SourceBytes in S, tokens:const Tokens in T,
@@ -94,7 +111,7 @@ func parse_selection(source:const SourceBytes in S, tokens:const Tokens in T,
     if (symbolic) {
         if (!parse_symbol(tokens, nodes, result, past)) return;
     } else {
-        if (!parse_module_name(source, tokens, nodes, result, past)) return;
+        if (!parse_resource_name(source, tokens, nodes, result, past)) return;
     };
     val selection <- result.root;
     val local_name <- 0u64;
@@ -103,7 +120,7 @@ func parse_selection(source:const SourceBytes in S, tokens:const Tokens in T,
         if (symbolic) {
             if (!parse_symbol(tokens, nodes, result, past)) return;
         } else {
-            if (!parse_module_name(source, tokens, nodes, result, past)) return;
+            if (!parse_resource_name(source, tokens, nodes, result, past)) return;
         };
         (local_name <- result.root + 1u64):void;
     } else {};
@@ -257,13 +274,17 @@ func parse_parameters(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func start_parameter_list(source:const SourceBytes in S, tokens:const Tokens in T,
-                          nodes:ExprNodes in A, result:ParseResult in R, past:u64, lexical:bool) -> u64
+                          nodes:ExprNodes in A, result:ParseResult in R, past:u64, lexical:bool, operators:bool) -> u64
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     val reserved <- at < past && (if (lexical) { reserved_lexical_binder(source, tokens[at]) }
                                   else { reserved_module_name(source, tokens[at]) });
     if (reserved) { result.diagnostic <- expected_name(); return no_node(); } else {};
-    if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) return no_node();
+    if (operators) {
+        if (!parse_resource_name(source, tokens, nodes, result, past)) return no_node();
+    } else {
+        if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) return no_node();
+    };
     val name <- result.root;
     val open <- result.next;
     if (punct_at(source, tokens, open, past) != 40u8) { # '('
@@ -344,7 +365,7 @@ func parse_here_parameter(source:const SourceBytes in S, tokens:const Tokens in 
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
-    val name <- start_parameter_list(source, tokens, nodes, result, past, true);
+    val name <- start_parameter_list(source, tokens, nodes, result, past, true, false);
     if (name == no_node()) return;
     val open <- tokens[result.next - 1u64].first;
     val parameters <- parse_parameters(source, tokens, nodes, result, past, false, false);
@@ -367,7 +388,7 @@ func parse_here_parameter(source:const SourceBytes in S, tokens:const Tokens in 
 func parse_callable_head(source:const SourceBytes in S, tokens:const Tokens in T,
                          nodes:ExprNodes in A, result:ParseResult in R, past:u64, native:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
-    val name <- start_parameter_list(source, tokens, nodes, result, past, false);
+    val name <- start_parameter_list(source, tokens, nodes, result, past, false, !native);
     if (name == no_node()) return;
     val open <- tokens[result.next - 1u64].first;
     val parameters <- parse_parameters(source, tokens, nodes, result, past, true, !native);
@@ -622,7 +643,7 @@ func parse_publication(source:const SourceBytes in S, tokens:const Tokens in T,
     if (result.next < past && tokens[result.next].kind == symbol_name()) {
         if (!parse_symbol(tokens, nodes, result, past)) return;
     } else {
-        if (!parse_module_name(source, tokens, nodes, result, past)) return;
+        if (!parse_resource_name(source, tokens, nodes, result, past)) return;
     };
     val name <- result.root;
     append_node(nodes, result, export_node(), first, nodes[name].past, 0u64, name, no_node(), first);

@@ -1022,7 +1022,18 @@ class LLVMEmission {
     const size_t offset = expr.kind == Expression::Kind::value_call ? 1 : 0;
     const auto &invocation = contexts_.front().at(&expr);
     for (const auto &[owner, input] : input_frame(method).owners) {
-      if (program_->methods[method].scope_inputs) {
+      const auto &callee = program_->methods[method];
+      if (callee.lexical_result && owner == null_target - 1 - callee.lexical_result->owner) {
+        std::map<size_t, std::vector<size_t>> alternatives;
+        for (size_t i = 0; i < contexts_.size(); ++i) {
+          const auto &call = contexts_[i].at(&expr);
+          if (call.lexical_result_owner && call.callee && program_->instances[*call.callee].method == method)
+            alternatives[*call.lexical_result_owner].push_back(i);
+        }
+        prepared.push_back(contextual_value(expr, alternatives, "result.owner", [&](size_t actual) {
+          return owner_identity(actual, expr.at);
+        }, b_.getPtrTy()));
+      } else if (callee.scope_inputs) {
         std::map<size_t, std::vector<size_t>> alternatives;
         for (size_t i = 0; i < contexts_.size(); ++i) {
           const auto &call = contexts_[i].at(&expr);
@@ -2838,6 +2849,8 @@ class LLVMEmission {
       [[fallthrough]];
     }
     case K::value_call: case K::call: case K::behave: case K::perform: case K::pipeline: case K::processor_composition: {
+      if (fact.builtin == BuiltinOperation::lexical_result)
+        return emit_expression(*expr.children.front(), projection, discard);
       if (fact.builtin == BuiltinOperation::builder_append) {
         const auto &source = *expr.children[1];
         auto *builder = emit_expression(*expr.children[0], Projection::target);

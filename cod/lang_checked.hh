@@ -145,7 +145,7 @@ class ScalarChecker {
   struct ModuleNames {
     std::map<std::string, size_t> callables;
     std::map<std::string, size_t> native_operations;
-    std::set<std::string> text_append_bindings;
+    std::map<std::string, cod_lang_export_kind> text_primitives;
     std::map<size_t, size_t> imports;
     std::set<std::string> imported_aliases;
     std::map<size_t, std::map<std::string, Location>> extensions;
@@ -157,7 +157,7 @@ class ScalarChecker {
     std::map<std::string, EnumValue> enum_members;
     bool binds_other_than_enum_member(const std::string &name) const {
       return callables.contains(name) || native_operations.contains(name) || symbols.contains(name) ||
-          values.contains(name) || types.contains(name) || text_append_bindings.contains(name);
+          values.contains(name) || types.contains(name) || text_primitives.contains(name);
     }
     struct Resource {
       enum class Kind { symbol, callable, type, native_operation } kind;
@@ -4567,6 +4567,7 @@ class ScalarChecker {
       }
     }
     std::map<size_t, size_t> owners;
+    if (operation.lexical_result_owner) owners.emplace(contract.owners.back(), *operation.lexical_result_owner);
     for (size_t i = 0; i < arguments.size(); ++i) {
       const auto role = contract.owners.empty() ? 0 : contract.owners.at(i);
       if (!role) continue;
@@ -4590,7 +4591,9 @@ class ScalarChecker {
       if (immediate_scope) require_lexical_allocator(operation.scope_owners.at(owner), expr.at);
       else if (operation.callee) {
         const auto &callee = program_.methods[program_.instances[*operation.callee].method];
-        require_lexical_allocator(one_owner(views.at(first_owner_operand(callee, owner))), expr.at);
+        if (callee.lexical_result && callee.lexical_result->owner == owner)
+          require_lexical_allocator(operation.lexical_result_owner, expr.at);
+        else require_lexical_allocator(one_owner(views.at(first_owner_operand(callee, owner))), expr.at);
       } else require_lexical_allocator(owners.at(owner), expr.at);
     }
     operation.type = *contract.target;
@@ -6835,6 +6838,10 @@ class ScalarChecker {
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && definition.kind == Form::Kind::procedure)
       fail(expr.at, "a function cannot invoke a procedure");
     if (!completes) { operation.type = Type::never; return; }
+    if (method.lexical_result) {
+      if (&expr == prepared_call_) implementation_gap(expr.at, "a use-site result on a prepared deferred call");
+      operation.lexical_result_owner = cleanup_scope_;
+    }
     for (const auto &owner : method.input_owners()) if (!owner.read_only) {
       bool supplied = false, has_storage_input = false, writable_storage = false, writable_native = false;
       for (size_t i = 0; i < views.size(); ++i) if (parameter_at(method, i).owner == owner.name) {
@@ -10854,13 +10861,14 @@ class ScalarChecker {
     const auto type = state ? evidence_annotation(*source.annotation, *state) : resolve_annotation(*source.annotation, instance);
     return type == Type::string || program_.builder_type(type);
   }
-  bool builder_append(const Expression &expr, const TypeEvidenceState *state = nullptr) const {
+  bool text_primitive(const Expression &expr, cod_lang_export_kind kind, const TypeEvidenceState *state = nullptr) const {
     if (expr.kind != Expression::Kind::call || expr.intrinsic) return false;
     const auto method = state ? state->method : checking_instance_ ? std::optional{checking_instance_->method} : std::nullopt;
     if ((state ? state->bindings.contains(expr.text) || state->symbol_shadows.contains(expr.text)
                : lexical_.lookup(expr.text).has_value()) || lexical_self(expr.text, method)) return false;
     const ModuleLookup lookup(module_, method ? program_.methods[*method].module : module_);
-    return module_names().text_append_bindings.contains(expr.text);
+    const auto selected = module_names().text_primitives.find(expr.text);
+    return selected != module_names().text_primitives.end() && selected->second == kind;
   }
   CheckedOperation check_argument_expression(const Expression &operand, ArgumentMode mode, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, const Type *expected = nullptr,
@@ -11083,7 +11091,14 @@ class ScalarChecker {
                                      bool contextual, const Type *expected, std::vector<Type> *alternatives,
                                      ExpectedTypeUse expected_use, EvidenceRead read, bool joining, CaseScopeEvidence *case_scope) const {
     using K = Expression::Kind;
-    if (builder_append(expr, &state)) {
+    if (state.method && program_.methods[*state.method].lexical_result &&
+        program_.methods[*state.method].lexical_result->marker == &expr) {
+      const auto result = type_evidence(*expr.children.front(), state, contextual, expected, alternatives, expected_use, true, read, joining);
+      view = state.value;
+      target_facts = state.target;
+      return result;
+    }
+    if (text_primitive(expr, COD_LANG_BUILDER_APPEND_EXPORT, &state)) {
       if (expr.children.size() != 2 || expr.has_here_body()) fail(expr.at, "text append requires a builder and one text piece");
       for (size_t i = 0; i < 2; ++i) {
         const auto &operand = *expr.children[i];
@@ -12665,6 +12680,21 @@ class ScalarChecker {
         }
         const auto type = infer_result(id, arguments, retained, family.declaration ? family.declaration : &state).contract;
         if (!type || nested_binder(method, *type->type) || (result && result != type->type)) return {};
+        if (method.lexical_result) {
+          if (!invokes) implementation_gap(expr.at, "a use-site result on a prepared deferred call");
+          if (!product_operands.empty()) record_type_call(expr, state, method, true);
+          if (state.exits) for (const auto &obligation : declaration_obligations(method, arguments, access, owners, &state)) {
+            if (state.root_failure_covered == false && declares_root(obligation.declaration->throws_types))
+              require_type_root_failure(state, expr.at);
+            note_type_failures(state, obligation.declaration->throws_types);
+          }
+          ViewEvidence next{type->read_only, true, {}, state.full_scope_owner};
+          view = !result || view == next ? next : ViewEvidence{};
+          target_facts.initialized = true;
+          target_facts.presence = TargetPresence::present;
+          result = type->type;
+          continue;
+        }
         if (!product_operands.empty()) {
           const auto &context = family.declaration ? *family.declaration : state;
           auto reasons = call_reasons(method);
@@ -13659,6 +13689,7 @@ class ScalarChecker {
       implementation_gap(at, "selected method does not satisfy the callable view contract");
   }
   bool concrete_callable_result(const CheckedMethod &method, const ResultContract &result, const Location &at) const {
+    if (method.lexical_result) implementation_gap(at, "a use-site result in an indirect callable contract");
     if (!nested_binder(method, *result.type)) return true;
     if (result_probe_) return false;
     implementation_gap(at, "type parameter is not determined by the arguments");
@@ -17510,7 +17541,15 @@ class ScalarChecker {
         }
         break;
       }
-      if (builder_append(expr)) {
+      if (instance && program_.methods[instance->method].lexical_result &&
+          program_.methods[instance->method].lexical_result->marker == &expr) {
+        const auto &operand = *expr.children.front();
+        operation.type = check(operand, instance, operations, false);
+        if (operation.type != Type::never) view(operations.at(&operand));
+        operation.builtin = BuiltinOperation::lexical_result;
+        break;
+      }
+      if (text_primitive(expr, COD_LANG_BUILDER_APPEND_EXPORT)) {
         if (expr.children.size() != 2 || expr.has_here_body()) fail(expr.at, "text append requires a builder and one text piece");
         if (&expr == prepared_call_) implementation_gap(expr.at, "deferring a direct text storage intrinsic");
         operation.type = Type::void_type;
@@ -17544,6 +17583,8 @@ class ScalarChecker {
       const bool builtin_signature = eager && (expr.intrinsic ||
           (named_family(expr.text).methods.empty() && !has_declarations(expr.text)));
       const auto family = named_family(expr.text);
+      if (expr.kind == K::binary && expr.text == "++" && family.methods.empty())
+        fail(expr.at, "no selected method family for operator '++'");
       if (!family.methods.empty() && (family.context || family.definition)) {
         operation.callable_captures = capture_values(family, expr.at);
         if (!operation.callable_captures.empty()) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
@@ -19311,6 +19352,8 @@ class ScalarChecker {
         if (instance.arguments[p] == Type::boolean) seed_boolean_input(id, p);
       }
       bind_product_inputs(instance, method.at, entry);
+      if (checking_method_->lexical_result)
+        instance.frame.owners.emplace(null_target - 1 - checking_method_->lexical_result->owner, null_target);
       if (checking_method_->scope_inputs) {
         for (const auto &[name, access] : checking_method_->scope_inputs->place_access) {
           const auto input = storage(instance.frame.inputs.at(access.input).place).binding;
@@ -20318,6 +20361,28 @@ class ScalarChecker {
         if (input.type.kind == Type::c_type_marker) record(input.type, form.at);
     }
   }
+  void register_lexical_result(CheckedMethod &method) const {
+    using K = Expression::Kind;
+    const auto &form = *method.source;
+    if (!form.body || form.body->kind != K::block || form.body->children.empty()) return;
+    const auto &tail = *form.body->children.back();
+    if (tail.kind != K::return_value || tail.children.empty()) return;
+    const auto &marker = ungrouped_expression(*tail.children.front());
+    const auto binding = module_names().text_primitives.find(marker.text);
+    if (marker.kind != K::call || marker.intrinsic || binding == module_names().text_primitives.end() ||
+        binding->second != COD_LANG_LEXICAL_RESULT_EXPORT || free_bindings(form).declarations.contains(marker.text)) return;
+    const auto &owners = method.input_owners();
+    const auto owner = std::ranges::find(owners, method.result.owner, &OwnerParameter::name);
+    if (marker.children.size() != 1 || marker.has_here_body() || form.c_linkage || form.symbolic ||
+        lexical_methods_.contains(&form) || !method.here.empty() || method.result.mode != ResultMode::borrowed_ref ||
+        !method.result.type || !(method.result.type == Type::string || program_.builder_type(*method.result.type)) ||
+        owner == owners.end() || owner->read_only ||
+        std::ranges::any_of(method.input_parameters(), [&](const auto &parameter) {
+          return parameter.owner == owner->name || (!parameter.owner.empty() && !parameter.read_only);
+        }))
+      fail(marker.at, "a use-site text result requires a dedicated writable result owner and readonly borrowed inputs");
+    method.lexical_result = CheckedMethod::LexicalResult{&marker, static_cast<size_t>(owner - owners.begin())};
+  }
   void register_module(const SourceModule &source, std::optional<size_t> &print_symbol,
                        std::optional<Location> &unsupported_here) {
     const auto &forms = source.forms;
@@ -20328,10 +20393,11 @@ class ScalarChecker {
       if ((form->kind == Form::Kind::using_resource || form->kind == Form::Kind::import_resource) &&
           form->path == COD_LANG_TEXT_STORAGE_MODULE && !form->using_symbol) {
         if (form->selected_members) implementation_gap(form->at, "member selection outside an enum");
-        if (form->name == COD_LANG_BUILDER_APPEND_NAME) {
+        if (form->name == COD_LANG_BUILDER_APPEND_NAME || form->name == COD_LANG_LEXICAL_RESULT_NAME) {
           if (form->exporting) implementation_gap(form->at, "re-exporting a private text storage primitive");
-          if (!module_names().text_append_bindings.insert(form->alias).second)
-            fail(form->at, "duplicate text append selection");
+          const auto kind = form->name == COD_LANG_BUILDER_APPEND_NAME ? COD_LANG_BUILDER_APPEND_EXPORT : COD_LANG_LEXICAL_RESULT_EXPORT;
+          if (!module_names().text_primitives.emplace(form->alias, kind).second)
+            fail(form->at, "duplicate text storage selection");
           continue;
         }
         if (form->name != COD_LANG_BUILDER_STORAGE_NAME)
@@ -20452,7 +20518,7 @@ class ScalarChecker {
                                             : parameters.size() == 2 && here && !parameters[1].here;
         if (!valid) implementation_gap(form->at, "this pipeline operator method signature");
       }
-      if ((!operation.empty() && !eager_operation(operation) && !swap_operation(operation) && !pipeline) || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || (!form->body && lexical_methods_.contains(form)))
+      if ((!operation.empty() && !eager_operation(operation) && operation != "++" && !swap_operation(operation) && !pipeline) || form->conversion || (!lexical_methods_.contains(form) && !form->captures.empty()) || (!form->body && lexical_methods_.contains(form)))
         implementation_gap(form->at, "callable captures, effects, declarations, operators, owners or throws contracts");
       if (!operation.empty() && !pipeline) {
         const auto arity = form->parameters.size();
@@ -20566,6 +20632,7 @@ class ScalarChecker {
         const auto parameter = std::ranges::find(prepared.input_owners(), owner, &OwnerParameter::name);
         prepared.result.read_only |= parameter->read_only;
       }
+      register_lexical_result(prepared);
       check_aggregate_owner_roles(prepared, prepared.parameters);
       for (const auto &parameter : form->type_parameters)
         if (parameter.bound) implementation_gap(parameter.at, "bounded type parameters");
@@ -20656,7 +20723,7 @@ class ScalarChecker {
     for (const auto &[name, operation] : module_names().native_operations)
       if (module_names().types.contains(name) || module_names().callables.contains(name) || module_names().symbols.contains(name))
         fail(program_.native_operations[operation].contract.source->at, "native provider conflicts with the binding '" + name + "'");
-    for (const auto &name : module_names().text_append_bindings)
+    for (const auto &[name, primitive] : module_names().text_primitives)
       if (module_names().callables.contains(name) || module_names().types.contains(name) ||
           module_names().symbols.contains(name) || module_names().native_operations.contains(name))
         fail({source.path.string()}, "text storage primitive conflicts with the binding '" + name + "'");

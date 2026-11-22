@@ -2826,6 +2826,17 @@
     "stderr_contains": "checked exception 'NullPointerException' requires a covering catch or throws declaration"
   },
   {
+    "file": "string-builder-concat.cod",
+    "exit": 0,
+    "stdout": "12\n"
+  },
+  {
+    "file": "string-builder-concat-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "borrowed result does not retain its declared external owner"
+  },
+  {
     "file": "abstract-symbol-call-inputs.cod",
     "exit": 0,
     "stdout": "1\n"

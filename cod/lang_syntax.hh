@@ -151,7 +151,7 @@ inline std::vector<Token> tokenize(const std::shared_ptr<const IndexedSource> &r
     if (cursor + 1 < source.size()) {
       const auto pair = source.substr(cursor, 2);
       if (pair == "->" || pair == "==" || pair == "!=" || pair == "<=" || pair == ">=" ||
-          pair == "&&" || pair == "||" || pair == "<-" || pair == "<:" || pair == ".." || pair == "=>" ||
+          pair == "&&" || pair == "||" || pair == "<-" || pair == "<:" || pair == ".." || pair == "=>" || pair == "++" ||
           pipeline_operator(pair)) {
         punctuation = pair;
         ++cursor;
@@ -505,7 +505,7 @@ inline int binary_precedence(const std::string &op) {
   if (op == "&&") return 4;
   if (op == "==" || op == "!=" || identity_operation(op)) return 5;
   if (op == "<" || op == ">" || op == "<=" || op == ">=") return 6;
-  if (op == "+" || op == "-") return 7;
+  if (op == "+" || op == "-" || op == "++") return 7;
   if (op == "*" || op == "/" || op == "%") return 8;
   return -1;
 }

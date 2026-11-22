@@ -691,6 +691,7 @@ func punctuation_width(first:u8, second:u8, third:u8) -> u64 {
     val greater <- 62u8;
     val equals <- 61u8;
     val minus <- 45u8;
+    val plus <- 43u8;
     val dot <- 46u8;
     val pipe <- 124u8;
     val ampersand <- 38u8;
@@ -702,11 +703,11 @@ func punctuation_width(first:u8, second:u8, third:u8) -> u64 {
     if ((first == dot && second == dot && third == dot) ||
         (first == less && (second == equals || second == minus) && third == greater))
         return 3u64;
-    # -> == != <= >= && || <- <: .. => |> <| !> <! $> <$
+    # -> == != <= >= && || <- <: .. => |> <| !> <! $> <$ ++
     if ((second == greater && (first == minus || first == equals || first == pipe ||
                                first == bang || first == dollar)) ||
         (second == equals && (first == equals || first == bang || first == less || first == greater)) ||
-        (first == second && (first == dot || first == ampersand || first == pipe)) ||
+        (first == second && (first == dot || first == ampersand || first == pipe || first == plus)) ||
         (first == less && (second == minus || second == colon || second == pipe ||
                            second == bang || second == dollar)))
         return 2u64;
