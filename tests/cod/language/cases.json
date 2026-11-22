@@ -10,6 +10,11 @@
     "stdout": "6\n4\n"
   },
   {
+    "file": "named-array-owner.cod",
+    "exit": 0,
+    "stdout": "0\n5\n0\n0\n7\n7\n17\n29\n2\n11\n44\n12\n29\n"
+  },
+  {
     "file": "nullable-case.cod",
     "exit": 0,
     "stdout": "11\n12\n13\n21\n22\n23\n31\n34\n41\n42\n"

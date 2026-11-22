@@ -248,6 +248,11 @@ struct cod_lexical_allocation {
     void (*release)(void *);
 };
 
+struct cod_lexical_extent {
+    struct cod_lexical_allocation allocation;
+    cod_region_storage backing;
+};
+
 struct cod_lexical_text {
     struct cod_lexical_allocation allocation;
     struct cod_text_view text;
@@ -265,6 +270,28 @@ static void publish_lexical_allocation(void **allocations, struct cod_lexical_al
     allocation->previous = *allocations;
     allocation->release = release;
     *allocations = allocation;
+}
+
+static void release_lexical_extent(void *allocation) {
+    struct cod_lexical_extent *extent = allocation;
+    cod_region_storage_release(&extent->backing);
+    free(extent);
+}
+
+void *cod_lang_lexical_extent_allocate(void **allocations, uint64_t bytes, uint64_t alignment) {
+    if (!allocations || bytes > SIZE_MAX || bytes > PTRDIFF_MAX || !alignment ||
+        alignment > _Alignof(max_align_t) || (alignment & (alignment - 1)))
+        return NULL;
+
+    struct cod_lexical_extent *extent = malloc(sizeof(*extent));
+    if (!extent) return NULL;
+    extent->backing = (cod_region_storage){0};
+    if (cod_region_storage_open_layout(&extent->backing, (size_t)bytes) != COD_REGION_STORAGE_OK) {
+        free(extent);
+        return NULL;
+    }
+    publish_lexical_allocation(allocations, &extent->allocation, release_lexical_extent);
+    return extent->backing.bytes;
 }
 
 void *cod_lang_lexical_text_create(void **allocations, const void *input) {

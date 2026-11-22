@@ -2846,8 +2846,8 @@ class ScalarChecker {
         fail(declaration.at, "reference initializer requires the declared text type");
       return;
     }
-    if (type.kind == Type::product || type.kind == Type::sum) {
-      const std::string_view category = type.kind == Type::product ? "product" : "sum";
+    if (type.kind == Type::product || type.kind == Type::sum || type.kind == Type::array) {
+      const std::string_view category = type.kind == Type::product ? "product" : type.kind == Type::sum ? "sum" : "array";
       if ((kind != "ref" && kind != "ptr") || (initial != Type::never && borrowed != true))
         implementation_gap(declaration.at, "materializing a whole " + std::string(category) + " as an independent value");
       if (initial != Type::never && initial != Type::null_ref && initial != type)
@@ -6021,7 +6021,8 @@ class ScalarChecker {
     reject_c_type_payload(resolved, at);
     require_ordinary_callable_type(resolved, at);
     if (!lexical_value_type(resolved) &&
-        !(borrowed_target && (resolved.kind == Type::product || resolved.kind == Type::sum || text_type(resolved))))
+        !(borrowed_target &&
+          (resolved.kind == Type::product || resolved.kind == Type::sum || resolved.kind == Type::array || text_type(resolved))))
       implementation_gap(at, "non-value local storage type '" + type_name(type) + "'");
     return resolved;
   }
@@ -6785,17 +6786,18 @@ class ScalarChecker {
       const auto &parameter = parameter_at(definition, i);
       const auto mode = argument_mode(parameter);
       const auto &element = program_.arrays.at(arguments[i].identity).element;
-      const bool writable = mode == ArgumentMode::borrowed_ref && !parameter.read_only && indexed_product(element, at);
+      const bool writable = mode == ArgumentMode::borrowed_ref && !parameter.read_only &&
+          (scalar_type(element) || indexed_product(element, at));
       const bool here_borrow = definition.scope_inputs && definition.scope_inputs->here_reception &&
           i < definition.scope_inputs->here_reception->selected.size() &&
           mode == ArgumentMode::borrowed_ref && (parameter.read_only || writable);
-      const bool captured_array = definition.scope_inputs && definition.scope_inputs->here_reception &&
-          definition.scope_inputs->live_bindings.contains(i) && mode == ArgumentMode::borrowed_ref && parameter.read_only;
+      const bool captured_array = definition.scope_inputs && definition.scope_inputs->live_bindings.contains(i) &&
+          mode == ArgumentMode::borrowed_ref && (writable || parameter.read_only);
       const bool readable = parameter.read_only &&
           (mode == ArgumentMode::borrowed_ref || mode == ArgumentMode::borrowed_read);
       const bool ordinary = !definition.scope_inputs && (readable || writable);
       if ((!here_borrow && !captured_array && !ordinary) || definition.source->symbolic || caller_bindings(definition))
-        implementation_gap(at, "array parameters require readonly borrows or writable refs to initialized numeric products");
+        implementation_gap(at, "array parameters require supported readonly borrows or writable refs to initialized elements");
     }
     const auto &supplied = program_.query_environments[query_environment].result;
     const auto result = supplied ? ResultEvidence{supplied, ResultOrigin::supplied} :
@@ -7717,11 +7719,19 @@ class ScalarChecker {
       return field.storage == PlaceKind::value && numeric(field.type);
     });
   }
-  const CheckedArray &indexed_array(const Type &type, bool view, bool read_only, const Location &at) const {
+  const CheckedArray &indexed_array(const Type &type, bool view, const Location &at) const {
     if (type.kind != Type::array) implementation_gap(at, "indexed operation on '" + type_name(type) + "'");
     const auto &array = program_.arrays.at(type.identity);
-    if (!view || (!(read_only && scalar_type(array.element)) && !indexed_product(array.element, at)))
-      implementation_gap(at, "indexed access requires a borrowed array of initialized numeric products or readonly scalar elements");
+    if (!view || (!scalar_type(array.element) && !indexed_product(array.element, at)))
+      implementation_gap(at, "indexed access requires a borrowed array of initialized scalar or numeric product elements");
+    return array;
+  }
+  const CheckedArray &array_construction(const Type &type, const Expression &expr) const {
+    const auto &array = program_.arrays.at(type.identity);
+    if (array.index != Type::uint64 || !scalar_type(array.element))
+      implementation_gap(expr.at, "named-array construction outside the u64-indexed scalar bits profile");
+    if (!expr.constructor_arguments || expr.children.size() != 2 || expr.initializer_block)
+      implementation_gap(expr.at, "named-array construction requires a length and a fill argument");
     return array;
   }
   static void check_array_index(const CheckedArray &array, const Type &index, const Location &at) {
@@ -12026,6 +12036,26 @@ class ScalarChecker {
         return {};
       }
       const bool track_places = state.checks_initialization() && state.selections.tracking;
+      if (type.kind == Type::array) {
+        const auto &array = array_construction(type, expr);
+        auto owner = state.full_scope_owner;
+        if (!expr.owner_name.empty() && expr.owner_name != "here")
+          owner = owner_evidence(expr.owner_name, state, expr.at);
+        if (owner && state.required && readonly_evidence_owner(*owner, state))
+          fail(expr.at, "const owner cannot allocate storage");
+        const auto length = type_evidence(*expr.children.front(), state);
+        if (length == Type::never) return Type::never;
+        const auto fill = type_evidence(*expr.children.back(), state);
+        if (fill == Type::never) return Type::never;
+        if (!length || !fill) return {};
+        transfer_type(*length, Type::uint64, expr.children.front()->at);
+        transfer_type(*fill, array.element, expr.children.back()->at);
+        view = {false, true, {}, owner};
+        target_facts.presence = TargetPresence::present;
+        target_facts.initialized = true;
+        note_type_allocation(state);
+        return type;
+      }
       if (type.kind == Type::sum) {
         const auto constructor = sum_constructor(expr);
         if (!constructor) fail(expr.at, "make requires a named data constructor for '" + type.name + "'");
@@ -12652,6 +12682,35 @@ class ScalarChecker {
       }
       [[fallthrough]];
     case K::unary: case K::call: case K::value_call: case K::behave: case K::perform: {
+      if (expr.kind == K::call && builtin_indexed_transfer(expr, operation_name(expr, &state), &state)) {
+        if (expr.children.size() != 3) fail(expr.at, "builtin indexed transfer requires an array, index and source");
+        if (state.required && state.preparing(expr))
+          implementation_gap(expr.at, "a prepared deferred builtin indexed transfer");
+        const auto type = child(0, false, true, EvidenceRead::target);
+        const auto array = state.value;
+        if (!type || *type == Type::never) return type;
+        if (type->kind != Type::array && !state.required) return {};
+        const auto &shape = state.required ? indexed_array(*type, array.view == true && !array.mixed_view, expr.at)
+                                           : program_.arrays.at(type->identity);
+        require_type_initialized(state, state.target, "array operand", expr.at);
+        read_type_target(state, array, state.target);
+        const auto index = child(1);
+        if (!index || *index == Type::never) return index;
+        if (state.required) {
+          check_array_index(shape, *index, expr.children[1]->at);
+          if (!scalar_type(shape.element)) implementation_gap(expr.at, "builtin indexed transfer of a non-scalar element");
+          if (!array.read_only) implementation_gap(expr.at, "indexed transfer destination access is not established");
+          transfer_access(*array.read_only, expr.at);
+        }
+        record_type_invocation(expr, state, {0, Completion::failure(exception_id(ExceptionCategory::index_out_of_bounds)).reason}, true);
+        const auto source = child(2);
+        if (!source || *source == Type::never) return source;
+        if (state.required) transfer_type(*source, shape.element, expr.children[2]->at);
+        view = {true, true, {}, array.owner};
+        target_facts.presence = TargetPresence::present;
+        target_facts.initialized = true;
+        return shape.element;
+      }
       if (array_length_query(expr)) {
         if (expr.children.size() != 1) fail(expr.at, "intrinsic (len) requires one array operand");
         if (state.preparing(expr)) fail(expr.at, "defer call requires a procedure");
@@ -13243,7 +13302,7 @@ class ScalarChecker {
           if (!state.validating_body && read != EvidenceRead::payload && read != EvidenceRead::discarded && read != EvidenceRead::loop_discard &&
               read != EvidenceRead::projection)
             implementation_gap(expr.at, "borrowing an indexed array element");
-          shape = &indexed_array(*source, array.view == true && !array.mixed_view, array.read_only == true, expr.at);
+          shape = &indexed_array(*source, array.view == true && !array.mixed_view, expr.at);
         } else if (source->kind == Type::array) shape = &program_.arrays.at(source->identity);
         if (shape) {
           require_type_initialized(state, state.target, "array operand", expr.at);
@@ -13843,6 +13902,11 @@ class ScalarChecker {
   std::vector<ArgumentEvidence> argument_evidence(const Expression &expr) const {
     if (expr.intrinsic || named_family(expr.text).methods.empty()) return std::vector<ArgumentEvidence>(expr.children.size());
     return argument_evidence(expr, evidence_state());
+  }
+  bool builtin_indexed_transfer(const Expression &expr, std::string_view operation,
+                               const TypeEvidenceState *state = nullptr) const {
+    return operation == "[]<-" &&
+        (expr.intrinsic || (named_family(expr.text, state).methods.empty() && !has_declarations(expr.text)));
   }
   struct CallableSelection {
     std::vector<Type> retained;
@@ -14842,7 +14906,8 @@ class ScalarChecker {
       return operations.at(&operand);
     }();
     const auto type = view.type;
-    if (!lexical_value_type(type) && !(live_binding && (type.kind == Type::product || text_type(type))))
+    if (!lexical_value_type(type) &&
+        !(live_binding && (type.kind == Type::product || type.kind == Type::array || text_type(type))))
       implementation_gap(capture.at, "full-scope input requires an admitted target or independent value type");
     parameter.read_only = view.read_only;
     if (!independent) {
@@ -17577,6 +17642,28 @@ class ScalarChecker {
     initialize(*operation.place);
     return operation;
   }
+  CheckedOperation check_array_construction(const Expression &expr, const Type &type, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations, std::optional<size_t> destination, bool read) {
+    if (read) implementation_gap(expr.at, "reading a whole array as an independent value");
+    const auto &array = array_construction(type, expr);
+    const auto owner = construction_destination(expr, destination);
+    CheckedOperation operation;
+    operation.type = Type::never;
+    const auto length = check(*expr.children.front(), instance, operations);
+    if (length == Type::never) return operation;
+    transfer_type(length, Type::uint64, expr.children.front()->at);
+    const auto fill = check(*expr.children.back(), instance, operations);
+    if (fill == Type::never) return operation;
+    transfer_type(fill, array.element, expr.children.back()->at);
+    operation.type = operation.operand_type = type;
+    operation.view = true;
+    operation.owners = {owner};
+    operation.initialization.emplace();
+    operation.lexical_allocation = CheckedOperation::LexicalAllocation{owner, CheckedOperation::LexicalAllocation::array};
+    require_lexical_allocator(owner, expr.at);
+    note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
+    return operation;
+  }
   CheckedOperation check_product_construction(const Expression &expr, const Type &type, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, std::optional<size_t> destination = {}, bool read = false) {
     const auto &schema = product_schema(type, expr.at);
@@ -18210,6 +18297,34 @@ class ScalarChecker {
     case K::value_call: case K::call: {
       const auto name = expr.kind != K::value_call ? operation_name(expr) : std::string_view{};
       const bool eager = eager_operation(name);
+      if (expr.kind == K::call && builtin_indexed_transfer(expr, name)) {
+        if (expr.children.size() != 3) fail(expr.at, "builtin indexed transfer requires an array, index and source");
+        if (&expr == prepared_call_) implementation_gap(expr.at, "a prepared deferred builtin indexed transfer");
+        operation.builtin = BuiltinOperation::array_transfer;
+        operation.type = Type::never;
+        const auto type = child(0, false);
+        if (type == Type::never) break;
+        const auto &array = operations.at(expr.children.front().get());
+        const auto &shape = indexed_array(type, array.view && !array.mixed_view, expr.at);
+        require_live_view(array, expr.at);
+        read_view(array, expr.at, "array operand");
+        const auto index = child(1);
+        if (index == Type::never) break;
+        check_array_index(shape, index, expr.children[1]->at);
+        if (!scalar_type(shape.element)) implementation_gap(expr.at, "builtin indexed transfer of a non-scalar element");
+        transfer_access(array.read_only, expr.at);
+        note_abrupt(expr.at, {exception_id(ExceptionCategory::index_out_of_bounds)});
+        const auto source = child(2);
+        if (source == Type::never) break;
+        require_live_view(array, expr.at);
+        transfer_type(source, shape.element, expr.children[2]->at);
+        operation.type = shape.element;
+        operation.operand_type = type;
+        operation.view = operation.indexed_target = operation.read_only = true;
+        operation.owners = array.owners;
+        operation.initialization.emplace();
+        break;
+      }
       if (expr.kind == K::call && swap_operation(name)) {
         if (expr.children.size() != 2) fail(expr.at, "swap requires two destinations");
         const bool reference = name == "<=>";
@@ -19328,6 +19443,10 @@ class ScalarChecker {
       require_ordinary_callable_type(type, expr.at);
       if (type.kind == Type::abstract_type) fail(expr.at, "an abstract type has no constructible layout");
       if (type.kind == Type::sum) fail(expr.at, "make requires a named data constructor for '" + type.name + "'");
+      if (type.kind == Type::array) {
+        operation = check_array_construction(expr, type, instance, operations, construction_owner, read && !discard);
+        break;
+      }
       const bool builder = program_.builder_type(type);
       const bool lexical_text = type.kind == Type::string || builder;
       if (!lexical_text) {
@@ -19374,7 +19493,7 @@ class ScalarChecker {
       const CheckedArray *shape = nullptr;
       if (source != Type::never) {
         const auto &array = operations.at(expr.children.front().get());
-        shape = &indexed_array(source, array.view && !array.mixed_view, array.read_only, expr.at);
+        shape = &indexed_array(source, array.view && !array.mixed_view, expr.at);
         operation.operand_type = source;
         require_live_view(array, expr.at);
         read_view(array, expr.at, "array operand");
