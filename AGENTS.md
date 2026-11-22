@@ -1,155 +1,70 @@
 # CoD Project Rules for AI Agents
 
-- Respond in English unless the user explicitly asks otherwise.
+Respond in English unless the user explicitly asks otherwise.
+
+## Before coding
+
+1. Identify the component, intended behavior and acceptance workload. Ask which component to change if the request leaves that unclear.
+2. Read the relevant qualified language contract and its registry entry. Before writing any new project code, submit its structure to the [CoD design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) and obtain explicit clearance. Include tests, scripts, tooling, native glue and additions to existing files. Describe responsibilities, caller and interface, state owners and lifetimes, failure and cleanup, and acceptance. Review coherent batches once within their stated scope. Return before expanding it. The [architecture review](design/ImplementationArchitecture.md) records existing dispositions and batch clearances.
+3. Start from how the actual workload should read and work. If that source needs a confirmed CoD capability the seed lacks, include the smallest coherent seed increment in the reviewed work. Defer convenience only where the remaining source stays clear and retains the design's guarantees. Keep a temporary substitute isolated and use the intended source for delivery acceptance. See the [booter delivery rule](applications/cod-booter/README.md#initial-seed-delivery) and the [AST work-method counterexample](CHANGELOG.md#h-booter-work-method-20261122).
+4. Before concluding, verify the real path against its acceptance conditions, including applicable ownership, failure and cleanup. Report supported coverage and limitations accurately. Follow the build and test authorization below.
+
+## Semantic fidelity and implementation obstacles
+
+- Correct code and fixtures against the latest confirmed contract. Use the pre-code architecture review for each code batch. Human reconfirmation of unchanged semantics is unnecessary for routine corrections unless the expected engineering cost is clearly disproportionate.
+- When a technical obstacle would weaken a guarantee or force a material architectural compromise, explain the obstacle, affected behavior, alternatives and costs to the design discussion before proceeding on that scope. Obtain human confirmation before changing a language contract or the user's design principles. Continue independent qualified work.
+- When a new confirmation conflicts with existing code, disclose sunk cost and expected rework, migrate faithfully, and remove superseded paths, assumptions and documentation. Preserve meaningful verification.
+- An authorized stage may support a sound subset with an honest unsupported-feature diagnostic. Every accepted program must keep its confirmed meaning. Changes in scope or acceptance go through review.
+
+## Implementation boundaries
+
+- Model compiler state and algorithms in C++ for the seed and CoD for the booter. Use sum types for alternatives with distinct payloads in idiomatic CoD. CoD owns the booter module graph, typed workspace and scoped symbolic-proc orchestration under the [module graph contract](applications/cod-booter/docs/ModuleGraph.md).
+- Use C for narrow OS/native services, generic raw storage and LLVM, with CoD-defined C interfaces. Follow the [native component roadmap](applications/cod-booter/README.md#next-stage-repositories-and-native-runtime) and the relevant operation contract.
+- Use C++20, match existing code and header style, and reuse repository libraries. Add external dependencies only on user request.
+- Apply the [diagnostics policy](applications/cod-booter/README.md#diagnostics-by-compiler-stage) in every phase. Both bootstrap compilers in the planned `e-wrks/cod-seed` enforce required checks, report failures and preserve required runtime behavior. The booter fills the seed's exception-handling gaps and verifies propagation, handling and cleanup. Use available source locations and check facts. The future compiler in `e-wrks/cod` owns diagnostic-only passes and detailed explanations.
+- Check relevant interactions with [planned fractions](design/FixedWidthFractions.md), including syntax, promotion, dispatch, layout, borrowing, transfer and formatting. Bring conflicts to design review. Fraction implementation remains deferred. H-256 covers reserving `//`, `#` comments and the representation-independent UoM prerequisites.
 
 ## Design Authority and Value Lineage
 
-### Sources of authority
-- The design charter (the general principles, or 总则) is `design/RegionalSemanticPlatformCharter.md`.
-- `design/DesignAuthorityRegistry.md` is the canonical current-state record of design concepts, mechanisms, abstractions, value-derivation/dependency relationships and document qualification. It references human confirmations and continuity evidence in `CHANGELOG.md` by stable record ID. Read only the entries relevant to the task.
-- Every design document, wherever located, must have a human-confirmed value-derivation path to the charter before it can serve as a delegated implementation contract. A technical dependency or a link to the charter alone does not establish that path.
-- Confirmation applies to an identified proposition, relationship, document revision and scope, not automatically to an entire file or every descendant. Existing code, merged commits, agent summaries, silence, and general approval of a direction are not evidence of approval of all detailed mechanisms.
-
-### Qualified design documents
-- A design is qualified only for the scope recorded as `confirmed` or validly `continued` in the registry: a human-confirmed baseline and derivation path exist; the current revision is covered; its constraints, non-goals and acceptance criteria are explicit; and no relevant upstream change or unresolved conflict invalidates the path.
-- Add a compact `Design authority` block near the top of each new or revised design document. Include its registry ID/link, design revision and covered sections, parent concept/relationship IDs and the value rationale, governing invariants/non-goals, acceptance criteria, human-confirmed baseline, and current continuity record when applicable. The registry is authoritative if a local summary is stale; uncertainty blocks delegation for the affected scope.
-- New designs and newly chosen concepts, abstractions or derivation relationships require human confirmation of their value and scope before qualification. Agents may draft them as `pending-human`; they must not self-approve them by borrowing an ancestor's confirmation.
-- A `continued` revision preserves an already qualified document's confirmed contract. It records an agent's continuity assessment, not another human confirmation. It cannot qualify a previously unconfirmed document or ratify an unresolved design choice.
-
-### Implementing against a qualified design
-- Read the applicable design contract, its targeted registry status/continuity entry, and directly needed dependency contracts. Identify the design IDs and covered scope for the task.
-- When the task stays within that qualified scope, agents are accountable to the local design and need not load the charter, unrelated designs, or the entire authority registry. Do not repeatedly ask humans to reconfirm an unchanged qualified design.
-- This context shortcut concerns the design charter only. It never waives this `AGENTS.md`, applicable repository instructions, task authorization, build/test restrictions, or operational safety requirements.
-- Missing qualification, stale evidence, contradictory implementation, an uncovered requirement, or a suspected break in the value chain triggers design review for the affected scope. Reading the charter alone does not manufacture missing human confirmation.
-- Do not disguise a design change as implementation-only work. If code, tests, defaults or interfaces would change the contract, follow the design-change procedure even if no Markdown edit was initially planned.
-
-### Implementation architecture review
-- All new project code requires explicit pre-code confirmation of its proposed structure by the CoD design discussion, including additions to existing files, fixes that introduce code, tests and tooling. Submit coherent batches with their units, responsibilities, data owners, caller path, failure/cleanup behavior and acceptance. A cleared batch can proceed without repeated approvals inside its stated scope. Changes of scope return to review. The design discussion settles architecture within the user's principles and refers material changes to those principles or language contracts to the user. See the [project-wide dispositions](design/ImplementationArchitecture.md).
-- Keep high-level compiler objects and algorithms in the compiler language. The C++ seed owns its C++ compiler state, and the CoD booter owns its CoD state. Use narrow C services for OS/native facilities, generic raw storage and LLVM. Apply the [module graph review](applications/cod-booter/docs/ModuleGraph.md) to the booter's typed workspace, relocatable syntax and scoped dependency callbacks.
-
-### Semantic fidelity and implementation obstacles
-- When an implementation disagrees with a confirmed rule, correct it under the existing decision and update any fixtures that encode the defect. Seek human review if the expected engineering cost is clearly disproportionate. A change to the language contract still follows the design-change procedure.
-- Implement the latest confirmed semantics and required guarantees faithfully. A technical obstacle that would require weakening them must be raised as a design issue before introducing the compromised implementation. Explain the concrete obstacle, affected guarantees, alternatives and costs, and obtain the necessary human design decision; unrelated qualified work may continue.
-- Do not pressure the human to approve a known-defective or semantically reduced implementation as an implementation-level compromise. Material trade-offs belong in the design contract. Routine engineering choices that preserve that contract remain the implementer's responsibility.
-- When existing code conflicts with newly confirmed semantics, disclose the sunk cost and expected rework factually, then migrate to the latest confirmed contract. Prior implementation effort does not justify weakening that contract. Use the migration to reduce technical debt: remove obsolete paths and assumptions, update documentation and preserve meaningful verification of the current semantics.
-- Already authorized staged implementation may admit a sound subset with honest unsupported-feature diagnostics. It must preserve the confirmed meaning of every accepted program and must not silently reduce an approved scope or acceptance obligation. Do not execute an unsupported case using obsolete or approximate semantics, or normalize such behavior through tests or documentation.
-
-### Creating or modifying a design
-1. Read the relevant charter clauses in their current context, the affected registry records and human confirmation evidence, and the necessary parent/dependency contracts. Unlike implementation under a qualified contract, design editing cannot skip the charter alignment check.
-2. Compare the proposed content with the human-confirmed baseline and the current accepted revision. Explain the preserved value chain and examine goals, assumptions, scope, invariants, trade-offs, interfaces, acceptance criteria and downstream dependencies. Consider the cumulative change since human confirmation, not just the latest small diff.
-3. If a change naturally continues an already qualified design without changing the confirmed contract or resolving an unconfirmed choice, record the rationale and old/new revision coverage as a continuity event and keep it `continued`. Editorial changes also need a brief continuity entry, but not a new human approval.
-4. If continuity is doubtful, or the proposal changes a confirmed value, boundary, material trade-off, parent relationship or open design choice, mark the affected scope `pending-human` or `needs-reconfirmation`. Present the proposed chain, the point of doubt, alternatives/consequences and the exact decision needed to a human. Do not activate the disputed design or implement it as accepted until explicit confirmation is recorded; unrelated qualified work may continue.
-5. Update the document's authority block, current registry entry and brief changelog continuity/decision record together, preferably in one commit. Record affected descendants and dependencies; invalidate only scopes whose qualification can no longer be justified. An obsolete ancestor must not leave descendants silently qualified.
-- Changing the charter's goals, principles or approval rules requires explicit human confirmation; agents cannot rewrite the root to make a preferred design appear compliant.
-
-### Maintaining the authority registry
-- Record concepts and relationships separately. For each relationship identify its endpoints, kind (`derives-from`, `depends-on`, or `constrains`), rationale, scope/version and confirmation state. Value chains must explain why a mechanism serves a charter value; dependency chains explain what it requires. Dependency edges never grant design authority.
-- Human confirmation events must identify the actual human as known, an explicit statement with its source and timestamp, the accepted/rejected propositions and relationships, scope/revision and exclusions. A conversation excerpt can be recorded when no durable link exists; label its provenance and do not invent a URL, identity, signature or broader approval.
-- Keep human decision history append-only through Git and concise evidence locators in `CHANGELOG.md`. Corrections, rejection, withdrawal, replacement and renewed confirmation are new events referencing the earlier event. Keep only current scope, status and evidence references in the registry and local authority blocks; never erase inconvenient evidence or relabel an agent assessment as a human decision.
-- Keep one current registry entry per independently decidable contract scope; link detailed semantics and acceptance to its design document. Preserve current qualifications, value/dependency edges, exclusions and open questions. In `CHANGELOG.md`, use stable-ID locators to an immutable Git commit + path and record location for historical payloads; retrieve original evidence when scope matters. Do not duplicate archives or routine implementation/test histories. Group coherent maintenance into one brief changelog continuity event; reconcile summaries against existing evidence and ask humans only about substantive uncertainty.
-- Maintain reverse links to affected designs, supersession/invalidation records, and pending questions so the path from charter value to concept, mechanism and implementation contract remains traceable in both directions.
-- Existing documents without sufficient recorded evidence are `pending-human`, not automatically grandfathered in. Register their current revision, candidate value chain and missing confirmation; add the authority block when revising them. They remain readable references, but cannot supply the no-charter implementation shortcut or authorize new design decisions. Search for existing evidence before requesting a new decision; do not fabricate retrospective approval.
+- The [charter](design/RegionalSemanticPlatformCharter.md) governs design. The [registry](design/DesignAuthorityRegistry.md) owns current scope and qualification and links to [changelog evidence](CHANGELOG.md). Qualification requires a human-confirmed value-derivation path, identified propositions and relationships, covered revision and scope, explicit invariants, non-goals and acceptance, and valid continuity. Technical dependencies, shipped code, agent summaries, silence and general approval do not establish it.
+- For work inside a qualified contract, read its scope, targeted registry entry and necessary dependency contracts. This substitutes for rereading the charter, while repository, authorization and safety rules still apply. Review missing or stale evidence, upstream invalidation, conflicts and uncovered requirements. Treat changes to behavior, tests, defaults or interfaces that alter a contract as design changes.
+- Before changing a design, read the relevant charter clauses, registry, original human evidence and parent contracts. Check the cumulative change from the confirmed baseline and the current revision. Examine value, goals, assumptions, scope, invariants, trade-offs, interfaces, acceptance and downstream effects.
+- Record contract-preserving revisions, including editorial changes, as `continued` with rationale and old/new coverage. An agent continuity assessment carries the established qualification forward. New propositions, value relationships and substantive changes require human confirmation. Mark uncertainty `pending-human` or `needs-reconfirmation`, explain the alternatives and decision needed, and await a recorded decision on that scope. Changes to charter goals, principles or approval rules require explicit human confirmation.
+- Put a compact **Design authority** block near the top of every new or revised design. State its registry link, revision and sections, parent concepts and relationships, value rationale, invariants, non-goals, acceptance, confirmed baseline and continuity. Update the block, registry and brief changelog record together. Include affected descendants, dependencies and reverse links. Invalidate only affected scope.
+- Use one current registry entry per independently decidable scope. Record concepts and edges separately with endpoints, kind (`derives-from`, `depends-on`, `constrains`), rationale, scope/version and status. Keep exclusions, pending questions and supersession links current. Value edges explain charter value. Dependency edges explain requirements.
+- Record the actual human, explicit statement, source/time, accepted or rejected scope, revision and exclusions. Label excerpts honestly when a durable source is unavailable. Preserve append-only decision history in Git with stable changelog IDs and immutable commit/path locators. Correct, withdraw or supersede through new events. Search for evidence before requesting confirmation. Register unqualified legacy documents as `pending-human` with the missing evidence and candidate value path.
 
 ## Build and Command Execution
-- After code changes, compile exactly with: `cmake --build ./build`.
-- Treat `./build` as the active build tree for the current checkout/worktree; use a separate worktree for another host/container/OS development environment.
-- Top-level repository scripts may be executed when they are within the current human authorization. Inspect scripts first when their effects are unclear. Scripts that can bootstrap, reconfigure, clean, install, or mutate toolchains follow the Bootstrap and Build Configuration Safety rules below.
-- Do not create or modify build symlinks.
-- Do not re-create build directories, that's too time/resource costing.
-- Before the first build after a client-profile, system-header or toolchain update, inspect the existing build graph without executing it (for Ninja, `ninja -C build -n -d explain`). Identify unexpectedly broad dependency invalidation before starting the build; compare package/content evidence when timestamps alone appear responsible. Keep the existing tree and follow the authorization rules below. An already authorized repair does not require repeated confirmation.
 
-## Bootstrap and Build Configuration Safety
-- Unless the human explicitly authorizes a bootstrap/configuration task in the current conversation, agents must not run commands or make edits that can cause a full or partial rebootstrap of LLVM/Clang/CoD.
-- Run the normal post-edit command `cmake --build ./build` without separate approval when the existing build plan, including relevant nested plans, establishes that it will avoid a large-scale LLVM build. Inspect an unfamiliar or uncertain plan with dry runs before executing it. Seek explicit authorization if the plan would trigger a broad LLVM rebuild or its impact remains uncertain.
-- Routine incremental builtins and runtime steps reached by the normal command follow the same build-plan rule. Intentional bootstrap, toolchain and build configuration changes, cleanup, and installation still require explicit authorization.
-- Do not run CMake configure/generate commands for the main build without explicit authorization. This includes `cmake -S ... -B ...`, `cmake -B ./build`, `cmake --preset ...`, `cmake --fresh`, commands that pass new `-D...` cache options, or any command intended to regenerate `build/CMakeCache.txt`, `build/build.ninja`, or `build/CMakeFiles/`.
-- Do not clean, delete, move, rename, recreate, or bulk-edit build outputs without explicit authorization. This includes `build/`, `built/`, `build-*`, `built-*`, `build/.bootstrap/`, `CMakeCache.txt`, `CMakeFiles/`, `build.ninja`, `.ninja_*`, and generated install trees.
-- Do not request install, clean, runtime, LLVM, Clang, LLD, libc++, compiler-rt, or bootstrap stage targets directly without explicit authorization. This includes `cmake --install`, `cmake --build ./build --target install`, `install-*`, `install-runtimes`, `clean`, `stage*`, `clang`, `lld`, `llvm`, `runtimes`, `libcxx`, and `compiler-rt`.
-- Do not modify bootstrap or toolchain definition files without explicit authorization. This includes `do-build-cod.*`, `prepare-*`, CMake files (`CMakeLists.txt`, `*.cmake`, presets, toolchain files), LLVM patch files under `patches/llvm/`, and files under `llvm-project/`.
-- Do not update, reinstall, remove, or switch host toolchains and SDKs without explicit authorization. This includes Visual Studio Build Tools/MSVC, Windows SDK, LLVM/Clang, CMake, Ninja, Git, system compilers, and package-manager commands such as `winget`, `choco`, `scoop`, `apt`, or `brew` when used for toolchain packages.
-- Reading build scripts, CMake files, caches, generated logs, or LLVM sources is allowed. Reporting what would need to be reconfigured or bootstrapped is allowed. Executing or editing the rebootstrap path requires explicit human authorization.
+- After code changes, compile exactly with `cmake --build ./build`. Use the current worktree's `build/` for development tools and a separate worktree for another host, container or OS. Keep build symlinks and directories in place.
+- The exact routine build may run without separate approval when the existing plan, including relevant nested plans, rules out a large-scale LLVM build. Incremental builtins and runtimes reached by this command follow the same rule. Dry-run an unfamiliar plan and the first build after client-profile, system-header or toolchain changes, for example `ninja -C build -n -d explain`. Check package/content evidence when timestamps suggest broad invalidation. Require explicit approval for a broad or still uncertain plan. An already authorized repair does not need repeated approval.
+- Inspect top-level scripts with unclear effects and run them within the current authorization. Read build scripts, logs, caches and LLVM sources as needed. When asked about LLVM internals, verify and cite file/line evidence in the workspace's `llvm-project/`. If that tree is absent, state the limitation.
+
+### Bootstrap and Build Configuration Safety
+
+Require explicit human authorization before any of the following:
+
+- Bootstrap or configuration work that can fully or partly rebootstrap LLVM, Clang or CoD. This includes CMake configure/generate, presets, fresh caches, new `-D` options and regeneration of the main build files.
+- Editing toolchain/bootstrap definitions, including `do-build-cod.*`, `prepare-*`, CMake files and presets, LLVM patches and files in `llvm-project/`. The same rule applies to installing, updating, removing or switching toolchains and SDKs.
+- Cleaning, deleting, moving, renaming, recreating or bulk-editing build trees, their metadata or install trees. Direct install, clean, compiler, runtime or bootstrap stage targets also require it.
 
 ## Tests
-- Do not run test scripts proactively.
-- When asked to run tests:
-  - Default toolchain: set `COD_TEST_TOOLCHAIN=build` and do not ask the user to confirm.
-  - Switch to `COD_TEST_TOOLCHAIN=built` only when the context clearly indicates release/pre-release testing.
-  - Confirm which component(s) to test if not explicit in the request.
-- You may execute test scripts under `tests/` and its subdirectories (e.g., `tests/**/run-all.sh`) or invoke CTest/CMake test targets directly when running tests.
 
-## Diagnostics by compiler stage
+Run test scripts only when asked. Confirm the component if unclear. Set `COD_TEST_TOOLCHAIN=build` by default and use `built` for release/pre-release context. Use the appropriate script under `tests/` or CTest/CMake test target.
 
-- Apply the [compiler diagnostics policy](applications/cod-booter/README.md#diagnostics-by-compiler-stage) to every language feature and compiler phase. The C++ seed and the CoD-written booter both belong in the planned `e-wrks/cod-seed` repository. Both must enforce the required checks, report failures and preserve required runtime behavior. They may include source locations or observations already available from those checks.
-- The booter fills gaps in the seed's exception handling. Check the required propagation, handling and cleanup behavior on supported paths. A proposal for a warning about valid code does not commission additional analysis or diagnostic output in either bootstrap compiler. The future compiler in `e-wrks/cod` owns full diagnostics, including diagnostic-only passes and detailed explanations.
+## Memory Regions and Regional Types
 
-## Compiler Terminology
-- Follow the [CoD operation terminology](design/CallableViewsAndCaptures.md#copying-moving-and-graph-transfer): CoD has no C++-style object copying/moving semantic model. Distinguish bits transfer, reference binding, ownership transfer, dedicated callable construction/capture and explicit graph transfer; native byte copying or C++ utility moves do not grant source-language permissions. Callable views require lexical-scope storage and cannot be stored in regions, including through compound carriers.
-- Follow the [alias glossary](design/CallableViewsAndCaptures.md#alias-terminology). Every use of the alias concept must identify **declared place aliasing**, **runtime target aliasing**, or **name/identity aliasing**; do not use unqualified alias/aliasing as an umbrella category. Apply this to design/development discussions, documentation, source comments, diagnostics and new/refactored interface or data names.
-- Compile-time/runtime labels do not prove when a selected place or target equality becomes known. Explicit place declarations may select runtime-indexed storage; independent references may share targets without a pairwise declaration. Preserve these distinctions, ordinary access/owner/lifetime checks and permitted overlap; this rule grants no exclusivity or new capture/lifetime mechanism.
+- Preserve zero-cost relocation, ownership and publication in the C region service. Consult [the region protocols](design/MemoryRegionAndRegionalTypes.md) before changing regional pointers or allocation. Ask when a change could affect region invariants.
+- In shilos, construct regional objects only in a region, with `memory_region&`, and preserve their no-copy/no-move model. Use `regional_ptr<T>` for intra-region references to regional or bits types, and `global_ptr<T, RT>` across regions. Prefer `auto_region<RT>` and match the allocator and release operation. Release memory regions through their protocol and never through C++ `delete`.
 
-## Code Changes
-- Use C++20 for C++ code, including the seed compiler. New CoD native components are written in C and expose a C interface defined by CoD runtime requirements. Follow the [native component roadmap](applications/cod-booter/README.md#next-stage-repositories-and-native-runtime) and the applicable operation contract.
-- Mimic existing style and header layout under `include/`.
-- Reuse existing libraries/utilities in the repo; do not add external dependencies unless requested by the user.
+## Terminology and component conventions
 
-## Documentation
-- All repository content except changelog documents must describe only the latest state: current contracts, implementation, supported evidence, limitations and open questions. This includes design documents, authority records, source comments, examples and reference data. Remove obsolete snapshots, work journals, superseded proposals and historical implementation narratives from those locations.
-- Keep changelog entries brief. Refer to historical states with an immutable commit hash + repository path, adding a stable record ID or source line range when needed; do not copy historical payloads into archive files or directories.
-- Current alternatives under review and evidence supporting a current conclusion may remain, with their scope and limitations explicit. A current authority record may link to changelog evidence; it must not duplicate the decision history or imply that past validation establishes current implementation support.
+- Follow [CoD operation terminology](design/CallableViewsAndCaptures.md#copying-moving-and-graph-transfer) for bits transfer, reference binding, ownership transfer, callable construction/capture and graph transfer. Native byte copying and C++ moves grant no CoD permission. Callable views require lexical storage, including when part of a compound value.
+- Use the [three qualified alias concepts](design/CallableViewsAndCaptures.md#alias-terminology) in discussions, documentation, comments, diagnostics and interfaces. Distinguish declared place aliasing, runtime target aliasing and name/identity aliasing. Preserve access, owners, lifetimes and permitted overlap. A declaration can select storage at runtime, and independent references can share a target.
+- Keep YAML optional and separate from allocation. Use colocated `*_yaml.hh` conversions and reuse the helpers in `include/shilos/`.
+- For codp, Git/VCS supplies package identity. Use `CodManifest.yaml` for deterministic builds and `path:` for local overrides. Preserve mmap sharing, zero-copy and zero-relocation assumptions.
 
-## Repository hygiene
-- After an authorized hygiene inspection, self-review and correct findings until the final pass has no outstanding issues in the inspected scope. Then stage precise hunks, commit and push the maintenance work.
-- Minimize overlap with concurrent mainline documentation edits. Small valid overlapping documentation updates may be included; preserve unrelated work and keep source/test changes outside a documentation-only cleanup.
+## Documentation and repository hygiene
 
-## Planned Fraction Compatibility
-- Future CoD language design and implementation must check relevant interactions with `design/FixedWidthFractions.md` (D-16): syntax/comments, numeric types and promotion, intrinsic dispatch, bits/layout, borrowing/transfer and formatting.
-- A conflict with its accepted requirements is a design obstacle: present the conflicting requirements and alternatives to the user before implementing the affected choice. Unrelated qualified work may continue.
-- Fraction support remains a design draft with implementation deferred. H-256 separately prioritizes reserving `//` with `#` comments and the representation-independent UoM refactor. Those prerequisites do not authorize implementing fractions or silently deciding the draft's open questions.
-
-## Memory Regions and Regional Types (Critical)
-
-The C++ types and maintenance protocols below apply to the existing shilos implementation. For the new C region service, preserve CoD’s relocation, ownership and publication guarantees. The C++ classes and file operations are historical reference.
-
-- Zero-cost relocation is mandatory for regional types.
-- Allocate regional types in memory regions only (never on the stack).
-- No copy/move semantics for regional types.
-- Constructors that create regional objects must accept `memory_region&`.
-- Use `regional_ptr<T>` for intra-region references; use `global_ptr<T, RT>` for multi-region references.
-- `regional_ptr<T>` can only point to regional types or bits types - never standard C++ types like std::string or std::vector.
-- Prefer RAII via `auto_region<RT>`; ensure allocator symmetry; never use `delete` on memory regions.
-- Before modifying logic involving `regional_ptr`/`global_ptr` or region allocation semantics, consult `design/MemoryRegionAndRegionalTypes.md` and adhere strictly to its protocols.
-
-## YAML and Serialization
-- Keep YAML serialization optional and separate from core allocation logic.
-- Place YAML conversions in `*_yaml.hh` headers colocated with their corresponding types; this applies to both existing code and any new regional types you author.
-- Use and extend utilities under `include/shilos/*_yaml.hh`; adding new `*_yaml.hh` files is expected and idiomatic.
-
-## Package Management (codp)
-- Git/VCS is the single source of truth (no central registry).
-- Deterministic builds via lock file `CodManifest.yaml`.
-- Support local dependency overrides via `path:`.
-- Design for mmap-shared, zero-copy, zero-relocation assumptions.
-
-## LLVM Project Integration
-- If `/llvm-project` exists in the workspace and you are asked about LLVM internals, locate and cite code from there and verify file/line correctness before presenting.
-- If `/llvm-project` is absent, state that clearly and avoid speculation.
-
-## Do / Don’t
-- Do:
-  - Compile only with `cmake --build ./build`.
-  - Keep development tools pointed at `build/` in this worktree.
-  - Ask for explicit authorization before touching bootstrap/configuration state.
-  - Follow existing patterns and C++20 best practices.
-  - Prefer `auto_region`; preserve zero-cost-relocation invariants.
-  - Keep YAML logic isolated; use existing YAML helpers.
-  - Run top-level repository scripts only when their effects stay within the current human authorization.
-- Don’t:
-  - Execute top-level repository scripts that can bootstrap, reconfigure, clean, install, or mutate toolchains unless explicitly authorized.
-  - Reconfigure, clean, install, regenerate, or modify the bootstrapped toolchain path unless explicitly authorized.
-  - Allocate regional types on the stack or introduce copy/move.
-  - Add external dependencies without explicit approval.
-  - Break allocator matching or use `delete` on memory regions.
-
-## When Unsure
-- Ask which component to modify (shilos/cod/codp/tests).
-- Ask when a change could impact memory-region invariants.
+- Outside changelogs, describe current contracts, implementation, evidence, limits and open questions. Keep current alternatives and relevant evidence where useful. Use brief changelog records with stable IDs and immutable commit/path locators for history. Keep journals and obsolete snapshots out of the repository.
+- After an authorized hygiene inspection, correct and self-review the inspected scope, then stage precise hunks, commit and push the maintenance work. Preserve concurrent edits and keep source and test changes out of documentation-only work.
