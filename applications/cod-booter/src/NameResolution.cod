@@ -5,10 +5,10 @@ using "ParserStorage.cod" {
     export_from_node, callable_node, callable_head_node, c_handle_type_node, c_procedure_node,
     data_record_node, c_record_node, data_parent_node, export_node, handle_parameter_node,
     here_parameter_node, array_declaration_node, is_function, parameter_node, ref_parameter_node,
-    ptr_parameter_node, val_parameter_node, result_clause_node, ref_result_node, throws_clause_node,
+    ptr_parameter_node, val_parameter_node, direct_place_parameter, result_clause_node, ref_result_node, throws_clause_node,
     owner_clause_node, type_parameter_node, readonly_declaration, typed_name_node, owned_type_node, name_node,
     field_access_node, index_access_node, array_length_node, symbol_node, literal_node, group_node,
-    integer_arithmetic, concat_node, is_transfer, make_named_node, construction_body, positional_construction,
+    integer_arithmetic, concat_node, is_transfer, rebind_node, make_named_node, construction_body, positional_construction,
     construction_type_query_node, initializer_assignment_node, call_node, behave_node,
     argument_node, deferred_call_node, deferred_block_node, discard_node, bool_node, compare_node,
     conditional_node, range_node, handle_local, handle_construction, owning_handle_local_node,
@@ -150,6 +150,7 @@ func missing_here_control() -> u8 { return 62u8; }
 func unsupported_here_group_storage() -> u8 { return 63u8; }
 func owner_without_input() -> u8 { return 72u8; }
 func owner_without_writable_input() -> u8 { return 73u8; }
+func invalid_direct_string_place() -> u8 { return 107u8; }
 func invalid_enum_backing() -> u8 { return 78u8; }
 func invalid_enum_code() -> u8 { return 79u8; }
 func invalid_enum_member_reference() -> u8 { return 80u8; }
@@ -368,7 +369,7 @@ func binder_name(nodes:const ExprNodes in N, binding:u64) -> u64 where {const ow
 func formal(kind:u8) -> bool {
     return kind == parameter_node() || kind == ref_parameter_node() ||
         kind == ptr_parameter_node() || kind == val_parameter_node() ||
-        kind == handle_parameter_node() || kind == here_parameter_node();
+        kind == handle_parameter_node() || kind == here_parameter_node() || direct_place_parameter(kind);
 }
 
 func list_entry(kind:u8) -> bool {
@@ -1035,7 +1036,8 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         resolve_value(source, nodes, bindings, work, state, at);
         if (state.diagnostic != 0u8) return;
     };
-    if (integer_arithmetic(kind) || kind == concat_node() || kind == compare_node() || kind == index_access_node() || is_transfer(nodes, at) ||
+    if (integer_arithmetic(kind) || kind == concat_node() || kind == compare_node() || kind == index_access_node() ||
+        is_transfer(nodes, at) || kind == rebind_node() ||
         logical_binary(kind)) {
         resolve_expression(source, nodes, bindings, work, state, nodes[at].left);
         if (state.diagnostic != 0u8) return;
@@ -1249,6 +1251,13 @@ func resolve_header_types(source:const SourceBytes in S, nodes:const ExprNodes i
     };
 }
 
+func writable_string_place(nodes:const ExprNodes in N, bindings:const NameBindings in B, binding:u64) -> bool
+    where {const owner N, const owner B} {
+    val annotation <- nodes[binding].right;
+    val type <- if (nodes[annotation].kind == owned_type_node()) { (nodes[annotation].left) } else { annotation };
+    return nodes[binding].number != readonly_declaration() && bindings[type].kind == builtin_string();
+}
+
 func resolve_formals(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                       work:NameWork in W, state:NameState in R, first:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
@@ -1262,6 +1271,10 @@ func resolve_formals(source:const SourceBytes in S, nodes:const ExprNodes in N, 
             binding <- nodes[parameter].right;
             resolve_annotation(source, nodes, bindings, work, state, binding);
             if (state.diagnostic != 0u8) return;
+            if (direct_place_parameter(nodes[parameter].kind) && !writable_string_place(nodes, bindings, binding)) {
+                reject_name(state, parameter, invalid_direct_string_place());
+                return;
+            };
             declare_name(source, nodes, bindings, work, state, binder_name(nodes, binding),
                          parameter, formal_binding(), duplicate_binding());
         };

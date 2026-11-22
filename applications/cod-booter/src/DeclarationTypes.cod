@@ -5,7 +5,7 @@ using "ParserStorage.cod" {
     make_named_node, field_access_node, enum_declaration_node, type_assertion_node, literal_node, text_literal_node,
     narrow_integer_node, bool_node, call_node, here_call_node, compare_node, logical_not_node, logical_binary,
     case_node, case_arm_node, case_member_pattern, case_true_pattern, case_false_pattern, case_null_pattern,
-    readonly_declaration, local_storage_binding, positional_construction,
+    readonly_declaration, local_storage_binding, positional_construction, rebind_node, direct_place_parameter,
 };
 using "NameResolution.cod" {
     NameBindings, NameWork, first_item, record_declaration, formal_binding, local_binding,
@@ -52,6 +52,7 @@ func invalid_c_string_operand() -> u8 { return 97u8; }
 export func interior_nul_in_c_string() -> u8 { return 98u8; }
 func invalid_string_operand() -> u8 { return 102u8; }
 func readonly_string_owner() -> u8 { return 103u8; }
+func invalid_string_installation() -> u8 { return 110u8; }
 
 func describe_type(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
                    annotation:u64, current_module:u64, result:DeclaredType in R) -> bool
@@ -374,6 +375,21 @@ func check_case_declaration(source:const SourceBytes in S, nodes:const ExprNodes
     return true;
 }
 
+func check_place_installation(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
+                             selected:const SelectedExports in E, work:const NameWork in W,
+                             spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I,
+                             at:u64, report:DeclaredExpressionResult in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, const owner W, const owner P, const owner I, owner R} {
+    val destination <- nodes[at].left;
+    if (nodes[destination].kind != name_node() || names[destination].kind != formal_binding() ||
+        !direct_place_parameter(nodes[names[destination].declaration].kind)) return true;
+    val input <- nodes[at].right;
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
+    if (trace_type(source, nodes, names, selected, work, spellings, interfaces, input, type) && !text_type(type.kind))
+        return declared_expression_failure(report, invalid_string_installation(), input);
+    return true;
+}
+
 export func check_declared_expressions(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
                                        selected:const SelectedExports in E, work:NameWork in W,
                                        spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I,
@@ -390,6 +406,8 @@ export func check_declared_expressions(source:const SourceBytes in S, nodes:cons
             !check_type_assertion(source, nodes, names, selected, work, spellings, interfaces, at, report)) return false;
         if (kind == case_node() &&
             !check_case_declaration(source, nodes, names, selected, work, spellings, interfaces, at, report)) return false;
+        if (kind == rebind_node() &&
+            !check_place_installation(source, nodes, names, selected, work, spellings, interfaces, at, report)) return false;
     };
     return true;
 }

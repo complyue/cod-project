@@ -547,6 +547,21 @@ export func val_word(source:const SourceBytes in S, token:const Token in T) -> b
     return source[first] == 118u8 && source[first + 1u64] == 97u8 && source[first + 2u64] == 108u8; # v a l
 }
 
+export func var_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    if (!identifier_width(token, 3u64)) return false;
+    val first <- token.first;
+    return source[first] == 118u8 && source[first + 1u64] == 97u8 && source[first + 2u64] == 114u8;
+}
+
+export func init_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    if (!identifier_width(token, 4u64)) return false;
+    val first <- token.first;
+    return source[first] == 105u8 && source[first + 1u64] == 110u8 &&
+        source[first + 2u64] == 105u8 && source[first + 3u64] == 116u8;
+}
+
 export func null_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     if (!identifier_width(token, 4u64)) return false;

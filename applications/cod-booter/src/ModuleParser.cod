@@ -1,6 +1,6 @@
 using "Lexer.cod" {
     exception_word, own_word, quoted_text, identifier, using_word, as_word, symbol_word,
-    symbol_name, from_word, proc_word, func_word, ref_word, ptr_word, val_word, throws_word,
+    symbol_name, from_word, proc_word, func_word, ref_word, ptr_word, val_word, var_word, init_word, throws_word,
     where_word, owner_word, const_word, in_word, data_word, reserved_module_name,
     reserved_lexical_binder, array_word, export_word, handle_word, here_word, c_linkage,
     enum_word, integer_literal, import_word, type_word, within_word, valid_module_path, invalid_module_path_escape,
@@ -15,7 +15,8 @@ using "ParserStorage.cod" {
     exception_parameter_node, exception_result_node, ref_result_node, Tokens, ExprNodes,
     len as token_len, no_node, module_node, module_item_node, using_node, module_path_node,
     callable_node, callable_head_node, procedure_definition, function_definition, parameter_node,
-    ref_parameter_node, ptr_parameter_node, val_parameter_node, result_clause_node,
+    ref_parameter_node, ptr_parameter_node, val_parameter_node, place_parameter_node, init_place_parameter_node,
+    result_clause_node,
     throws_clause_node, owner_clause_node, type_parameter_node, owned_type_node, c_handle_type_node, c_procedure_node,
     handle_parameter_node, here_parameter_node, data_record_node, c_record_node, data_parent_node,
     export_node, export_from_node, array_declaration_node, array_shape_node, readonly_declaration,
@@ -54,8 +55,10 @@ func parse_resource_name(source:const SourceBytes in S, tokens:const Tokens in T
     val at <- result.next;
     if (punct_at(source, tokens, at, past) != 40u8)
         return parse_module_name(source, tokens, nodes, result, past);
-    if (!punct_pair_at(source, tokens, at + 1u64, past, 43u8, 43u8) ||
-        punct_at(source, tokens, at + 2u64, past) != 41u8) {
+    val operator <- at + 1u64;
+    val accepted <- punct_pair_at(source, tokens, operator, past, 43u8, 43u8) ||
+        punct_pair_at(source, tokens, operator, past, 60u8, 45u8);
+    if (!accepted || punct_at(source, tokens, at + 2u64, past) != 41u8) {
         result.diagnostic <- expected_name();
         return false;
     } else {};
@@ -204,6 +207,12 @@ func parse_selection_items(source:const SourceBytes in S, tokens:const Tokens in
     return false;
 }
 
+func direct_place_head(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> bool
+    where {const owner S, const owner T} {
+    return at + 2u64 < past && val_word(source, tokens[at]) && var_word(source, tokens[at + 1u64]) &&
+        punct_at(source, tokens, at + 2u64, past) != 58u8;
+}
+
 # Formal parameters link to their preceding parameter and retain the typed name.
 func parse_parameter(source:const SourceBytes in S, tokens:const Tokens in T,
                      nodes:ExprNodes in A, result:ParseResult in R,
@@ -217,13 +226,23 @@ func parse_parameter(source:const SourceBytes in S, tokens:const Tokens in T,
         kind <- exception_parameter_node();
         (result.next <- at + width):void;
     } else {
-        if (ref_word(source, tokens[at])) { (kind <- ref_parameter_node()):void; } else {};
-        if (ptr_word(source, tokens[at])) { (kind <- ptr_parameter_node()):void; } else {};
-        if (val_word(source, tokens[at])) { (kind <- val_parameter_node()):void; } else {};
-        if (handle_word(source, tokens[at]) && punct_at(source, tokens, at + 1u64, past) != 58u8) {
-            (kind <- handle_parameter_node()):void;
-        } else {};
-        if (kind != parameter_node()) { (result.next <- at + 1u64):void; } else {};
+        if (!field && init_word(source, tokens[at]) && direct_place_head(source, tokens, at + 1u64, past)) {
+            kind <- init_place_parameter_node();
+            (result.next <- at + 3u64):void;
+        } else {
+            if (!field && direct_place_head(source, tokens, at, past)) {
+                kind <- place_parameter_node();
+                (result.next <- at + 2u64):void;
+            } else {
+                if (ref_word(source, tokens[at])) { (kind <- ref_parameter_node()):void; } else {};
+                if (ptr_word(source, tokens[at])) { (kind <- ptr_parameter_node()):void; } else {};
+                if (val_word(source, tokens[at])) { (kind <- val_parameter_node()):void; } else {};
+                if (handle_word(source, tokens[at]) && punct_at(source, tokens, at + 1u64, past) != 58u8) {
+                    (kind <- handle_parameter_node()):void;
+                } else {};
+                if (kind != parameter_node()) { (result.next <- at + 1u64):void; } else {};
+            };
+        };
     };
     if (!parse_binding_name(source, tokens, nodes, result, past, true, true, field))
         return false;

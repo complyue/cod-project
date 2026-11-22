@@ -10,7 +10,7 @@ using "ParserStorage.cod" {
     multiply_node, subtract_node, divide_node, remainder_node, concat_node, group_node, name_node, call_node,
     argument_node, deferred_call_node, deferred_block_node, block_node, full_scope_node,
     block_item_node, try_node, catch_clause_node, catch_handler_node, catch_binding_node,
-    finally_clause_node, symbol_node, behave_node, throw_node, transfer_node, typed_name_node,
+    finally_clause_node, symbol_node, behave_node, throw_node, transfer_node, rebind_node, typed_name_node,
     readonly_declaration, val_binding_node, ptr_binding_node, null_node, return_node,
     owned_type_node, discarded_guard_result, discard_node, bool_node, conditional_node, range_node,
     range_header_node, logical_not_node, logical_and_node, logical_or_node, compare_node,
@@ -1636,13 +1636,15 @@ func parse_expression_operand(source:const SourceBytes in S, tokens:const Tokens
     parse_binary(source, tokens, nodes, result, past, minimum);
     if (result.diagnostic != 0u8 || minimum != 1u8) return;
     val assignment <- result.next;
-    if (!punct_pair_at(source, tokens, assignment, past, 60u8, 45u8)) return; # '<-'
+    val rebind <- punct_at(source, tokens, assignment, past) == 61u8;
+    if (!rebind && !punct_pair_at(source, tokens, assignment, past, 60u8, 45u8)) return; # '<-'
     val destination <- result.root;
     result.next <- assignment + 1u64;
     parse_expression_operand(source, tokens, nodes, result, past, 1u8);
     if (result.diagnostic != 0u8) return;
     val source_node <- result.root;
-    append_node(nodes, result, transfer_node(), nodes[destination].first, nodes[source_node].past,
+    append_node(nodes, result, if (rebind) { rebind_node() } else { transfer_node() },
+                nodes[destination].first, nodes[source_node].past,
                 0u64, destination, source_node, tokens[assignment].first);
 }
 
