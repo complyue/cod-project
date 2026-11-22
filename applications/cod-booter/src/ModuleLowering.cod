@@ -10,6 +10,7 @@ using "ParserStorage.cod" {
     throw_node, case_node, case_arm_node, case_fallthrough_node, case_failure_node, break_node,
     enum_declaration_node, type_assertion_node, case_null_pattern, data_record_node, field_access_node,
     text_literal_node, narrow_integer_node, owner_clause_node, init_place_parameter_node, rebind_node, export_node,
+    export_from_node,
 };
 using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" { NameBindings, NameWork, first_item, callable_head, exception_binding };
@@ -122,7 +123,7 @@ func new_slot(plan:NativePlan in P) -> u64 where {owner P} {
 
 func position(code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R,
               label:u64) -> void where {owner C, owner P, owner R} {
-    emit(code, plan, position_block(), label, state.active_function);
+    emit(code, plan, position_block(), label, plan.function_base + state.active_function);
     state.live <- true;
     return;
 }
@@ -310,9 +311,13 @@ func invoke(nodes:const ExprNodes in N, links:const NameWork in L,
         return;
     } else {};
     val argument <- first_item(nodes, nodes[call].right);
+    val target <- no_node();
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (argument == no_node()) {
-            command(code, plan, invoke_function(), facts[call].call_definition, slot(call),
+            target <- if (links[call].imported_function == no_node()) {
+                plan.function_base + facts[call].call_definition
+            } else { (links[call].imported_function) };
+            command(code, plan, invoke_function(), target, slot(call),
                     call_category(), call_site());
             return;
         } else {};
@@ -398,7 +403,7 @@ func lower_transfer_call(nodes:const ExprNodes in N, names:const NameBindings in
     if (input_chain != no_node()) { prepare_owner_address(nodes, facts, code, plan, facts[input].owner, slot(input_chain)); };
     pass_prepared_operand(code, plan, place, place_chain);
     pass_prepared_operand(code, plan, slot(input), input_chain);
-    command(code, plan, invoke_function(), facts[at].call_definition, slot(at), call_category(), call_site());
+    command(code, plan, invoke_function(), plan.function_base + facts[at].call_definition, slot(at), call_category(), call_site());
     propagate_invocation_failure(code, plan, state);
 }
 
@@ -1117,7 +1122,7 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
     plan.node <- at;
     val kind <- nodes[at].kind;
     if (kind == using_node() || kind == callable_node() || kind == enum_declaration_node() ||
-        kind == data_record_node() || kind == export_node()) return;
+        kind == data_record_node() || kind == export_node() || kind == export_from_node()) return;
     if (kind == type_assertion_node()) {
         if (facts[at].enum_constant != 0u8) {
             emit(code, plan, word_constant(), slot(at), facts[at].discriminator_code);
@@ -1496,7 +1501,7 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
         finalizer <- no_node(); break_landing <- no_node(); break_value <- no_node();
         scan_landing <- no_node(); pending_break <- false; pending_scan <- false;
     };
-    emit(code, plan, begin_function(), scope, entry);
+    emit(code, plan, begin_function(), plan.function_base + scope, entry);
     position(code, plan, state, entry);
     emit(code, plan, word_constant(), pending_category(), 0u64);
     emit(code, plan, word_constant(), pending_site(), 0u64);
@@ -1582,10 +1587,11 @@ func module_command_supported(names:const NameBindings in B, sites:const Complet
 # to LLVM only when this operation succeeds.
 export func lower_native_module(nodes:const ExprNodes in N, tree:const ParseResult in T, names:const NameBindings in B,
                                 links:const NameWork in L, facts:const OperandFacts in F, sites:const CompletionSites in S,
-                                code:NativeCommands in C, plan:NativePlan in P) -> bool
+                                code:NativeCommands in C, plan:NativePlan in P, base:u64, entry:bool) -> bool
     where {const owner N, const owner T, const owner B, const owner L, const owner F, const owner S, owner C, owner P} {
     plan.used <- 0u64;
     plan.functions <- tree.used;
+    plan.function_base <- base;
     plan.labels <- tree.used;
     plan.slots <- 0u64;
     plan.diagnostic <- invalid_native_module();
@@ -1603,13 +1609,13 @@ export func lower_native_module(nodes:const ExprNodes in N, tree:const ParseResu
         plan.node <- at;
         if (!module_command_supported(names, sites, at)) { plan.diagnostic <- native_unsupported(); return false; } else {};
         if (nodes[at].kind == callable_node()) {
-            command(code, plan, declare_function(), at, formal_count(nodes, facts, callable_head(nodes, at)), 0u64, 0u64);
+            command(code, plan, declare_function(), base + at, formal_count(nodes, facts, callable_head(nodes, at)), 0u64, 0u64);
             if (plan.diagnostic != 0u8) return false;
         } else {};
     };
-    command(code, plan, declare_function(), tree.root, 0u64, 1u64, 0u64);
+    if (entry) { command(code, plan, declare_function(), base + tree.root, 0u64, 1u64, 0u64); };
     for (at in 0u64 .. tree.used) {
-        if (nodes[at].kind == callable_node() || at == tree.root) {
+        if (nodes[at].kind == callable_node() || (entry && at == tree.root)) {
             lower_activation(nodes, names, links, facts, sites, code, plan, at);
             if (plan.diagnostic != 0u8) return false;
         } else {};

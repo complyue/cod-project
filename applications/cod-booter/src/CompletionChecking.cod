@@ -540,6 +540,9 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
     if (kind == make_named_node() && facts[at].allocation_owner != no_node())
         return route_failure(nodes, names, links, facts, sites, at, used, out_of_memory_identity(), 0u8, possible_failure());
     if (kind == call_node()) {
+        if (links[at].imported_function != no_node() &&
+            (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8))
+            return unproved_deferred_error();
         if (facts[at].text_intrinsic == text_byte_export())
             return route_failure(nodes, names, links, facts, sites, at, used, index_out_of_bounds_identity(), 0u8, possible_failure());
         if (facts[at].text_intrinsic != 0u8) return 0u8;
@@ -635,6 +638,13 @@ func check_escaping_failure_paths(nodes:const ExprNodes in N, names:const NameBi
                 (count <- enqueue_failure(sites, definition, count)):void;
             } else {};
         } else {};
+        if (links[at].imported_function != no_node() && can_continue(sites, at) &&
+            sites[at].replacing_try == no_node() && matching_handler(nodes, links, facts, sites, at, category, used) == no_node()) {
+            definition <- enclosing_callable(nodes, names, names[at].scope);
+            if (nodes[definition].kind == callable_node()) {
+                (count <- enqueue_failure(sites, definition, count)):void;
+            };
+        };
     };
     if (count == 0u64) return true;
     for (at in 0u64 .. used) {

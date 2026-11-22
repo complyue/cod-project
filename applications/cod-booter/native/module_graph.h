@@ -10,6 +10,7 @@ enum {
     module_dependency_rejected = 7,
     module_graph_storage_failed = 8,
     module_depth_unproved = 9,
+    module_dependency_unsupported = 16,
 };
 
 uint8_t cod_booter_check_declarations(const char *input, cod_booter_diagnostic *diagnostic);

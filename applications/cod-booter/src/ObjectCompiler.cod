@@ -1,138 +1,41 @@
-using "NativeSource.cod" { Path, SourceRevision, SourceOpenException };
-using "NativeSourceUse.cod" source_use;
-using "NativeScratch.cod" { Scratch, ScratchOpenException, scratch_use };
+using "NativeSource.cod" Path;
+using "NativeScratch.cod" ScratchOpenException;
 using symbol "NativeLLVM.cod" @llvmSession;
-using "NativeLLVM.cod" {
-    LLVMSession, LLVMOpenException, llvm_construct, llvm_verify, llvm_emit_object,
-};
-using "NativeDiagnostics.cod" {
-    DiagnosticDestination, report_rejection, report_source_open_error, report_backend_error,
-    report_scratch_error,
-};
-using "SourceStorage.cod" { SourceBytes, SourceLines };
-using "ParserStorage.cod" { Tokens, ExprNodes, no_node };
-using "TokenBuffer.cod" ScanResult;
-using "ExpressionParser.cod" ParseResult;
-using "Frontend.cod" FrontendResult;
-using "ModuleExports.cod" { ModuleExports, SelectedExports };
-using "NameResolution.cod" { NameBindings, NameWork };
-using "OperandChecking.cod" { OperandFacts, CallOwners };
-using "CompletionChecking.cod" CompletionSites;
-using "ModuleFrontend.cod" {
-    ModuleBindingResult, module_read_failed, rejected_unsupported_declaration,
-};
-using "ModuleCompiler.cod" compile_module_commands;
-using "NativeCommands.cod" { NativeCommands, NativePlan };
-using "ModuleLowering.cod" native_unsupported;
-using "ModuleDriver.cod" { ModuleWorkspacePlan, plan_module_workspace };
-using "Compiler.cod" ExpressionScratchPlan;
-using "CompilerStatus.cod" CompilerStatus { Complete, Rejected, FormUnsupported, OpenFailed, LoweringFailed, FinishFailed, ScratchFailed, SourceOpenFailed };
+using "NativeLLVM.cod" { LLVMSession, LLVMOpenException, llvm_verify, llvm_emit_object };
+using "NativeDiagnostics.cod" { DiagnosticDestination, report_backend_error, report_scratch_error };
+using "SourceStorage.cod" SourceBytes;
+using "ModuleExports.cod" ModuleExports;
+using "ModuleGraph.cod" { NativeGraph, collect_native_graph, construct_native_graph };
+using "CompilerStatus.cod" CompilerStatus { Complete, OpenFailed, LoweringFailed, FinishFailed, ScratchFailed };
 
 proc verify_active_session() -> u8 {
     return llvm_verify(@llvmSession);
 }
 
-proc write_object(source:const SourceBytes in S, output:const String in A, handle diagnostic:DiagnosticDestination in D,
-                  commands:const NativeCommands in W, plan:const NativePlan in P) -> CompilerStatus
-    where {const owner S, const owner A, const owner W, const owner P, owner D} {
+proc write_object(handle graph:NativeGraph in G, output:const String in A,
+                  handle diagnostic:DiagnosticDestination in D) -> CompilerStatus
+    where {const owner G, const owner A, owner D} {
     try {
         effect @llvmSession <- make own handle LLVMSession();
-        val constructed <- llvm_construct(@llvmSession, commands, source, plan.used, plan.functions, plan.labels, plan.slots);
+        val constructed <- construct_native_graph(graph, @llvmSession);
         if (constructed != 0u8) {
             report_backend_error(diagnostic, constructed);
             return LoweringFailed;
-        } else {};
+        };
         val verified <- verify_active_session();
         if (verified != 0u8) {
             report_backend_error(diagnostic, verified);
             return FinishFailed;
-        } else {};
+        };
         val emitted <- llvm_emit_object(@llvmSession, output:CString);
         if (emitted != 0u8) {
             report_backend_error(diagnostic, emitted);
             return FinishFailed;
-        } else {};
+        };
         return Complete;
     } catch (error:LLVMOpenException) {
         report_backend_error(diagnostic, error.status);
         return OpenFailed;
-    }
-}
-
-proc lower_object(source:const SourceBytes in S, lines:const SourceLines in S,
-                  spellings:const SourceBytes in B, exports:const ModuleExports in B,
-                  output:const String in A, handle diagnostic:DiagnosticDestination in D,
-                  tokens:Tokens in W, nodes:ExprNodes in W,
-                  selected:SelectedExports in W, bindings:NameBindings in W, names:NameWork in W,
-                  facts:OperandFacts in W, owners:CallOwners in W, sites:CompletionSites in W,
-                  commands:NativeCommands in W) -> CompilerStatus
-    where {const owner S, const owner B, const owner A, owner D, owner W} {
-    ref analysis = make ModuleBindingResult {
-        frontend <- make FrontendResult {
-            scan <- make ScanResult { used <- 0u64; next <- 0u64; complete <- false; invalid_source <- false; };
-            tree <- make ParseResult { next <- 0u64; used <- 0u64; root <- no_node(); diagnostic <- 0u8; supplied_here <- false; case_control <- false; };
-            diagnostic_first <- 0u64;
-            diagnostic_past <- 0u64;
-        };
-        stage <- 0u8;
-        diagnostic <- 0u8;
-        related_first <- no_node();
-    };
-    ref plan = make NativePlan {
-        used <- 0u64; functions <- 0u64; labels <- 0u64; slots <- 0u64; diagnostic <- 0u8; node <- no_node();
-    };
-    if (!compile_module_commands(source, tokens, nodes, spellings, exports, selected, bindings, names,
-                                 facts, owners, sites, commands, plan, analysis)) {
-        if (analysis.stage != 0u8) {
-            val code <- if (analysis.stage == module_read_failed()) { analysis.frontend.tree.diagnostic }
-                        else { analysis.diagnostic };
-            report_rejection(source, lines, diagnostic, analysis.stage, code, analysis.frontend.diagnostic_first,
-                             analysis.frontend.diagnostic_past, analysis.related_first);
-            if (rejected_unsupported_declaration(analysis)) return FormUnsupported;
-            return Rejected;
-        } else {};
-        val first <- no_node();
-        val past <- no_node();
-        if (plan.node != no_node()) {
-            first <- nodes[plan.node].first;
-            (past <- nodes[plan.node].past):void;
-        } else {};
-        report_rejection(source, lines, diagnostic, 0u8, plan.diagnostic, first, past, no_node());
-        if (plan.diagnostic == native_unsupported()) return FormUnsupported;
-        return LoweringFailed;
-    } else {};
-    return write_object(source, output, diagnostic, commands, plan);
-}
-
-proc compile_revision(source:const SourceBytes in S, lines:const SourceLines in S,
-                      spellings:const SourceBytes in B, exports:const ModuleExports in B,
-                      output:const String in A, handle diagnostic:DiagnosticDestination in D) -> CompilerStatus
-    where {const owner S, const owner B, const owner A, owner D} {
-    ref workspace = make ModuleWorkspacePlan {
-        source <- make ExpressionScratchPlan {
-            token_count <- 0u64; node_capacity <- 0u64; diagnostic <- 0u8;
-            diagnostic_first <- 0u64; diagnostic_past <- 0u64;
-        };
-        commands <- 0u64;
-    };
-    val planned <- plan_module_workspace(source, workspace);
-    if (planned != Complete) {
-        if (workspace.source.diagnostic != 0u8) {
-            report_rejection(source, lines, diagnostic, module_read_failed(), workspace.source.diagnostic,
-                             workspace.source.diagnostic_first, workspace.source.diagnostic_past, no_node());
-        } else {};
-        return planned;
-    } else {};
-    try {
-        own handle scratch:Scratch <- make own handle Scratch(workspace.source.token_count,
-            workspace.source.node_capacity, workspace.commands);
-        return scratch_use(scratch) (tokens, nodes, selected, bindings, names, facts, owners, sites, commands) => {
-            continue lower_object(source, lines, spellings, exports, output, diagnostic,
-                                  tokens, nodes, selected, bindings, names, facts, owners, sites, commands);
-        };
-    } catch (error:ScratchOpenException) {
-        report_scratch_error(diagnostic, error.status);
-        return ScratchFailed;
     }
 }
 
@@ -141,12 +44,12 @@ export proc compile_object(handle input:Path in A, output:const String in A,
                            spellings:const SourceBytes in B, exports:const ModuleExports in B) -> CompilerStatus
     where {const owner A, const owner B, owner D} {
     try {
-        own handle source:SourceRevision <- make own handle SourceRevision(input);
-        return source_use(source) (bytes, lines) => {
-            continue compile_revision(bytes, lines, spellings, exports, output, diagnostic);
-        };
-    } catch (error:SourceOpenException) {
-        report_source_open_error(diagnostic, error.os_error);
-        return SourceOpenFailed;
+        own handle graph:NativeGraph <- make own handle NativeGraph();
+        val checked <- collect_native_graph(graph, input, diagnostic, spellings, exports);
+        if (checked != Complete) return checked;
+        return write_object(graph, output, diagnostic);
+    } catch (error:ScratchOpenException) {
+        report_scratch_error(diagnostic, error.status);
+        return ScratchFailed;
     }
 }

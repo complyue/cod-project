@@ -1,0 +1,6 @@
+using "text-metric.cod" measured_size as count;
+using "std:text-storage" utf8_size;
+using symbol "std:io" @print;
+
+behave @print(count(3u64));
+behave @print(utf8_size("entry"));

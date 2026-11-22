@@ -78,15 +78,24 @@ static LLVMValueRef cod_llvm_text_global(cod_llvm_construction *state, LLVMValue
   return global;
 }
 
-static LLVMValueRef cod_llvm_text_literal(cod_llvm_construction *state, uint64_t first, uint64_t past) {
+static LLVMValueRef cod_llvm_text_literal(cod_llvm_construction *state, uint64_t first, uint64_t past, uint64_t id) {
   const cod_llvm_command_unit *unit = &state->units[state->unit_index];
-  if (!unit->source || past > unit->source_size || first > past || past - first < 2 ||
-      unit->source[first] != '"' || unit->source[past - 1] != '"') return NULL;
-  const size_t width = (size_t)(past - first) - 2;
+  if (past > unit->source_size || first > past || past - first < 2) return NULL;
+  const size_t extent = (size_t)(past - first);
+  const uint8_t *spelling;
+  if (id) {
+    if (id > unit->literal_count || unit->literals[id - 1].size != extent) return NULL;
+    spelling = unit->literals[id - 1].bytes;
+  } else {
+    if (!unit->source) return NULL;
+    spelling = unit->source + first;
+  }
+  if (!spelling || spelling[0] != '"' || spelling[extent - 1] != '"') return NULL;
+  const size_t width = extent - 2;
   uint8_t *bytes = malloc(width ? width : 1);
   if (!bytes) return NULL;
   size_t length;
-  if (cod_decode_text_literal(unit->source + first + 1, width, bytes, &length)) {
+  if (cod_decode_text_literal(spelling + 1, width, bytes, &length)) {
     free(bytes);
     return NULL;
   }
@@ -337,7 +346,7 @@ static inline bool cod_llvm_construct_command(cod_llvm_construction *state, cod_
     }
     case COD_LLVM_TEXT_LITERAL: {
       if (a >= slots) return false;
-      LLVMValueRef descriptor = cod_llvm_text_literal(state, b, c);
+      LLVMValueRef descriptor = cod_llvm_text_literal(state, b, c, d);
       if (!descriptor) return false;
       cod_llvm_write_word(state, a, LLVMConstPtrToInt(descriptor, state->word));
       return true;
@@ -467,7 +476,7 @@ static bool cod_llvm_measure_units(const cod_llvm_command_unit *units, size_t co
     if (!unit->records || !unit->count || unit->count > PTRDIFF_MAX / sizeof(cod_llvm_command) ||
         !unit->labels || unit->labels > PTRDIFF_MAX / sizeof(LLVMBasicBlockRef) ||
         !unit->slots || unit->slots > PTRDIFF_MAX / sizeof(LLVMValueRef) ||
-        (unit->source_size && !unit->source)) return false;
+        (unit->literal_count && !unit->literals)) return false;
     if (count > 1) {
       if (!unit->source_name || !*unit->source_name ||
           unit->source_size >= UINT64_MAX - limits->site_limit) return false;

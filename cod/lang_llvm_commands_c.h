@@ -31,6 +31,11 @@ typedef struct cod_llvm_command {
   uint64_t a, b, c, d;
 } cod_llvm_command;
 
+typedef struct cod_llvm_literal_spelling {
+  const uint8_t *bytes;
+  size_t size;
+} cod_llvm_literal_spelling;
+
 /* A checked command unit borrows its records and one indexed source revision
    for construction. Block labels and slots are unit-local. Callable IDs
    are artifact-wide. Only INVOKE may reference another unit's definition.
@@ -41,6 +46,10 @@ typedef struct cod_llvm_command_unit {
   const uint8_t *source;
   size_t source_size;
   const char *source_name;
+  /* TEXT_LITERAL.d selects an optional retained spelling (one-based).
+     Its byte span is still relative to the original revision. */
+  const cod_llvm_literal_spelling *literals;
+  size_t literal_count;
 } cod_llvm_command_unit;
 
 #ifdef __cplusplus
