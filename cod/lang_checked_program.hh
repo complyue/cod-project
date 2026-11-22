@@ -93,10 +93,17 @@ inline bool accepts_argument(const Type &source, const Type &target, ArgumentMod
 
 enum class HereExit : std::uint8_t { break_call = 1, return_supplier, failure };
 
+struct SumConstructor {
+  size_t sum;
+  size_t alternative;
+  bool operator==(const SumConstructor &) const = default;
+};
+
 struct CasePattern {
   enum class Kind { any, null, code };
   Kind kind = Kind::any;
   std::uint64_t code = 0;
+  std::optional<SumConstructor> constructor = {};
 };
 
 struct CheckedOperation {
@@ -159,7 +166,10 @@ struct CheckedOperation {
   };
   std::optional<LexicalAllocation> lexical_allocation;
   std::optional<size_t> lexical_result_owner;
+  std::optional<SumConstructor> sum_constructor;
+  std::vector<size_t> sum_initializers;
   CasePattern case_pattern;
+  std::vector<size_t> case_payload_fields;
   bool case_subject_may_be_null = false;
   bool case_reaches_end = false;
   bool case_scope_resumes = false;
@@ -315,6 +325,15 @@ struct CheckedSchema {
   bool has_enum_storage = false;
   std::optional<size_t> abstract_parent = {};
   bool lexical_builder = false;
+};
+
+struct CheckedSum {
+  struct Alternative {
+    const SumAlternative *source;
+    std::vector<CheckedSchema::Field> fields;
+  };
+  const Form *source;
+  std::vector<Alternative> alternatives;
 };
 
 struct CheckedAbstractType {
@@ -817,6 +836,7 @@ struct CheckedProgram {
     return exception_type(category);
   }
   std::vector<CheckedSchema> schemas;
+  std::vector<CheckedSum> sums;
   std::vector<CheckedAbstractType> abstract_types;
   std::vector<CheckedArray> arrays;
   std::vector<CheckedEnum> enums;

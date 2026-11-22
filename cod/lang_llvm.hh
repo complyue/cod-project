@@ -307,7 +307,9 @@ class LLVMEmission {
     if (type.kind == Type::array) return array_base + type.identity;
     const auto enum_base = array_base + program_->arrays.size();
     if (type.kind == Type::enumeration) return enum_base + type.identity;
-    const auto text_base = enum_base + program_->enums.size();
+    const auto sum_base = enum_base + program_->enums.size();
+    if (type.kind == Type::sum) return sum_base + type.identity;
+    const auto text_base = sum_base + program_->sums.size();
     if (type.kind == Type::string) return text_base;
     if (type.kind == Type::c_string) return text_base + 1;
     if (type.kind == Type::procedure) {
@@ -360,6 +362,41 @@ class LLVMEmission {
       pending.pop_back();
     }
     return product_layouts_.at(root);
+  }
+  struct SumLayout {
+    struct Alternative {
+      llvm::StructType *payload;
+      std::uint64_t tag;
+    };
+    llvm::StructType *storage;
+    std::vector<Alternative> alternatives;
+  };
+  std::map<size_t, SumLayout> sum_layouts_;
+  const SumLayout &sum_layout(size_t identity) {
+    if (const auto found = sum_layouts_.find(identity); found != sum_layouts_.end()) return found->second;
+    const auto &data = module_.getDataLayout();
+    std::vector<SumLayout::Alternative> alternatives;
+    llvm::Type *alignment_type = b_.getInt8Ty();
+    std::uint64_t bytes = 0;
+    for (const auto &alternative : program_->sums.at(identity).alternatives) {
+      std::vector<llvm::Type *> fields;
+      for (const auto &field : alternative.fields) fields.push_back(native_type(field.type));
+      auto *payload = llvm::StructType::get(context_, fields);
+      if (data.getABITypeAlign(payload) > data.getABITypeAlign(alignment_type)) alignment_type = payload;
+      bytes = std::max(bytes, data.getTypeAllocSize(payload).getFixedValue());
+      alternatives.push_back({payload, alternatives.size()});
+    }
+    // The zero-length array supplies the ABI alignment of the most
+    // strictly aligned alternative. Unused payload bytes have no value.
+    auto *payload = llvm::StructType::get(context_, {
+        llvm::ArrayType::get(alignment_type, 0), llvm::ArrayType::get(b_.getInt8Ty(), bytes)});
+    auto *storage = llvm::StructType::get(context_, {b_.getInt64Ty(), payload});
+    return sum_layouts_.emplace(identity, SumLayout{storage, std::move(alternatives)}).first->second;
+  }
+  llvm::Value *sum_field_address(llvm::Value *storage, SumConstructor constructor, size_t field) {
+    const auto &layout = sum_layout(constructor.sum);
+    auto *payload = b_.CreateStructGEP(layout.storage, storage, 1);
+    return b_.CreateStructGEP(layout.alternatives.at(constructor.alternative).payload, payload, field);
   }
   llvm::Value *pack(llvm::IRBuilder<> &builder, llvm::Value *value, const Type &type) {
     if (type.kind == Type::exception) {
@@ -2947,7 +2984,8 @@ class LLVMEmission {
       }
 
       auto *selected_arm = block("case.matched"), *next = block("case.next");
-      const auto pattern = contexts_.front().at(&item).case_pattern;
+      const auto &checked = contexts_.front().at(&item);
+      const auto pattern = checked.case_pattern;
       using P = CasePattern::Kind;
       switch (pattern.kind) {
       case P::any:
@@ -2963,14 +3001,33 @@ class LLVMEmission {
           b_.CreateCondBr(b_.CreateIsNull(selected), next, present);
           b_.SetInsertPoint(present);
         }
-        auto *payload = borrowed ? load_place(selected, subject) : selected;
-        auto *bits = unpack(payload, subject_type);
-        auto *code = llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(bits->getType()), pattern.code);
-        b_.CreateCondBr(b_.CreateICmpEQ(bits, code), selected_arm, next);
+        if (pattern.constructor) {
+          const auto constructor = *pattern.constructor;
+          const auto &layout = sum_layout(constructor.sum);
+          auto *tag = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(layout.storage, selected, 0));
+          auto *code = integer(layout.alternatives.at(constructor.alternative).tag);
+          b_.CreateCondBr(b_.CreateICmpEQ(tag, code), selected_arm, next);
+        } else {
+          auto *payload = borrowed ? load_place(selected, subject) : selected;
+          auto *bits = unpack(payload, subject_type);
+          auto *code = llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(bits->getType()), pattern.code);
+          b_.CreateCondBr(b_.CreateICmpEQ(bits, code), selected_arm, next);
+        }
         break;
       }
 
       b_.SetInsertPoint(selected_arm);
+      for (size_t i = 0; i < checked.case_payload_fields.size(); ++i) {
+        const auto &receiver = *item.case_bindings[i];
+        const auto &binding = contexts_.front().at(&receiver);
+        auto *field = sum_field_address(selected, *pattern.constructor, checked.case_payload_fields[i]);
+        auto *payload = load_place(b_, field, StorageFormat{binding.operand_type});
+        const auto conversions = choices(receiver, {});
+        auto *value = choose(receiver, {}, conversions, scalar_, [&](const auto &choice) {
+          return convert_value(payload, choice.operation->operand_type, choice.operation->type);
+        });
+        assign_place(storage_.at(*binding.place), value, receiver);
+      }
       if (item.children.size() == 2) {
         const auto &guard = *item.children.front();
         emit_case_item(breaking, nullptr, [&] {
@@ -3650,6 +3707,23 @@ class LLVMEmission {
     case K::make_borrowed_handle:
       return emit_attached_native_handle(expr);
     case K::make_object: {
+      if (fact.sum_constructor) {
+        const auto constructor = *fact.sum_constructor;
+        auto *address = storage_.at(*fact.place);
+        const auto items = expr.initializer_items();
+        for (size_t i = 0; i < fact.sum_initializers.size(); ++i) {
+          const auto &item = *items[i];
+          const auto &input = *item.children.back();
+          auto *value = emit_expression(input);
+          if (!reachable()) return nullptr;
+          auto *field = sum_field_address(address, constructor, fact.sum_initializers[i]);
+          assign_place(field, convert_result(item, input, value), item, &CheckedOperation::operand_type);
+        }
+        const auto &layout = sum_layout(constructor.sum);
+        const auto tag = layout.alternatives.at(constructor.alternative).tag;
+        b_.CreateStore(integer(tag), b_.CreateStructGEP(layout.storage, address, 0));
+        return discard ? empty_scalar() : address;
+      }
       if (fact.lexical_allocation) {
         using Allocation = CheckedOperation::LexicalAllocation;
         std::vector<llvm::Value *> operands;
@@ -3938,6 +4012,7 @@ class LLVMEmission {
       else formats = storage_types[i];
       llvm::Type *layout = scalar_;
       if (binding.type.kind == Type::product) layout = product_layout(binding.type.identity);
+      else if (binding.type.kind == Type::sum) layout = sum_layout(binding.type.identity).storage;
       else if (binding.type.kind == Type::native_handle)
         layout = binding.type.owned ? static_cast<llvm::Type *>(b_.getInt64Ty()) : native_handle_pair();
       else if (!formats.contains(StorageFormat{}))

@@ -170,7 +170,8 @@ enum class ArgumentMode { value, borrowed_read, borrowed_ref, borrowed_ptr, borr
 struct Type {
   enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64,
               named, unit, quantity, product, region_schema, region, regional, array, reference, null_ref, abstract_type, arguments, parameter,
-              exception, never, c_type_marker, native_handle, exception_holder, enumeration, string, c_string, builder_storage };
+              exception, never, c_type_marker, native_handle, exception_holder, enumeration, string, c_string, builder_storage,
+              sum };
   Kind kind;
   std::string name;
   size_t identity = 0;
@@ -281,7 +282,7 @@ inline std::string type_name(const Type &type) {
   case Type::float64: return "f64";
   case Type::quantity: return type_name(*type.target) + "(" + type.name + ")";
   case Type::unit: return type.name;
-  case Type::named: case Type::product: case Type::region_schema: case Type::regional: case Type::array:
+  case Type::named: case Type::product: case Type::sum: case Type::region_schema: case Type::regional: case Type::array:
   case Type::abstract_type: case Type::c_type_marker: case Type::enumeration: case Type::builder_storage: return type.name;
   case Type::region: return std::string(type.owned ? "own " : "") + "region" +
                            (type.target ? " :" + type_name(*type.target) : "");
@@ -338,6 +339,7 @@ struct Expression {
   std::string declaration_kind = {};
   std::string owner_name = {};
   std::shared_ptr<ReceivingHeader> receiving = {};
+  std::vector<std::unique_ptr<Expression>> case_bindings;
   std::unique_ptr<PipelineEndpoints> endpoints = {};
   bool initializer_block = false;
   SourceSpan span = {};
@@ -1496,9 +1498,23 @@ class Parser {
         if (is(")")) arm->text = "_";
         else {
           const auto pattern = peek();
-          if (pattern.kind != TokenKind::identifier || !is(")", 1))
+          if (pattern.kind != TokenKind::identifier || (!is(")", 1) && !is("{", 1)))
             fail(pattern.at, "case pattern is outside the supported seed profile");
           arm->text = tokens_[cursor_++].text;
+          if (is("{")) {
+            ReceivingHeader reception;
+            labelled_receiving(reception);
+            validate_receivers(reception);
+            for (const auto &item : reception.items) {
+              auto binding = make(K::pointer, Token{TokenKind::identifier, item.name, item.at});
+              binding->annotation = item.annotation;
+              binding->declaration_kind = item.declaration_kind;
+              binding->fixed_binding = item.fixed_binding;
+              binding->read_only = item.read_only;
+              arm->case_bindings.push_back(std::move(binding));
+            }
+            arm->receiving = std::make_shared<ReceivingHeader>(std::move(reception));
+          }
         }
         expect(")");
         if (take("|") && !is("->")) arm->children.push_back(expression(0, HereAttachment::immediate, false));
