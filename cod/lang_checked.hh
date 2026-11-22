@@ -11111,6 +11111,10 @@ class ScalarChecker {
         implementation_gap(operands[i]->at, "cannot establish a scalar parameter type for an abruptly completing operand");
     }
   }
+  static bool supported_here_exit_result(const ResultContract &result) {
+    return !result.borrowed() && result.type &&
+        (*result.type == Type::void_type || scalar_type(*result.type) || result.type->kind == Type::procedure);
+  }
   Type query_here_call(const Expression &expr, TypeEvidenceState &state) const {
     if (!expr.has_here_body() || expr.kind != Expression::Kind::call || expr.intrinsic ||
         active_here(expr.text, &state) || state.preparing(expr) || state.exits || state.checks_initialization())
@@ -11160,8 +11164,8 @@ class ScalarChecker {
       implementation_gap(supplied.at, "return inspection in a queried here group");
     const auto contract = here_value_signature(receiver, signature, *match(receiver, arguments, {}, true), supplied.at);
     const auto receiving = require_result(selected, arguments, {}, expr.at, &state).contract.value();
-    if (receiving.borrowed() || (receiving.type != Type::void_type && !scalar_type(*receiving.type)))
-      implementation_gap(supplied.at, "type inspection of a here call with a borrowed or non-scalar result");
+    if (!supported_here_exit_result(receiving))
+      implementation_gap(supplied.at, "type inspection requires a scalar, callable or void result for a here call");
     if (supplied.receiving->from_for && receiving.type != Type::void_type)
       fail(supplied.at, "a generator loop requires a receiver with a void result");
 
@@ -13147,7 +13151,10 @@ class ScalarChecker {
       const auto &contract = breaking ? state.here_control->receiving : state.here_control->feedback;
       if (contract == Type::void_type && !expr.children.empty())
         fail(expr.at, breaking ? "void receiving calls require bare break" : "void here feedback requires bare continue");
-      const auto value = expr.children.empty() ? std::optional{Type{Type::void_type}} : child(0);
+      const auto value = expr.children.empty() ? std::optional{Type{Type::void_type}} :
+          breaking && contract.kind == Type::procedure
+              ? type_evidence(*expr.children.front(), state, false, &contract, nullptr, ExpectedTypeUse::callable_result)
+              : child(0);
       if (value && *value != Type::never && !transfers_value(*value, contract))
         fail(expr.at, std::string(breaking ? "break" : "continue") + " requires '" + type_name(contract) + "'");
       return Type::never;
@@ -13159,7 +13166,8 @@ class ScalarChecker {
       if (tail && !state.checks_reaching_paths())
         return child(0, false, false, EvidenceRead::discarded) == Type::never ? Type{Type::never} : Type{Type::void_type};
       const auto *expected_return = state.invocation_result ? &*state.invocation_result : nullptr;
-      const auto expected_use = state.supplied_invocation_result ? ExpectedTypeUse::callable_result : ExpectedTypeUse::materialization;
+      const auto expected_use = state.here_control || state.supplied_invocation_result
+          ? ExpectedTypeUse::callable_result : ExpectedTypeUse::materialization;
       std::vector<Type> tail_types;
       auto *evidence = !state.returns ? nullptr : tail ? &tail_types : &state.returns->types;
       const bool native_result = expected_return && expected_return->kind == Type::native_handle;
@@ -14917,9 +14925,8 @@ class ScalarChecker {
       if (checking_method_ && checking_method_->here_group) implementation_gap(body.at, "a single-brace here body supplied inside a here group");
       if (body.receiving->from_for && receiving.type != Type::void_type)
         fail(body.at, "a generator loop requires a receiver with a void result");
-      if (receiving.borrowed() || (receiving.type != Type::void_type && !scalar_type(*receiving.type)) ||
-          (supplier && (supplier->result.borrowed() || (supplier->result.type != Type::void_type && !scalar_type(*supplier->result.type)))))
-        implementation_gap(body.at, "single-brace here completion with a non-scalar supplier or receiving result");
+      if (!supported_here_exit_result(receiving) || (supplier && !supported_here_exit_result(supplier->result)))
+        implementation_gap(body.at, "single-brace here completion requires a scalar, callable or void supplier and receiving result");
       group = CheckedMethod::HereGroupResults{supplier ? supplier->result.type : std::nullopt, *receiving.type, {}};
       if (definition.body->inspects_return()) group->supplier_return = false;
       group->binds_return_payload = definition.body->inspects_return(true);
@@ -18729,9 +18736,11 @@ class ScalarChecker {
         if (breaking && *expected == Type::void_type && !expr.children.empty())
           fail(expr.at, "void receiving calls require bare break");
         const auto value = expr.children.empty() ? Type{Type::void_type} :
-            check(*expr.children.front(), instance, operations, true, false, &*expected);
+            check(*expr.children.front(), instance, operations, true, false, &*expected, ExpectedTypeUse::callable_result);
         if (value != Type::never && !transfers_value(value, *expected))
           fail(expr.at, std::string(breaking ? "break" : "supplier return") + " requires '" + type_name(*expected) + "'");
+        if (value.kind == Type::procedure && (!proving_ || !capture_free_callables(observed_callables(expr))))
+          note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
         operation.type = Type::never;
         operation.operand_type = *expected;
         operation.here_exit = breaking ? HereExit::break_call : HereExit::return_supplier;
@@ -19268,15 +19277,28 @@ class ScalarChecker {
       std::map<const Expression *, Node> expressions, observations;
       std::vector<Node> places;
       Node result;
+      std::optional<Node> supplier_result{}, break_result{}, observed_return{};
     };
     std::vector<Context> contexts;
-    const auto context = [&](const Facts &facts, const std::vector<CheckedStorage> &storage) {
+    const auto context = [&](const Facts &facts, const std::vector<CheckedStorage> &storage,
+                             const CheckedMethod::HereGroupResults *group = nullptr) {
       Context result{&facts, &storage, {}, {}, {}, flow.node()};
       for (size_t i = 0; i < storage.size(); ++i) result.places.push_back(flow.node());
+      if (group && group->supplier && group->supplier->kind == Type::procedure) {
+        result.supplier_result = flow.node();
+        if (group->binds_return_payload) {
+          result.observed_return = flow.node();
+          flow.link(*result.supplier_result, *result.observed_return);
+        }
+      }
+      if (group && group->receiving_call.kind == Type::procedure) result.break_result = flow.node();
       return result;
     };
     contexts.push_back(context(program_.entry, program_.entry_storage));
-    for (const auto &instance : program_.instances) contexts.push_back(context(instance.operations, instance.storage));
+    for (const auto &instance : program_.instances) {
+      const auto &group = program_.methods[instance.method].here_group;
+      contexts.push_back(context(instance.operations, instance.storage, group ? &*group : nullptr));
+    }
     const auto expression = [&](size_t c, const Expression *expr) {
       auto &nodes = contexts[c].expressions;
       if (const auto found = nodes.find(expr); found != nodes.end()) return found->second;
@@ -19349,15 +19371,28 @@ class ScalarChecker {
           for (const auto place : fact.targets) if (place != null_target)
             flow.link(source, contexts[c].places.at(place));
         }
-        if ((expr->kind == K::return_value || expr->kind == K::return_tail) && c && !expr->children.empty()) {
+        if (fact.operand_type.kind == Type::procedure && !fact.borrowed_result && !expr->children.empty() &&
+            (fact.here_exit || (c && (expr->kind == K::return_value || expr->kind == K::return_tail)))) {
           const auto source = expression(c, expr->children.front().get());
-          flow.link(source, contexts[c].result);
-          if (fact.operand_type.kind == Type::procedure && !fact.borrowed_result)
-            contexts[c].observations.emplace(expr, source);
+          const auto destination = fact.here_exit == HereExit::break_call ? contexts[c].break_result.value() :
+              fact.here_exit == HereExit::return_supplier ? contexts[c].supplier_result.value() : contexts[c].result;
+          flow.link(source, destination);
+          contexts[c].observations.emplace(expr, source);
         }
         if (expr->kind == K::return_test && fact.return_filter.can_match && fact.place && fact.operand_type.kind == Type::procedure) {
-          flow.link(contexts[c].result, contexts[c].places.at(*fact.place));
-          contexts[c].observations.emplace(expr, contexts[c].result);
+          const auto returned = contexts[c].observed_return.value_or(contexts[c].result);
+          flow.link(returned, contexts[c].places.at(*fact.place));
+          contexts[c].observations.emplace(expr, returned);
+        }
+        if (fact.supplied_here) {
+          const auto connect = [&](size_t instance) {
+            const auto &body = contexts.at(instance + 1);
+            if (body.supplier_result) flow.link(*body.supplier_result, contexts[c].result);
+            if (body.break_result) flow.link(*body.break_result, node);
+            if (body.observed_return) flow.link(contexts[c].result, *body.observed_return);
+          };
+          connect(fact.supplied_here->instance);
+          if (fact.supplied_here->returning) connect(fact.supplied_here->returning->body);
         }
         if (fact.callee && fact.type != Type::never) {
           for (const auto &[from, to] : invocation(c, *expr, fact, *fact.callee + 1, 0)) flow.link(from, to);
