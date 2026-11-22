@@ -536,7 +536,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
         sites[nodes[at].right].presence != present_target()) return unproved_nonnull_binding();
     if (kind == type_assertion_node() && facts[at].text_assertion != 0u8)
         return route_failure(nodes, names, links, facts, sites, at, used, type_assertion_failed_identity(), 0u8, possible_failure());
-    if (kind == make_named_node() && facts[at].text_allocation != 0u8)
+    if (kind == make_named_node() && facts[at].allocation_owner != no_node())
         return route_failure(nodes, names, links, facts, sites, at, used, out_of_memory_identity(), 0u8, possible_failure());
     if (kind == call_node()) {
         if (facts[at].text_intrinsic == text_byte_export())

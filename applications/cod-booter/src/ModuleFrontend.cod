@@ -116,7 +116,6 @@ func unsupported_source_form(nodes:const ExprNodes in N, at:u64, emit_object:boo
     if (kind == exception_parameter_node()) return 29u8;
     if (kind == exception_result_node()) return 30u8;
     if (kind == make_exception_node()) return 33u8;
-    if (emit_object && kind == ref_result_node()) return 35u8;
     if (emit_object && kind == type_parameter_node()) return unsupported_module_declaration();
     if (kind == make_named_node() && !supported_construction_shape(nodes, at) && !positional_construction(nodes, at)) return unsupported_ordinary_construction();
     if (emit_object && kind == index_access_node()) return 39u8;
@@ -189,7 +188,8 @@ export func bind_selected_module(source:const SourceBytes in S, nodes:const Expr
         if (nodes[at].kind == ref_result_node()) {
             marker <- nodes[nodes[at].right].left;
             text <- text_type(bindings[marker].kind);
-            if (!text && (bindings[at].declaration == no_node() || !is_lexical_builder(nodes, bindings, marker))) {
+            if ((!text && (emit_object || bindings[at].declaration == no_node() || !is_lexical_builder(nodes, bindings, marker))) ||
+                (emit_object && bindings[at].declaration != no_node())) {
                 binding_diagnostic(nodes, result, module_binding_failed(), 35u8, at);
                 return false;
             } else {};

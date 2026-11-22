@@ -9,7 +9,7 @@ using "ParserStorage.cod" {
     logical_not_node, logical_and_node, logical_binary, skips_right, equal_words, return_node,
     throw_node, case_node, case_arm_node, case_fallthrough_node, case_failure_node, break_node,
     enum_declaration_node, type_assertion_node, case_null_pattern, data_record_node, field_access_node,
-    text_literal_node, narrow_integer_node,
+    text_literal_node, narrow_integer_node, owner_clause_node,
 };
 using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" { NameBindings, NameWork, first_item, callable_head, exception_binding };
@@ -37,7 +37,6 @@ using "NativeCommands.cod" {
 data LoweringState {
     active_function:u64;
     active_scope:u64;
-    text_allocations:u64;
     exception_target:u64;
     return_target:u64;
     return_slot:u64;
@@ -261,6 +260,18 @@ func lower_bits(nodes:const ExprNodes in N, names:const NameBindings in B, links
     };
 }
 
+# A local owner stores its chain head. A formal stores the address
+# of that same head in the supplying activation.
+func prepare_owner_address(nodes:const ExprNodes in N, facts:const OperandFacts in F,
+                           code:NativeCommands in C, plan:NativePlan in P,
+                           owner_site:u64, destination:u64) -> void
+    where {const owner N, const owner F, owner C, owner P} {
+    val chain <- facts[owner_site].owner_chain;
+    if (chain == no_node()) { plan.diagnostic <- invalid_native_module(); return; };
+    val operation <- if (nodes[owner_site].kind == owner_clause_node()) { copy_word() } else { place_address() };
+    emit(code, plan, operation, destination, slot(chain));
+}
+
 func prepare_arguments(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                        facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
                        plan:NativePlan in P, state:LoweringState in R, call:u64) -> void
@@ -282,13 +293,16 @@ func prepare_arguments(nodes:const ExprNodes in N, names:const NameBindings in B
                 storage_operation(code, plan, copy_word(), slot(argument), slot(actual), facts[actual].reservation, actual);
             } else {};
         };
+        if (state.live && facts[argument].owner_chain != no_node()) {
+            prepare_owner_address(nodes, facts, code, plan, facts[argument].owner, slot(facts[argument].owner_chain));
+        };
         argument <- links[argument].next;
     };
 }
 
 func invoke(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-             code:NativeCommands in C, plan:NativePlan in P, call:u64) -> void
-    where {const owner N, const owner B, const owner L, owner C, owner P} {
+             facts:const OperandFacts in F, code:NativeCommands in C, plan:NativePlan in P, call:u64) -> void
+    where {const owner N, const owner B, const owner L, const owner F, owner C, owner P} {
     if (nodes[call].kind == behave_node()) {
         emit(code, plan, print_word(), slot(nodes[call].right), 0u64);
         return;
@@ -301,6 +315,9 @@ func invoke(nodes:const ExprNodes in N, names:const NameBindings in B, links:con
             return;
         } else {};
         emit(code, plan, pass_argument(), slot(argument), 0u64);
+        if (facts[argument].owner_chain != no_node()) {
+            emit(code, plan, pass_argument(), slot(facts[argument].owner_chain), 0u64);
+        };
         argument <- links[argument].next;
     };
 }
@@ -347,7 +364,7 @@ func lower_call(nodes:const ExprNodes in N, names:const NameBindings in B, links
         lower_text_intrinsic(nodes, links, code, plan, state, at, intrinsic_kind);
         return;
     };
-    invoke(nodes, names, links, code, plan, at);
+    invoke(nodes, names, links, facts, code, plan, at);
     if (nodes[at].kind == behave_node()) return;
     val ready <- new_block(plan);
     val failed <- new_block(plan);
@@ -976,12 +993,13 @@ func lower_construction(nodes:const ExprNodes in N, names:const NameBindings in 
                         facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
                         plan:NativePlan in P, state:LoweringState in R, at:u64) -> void
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
-    if (facts[at].text_allocation != 0u8) {
+    if (facts[at].allocation_owner != no_node()) {
         val text_input <- nodes[nodes[nodes[at].right].left].right;
         lower_node(nodes, names, links, facts, sites, code, plan, state, text_input);
         if (!state.live || plan.diagnostic != 0u8) return;
-        if (state.text_allocations == no_node()) { plan.diagnostic <- invalid_native_module(); return; };
-        command(code, plan, text_allocate(), slot(at), slot(text_input), state.text_allocations, 0u64);
+        val chain_address <- new_slot(plan);
+        prepare_owner_address(nodes, facts, code, plan, facts[at].allocation_owner, chain_address);
+        command(code, plan, text_allocate(), slot(at), slot(text_input), chain_address, 0u64);
         guard_word(code, plan, state, slot(at), true, out_of_memory_identity(), nodes[at].first);
         return;
     };
@@ -1022,15 +1040,16 @@ func lower_return(nodes:const ExprNodes in N, names:const NameBindings in B, lin
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     val value <- nodes[at].left;
     if (value != no_node()) {
-        if (state.return_slot != no_node()) {
+        if (state.return_slot != no_node() && !immutable_text_kind(facts[names[at].scope].kind)) {
             lower_bits(nodes, names, links, facts, sites, code, plan, state, value);
-            if (!state.live) return;
-            emit(code, plan, copy_word(), state.return_slot, slot(value));
         } else {
             lower_node(nodes, names, links, facts, sites, code, plan, state, value);
-            if (!state.live) return;
         };
-    } else {};
+        if (!state.live) return;
+        if (state.return_slot != no_node()) {
+            emit(code, plan, copy_word(), state.return_slot, slot(value));
+        };
+    };
     state.local_return <- true;
     emit(code, plan, word_constant(), pending_category(), 0u64);
     finish_block(code, plan, state, state.return_target);
@@ -1177,22 +1196,38 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
     return;
 }
 
-func formal_count(nodes:const ExprNodes in N, head:u64) -> u64 where {const owner N} {
-    val current <- nodes[head].right;
-    for (count in 0u64 .. syntax_len(nodes)) {
-        if (current == no_node()) return count;
-        current <- nodes[current].left;
-    };
-    return 0u64;
+func formal_owner_word(facts:const OperandFacts in F, formal:u64) -> u64 where {const owner F} {
+    if (facts[formal].passes_owner == 0u8) return no_node();
+    return facts[facts[formal].owner].owner_chain;
 }
 
-func receive_formals(nodes:const ExprNodes in N, links:const NameWork in L, code:NativeCommands in C,
-                     plan:NativePlan in P, head:u64) -> void
-    where {const owner N, const owner L, owner C, owner P} {
+func formal_count(nodes:const ExprNodes in N, facts:const OperandFacts in F, head:u64) -> u64
+    where {const owner N, const owner F} {
+    val current <- nodes[head].right;
+    val count <- 0u64;
+    for (unused in 0u64 .. syntax_len(nodes)) {
+        if (current == no_node()) return count;
+        count <- count + (if (formal_owner_word(facts, current) == no_node()) { 1u64 } else { 2u64 });
+        current <- nodes[current].left;
+    };
+    return count;
+}
+
+func receive_formals(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
+                     code:NativeCommands in C, plan:NativePlan in P, head:u64) -> void
+    where {const owner N, const owner L, const owner F, owner C, owner P} {
     val formal <- first_item(nodes, nodes[head].right);
-    for (index in 0u64 .. syntax_len(nodes)) {
+    val index <- 0u64;
+    val chain <- no_node();
+    for (unused in 0u64 .. syntax_len(nodes)) {
         if (formal == no_node()) return;
         emit(code, plan, receive_parameter(), slot(formal), index);
+        index <- index + 1u64;
+        chain <- formal_owner_word(facts, formal);
+        if (chain != no_node()) {
+            emit(code, plan, receive_parameter(), slot(chain), index);
+            (index <- index + 1u64):void;
+        };
         formal <- links[formal].next;
     };
 }
@@ -1259,7 +1294,7 @@ func drain_scope(nodes:const ExprNodes in N, names:const NameBindings in B, link
             lower_delayed_block(nodes, names, links, facts, sites, code, plan, state, nodes[action].left, next);
         } else {
             invocation <- nodes[action].right;
-            invoke(nodes, names, links, code, plan, invocation);
+            invoke(nodes, names, links, facts, code, plan, invocation);
             if (nodes[invocation].kind == call_node()) {
                 # In this admitted subset only a fatal numeric fault can escape
                 # a deferred callee. Keep the pending outcome on normal return.
@@ -1276,16 +1311,15 @@ func drain_scope(nodes:const ExprNodes in N, names:const NameBindings in B, link
 }
 
 func begin_text_owner(facts:const OperandFacts in F, code:NativeCommands in C, plan:NativePlan in P,
-                      scope:u64) -> u64 where {const owner F, owner C, owner P} {
-    if (facts[scope].text_allocation == 0u8) return no_node();
-    val allocations <- new_slot(plan);
-    emit(code, plan, word_constant(), allocations, 0u64);
-    return allocations;
+                      scope:u64) -> void where {const owner F, owner C, owner P} {
+    val chain <- facts[scope].owner_chain;
+    if (chain != no_node()) { emit(code, plan, word_constant(), slot(chain), 0u64); };
 }
 
-func release_text_owner(code:NativeCommands in C, plan:NativePlan in P, allocations:u64) -> void
-    where {owner C, owner P} {
-    if (allocations != no_node()) { emit(code, plan, text_release(), allocations, 0u64); };
+func release_text_owner(facts:const OperandFacts in F, code:NativeCommands in C, plan:NativePlan in P,
+                        scope:u64) -> void where {const owner F, owner C, owner P} {
+    val chain <- facts[scope].owner_chain;
+    if (chain != no_node()) { emit(code, plan, text_release(), slot(chain), 0u64); };
 }
 
 # A full scope executes in the current native activation with its own
@@ -1296,7 +1330,6 @@ func lower_full_scope(nodes:const ExprNodes in N, names:const NameBindings in B,
                       plan:NativePlan in P, state:LoweringState in R, scope:u64) -> void
     where {const owner N, const owner B, const owner L, const owner F, const owner S, owner C, owner P, owner R} {
     val outer_scope <- state.active_scope;
-    val outer_allocations <- state.text_allocations;
     val outer_exception <- state.exception_target;
     val outer_return_target <- state.return_target;
     val outer_return_slot <- state.return_slot;
@@ -1320,7 +1353,7 @@ func lower_full_scope(nodes:const ExprNodes in N, names:const NameBindings in B,
     state.local_return <- false;
     initialize_defer_flags(sites, code, plan, scope, syntax_len(nodes));
     initialize_guarded_locals(names, code, plan, scope);
-    state.text_allocations <- begin_text_owner(facts, code, plan, scope);
+    begin_text_owner(facts, code, plan, scope);
     lower_list(nodes, names, links, facts, sites, code, plan, state, nodes[scope].left, destination, false);
     if (plan.diagnostic != 0u8) return;
     val normal <- state.live || state.local_return;
@@ -1328,8 +1361,7 @@ func lower_full_scope(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (state.live) { finish_block(code, plan, state, cleanup); } else {};
     position(code, plan, state, cleanup);
     drain_scope(nodes, names, links, facts, sites, code, plan, state, scope);
-    release_text_owner(code, plan, state.text_allocations);
-    state.text_allocations <- outer_allocations;
+    release_text_owner(facts, code, plan, scope);
     val resumes <- normal || state.local_return;
     state.active_scope <- outer_scope;
     state.exception_target <- outer_exception;
@@ -1368,9 +1400,9 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
     val cleanup <- new_block(plan);
     val returned <- if (check_return) { new_block(plan) } else { cleanup };
     val return_ready <- if (check_return) { new_slot(plan) } else { no_node() };
-    val return_slot <- if (scalar_kind(facts[scope].kind)) { returned_word() } else { no_node() };
+    val return_slot <- if (scalar_kind(facts[scope].kind) || immutable_text_kind(facts[scope].kind)) { returned_word() } else { no_node() };
     ref state = make LoweringState {
-        active_function <- scope; active_scope <- scope; text_allocations <- no_node(); exception_target <- cleanup;
+        active_function <- scope; active_scope <- scope; exception_target <- cleanup;
         return_target <- returned; return_slot <- return_slot; return_ready <- return_ready;
         caught_failure <- no_node(); live <- true; local_return <- false;
         scope_cleanup <- no_node(); scope_scan_flag <- no_node(); scope_scan_pending <- false;
@@ -1388,11 +1420,11 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (check_return) { emit(code, plan, word_constant(), return_ready, 0u64); } else {};
     initialize_defer_flags(sites, code, plan, scope, syntax_len(nodes));
     initialize_guarded_locals(names, code, plan, scope);
-    state.text_allocations <- begin_text_owner(facts, code, plan, scope);
+    begin_text_owner(facts, code, plan, scope);
     if (program) {
         lower_list(nodes, names, links, facts, sites, code, plan, state, nodes[scope].left, no_node(), false);
     } else {
-        receive_formals(nodes, links, code, plan, callable_head(nodes, scope));
+        receive_formals(nodes, links, facts, code, plan, callable_head(nodes, scope));
         lower_node(nodes, names, links, facts, sites, code, plan, state, body);
     };
     if (plan.diagnostic != 0u8) return;
@@ -1408,7 +1440,7 @@ func lower_activation(nodes:const ExprNodes in N, names:const NameBindings in B,
     forward_return(code, plan, state, returned, cleanup, no_node(), return_ready);
     position(code, plan, state, cleanup);
     drain_scope(nodes, names, links, facts, sites, code, plan, state, scope);
-    release_text_owner(code, plan, state.text_allocations);
+    release_text_owner(facts, code, plan, scope);
     if (check_return) {
         val normal <- new_block(plan);
         val missing <- new_block(plan);
@@ -1449,10 +1481,13 @@ export func lower_native_module(nodes:const ExprNodes in N, tree:const ParseResu
     plan.diagnostic <- 0u8;
     plan.slots <- slot(tree.used);
     for (at in 0u64 .. tree.used) {
+        if (facts[at].owner_chain != no_node()) {
+            (plan.slots <- slot(facts[at].owner_chain + 1u64)):void;
+        };
         plan.node <- at;
         if (!module_command_supported(names, sites, at)) { plan.diagnostic <- native_unsupported(); return false; } else {};
         if (nodes[at].kind == callable_node()) {
-            command(code, plan, declare_function(), at, formal_count(nodes, callable_head(nodes, at)), 0u64, 0u64);
+            command(code, plan, declare_function(), at, formal_count(nodes, facts, callable_head(nodes, at)), 0u64, 0u64);
             if (plan.diagnostic != 0u8) return false;
         } else {};
     };

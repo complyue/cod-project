@@ -1,0 +1,49 @@
+using symbol "std:io" @print;
+using "std:text-storage" { utf8_size, utf8_byte };
+
+data Destination { writes:u64; }
+
+proc observe(text:const String in O) -> void where {const owner O} {
+    behave @print(utf8_size(text));
+    return;
+}
+
+proc prepare(count:const u64 in D, target:Destination in D, input:const String in S) -> ref const String in D
+    where {owner D, const owner S} {
+    target.writes <- count + 1u64;
+    return make String(input) in D;
+}
+
+proc forward(target:Destination in D, input:const String in S) -> ref const String in D
+    where {owner D, const owner S} {
+    ref short = make String(input) in here;
+    defer observe(short);
+    return prepare(target.writes, target, short);
+}
+
+proc replace_result(target:Destination in D) -> ref const String in D where {owner D} {
+    try {
+        ref pending:const String in D = make String("discarded");
+        return pending;
+    } finally {
+        return make String("λ") in D;
+    };
+}
+
+func keep_path(path:const CString in O) -> ref const CString in O where {const owner O} {
+    return path;
+}
+
+ref destination = make Destination { writes <- 0u64; };
+ref selected_text = forward(destination, "é\0x");
+if (utf8_byte(selected_text, 2u64) == 0u8) { observe(selected_text); };
+{{
+    ref inner = make Destination { writes <- 0u64; };
+    ref chosen = forward(inner, "🚀");
+    observe(chosen);
+    observe(selected_text);
+}};
+ref replacement = replace_result(destination);
+ref checked_path = keep_path(replacement:CString);
+observe(checked_path);
+behave @print(destination.writes);
