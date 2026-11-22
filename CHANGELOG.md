@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Ordinary native path results and key-loan feedback
+
+<a id="k-booter-native-u64-result-20261122"></a>
+**K-BOOTER-NATIVE-U64-RESULT-20261122.** Delegated review under H-PROJECT-ARCHITECTURE-REVIEW-20261122 clears full-width ordinary C operation results for path preparation. It corrects the mixed feedback/result shape proposed in K-BOOTER-FIRST-EDGE-20261122 at `b2e8bd4e8fc184c44be88680a1605a177a2ea864:applications/cod-booter/docs/ModuleGraph.md`. A CoD readiness check precedes the existing matching native callback and provider results. D-20-MODULE-GRAPH r7 to r8, interop r23 to r24, D-ARCH-REVIEW r8 to r9, registry r1057.
+
 ## 2026-11-22 — First CoD-owned dependency edge
 
 <a id="k-booter-first-edge-20261122"></a>
