@@ -2,11 +2,13 @@
 
 ## Design authority
 
-[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 4. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 5. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
 
 [K-BOOTER-AST-TABLE-20261122](../../../CHANGELOG.md#k-booter-ast-table-20261122) continues that architecture for the [first indexed AST path](#first-indexed-ast-path). Its private representation uses the existing named-array constructor, valid bits transfer and constructor-pattern checks. Acceptance includes the parser, checker, lowering and emitted object.
 
 The [frame and node identity clearance](../../../CHANGELOG.md#k-booter-ast-membership-20261122) covers revision issuance, table lookup and nested invocation isolation.
+
+The [typed syntax consumer clearance](../../../CHANGELOG.md#k-booter-syntax-consumers-20261122) covers the existing parser and the passes that consume its nodes, including their shared declaration checks.
 
 The [single-file object route clearance](../../../CHANGELOG.md#k-booter-typed-object-20261122) covers the isolated CompilerCLI activation, its lexical workspace, the existing generated providers and the linked workload.
 
@@ -64,6 +66,23 @@ The parser issues IDs for published rows. Given the originating compilation and 
 Two compilations may both issue `(revision = 1, index = 0)`. Their IDs are meaningful only inside their originating G. Keep IDs private to that compilation's parser, checker and lowering data flow. A nested compilation starts with its own inputs and returns its ordinary output or status. Its caller resumes with the original frame. Any interface that could mix IDs from independent invocations must establish their origin separately before lookup. A numeric match supplies neither that evidence nor access to storage. Native interfaces receive their existing source loans or completed outputs. A process-wide key allocator is unnecessary.
 
 Exercise two real frames in one compilation whose occupied rows have the same index, and reject each foreign ID before projection. Reopen the same path and check that the old ID fails. In nested independent compilations, exercise colliding numeric pairs and verify that each call resolves its own source span and restores the outer frame. Keep the valid-ID growth and failed-publication checks in the parser-to-object workload.
+
+### Typed syntax consumers
+
+Migrate each existing syntax family from its parser through all passes that interpret it. Begin with module and block lists, named callable headers and bodies, arguments and builtin selection. Continue with the other grammar already handled by those modules. The shared compiler must check its transitive definitions even when the compiled program exercises just a named call and a literal.
+
+| CoD modules | Responsibility in the migration |
+| --- | --- |
+| ParserStorage, ParserInput, CallableSyntax, ModuleParser, ExpressionParser | Construct complete alternatives with named operand roles, optional children, half-open spans and the applicable operator anchors. Represent an operator choice with a closed enum when the operators share an operand shape. Shared sequence operations preserve the existing source order. |
+| NameResolution, DeclarationTypes, NativeDeclarations, ModuleExports | Match the syntax for names, signatures, selections and native declarations. These passes own definition identity, result types, actual-owner relationships and publication checks. Published interfaces keep their established defining-module and declaration identities. |
+| ModuleFrontend, OperandChecking, CompletionChecking | Retain profile selection, operand, owner, access and completion checks and their existing diagnostic locations. Shared syntax helpers can return a specific syntactic fact such as a callable header or a selected name. |
+| Compiler, Lowering, ModuleLowering, ModuleDriver, ModuleGraph | Read the alternatives and source anchors needed by their existing work. This clearance includes AST reads for graph selection and diagnostics. Graph traversal, native providers and production cutover retain their separate scopes. |
+
+For example, the parser records a trailing `here` call, the receiver specification and its body. [NativeDeclarations](../src/NativeDeclarations.cod) matches the call and body, uses the selected call's checked result identity and records the active callback for a full-scope body. Operand and completion checks still apply the respective scope's return rules. Keep these decisions in the passes that own them. A generic accessor returning the old kind or numbered payload columns would lose the distinction.
+
+A stored child link uses the frame membership check before lookup. After that check a pass may use the derived index in its own same-frame work table. Row zero, an absent optional child, an unpublished or vacant row, and a valid node of another constructor have distinct meanings. A failed lookup cannot supply a default child or a partially published declaration. Constructor-specific forms such as a bare return may represent absence in the constructor itself.
+
+Verify each family on its existing accepted and rejected sources, including ordinary and native `here` calls, owner or receiver mismatches, completion and diagnostic spans. Check the complete isolated CompilerCLI declarations and run the named-call object in both seed modes. Before production cutover, compare generated providers, cross-module output and failure/cleanup behavior with the established workloads. Keep a single typed AST along each migrated path.
 
 ### Single-file object route
 
