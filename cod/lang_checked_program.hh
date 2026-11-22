@@ -28,7 +28,7 @@ namespace cod::language {
 
 inline bool scalar_type(const Type &type) { return numeric(type) || type == Type::boolean || type.kind == Type::enumeration; }
 inline bool nominal_exception(const Type &type) {
-  return type.kind == Type::exception && type.identity >= exception_categories.size();
+  return type.kind == Type::exception && nominal_failure(type.identity);
 }
 inline bool bits_type(const Type &type) { return scalar_type(type) || (type.kind == Type::exception && !nominal_exception(type)); }
 inline bool lexical_value_type(const Type &type) { return bits_type(type) || type.kind == Type::procedure; }
@@ -67,7 +67,10 @@ inline std::vector<size_t> here_owner_inputs(const Type &invocation) {
   return inputs;
 }
 inline bool accepts_exception(const Type &source, const Type &target) {
-  return source.kind == Type::exception && target.kind == Type::exception && (!target.identity || source == target);
+  if (source.kind != Type::exception || target.kind != Type::exception) return false;
+  return !target.identity || source == target ||
+      (target.identity == error_root_id && source.identity && source.identity < exception_categories.size() &&
+       !exception_categories[source.identity].checked);
 }
 inline bool transfers_bits(const Type &source, const Type &target) {
   return !nominal_exception(source) && !nominal_exception(target) &&
@@ -770,9 +773,9 @@ struct CheckedProgram {
   Type exception_type(size_t category) const {
     return {Type::exception, std::string(exception_types.at(category).name), category};
   }
-  Type append_exception_type(const Form &source) {
+  Type append_exception_type(const Form &source, bool checked) {
     const auto category = exception_types.size();
-    exception_types.push_back({source.name, true, schemas.size()});
+    exception_types.push_back({source.name, checked, schemas.size()});
     schemas.push_back({&source, {}, false});
     return exception_type(category);
   }

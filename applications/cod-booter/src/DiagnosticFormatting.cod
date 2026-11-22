@@ -1,25 +1,25 @@
-export import "../../../cod/library/string.cod" { str, repr };
-using "../../../cod/library/string.cod" { Utf8StreamOut, Utf8WriteException, writeUtf8 };
+export import "../../../cod/library/string.cod" { str, repr, emitStr, emitRepr };
+import "../../../cod/library/string.cod" emit;
 using "SourceStorage.cod" SourcePosition;
 
-proc str(out:Utf8StreamOut in O, position:const SourcePosition in P) -> void
-    throws Utf8WriteException where {owner O, const owner P} {
+proc emitStr(position:const SourcePosition in P) -> void
+    where {const owner P} {
     if (position.line == 0u64 && position.column == 0u64) {
-        writeUtf8(out, "<unknown>");
+        emit("<unknown>");
         return;
     };
-    str(out, position.line);
-    writeUtf8(out, ":");
-    str(out, position.column);
+    emitStr(position.line);
+    emit(":");
+    emitStr(position.column);
     return;
 }
 
-proc repr(out:Utf8StreamOut in O, position:const SourcePosition in P) -> void
-    throws Utf8WriteException where {owner O, const owner P} {
-    writeUtf8(out, "SourcePosition(line=");
-    str(out, position.line);
-    writeUtf8(out, ", column=");
-    str(out, position.column);
-    writeUtf8(out, ")");
+proc emitRepr(position:const SourcePosition in P) -> void
+    where {const owner P} {
+    emit("SourcePosition(line=");
+    emitStr(position.line);
+    emit(", column=");
+    emitStr(position.column);
+    emit(")");
     return;
 }

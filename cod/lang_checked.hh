@@ -99,27 +99,28 @@ class ScalarChecker {
   std::map<const Form *, std::set<size_t>> abstract_effect_inputs_;
   std::set<size_t> changed_abstract_inputs_;
   Type exception_type(size_t category) const { return program_.exception_type(category); }
-  static std::set<size_t> concrete_categories(size_t count) {
-    std::set<size_t> result;
-    for (size_t category = 1; category < count; ++category) result.insert(category);
-    return result;
-  }
   std::set<size_t> exception_possibilities(const Type &type) const {
     if (type.kind != Type::exception) return {};
-    return type.identity ? std::set<size_t>{type.identity} : concrete_categories(program_.exception_types.size());
+    std::set<size_t> result;
+    for (size_t category = 1; category < program_.exception_types.size(); ++category)
+      if (matches_failure(program_.exception_types, category, type.identity)) result.insert(category);
+    return result;
   }
   static std::set<size_t> exception_value_categories(const Type &type) {
     // Until owned exception lowering is available, ordinary exception value slots are intrinsic packets.
     if (type.kind != Type::exception || nominal_exception(type)) return {};
-    return type.identity ? std::set<size_t>{type.identity} : concrete_categories(exception_categories.size());
+    if (concrete_failure(type.identity)) return {type.identity};
+    std::set<size_t> result;
+    for (size_t category = 1; category < exception_categories.size(); ++category)
+      if (!type.identity || !exception_categories[category].checked) result.insert(category);
+    return result;
   }
   static bool owned_failure(Completion completion) {
-    return completion.exception() && completion.category() >= exception_categories.size();
+    return completion.exception() && nominal_failure(completion.category());
   }
   std::set<size_t> declared_exception_categories(const std::vector<Type> &types) const {
-    if (declares_root(types)) return concrete_categories(program_.exception_types.size());
     std::set<size_t> result;
-    for (const auto &type : types) if (type.kind == Type::exception) result.insert(type.identity);
+    for (const auto &type : types) result.merge(exception_possibilities(type));
     return result;
   }
   using CallableChoices = std::vector<std::map<const Expression *, std::set<size_t>>>;
@@ -2828,7 +2829,7 @@ class ScalarChecker {
     if (type.kind != Type::exception) fail(handler.at, "catch requires a selected exception type");
     if (!handled.insert(type.identity).second) fail(handler.at, "duplicate exception category in catch clauses");
     if (nominal_exception(type)) scalar_exception_schema(type, handler.at);
-    else if (handler.annotation && !handler.read_only)
+    else if (type.identity != error_root_id && handler.annotation && !handler.read_only)
       implementation_gap(handler.at, "writable catch of an intrinsic exception");
   }
   static void check_guarded_result(const Type &body, const Type &handler, const Location &at) {
@@ -3949,7 +3950,8 @@ class ScalarChecker {
   std::set<size_t> call_reasons(const std::set<size_t> &declared_categories) const {
     std::set<size_t> reasons{0, 2};
     for (size_t category = 1; category < program_.exception_types.size(); ++category)
-      if (!program_.exception_types[category].checked || declared_categories.contains(category)) reasons.insert(Completion::failure(category).reason);
+      if (concrete_failure(category) && (!program_.exception_types[category].checked || declared_categories.contains(category)))
+        reasons.insert(Completion::failure(category).reason);
     return reasons;
   }
   std::set<size_t> call_reasons(const CheckedMethod &method) const {
@@ -6269,7 +6271,7 @@ class ScalarChecker {
       const auto type = resolve_type(failure, &receiver);
       if (type.kind != Type::exception) fail(formal.at, "here throws contracts require selected exception types");
       contract.throws_root |= !type.identity;
-      if (type.identity) contract.throws_categories.insert(type.identity);
+      if (type.identity) contract.throws_categories.merge(exception_possibilities(type));
     }
     if (contract.throws_root) contract.throws_categories.clear();
     return contract;
@@ -8257,7 +8259,7 @@ class ScalarChecker {
   std::set<size_t> deferred_outcomes() const {
     std::set<size_t> outcomes{0, 2};
     for (size_t category = 1; category < program_.exception_types.size(); ++category)
-      outcomes.insert(Completion::failure(category).reason);
+      if (concrete_failure(category)) outcomes.insert(Completion::failure(category).reason);
     return outcomes;
   }
   static void register_type_defer(TypeEvidenceState &state, const Expression &source, const Expression *entry,
@@ -8924,11 +8926,11 @@ class ScalarChecker {
     restore_type_binding(caught, entry, name);
     caught.caught_exception = entry.caught_exception;
   }
-  static std::optional<TypeEvidenceState> take_type_catch(TypeEvidenceExits &incoming, const Type &type) {
+  std::optional<TypeEvidenceState> take_type_catch(TypeEvidenceExits &incoming, const Type &type) const {
     std::optional<TypeEvidenceState> selected;
     const auto matches = [&](size_t outcome) {
       const Completion completion{outcome};
-      return completion.exception() && (!type.identity || completion.category() == type.identity);
+      return completion.exception() && matches_failure(program_.exception_types, completion.category(), type.identity);
     };
     for (auto &path : incoming.paths)
       if (std::erase_if(path.reasons, matches))
@@ -14363,7 +14365,7 @@ class ScalarChecker {
       }
       const auto type = check(operand, instance, operations, independent);
       auto view = operations.at(&operand);
-      if (!lexical_value_type(type) && !(live_binding && type.kind == Type::product))
+      if (!lexical_value_type(type) && !(live_binding && (type.kind == Type::product || text_type(type))))
         implementation_gap(capture.at, "full-scope input requires an admitted target or independent value type");
       parameter.read_only = view.read_only;
       if (!independent) {
@@ -16134,7 +16136,8 @@ class ScalarChecker {
         }
       };
       for (size_t category = 1; category < program_.exception_types.size(); ++category)
-        arrive(Completion::failure(category), ExceptionFacts::arrival({category}, action));
+        if (concrete_failure(category))
+          arrive(Completion::failure(category), ExceptionFacts::arrival({category}, action));
       arrive({2, false}, {});
     }
     abrupt_ = &incoming;
@@ -16158,12 +16161,13 @@ class ScalarChecker {
       const auto type = handler.annotation ? resolve_annotation(*handler.annotation, instance) : exception_type(0);
       check_catch_category(type, handled, handler);
       if (!type.identity) incoming.declared.clear();
+      const auto matching = exception_possibilities(type);
       std::vector<LexicalState> entries;
       ExceptionFacts categories;
       std::map<size_t, CompletionInputs> category_inputs;
       bool resumes_protected_transfer = false;
       for (auto &path : incoming.paths) {
-        auto selected = type.identity ? path.exceptions.restricted({type.identity}) : path.exceptions;
+        auto selected = type.identity ? path.exceptions.restricted(matching) : path.exceptions;
         if (selected.empty()) continue;
         auto entry = path.state; entry.exception_conditions.insert(selected);
         entries.push_back(std::move(entry));
@@ -16183,9 +16187,7 @@ class ScalarChecker {
       checked_scope_owners_[&handler] = next_scope_;
       lexical_.scopes.push_back({next_scope_++, {}});
       const bool nominal = nominal_exception(type);
-      const bool owned = nominal || std::ranges::any_of(categories.possibilities(), [](size_t category) {
-        return category >= exception_categories.size();
-      });
+      const bool owned = nominal || std::ranges::any_of(categories.possibilities(), nominal_failure);
       const auto id = declare(handler.text, type, !nominal || handler.read_only, true, handler.at);
       if (nominal) for (const auto &field : scalar_exception_schema(type, handler.at).fields) {
         const auto place = declare("$caught." + std::to_string(id) + "." + field.source->name, field.type,
@@ -20138,18 +20140,19 @@ class ScalarChecker {
       if (form->parent_type && (!product || form->c_data))
         implementation_gap(form->at, "a parent type on this data layout");
       std::optional<size_t> abstract_parent;
-      bool exception = false;
+      bool exception = false, checked = false;
       if (form->parent_type) {
         const auto parent = resolve_type(*form->parent_type);
-        exception = parent == exception_type(0);
+        checked = parent == exception_type(0);
+        exception = checked || parent == exception_type(error_root_id);
         if (parent.kind == Type::abstract_type) abstract_parent = parent.identity;
         else if (!exception) {
           if (parent.kind == Type::exception)
-            implementation_gap(form->at, "library-defined exception inheritance beyond the root Exception");
-          fail(form->at, "a data parent must name an abstract type or Exception");
+            implementation_gap(form->at, "library-defined exception inheritance beyond the Exception and Error roots");
+          fail(form->at, "a data parent must name an abstract type, Exception or Error");
         }
       }
-      const auto type = exception ? program_.append_exception_type(*form)
+      const auto type = exception ? program_.append_exception_type(*form, checked)
           : Type{kind, form->name, array ? program_.arrays.size() : program_.schemas.size()};
       if (!module_names().types.emplace(form->name, type).second)
         fail(form->at, "duplicate type binding '" + form->name + "'");
@@ -20496,8 +20499,9 @@ class ScalarChecker {
       if ((form->kind != Form::Kind::using_resource && form->kind != Form::Kind::import_resource) || form->path != COD_LANG_EXCEPTION_MODULE || form->using_symbol) continue;
       if (form->selected_members) implementation_gap(form->at, "member selection outside an enum");
       const auto found = std::find_if(exception_categories.begin(), exception_categories.end(), [&](const ExceptionDescriptor &entry) { return form->name == entry.name; });
-      if (found == exception_categories.end()) fail(form->at, "unknown intrinsic exception selection '" + form->name + "'");
-      const auto type = exception_type(exception_id(found->category));
+      const bool error_root = form->name == COD_LANG_ERROR_ROOT_NAME;
+      if (!error_root && found == exception_categories.end()) fail(form->at, "unknown intrinsic exception selection '" + form->name + "'");
+      const auto type = exception_type(error_root ? error_root_id : exception_id(found->category));
       if (!module_names().types.emplace(form->alias, type).second) fail(form->at, "duplicate exception type selection");
       if (form->exporting) {
         ModuleNames::Resource resource{};

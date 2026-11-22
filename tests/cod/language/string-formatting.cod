@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
 using "std:text-storage" { utf8_size, utf8_byte };
-using "../../../cod/library/string.cod" Utf8WriteException;
+using "../../../cod/library/string.cod" Utf8WriteError;
 using "../../../applications/cod-booter/src/SourceStorage.cod" SourcePosition;
 import "../../../applications/cod-booter/src/DiagnosticFormatting.cod" { str as display, repr as debug };
 
@@ -14,7 +14,7 @@ func same_text(left:const String in L, right:const String in R) -> bool
     return true;
 }
 
-proc verify() -> u64 throws Utf8WriteException {
+proc verify() -> u64 {
     ref position = make SourcePosition { line <- 12u64; column <- 7u64; };
     ref absent = make SourcePosition { line <- 0u64; column <- 0u64; };
     ref display_before_edit = display(position);
@@ -33,4 +33,4 @@ proc verify() -> u64 throws Utf8WriteException {
 }
 
 try { behave @print(verify()); }
-catch (error:const Utf8WriteException) { behave @print(9u64); };
+catch (error:const Utf8WriteError) { behave @print(9u64); };

@@ -2842,6 +2842,11 @@
     "stdout": "73\n"
   },
   {
+    "file": "string-scoped-output.cod",
+    "exit": 0,
+    "stdout": "73\n"
+  },
+  {
     "file": "abstract-symbol-call-inputs.cod",
     "exit": 0,
     "stdout": "1\n"

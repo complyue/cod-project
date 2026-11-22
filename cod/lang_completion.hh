@@ -223,7 +223,7 @@ public:
   explicit CleanupEquations(std::span<const CheckedExceptionCategory> exception_types)
       : exception_types_(exception_types) {
     for (size_t category = 1; category < exception_types_.size(); ++category)
-      categories_.insert(category);
+      if (concrete_failure(category)) categories_.insert(category);
   }
   // This entry selector belongs to the pending completion, outside lexical binding IDs.
   static constexpr size_t pending_return_selection = null_target;

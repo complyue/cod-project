@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -36,6 +37,10 @@ inline constexpr std::array exception_categories{
 #undef COD_LANG_EXCEPTION_DESCRIPTOR
 };
 inline constexpr size_t concrete_exception_count = exception_categories.size() - 1;
+inline constexpr size_t error_root_id = COD_LANG_ERROR_ROOT_ID;
+static_assert(error_root_id == exception_categories.size());
+constexpr bool concrete_failure(size_t category) { return category != 0 && category != error_root_id; }
+constexpr bool nominal_failure(size_t category) { return category > error_root_id; }
 
 struct CheckedExceptionCategory {
   std::string_view name;
@@ -45,9 +50,16 @@ struct CheckedExceptionCategory {
 
 inline std::vector<CheckedExceptionCategory> intrinsic_exception_types() {
   std::vector<CheckedExceptionCategory> types;
-  types.reserve(exception_categories.size());
+  types.reserve(exception_categories.size() + 1);
   for (const auto &category : exception_categories) types.push_back({category.name, category.checked});
+  types.push_back({COD_LANG_ERROR_ROOT_NAME, false});
   return types;
+}
+
+inline bool matches_failure(std::span<const CheckedExceptionCategory> types, size_t actual, size_t target) {
+  if (!concrete_failure(actual) || actual >= types.size()) return false;
+  if (target == error_root_id) return !types[actual].checked;
+  return !target || actual == target;
 }
 
 static_assert([] {

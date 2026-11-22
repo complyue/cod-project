@@ -44,6 +44,7 @@ export func lexical_result_export() -> u8 { return 14u8; }
 export func ordinary_callable_shape() -> u8 { return 1u8; }
 export func print_export_identity() -> u64 { return 0u64; }
 export func exception_root_identity() -> u64 { return 0u64; }
+export func error_root_identity() -> u64 { return 11u64; }
 export func null_pointer_identity() -> u64 { return 4u64; }
 export func missing_return_identity() -> u64 { return 5u64; }
 export func unexpected_case_identity() -> u64 { return 9u64; }
