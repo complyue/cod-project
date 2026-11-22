@@ -154,6 +154,7 @@ class ScalarChecker {
     std::set<std::string> selected_callables, values;
     std::map<std::string, Type> types;
     std::map<std::string, EnumValue> enum_members;
+    std::map<std::string, SumConstructor> constructors;
     bool binds_other_than_enum_member(const std::string &name) const {
       return callables.contains(name) || native_operations.contains(name) || symbols.contains(name) ||
           values.contains(name) || types.contains(name) || text_primitives.contains(name);
@@ -2269,6 +2270,7 @@ class ScalarChecker {
     std::set<std::uint64_t> domain;
     CasePossibilities remaining;
     bool borrowed;
+    bool discriminant_can_change;
 
     CasePossibilities match(CasePattern pattern) {
       using K = CasePattern::Kind;
@@ -2282,7 +2284,7 @@ class ScalarChecker {
     void invalidate(bool may_write) {
       // A write can change the bits at the selected address. The address
       // itself, including its absence, was fixed on entry.
-      if (borrowed && may_write && remaining.present()) remaining.codes = domain;
+      if (borrowed && discriminant_can_change && may_write && remaining.present()) remaining.codes = domain;
     }
     void resume(const CasePossibilities &matched, bool may_write) {
       remaining.absent |= matched.absent;
@@ -2305,7 +2307,11 @@ class ScalarChecker {
     if (subject == Type::boolean) codes = {0, 1};
     else if (subject.kind == Type::enumeration) {
       for (const auto &member : program_.enums.at(subject.identity).members) codes.insert(member.code);
-    } else if (subject != Type::null_ref) implementation_gap(operand.at, "case matching on a subject other than bool, enum or null");
+    } else if (subject.kind == Type::sum) {
+      if (!borrowed) implementation_gap(operand.at, "case matching on an independent sum value");
+      const auto count = program_.sums.at(subject.identity).alternatives.size();
+      for (size_t i = 0; i < count; ++i) codes.insert(i);
+    } else if (subject != Type::null_ref) implementation_gap(operand.at, "case matching requires bool, enum, a sum reference or null");
     if (subject == Type::null_ref) presence = TargetPresence::absent;
     auto remaining = presence == TargetPresence::absent ? std::set<std::uint64_t>{} : codes;
     if (subject == Type::boolean && !borrowed) {
@@ -2313,12 +2319,23 @@ class ScalarChecker {
       while (literal->kind == Expression::Kind::grouped) literal = literal->children.front().get();
       if (literal->kind == Expression::Kind::boolean) remaining = {literal->text == "true"};
     }
-    return {std::move(codes), {std::move(remaining), borrowed && presence != TargetPresence::present}, borrowed};
+    // This sum profile has no in-place whole-sum transfer. A rebind can
+    // change the source slot, but the case still selects its original target.
+    return {std::move(codes), {std::move(remaining), borrowed && presence != TargetPresence::present},
+            borrowed, subject.kind != Type::sum};
   }
   CasePattern case_pattern(const Type &subject, const Expression &arm) const {
     using K = CasePattern::Kind;
+    if (arm.receiving && (subject.kind != Type::sum || arm.text == "_" || arm.text == "null"))
+      implementation_gap(arm.at, "receiving fields in this case pattern");
     if (arm.text == "_") return {};
     if (arm.text == "null") return {K::null};
+    if (subject.kind == Type::sum) {
+      const auto constructor = module_names().constructors.find(arm.text);
+      if (constructor == module_names().constructors.end() || constructor->second.sum != subject.identity)
+        fail(arm.at, "'" + arm.text + "' is not a selected data constructor of '" + subject.name + "'");
+      return {K::code, constructor->second.alternative, constructor->second};
+    }
     if (subject == Type::boolean) {
       if (arm.text == "true" || arm.text == "false") return {K::code, arm.text == "true"};
       fail(arm.at, "a bool case pattern requires true, false, null or a catch-all");
@@ -2327,6 +2344,30 @@ class ScalarChecker {
     if (const auto member = enum_member(subject, arm.text))
       return {K::code, program_.enums.at(subject.identity).members.at(member->member).code};
     fail(arm.at, "unknown member '" + arm.text + "' of enum '" + subject.name + "'");
+  }
+  struct CaseField {
+    size_t field;
+    Type type;
+    bool read_only;
+  };
+  template <typename Resolve>
+  std::vector<CaseField> case_fields(const Expression &arm, const CasePattern &pattern, Resolve resolve) const {
+    std::vector<CaseField> result;
+    if (!arm.receiving) return result;
+    const auto &alternative = sum_alternative(*pattern.constructor);
+    for (const auto &item : arm.receiving->items) {
+      if (item.declaration_kind != "val" || item.operation != "<-" || !item.owner.empty())
+        implementation_gap(item.at, "sum case reception outside a fresh direct bits value");
+      const auto found = std::ranges::find_if(alternative.fields, [&](const auto &field) {
+        return field.source->name == item.selector;
+      });
+      if (found == alternative.fields.end())
+        fail(item.at, "unknown field '" + item.selector + "' of '" + alternative.source->name.text + "'");
+      const auto type = item.annotation ? resolve(*item.annotation) : found->type;
+      transfer_type(found->type, type, item.at);
+      result.push_back({static_cast<size_t>(found - alternative.fields.begin()), type, item.read_only || item.fixed_binding});
+    }
+    return result;
   }
   CheckedOperation enum_literal(const EnumValue &value) const {
     CheckedOperation result;
@@ -2777,6 +2818,7 @@ class ScalarChecker {
   }
   static void transfer_type(const Type &source, const Type &destination, const Location &at) {
     if (destination.kind == Type::product) implementation_gap(at, "whole-product bits transfer");
+    if (destination.kind == Type::sum) implementation_gap(at, "whole-sum bits transfer");
     if (!transfers_value(source, destination)) fail(at, "bits transfer source does not satisfy destination type");
   }
   static bool ordinary_callable_type(const Type &type) {
@@ -2804,11 +2846,12 @@ class ScalarChecker {
         fail(declaration.at, "reference initializer requires the declared text type");
       return;
     }
-    if (type.kind == Type::product) {
+    if (type.kind == Type::product || type.kind == Type::sum) {
+      const std::string_view category = type.kind == Type::product ? "product" : "sum";
       if ((kind != "ref" && kind != "ptr") || (initial != Type::never && borrowed != true))
-        implementation_gap(declaration.at, "materializing a whole product as an independent value");
+        implementation_gap(declaration.at, "materializing a whole " + std::string(category) + " as an independent value");
       if (initial != Type::never && initial != Type::null_ref && initial != type)
-        fail(declaration.at, "reference initializer requires the declared product type");
+        fail(declaration.at, "reference initializer requires the declared " + std::string(category) + " type");
       return;
     }
     require_value(type, group.at);
@@ -5977,7 +6020,8 @@ class ScalarChecker {
     auto resolved = resolve_annotation(type, instance);
     reject_c_type_payload(resolved, at);
     require_ordinary_callable_type(resolved, at);
-    if (!lexical_value_type(resolved) && !(borrowed_target && (resolved.kind == Type::product || text_type(resolved))))
+    if (!lexical_value_type(resolved) &&
+        !(borrowed_target && (resolved.kind == Type::product || resolved.kind == Type::sum || text_type(resolved))))
       implementation_gap(at, "non-value local storage type '" + type_name(type) + "'");
     return resolved;
   }
@@ -8736,6 +8780,12 @@ class ScalarChecker {
       }
       const auto pattern = case_pattern(*type, item);
       const auto matched = scan.match(pattern);
+      const auto receiving = case_fields(item, pattern, [&](const Type &type) { return evidence_annotation(type, state); });
+      const auto entry_bindings = receiving.empty() ? std::nullopt : std::optional{state};
+      const auto leave_receiving = [&](TypeEvidenceState &edge) {
+        if (entry_bindings) for (const auto &receiver : item.case_bindings)
+          restore_type_binding(edge, *entry_bindings, receiver->text);
+      };
       auto arm = state;
       if (scan.borrowed && pattern.kind == CasePattern::Kind::code && reaches_end &&
           (matched.present() || scan.remaining.present())) {
@@ -8749,6 +8799,24 @@ class ScalarChecker {
       }
       const bool match_reaches = reaches_end && enter_partition(arm, matched);
       const bool miss_reaches = reaches_end && enter_partition(state, scan.remaining);
+      for (size_t i = 0; i < receiving.size(); ++i) {
+        const auto &receiver = *item.case_bindings[i];
+        const auto &field = receiving[i];
+        const auto owner = EvidenceOwner::for_scope(receiver);
+        arm.bindings[receiver.text] = field.type;
+        arm.local_declarations[receiver.text] = &receiver;
+        arm.definitions.erase(receiver.text);
+        arm.owner_bindings.erase(receiver.text);
+        arm.selections.remove_binding(receiver.text);
+        arm.views[receiver.text] = {field.read_only, true, true, owner, false, receiver.fixed_binding, field.read_only, true};
+        arm.views.at(receiver.text).place_owners.insert(owner);
+        arm.views.at(receiver.text).storage_kind = PlaceKind::value;
+        if (arm.selections.tracking) {
+          EvidencePlaces place{&receiver};
+          arm.selections.initialize(place);
+          arm.selections.value_places.emplace(receiver.text, std::move(place));
+        }
+      }
       bool scan_reaches = miss_reaches;
       const bool guard_writes = item.children.size() == 2 && case_may_write(*item.children.front());
       bool body_reaches = match_reaches;
@@ -8759,6 +8827,7 @@ class ScalarChecker {
         const auto condition = type_evidence(guard, arm, false, nullptr, nullptr,
                                              ExpectedTypeUse::materialization, match_reaches);
         arm.exits = outer;
+        for (auto &path : exits.paths) leave_receiving(path.state);
         transfers(exits, guard.at);
         if (condition && *condition != Type::boolean && *condition != Type::never)
           fail(guard.at, "case guard requires bool");
@@ -8769,6 +8838,7 @@ class ScalarChecker {
         const bool guard_returns = match_reaches && condition != Type::never;
         body_reaches = guard_returns && arm.selections.reachable(proof, true);
         if (guard_returns && declined.selections.reachable(proof, false)) {
+          leave_receiving(declined);
           state = merge_reaching_evidence(std::move(state), std::move(declined), !miss_reaches, false);
           scan.resume(matched, guard_writes);
           scan_reaches = true;
@@ -8782,12 +8852,14 @@ class ScalarChecker {
       const auto value = type_evidence(body, arm, contextual, expected, nullptr, expected_use, body_reaches,
           read == EvidenceRead::loop_discard ? EvidenceRead::discarded : EvidenceRead::target, false, scoped ? &scope_paths : nullptr);
       arm.exits = outer;
+      for (auto &path : exits.paths) leave_receiving(path.state);
       auto resumed = transfers(exits, body.at);
       if (body_reaches && scope_paths.scan) {
         resumed = arm;
         resumed->selections = std::move(*scope_paths.scan);
       }
       if (resumed) {
+        leave_receiving(*resumed);
         state = merge_reaching_evidence(std::move(state), std::move(*resumed), !scan_reaches, false);
         scan.resume(matched, guard_writes || case_may_write(body));
         scan_reaches = true;
@@ -8798,6 +8870,7 @@ class ScalarChecker {
         auto arm_target = arm.target;
         if (state.required && arm_view.view == true)
           projections.push_back(case_projection_evidence(body, arm_view, arm_target, arm));
+        leave_receiving(arm);
         complete(value, arm_view, std::move(arm_target), std::move(arm), body.at);
       }
     }
@@ -8895,7 +8968,16 @@ class ScalarChecker {
   Type evidence_annotation(const Type &type, const TypeEvidenceState &state) const {
     return state.method ? substitute(type, program_.methods[*state.method], state.substitutions, true) : resolve_type(type);
   }
+  std::optional<SumConstructor> sum_constructor(const Expression &expr) const {
+    if (expr.construction_type_query || !expr.annotation || expr.annotation->kind != Type::named) return {};
+    const auto found = module_names().constructors.find(expr.annotation->name);
+    return found == module_names().constructors.end() ? std::nullopt : std::optional{found->second};
+  }
+  Type sum_type(size_t identity) const {
+    return {Type::sum, program_.sums.at(identity).source->name, identity};
+  }
   std::optional<Type> construction_type(const Expression &expr, const TypeEvidenceState &state) const {
+    if (const auto selected = sum_constructor(expr)) return sum_type(selected->sum);
     if (!expr.construction_type_query) return evidence_annotation(*expr.annotation, state);
     auto query = state;
     query.returns = nullptr;
@@ -8915,6 +8997,42 @@ class ScalarChecker {
     if (expression_keyword(name) || (module_keyword(name) && !lexical_module_name(name)) || intrinsic_name(name) ||
         name == "bool" || name == "void" || name == "region")
       fail(label.at, "expected a lexical assignment destination in scalar initializer");
+  }
+  const CheckedSum::Alternative &sum_alternative(SumConstructor constructor) const {
+    return program_.sums.at(constructor.sum).alternatives.at(constructor.alternative);
+  }
+  std::vector<size_t> sum_initializers(const Expression &expr, SumConstructor constructor) const {
+    const auto &alternative = sum_alternative(constructor);
+    const auto &name = alternative.source->name.text;
+    if (module_names().callables.contains(expr.annotation->name))
+      implementation_gap(expr.at, "construction with a visible initializer family for '" + name + "'");
+    if (expr.constructor_arguments || !expr.initializer_block)
+      implementation_gap(expr.at, "sum construction outside a complete initializer block");
+    std::set<size_t> initialized;
+    std::vector<size_t> order;
+    for (const auto &item : expr.initializer_items()) {
+      const auto *label = item->initializer_field_label();
+      if (!label) fail(item->at, "sum make requires named field initializers");
+      const auto member = std::ranges::find_if(alternative.fields, [&](const auto &field) {
+        return field.source->name == label->text;
+      });
+      if (member == alternative.fields.end())
+        fail(label->at, "unknown field '" + label->text + "' of '" + name + "'");
+      if (item->kind == Expression::Kind::rebind || item->binding == "=")
+        fail(label->at, "a direct sum field requires bits transfer '<-'");
+      const auto index = static_cast<size_t>(member - alternative.fields.begin());
+      if (!initialized.insert(index).second && readonly_field(*member))
+        fail(label->at, "readonly field '" + label->text + "' is initialized more than once");
+      order.push_back(index);
+    }
+    return order;
+  }
+  void complete_sum_initialization(const Expression &expr, SumConstructor constructor, const std::vector<size_t> &order) const {
+    const auto &alternative = sum_alternative(constructor);
+    for (size_t index = 0; index < alternative.fields.size(); ++index)
+      if (std::ranges::find(order, index) == order.end())
+        fail(expr.at, "missing initializer for field '" + alternative.fields[index].source->name + "' of '" +
+                      alternative.source->name.text + "'");
   }
   bool query_product_initializers(const Expression &expr, const Type &type, const QueryProductPlace &product,
                                   TypeEvidenceState &state, bool track_places, bool reached = true) const {
@@ -11908,6 +12026,32 @@ class ScalarChecker {
         return {};
       }
       const bool track_places = state.checks_initialization() && state.selections.tracking;
+      if (type.kind == Type::sum) {
+        const auto constructor = sum_constructor(expr);
+        if (!constructor) fail(expr.at, "make requires a named data constructor for '" + type.name + "'");
+        if (!expr.owner_name.empty() && expr.owner_name != "here" && state.required &&
+            compare_owners(owner_evidence(expr.owner_name, state, expr.at), state.full_scope_owner, &state) != OwnerMatch::satisfied)
+          implementation_gap(expr.at, "sum construction outside the current lexical owner");
+        const auto order = sum_initializers(expr, *constructor);
+        const auto &fields = sum_alternative(*constructor).fields;
+        const auto items = expr.initializer_items();
+        for (size_t i = 0; i < order.size(); ++i) {
+          const auto &input = *items[i]->children.back();
+          const auto value = type_evidence(input, state);
+          if (!value || *value == Type::never) return value;
+          transfer_type(*value, fields[order[i]].type, input.at);
+        }
+        complete_sum_initialization(expr, *constructor, order);
+        view = {false, true, {}, state.full_scope_owner};
+        target_facts.presence = TargetPresence::present;
+        if (track_places) {
+          if (state.imported_storage.contains(&expr))
+            implementation_gap(expr.at, "recursive activation shares an abstract storage origin in typeof");
+          target_facts.places.insert(&expr);
+          state.selections.initialize(target_facts.places);
+        }
+        return type;
+      }
       const bool builder = program_.builder_type(type);
       const bool lexical_text = type.kind == Type::string || builder;
       auto text_owner = state.full_scope_owner;
@@ -16974,6 +17118,8 @@ class ScalarChecker {
     operation.read_only = slot.read_only;
     operation.fixed_binding = slot.fixed;
     operation.view = true;
+    if (read && operation.type.kind == Type::sum)
+      implementation_gap(expr.at, "reading a whole sum as an independent value");
     if (read && (operation.type.kind == Type::product || operation.type.kind == Type::array))
       implementation_gap(expr.at, operation.type.kind == Type::array ? "reading a whole array as an independent value"
                                                                       : "reading a whole product as an independent value");
@@ -17403,6 +17549,34 @@ class ScalarChecker {
     if (read) read_view(operation, expr.at, "scalar make target");
     return operation;
   }
+  CheckedOperation check_sum_construction(const Expression &expr, SumConstructor constructor, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations, bool read) {
+    if (read) implementation_gap(expr.at, "reading a whole sum as an independent value");
+    const auto type = sum_type(constructor.sum);
+    auto operation = construction_target(reserve_lexical_construction(type, expr.at, nullptr), type);
+    operation.sum_constructor = constructor;
+    operation.sum_initializers = sum_initializers(expr, constructor);
+    const auto &fields = sum_alternative(constructor).fields;
+    const auto items = expr.initializer_items();
+    for (size_t i = 0; i < operation.sum_initializers.size(); ++i) {
+      const auto &item = *items[i];
+      const auto &input = *item.children.back();
+      const auto value = check(input, instance, operations);
+      if (value == Type::never) {
+        operation.type = Type::never;
+        return operation;
+      }
+      const auto &type = fields[operation.sum_initializers[i]].type;
+      transfer_type(value, type, input.at);
+      CheckedOperation initializer;
+      initializer.type = Type::void_type;
+      initializer.operand_type = type;
+      operations.insert_or_assign(&item, std::move(initializer));
+    }
+    complete_sum_initialization(expr, constructor, operation.sum_initializers);
+    initialize(*operation.place);
+    return operation;
+  }
   CheckedOperation check_product_construction(const Expression &expr, const Type &type, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, std::optional<size_t> destination = {}, bool read = false) {
     const auto &schema = product_schema(type, expr.at);
@@ -17562,7 +17736,7 @@ class ScalarChecker {
       join(other, false, current, current_exits, at);
     };
     const auto complete = [&](LexicalState state, const Type &value, const CheckedOperation *fact,
-                              const Location &at, bool prepared) {
+                              const Location &at, bool prepared, std::optional<size_t> reception_scope = {}) {
       if (!state.live || value == Type::never) return;
       if (!case_result_type(value)) implementation_gap(at, "case result outside scalar bits and scalar references");
       const bool viewed = fact && fact->view;
@@ -17579,6 +17753,8 @@ class ScalarChecker {
         if (projects) {
           if (!prepared) require_case_projection(*fact, at);
         } else {
+          if (reception_scope && fact->owners.contains(*reception_scope))
+            fail(at, "case result borrows branch-local receiving storage");
           require_live_view(*fact, at);
           auto readiness = fact->initialization;
           if (std::ranges::all_of(fact->targets, [&](size_t target) {
@@ -17599,6 +17775,7 @@ class ScalarChecker {
           if (read && !discard) read_view(*fact, at, "case result");
         }
       }
+      if (reception_scope) leave_scope();
       if (completed) {
         const auto reached = std::move(lexical_);
         join(*completed, false, reached, false, at);
@@ -17644,6 +17821,8 @@ class ScalarChecker {
 
       CheckedOperation header;
       header.case_pattern = case_pattern(type, item);
+      const auto receiving = case_fields(item, header.case_pattern,
+          [&](const Type &type) { return resolve_annotation(type, instance); });
       const auto matched = scan.match(header.case_pattern);
       const auto before = lexical_;
       std::optional<LexicalState> tested_present;
@@ -17671,10 +17850,30 @@ class ScalarChecker {
       after_test(scan.remaining);
       auto missed = lexical_;
       after_test(matched);
+      const auto enclosing_depth = lexical_.scopes.size();
+      std::optional<size_t> reception_scope;
+      if (!receiving.empty()) {
+        reception_scope = next_scope_++;
+        lexical_.scopes.push_back({*reception_scope, {}});
+        for (size_t i = 0; i < receiving.size(); ++i) {
+          const auto &source = *item.case_bindings[i];
+          const auto &field = receiving[i];
+          const auto place = declare(source.text, field.type, field.read_only, true, source.at);
+          bindings_->at(storage(place).binding).fixed = source.fixed_binding;
+          initialize(place);
+          CheckedOperation binding;
+          binding.type = field.type;
+          binding.operand_type = sum_alternative(*header.case_pattern.constructor).fields[field.field].type;
+          binding.place = place;
+          operations.insert_or_assign(&source, std::move(binding));
+          header.case_payload_fields.push_back(field.field);
+        }
+        lexical_.scopes.back().declarations = false;
+      }
       const bool guard_writes = item.children.size() == 2 && case_may_write(*item.children.front());
       if (item.children.size() == 2) {
         const auto &guard = *item.children.front();
-        AbruptFlow exits{lexical_.scopes.size(), {}};
+        AbruptFlow exits{enclosing_depth, {}};
         abrupt_ = &exits;
         const auto condition = check(guard, instance, operations);
         abrupt_ = outer;
@@ -17683,6 +17882,7 @@ class ScalarChecker {
         const auto evaluated = lexical_;
         refine(guard, false, operations);
         if (lexical_.live) scan.resume(matched, guard_writes);
+        if (reception_scope) leave_scope();
         join_scan(missed, condition == Type::never, guard.at);
         missed = lexical_;
         lexical_ = evaluated;
@@ -17700,7 +17900,7 @@ class ScalarChecker {
         header.case_scope_resumes = resumed && resumed->live;
         operations.insert_or_assign(&body, std::move(call));
       } else {
-        AbruptFlow exits{lexical_.scopes.size(), {}};
+        AbruptFlow exits{enclosing_depth, {}};
         abrupt_ = &exits;
         value = check(body, instance, operations, false, discard, expected, expected_use);
         abrupt_ = outer;
@@ -17709,9 +17909,10 @@ class ScalarChecker {
       header.type = value;
       header.case_arm_completes = lexical_.live && value != Type::never;
       operations.insert_or_assign(&item, std::move(header));
-      complete(lexical_, value, &operations.at(&body), body.at, false);
+      complete(lexical_, value, &operations.at(&body), body.at, false, reception_scope);
       if (resumed && resumed->live) {
         lexical_ = std::move(*resumed);
+        if (reception_scope && lexical_.scopes.size() > enclosing_depth) leave_scope();
         join_scan(missed, false, body.at);
         scan.resume(matched, guard_writes || case_may_write(body));
       } else lexical_ = std::move(missed);
@@ -19112,6 +19313,12 @@ class ScalarChecker {
       operation = check_attached_native_acquisition(expr, instance, operations);
       break;
     case K::make_object: {
+      if (const auto constructor = sum_constructor(expr)) {
+        if (reservation_receiver) implementation_gap(expr.at, "reserving a non-scalar val with make");
+        check_construction_owner(expr, construction_owner);
+        operation = check_sum_construction(expr, *constructor, instance, operations, read && !discard);
+        break;
+      }
       const auto type = [&] {
         if (!expr.construction_type_query) return resolve_annotation(*expr.annotation, instance);
         auto state = evidence_state(false, nullptr, true);
@@ -19120,6 +19327,7 @@ class ScalarChecker {
       }();
       require_ordinary_callable_type(type, expr.at);
       if (type.kind == Type::abstract_type) fail(expr.at, "an abstract type has no constructible layout");
+      if (type.kind == Type::sum) fail(expr.at, "make requires a named data constructor for '" + type.name + "'");
       const bool builder = program_.builder_type(type);
       const bool lexical_text = type.kind == Type::string || builder;
       if (!lexical_text) {
@@ -20535,6 +20743,29 @@ class ScalarChecker {
     }
   }
 
+  void bind_sum_constructor(const Token &name, SumConstructor constructor) {
+    const auto [selected, inserted] = module_names().constructors.emplace(name.text, constructor);
+    if (!inserted && selected->second != constructor)
+      fail(name.at, "conflicting data constructor '" + name.text + "'");
+  }
+
+  void select_sum_constructors(const Form &form, const Type &type) {
+    const auto &alternatives = program_.sums.at(type.identity).alternatives;
+    if (form.selected_members->empty()) {
+      for (size_t i = 0; i < alternatives.size(); ++i)
+        bind_sum_constructor(alternatives[i].source->name, {type.identity, i});
+      return;
+    }
+    for (const auto &name : *form.selected_members) {
+      const auto found = std::ranges::find_if(alternatives, [&](const auto &alternative) {
+        return alternative.source->name.text == name.text;
+      });
+      if (found == alternatives.end())
+        fail(name.at, "unknown data constructor '" + name.text + "' of '" + type.name + "'");
+      bind_sum_constructor(name, {type.identity, static_cast<size_t>(found - alternatives.begin())});
+    }
+  }
+
   void select_module_resource(const Form &form, size_t dependency) {
     using Resource = ModuleNames::Resource;
     const bool importing = form.kind == Form::Kind::import_resource;
@@ -20549,7 +20780,8 @@ class ScalarChecker {
       fail(form.at, "selected resource does not match the requested symbol or lexical category");
     if (form.selected_members) {
       if (resource.kind != Resource::Kind::type) fail(form.at, "member selection requires a type");
-      select_enum_members(form, resource.type);
+      if (resource.type.kind == Type::sum) select_sum_constructors(form, resource.type);
+      else select_enum_members(form, resource.type);
     }
     if (reexporting) {
       publish(form.alias, resource, form.at);
@@ -20770,13 +21002,43 @@ class ScalarChecker {
       for (const auto type : path) visited[type - first] = Visit::complete;
     }
   }
+  void register_sum_type(const Form &form) {
+    const auto identity = program_.sums.size();
+    if (!module_names().types.emplace(form.name, Type{Type::sum, form.name, identity}).second)
+      fail(form.at, "duplicate type binding '" + form.name + "'");
+    auto &sum = program_.sums.emplace_back(CheckedSum{&form, {}});
+    for (const auto &alternative : form.sum_alternatives) {
+      bind_sum_constructor(alternative.name, {identity, sum.alternatives.size()});
+      sum.alternatives.push_back({&alternative, {}});
+    }
+  }
+
+  void resolve_sum_fields(CheckedSum &sum) {
+    if (sum.source->parent_type)
+      implementation_gap(sum.source->at, "sum conformance to a parent type");
+    for (auto &alternative : sum.alternatives) {
+      std::set<std::string> names;
+      for (const auto &field : alternative.source->fields) {
+        if (!names.insert(field.name).second)
+          fail(field.at, "duplicate field '" + field.name + "' in '" + alternative.source->name.text + "'");
+        const auto type = resolve_type(field.type);
+        if ((!field.declaration_kind.empty() && field.declaration_kind != "val") || !scalar_type(type))
+          implementation_gap(field.at, "sum payload fields outside direct scalar bits");
+        alternative.fields.push_back({&field, type, PlaceKind::value});
+      }
+    }
+  }
+
   void register_nominal_types(const SourceModule &source) {
     register_abstract_types(source);
     const auto first = program_.schemas.size();
     const auto first_array = program_.arrays.size();
+    const auto first_sum = program_.sums.size();
     for (const auto &form : source.forms) {
-      if (form->kind == Form::Kind::sum_data)
-        implementation_gap(form->at, "nominal sum type representation and checking");
+      if (form->kind == Form::Kind::sum_data) {
+        register_sum_type(*form);
+        continue;
+      }
       const bool product = form->kind == Form::Kind::data;
       const bool array = form->kind == Form::Kind::array;
       if (form->kind == Form::Kind::enumeration) {
@@ -20813,6 +21075,7 @@ class ScalarChecker {
         program_.schemas.back().abstract_parent = abstract_parent;
       }
     }
+    for (auto &sum : std::span(program_.sums).subspan(first_sum)) resolve_sum_fields(sum);
     for (auto &array : std::span(program_.arrays).subspan(first_array)) {
       array.index = resolve_type(std::move(array.index));
       array.element = resolve_type(std::move(array.element));
@@ -21195,7 +21458,7 @@ class ScalarChecker {
         continue;
       }
       if (form->kind == Form::Kind::expression || form->kind == Form::Kind::export_resource ||
-          form->kind == Form::Kind::data || form->kind == Form::Kind::abstract_type ||
+          form->kind == Form::Kind::data || form->kind == Form::Kind::sum_data || form->kind == Form::Kind::abstract_type ||
           form->kind == Form::Kind::native_handle_type ||
           form->kind == Form::Kind::region_definition || form->kind == Form::Kind::array ||
           form->kind == Form::Kind::enumeration)
