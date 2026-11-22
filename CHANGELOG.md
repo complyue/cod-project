@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — First indexed booter AST path
+
+<a id="k-booter-ast-table-20261122"></a>
+**K-BOOTER-AST-TABLE-20261122.** Under H-PROJECT-ARCHITECTURE-REVIEW-20261122 and H-BOOTER-WORK-METHOD-20261122, design review cleared the real parser-to-object path and its seed prerequisites. Length/fill construction and valid transfer of finite recursively bits sums support initialized, private AST slots under the workspace owner. The existing scopes are at `5169b43f182d59f4c4a29a8809639dacebaa6cbe:design/ConstructionAndAcquisition.md`, “Confirmed requirements” and “Source migration”. D-20-MODULE-GRAPH and D-ARCH-REVIEW r2, P-680–P-683, registry r1049. This is a workload-specific implementation clearance, separate from executable evidence.
+
 ## 2026-11-22 — Work-method counterexample for the booter AST
 
 <a id="h-booter-work-method-20261122"></a>
