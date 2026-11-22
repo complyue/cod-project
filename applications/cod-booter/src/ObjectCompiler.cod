@@ -1,6 +1,7 @@
 using "NativeSource.cod" { Path, SourceRevision, SourceOpenException };
 using "NativeSourceUse.cod" source_use;
 using "NativeScratch.cod" { Scratch, ScratchOpenException, scratch_use };
+using symbol "NativeLLVM.cod" @llvmSession;
 using "NativeLLVM.cod" {
     LLVMSession, LLVMOpenException, llvm_construct, llvm_verify, llvm_emit_object,
 };
@@ -27,22 +28,26 @@ using "ModuleDriver.cod" { ModuleWorkspacePlan, plan_module_workspace };
 using "Compiler.cod" ExpressionScratchPlan;
 using "CompilerStatus.cod" CompilerStatus { Complete, Rejected, FormUnsupported, OpenFailed, LoweringFailed, FinishFailed, ScratchFailed, SourceOpenFailed };
 
+proc verify_active_session() -> u8 {
+    return llvm_verify(@llvmSession);
+}
+
 proc write_object(handle output:Path in A, handle diagnostic:DiagnosticDestination in D,
                   commands:const NativeCommands in W, plan:const NativePlan in P) -> CompilerStatus
     where {const owner A, const owner W, const owner P, owner D} {
     try {
-        own handle session:LLVMSession <- make own handle LLVMSession();
-        val constructed <- llvm_construct(session, commands, plan.used, plan.labels, plan.slots);
+        effect @llvmSession <- make own handle LLVMSession();
+        val constructed <- llvm_construct(@llvmSession, commands, plan.used, plan.labels, plan.slots);
         if (constructed != 0u8) {
             report_backend_error(diagnostic, constructed);
             return LoweringFailed;
         } else {};
-        val verified <- llvm_verify(session);
+        val verified <- verify_active_session();
         if (verified != 0u8) {
             report_backend_error(diagnostic, verified);
             return FinishFailed;
         } else {};
-        val emitted <- llvm_emit_object(session, output);
+        val emitted <- llvm_emit_object(@llvmSession, output);
         if (emitted != 0u8) {
             report_backend_error(diagnostic, emitted);
             return FinishFailed;

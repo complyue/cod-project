@@ -11,12 +11,12 @@ using "ParserStorage.cod" {
     construction_type_query_node, initializer_assignment_node, call_node, behave_node,
     argument_node, deferred_call_node, deferred_block_node, discard_node, bool_node, compare_node,
     conditional_node, range_node, handle_local, handle_construction, owning_handle_local_node,
-    make_borrowed_handle_node, here_call_node, here_receiver_node, break_node, continue_node,
+    make_own_handle_node, make_borrowed_handle_node, here_call_node, here_receiver_node, break_node, continue_node,
     narrow_integer_node, logical_not_node, logical_binary, block_node, full_scope_node,
     block_item_node, try_node, catch_clause_node, finally_clause_node, null_node, return_node,
     throw_node, local_storage_binding, case_node, case_arm_node, case_fallthrough_node, case_failure_node,
     enum_declaration_node, enum_member_node, enum_integer_node, type_assertion_node,
-    local_module_selection, local_resource_name,
+    local_module_selection, local_resource_name, native_symbol_declaration_node, native_effect_node,
 };
 using "ExpressionParser.cod" ParseResult;
 using "ModuleExports.cod" { SelectedExports, record_export, enum_member_export };
@@ -100,6 +100,11 @@ export func loop_index() -> u8 { return 23u8; }
 export func handle_binding() -> u8 { return 24u8; }
 export func here_receiver_binding() -> u8 { return 25u8; }
 export func enum_value() -> u8 { return 27u8; }
+export func native_symbol_binding() -> u8 { return 28u8; }
+
+func symbol_binding(kind:u8) -> bool {
+    return kind == symbolic_selection() || kind == native_symbol_binding();
+}
 
 export func native_scalar(kind:u8) -> bool {
     return kind == builtin_u64() || kind == builtin_bool() || (kind >= builtin_u8() && kind <= builtin_f64());
@@ -218,12 +223,14 @@ func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
         return;
     } else {};
     if (nodes[name].kind == symbol_node()) {
-        if (kind != symbolic_selection()) { reject_name(state, name, expected_symbol_binding()); return; } else {};
+        if (!symbol_binding(kind)) { reject_name(state, name, expected_symbol_binding()); return; } else {};
         if (is_function(nodes, enclosing_callable(nodes, bindings, state.scope_node))) {
             reject_name(state, name, dynamic_symbol_in_function());
             return;
         } else {};
-    } else {};
+    } else {
+        if (kind == native_symbol_binding()) { reject_name(state, name, expected_symbol_binding()); return; } else {};
+    };
     remember(bindings, name, declaration, kind);
 }
 
@@ -561,14 +568,14 @@ func resolve_handle_local(source:const SourceBytes in S, nodes:const ExprNodes i
 }
 
 func resolve_handle_construction(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
-                                 work:NameWork in W, state:NameState in R, at:u64) -> void
+                                 work:NameWork in W, state:NameState in R, at:u64, installs_effect:bool) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     if (state.delayed != no_node()) {
         reject_name(state, at, declaration_in_deferred_group());
         state.enclosing_defer <- state.delayed;
         return;
     } else {};
-    if (state.repeated) { reject_name(state, at, repeated_handle_acquisition()); return; } else {};
+    if (state.repeated && !installs_effect) { reject_name(state, at, repeated_handle_acquisition()); return; } else {};
     if (state.here_group) { reject_name(state, at, unsupported_here_group_storage()); return; } else {};
     if (is_function(nodes, enclosing_callable(nodes, bindings, state.scope_node))) {
         reject_name(state, at, native_acquisition_in_function());
@@ -581,6 +588,22 @@ func resolve_handle_construction(source:const SourceBytes in S, nodes:const Expr
         if (state.diagnostic != 0u8) return;
     } else {};
     resolve_list(source, nodes, bindings, work, state, nodes[at].right);
+}
+
+func resolve_effect_initializer(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                                work:NameWork in W, state:NameState in R, at:u64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    bindings[at].scope <- state.scope_node;
+    bindings[at].finalizer <- state.finalizer;
+    if (nodes[at].kind == group_node()) {
+        resolve_effect_initializer(source, nodes, bindings, work, state, nodes[at].left);
+        return;
+    } else {};
+    if (nodes[at].kind == make_own_handle_node()) {
+        resolve_handle_construction(source, nodes, bindings, work, state, at, true);
+        return;
+    } else {};
+    resolve_expression(source, nodes, bindings, work, state, at);
 }
 
 func resolve_defer(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
@@ -813,6 +836,15 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         resolve_value(source, nodes, bindings, work, state, at);
         return;
     } else {};
+    if (kind == native_effect_node()) {
+        if (enclosing_callable(nodes, bindings, state.scope_node) == no_node() || state.delayed != no_node()) {
+            reject_name(state, at, invalid_module_tree());
+            return;
+        } else {};
+        resolve_value(source, nodes, bindings, work, state, nodes[at].left);
+        if (state.diagnostic == 0u8) { resolve_effect_initializer(source, nodes, bindings, work, state, nodes[at].right); } else {};
+        return;
+    } else {};
     if (kind == type_assertion_node()) {
         resolve_type_name(source, nodes, bindings, work, state, nodes[at].right);
         if (state.diagnostic != 0u8) return;
@@ -870,7 +902,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         return;
     } else {};
     if (handle_construction(kind)) {
-        resolve_handle_construction(source, nodes, bindings, work, state, at);
+        resolve_handle_construction(source, nodes, bindings, work, state, at, false);
         return;
     } else {};
     if (kind == make_named_node()) { resolve_construction(source, nodes, bindings, work, state, at); return; } else {};
@@ -915,7 +947,8 @@ export func record_declaration(kind:u8) -> bool {
 
 export func declaration_requires_native_output(kind:u8) -> bool {
     return kind == c_handle_type_node() || record_declaration(kind) || kind == array_declaration_node() ||
-        kind == enum_declaration_node() || kind == c_procedure_node() || kind == export_node() || kind == export_from_node();
+        kind == enum_declaration_node() || kind == c_procedure_node() || kind == native_symbol_declaration_node() ||
+        kind == export_node() || kind == export_from_node();
 }
 
 func type_declaration_name(nodes:const ExprNodes in N, form:u64) -> u64 where {const owner N} {
@@ -958,6 +991,9 @@ func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, 
         } else {};
         if (form_kind == enum_declaration_node()) {
             declare_name(source, nodes, bindings, work, state, nodes[form].left, form, enum_type(), duplicate_binding());
+        } else {};
+        if (form_kind == native_symbol_declaration_node()) {
+            declare_name(source, nodes, bindings, work, state, nodes[form].left, form, native_symbol_binding(), duplicate_binding());
         } else {};
         if (local_module_selection(form_kind)) {
             name <- local_resource_name(nodes, form);
@@ -1293,11 +1329,15 @@ func resolve_module_form(source:const SourceBytes in S, nodes:const ExprNodes in
         resolve_type_declaration(source, nodes, bindings, work, state, form);
         return;
     } else {};
+    if (kind == native_symbol_declaration_node()) {
+        resolve_type_name(source, nodes, bindings, work, state, nodes[form].right);
+        return;
+    } else {};
     if (kind == export_node()) {
         val name <- nodes[form].left;
         val found <- lookup(source, nodes, work, name, 0u64, state.module_names);
         if (found == no_node()) { reject_name(state, name, unresolved_name()); return; } else {};
-        if ((nodes[name].kind == symbol_node()) != (bindings[found].kind == symbolic_selection())) {
+        if ((nodes[name].kind == symbol_node()) != symbol_binding(bindings[found].kind)) {
             reject_name(state, name, expected_symbol_binding());
             return;
         } else {};

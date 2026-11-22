@@ -16,7 +16,7 @@ using "ParserStorage.cod" {
     range_header_node, logical_not_node, logical_and_node, logical_or_node, compare_node,
     equal_words, unequal_words, less_words, at_most_words, greater_words, at_least_words, no_node, type_assertion_node,
     case_node, case_arm_node, case_fallthrough_node, case_failure_node, case_pattern_node,
-    case_member_pattern, case_false_pattern, case_true_pattern, case_null_pattern,
+    case_member_pattern, case_false_pattern, case_true_pattern, case_null_pattern, native_effect_node,
 };
 using "Lexer.cod" {
     exception_word, own_word, handle_word, ref_word, make_word, typeof_word, from_word,
@@ -24,7 +24,7 @@ using "Lexer.cod" {
     func_word, region_word, capacity_word, identifier, integer_literal, punctuation, defer_word,
     catch_word, finally_word, try_word, const_word, behave_word, throw_word, symbol_name, in_word,
     ptr_word, val_word, null_word, return_word, void_word, if_word, for_word, continue_word,
-    break_word, else_word, true_word, false_word, not_word, case_word, of_word, fallthrough_word,
+    break_word, else_word, true_word, false_word, not_word, case_word, of_word, fallthrough_word, effect_word,
 };
 using "SourceStorage.cod" { SourceBytes, Token };
 
@@ -917,12 +917,32 @@ func parse_case(source:const SourceBytes in S, tokens:const Tokens in T, nodes:E
     (result.case_control <- enclosing):void;
 }
 
+func parse_native_effect(source:const SourceBytes in S, tokens:const Tokens in T,
+                         nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val first <- tokens[result.next].first;
+    result.next <- result.next + 1u64;
+    if (!parse_symbol(tokens, nodes, result, past)) return;
+    val name <- result.root;
+    val assignment <- result.next;
+    if (!punct_pair_at(source, tokens, assignment, past, 60u8, 45u8)) {
+        result.diagnostic <- expected_binding_operator();
+        return;
+    } else {};
+    result.next <- assignment + 1u64;
+    parse_expression_at(source, tokens, nodes, result, past, 1u8);
+    if (result.diagnostic != 0u8) return;
+    val initializer <- result.root;
+    append_node(nodes, result, native_effect_node(), first, nodes[initializer].past, 0u64, name, initializer, tokens[assignment].first);
+}
+
 func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
                    nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     if (at >= past) { result.diagnostic <- expected_operand(); return; } else {};
     val first <- tokens[at].first;
+    if (effect_word(source, tokens[at])) { parse_native_effect(source, tokens, nodes, result, past); return; } else {};
     if (if_word(source, tokens[at])) { parse_conditional(source, tokens, nodes, result, past); return; } else {};
     if (case_word(source, tokens[at])) { parse_case(source, tokens, nodes, result, past); return; } else {};
     if (for_word(source, tokens[at])) { parse_range(source, tokens, nodes, result, past); return; } else {};

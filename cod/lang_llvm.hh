@@ -156,6 +156,7 @@ class LLVMEmission {
     std::set<size_t> captures;
     std::optional<size_t> native_constructor = {};
     llvm::AllocaInst *activation_record = nullptr;
+    std::optional<size_t> native_symbol = {};
   };
   struct Control {
     Control *parent;
@@ -174,6 +175,7 @@ class LLVMEmission {
   };
   llvm::StructType *cleanup_header_ = llvm::StructType::get(context_, {b_.getPtrTy(), b_.getInt64Ty()});
   Scope *scope_ = nullptr;
+  Scope *native_effect_scope_ = nullptr;
   struct Choice {
     std::vector<Type> inputs;
     const CheckedOperation *operation;
@@ -838,7 +840,7 @@ class LLVMEmission {
       return type == Type::boolean ? b_.CreateZExt(converted, boundary) : converted;
     });
   }
-  llvm::Value *emit_native_call(const Expression &expr) {
+  llvm::Value *emit_native_call(const Expression &expr, const std::vector<llvm::Value *> *prepared = nullptr) {
     std::map<size_t, std::vector<size_t>> alternatives;
     for (size_t i = 0; i < contexts_.size(); ++i)
       alternatives[*contexts_[i].at(&expr).native_call].push_back(i);
@@ -850,7 +852,10 @@ class LLVMEmission {
         const auto &input = native.inputs[i];
         const auto &operand = *expr.children[i];
         llvm::Value *argument;
-        if (input.owner) {
+        if (prepared) {
+          argument = input.owner ? view_address(prepared->at(i)) : unpack(prepared->at(i), input.type);
+          if (input.type == Type::boolean) argument = b_.CreateZExt(argument, b_.getInt8Ty());
+        } else if (input.owner) {
           argument = emit_expression(operand, Projection::target);
           if (!reachable()) return nullptr;
           if (input.type.kind == Type::array) argument = checked_address(argument, operand, operand.at);
@@ -1321,8 +1326,26 @@ class LLVMEmission {
     b_.SetInsertPoint(good);
     return b_.CreateExtractValue(result, 0);
   }
-  void collect_cleanup(const Expression &expr, Scope &scope) {
-    for (const auto &child : expr.children) collect_cleanup(*child, scope);
+  void collect_cleanup(const Expression &expr, Scope &scope, bool only_native_effects = false,
+                       bool nested_iteration = false) {
+    using K = Expression::Kind;
+    if (expr.kind != K::deferred || !only_native_effects)
+      for (size_t i = 0; i < expr.children.size(); ++i)
+        collect_cleanup(*expr.children[i], scope, only_native_effects,
+                        nested_iteration || (expr.kind == K::range_for && i >= 2));
+    if (expr.kind == K::effect && !nested_iteration) {
+      std::set<std::pair<size_t, size_t>> installations;
+      for (const auto &context : contexts_) {
+        const auto effect = context.operations->find(&expr);
+        if (effect != context.operations->end() && effect->second.native_acquisition)
+          installations.emplace(*effect->second.symbol, effect->second.native_acquisition->constructor);
+      }
+      for (const auto &[symbol, constructor] : installations) {
+        auto *layout = llvm::StructType::get(context_, {cleanup_header_, native_handle_pair(), scalar_});
+        scope.actions.push_back({&expr, layout, {}, constructor, slot(layout, "native.effect.record"), symbol});
+      }
+    }
+    if (only_native_effects) return;
     if (expr.kind == Expression::Kind::native_handle_binding && expr.binding == "<-") {
       std::set<size_t> constructors;
       for (const auto &context : contexts_) constructors.insert(context.at(&expr).native_acquisition->constructor);
@@ -1338,14 +1361,18 @@ class LLVMEmission {
     for (const auto &context : contexts_) layouts.insert(context.at(&expr).captures);
     for (const auto &captures : layouts) {
       std::vector<llvm::Type *> fields{cleanup_header_};
-      fields.insert(fields.end(), body.kind == Expression::Kind::block ? captures.size() : prepared_count(body), scalar_);
+      const auto &call = contexts_.front().at(&body);
+      if (body.kind != K::block && call.native_call) {
+        for (const auto &input : program_->native_operations.at(*call.native_call).inputs)
+          fields.push_back(input.type.kind == Type::c_type_marker ? native_handle_pair() : static_cast<llvm::Type *>(scalar_));
+      } else fields.insert(fields.end(), body.kind == K::block ? captures.size() : prepared_count(body), scalar_);
       auto *layout = llvm::StructType::get(context_, fields);
       auto *backing = expr.repeated_defer_registration ? nullptr : slot(layout, "defer.record");
       scope.actions.push_back({&expr, layout, captures, {}, backing});
     }
   }
-  void prepare_cleanup_record(llvm::Value *record, size_t action) {
-    b_.CreateStore(load(scope_->head), b_.CreateStructGEP(cleanup_header_, record, 0));
+  void prepare_cleanup_record(Scope &scope, llvm::Value *record, size_t action) {
+    b_.CreateStore(load(scope.head), b_.CreateStructGEP(cleanup_header_, record, 0));
     b_.CreateStore(integer(action), b_.CreateStructGEP(cleanup_header_, record, 1));
   }
   void complete_cleanup(const std::function<void()> &emit, CleanupBoundary boundary, bool handles_failure = false) {
@@ -1438,7 +1465,13 @@ class LLVMEmission {
         auto *destroy = block("native.destroy");
         dispatch->addCase(integer(i), destroy);
         b_.SetInsertPoint(destroy);
-        auto *resource = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(descriptor.layout, record, 1));
+        auto *resource_address = b_.CreateStructGEP(descriptor.layout, record, 1);
+        if (descriptor.native_symbol) {
+          auto *previous = b_.CreateLoad(scalar_, b_.CreateStructGEP(descriptor.layout, record, 2));
+          b_.CreateStore(previous, symbols_.at(*descriptor.native_symbol));
+          resource_address = b_.CreateStructGEP(native_handle_pair(), resource_address, 0);
+        }
+        auto *resource = b_.CreateLoad(b_.getInt64Ty(), resource_address);
         const auto &handle = program_->native_constructors.at(*descriptor.native_constructor).handle;
         b_.CreateCall(runtime(native_destroy_name(handle), b_.getVoidTy(), {b_.getInt64Ty()}), {resource});
         b_.CreateBr(scope.cleanup);
@@ -1473,10 +1506,22 @@ class LLVMEmission {
         continue;
       }
       std::vector<llvm::Value *> arguments;
-      for (size_t j = 0; j < prepared_count(body); ++j)
-        arguments.push_back(b_.CreateLoad(scalar_, b_.CreateStructGEP(descriptor.layout, record, j + 1)));
+      for (size_t j = 0; j < prepared_count(body); ++j) {
+        auto *field = descriptor.layout->getElementType(j + 1);
+        auto *value = b_.CreateLoad(field, b_.CreateStructGEP(descriptor.layout, record, j + 1));
+        if (field == native_handle_pair()) {
+          auto *loan = slot(field, "defer.native.loan");
+          b_.CreateStore(value, loan);
+          arguments.push_back(pack_view(loan, *body.children[j]));
+        } else arguments.push_back(value);
+      }
       // Prepared values and checked borrowed addresses do not refer into their record.
       if (!descriptor.activation_record) release_heap_record();
+      if (contexts_.front().at(&body).native_call) {
+        complete_cleanup([&] { emit_native_call(body, &arguments); }, CleanupBoundary::deferred);
+        b_.CreateBr(scope.cleanup);
+        continue;
+      }
       if (body.kind == Expression::Kind::transfer || body.kind == Expression::Kind::rebind) {
         if (body.kind == Expression::Kind::transfer) arguments[1] = own_value(arguments[1]);
         assign_prepared(body, arguments);
@@ -1530,7 +1575,8 @@ class LLVMEmission {
     if (expr.kind == K::effect || expr.kind == K::procedure_effect) {
       for (const auto &context : contexts_) {
         const auto effect = context.operations->find(&expr);
-        if (effect != context.operations->end() && effect->second.publishes_effect) symbols.insert(*effect->second.symbol);
+        if (effect != context.operations->end() && effect->second.publishes_effect && !effect->second.native_acquisition)
+          symbols.insert(*effect->second.symbol);
       }
     }
     const size_t children = expr.kind == K::range_for ? 2 : expr.children.size();
@@ -1587,14 +1633,25 @@ class LLVMEmission {
     return empty_scalar();
   }
   llvm::Value *iteration(const Expression &expr, bool discard) {
+    Scope native{nullptr, nullptr, nullptr, {}, {}};
+    collect_cleanup(expr, native, true);
     const auto saved = save_effects({&expr});
-    if (saved.empty()) return emit_expression(expr, Projection::value, discard);
+    if (saved.empty() && native.actions.empty()) return emit_expression(expr, Projection::value, discard);
     Control control{control_, block("iteration.restore")};
     control_ = &control;
+    auto *outer_native = native_effect_scope_;
+    if (!native.actions.empty()) {
+      native.cleanup = control.exit;
+      native.head = slot(b_.getPtrTy(), "iteration.native.head");
+      b_.CreateStore(null_pointer(), native.head);
+      native_effect_scope_ = &native;
+    }
     auto *result = slot(scalar_, "iteration.value");
     auto *value = emit_expression(expr, Projection::value, discard);
     if (reachable()) { b_.CreateStore(value, result); b_.CreateBr(control.exit); }
     b_.SetInsertPoint(control.exit);
+    if (!native.actions.empty()) drain(native);
+    native_effect_scope_ = outer_native;
     restore_effects(saved);
     control_ = control.parent;
     auto *continuation = block("iteration.continue");
@@ -1608,11 +1665,13 @@ class LLVMEmission {
   void call_scope(const std::vector<const Expression *> &expressions, const Location &at,
                   llvm::Value *requires_return = nullptr, const Type *feedback = nullptr) {
     auto *outer_temporaries = temporaries_;
+    auto *outer_native = native_effect_scope_;
     Scope scope{scope_, block("scope.cleanup"), slot(b_.getPtrTy(), "defer.head"), {}, {}};
     if (environments_) scope.values.values = parameter_values_;
     Control control{control_, scope.cleanup};
     control_ = &control;
     scope_ = &scope;
+    native_effect_scope_ = &scope;
     temporaries_ = &scope.values;
     b_.CreateStore(null_pointer(), scope.head);
     for (const auto *expr : expressions) collect_cleanup(*expr, scope);
@@ -1640,7 +1699,7 @@ class LLVMEmission {
       scope.cleanup = draining;
     }
     drain(scope); release_values(scope.values); restore_effects(effects);
-    scope_ = scope.parent; control_ = control.parent; temporaries_ = outer_temporaries;
+    scope_ = scope.parent; native_effect_scope_ = outer_native; control_ = control.parent; temporaries_ = outer_temporaries;
     if (requires_return) {
       auto *missing = block("return.missing");
       auto *unprepared = b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0));
@@ -1724,10 +1783,41 @@ class LLVMEmission {
     // Direct declarations execute once per owning scope activation. Their
     // cleanup record is already reserved when native acquisition succeeds.
     auto *record = slot(action->layout, "native.cleanup");
-    prepare_cleanup_record(record, std::distance(scope_->actions.begin(), action));
+    prepare_cleanup_record(*scope_, record, std::distance(scope_->actions.begin(), action));
     b_.CreateStore(load(resource), b_.CreateStructGEP(action->layout, record, 1));
     b_.CreateStore(record, scope_->head);
     return empty_scalar();
+  }
+  llvm::Value *install_native_effect(const Expression &effect) {
+    using Plan = std::pair<size_t, CheckedOperation::NativeAcquisition>;
+    std::map<Plan, std::vector<size_t>> plans;
+    for (size_t i = 0; i < contexts_.size(); ++i) {
+      const auto &operation = contexts_[i].at(&effect);
+      plans[{*operation.symbol, *operation.native_acquisition}].push_back(i);
+    }
+    return contextual_value(effect, plans, "native.effect", [&](const Plan &plan) {
+      return temporary_scope(effect.at, scalar_, [&]() -> llvm::Value * {
+        const auto &[symbol, acquisition] = plan;
+        auto &scope = *native_effect_scope_;
+        const auto action = std::ranges::find_if(scope.actions, [&](const auto &item) {
+          return item.action == &effect && item.native_constructor == acquisition.constructor && item.native_symbol == symbol;
+        });
+        if (action == scope.actions.end()) throw std::logic_error("uncollected native effect release");
+        auto *record = action->activation_record;
+        auto *pair_type = native_handle_pair();
+        auto *pair = b_.CreateStructGEP(action->layout, record, 1);
+        auto *resource = b_.CreateStructGEP(pair_type, pair, 0);
+        if (!call_native_constructor(acquisition, resource)) return nullptr;
+        b_.CreateStore(b_.CreateLoad(b_.getInt64Ty(), resource), b_.CreateStructGEP(pair_type, pair, 1));
+        auto *binding = symbols_.at(symbol);
+        b_.CreateStore(b_.CreateLoad(scalar_, binding), b_.CreateStructGEP(action->layout, record, 2));
+        prepare_cleanup_record(scope, record, std::distance(scope.actions.begin(), action));
+        auto *selected = b_.CreateInsertValue(empty_scalar(), b_.CreatePtrToInt(pair, b_.getInt64Ty()), 0);
+        b_.CreateStore(selected, binding);
+        b_.CreateStore(record, scope.head);
+        return empty_scalar();
+      });
+    });
   }
   llvm::Value *emit_attached_native_handle(const Expression &expr) {
     std::map<CheckedOperation::NativeAcquisition, std::vector<size_t>> plans;
@@ -2571,9 +2661,13 @@ class LLVMEmission {
     }
     case K::callable: return empty_scalar();
     case K::null_ref: return null_pointer();
-    case K::symbol: return b_.CreateLoad(scalar_, symbols_.at(*fact.symbol), "effect.current");
+    case K::symbol: {
+      auto *value = b_.CreateLoad(scalar_, symbols_.at(*fact.symbol), "effect.current");
+      return fact.type.kind == Type::native_handle ? view_address(value) : value;
+    }
     case K::touch: return empty_scalar();
     case K::effect: {
+      if (fact.native_acquisition) return install_native_effect(expr);
       auto *value = emit_expression(*expr.children.front());
       if (!reachable()) return nullptr;
       return finish_effect(fact, convert_result(expr, *expr.children.front(), value), expr.at);
@@ -3048,10 +3142,15 @@ class LLVMEmission {
         b_.SetInsertPoint(failed); fail_path(ExceptionCategory::out_of_memory, expr.at);
         b_.SetInsertPoint(ready);
       }
-      prepare_cleanup_record(prepared, std::distance(scope_->actions.begin(), record));
+      prepare_cleanup_record(*scope_, prepared, std::distance(scope_->actions.begin(), record));
       for (size_t i = 0; i < arguments.size(); ++i) {
-        b_.CreateStore(arguments[i], b_.CreateStructGEP(record->layout, prepared, i + 1));
-        take_value(arguments[i]);
+        auto *field = record->layout->getElementType(i + 1);
+        auto *destination = b_.CreateStructGEP(record->layout, prepared, i + 1);
+        if (field == native_handle_pair()) b_.CreateStore(b_.CreateLoad(field, view_address(arguments[i])), destination);
+        else {
+          b_.CreateStore(arguments[i], destination);
+          take_value(arguments[i]);
+        }
       }
       b_.CreateStore(prepared, scope_->head);
       return empty_scalar();

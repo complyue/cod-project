@@ -3,6 +3,7 @@ using "NativeCommands.cod" NativeCommands;
 using "NativeSource.cod" Path;
 
 export handle type LLVMSession;
+export symbol @llvmSession :own handle LLVMSession;
 export data LLVMOpenException <: Exception { status:u8; }
 
 proc "C" LLVMSession() throws LLVMOpenException;
