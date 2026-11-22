@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Writable supplier array in the path-key consumer
+
+<a id="k-booter-path-key-consumer-20261122"></a>
+**K-BOOTER-PATH-KEY-CONSUMER-20261122.** Under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122, delegated review cleared the ordinary seed supplier-slot check and real wrapper verification. D-18 synchronous direct access and the graph workload at `fb242ce1b4b6bf72abe35b3232a3d57fa4176bb3:applications/cod-booter/docs/ModuleGraph.md` supply the existing contracts. D-20-MODULE-GRAPH r9 to r10, D-ARCH-REVIEW r10 to r11, P-680–P-683, registry r1059.
+
 ## 2026-11-22 — Named-array transport for the first dependency edge
 
 <a id="k-booter-array-transport-20261122"></a>

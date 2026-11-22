@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 10. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 11. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
 
 [K-BOOTER-AST-TABLE-20261122](../CHANGELOG.md#k-booter-ast-table-20261122) records the delegated review of the indexed AST workload and its seed prerequisites under the [work-method decision](../CHANGELOG.md#h-booter-work-method-20261122).
 
@@ -14,7 +14,7 @@ The [single-file route clearance](../CHANGELOG.md#k-booter-typed-object-20261122
 
 The [seed Boolean observation clearance](../CHANGELOG.md#k-seed-boolean-observation-20261122) covers the private checker operation used during semantic checking of the typed CompilerCLI.
 
-The [first dependency-edge clearance](../CHANGELOG.md#k-booter-first-edge-20261122) covers scoped changes to the path providers, the regional seed path, holder forwarding and definition-installed dispatch. The [ordinary-result correction](../CHANGELOG.md#k-booter-native-u64-result-20261122) covers declaration checking and existing generated output transport for native path preparation. The [array transport review](../CHANGELOG.md#k-booter-array-transport-20261122) covers the first edge’s checked allocation roles, LLVM array views and initialized caller slots.
+The [first dependency-edge clearance](../CHANGELOG.md#k-booter-first-edge-20261122) covers scoped changes to the path providers, the regional seed path, holder forwarding and definition-installed dispatch. The [ordinary-result correction](../CHANGELOG.md#k-booter-native-u64-result-20261122) covers declaration checking and existing generated output transport for native path preparation. The [array transport review](../CHANGELOG.md#k-booter-array-transport-20261122) covers the first edge’s checked allocation roles, LLVM array views and initialized caller slots. The [path-key review](../CHANGELOG.md#k-booter-path-key-consumer-20261122) covers synchronous access to a writable supplier array through the ordinary wrapper.
 
 ## Before coding
 
@@ -67,6 +67,12 @@ Verify equality of the complete normalized `BooleanValue` against the existing e
 ### Seed array layout and caller slots
 
 The [first-edge transport clearance](../applications/cod-booter/docs/ModuleGraph.md#named-array-transport-for-the-first-edge) covers the checked program, checker, LLVM emitter and their direct fixtures. The checker owns actual-owner and allocation-class requirements, lexical place selection, access and completion effects. The emitter uses one private layout for the admitted CoD-allocated arrays, projects transient native views at the existing C boundary and forwards an initialized `ref var` as the selected caller slot. Reuse the existing raw storage and cleanup services. The CoD graph retains responsibility for table replacement, membership and publication. Acceptance includes old borrows, observable slot writes on exceptional exits and the real typed booter.
+
+### Writable supplier-array access
+
+For the [path-key consumer](../applications/cod-booter/docs/ModuleGraph.md#writing-canonical-key-bytes-from-a-supplied-here-body), change the seed checker’s ordinary supplied-`here` admission and its direct fixtures. Admit a live, unambiguously identified lexical ref slot selecting a definitely initialized nonnull named array of admitted bits elements with writable target access and one proven live target owner. Preserve that proof for every admitted invocation. Record the slot as a live binding with its place and target owners. The existing emitter passes the slot, and the wrapper’s native callback forwards the original `work` activation. Direct native access to a writable supplier place and callback-side holder rebinding have separate implementation scopes.
+
+Completed element writes must be visible through other live references on normal and protected exits. Any check that relies on a possibly overwritten element’s former value must account for the write. Zero invocations establish no write. Where the seed admits an independent same-owner rebind between invocations, verify that the second invocation writes the new target. If that source is outside the seed profile, record the exact rejection and inspect the generated slot load as structural evidence. The real public-wrapper byte transfer and nested restoration still require execution.
 
 ### Lexical backing for the indexed AST array
 
