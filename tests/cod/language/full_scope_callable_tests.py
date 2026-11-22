@@ -262,10 +262,14 @@ runner.CASES = {
         'using "std:exceptions" MissingReturnError;proc run()->const func(u64)->const u64{'
         'defer{if returning (saved:func(u64)->const u64){}else{behave @print(7u64);}};}'
         'try{run():void;}catch(e:const MissingReturnError){behave @print(8u64);};',0,'7\n8\n','[-Wmissing-return]'),
-    'return_inspection_preserves_closed_indirect_failure': (
+    'return_inspection_preserves_closed_indirect_failure': (IO+
+        'using "std:exceptions" UnhandledDeferError;'
         'func missing(n:u64)->const u64{}'
-        'proc run(f:func(u64)->const u64)->u64{defer{if returning (){return f(7u64);}};return 1u64;}run(missing);',
-        2,'','return inspection requires independent deferred failure delivery'),
+        'proc run(f:func(u64)->const u64)->u64{'
+        'defer{if returning (val saved){behave @print(saved);}};'
+        'defer{if returning (){return f(7u64);}};return 11u64;}'
+        'try{behave @print(run(missing));}catch(e:UnhandledDeferError){behave @print(22u64);};',
+        0,'11\n22\n','[-Wmissing-return]'),
     'here_group_distinct_feedback_and_break': (IO+
         'func plus_one(here body()->u64)->u64{return body()+1u64;}'
         'func relay(here body()->u64)->u64{return plus_one(body)+10u64;}'

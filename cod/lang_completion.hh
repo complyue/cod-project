@@ -1207,8 +1207,6 @@ public:
     MissingInitialization uninitialized_captures{};
     bool needs_checked_cleanup_proof = false;
     bool uncovered_deferred_root = false;
-    bool observes_return = false;
-    bool raises_deferred_failure = false;
     std::vector<ExceptionFacts> queued_failures{};
     // Necessary immutable input facts for reaching this queue completion.
     ConditionClauses reaching{ConditionFacts{}};
@@ -1450,8 +1448,6 @@ private:
     result.declared_failures.insert(second.declared_failures.begin(), second.declared_failures.end());
     result.needs_checked_cleanup_proof = first.needs_checked_cleanup_proof || second.needs_checked_cleanup_proof;
     result.uncovered_deferred_root = first.uncovered_deferred_root || second.uncovered_deferred_root;
-    result.observes_return = first.observes_return || second.observes_return;
-    result.raises_deferred_failure = first.raises_deferred_failure || second.raises_deferred_failure;
     if (!unconditional(second.action_reaching)) {
       const auto unknown = unknown_boolean();
       const auto lifted = substitute_boolean_payloads(second.action_reaching, [&](size_t place) -> const BooleanValue * {
@@ -1523,8 +1519,6 @@ private:
     const auto previous_declared = known.declared_failures;
     const auto previous_checked_cleanup = known.needs_checked_cleanup_proof;
     const auto previous_uncovered_root = known.uncovered_deferred_root;
-    const auto previous_return_observation = known.observes_return;
-    const auto previous_deferred_failure = known.raises_deferred_failure;
     const auto previous_selections = known.selections;
     const auto previous_symbols = known.symbols;
     const auto previous_reaching = known.reaching;
@@ -1536,8 +1530,6 @@ private:
     known.declared_failures.insert(effects.declared_failures.begin(), effects.declared_failures.end());
     known.needs_checked_cleanup_proof = previous_checked_cleanup || effects.needs_checked_cleanup_proof;
     known.uncovered_deferred_root = previous_uncovered_root || effects.uncovered_deferred_root;
-    known.observes_return = previous_return_observation || effects.observes_return;
-    known.raises_deferred_failure = previous_deferred_failure || effects.raises_deferred_failure;
     for (const auto &[read, before] : effects.reads) merge_read(known.reads, read, before);
     // A queue arm with no writer can leave a place uninitialized only
     // on paths that reach that arm.
@@ -1574,7 +1566,6 @@ private:
         previous_selections != known.selections || previous_symbols != known.symbols || previous_payload_writes != known.payload_writes ||
         previous_present != known.present || previous_booleans != known.booleans || previous_declared != known.declared_failures ||
         previous_checked_cleanup != known.needs_checked_cleanup_proof || previous_uncovered_root != known.uncovered_deferred_root ||
-        previous_return_observation != known.observes_return || previous_deferred_failure != known.raises_deferred_failure ||
         previous_reaching != known.reaching || previous_action_reaching != known.action_reaching;
   }
 public:
@@ -1701,8 +1692,6 @@ public:
             auto outgoing = from;
             auto effects = preserve_queue(path.effects, outgoing);
             effects.reaching = intersect_reaching(effects.reaching, conditions->second);
-            effects.observes_return |= action.observes_return;
-            effects.raises_deferred_failure |= path.completion.failed();
             advance_deferred_phase(outgoing, action, *node.action, selected, path.completion, effects);
             for (const auto &[intermediate, nested] : require(path.queue, outgoing)) {
               auto invoked = compose(effects, nested);
