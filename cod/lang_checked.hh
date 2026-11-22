@@ -21504,8 +21504,8 @@ class ScalarChecker {
     const auto result = form.result_type ? resolve_type(*form.result_type) : Type{Type::void_type};
     if (form.symbolic || form.operation || form.explicit_captures || !form.type_parameters.empty() ||
         !form.result_owner.empty() || !form.throws_types.empty() ||
-        (result != Type::uint8 && result != Type::void_type && result.kind != Type::enumeration))
-      implementation_gap(form.at, "C operations outside the nonthrowing u8, enum or void result profile");
+        (result != Type::uint8 && result != Type::uint64 && result != Type::void_type && result.kind != Type::enumeration))
+      implementation_gap(form.at, "C operations outside the nonthrowing u8, u64, enum or void result profile");
     CheckedNativeOperation native;
     native.contract.source = &form;
     native.contract.module = module_;

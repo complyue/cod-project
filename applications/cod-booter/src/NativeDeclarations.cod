@@ -584,7 +584,8 @@ func check_c_procedure(nodes:const ExprNodes in N, names:const NameBindings in B
         } else {};
     } else {
         val valid <- if (direction == c_operation()) {
-            result_kind == builtin_u8() || result_kind == builtin_void() || result_kind == enum_type()
+            result_kind == builtin_u8() || result_kind == builtin_u64() ||
+                result_kind == builtin_void() || result_kind == enum_type()
         } else { result != no_node() && (native_scalar(result_kind) || result_kind == builtin_void() || result_kind == enum_type()) };
         if (failure != no_node()) {
             reject_declaration(report, failure, invalid_native_failure());
