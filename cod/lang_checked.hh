@@ -14201,6 +14201,10 @@ class ScalarChecker {
   void define_callable(size_t method, const Location &at) {
     auto &definition = program_.methods[method];
     resolve_captures(definition);
+    if (definition.source->kind == Form::Kind::function)
+      for (const auto &capture : definition.captures)
+        if (const auto binding = lexical_.lookup(capture.name); binding && !definitions_.contains(*binding))
+          fail(capture.at, "an ordinary func cannot access enclosing runtime binding '" + capture.name + "'");
     if (!definition.source->explicit_captures)
       std::erase_if(definition.captures, [&](const auto &capture) {
         const auto binding = lexical_.lookup(capture.name);
