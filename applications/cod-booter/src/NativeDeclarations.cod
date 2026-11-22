@@ -23,7 +23,7 @@ using "NameResolution.cod" {
     builtin_u8, builtin_u32, builtin_u64, builtin_i64, builtin_void, builtin_c_string, text_type,
 };
 using "ModuleExports.cod" {
-    SelectedExports, ModuleExports, exception_type_export, exception_root_identity,
+    SelectedExports, ModuleExports, exception_type_export, exception_root_identity, error_root_identity,
     native_handle_export, record_export, array_export, nominal_exception_export, callable_export, enum_export, ordinary_callable_shape,
     symbol_export, abstract_type_export, lexical_builder_export,
 };
@@ -242,6 +242,7 @@ func check_nominal_parent(nodes:const ExprNodes in N, names:const NameBindings i
     val abstract <- nodes[form].kind == abstract_type_node();
     val header <- nodes[form].left;
     val parent <- no_node();
+    val identity <- 0u64;
     for (unused in 0u64 .. used) {
         if (nodes[header].kind != data_parent_node()) return;
         parent <- nodes[header].right;
@@ -254,8 +255,10 @@ func check_nominal_parent(nodes:const ExprNodes in N, names:const NameBindings i
             (header <- nodes[names[parent].declaration].left):void;
         } else {
             if (imported_kind(names, selected, parent) == abstract_type_export()) return;
-            if (!abstract && exception_selection(names, selected, parent) &&
-                selected[names[parent].declaration].identity == exception_root_identity()) return;
+            if (!abstract && exception_selection(names, selected, parent)) {
+                identity <- selected[names[parent].declaration].identity;
+                if (identity == exception_root_identity() || identity == error_root_identity()) return;
+            };
             reject_declaration(report, parent, invalid_nominal_parent());
             return;
         };
@@ -1593,7 +1596,8 @@ func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in
         };
         if (has_exception_parent(nodes, names, target)) {
             exports[at].kind <- nominal_exception_export();
-            exports[at].checked <- 1u8;
+            val parent <- nodes[nodes[target].left].right;
+            exports[at].checked <- if (selected[names[parent].declaration].identity == error_root_identity()) { 0u8 } else { 1u8 };
             if (scalar_failure(nodes, names, selected, name)) { (exports[at].shape <- scalar_exception()):void; } else {};
         } else {
             exports[at].kind <- record_export();

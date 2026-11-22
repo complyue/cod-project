@@ -1200,6 +1200,7 @@ class LLVMEmission {
             auto *category = b_.CreateExtractValue(unpack(arguments[i], admitted[i]), 0);
             auto *valid = b_.CreateAnd(b_.CreateICmpUGT(category, integer(0)),
                                       b_.CreateICmpULT(category, integer(program_->exception_types.size())));
+            valid = b_.CreateAnd(valid, b_.CreateICmpNE(category, integer(error_root_id)));
             auto *identity = b_.CreateAdd(b_.CreateTrunc(category, b_.getInt32Ty()), b_.getInt32(tag(program_->exception_type(0))));
             arguments[i] = b_.CreateInsertValue(arguments[i], b_.CreateSelect(valid, identity, b_.getInt32(0)), 1);
           }
@@ -1931,7 +1932,15 @@ class LLVMEmission {
       auto *caught = choose(handler, {}, choices(handler, {}), scalar_, [&](const Choice &choice) -> llvm::Value * {
         const auto &type = choice.operation->type;
         auto *value = pack(active_exception(), type);
-        return type.identity ? b_.CreateSelect(b_.CreateICmpEQ(load(completion_.category), integer(type.identity)), value, empty_scalar()) : value;
+        if (!type.identity) return value;
+        auto *category = load(completion_.category);
+        if (type.identity != error_root_id)
+          return b_.CreateSelect(b_.CreateICmpEQ(category, integer(type.identity)), value, empty_scalar());
+        llvm::Value *matched = b_.getFalse();
+        for (size_t i = 1; i < program_->exception_types.size(); ++i)
+          if (matches_failure(program_->exception_types, i, type.identity))
+            matched = b_.CreateOr(matched, b_.CreateICmpEQ(category, integer(i)));
+        return b_.CreateSelect(matched, value, empty_scalar());
       });
       b_.CreateCondBr(b_.CreateICmpNE(b_.CreateExtractValue(caught, 1), b_.getInt32(0)), selected, next);
       b_.SetInsertPoint(selected);
@@ -3752,9 +3761,10 @@ class LLVMEmission {
     if (owned_failures_) {
       clear_failure_owner();
       auto *intrinsic = block("uncaught.intrinsic");
-      auto *select = b_.CreateSwitch(category, intrinsic, program_->exception_types.size() - exception_categories.size());
+      const auto first_nominal = error_root_id + 1;
+      auto *select = b_.CreateSwitch(category, intrinsic, program_->exception_types.size() - first_nominal);
       auto report = runtime("cod_lang_uncaught_nominal", b_.getVoidTy(), {b_.getPtrTy(), b_.getInt64Ty()});
-      for (size_t i = exception_categories.size(); i < program_->exception_types.size(); ++i) {
+      for (size_t i = first_nominal; i < program_->exception_types.size(); ++i) {
         auto *nominal = block("uncaught.nominal");
         select->addCase(integer(i), nominal);
         b_.SetInsertPoint(nominal);
@@ -3863,7 +3873,7 @@ public:
       return allocates_lexically(instance.operations);
     });
     protected_outcomes_ = std::ranges::any_of(program.methods, [](const auto &method) { return method.here_group && !method.instances.empty(); });
-    owned_failures_ = program.exception_types.size() > exception_categories.size();
+    owned_failures_ = program.exception_types.size() > error_root_id + 1;
     case_scope_outcomes_ = std::ranges::any_of(program.methods, [](const auto &method) {
       return method.source->case_scan_scope && !method.instances.empty();
     });

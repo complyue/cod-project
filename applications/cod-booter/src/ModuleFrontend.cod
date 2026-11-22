@@ -12,12 +12,12 @@ using "Frontend.cod" { FrontendResult, read_module };
 using "ExpressionParser.cod" ParseResult;
 using "ModuleExports.cod" {
     ModuleExports, SelectedExports, ExportResolutionResult, resolve_module_exports,
-    prepare_module_dependencies, export_storage_exhausted,
+    prepare_module_dependencies, export_storage_exhausted, exception_type_export, error_root_identity,
 };
 using "NameResolution.cod" {
     NameBindings, NameWork, NameResolutionResult, unsupported_module_declaration,
     unsupported_ordinary_construction, declaration_requires_native_output, first_item,
-    resolve_module_names, text_type, is_lexical_builder, owner_binding,
+    resolve_module_names, text_type, is_lexical_builder, owner_binding, ordinary_selection,
 };
 using "NativeDeclarations.cod" {
     NativeDeclarationResult, check_native_declarations, declared_exception_type,
@@ -177,6 +177,8 @@ export func bind_selected_module(source:const SourceBytes in S, nodes:const Expr
     } else {};
     val marker <- no_node();
     val text <- false;
+    val annotation <- no_node();
+    val selection <- no_node();
     for (at in 0u64 .. result.frontend.tree.used) {
         if (nodes[at].kind == ref_result_node()) {
             marker <- nodes[nodes[at].right].left;
@@ -191,11 +193,20 @@ export func bind_selected_module(source:const SourceBytes in S, nodes:const Expr
                 return false;
             } else {};
         } else {};
-        if (nodes[at].kind == catch_binding_node() && nodes[at].right != no_node() &&
-            !declared_exception_type(nodes, bindings, selected, nodes[at].right)) {
-            binding_diagnostic(nodes, result, module_binding_failed(), invalid_catch_annotation(), nodes[at].right);
-            return false;
-        } else {};
+        if (nodes[at].kind == catch_binding_node() && nodes[at].right != no_node()) {
+            annotation <- nodes[at].right;
+            if (!declared_exception_type(nodes, bindings, selected, annotation)) {
+                binding_diagnostic(nodes, result, module_binding_failed(), invalid_catch_annotation(), annotation);
+                return false;
+            };
+            if (emit_object && bindings[annotation].kind == ordinary_selection()) {
+                selection <- bindings[annotation].declaration;
+                if (selected[selection].kind == exception_type_export() && selected[selection].identity == error_root_identity()) {
+                    binding_diagnostic(nodes, result, module_binding_failed(), unsupported_module_declaration(), annotation);
+                    return false;
+                };
+            };
+        };
     };
     if (!emit_object || first_extended_declaration(nodes, work, result.frontend.tree) != no_node() ||
         uses_native_boundary(nodes, result.frontend.tree.used)) {

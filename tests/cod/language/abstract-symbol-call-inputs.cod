@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
-using "../../../cod/library/string.cod" { StringBuilder, Utf8StreamOut, Utf8WriteException, emit as original_emit };
-using symbol "../../../cod/library/string.cod" @io;
+using "../../../cod/library/string.cod" { StringBuilder, Utf8StreamOut, Utf8WriteError, emit as original_emit };
+using symbol "../../../cod/library/string.cod" @sout;
 import "../../../cod/library/string.cod" { writeUtf8, emit as adapted_emit };
 
 data Output <: Utf8StreamOut { count:u64; }
@@ -12,24 +12,24 @@ proc writeUtf8(target:Output in O, piece:const String in S) -> void where {owner
 }
 
 proc through_source(piece:const String in S) -> void
-    throws Utf8WriteException where {const owner S} {
+    where {const owner S} {
     original_emit(piece);
     return;
 }
 
 proc through_receiver(piece:const String in S) -> void
-    throws Utf8WriteException where {const owner S} {
+    where {const owner S} {
     adapted_emit(piece);
     return;
 }
 
-proc test() -> void throws Utf8WriteException {
+proc test() -> void {
     ref buffer = make StringBuilder();
     ref output = make Output { count <- 0u64; };
-    effect @io = buffer;
+    effect @sout = buffer;
     through_source("initial");
     {{
-        effect @io = output;
+        effect @sout = output;
         through_receiver("redirected");
     }};
     through_receiver("restored");
@@ -38,4 +38,4 @@ proc test() -> void throws Utf8WriteException {
     return;
 }
 
-try { test(); } catch (failure:const Utf8WriteException) { behave @print(failure.code); };
+try { test(); } catch (failure:const Utf8WriteError) { behave @print(failure.code); };
