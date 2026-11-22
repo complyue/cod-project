@@ -1427,7 +1427,7 @@ class LLVMEmission {
     std::set<std::set<size_t>> layouts;
     for (const auto &context : contexts_) layouts.insert(context.at(&expr).captures);
     for (const auto &captures : layouts) {
-      std::vector<llvm::Type *> fields{cleanup_header_};
+      std::vector<llvm::Type *> fields{cleanup_header_, deferred_failure_layout()};
       const auto &call = contexts_.front().at(&body);
       if (body.kind != K::block && call.native_call) {
         for (const auto &input : program_->native_operations.at(*call.native_call).inputs)
@@ -1491,14 +1491,7 @@ class LLVMEmission {
     }
     b_.CreateBr(done);
     b_.SetInsertPoint(replace);
-    llvm::Value *retain_failure = nullptr;
-    if (boundary == CleanupBoundary::deferred) {
-      retain_failure = b_.CreateAnd(b_.CreateICmpEQ(pending.kind, b_.getInt8(2)),
-          b_.CreateAnd(b_.CreateICmpNE(kind, b_.getInt8(2)), b_.CreateNot(entered_failure)));
-    }
-    if (pending.failure_owner)
-      release_failure_owner(b_, retain_failure ? b_.CreateSelect(retain_failure, null_pointer(), pending.failure_owner)
-                                               : pending.failure_owner);
+    release_failure_owner(b_, pending.failure_owner);
     if (boundary == CleanupBoundary::deferred) {
       auto *retain = block("cleanup.retain.return"), *replaced = block("cleanup.replaced.return");
       b_.CreateCondBr(b_.CreateAnd(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2)), b_.CreateNot(load(completion_.has_return))), retain, replaced);
@@ -1510,13 +1503,6 @@ class LLVMEmission {
       b_.SetInsertPoint(replaced);
     }
     release_value(pending.value);
-    if (retain_failure) {
-      const auto places = completion_.failure_fields();
-      const auto values = pending.failure_fields();
-      for (size_t i = 0; i < places.size(); ++i)
-        if (places[i]) b_.CreateStore(b_.CreateSelect(retain_failure, values[i], load(places[i])), places[i]);
-      b_.CreateStore(b_.CreateSelect(retain_failure, b_.getInt8(2), kind), completion_.kind);
-    }
     b_.CreateBr(done);
     b_.SetInsertPoint(done);
     auto *transfer = pending.transfer;
@@ -1532,12 +1518,147 @@ class LLVMEmission {
     preserve_transfer(transfer);
     return replaces_body;
   }
+  struct DeferredFailures {
+    llvm::AllocaInst *head, *tail;
+  };
+  enum DeferredFailureField { failure_next, failure_backing, failure_outcome };
+  static constexpr unsigned first_deferred_operand = 2;
+  llvm::StructType *deferred_failure_layout() {
+    return llvm::StructType::get(context_, {b_.getPtrTy(), b_.getPtrTy(), outcome_});
+  }
+  llvm::Value *deferred_failure_field(llvm::Value *node, unsigned index) {
+    return b_.CreateStructGEP(deferred_failure_layout(), node, index);
+  }
+  void clear_deferred_failures(const DeferredFailures &queue) {
+    b_.CreateStore(null_pointer(), queue.head);
+    b_.CreateStore(null_pointer(), queue.tail);
+  }
+  DeferredFailures deferred_failures() {
+    DeferredFailures queue{slot(b_.getPtrTy(), "defer.failures.head"), slot(b_.getPtrTy(), "defer.failures.tail")};
+    clear_deferred_failures(queue);
+    return queue;
+  }
+  void append_deferred_failures(const DeferredFailures &queue, llvm::Value *first, llvm::Value *last) {
+    auto *extend = block("defer.failures.extend"), *start = block("defer.failures.start"), *done = block("defer.failures.appended");
+    auto *tail = load(queue.tail);
+    b_.CreateCondBr(b_.CreateIsNull(tail), start, extend);
+    b_.SetInsertPoint(start);
+    b_.CreateStore(first, queue.head);
+    b_.CreateBr(done);
+    b_.SetInsertPoint(extend);
+    b_.CreateStore(first, deferred_failure_field(tail, failure_next));
+    b_.CreateBr(done);
+    b_.SetInsertPoint(done);
+    b_.CreateStore(last, queue.tail);
+  }
+  void retire_deferred_failure(llvm::Value *node) {
+    auto *backing = b_.CreateLoad(b_.getPtrTy(), deferred_failure_field(node, failure_backing));
+    auto *release = block("defer.record.release"), *done = block("defer.record.released");
+    b_.CreateCondBr(b_.CreateIsNull(backing), done, release);
+    b_.SetInsertPoint(release);
+    b_.CreateCall(runtime("cod_lang_defer_free", b_.getVoidTy(), {b_.getPtrTy()}), {backing});
+    b_.CreateBr(done);
+    b_.SetInsertPoint(done);
+  }
+  void finish_deferred_phase(const DeferredFailures &queue, llvm::Value *node) {
+    auto *failed = block("defer.failure.save"), *normal = block("defer.phase.normal"), *done = block("defer.phase.done");
+    b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2)), failed, normal);
+    b_.SetInsertPoint(failed);
+    auto *owner = owned_failures_ ? take_failure_owner(b_, completion_.failure_owner) : nullptr;
+    auto *failure = outcome(empty_scalar(), load(completion_.category), load(completion_.site), load(completion_.fatal),
+                            load(completion_.requested), load(completion_.available), load(completion_.cause), nullptr, owner);
+    b_.CreateStore(failure, deferred_failure_field(node, failure_outcome));
+    b_.CreateStore(null_pointer(), deferred_failure_field(node, failure_next));
+    auto *kind = b_.CreateSelect(load(completion_.has_return), b_.getInt8(1), b_.getInt8(0));
+    if (protected_outcomes_)
+      kind = b_.CreateSelect(b_.CreateIsNotNull(load(completion_.transfer)), b_.getInt8(3), kind);
+    b_.CreateStore(kind, completion_.kind);
+    b_.CreateStore(integer(0), completion_.category);
+    b_.CreateStore(null_pointer(), completion_.fatal);
+    append_deferred_failures(queue, node, node);
+    b_.CreateBr(done);
+    b_.SetInsertPoint(normal);
+    retire_deferred_failure(node);
+    b_.CreateBr(done);
+    b_.SetInsertPoint(done);
+  }
+  llvm::Value *matches_deferred_handler(const Expression &entry, llvm::Value *failure) {
+    auto *category = b_.CreateExtractValue(failure, 1);
+    llvm::Value *matches = b_.getFalse();
+    for (const auto &clause : std::span{entry.children}.subspan(1)) {
+      if (clause->kind != Expression::Kind::handler) break;
+      auto *selected = choose(*clause, {}, choices(*clause, {}), b_.getInt1Ty(), [&](const Choice &choice) {
+        return catch_matches(category, choice.operation->type.identity);
+      });
+      matches = b_.CreateOr(matches, selected);
+    }
+    return b_.CreateAnd(matches, b_.CreateAnd(b_.CreateICmpNE(category, integer(0)),
+                        b_.CreateIsNull(b_.CreateExtractValue(failure, 3))));
+  }
+  void visit_deferred_failures(const Expression &entry, const DeferredFailures &queue, const auto &run_action) {
+    auto *incoming = slot(b_.getPtrTy(), "defer.visit.incoming");
+    b_.CreateStore(load(queue.head), incoming);
+    clear_deferred_failures(queue);
+    const auto outgoing = deferred_failures();
+    auto *scan = block("defer.visit.next"), *test = block("defer.visit.match"), *done = block("defer.visit.done");
+    b_.CreateBr(scan);
+    b_.SetInsertPoint(scan);
+    auto *node = load(incoming);
+    b_.CreateCondBr(b_.CreateIsNull(node), done, test);
+    b_.SetInsertPoint(test);
+    b_.CreateStore(b_.CreateLoad(b_.getPtrTy(), deferred_failure_field(node, failure_next)), incoming);
+    auto *failure = b_.CreateLoad(outcome_, deferred_failure_field(node, failure_outcome));
+    auto *handle = block("defer.visit.handle"), *keep = block("defer.visit.keep");
+    b_.CreateCondBr(matches_deferred_handler(entry, failure), handle, keep);
+    b_.SetInsertPoint(keep);
+    b_.CreateStore(null_pointer(), deferred_failure_field(node, failure_next));
+    append_deferred_failures(queue, node, node);
+    b_.CreateBr(scan);
+    b_.SetInsertPoint(handle);
+    save_abrupt(failure);
+    run_action([&] { emit_finally(entry, Projection::value, true); }, b_.getTrue());
+    finish_deferred_phase(outgoing, node);
+    b_.CreateBr(scan);
+    b_.SetInsertPoint(done);
+    auto *first = load(outgoing.head);
+    auto *append = block("defer.visit.outputs"), *next = block("defer.visit.completed");
+    b_.CreateCondBr(b_.CreateIsNull(first), next, append);
+    b_.SetInsertPoint(append);
+    append_deferred_failures(queue, first, load(outgoing.tail));
+    b_.CreateBr(next);
+    b_.SetInsertPoint(next);
+  }
+  void restore_deferred_residual(const DeferredFailures &queue) {
+    auto *tail = load(queue.tail);
+    auto *residual = block("defer.residual"), *scan = block("defer.residual.next"), *done = block("defer.residual.done");
+    b_.CreateCondBr(b_.CreateIsNull(tail), done, residual);
+    b_.SetInsertPoint(residual);
+    // Residual aggregation has its own source and ownership contract. Retain
+    // the existing terminal outcome for the admitted residual boundary.
+    save_abrupt(b_.CreateLoad(outcome_, deferred_failure_field(tail, failure_outcome)));
+    b_.CreateBr(scan);
+    b_.SetInsertPoint(scan);
+    auto *node = load(queue.head);
+    auto *release = block("defer.residual.release");
+    b_.CreateCondBr(b_.CreateIsNull(node), done, release);
+    b_.SetInsertPoint(release);
+    b_.CreateStore(b_.CreateLoad(b_.getPtrTy(), deferred_failure_field(node, failure_next)), queue.head);
+    if (owned_failures_) {
+      auto *old = b_.CreateLoad(outcome_, deferred_failure_field(node, failure_outcome));
+      release_failure_owner(b_, b_.CreateSelect(b_.CreateICmpEQ(node, tail), null_pointer(),
+                                                 b_.CreateExtractValue(old, failure_owner_field())));
+    }
+    retire_deferred_failure(node);
+    b_.CreateBr(scan);
+    b_.SetInsertPoint(done);
+  }
   void drain(Scope &scope) {
     b_.SetInsertPoint(scope.cleanup);
     if (scope.actions.empty()) return;
     auto *next_entry = scope.cleanup;
     llvm::AllocaInst *body_pending = nullptr;
     CompletionState<llvm::Value *> body_outcome;
+    DeferredFailures failures{};
     if (std::ranges::any_of(scope.actions, [](const auto &entry) { return !entry.native_constructor; })) {
       // Suspend the ordinary failure for the whole pass. The active failure
       // during the pass always comes from an invoked cleanup action.
@@ -1549,25 +1670,12 @@ class LLVMEmission {
       b_.CreateStore(integer(0), completion_.category);
       b_.CreateStore(null_pointer(), completion_.fatal);
       if (owned_failures_) b_.CreateStore(null_pointer(), completion_.failure_owner);
+      failures = deferred_failures();
       next_entry = block("defer.next");
       b_.CreateBr(next_entry);
       b_.SetInsertPoint(next_entry);
     }
-    const auto run_action = [&](const auto &emit, const Expression *handler_entry = nullptr) {
-      llvm::Value *arrives = nullptr;
-      if (handler_entry) {
-        auto *category = load(completion_.category);
-        llvm::Value *matches = b_.getFalse();
-        for (const auto &clause : std::span{handler_entry->children}.subspan(1)) {
-          if (clause->kind != Expression::Kind::handler) break;
-          auto *selected = choose(*clause, {}, choices(*clause, {}), b_.getInt1Ty(), [&](const Choice &choice) {
-            return catch_matches(category, choice.operation->type.identity);
-          });
-          matches = b_.CreateOr(matches, selected);
-        }
-        arrives = b_.CreateAnd(matches, b_.CreateAnd(b_.CreateICmpNE(category, integer(0)),
-                                b_.CreateICmpEQ(load(completion_.fatal), null_pointer())));
-      }
+    const auto run_action = [&](const auto &emit, llvm::Value *arrives = nullptr) {
       auto *replaces_body = complete_cleanup(emit, CleanupBoundary::deferred, arrives);
       auto *pending = load(body_pending);
       if (owned_failures_)
@@ -1607,6 +1715,13 @@ class LLVMEmission {
       auto *run = block("defer.invoke");
       dispatch->addCase(integer(i), run);
       b_.SetInsertPoint(run);
+      auto *failure_node = b_.CreateStructGEP(descriptor.layout, record, 1);
+      b_.CreateStore(descriptor.activation_record ? null_pointer() : record, deferred_failure_field(failure_node, failure_backing));
+      const auto run_entry = [&](const auto &emit) {
+        run_action(emit);
+        finish_deferred_phase(failures, failure_node);
+        b_.CreateBr(next_entry);
+      };
       const ContextSelection selection(contexts_);
       for (const auto &context : selection.all())
         if (context.at(descriptor.action).captures == descriptor.captures &&
@@ -1614,48 +1729,48 @@ class LLVMEmission {
           contexts_.push_back(context);
       if (body.kind == Expression::Kind::block) {
         std::vector<std::pair<size_t, llvm::AllocaInst *>> bindings;
-        size_t field = 1;
+        size_t field = first_deferred_operand;
         for (const auto id : descriptor.captures) {
           auto *captured = slot(scalar_, "defer.caught");
           b_.CreateStore(b_.CreateLoad(scalar_, b_.CreateStructGEP(descriptor.layout, record, field++)), captured);
           bindings.emplace_back(id, storage_.at(id));
           storage_[id] = captured;
         }
-        if (!descriptor.activation_record) release_heap_record();
-        run_action([&] {
+        if (descriptor.action->deferred_catch()) {
+          visit_deferred_failures(*descriptor.action, failures, run_action);
+          if (const auto *finalizer = descriptor.action->deferred_finalizer())
+            run_entry([&] { emit_expression(*finalizer, Projection::value, true); });
+          else {
+            retire_deferred_failure(failure_node);
+            b_.CreateBr(next_entry);
+          }
+        } else run_entry([&] {
           if (descriptor.action->children.size() == 1) emit_expression(body, Projection::value, true);
           else emit_finally(*descriptor.action, Projection::value, true);
-        }, descriptor.action->deferred_catch() ? descriptor.action : nullptr);
-        if (const auto *finalizer = descriptor.action->deferred_finalizer())
-          run_action([&] { emit_expression(*finalizer, Projection::value, true); });
+        });
         for (const auto &[id, place] : bindings) storage_[id] = place;
-        b_.CreateBr(next_entry);
         continue;
       }
       std::vector<llvm::Value *> arguments;
       for (size_t j = 0; j < prepared_count(body); ++j) {
-        auto *field = descriptor.layout->getElementType(j + 1);
-        auto *value = b_.CreateLoad(field, b_.CreateStructGEP(descriptor.layout, record, j + 1));
+        auto *field = descriptor.layout->getElementType(j + first_deferred_operand);
+        auto *value = b_.CreateLoad(field, b_.CreateStructGEP(descriptor.layout, record, j + first_deferred_operand));
         if (field == native_handle_pair()) {
           auto *loan = slot(field, "defer.native.loan");
           b_.CreateStore(value, loan);
           arguments.push_back(pack_view(loan, *body.children[j]));
         } else arguments.push_back(value);
       }
-      // Prepared values and checked borrowed addresses do not refer into their record.
-      if (!descriptor.activation_record) release_heap_record();
       if (contexts_.front().at(&body).native_call) {
-        run_action([&] { emit_native_call(body, &arguments); });
-        b_.CreateBr(next_entry);
+        run_entry([&] { emit_native_call(body, &arguments); });
         continue;
       }
       if (body.kind == Expression::Kind::transfer || body.kind == Expression::Kind::rebind) {
         if (body.kind == Expression::Kind::transfer) arguments[1] = own_value(arguments[1]);
-        run_action([&] { assign_prepared(body, arguments); });
-        b_.CreateBr(next_entry);
+        run_entry([&] { assign_prepared(body, arguments); });
         continue;
       }
-      run_action([&] {
+      run_entry([&] {
         if (std::any_of(contexts_.begin(), contexts_.end(), [&](const auto &context) {
               const auto &call = context.at(&body);
               return call.destination_arguments && std::any_of(call.arguments.begin(), call.arguments.end(),
@@ -1671,7 +1786,6 @@ class LLVMEmission {
         b_.SetInsertPoint(replace); save_abrupt(result); b_.CreateBr(done);
         b_.SetInsertPoint(done);
       });
-      b_.CreateBr(next_entry);
     }
     b_.SetInsertPoint(invalid);
     if (std::ranges::none_of(scope.actions, [](const auto &action) { return action.native_constructor || action.activation_record; }))
@@ -1680,6 +1794,7 @@ class LLVMEmission {
     b_.CreateBr(next_entry);
     b_.SetInsertPoint(done);
     if (body_pending) {
+      restore_deferred_residual(failures);
       auto *resume = block("defer.resume.body"), *discard = block("defer.discard.body"), *completed = block("defer.completed");
       auto *deferred_failure = b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2));
       b_.CreateCondBr(b_.CreateAnd(load(body_pending), b_.CreateNot(deferred_failure)), resume, discard);
@@ -3500,8 +3615,8 @@ class LLVMEmission {
       }
       prepare_cleanup_record(*scope_, prepared, std::distance(scope_->actions.begin(), record));
       for (size_t i = 0; i < arguments.size(); ++i) {
-        auto *field = record->layout->getElementType(i + 1);
-        auto *destination = b_.CreateStructGEP(record->layout, prepared, i + 1);
+        auto *field = record->layout->getElementType(i + first_deferred_operand);
+        auto *destination = b_.CreateStructGEP(record->layout, prepared, i + first_deferred_operand);
         if (field == native_handle_pair()) b_.CreateStore(b_.CreateLoad(field, view_address(arguments[i])), destination);
         else {
           b_.CreateStore(arguments[i], destination);

@@ -13,6 +13,7 @@
 #include <optional>
 #include <set>
 #include <span>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -84,7 +85,7 @@ struct SelectionConditions {
 // they are resolved with the same relation used by boolean payload evidence.
 struct ExceptionFacts {
   struct Origin {
-    enum class Kind { constant, input, arrival, payload } kind = Kind::constant;
+    enum class Kind { constant, input, arrival, payload, deferred_input } kind = Kind::constant;
     std::optional<size_t> action = {};
     size_t index = 0;
     SelectionConditions conditions{};
@@ -109,6 +110,11 @@ struct ExceptionFacts {
   }
   static ExceptionFacts arrival(const std::set<size_t> &categories, std::optional<size_t> action = {}) {
     ExceptionFacts result; result.add({Origin::Kind::arrival, action}, categories);
+    return result;
+  }
+  static ExceptionFacts deferred_input(size_t index, size_t category) {
+    ExceptionFacts result;
+    result.add({Origin::Kind::deferred_input, {}, index}, {category});
     return result;
   }
   void merge(const ExceptionFacts &other) { for (const auto &[origin, categories] : other.terms) add(origin, categories); }
@@ -158,10 +164,15 @@ struct ExceptionFacts {
   }
   // Empty provisional summaries cannot exclude a conditional read path.
   ExceptionFacts through(const std::map<size_t, ExceptionFacts> &values, const ExceptionFacts &failure,
-                         bool closed = false, bool conservative = false) const {
+                         bool closed = false, bool conservative = false,
+                         std::span<const ExceptionFacts> deferred = {}) const {
     ExceptionFacts result;
     for (const auto &[origin, categories] : terms) {
       if (origin.kind == Origin::Kind::arrival && !origin.action) result.merge((conservative && failure.empty() ? ExceptionFacts{categories} : failure).restricted(categories).guarded(origin.conditions));
+      else if (origin.kind == Origin::Kind::deferred_input && origin.index < deferred.size()) {
+        const auto &value = deferred[origin.index];
+        result.merge((conservative && value.empty() ? ExceptionFacts{categories} : value).restricted(categories).guarded(origin.conditions));
+      }
       else if (origin.kind == Origin::Kind::payload && !origin.action) {
         const auto found = values.find(origin.index);
         if (found != values.end()) result.merge((conservative && found->second.empty() ? ExceptionFacts{categories} : found->second).restricted(categories).guarded(origin.conditions));
@@ -187,6 +198,7 @@ struct ExceptionFacts {
   bool unresolved() const {
     return std::any_of(terms.begin(), terms.end(), [](const auto &term) {
       return term.first.kind == Origin::Kind::arrival || term.first.kind == Origin::Kind::payload ||
+          term.first.kind == Origin::Kind::deferred_input ||
           !term.first.conditions.terms.empty();
     });
   }
@@ -1197,6 +1209,7 @@ public:
     bool uncovered_deferred_root = false;
     bool observes_return = false;
     bool raises_deferred_failure = false;
+    std::vector<ExceptionFacts> queued_failures{};
     // Necessary immutable input facts for reaching this queue completion.
     ConditionClauses reaching{ConditionFacts{}};
     // Necessary Boolean observations for this completion, relative to action entry.
@@ -1232,6 +1245,7 @@ public:
     template <typename Transform, typename ProofTransform> void transform_values(const Transform &transform, const ProofTransform &proof_transform) {
       returned.value = transform(returned.value);
       thrown = transform(thrown);
+      for (auto &failure : queued_failures) failure = transform(failure);
       for (auto &[target, value] : payloads) value = transform(value);
       transform_conditions([&](const auto &clauses) {
         ConditionClauses result;
@@ -1265,18 +1279,33 @@ public:
   // Checked deferred arrivals have a different obligation from ordinary
   // scope-body failures. Declared roots also have hypothetical arrivals.
   enum class DeferredCoverage { none, checked, declared_root };
+  struct DeferredOccurrence {
+    size_t reason;
+    DeferredCoverage coverage = DeferredCoverage::none;
+    auto operator<=>(const DeferredOccurrence &) const = default;
+  };
+  // This bounds the proof of growing registration cycles. Native delivery
+  // uses one record per successful registration.
+  static constexpr size_t deferred_proof_depth = 3;
   struct DrainState {
     size_t encoded;
-    DeferredCoverage coverage = DeferredCoverage::none;
     size_t body_failure = 0;
+    std::vector<DeferredOccurrence> pending{};
+    bool fifo = false;
+    bool cyclic = false;
+    bool unproved = false;
+    bool visited_multiple = false;
     Completion active() const { return Completion::from(encoded); }
-    bool resumes_body_failure() const { return body_failure && !active().failed(); }
+    bool resumes_body_failure() const { return body_failure && pending.empty(); }
     Completion completion() const {
       const auto current = active();
-      return resumes_body_failure() ? Completion{body_failure, current.returned} : current;
+      if (!pending.empty()) return {pending.back().reason, current.returned};
+      return body_failure ? Completion{body_failure, current.returned} : current;
     }
-    bool has_deferred_failure() const { return active().failed(); }
-    bool pending_checked() const { return coverage == DeferredCoverage::checked || coverage == DeferredCoverage::declared_root; }
+    bool has_deferred_failure() const { return !pending.empty(); }
+    bool pending_checked() const {
+      return std::ranges::any_of(pending, [](const auto &entry) { return entry.coverage != DeferredCoverage::none; });
+    }
     auto operator<=>(const DrainState &) const = default;
   };
   Targets project_observed_return(Effects &effects, const Returned &incoming, const Selections &entry) const {
@@ -1309,9 +1338,19 @@ private:
   std::vector<std::optional<size_t>> reads_;
   using Outcomes = std::map<DrainState, Effects>;
   std::map<DrainState, Outcomes> identities_;
+  Effects preserve_queue(Effects effects, const DrainState &state) const {
+    effects.queued_failures.clear();
+    for (size_t i = 0; i < state.pending.size(); ++i) {
+      const Completion occurrence{state.pending[i].reason};
+      effects.queued_failures.push_back(occurrence.exception() ? ExceptionFacts::deferred_input(i, occurrence.category())
+                                                               : ExceptionFacts{});
+    }
+    effects.needs_checked_cleanup_proof |= state.unproved;
+    return effects;
+  }
   const Outcomes &identity(DrainState completion) {
     auto [entry, inserted] = identities_.try_emplace(completion);
-    if (inserted) entry->second.emplace(completion, preserve_pending({}));
+    if (inserted) entry->second.emplace(completion, preserve_queue(preserve_pending({}), completion));
     return entry->second;
   }
   using QueueState = std::pair<size_t, DrainState>;
@@ -1322,24 +1361,63 @@ private:
   // New nodes leave existing dependencies intact. Changes to backedges,
   // action definitions or the observation projection can revise old results.
   std::map<QueueState, SolvedState> solved_;
-  DrainState deferred_coverage(DrainState state, const Action &action, bool receives,
-                               const Path &path, Completion outgoing, Effects &effects) const {
-    const auto incoming = state.active();
-    const bool preserves = incoming.failed() && !receives && !path.completion.failed();
-    if ((state.pending_checked() && !receives && !preserves) ||
-        (receives && state.coverage == DeferredCoverage::declared_root && !action.catches_root))
-      effects.needs_checked_cleanup_proof = true;
-    state.encoded = outgoing.index();
-    if (path.completion.returned || (path.completion.reason && !path.completion.failed())) state.body_failure = 0;
-    if (!preserves) {
-      state.coverage = DeferredCoverage::none;
-      if (outgoing.exception() &&
-          (exception_types_[outgoing.category()].checked || !effects.declared_failures.empty())) {
-        if (incoming.failed() && !receives) effects.needs_checked_cleanup_proof = true;
-        state.coverage = DeferredCoverage::checked;
+  std::pair<bool, bool> defer_graph(size_t queue) const {
+    bool handles_failures = false, cyclic = false;
+    std::set<size_t> visited;
+    std::vector<size_t> work{queue};
+    while (!work.empty()) {
+      const auto id = work.back();
+      work.pop_back();
+      if (!id || !visited.insert(id).second) continue;
+      const auto &node = queues_.at(id);
+      if (node.action) handles_failures |= actions_.at(*node.action).bodyless_catch;
+      for (const auto prior : node.previous) {
+        cyclic |= prior >= id;
+        work.push_back(prior);
       }
     }
-    return state;
+    return {handles_failures, cyclic};
+  }
+  void advance_deferred_phase(DrainState &state, const Action &action, size_t action_id,
+                              std::optional<size_t> selected, Completion completed, Effects &effects) const {
+    const auto incoming = state.active();
+    if (completed.returned || (completed.reason && !completed.failed())) state.body_failure = 0;
+    auto resumed = completed.failed() || !completed.reason ? incoming : completed;
+    if (completed.failed() && completed.returned && !incoming.protected_here()) resumed = {1, true};
+    if (incoming.protected_here()) resumed.reason = incoming.reason;
+    state.encoded = resumed.index();
+
+    ExceptionFacts arrival;
+    if (selected) {
+      const auto &occurrence = state.pending[*selected];
+      arrival = effects.queued_failures[*selected];
+      if (occurrence.coverage == DeferredCoverage::declared_root && !action.catches_root)
+        effects.needs_checked_cleanup_proof = true;
+      state.pending.erase(state.pending.begin() + *selected);
+      effects.queued_failures.erase(effects.queued_failures.begin() + *selected);
+    }
+    effects.transform_values([&](const auto &value) { return value.enter(action_id, arrival); });
+    if (!completed.failed()) return;
+
+    const auto coverage = completed.exception() &&
+        (exception_types_[completed.category()].checked || !effects.declared_failures.empty())
+        ? DeferredCoverage::checked : DeferredCoverage::none;
+    if (!state.fifo && !state.pending.empty()) {
+      // Without a handler the existing residual outcome is the last one.
+      // An earlier checked failure still requires coverage in this pass.
+      if (state.pending_checked() || coverage != DeferredCoverage::none)
+        effects.needs_checked_cleanup_proof = true;
+      state.pending.clear();
+      effects.queued_failures.clear();
+    }
+    if (state.cyclic && state.pending.size() == deferred_proof_depth) {
+      state.unproved = true;
+      effects.needs_checked_cleanup_proof = true;
+      return;
+    }
+    state.pending.push_back({completed.reason, coverage});
+    state.visited_multiple |= state.pending.size() > 1;
+    effects.queued_failures.push_back(completed.exception() ? effects.thrown : ExceptionFacts{});
   }
   static ConditionClauses intersect_reaching(const ConditionClauses &left, const ConditionClauses &right) {
     if (unconditional(left)) return right;
@@ -1386,8 +1464,8 @@ private:
       if (binding == pending_return_selection) return observed;
       return first.selections.selection_on_exit(binding);
     });
-    next.transform_values([&](const auto &value) { return value.through(first.payloads, first.thrown); },
-        [&](const auto &value) { return value.through(first.payloads, first.thrown, false, true); });
+    next.transform_values([&](const auto &value) { return value.through(first.payloads, first.thrown, false, false, first.queued_failures); },
+        [&](const auto &value) { return value.through(first.payloads, first.thrown, false, true, first.queued_failures); });
     next.transform_conditions([&](const auto &clauses) { return through_conditions(clauses, first.booleans); });
     for (const auto &[read, known] : next.reads) {
       const auto place = read_target(read);
@@ -1410,10 +1488,12 @@ private:
     result.returned.initialize_from_observation(next.selections);
     result.returned.advance(next.selections);
     result.selections.then(next.selections, result.initialized);
-    result.unknown_thrown = first.unknown_thrown || second.unknown_thrown || second.thrown.reads_unknown(first.payloads);
+    result.unknown_thrown = first.unknown_thrown || second.unknown_thrown || second.thrown.reads_unknown(first.payloads) ||
+        std::ranges::any_of(second.queued_failures, [&](const auto &value) { return value.reads_unknown(first.payloads); });
     result.returned.then(next.returned);
     result.returned.initialize(result.initialized, result.selections);
     result.thrown = next.thrown;
+    result.queued_failures = std::move(next.queued_failures);
     for (auto &[target, value] : next.payloads) result.payloads[target] = std::move(value);
     for (auto &[target, value] : next.booleans) result.booleans[target] = std::move(value);
     if (!unconditional(result.reaching))
@@ -1431,6 +1511,7 @@ private:
     const auto previous_uninitialized_captures = known.uninitialized_captures;
     const auto previous_returned = known.returned;
     const auto previous_thrown = known.thrown;
+    const auto previous_queued = known.queued_failures;
     const auto previous_unknown_thrown = known.unknown_thrown;
     const auto previous_payloads = known.payloads;
     const auto previous_payload_writes = known.payload_writes;
@@ -1462,6 +1543,7 @@ private:
     std::erase_if(known.present, [&](size_t id) { return !effects.present.contains(id); });
     known.returned.merge(effects.returned);
     known.thrown.merge(effects.thrown);
+    for (size_t i = 0; i < known.queued_failures.size(); ++i) known.queued_failures[i].merge(effects.queued_failures[i]);
     known.unknown_thrown = known.unknown_thrown || effects.unknown_thrown;
     for (auto &[target, value] : known.payloads)
       if (!effects.payloads.contains(target)) value.merge(ExceptionFacts::payload(target, categories_));
@@ -1485,7 +1567,7 @@ private:
     known.resolve_initialization();
     return previous_reads != known.reads || previous_initialized != known.initialized || previous_uninitialized != known.uninitialized ||
         previous_uninitialized_captures != known.uninitialized_captures ||
-        previous_returned != known.returned || previous_thrown != known.thrown || previous_unknown_thrown != known.unknown_thrown || previous_payloads != known.payloads ||
+        previous_returned != known.returned || previous_thrown != known.thrown || previous_queued != known.queued_failures || previous_unknown_thrown != known.unknown_thrown || previous_payloads != known.payloads ||
         previous_selections != known.selections || previous_symbols != known.symbols || previous_payload_writes != known.payload_writes ||
         previous_present != known.present || previous_booleans != known.booleans || previous_declared != known.declared_failures ||
         previous_checked_cleanup != known.needs_checked_cleanup_proof || previous_uncovered_root != known.uncovered_deferred_root ||
@@ -1563,11 +1645,14 @@ public:
     queues_.push_back({{entry}, {}}); return queues_.size() - 1;
   }
   void backedge(size_t header, size_t body) { solved_.clear(); queues_.at(header).previous.push_back(body); }
-  const Outcomes &apply(size_t queue, Completion input) {
-    const DrainState ordinary = input.failed()
-        ? DrainState{Completion{0, input.returned}.index(), DeferredCoverage::none, input.reason}
-        : DrainState{input.index()};
+  const Outcomes &apply(size_t queue, Completion input, bool proving = true) {
+    DrainState ordinary{(input.failed() ? Completion{0, input.returned} : input).index(), input.failed() ? input.reason : 0};
     if (!queue) return identity(ordinary);
+    std::tie(ordinary.fifo, ordinary.cyclic) = defer_graph(queue);
+    // Discovery uses the call signature's broad failure envelope before
+    // executable call effects have closed. Only the coverage pass expands
+    // those arrivals into their ordered positions.
+    if (!proving) ordinary.fifo = false;
     const QueueState root{queue, ordinary};
     const auto [entry, inserted] = solved_.try_emplace(root);
     if (!inserted) return entry->second.outcomes;
@@ -1583,7 +1668,7 @@ public:
       const auto [conditions, project] = reaching.try_emplace(id);
       if (project) conditions->second = queue_conditions(node.reaching);
       const auto require = [&](size_t dependency, DrainState completion) -> const Outcomes & {
-        if (!dependency) return identity(completion);
+        if (!dependency || completion.unproved) return identity(completion);
         const QueueState needed{dependency, completion};
         const auto [found, fresh] = solved_.try_emplace(needed);
         found->second.dependents.insert(key);
@@ -1592,7 +1677,7 @@ public:
       };
       bool changed = false;
       if (!node.action) {
-        auto known = preserve_pending(Effects{{}, node.initialized});
+        auto known = preserve_queue(preserve_pending(Effects{{}, node.initialized}), state);
         known.uninitialized = node.uninitialized;
         known.reaching = conditions->second;
         known.selections.initialized_captures = node.initialized_captures;
@@ -1600,46 +1685,65 @@ public:
           changed = merge(result.outcomes, value, compose(known, effects)) || changed;
       } else {
         const auto &action = actions_.at(*node.action);
-        const auto incoming = state.active();
-        const bool receives = action.bodyless_catch && incoming.exception() && action.catches.contains(incoming.category());
-        const auto selected = deferred_input(incoming, receives, action.observes_return);
-        for (const auto &path : action.paths) {
-          if (path.input != selected) continue;
-          auto next = path.completion;
-          if (!next.reason) {
-            next = receives ?
-                Completion{incoming.returned ? size_t{1} : size_t{0}, incoming.returned} : incoming;
-          } else if (next.reason != 1) next.returned = next.returned || incoming.returned;
-          if (incoming.protected_here() && !next.failed()) next.reason = incoming.reason;
-          if (incoming.failed() && !receives && !path.completion.failed()) next.reason = incoming.reason;
-          auto effects = path.effects;
-          effects.reaching = intersect_reaching(effects.reaching, conditions->second);
-          const auto outgoing = deferred_coverage(state, action, receives, path, next, effects);
-          effects.observes_return |= action.observes_return;
-          effects.raises_deferred_failure |= path.completion.failed();
-          if (!next.exception()) effects.thrown.clear();
-          for (const auto &[intermediate, nested] : require(path.queue, outgoing)) {
-            auto invoked = compose(effects, nested);
-            invoked.enter_initialization(action_frame(*node.action));
-            invoked.enter_selection_guards(*node.action);
-            const auto arrival = receives
-                ? ExceptionFacts::arrival({incoming.category()}) : ExceptionFacts{};
-            invoked.transform_values([&](const auto &value) { return value.enter(*node.action, arrival); });
-            invoked.transform_conditions([&](const auto &clauses) { return enter_conditions(clauses, *node.action); });
-            invoked.action_reaching = enter_conditions(invoked.action_reaching, *node.action);
-            // Check a declared root against the remaining entries even if
-            // this executable path leaves no pending exception.
-            if (!effects.declared_failures.empty()) for (const auto category : categories_) {
-              const DrainState possible{Completion::failure(category, next.returned).index(), DeferredCoverage::declared_root};
-              for (const auto &[residual, evidence] : require(node.previous.front(), possible)) {
-                invoked.uncovered_deferred_root |= residual.pending_checked() || evidence.uncovered_deferred_root;
-                invoked.needs_checked_cleanup_proof |= evidence.needs_checked_cleanup_proof;
-              }
-            }
-            for (const auto &[value, previous] : require(node.previous.front(), intermediate))
-              changed = merge(result.outcomes, value, compose(invoked, previous)) || changed;
+        const auto phase = [&](const DrainState &from, const Effects &prefix, std::optional<size_t> selected,
+                               Outcomes &visited) {
+          if (from.unproved) {
+            merge(visited, from, prefix);
+            return;
           }
-        }
+          const auto input = deferred_input({selected ? from.pending[*selected].reason : 0, from.active().returned},
+                                           selected.has_value(), action.observes_return);
+          for (const auto &path : action.paths) {
+            if (path.input != input) continue;
+            auto outgoing = from;
+            auto effects = preserve_queue(path.effects, outgoing);
+            effects.reaching = intersect_reaching(effects.reaching, conditions->second);
+            effects.observes_return |= action.observes_return;
+            effects.raises_deferred_failure |= path.completion.failed();
+            advance_deferred_phase(outgoing, action, *node.action, selected, path.completion, effects);
+            for (const auto &[intermediate, nested] : require(path.queue, outgoing)) {
+              auto invoked = compose(effects, nested);
+              invoked.enter_initialization(action_frame(*node.action));
+              invoked.enter_selection_guards(*node.action);
+              invoked.transform_conditions([&](const auto &clauses) { return enter_conditions(clauses, *node.action); });
+              invoked.action_reaching = enter_conditions(invoked.action_reaching, *node.action);
+              // An explicit root declaration remains an obligation even on
+              // executable paths where the operation prepares no failure.
+              if (!effects.declared_failures.empty()) for (const auto category : categories_) {
+                auto possible = outgoing;
+                if (path.completion.failed()) possible.pending.pop_back();
+                possible.pending.push_back({Completion::failure(category).reason, DeferredCoverage::declared_root});
+                if (possible.cyclic && possible.pending.size() > deferred_proof_depth) possible.unproved = true;
+                for (const auto &[residual, evidence] : require(node.previous.front(), possible)) {
+                  invoked.uncovered_deferred_root |= residual.pending_checked() || evidence.uncovered_deferred_root;
+                  invoked.needs_checked_cleanup_proof |= evidence.needs_checked_cleanup_proof;
+                }
+              }
+              merge(visited, intermediate, compose(prefix, invoked));
+            }
+          }
+        };
+        const auto entry_effects = preserve_queue(preserve_pending({}), state);
+        Outcomes visited;
+        if (action.bodyless_catch) {
+          visited.emplace(state, entry_effects);
+          // The original length determines the visit. A matched entry is
+          // removed at the cursor and its outputs go behind the incoming suffix.
+          size_t cursor = 0;
+          for (const auto &occurrence : state.pending) {
+            const Completion failure{occurrence.reason};
+            if (!failure.exception() || !action.catches.contains(failure.category())) {
+              ++cursor;
+              continue;
+            }
+            Outcomes advanced;
+            for (const auto &[from, prefix] : visited) phase(from, prefix, cursor, advanced);
+            visited = std::move(advanced);
+          }
+        } else phase(state, entry_effects, {}, visited);
+        for (const auto &[intermediate, invoked] : visited)
+          for (const auto &[value, previous] : require(node.previous.front(), intermediate))
+            changed = merge(result.outcomes, value, compose(invoked, previous)) || changed;
       }
       // In a cyclic registration graph a later contribution can change an
       // earlier state. Recheck only the consumers of that state.

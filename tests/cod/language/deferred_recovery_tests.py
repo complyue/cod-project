@@ -21,6 +21,45 @@ proc read(ptr value:const u64 in O) -> void throws NullPointerException where {c
     return;
 }
 '''
+FIFO_FORWARDING = '''using "std:exceptions" { MissingReturnError, NullPointerException };
+using symbol "std:io" @print;
+
+func fail_missing_result() -> u64 {}
+proc fail_first(ptr value:const u64 in O) -> void throws NullPointerException where {const owner O} {
+    behave @print(value);
+    return;
+}
+proc fail_last(ptr value:const u64 in O) -> void throws NullPointerException where {const owner O} {
+    behave @print(value);
+    return;
+}
+
+proc run() -> void {
+    ptr missing:u64 = null in here;
+    val first_site <- 0u64;
+    val last_site <- 0u64;
+    try { fail_first(missing); } catch (e:const NullPointerException) { (first_site <- e.site):void; };
+    try { fail_last(missing); } catch (e:const NullPointerException) { (last_site <- e.site):void; };
+
+    defer catch (e:const NullPointerException) {
+              if (e.site == first_site) { behave @print(104u64); }
+              else { if (e.site == last_site) { behave @print(106u64); } else { behave @print(999u64); }; };
+          }
+          catch (e:const MissingReturnError) { behave @print(105u64); }
+          finally { behave @print(109u64); };
+    defer catch (e:const NullPointerException) {
+              if (e.site == first_site) { behave @print(204u64); }
+              else { if (e.site == last_site) { behave @print(206u64); } else { behave @print(998u64); }; };
+              throw e;
+          } finally { behave @print(209u64); };
+    defer fail_last(missing);
+    defer fail_missing_result();
+    defer fail_first(missing);
+    return;
+}
+
+run();
+'''
 runner.CASES = {
     "attached_catch_keeps_deferred_failure_pending": (CHECKED_READ + '''
 proc run() -> void {
@@ -109,7 +148,7 @@ proc run() -> u64 {
 }
 behave @print(run());
 ''', 0, '10\n20\n30\n31\n77\n', ''),
-    "separate_handler_and_finalizer_failures_need_fifo": (CHECKED_READ + '''
+    "separate_handler_and_finalizer_failures_reach_next_handler": (CHECKED_READ + '''
 proc run() -> void {
     ptr missing:u64 = null in here;
     defer catch (failure:const NullPointerException) { behave @print(30u64); };
@@ -119,7 +158,18 @@ proc run() -> void {
     return;
 }
 run();
-''', 2, '', 'coverage within the owning pass'),
+''', 0, '30\n30\n', ''),
+    "bodyless_handler_visits_each_failure_before_finalizer": (CHECKED_READ + '''
+proc run() -> void {
+    ptr missing:u64 = null in here;
+    defer catch (failure:const NullPointerException) { behave @print(1u64); }
+          finally { behave @print(2u64); };
+    defer read(missing);
+    defer read(missing);
+    return;
+}
+run();
+''', 0, '1\n1\n2\n', ''),
     "pending_return": (PRELUDE + 'proc f()->const i64{defer observe(1);defer catch(e:const MissingReturnError){observe(2);};defer missing();return 7;}observe(f());', 0, '2\n1\n7\n', WARN),
     "attached_body_runs_during_failure": (PRELUDE + 'try{{defer{observe(1);}catch(e:const MissingReturnError){observe(99);}finally{observe(2);};missing();{}}}catch(e:const MissingReturnError){observe(3);};', 0, '1\n2\n3\n', WARN),
     "own_body_failure": (PRELUDE + '{{defer{observe(1);missing();}catch(e:const MissingReturnError){observe(2);}finally{observe(3);};}};observe(4);', 0, '1\n2\n3\n4\n', WARN),
@@ -164,7 +214,40 @@ run();
     "checked_one_iteration": (PRELUDE + 'func f(e:NullPointerException)->void{for(i in 0..1){defer catch(x:const NullPointerException){};};defer{throw e;};}', 0, '', WARN),
     "checked_zero_iterations": (PRELUDE + 'func f(e:NullPointerException)->void{for(i in 0..0){defer catch(x:const NullPointerException){};};throw e;}', 2, '', 'requires a covering catch or throws declaration'),
     "checked_per_iteration": (PRELUDE + 'func f(e:NullPointerException)->void{for(i in 0..3){ {{defer catch(x:const NullPointerException){};defer{throw e;};}}; };}', 0, '', WARN),
-    "checked_accumulated_failures_need_fifo": (PRELUDE + 'func f(e:NullPointerException)->void{defer catch(x:const NullPointerException){};for(i in 0..3){defer{throw e;};};}', 2, '', 'coverage within the owning pass'),
+    "selective_forwarding_keeps_unmatched_failure_ahead": (
+        FIFO_FORWARDING, 0, '204\n206\n209\n105\n104\n106\n109\n', WARN),
+    "finalizer_failure_follows_forwarded_failure": (
+        FIFO_FORWARDING.replace('} finally { behave @print(209u64); };',
+                                '} finally { behave @print(209u64); fail_last(missing); };')
+                       .replace('    defer fail_last(missing);\n', ''),
+        0, '204\n209\n105\n104\n106\n109\n', WARN),
+    "forwarded_owned_failures_keep_their_payloads": ('''
+using "std:exceptions" Exception;
+using symbol "std:io" @print;
+
+data DeferredFailure <: Exception { code:u64; }
+
+proc fail(code:u64) -> void throws DeferredFailure {
+    throw DeferredFailure { code <- code; };
+}
+
+proc run() -> void {
+    defer catch (e:DeferredFailure) { behave @print(e.code); }
+          catch (e) { behave @print(99u64); }
+          finally { behave @print(30u64); };
+    defer catch (e:DeferredFailure) {
+        if (e.code == 1u64) { (e.code <- 10u64):void; }
+        else { (e.code <- 20u64):void; };
+        throw;
+    };
+    defer fail(1u64);
+    defer fail(2u64);
+    return;
+}
+
+run();
+''', 0, '20\n10\n30\n', ''),
+    "checked_loop_failure_count_is_unproved": (PRELUDE + 'func f(e:NullPointerException)->void{defer catch(x:const NullPointerException){};for(i in 0..3){defer{throw e;};};}', 2, '', 'coverage within the owning pass'),
     "checked_finally_does_not_recover": (PRELUDE + 'func f(e:NullPointerException)->void{defer{}finally{};throw e;}', 2, '', 'requires a covering catch or throws declaration'),
 }
 runner.CASE_ARGUMENTS = {}

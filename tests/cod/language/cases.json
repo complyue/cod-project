@@ -3021,7 +3021,7 @@
     "file": "scopes/defer-category-body-npe.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "coverage within the owning pass"
+    "stderr_contains": "requires a covering catch or throws declaration"
   },
   {
     "file": "scopes/defer-category-action-npe.cod",
