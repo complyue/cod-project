@@ -125,6 +125,8 @@ class LLVMEmission {
   };
   std::vector<EmissionBinding> bindings_;
   std::map<size_t, llvm::Value *> owner_identities_;
+  llvm::AllocaInst *lexical_texts_ = nullptr;
+  bool owns_text_storage_ = false;
   std::map<size_t, llvm::AllocaInst *> caught_owners_;
   std::vector<llvm::AllocaInst *> parameter_values_;
   llvm::Value *query_environment_ = nullptr;
@@ -173,7 +175,6 @@ class LLVMEmission {
     llvm::AllocaInst *head;
     std::vector<CleanupAction> actions;
     Lifetime values;
-    llvm::AllocaInst *lexical_texts = nullptr;
   };
   llvm::StructType *cleanup_header_ = llvm::StructType::get(context_, {b_.getPtrTy(), b_.getInt64Ty()});
   Scope *scope_ = nullptr;
@@ -766,7 +767,18 @@ class LLVMEmission {
   const CheckedFrame &input_frame(size_t method) const {
     return program_->instances.at(program_->methods.at(method).instances.front()).frame;
   }
+  llvm::AllocaInst *lexical_text_owner() {
+    if (!lexical_texts_) {
+      lexical_texts_ = slot(b_.getPtrTy(), "owner.texts");
+      llvm::IRBuilder<> entry(lexical_texts_->getParent(), std::next(lexical_texts_->getIterator()));
+      entry.CreateStore(null_pointer(), lexical_texts_);
+    }
+    return lexical_texts_;
+  }
   llvm::Value *owner_identity(size_t owner, const Location &at) {
+    // In a program with text construction, the full scope's identity also
+    // carries its allocation head to calls with a proved lexical destination.
+    if (owner == 0 && owns_text_storage_) return lexical_text_owner();
     if (const auto found = owner_identities_.find(owner); found != owner_identities_.end()) return found->second;
     if (owner > null_target / 2) implementation_gap(at, "runtime identity for an owner without an input-bound actual context");
     // Admitted lexical cells have stable native storage. One activation-local
@@ -1704,9 +1716,15 @@ class LLVMEmission {
       scope.cleanup = draining;
     }
     drain(scope); release_values(scope.values); restore_effects(effects);
-    if (scope.lexical_texts) {
+    if (lexical_texts_) {
+      auto *head = load(lexical_texts_);
+      auto *release_text = block("text.release"), *done = block("text.released");
+      b_.CreateCondBr(b_.CreateIsNotNull(head), release_text, done);
+      b_.SetInsertPoint(release_text);
       auto release = runtime("cod_lang_lexical_text_release", b_.getVoidTy(), {b_.getPtrTy()});
-      b_.CreateCall(release, {load(scope.lexical_texts)});
+      b_.CreateCall(release, {head});
+      b_.CreateBr(done);
+      b_.SetInsertPoint(done);
     }
     scope_ = scope.parent; native_effect_scope_ = outer_native; control_ = control.parent; temporaries_ = outer_temporaries;
     if (requires_return) {
@@ -3109,14 +3127,16 @@ class LLVMEmission {
       if (fact.operand_type.kind == Type::string) {
         auto *source = emit_expression(*expr.children.front(), Projection::target);
         if (!reachable()) return nullptr;
-        if (!scope_->lexical_texts) {
-          scope_->lexical_texts = slot(b_.getPtrTy(), "scope.texts");
-          auto *head = scope_->lexical_texts;
-          llvm::IRBuilder<> entry(head->getParent(), std::next(head->getIterator()));
-          entry.CreateStore(null_pointer(), head);
+        std::map<size_t, std::vector<size_t>> destinations;
+        for (size_t i = 0; i < contexts_.size(); ++i) {
+          const auto &construction = contexts_[i].at(&expr);
+          if (construction.type != Type::never) destinations[construction.text_storage_owner.value()].push_back(i);
         }
+        auto *owner = contextual_value(expr, destinations, "text.owner", [&](size_t destination) -> llvm::Value * {
+          return owner_identity(destination, expr.at);
+        }, b_.getPtrTy());
         auto create = runtime("cod_lang_lexical_text_create", b_.getPtrTy(), {b_.getPtrTy(), b_.getPtrTy()});
-        auto *value = b_.CreateCall(create, {scope_->lexical_texts, source}, "text.created");
+        auto *value = b_.CreateCall(create, {owner, source}, "text.created");
         auto *ready = block("text.ready"), *failed = block("text.failed");
         b_.CreateCondBr(b_.CreateIsNotNull(value), ready, failed);
         b_.SetInsertPoint(failed);
@@ -3347,6 +3367,7 @@ class LLVMEmission {
     for (size_t i = 0; i < frame.inputs.size(); ++i) arguments_.push_back(function->getArg(i));
     b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr; control_ = nullptr;
     owner_identities_.clear();
+    lexical_texts_ = nullptr;
     size_t owner_index = frame.inputs.size();
     for (const auto &[owner, input] : frame.owners) owner_identities_[owner] = function->getArg(owner_index++);
     completion_ = {slot(scalar_, "return.value"), slot(b_.getInt64Ty(), "exception.category"),
@@ -3655,6 +3676,12 @@ class LLVMEmission {
 public:
   std::pair<std::string, std::string> emit(const CheckedProgram &program, bool emit_text, bool emit_bitcode, bool specialize = true, bool bounds_checks = true) {
     program_ = &program; specialize_ = specialize; bounds_checks_ = bounds_checks;
+    const auto constructs_text = [](const auto &operations) {
+      return std::ranges::any_of(operations, [](const auto &operation) { return operation.second.text_storage_owner.has_value(); });
+    };
+    owns_text_storage_ = constructs_text(program.entry) || std::ranges::any_of(program.instances, [&](const auto &instance) {
+      return constructs_text(instance.operations);
+    });
     protected_outcomes_ = std::ranges::any_of(program.methods, [](const auto &method) { return method.here_group && !method.instances.empty(); });
     owned_failures_ = program.exception_types.size() > exception_categories.size();
     case_scope_outcomes_ = std::ranges::any_of(program.methods, [](const auto &method) {

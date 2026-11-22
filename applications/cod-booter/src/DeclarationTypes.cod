@@ -4,7 +4,7 @@ using "ParserStorage.cod" {
     make_named_node, field_access_node, enum_declaration_node, type_assertion_node, literal_node, text_literal_node,
     narrow_integer_node, bool_node, call_node, here_call_node, compare_node, logical_not_node, logical_binary,
     case_node, case_arm_node, case_member_pattern, case_true_pattern, case_false_pattern, case_null_pattern,
-    readonly_declaration,
+    readonly_declaration, local_storage_binding,
 };
 using "NameResolution.cod" {
     NameBindings, NameWork, first_item, record_declaration, formal_binding, local_binding,
@@ -222,6 +222,30 @@ func remember_type(work:NameWork in W, at:u64, type:const DeclaredType in T) -> 
     (work[at].value_identity <- type.identity):void;
 }
 
+func readonly_owner_name(nodes:const ExprNodes in N, names:const NameBindings in B, at:u64) -> bool
+    where {const owner N, const owner B} {
+    return at != no_node() && names[at].kind == owner_binding() &&
+        nodes[names[at].declaration].number == readonly_declaration();
+}
+
+func check_text_receiver(nodes:const ExprNodes in N, names:const NameBindings in B,
+                         at:u64, report:DeclaredExpressionResult in R) -> bool
+    where {const owner N, const owner B, owner R} {
+    val binding <- nodes[at].left;
+    if (nodes[binding].kind != typed_name_node()) return true;
+    val annotation <- nodes[binding].right;
+    if (nodes[annotation].kind != owned_type_node()) return true;
+    val operand <- nodes[at].right;
+    if (operand == no_node()) return true;
+    val initializer <- ungrouped(nodes, operand);
+    if (nodes[initializer].kind != make_named_node() || names[nodes[initializer].left].kind != builtin_string())
+        return true;
+    val destination <- nodes[annotation].right;
+    if (readonly_owner_name(nodes, names, destination))
+        return declared_expression_failure(report, readonly_string_owner(), destination);
+    return true;
+}
+
 func check_text_construction(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
                               selected:const SelectedExports in E, work:const NameWork in W,
                               spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I,
@@ -229,8 +253,7 @@ func check_text_construction(source:const SourceBytes in S, nodes:const ExprNode
     where {const owner S, const owner N, const owner B, const owner E, const owner W, const owner P, const owner I, owner R} {
     val payload <- nodes[at].right;
     val owner_name <- nodes[payload].right;
-    if (owner_name != no_node() && names[owner_name].kind == owner_binding() &&
-        nodes[names[owner_name].declaration].number == readonly_declaration())
+    if (readonly_owner_name(nodes, names, owner_name))
         return declared_expression_failure(report, readonly_string_owner(), owner_name);
     val operand <- nodes[first_item(nodes, nodes[payload].left)].right;
     ref actual = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
@@ -340,6 +363,7 @@ export func check_declared_expressions(source:const SourceBytes in S, nodes:cons
     val kind <- 0u8;
     for (at in 0u64 .. used) {
         kind <- nodes[at].kind;
+        if (local_storage_binding(kind) && !check_text_receiver(nodes, names, at, report)) return false;
         if (kind == make_named_node() && names[nodes[at].left].kind == builtin_string() &&
             !check_text_construction(source, nodes, names, selected, work, spellings, interfaces, at, report)) return false;
         if (kind == type_assertion_node() &&
