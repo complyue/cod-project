@@ -32,7 +32,10 @@ inline bool nominal_exception(const Type &type) {
 }
 inline bool bits_type(const Type &type) { return scalar_type(type) || (type.kind == Type::exception && !nominal_exception(type)); }
 inline bool lexical_value_type(const Type &type) { return bits_type(type) || type.kind == Type::procedure; }
-enum class BuiltinOperation { none, unary, binary, identity, array_length, reference_swap, bits_swap, print, builder_append, lexical_result };
+enum class BuiltinOperation {
+  none, unary, binary, identity, array_length, reference_swap, bits_swap, print,
+  builder_append, lexical_result, text_size, text_byte, text_slice
+};
 // Nominal schema identities for a selected abstract target. An empty set carries no narrowing.
 using NominalTargets = std::set<size_t>;
 using AbstractSymbolTargets = std::map<size_t, NominalTargets>;
@@ -140,7 +143,7 @@ struct CheckedOperation {
   bool check_c_string = false;
   struct LexicalAllocation {
     size_t owner;
-    enum Kind { text, builder_snapshot, builder } kind;
+    enum Kind { text, builder_snapshot, builder, text_slice } kind;
     unsigned builder_inputs = 0;
     auto operator<=>(const LexicalAllocation &) const = default;
   };

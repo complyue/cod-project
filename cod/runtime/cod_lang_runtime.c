@@ -174,6 +174,23 @@ void *cod_lang_lexical_text_create(void **allocations, const void *input) {
     return &object->text;
 }
 
+static int utf8_boundary(const struct cod_text_view *text, uint64_t at) {
+    return at == text->size || (text->bytes[at] & 0xc0) != 0x80;
+}
+
+int cod_lang_lexical_text_slice(void **allocations, const void *input, uint64_t first, uint64_t past,
+                               void **result) {
+    const struct cod_text_view *source = input;
+    if (first > past || past > source->size || !utf8_boundary(source, first) || !utf8_boundary(source, past))
+        return COD_TEXT_SLICE_INVALID;
+    const uint64_t size = past - first;
+    const struct cod_text_view slice = {size ? source->bytes + first : NULL, size, size};
+    void *text = cod_lang_lexical_text_create(allocations, &slice);
+    if (!text) return COD_TEXT_SLICE_OUT_OF_MEMORY;
+    *result = text;
+    return COD_TEXT_SLICE_READY;
+}
+
 static void release_builder(void *object) {
     struct cod_lexical_builder *builder = object;
     free(builder->bytes);

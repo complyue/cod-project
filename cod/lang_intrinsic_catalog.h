@@ -9,9 +9,13 @@
 #define COD_LANG_IO_MODULE "std:io"
 #define COD_LANG_PRINT_NAME "print"
 #define COD_LANG_TEXT_STORAGE_MODULE "std:text-storage"
-#define COD_LANG_BUILDER_STORAGE_NAME "Utf8BuilderStorage"
-#define COD_LANG_BUILDER_APPEND_NAME "append_utf8"
-#define COD_LANG_LEXICAL_RESULT_NAME "result_in_scope"
+#define COD_LANG_TEXT_INTRINSICS(ENTRY) \
+  ENTRY(builder_storage, Utf8BuilderStorage, BUILDER_STORAGE, 11) \
+  ENTRY(builder_append, append_utf8, BUILDER_APPEND, 12) \
+  ENTRY(lexical_result, result_in_scope, LEXICAL_RESULT, 14) \
+  ENTRY(text_size, utf8_size, TEXT_SIZE, 15) \
+  ENTRY(text_byte, utf8_byte, TEXT_BYTE, 16) \
+  ENTRY(text_slice, utf8_slice, TEXT_SLICE, 17)
 
 /* Keep runtime categories and their public type facts in one definition. */
 #define COD_LANG_INTRINSIC_EXCEPTIONS(ENTRY) \
@@ -32,9 +36,9 @@
 enum cod_lang_export_kind {
   COD_LANG_EXCEPTION_TYPE_EXPORT = 1,
   COD_LANG_SYMBOL_EXPORT = 2,
-  COD_LANG_BUILDER_STORAGE_EXPORT = 11,
-  COD_LANG_BUILDER_APPEND_EXPORT = 12,
-  COD_LANG_LEXICAL_RESULT_EXPORT = 14
+#define COD_LANG_TEXT_EXPORT_KIND(key, spelling, kind, id) COD_LANG_ ## kind ## _EXPORT = id,
+  COD_LANG_TEXT_INTRINSICS(COD_LANG_TEXT_EXPORT_KIND)
+#undef COD_LANG_TEXT_EXPORT_KIND
 };
 
 enum cod_lang_intrinsic_symbol {
@@ -57,9 +61,9 @@ typedef struct cod_lang_intrinsic_spellings {
   char io[sizeof(COD_LANG_IO_MODULE)];
   char print[sizeof(COD_LANG_PRINT_NAME)];
   char text_storage[sizeof(COD_LANG_TEXT_STORAGE_MODULE)];
-  char builder_storage[sizeof(COD_LANG_BUILDER_STORAGE_NAME)];
-  char builder_append[sizeof(COD_LANG_BUILDER_APPEND_NAME)];
-  char lexical_result[sizeof(COD_LANG_LEXICAL_RESULT_NAME)];
+#define COD_LANG_TEXT_FIELD(key, spelling, kind, id) char key[sizeof(#spelling)];
+  COD_LANG_TEXT_INTRINSICS(COD_LANG_TEXT_FIELD)
+#undef COD_LANG_TEXT_FIELD
 #define COD_LANG_SPELLING_FIELD(key, spelling, id, checked) char key[sizeof(#spelling)];
   COD_LANG_INTRINSIC_EXCEPTIONS(COD_LANG_SPELLING_FIELD)
 #undef COD_LANG_SPELLING_FIELD
@@ -67,7 +71,10 @@ typedef struct cod_lang_intrinsic_spellings {
 
 static const cod_lang_intrinsic_spellings cod_lang_intrinsic_names = {
     COD_LANG_EXCEPTION_MODULE, COD_LANG_IO_MODULE, COD_LANG_PRINT_NAME,
-    COD_LANG_TEXT_STORAGE_MODULE, COD_LANG_BUILDER_STORAGE_NAME, COD_LANG_BUILDER_APPEND_NAME, COD_LANG_LEXICAL_RESULT_NAME,
+    COD_LANG_TEXT_STORAGE_MODULE,
+#define COD_LANG_TEXT_VALUE(key, spelling, kind, id) #spelling,
+    COD_LANG_TEXT_INTRINSICS(COD_LANG_TEXT_VALUE)
+#undef COD_LANG_TEXT_VALUE
 #define COD_LANG_SPELLING_VALUE(key, spelling, id, checked) #spelling,
     COD_LANG_INTRINSIC_EXCEPTIONS(COD_LANG_SPELLING_VALUE)
 #undef COD_LANG_SPELLING_VALUE
@@ -85,12 +92,11 @@ static const cod_lang_intrinsic_export cod_lang_intrinsic_exports[] = {
 #undef COD_LANG_EXCEPTION_EXPORT
     {COD_LANG_SPELLING_SPAN(io, COD_LANG_IO_MODULE), COD_LANG_SPELLING_SPAN(print, COD_LANG_PRINT_NAME),
         COD_LANG_PRINT_SYMBOL, COD_LANG_SYMBOL_EXPORT, 0, 0, 0, 0, 0, 0},
-    {COD_LANG_SPELLING_SPAN(text_storage, COD_LANG_TEXT_STORAGE_MODULE), COD_LANG_SPELLING_SPAN(builder_storage, COD_LANG_BUILDER_STORAGE_NAME),
-        0, COD_LANG_BUILDER_STORAGE_EXPORT, 0, 0, 0, 0, 0, 0},
-    {COD_LANG_SPELLING_SPAN(text_storage, COD_LANG_TEXT_STORAGE_MODULE), COD_LANG_SPELLING_SPAN(builder_append, COD_LANG_BUILDER_APPEND_NAME),
-        0, COD_LANG_BUILDER_APPEND_EXPORT, 0, 0, 0, 0, 0, 0},
-    {COD_LANG_SPELLING_SPAN(text_storage, COD_LANG_TEXT_STORAGE_MODULE), COD_LANG_SPELLING_SPAN(lexical_result, COD_LANG_LEXICAL_RESULT_NAME),
-        0, COD_LANG_LEXICAL_RESULT_EXPORT, 0, 0, 0, 0, 0, 0},
+#define COD_LANG_TEXT_EXPORT(key, spelling, kind, id) \
+    {COD_LANG_SPELLING_SPAN(text_storage, COD_LANG_TEXT_STORAGE_MODULE), COD_LANG_SPELLING_SPAN(key, #spelling), \
+        0, COD_LANG_ ## kind ## _EXPORT, 0, 0, 0, 0, 0, 0},
+    COD_LANG_TEXT_INTRINSICS(COD_LANG_TEXT_EXPORT)
+#undef COD_LANG_TEXT_EXPORT
 };
 
 #undef COD_LANG_SPELLING_SPAN
