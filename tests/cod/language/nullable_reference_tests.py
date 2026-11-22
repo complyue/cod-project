@@ -93,7 +93,7 @@ runner.CASES = {
     'finally_nullable_read': (PRE + 'ptr p:i64=null in here;try{try{}finally{behave @print(p);};}catch(e:const NullPointerException){behave @print(4);};', 0, '4\n', ''),
     'npe_value_roundtrip': (ERROR + 'val e<-error();behave @print(e.category);behave @print(e.cause_count);', 0, '4\n0\n', ''),
     'captured_nullable_exception_alias': (PRE + 'proc f()->void{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){ptr q=e;defer{behave @print((q is null));};q=null;{};};return;}f();', 0, 'true\n', ''),
-    'captured_nullable_alias_read': (PRE + 'proc f()->void throws NullPointerException{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){ptr q=e;defer{behave @print(q.category);};q=null;{};};}try{f();}catch(e:const NullPointerException){behave @print(4);};', 0, '4\n', ''),
+    'captured_nullable_alias_read': (PRE + 'proc f()->void{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){ptr q=e;defer catch(failure:const NullPointerException){behave @print(failure.category);};defer{behave @print(q.category);};q=null;{};};return;}f();', 0, '4\n', ''),
     'deferred_null_test': ('ptr p:i64=null in here;defer (is)(p,null);', 0, '', ''),
 }
 runner.CASE_SHADOWS = {

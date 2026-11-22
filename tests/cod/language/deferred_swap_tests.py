@@ -101,7 +101,7 @@ runner.CASES = {
  'null_check_requires_covering_handler': ('val x<-1;ptr p:i64=null in here;defer (<->)(x,p);',2,'','requires a covering catch'),
  'post_cleanup_checked_category_remains_possible': (EXCEPTIONS +
      'proc run()->void{val a:Exception<-error(),b:Exception<-absent();defer{throw a;};defer (<->)(a,b);}run();',
-     2, '', 'declared checked exception'),
+     2, '', 'coverage within the owning pass'),
 }
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {

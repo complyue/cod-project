@@ -39,7 +39,7 @@ runner.CASES = {
  'checked_query_no_invocation': (IO+NPE+'func (+)(x:u64,y:u64)->u64 throws NullPointerException;val x<-make local typeof(1u64+2u64){7u64};behave @print(x);',0,'7\n',''),
  'aborted_builtin_no_invocation': (IO+NPE+'func (+)(x:u64,y:u64)->u64 throws NullPointerException;func f()->u64{(+)({return 7u64;1u64},2u64);return 0u64;}behave @print(f());',0,'7\n',''),
  'aborted_method_no_invocation': (IO+NPE+'func (+)(x:u64,y:u64)->u64 throws NullPointerException;func (+)(x:u64,y:u64){return x;}func f()->u64{(+)({return 7u64;1u64},2u64);return 0u64;}behave @print(f());',0,'7\n',''),
- 'deferred_builtin_checked_obligation': (NPE+'func (+)(x:u64,y:u64)->u64 throws NullPointerException;defer (+)(1u64,2u64);',2,'','requires a covering catch or throws'),
+ 'deferred_builtin_checked_obligation': (NPE+'func (+)(x:u64,y:u64)->u64 throws NullPointerException;defer (+)(1u64,2u64);',2,'','coverage within the owning pass'),
  'deferred_builtin_caught': (IO+NPE+'func (+)(x:u64,y:u64)->u64 throws NullPointerException;{{defer{try{(+)(1u64,2u64);{}}catch(e:const NullPointerException){};};behave @print(7u64);}};',0,'7\n',''),
  'checked_method_obligation': (NPE+'func (+)(x:bool,y:bool)->bool throws NullPointerException;func (+)(x:bool,y:bool){return true;}false+true;',2,'','requires a covering catch or throws'),
  'method_keeps_own_throws': (NPE+'func (+)(x:u64,y:u64)->u64;func (+)(x:u64,y:u64)->u64 throws NullPointerException{return x;}',2,'','checked exception outside its callable declaration'),

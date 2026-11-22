@@ -51,7 +51,7 @@ runner.CASES = {
     'checked_throw_rejects': (TYPES+'symbol @saved:NullPointerException;proc fail()->void{throw @saved;}', 2, '', 'requires a covering catch or throws declaration'),
     'checked_common_rejects': (TYPES+COMMON+'proc fail()->void{throw @saved;}', 2, '', 'requires a covering catch or throws declaration'),
     'checked_dynamic_body_rejects': (TYPES+'symbol @saved:NullPointerException;proc build()->void{proc fail=proc()->void{throw @saved;};}', 2, '', 'requires a covering catch or throws declaration'),
-    'checked_defer_rejects': (TYPES+'symbol @saved:NullPointerException;proc fail()->void{defer{throw @saved;};}', 2, '', 'requires a covering catch or throws declaration'),
+    'checked_defer_rejects': (TYPES+'symbol @saved:NullPointerException;proc fail()->void{defer{throw @saved;};}', 2, '', 'coverage within the owning pass'),
     'checked_declaration_accepts': (TYPES+'symbol @saved:NullPointerException;proc fail()->void throws NullPointerException{throw @saved;}', 0, '', ''),
     'checked_catch_accepts': (TYPES+'symbol @saved:NullPointerException;proc fail()->void{try{throw @saved;}catch(e:const NullPointerException){};return;}', 0, '', ''),
     'checked_native_delivery': (IO+TYPES+ERROR+NULL_ERROR+'symbol @saved:NullPointerException;proc fail()->void throws NullPointerException{throw @saved;}'

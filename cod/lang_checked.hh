@@ -401,7 +401,6 @@ class ScalarChecker {
   std::vector<CallEffects::ReadSite> read_sites_;
   std::vector<Location> declared_sites_;
   std::map<const Expression *, size_t> declared_requirements_;
-  std::set<size_t> deferred_actions_with_checked_scopes_;
   bool delayed_ = false;
   size_t next_scope_ = 1;
   static constexpr size_t instance_limit = 4096;
@@ -5721,14 +5720,13 @@ class ScalarChecker {
     if (result.type != Type::never && lexical_.live) flow.paths.push_back({lexical_, {}, at, {0, false}});
     std::vector<LexicalState> normals, scans;
     std::vector<AbruptPath> exits;
-    auto declared = flow.declared;
     std::optional<Type> normal_type;
     for (const auto &path : flow.paths) for (const auto origin : path.state.inputs) {
       const auto queue = path.state.input_facts.at(origin).queues.at(scope);
       if (proving_ && checking_method_ && checking_method_->here_inputs() && !observed_.protected_defer_failure && cleanup_.has_actions(queue)) {
         const auto &outcomes = cleanup_.apply(queue, Completion{});
         observed_.protected_defer_failure = std::ranges::any_of(outcomes, [](const auto &outcome) {
-          return Completion::from(outcome.first).failed();
+          return outcome.first.completion().failed();
         });
       }
       std::vector<Completion> inputs;
@@ -5737,9 +5735,8 @@ class ScalarChecker {
       const bool scan_requested = case_scan && path.completion.reason == Completion::case_scan;
       if (path.exceptions.empty()) inputs.push_back(scan_requested ? Completion{} : path.completion);
       else for (const auto category : path.exceptions.possibilities()) inputs.push_back(Completion::failure(category, path.completion.returned));
-      for (const auto input : inputs) for (const auto &[encoded, effects] : cleanup_.apply(queue, input)) {
-        declared.insert(effects.declared_failures.begin(), effects.declared_failures.end());
-        const auto completion = Completion::from(encoded);
+      for (const auto input : inputs) for (const auto &[outcome, effects] : cleanup_.apply(queue, input)) {
+        const auto completion = outcome.completion();
         auto state = path.state;
         state.inputs = {origin};
         state.initialized = path.state.input_facts.at(origin).initialized;
@@ -5799,6 +5796,8 @@ class ScalarChecker {
             (input.failed() && effects.guarded_pending_failure);
         if (proving_) observed_.requires_deferred_failure_delivery |= needs_deferred_delivery;
         if (proving_ && validating_) {
+          if (effects.uncovered_deferred_root)
+            fail(path.at, "declared checked failure 'Exception' requires coverage within the owning pass");
           if ((effects.raises_deferred_failure && (owned_failure(input) || owned_failure(completion))) ||
               (effects.guarded_pending_failure && owned_failure(input)))
             implementation_gap(path.at, "owned exceptions interacting with deferred failures require independent failure delivery");
@@ -5825,6 +5824,8 @@ class ScalarChecker {
           refresh_targets(state, false);
           if (!state.live) continue;
         }
+        if (proving_ && validating_ && outcome.pending_checked())
+          fail(path.at, "checked deferred failure requires coverage within the owning pass");
         state.input_facts.at(origin).queues[scope] = 0;
         if (!completion.reason) {
           if (scan_requested) {
@@ -5845,7 +5846,7 @@ class ScalarChecker {
       }
     }
     abrupt_ = outer;
-    for (const auto requirement : declared) note_declared(requirement);
+    for (const auto requirement : flow.declared) note_declared(requirement);
     for (const auto &path : exits) {
       lexical_ = path.state;
       forward_abrupt(path);
@@ -14587,8 +14588,6 @@ class ScalarChecker {
     auto contract = callable_type(program_.methods[profile], selected.arguments, selected.result);
     const auto &effects = read_effects(target);
     for (const auto failure : effects.scope_checked_failures) contract.throws_types.push_back(exception_type(failure));
-    if (deferred_action_ && !effects.scope_checked_failures.empty())
-      deferred_actions_with_checked_scopes_.insert(*deferred_action_);
     auto reasons = direct_call_reasons(contract, effects);
     if (proving_ && effects.propagates_here_transfer) reasons.insert(Completion::protected_transfer);
     if (case_scan) {
@@ -19142,8 +19141,13 @@ class ScalarChecker {
               return term.first.kind != ExceptionFacts::Origin::Kind::arrival || term.first.action != action;
             });
           })) implementation_gap(expr.at, "escaping owned exceptions from deferred actions require independent failure delivery");
-      summary.enforce_checked_boundary = (checking_method_ && checking_method_->source->implicit_scope) ||
-          deferred_actions_with_checked_scopes_.contains(action);
+      summary.bodyless_catch = expr.binding == "fallback";
+      if (summary.bodyless_catch) for (const auto &clause : std::span{expr.children}.subspan(1)) {
+        if (clause->kind != K::handler) break;
+        const auto &type = operations.at(clause.get()).type;
+        summary.catches_root |= !type.identity;
+        summary.catches.merge(exception_possibilities(type));
+      }
       const bool writes_storage = std::ranges::any_of(summary.paths, [](const auto &path) {
         return !path.effects.payload_writes.empty() &&
             (!path.effects.initialized.empty() || !path.effects.uninitialized.empty());
@@ -19354,7 +19358,6 @@ class ScalarChecker {
     abstract_operand_ = nullptr;
     literal_text_owner_.reset();
     declared_sites_.clear(); declared_requirements_.clear();
-    deferred_actions_with_checked_scopes_.clear();
     loop_controls_.clear(); delayed_controls_.clear(); deferred_inputs_.clear(); active_loops_.clear();
     caught_.reset(); catch_bindings_.clear(); owned_catches_.clear(); caught_inputs_.clear();
     captures_ = nullptr; delayed_ = false; deferred_action_.reset(); return_inputs_ = {}; prepared_call_ = nullptr;

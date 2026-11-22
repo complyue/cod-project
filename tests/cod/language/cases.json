@@ -2777,7 +2777,7 @@
     "file": "scopes/defer-checked-self.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "checked NullPointerException requires a local catch"
+    "stderr_contains": "coverage within the owning pass"
   },
   {
     "file": "scopes/defer-checked-expired.cod",
@@ -2807,7 +2807,7 @@
     "file": "scopes/defer-checked-popped.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "checked exception 'NullPointerException' requires a covering catch or throws declaration"
+    "stderr_contains": "coverage within the owning pass"
   },
   {
     "file": "scopes/defer-checked.cod",
@@ -3021,13 +3021,13 @@
     "file": "scopes/defer-category-body-npe.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "checked NullPointerException requires a local catch"
+    "stderr_contains": "coverage within the owning pass"
   },
   {
     "file": "scopes/defer-category-action-npe.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "checked NullPointerException requires a local catch"
+    "stderr_contains": "coverage within the owning pass"
   },
   {
     "file": "scopes/exception-category-loop-npe.cod",
@@ -3263,7 +3263,7 @@
     "file": "scopes/defer-pointer-checked.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "checked NullPointerException requires a local catch"
+    "stderr_contains": "coverage within the owning pass"
   },
   {
     "file": "scopes/defer-pointer-const.cod",
