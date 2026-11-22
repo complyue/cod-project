@@ -14,7 +14,9 @@ typedef enum cod_llvm_command_kind {
   COD_LLVM_PARAMETER, COD_LLVM_ARGUMENT, COD_LLVM_INVOKE, COD_LLVM_PRINT,
   COD_LLVM_RETURN, COD_LLVM_FINISH, COD_LLVM_COMPARE, COD_LLVM_SUBTRACT,
   COD_LLVM_DIVIDE, COD_LLVM_REMAINDER, COD_LLVM_BRANCH_CATCHABLE,
-  COD_LLVM_ALLOCATE_WORDS = 29, COD_LLVM_OFFSET_ADDRESS
+  COD_LLVM_ALLOCATE_WORDS = 29, COD_LLVM_OFFSET_ADDRESS, COD_LLVM_TEXT_LITERAL,
+  COD_LLVM_TEXT_SIZE, COD_LLVM_TEXT_BYTE, COD_LLVM_TEXT_CONTAINS_NUL,
+  COD_LLVM_TEXT_ALLOCATE, COD_LLVM_TEXT_RELEASE
 } cod_llvm_command_kind;
 
 /* Arithmetic faults occupy the top of the outcome category range. */
@@ -34,6 +36,8 @@ extern "C" {
 
 bool cod_llvm_construct_word_records(cod_llvm_session *session, const void *records, size_t count,
                                      size_t labels, size_t slots);
+bool cod_llvm_construct_source_records(cod_llvm_session *session, const void *records, size_t count,
+                                       size_t labels, size_t slots, const uint8_t *source, size_t source_size);
 bool cod_llvm_construct_words(cod_llvm_session *session, const cod_llvm_command *commands, size_t count,
                               size_t labels, size_t slots);
 

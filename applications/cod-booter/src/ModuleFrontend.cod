@@ -25,7 +25,7 @@ using "NativeDeclarations.cod" {
 };
 using "OperandChecking.cod" {
     OperandFacts, CallOwners, OperandCheckResult, check_module_operands,
-    unsupported_case_subject, unsupported_case_pattern, unsupported_product_layout,
+    unsupported_case_subject, unsupported_case_pattern, unsupported_product_layout, unsupported_text_operation,
 };
 using "CompletionChecking.cod" {
     CompletionSites, CompletionCheckResult, check_module_completion, unsupported_case_transfer,
@@ -52,7 +52,7 @@ func unsupported_rebind() -> u8 { return 109u8; }
 export func rejected_unsupported_declaration(result:const ModuleBindingResult in R) -> bool where {const owner R} {
     if (result.stage == module_operands_failed())
         return result.diagnostic == unsupported_case_subject() || result.diagnostic == unsupported_case_pattern() ||
-            result.diagnostic == unsupported_product_layout();
+            result.diagnostic == unsupported_product_layout() || result.diagnostic == unsupported_text_operation();
     if (result.stage == module_completion_failed()) return result.diagnostic == unsupported_case_transfer();
     return result.stage == module_binding_failed() &&
         (result.diagnostic == unsupported_module_declaration() || result.diagnostic == unsupported_array_length() ||
@@ -118,8 +118,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, at:u64, emit_object:boo
     if (kind == make_exception_node()) return 33u8;
     if (emit_object && kind == ref_result_node()) return 35u8;
     if (emit_object && kind == type_parameter_node()) return unsupported_module_declaration();
-    if (kind == make_named_node() && !supported_construction_shape(nodes, at) &&
-        (emit_object || !positional_construction(nodes, at))) return unsupported_ordinary_construction();
+    if (kind == make_named_node() && !supported_construction_shape(nodes, at) && !positional_construction(nodes, at)) return unsupported_ordinary_construction();
     if (emit_object && kind == index_access_node()) return 39u8;
     if (emit_object && kind == array_length_node()) return unsupported_array_length();
     if (kind == bodyless_defer_node()) return 40u8;

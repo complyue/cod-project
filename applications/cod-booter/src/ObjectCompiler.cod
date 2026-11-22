@@ -32,12 +32,12 @@ proc verify_active_session() -> u8 {
     return llvm_verify(@llvmSession);
 }
 
-proc write_object(output:const String in A, handle diagnostic:DiagnosticDestination in D,
+proc write_object(source:const SourceBytes in S, output:const String in A, handle diagnostic:DiagnosticDestination in D,
                   commands:const NativeCommands in W, plan:const NativePlan in P) -> CompilerStatus
-    where {const owner A, const owner W, const owner P, owner D} {
+    where {const owner S, const owner A, const owner W, const owner P, owner D} {
     try {
         effect @llvmSession <- make own handle LLVMSession();
-        val constructed <- llvm_construct(@llvmSession, commands, plan.used, plan.labels, plan.slots);
+        val constructed <- llvm_construct(@llvmSession, commands, source, plan.used, plan.labels, plan.slots);
         if (constructed != 0u8) {
             report_backend_error(diagnostic, constructed);
             return LoweringFailed;
@@ -99,7 +99,7 @@ proc lower_object(source:const SourceBytes in S, lines:const SourceLines in S,
         if (plan.diagnostic == native_unsupported()) return FormUnsupported;
         return LoweringFailed;
     } else {};
-    return write_object(output, diagnostic, commands, plan);
+    return write_object(source, output, diagnostic, commands, plan);
 }
 
 proc compile_revision(source:const SourceBytes in S, lines:const SourceLines in S,

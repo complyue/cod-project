@@ -64,6 +64,12 @@ export func local_binding_fact(opcode:u8) -> bool { return opcode >= unbind_loca
 # uses the layout's word offset relative to an already selected address.
 export func allocate_words() -> u8 { return 29u8; }
 export func offset_address() -> u8 { return 30u8; }
+export func text_literal() -> u8 { return 31u8; }
+export func text_size() -> u8 { return 32u8; }
+export func text_byte() -> u8 { return 33u8; }
+export func text_contains_nul() -> u8 { return 34u8; }
+export func text_allocate() -> u8 { return 35u8; }
+export func text_release() -> u8 { return 36u8; }
 
 # Internal outcome words. Zero denotes success. Fatal numeric failures
 # bypass language catches and still leave through the activation cleanup.

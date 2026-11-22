@@ -1,0 +1,48 @@
+using symbol "std:io" @print;
+using "std:exceptions" { TypeAssertionFailedError, IndexOutOfBoundsError };
+using "std:text-storage" { utf8_size, utf8_byte };
+
+proc show(text:const String in O) -> void where {const owner O} {
+    behave @print(utf8_size(text));
+    return;
+}
+
+func size_path(path:const CString in P, adjustment:u64) -> u64 where {const owner P} {
+    return utf8_size(path) + adjustment;
+}
+
+proc later() -> u64 {
+    behave @print(91u64);
+    return 20u64;
+}
+
+proc verify_path(input:const String in S) -> u64 where {const owner S} {
+    try {
+        return size_path(input:CString, later());
+    } catch (failure:const TypeAssertionFailedError) {
+        return 42u64;
+    };
+}
+
+proc verify_byte(input:const String in S, index:u64) -> u64 where {const owner S} {
+    try {
+        if (utf8_byte(input, index) == 0u8) return 7u64;
+        return 0u64;
+    } catch (failure:const IndexOutOfBoundsError) {
+        return 43u64;
+    };
+}
+
+behave @print(size_path("", 0u64));
+behave @print(verify_path("x\0y"));
+behave @print(verify_path("é\u{1F680}"));
+behave @print(verify_byte("x\u{0}y", 1u64));
+behave @print(verify_byte("", 0u64));
+if (utf8_byte("é", 0u64) == 195u8) {
+    behave @print(195u64);
+};
+{{
+    ref short = make String("é\0\\\n\u{1F680} # //") in here;
+    defer show(short);
+    behave @print(verify_byte(short, 2u64));
+}};

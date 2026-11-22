@@ -13,18 +13,18 @@ using "ParserStorage.cod" {
     range_header_node, literal_range, nonempty_literal_range, logical_not_node, logical_binary,
     skips_right, unequal_words, case_node, case_arm_node, case_false_pattern, case_true_pattern,
     case_fallthrough_node, case_failure_node, break_node, type_assertion_node, enum_declaration_node,
-    case_member_pattern, case_null_pattern, data_record_node, field_access_node, initializer_assignment_node, ungrouped,
+    case_member_pattern, case_null_pattern, data_record_node, field_access_node, initializer_assignment_node, ungrouped, text_literal_node, positional_construction,
 };
 using "ExpressionParser.cod" ParseResult;
 using "NameResolution.cod" {
     NameBindings, NameWork, first_item, callable_head, enclosing_callable, builtin_u64,
     builtin_void, builtin_bool, ordinary_selection, symbolic_selection, callable_binding,
     formal_binding, local_binding, loop_index, exception_binding, find_enum_member,
-    record_type, find_record_field, has_exception_parent,
+    record_type, find_record_field, has_exception_parent, builtin_string, builtin_c_string, builtin_u8, owner_binding,
 };
 using "ModuleExports.cod" {
     SelectedExports, exception_type_export, symbol_export, print_export_identity,
-    exception_root_identity,
+    exception_root_identity, text_size_export, text_byte_export,
 };
 using "ModuleExportStorage.cod" enum_type;
 
@@ -67,6 +67,10 @@ export data OperandFact {
     product_words:u64;
     word_offset:u64;
     last_initializer:u64;
+    text_nul:u8;
+    text_allocation:u8;
+    text_assertion:u8;
+    text_intrinsic:u8;
 }
 export array OperandFacts[u64]:OperandFact;
 
@@ -89,8 +93,17 @@ export func never_result() -> u8 { return 5u8; }
 func scalar_bool() -> u8 { return 6u8; }
 func scalar_enum() -> u8 { return 7u8; }
 export func product_kind() -> u8 { return 8u8; }
+func string_kind() -> u8 { return 9u8; }
+func c_string_kind() -> u8 { return 10u8; }
+func scalar_u8() -> u8 { return 11u8; }
+export func immutable_text_kind(kind:u8) -> bool {
+    return kind == string_kind() || kind == c_string_kind();
+}
+func nul_absent() -> u8 { return 1u8; }
+func nul_present() -> u8 { return 2u8; }
+func static_text_owner() -> u64 { return no_node() - 1u64; }
 export func scalar_kind(kind:u8) -> bool {
-    return kind == scalar_u64() || kind == scalar_bool() || kind == scalar_enum();
+    return kind == scalar_u64() || kind == scalar_bool() || kind == scalar_enum() || kind == scalar_u8();
 }
 
 export func independent_value() -> u8 { return 1u8; }
@@ -135,6 +148,10 @@ export func unsupported_product_layout() -> u8 { return 30u8; }
 func unknown_product_field() -> u8 { return 31u8; }
 func repeated_readonly_initializer() -> u8 { return 32u8; }
 func missing_product_initializer() -> u8 { return 33u8; }
+func string_operand_required() -> u8 { return 34u8; }
+func c_string_operand_required() -> u8 { return 35u8; }
+func interior_literal_nul() -> u8 { return 36u8; }
+export func unsupported_text_operation() -> u8 { return 37u8; }
 
 export func unreachable_case_item() -> u8 { return 1u8; }
 export func misses_case_arm() -> u8 { return 0u8; }
@@ -156,6 +173,7 @@ func set_fact(facts:OperandFacts in F, at:u64, kind:u8, reception:u8,
     facts[at].checked_exception <- checked_exception;
     facts[at].target_readonly <- 0u8;
     facts[at].selection <- no_node();
+    facts[at].text_nul <- 0u8;
     facts[at].target_presence <- if (kind == null_literal()) { absent_target() } else {
         if (reception == nullable_ptr()) { unknown_target() } else { present_target() }
     };
@@ -173,6 +191,7 @@ func copy_fact(facts:OperandFacts in F, destination:u64, source:u64) -> void whe
     facts[destination].target_readonly <- facts[source].target_readonly;
     facts[destination].target_presence <- facts[source].target_presence;
     facts[destination].selection <- facts[source].selection;
+    facts[destination].text_nul <- facts[source].text_nul;
     return;
 }
 
@@ -214,6 +233,7 @@ func require_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:u
 
 func declared_scalar(binding:u8) -> u8 {
     if (binding == builtin_u64()) return scalar_u64();
+    if (binding == builtin_u8()) return scalar_u8();
     if (binding == builtin_bool()) return scalar_bool();
     if (binding == enum_type()) return scalar_enum();
     return 0u8;
@@ -229,6 +249,8 @@ func declared_borrow(names:const NameBindings in B, facts:const OperandFacts in 
     where {const owner B, const owner F} {
     if (names[annotation].kind == record_type() && facts[names[annotation].declaration].product_words != 0u64)
         return product_kind();
+    if (names[annotation].kind == builtin_string()) return string_kind();
+    if (names[annotation].kind == builtin_c_string()) return c_string_kind();
     return declared_scalar(names[annotation].kind);
 }
 
@@ -256,7 +278,8 @@ func prepare_product_layout(nodes:const ExprNodes in N, names:const NameBindings
 }
 
 func owner_conflict(nodes:const ExprNodes in N, first:u64, second:u64) -> u8 where {const owner N} {
-    if (nodes[first].kind == owner_clause_node() || nodes[second].kind == owner_clause_node())
+    if ((first != static_text_owner() && nodes[first].kind == owner_clause_node()) ||
+        (second != static_text_owner() && nodes[second].kind == owner_clause_node()))
         return unproved_owner();
     return incompatible_owner();
 }
@@ -285,6 +308,8 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
         val borrowed_kind <- declared_borrow(names, facts, target);
         if (names[target].kind == record_type() && (borrowed_kind == 0u8 || form == ptr_parameter_node()))
             return unsupported_product_layout();
+        if (immutable_text_kind(borrowed_kind) && (form != ref_parameter_node() || readonly == 0u8))
+            return unsupported_text_operation();
         if (borrowed_kind == 0u8) return unproved_operand();
         val owner_site <- names[nodes[annotation].right].declaration;
         if (owner_site == no_node() || nodes[owner_site].kind != owner_clause_node()) return unproved_owner();
@@ -292,6 +317,7 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
         set_fact(facts, formal, borrowed_kind, reception, owner_site, nominal_identity(names, target), 0u8);
         if (reception == nullable_ptr()) { (facts[formal].selection <- formal):void; } else {};
         facts[formal].target_readonly <- readonly;
+        if (borrowed_kind == c_string_kind()) { (facts[formal].text_nul <- nul_absent()):void; };
         return 0u8;
     } else {};
     if (form != parameter_node() && form != val_parameter_node() && form != ref_parameter_node() &&
@@ -382,6 +408,9 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, fact
     if (declared_kind == product_kind() || facts[initializer].kind == product_kind()) {
         if (value_binding || nodes[at].kind == ptr_binding_node()) return unsupported_product_layout();
     };
+    if (immutable_text_kind(declared_kind) || immutable_text_kind(facts[initializer].kind)) {
+        if (value_binding || nodes[at].kind == ptr_binding_node()) return unsupported_text_operation();
+    };
     if (declared_kind == 0u8 && type_name != no_node()) return unproved_operand();
     val identity <- if (type_name == no_node()) { (facts[initializer].identity) } else { nominal_identity(names, type_name) };
     if (declared_kind == scalar_enum() && facts[initializer].kind == scalar_enum() &&
@@ -422,8 +451,15 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, fact
     if (facts[initializer].kind == null_literal()) {
         if (!pointer) return unproved_nonnull_borrow();
     } else {
-        if ((!scalar_kind(kind) && kind != product_kind()) || facts[initializer].kind != kind)
-            return unproved_operand();
+        if (immutable_text_kind(kind)) {
+            if (!immutable_text_kind(facts[initializer].kind)) return string_operand_required();
+            if (kind == c_string_kind() && facts[initializer].kind != c_string_kind() &&
+                !(nodes[ungrouped(nodes, initializer)].kind == text_literal_node() && facts[initializer].text_nul == nul_absent()))
+                return c_string_operand_required();
+        } else {
+            if ((!scalar_kind(kind) && kind != product_kind()) || facts[initializer].kind != kind)
+                return unproved_operand();
+        };
         if (kind == product_kind() && facts[initializer].identity != identity) return wrong_operand_type();
         if (type_name != no_node() && facts[initializer].target_readonly != 0u8 && readonly == 0u8)
             return expected_writable_place();
@@ -432,11 +468,50 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, fact
     set_fact(facts, at, kind, reception, owner_site, identity, 0u8);
     facts[at].target_readonly <- if (type_name == no_node()) { (facts[initializer].target_readonly) } else { readonly };
     facts[at].reservation <- facts[initializer].reservation;
+    facts[at].text_nul <- facts[initializer].text_nul;
     if (pointer) {
         facts[at].target_presence <- facts[initializer].target_presence;
         val selected <- facts[initializer].selection;
         (facts[at].selection <- if (selected == no_node()) { at } else { selected }):void;
     } else {};
+    return 0u8;
+}
+
+func check_text_construction(nodes:const ExprNodes in N, names:const NameBindings in B,
+                             facts:OperandFacts in F, at:u64) -> u8
+    where {const owner N, const owner B, owner F} {
+    val payload <- nodes[at].right;
+    val tail <- nodes[payload].left;
+    if (!positional_construction(nodes, at) || tail == no_node() || nodes[tail].left != no_node())
+        return unsupported_text_operation();
+    val source <- nodes[tail].right;
+    val owner_site <- names[at].scope;
+    val placement <- nodes[payload].right;
+    if (placement != no_node() && names[placement].declaration != owner_site) {
+        if (names[placement].kind == owner_binding() &&
+            nodes[names[placement].declaration].number == readonly_declaration()) return readonly_owner_argument();
+        return unsupported_text_operation();
+    };
+    facts[at].text_allocation <- 1u8;
+    (facts[owner_site].text_allocation <- 1u8):void;
+    if (facts[source].kind == never_result()) { set_result(facts, at, never_result()); return 0u8; };
+    if (!immutable_text_kind(facts[source].kind)) return string_operand_required();
+    set_fact(facts, at, string_kind(), borrowed_ref(), owner_site, 0u64, 0u8);
+    facts[at].target_readonly <- 1u8;
+    facts[at].text_nul <- facts[source].text_nul;
+    return 0u8;
+}
+
+func check_text_assertion(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64) -> u8
+    where {const owner N, owner F} {
+    val operand <- nodes[at].left;
+    if (facts[operand].kind == never_result()) { copy_fact(facts, at, operand); return 0u8; };
+    if (!immutable_text_kind(facts[operand].kind)) return string_operand_required();
+    if (facts[operand].text_nul == nul_present()) return interior_literal_nul();
+    set_fact(facts, at, c_string_kind(), borrowed_ref(), facts[operand].owner, 0u64, 0u8);
+    facts[at].target_readonly <- 1u8;
+    facts[at].text_nul <- nul_absent();
+    (facts[at].text_assertion <- if (facts[operand].text_nul == nul_absent()) { 0u8 } else { 1u8 }):void;
     return 0u8;
 }
 
@@ -584,15 +659,23 @@ func check_argument(nodes:const ExprNodes in N, facts:OperandFacts in F, owners:
     } else {};
     if (local_storage_binding(nodes[actual].kind) ||
         facts[actual].kind == 0u8 || facts[actual].kind == null_literal()) return unproved_operand();
-    if (!same_operand_type(facts, actual, formal)) return wrong_operand_type();
+    if (immutable_text_kind(kind)) {
+        if (!immutable_text_kind(facts[actual].kind)) return string_operand_required();
+        if (kind == c_string_kind() && facts[actual].kind != c_string_kind() &&
+            !(nodes[ungrouped(nodes, actual)].kind == text_literal_node() && facts[actual].text_nul == nul_absent()))
+            return c_string_operand_required();
+    } else {
+        if (!same_operand_type(facts, actual, formal)) return wrong_operand_type();
+    };
     val reception <- facts[actual].reception;
     if (reception == independent_value()) return unproved_owner();
     if (facts[actual].target_readonly != 0u8 && facts[formal].target_readonly == 0u8) return expected_writable_place();
     val owner_parameter <- facts[formal].owner;
     val actual_owner <- facts[actual].owner;
     if (actual_owner == no_node()) return unproved_owner();
-    if (nodes[actual_owner].kind == owner_clause_node() && nodes[actual_owner].number == readonly_declaration() &&
-        nodes[owner_parameter].number != readonly_declaration()) return readonly_owner_argument();
+    val readonly_owner <- actual_owner == static_text_owner() ||
+        (nodes[actual_owner].kind == owner_clause_node() && nodes[actual_owner].number == readonly_declaration());
+    if (readonly_owner && nodes[owner_parameter].number != readonly_declaration()) return readonly_owner_argument();
     if (owners[owner_parameter].call_site == invocation && owners[owner_parameter].actual_owner != actual_owner)
         return owner_conflict(nodes, owners[owner_parameter].actual_owner, actual_owner);
     owners[owner_parameter].call_site <- invocation;
@@ -601,10 +684,36 @@ func check_argument(nodes:const ExprNodes in N, facts:OperandFacts in F, owners:
     return 0u8;
 }
 
+func check_text_intrinsic(nodes:const ExprNodes in N, links:const NameWork in L, facts:OperandFacts in F,
+                          at:u64, intrinsic_kind:u8) -> u8
+    where {const owner N, const owner L, owner F} {
+    if (intrinsic_kind != text_size_export() && intrinsic_kind != text_byte_export()) return unproved_call_target();
+    val first <- first_item(nodes, nodes[at].right);
+    if (first == no_node()) return wrong_argument_count();
+    val next <- links[first].next;
+    val byte <- intrinsic_kind == text_byte_export();
+    if ((!byte && next != no_node()) || (byte && (next == no_node() || links[next].next != no_node())))
+        return wrong_argument_count();
+    val text <- nodes[first].right;
+    if (!immutable_text_kind(facts[text].kind)) return string_operand_required();
+    copy_fact(facts, first, text);
+    if (byte) {
+        val diagnostic <- require_bits(nodes, facts, nodes[next].right);
+        if (diagnostic != 0u8) return diagnostic;
+        scalar_fact(facts, next, independent_value(), no_node());
+    };
+    if (byte) { set_result(facts, at, scalar_u8()); } else { set_result(facts, at, scalar_u64()); };
+    (facts[at].text_intrinsic <- intrinsic_kind):void;
+    return 0u8;
+}
+
 func check_direct_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-                       facts:OperandFacts in F, owners:CallOwners in O, at:u64, used:u64) -> u8
-    where {const owner N, const owner B, const owner L, owner F, owner O} {
+                       selected:const SelectedExports in E, facts:OperandFacts in F,
+                       owners:CallOwners in O, at:u64, used:u64) -> u8
+    where {const owner N, const owner B, const owner L, const owner E, owner F, owner O} {
     val callee <- nodes[at].left;
+    if (names[callee].kind == ordinary_selection())
+        return check_text_intrinsic(nodes, links, facts, at, selected[names[callee].declaration].kind);
     if (names[callee].kind != callable_binding()) return unproved_call_target();
     val definition <- names[callee].declaration;
     if (!is_function(nodes, definition) && is_function(nodes, enclosing_callable(nodes, names, names[at].scope)))
@@ -698,6 +807,8 @@ func sequence_result(facts:const OperandFacts in F, tail:u64) -> u8 where {const
 func merge_result(facts:OperandFacts in F, at:u64, kind:u8, identity:u64) -> u8 where {owner F} {
     if (kind == 0u8) return unproved_result_contract();
     if (kind == never_result()) return 0u8;
+    if (immutable_text_kind(kind)) return unsupported_text_operation();
+    if (kind == product_kind()) return unsupported_product_layout();
     if (facts[at].kind != 0u8 &&
         (facts[at].kind != kind || (kind == scalar_enum() && facts[at].identity != identity)))
         return unproved_result_contract();
@@ -713,6 +824,8 @@ func merge_arm_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u6
     if (kind == never_result()) return 0u8;
     if (facts[at].discarded_result == loop_discard() && nodes[at].kind != case_node())
         return merge_result(facts, at, void_result(), 0u64);
+    if (immutable_text_kind(kind)) return unsupported_text_operation();
+    if (kind == product_kind()) return unsupported_product_layout();
     if (facts[at].kind == 0u8) {
         copy_fact(facts, at, arm);
         return 0u8;
@@ -1297,7 +1410,7 @@ func check_numeric_expression(nodes:const ExprNodes in N, facts:OperandFacts in 
     if (kind == group_node()) {
         val inside <- facts[left].kind;
         if (inside == product_kind()) return unsupported_product_layout();
-        if (inside == void_result() || inside == never_result() || inside == exception_type() ||
+        if (inside == void_result() || inside == never_result() || inside == exception_type() || immutable_text_kind(inside) ||
             facts[left].reception == nullable_ptr()) {
             copy_fact(facts, at, left);
             return 0u8;
@@ -1413,8 +1526,21 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     if (kind == catch_clause_node()) return check_catch_clause(nodes, facts, at);
     if (kind == callable_node()) return check_callable_tail(nodes, facts, at);
     if (names[at].scope == no_node()) return 0u8;
-    if (kind == type_assertion_node()) return check_enum_assertion(source, nodes, names, links, facts, at);
-    if (kind == narrow_integer_node()) return unsupported_narrow_execution();
+    if (kind == type_assertion_node()) {
+        if (names[nodes[at].right].kind == builtin_c_string()) return check_text_assertion(nodes, facts, at);
+        return check_enum_assertion(source, nodes, names, links, facts, at);
+    };
+    if (kind == narrow_integer_node()) {
+        if (nodes[at].left != 8u64) return unsupported_narrow_execution();
+        set_result(facts, at, scalar_u8());
+        return 0u8;
+    };
+    if (kind == text_literal_node()) {
+        set_fact(facts, at, string_kind(), borrowed_ref(), static_text_owner(), 0u64, 0u8);
+        facts[at].target_readonly <- 1u8;
+        (facts[at].text_nul <- if (nodes[at].number == 0u64) { nul_absent() } else { nul_present() }):void;
+        return 0u8;
+    };
     if (kind == literal_node()) { scalar_fact(facts, at, independent_value(), no_node()); return 0u8; } else {};
     if (kind == bool_node()) { set_result(facts, at, scalar_bool()); return 0u8; } else {};
     if (kind == name_node()) {
@@ -1435,6 +1561,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     if (local_storage_binding(kind)) return check_local(nodes, names, facts, at);
     if (kind == make_named_node()) {
         val requested <- nodes[at].left;
+        if (names[requested].kind == builtin_string()) return check_text_construction(nodes, names, facts, at);
         if (names[requested].kind == record_type())
             return check_product_construction(source, nodes, names, links, facts, at, names[requested].declaration);
         return check_construction(nodes, names, facts, at);
@@ -1445,7 +1572,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     if (is_transfer(nodes, at)) return check_transfer(nodes, facts, at);
     if (kind == compare_node()) return check_comparison(nodes, facts, at);
     if (kind == logical_not_node() || logical_binary(kind)) return check_logical(nodes, facts, at);
-    if (kind == call_node()) return check_direct_call(nodes, names, links, facts, owners, at, used);
+    if (kind == call_node()) return check_direct_call(nodes, names, links, selected, facts, owners, at, used);
     if (kind == behave_node()) return check_symbolic_call(nodes, names, selected, facts, at);
     if (kind == block_node()) {
         val tail <- nodes[at].left;
@@ -1488,6 +1615,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
         if (operand != no_node() && facts[operand].kind != exception_type()) return expected_exception_type();
         set_result(facts, at, never_result());
     } else {};
+    if (kind == deferred_call_node() && facts[nodes[at].right].text_intrinsic != 0u8) return unsupported_text_operation();
     if (kind == deferred_call_node() || kind == deferred_block_node()) { only_void(facts, at); } else {};
     return 0u8;
 }
@@ -1610,6 +1738,9 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
         facts[at].product_words <- 0u64;
         facts[at].word_offset <- 0u64;
         facts[at].last_initializer <- no_node();
+        facts[at].text_allocation <- 0u8;
+        facts[at].text_assertion <- 0u8;
+        facts[at].text_intrinsic <- 0u8;
         owners[at].call_site <- no_node();
         owners[at].actual_owner <- no_node();
     };
