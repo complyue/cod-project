@@ -33,7 +33,7 @@ using "NativeCommands.cod" {
     return_outcome, finish_program, returned_word, pending_category, pending_site, call_category,
     call_site, arithmetic_fault, slot, reservation_tag, allocate_words, offset_address,
     text_literal, text_size, text_byte, text_contains_nul, text_allocate, text_release,
-    require_initialized_place, copy_completion,
+    require_initialized_place, copy_completion, source_site,
 };
 
 data LoweringState {
@@ -146,7 +146,7 @@ func forward_return(code:NativeCommands in C, plan:NativePlan in P, state:Loweri
 func source_failure(code:NativeCommands in C, plan:NativePlan in P, category:u64, at:u64) -> void
     where {owner C, owner P} {
     emit(code, plan, word_constant(), pending_category(), category);
-    emit(code, plan, word_constant(), pending_site(), at);
+    emit(code, plan, source_site(), pending_site(), at);
 }
 
 func invocation_failure(code:NativeCommands in C, plan:NativePlan in P) -> void where {owner C, owner P} {
@@ -440,7 +440,7 @@ func lower_binary(nodes:const ExprNodes in N, names:const NameBindings in B, lin
     command(code, plan, branch_equal(), arithmetic_fault(), 0u64, ready, failed);
     position(code, plan, state, failed);
     command(code, plan, copy_completion(), pending_category(), arithmetic_fault(), 1u64, 0u64);
-    emit(code, plan, word_constant(), pending_site(), nodes[at].operation_at);
+    emit(code, plan, source_site(), pending_site(), nodes[at].operation_at);
     finish_block(code, plan, state, state.exception_target);
     position(code, plan, state, ready);
 }
@@ -1585,6 +1585,7 @@ export func lower_native_module(nodes:const ExprNodes in N, tree:const ParseResu
                                 code:NativeCommands in C, plan:NativePlan in P) -> bool
     where {const owner N, const owner T, const owner B, const owner L, const owner F, const owner S, owner C, owner P} {
     plan.used <- 0u64;
+    plan.functions <- tree.used;
     plan.labels <- tree.used;
     plan.slots <- 0u64;
     plan.diagnostic <- invalid_native_module();
