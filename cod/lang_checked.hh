@@ -19470,9 +19470,8 @@ class ScalarChecker {
         if (handle && type.kind != Type::c_type_marker)
           fail(parameter.at, "handle parameter requires a 'handle type' name");
         if (handle) constrain_native_owner(native_owners, parameter, type);
-        if (text && (argument_mode(parameter) != ArgumentMode::borrowed_ref || !owner->read_only || !parameter.read_only ||
-                     (readonly_arrays && type != Type::c_string)))
-          fail(parameter.at, "C text parameters require readonly loans under a const owner and CString for provider calls");
+        if (text && (argument_mode(parameter) != ArgumentMode::borrowed_ref || !owner->read_only || !parameter.read_only))
+          fail(parameter.at, "C text parameters require readonly loans under a const owner");
         if (array) {
           if (!owner->read_only || !parameter.read_only)
             implementation_gap(parameter.at, "C operation array loans other than readonly views under a const owner");

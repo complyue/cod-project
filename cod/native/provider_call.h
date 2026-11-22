@@ -22,11 +22,11 @@ static inline bool cod_provider_text_argument(const cod_provider_argument *input
 }
 
 static inline void cod_provider_text_preamble(cod_provider_text *header, cod_provider_text *stubs,
-                                             bool incoming, bool outgoing) {
-    if (!incoming && !outgoing) return;
+                                             bool incoming, bool bounded_output, bool c_string_output) {
+    if (!incoming && !bounded_output && !c_string_output) return;
     cod_provider_print(header, "typedef struct cod_native_text {\n"
         "    const uint8_t *bytes;\n    uint64_t size;\n    uint64_t extent;\n} cod_native_text;\n\n");
-    cod_provider_print(stubs, "#include <stdlib.h>\n#include <string.h>\n");
+    if (incoming || c_string_output) cod_provider_print(stubs, "#include <stdlib.h>\n#include <string.h>\n");
     if (incoming) cod_provider_print(stubs, "#include <cod_utf8.h>\n");
     cod_provider_print(stubs, "\nstatic int cod_text_has_extent(const cod_native_text *text) {\n"
         "    return text && text->bytes && text->size <= text->extent && text->extent <= PTRDIFF_MAX &&\n"
@@ -41,7 +41,7 @@ static inline void cod_provider_text_preamble(cod_provider_text *header, cod_pro
         "    memcpy(bytes, input->bytes, size);\n    bytes[size] = 0;\n"
         "    if (!cod_utf8_valid(bytes, size) || (c_string && memchr(bytes, 0, size))) { free(bytes); return 0; }\n"
         "    *output = (cod_native_text){bytes, size, size + 1};\n    return 1;\n}\n\n");
-    if (outgoing) cod_provider_print(stubs,
+    if (c_string_output) cod_provider_print(stubs,
         "static const char *cod_text_c_string(const cod_native_text *text, char **temporary) {\n"
         "    if (!cod_text_has_extent(text)) return NULL;\n"
         "    const size_t size = (size_t)text->size;\n"
@@ -67,6 +67,8 @@ static inline void cod_provider_callable_input(cod_provider_text *out, const cod
         cod_provider_print(out, "%s arg%zu", input->type, i);
         break;
     case cod_provider_argument_text:
+        cod_provider_print(out, "const cod_native_text *arg%zu", i);
+        break;
     case cod_provider_argument_c_string:
         cod_provider_print(out, *pointer ? "const cod_native_text *arg%zu" : "const char *arg%zu", i);
         break;
@@ -111,28 +113,31 @@ static inline void cod_provider_write_call(cod_provider_text *header, cod_provid
                 }
             }
             cod_provider_print(stubs, ") return COD_NATIVE_BOUNDARY_ERROR;\n");
-        } else if (input->boolean) cod_provider_print(stubs, "    if (arg%zu > 1) return COD_NATIVE_BOUNDARY_ERROR;\n", i);
+        } else if (input->kind == cod_provider_argument_text)
+            cod_provider_print(stubs, "    if (!cod_text_has_extent(arg%zu)) return COD_NATIVE_BOUNDARY_ERROR;\n", i);
+        else if (input->boolean) cod_provider_print(stubs, "    if (arg%zu > 1) return COD_NATIVE_BOUNDARY_ERROR;\n", i);
         else if (input->enum_value)
             cod_provider_print(stubs, "    if (!%s_valid(arg%zu)) return COD_NATIVE_BOUNDARY_ERROR;\n", input->type, i);
     }
-    for (size_t i = 0; i < shape->count; ++i) if (cod_provider_text_argument(shape->inputs + i)) {
+    for (size_t i = 0; i < shape->count; ++i) if (shape->inputs[i].kind == cod_provider_argument_c_string) {
         cod_provider_print(stubs, "    char *text_backing%zu = NULL;\n"
             "    const char *text%zu = cod_text_c_string(arg%zu, &text_backing%zu);\n"
             "    if (!text%zu) {\n", i, i, i, i, i);
-        for (size_t j = 0; j < i; ++j) if (cod_provider_text_argument(shape->inputs + j))
+        for (size_t j = 0; j < i; ++j) if (shape->inputs[j].kind == cod_provider_argument_c_string)
             cod_provider_print(stubs, "        free(text_backing%zu);\n", j);
         cod_provider_print(stubs, "        return COD_NATIVE_BOUNDARY_ERROR;\n    }\n");
     }
     if (shape->result) cod_provider_print(stubs, "    %s result = 0;\n", shape->result);
     cod_provider_print(stubs, "    const cod_native_status status = cod_native_%s_impl(", shape->name);
     for (size_t i = 0; i < shape->count; ++i) {
-        if (cod_provider_text_argument(shape->inputs + i)) cod_provider_print(stubs, "%stext%zu", i ? ", " : "", i);
+        if (shape->inputs[i].kind == cod_provider_argument_c_string) cod_provider_print(stubs, "%stext%zu", i ? ", " : "", i);
         else cod_provider_print(stubs, "%s%sarg%zu", i ? ", " : "",
-                               shape->inputs[i].kind == cod_provider_argument_scalar ? "" : "*", i);
+                               shape->inputs[i].kind == cod_provider_argument_scalar ||
+                               shape->inputs[i].kind == cod_provider_argument_text ? "" : "*", i);
     }
     if (shape->result) cod_provider_print(stubs, "%s&result", shape->count ? ", " : "");
     cod_provider_print(stubs, ");\n");
-    for (size_t i = 0; i < shape->count; ++i) if (cod_provider_text_argument(shape->inputs + i))
+    for (size_t i = 0; i < shape->count; ++i) if (shape->inputs[i].kind == cod_provider_argument_c_string)
         cod_provider_print(stubs, "    free(text_backing%zu);\n", i);
     cod_provider_print(stubs, "    if (status != COD_NATIVE_OK) return COD_NATIVE_BOUNDARY_ERROR;\n");
     if (shape->enum_result)

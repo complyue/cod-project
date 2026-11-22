@@ -44,6 +44,7 @@ func duplicate_native_constructor() -> u8 { return 24u8; }
 func invalid_native_access() -> u8 { return 25u8; }
 func invalid_native_callback() -> u8 { return 26u8; }
 func c_string_argument_required() -> u8 { return 99u8; }
+func string_argument_required() -> u8 { return 100u8; }
 func invalid_array_shape() -> u8 { return 27u8; }
 func invalid_handle_initializer() -> u8 { return 52u8; }
 func mismatched_handle_type() -> u8 { return 53u8; }
@@ -351,8 +352,7 @@ func check_native_argument(nodes:const ExprNodes in N, names:const NameBindings 
     if (mode == ref_parameter_node()) {
         val marker <- names[declared_type].kind;
         if (text_type(marker)) {
-            if (!readonly || nodes[role].number == 0u64 ||
-                (direction != c_entry() && (direction != c_operation() || marker != builtin_c_string()))) {
+            if (!readonly || nodes[role].number == 0u64 || (direction != c_entry() && direction != c_operation())) {
                 reject_declaration(report, parameter, invalid_native_parameter());
             } else {
                 (work[role].active <- role):void;
@@ -1162,17 +1162,19 @@ func selected_call_interface(nodes:const ExprNodes in N, names:const NameBinding
     return find_interface(contracts, selected[site].origin_module, selected[site].identity);
 }
 
-func check_c_string_argument(nodes:const ExprNodes in N, work:const NameWork in W,
-                             argument:u64, report:NativeDeclarationResult in R) -> bool
+func check_text_argument(nodes:const ExprNodes in N, work:const NameWork in W,
+                         argument:u64, expected:u8, report:NativeDeclarationResult in R) -> bool
     where {const owner N, const owner W, owner R} {
     val value <- ungrouped(nodes, nodes[argument].right);
     if (nodes[value].kind == text_literal_node()) {
-        if (nodes[value].number == 0u64) return true;
+        if (expected != builtin_c_string() || nodes[value].number == 0u64) return true;
         reject_declaration(report, value, interior_nul_in_c_string());
         return false;
     } else {};
-    if (work[value].value_kind == builtin_c_string()) return true;
-    reject_declaration(report, value, c_string_argument_required());
+    val actual <- work[value].value_kind;
+    if (text_type(actual) && (actual == expected || actual == builtin_c_string())) return true;
+    reject_declaration(report, value, if (expected == builtin_c_string()) { c_string_argument_required() }
+                                      else { string_argument_required() });
     return false;
 }
 
@@ -1188,12 +1190,13 @@ func check_native_text_call(nodes:const ExprNodes in N, names:const NameBindings
         val signature <- signature_head(nodes, nodes[definition].left);
         val formal <- first_item(nodes, nodes[signature].right);
         val annotation <- no_node();
+        val expected <- 0u8;
         for (unused in 0u64 .. intrinsic (len)(nodes)) {
             if (argument == no_node() || formal == no_node()) return true;
             if (nodes[formal].kind == ref_parameter_node()) {
                 annotation <- nodes[nodes[formal].right].right;
-                if (names[nodes[annotation].left].kind == builtin_c_string() &&
-                    !check_c_string_argument(nodes, work, argument, report)) return false;
+                expected <- names[nodes[annotation].left].kind;
+                if (text_type(expected) && !check_text_argument(nodes, work, argument, expected, report)) return false;
             } else {};
             argument <- work[argument].next;
             formal <- work[formal].next;
@@ -1204,8 +1207,8 @@ func check_native_text_call(nodes:const ExprNodes in N, names:const NameBindings
     if (head == no_node() || contracts[head].interface_kind != c_operation() || contracts[head].has_here != 0u8) return true;
     for (row in head + 1u64 .. head + 1u64 + contracts[head].entry_count) {
         if (argument == no_node()) return true;
-        if (contracts[row].value_kind == builtin_c_string() &&
-            !check_c_string_argument(nodes, work, argument, report)) return false;
+        if (text_type(contracts[row].value_kind) &&
+            !check_text_argument(nodes, work, argument, contracts[row].value_kind, report)) return false;
         argument <- work[argument].next;
     };
     return true;
