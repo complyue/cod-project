@@ -47,7 +47,7 @@ runner.CASES = {
  'variadic_categories': (IO+ERROR+'func f(rest:T...)->bool where T;func f(a:Exception,b:Exception,c:Exception)->bool{return true;}'+OUT('f(missing_value(),null_value(),missing_value())'),0,'true\n',''),
  'deferred_snapshot': (IO+ERROR+'proc show(a:T,b:T)->void where T;proc show(a:Exception,b:Exception)->void{'+OUT('a.category')+OUT('b.category')+'return;}val left:Exception<-missing_value(),right:Exception<-null_value();{{defer show(left,right);left<-right:void;}};',0,'5\n4\n',''),
  'deferred_disjoint_failure': (ERROR+FAILURE+'{{defer f(null_value());}};',0,'',''),
- 'deferred_failure_required': (ERROR+FAILURE+'defer f(missing_value());',2,'','requires a covering catch or throws'),
+ 'deferred_failure_required': (ERROR+FAILURE+'defer f(missing_value());',2,'','coverage within the owning pass'),
  'operator_overlap': (IO+ERROR+'func (+)(a:T,b:T)->bool where T;func (+)(a:Exception,b:Exception)->bool{return true;}'+OUT('missing_value()+null_value()'),0,'true\n',''),
  'imported_declaration': ({'main.cod':IO+ERROR+'import "./lib.cod" f;func f(a:Exception,b:Exception)->bool{return true;}'+OUT('f(missing_value(),null_value())'),'lib.cod':'func f(a:T,b:T)->bool where T;export f;'},0,'true\n','[-Wmissing-return]'),
 }

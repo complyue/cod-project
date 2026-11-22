@@ -38,7 +38,7 @@ runner.CASES = {
  'retained_owner_return_after_cleanup': (IO+BROAD+METHOD.replace('return y;','defer{x<-8;};return x;')+'val x<-1,y<-2;behave @print(choose(x,y));',0,'8\n',''),
  'narrow_declared_throw_obligation': (NPE+'func f(ref x:const i64 in A)->i64 throws NullPointerException where {owner A};func f(ref x:i64 in O) where {owner O}{return x;}val x<-1;f(x);',2,'','requires a covering catch or throws'),
  'deferred_narrow_contract': (IO+'proc show(x:const i64 in A,y:const i64 in B)->void where {owner A,owner B};proc show(x:i64 in O,y:i64 in O) where {owner O}{behave @print(y);return;}val x<-1,y<-2;{{defer show(x,y);y<-7:void;}};',0,'7\n',''),
- 'deferred_declared_throws': (NPE+'func f(ref x:const i64 in A)->i64 throws NullPointerException where {owner A};func f(ref x:i64 in O) where {owner O}{return x;}val x<-1;defer f(x);',2,'','requires a covering catch or throws'),
+ 'deferred_declared_throws': (NPE+'func f(ref x:const i64 in A)->i64 throws NullPointerException where {owner A};func f(ref x:i64 in O) where {owner O}{return x;}val x<-1;defer f(x);',2,'','coverage within the owning pass'),
  'operator_value_access': (IO+'func (+)(x:const i64,y:const i64)->i64;behave @print(2+3);',0,'5\n',''),
  'operator_owner_containment': (IO+'func (+)(ref x:const i64 in A,ref y:const i64 in B)->i64 where {owner A,owner B};func (+)(ref x:i64 in O,ref y:i64 in O) where {owner O}{return intrinsic (+)(x,y);}val x<-2,y<-3;behave @print(x+y);',0,'5\n',''),
  'disjoint_swap_builtin': (IO+'proc (<->)(x:const i64 in A,y:const i64 in B)->void where {owner A,owner B};val x<-1,y<-2;x<->y;behave @print(x);behave @print(y);',0,'2\n1\n',''),

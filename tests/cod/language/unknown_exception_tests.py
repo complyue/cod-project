@@ -33,7 +33,7 @@ runner.CASES={
  'generic_callable':(IO+UNKNOWN+ONE+'func apply(f:F)->const i64 throws StaticallyUnknownTypeException where F{return f();}'+CATCH(OBS('apply(one)')),0,'1\n',''),
  'generic_caller_missing_declaration':(UNKNOWN+ONE+'func apply(f:F)->const i64 where F{return f();}try{apply(one);{}}catch(e:const StaticallyUnknownTypeException){};',2,'',"checked exception 'StaticallyUnknownTypeException'"),
  'deferred_declared_call':(IO+UNKNOWN+'proc show(x:i64)->void throws StaticallyUnknownTypeException{'+OBS('x')+'}'+CATCH('{{defer show(1);defer show(2);}};'),0,'2\n1\n',''),
- 'registration_catch_not_invocation_cover':(UNKNOWN+'proc f()->void throws StaticallyUnknownTypeException{}try{defer f();}catch(e:const StaticallyUnknownTypeException){};',2,'',"checked exception 'StaticallyUnknownTypeException'"),
+ 'registration_catch_not_invocation_cover':(UNKNOWN+'proc f()->void throws StaticallyUnknownTypeException{}try{defer f();}catch(e:const StaticallyUnknownTypeException){};',2,'','coverage within the owning pass'),
  'deferred_handler_covers':(IO+UNKNOWN+'proc show(x:i64)->void throws StaticallyUnknownTypeException{'+OBS('x')+'}{{defer catch(e:const StaticallyUnknownTypeException){}finally{};defer show(3);}};',0,'3\n',''),
  'deferred_selected_callable':(IO+UNKNOWN+'proc show(x:i64)->void throws StaticallyUnknownTypeException{'+OBS('x')+'}proc f=show;'+CATCH('{{defer f(4);}};'),0,'4\n',''),
  'exact_throw_requires_declaration':(UNKNOWN+'func f(e:StaticallyUnknownTypeException)->void{throw e;}',2,'',"checked exception 'StaticallyUnknownTypeException'"),

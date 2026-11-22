@@ -34,7 +34,7 @@ runner.CASES = {
  'partial_declaration_restricts_implementation_throws': (NPE+THROW.replace(' throws NullPointerException','')+BODY.replace(' where {owner A',' throws NullPointerException where {owner A'),2,'','outside its callable declaration'),
  'partial_declaration_keeps_kind': (THROW.replace(' throws NullPointerException','')+BODY.replace('func f','proc f'),2,'','implementation kind'),
  'deferred_distinct_owner_call': (IO+NPE+THROW.replace('func f','proc f').replace('->i64','->void')+BODY.replace('func f','proc f').replace('->i64','->void').replace('return b;',OUT('b')+'return;')+'val outer<-3;{{val inner<-7;{{defer f(outer,inner);inner<-9:void;}};}};',0,'9\n',''),
- 'deferred_same_owner_call_keeps_failure': (NPE+THROW+BODY+'val slot<-7;defer f(slot,slot);',2,'','requires a covering catch or throws'),
+ 'deferred_same_owner_call_keeps_failure': (NPE+THROW+BODY+'val slot<-7;defer f(slot,slot);',2,'','coverage within the owning pass'),
  'complete_view_retains_possible_failure': (NPE+THROW+BODY+'func selected=f;val outer<-3;{{val inner<-7;selected(outer,inner);}};',2,'','requires a covering catch or throws'),
  'complete_view_cannot_omit_failure': (NPE+THROW+BODY+BODY.replace('func f','func prototype')+'func selected=prototype;selected<-f;',2,'','required checked exception'),
  'partial_borrowed_callable': (IO+DECL+METHOD+'func selected=choose;val outer<-3;{{val inner<-7;'+OUT('selected(outer,inner)')+'}};',0,'7\n',''),
