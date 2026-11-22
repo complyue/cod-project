@@ -2,9 +2,11 @@
 
 ## Design authority
 
-[D-07-STRING-BUILD](DesignAuthorityRegistry.md#d-07-string-build), revision 3. The project user requested one lexical working type, common formatting for immutable strings and UTF-8 streams, a scoped output for deep helpers, and user-defined display and diagnostic representations. They delegated library and intrinsic design and asked mainline to validate it in the booter. [H-STRING-BUILD-20261121](../CHANGELOG.md#h-string-build-20261121) identifies that prototype authority. The API choices below are the design review’s decisions within it. P-678 derives this scope from C-36, C-55 and C-80. P-679 identifies its borrowing, text, module-world and scoped-output dependencies. Existing [UTF-8, CString and field semantics](Utf8Strings.md) govern every output. Acceptance ends at the [booter workload](#booter-prototype). Public API stability, terminal encoding for arbitrary bytes, persistence formats, and a permanent intrinsic or C ABI have separate scope.
+[D-07-STRING-BUILD](DesignAuthorityRegistry.md#d-07-string-build), revision 4. The project user requested one lexical working type, common formatting for immutable strings and UTF-8 streams, a scoped output for deep helpers, and user-defined display and diagnostic representations. They delegated library and intrinsic design and asked mainline to validate it in the booter. [H-STRING-BUILD-20261121](../CHANGELOG.md#h-string-build-20261121) identifies that prototype authority. The API choices below are the design review’s decisions within it. P-678 derives this scope from C-36, C-55 and C-80. P-679 identifies its borrowing, text, module-world and scoped-output dependencies. Existing [UTF-8, CString and field semantics](Utf8Strings.md) govern every output. Acceptance ends at the [booter workload](#booter-prototype). Public API stability, terminal encoding for arbitrary bytes, persistence formats, and a permanent intrinsic or C ABI have separate scope.
 
 [H-STRING-SOUT-20261121](../CHANGELOG.md#h-string-sout-20261121) covers the user’s direction to omit the destination from public type formatters and name the scoped output `@sout`. The streaming and collecting family names below implement that direction under the delegated prototype scope. P-678/P-679 still apply. Verify direct output, nested collection without output leakage, and restoration after failure under the existing [reference-symbol contract](SymbolicDynamicScope.md#owner-parameter-reference-symbols-and-implementation-cost).
+
+[H-UTF8-WRITE-ERROR-20261121](../CHANGELOG.md#h-utf8-write-error-20261121) selects the [unchecked output failure](#failure-cleanup-and-acceptance) for the delegated prototype under the existing [exception roots and handling obligations](ExceptionControl.md#declared-handling-obligations). Verify optional typed recovery, propagation through an unannotated formatter, partial progress and restoration.
 
 The bundled module exposes one working type, `StringBuilder`. It builds a valid UTF-8 sequence in a full lexical scope. An immutable result belongs to the owner chosen for construction. A streaming consumer can write each piece while the producer is live. Standard operations are brought into scope through ordinary module selection.
 
@@ -36,24 +38,24 @@ A caller selects this identity with `using symbol "string.cod" @sout;` and insta
 
 `emit(piece)` writes the bytes of a String or builder. It delegates to the public writer extension point `writeUtf8(@sout, piece)`. A new writer type implements `writeUtf8(out, piece)`; the explicit `out` selects the concrete backend by ordinary [method dispatch](ModuleWorlds.md#actual-type-dispatch-and-concrete-type-evidence). A type implementing a representation uses the one-argument rendering hooks below. A func can compose text or append to an explicit builder. Reading or installing the dynamic output requires a proc context.
 
-For example, a compiler can render an object manifest to a file or use identical bytes as an in-memory test fixture. Here `ObjectList` and the `objects` generator belong to the application. `Utf8WriteException` is the prototype library’s checked output failure.
+For example, a compiler can render an object manifest to a file or use identical bytes as an in-memory test fixture. Here `ObjectList` and the `objects` generator belong to the application.
 
 ```cod
 proc emit_object(dir:const String in D, file:const String in F)
-    throws Utf8WriteException where {const owner D, const owner F} {
+    where {const owner D, const owner F} {
     emit(dir ++ "/" ++ file ++ "\n");
     return;
 }
 
 proc render_manifest(list:const ObjectList in L)
-    throws Utf8WriteException where {const owner L} {
+    where {const owner L} {
     emit("objects\n");
     for ref item = objects(list) { emit_object(item.dir, item.file); }
     return;
 }
 ```
 
-The two calling contexts below use the same imported `@sout`. Each handles or declares the formatter's checked failure. In the first, D is the allocation-capable owner chosen for the final String. In the second, `writer` is an existing writable output.
+The two calling contexts below use the same imported `@sout`. In the first, D is the allocation-capable owner chosen for the final String. In the second, `writer` is an existing writable output.
 
 ```cod
 ref b = make StringBuilder();
@@ -81,18 +83,17 @@ Each call to `emit_object` has its own lexical workspace. A synchronous stream w
 | `emitRepr(x)` | Write the diagnostic form to the currently installed `@sout` and return void. |
 | `str(x)` and `repr(x)` | Return a reference to a completed immutable String in the caller’s full lexical scope. The library collects through the corresponding streaming method. |
 
-The type author implements the first two ordinary proc families. A method takes the value being rendered and declares its ordinary failures. It calls `emit` for literal pieces and `emitStr` or `emitRepr` for nested values. If the two representations coincide, a method can explicitly delegate. Ordinary module-world selection applies to every family. A missing or ambiguous method rejects on the required path, and a failing method propagates its exception once.
+The type author implements the first two ordinary proc families. A method takes the value being rendered. Standard output failure can propagate through an unannotated formatter. Other checked operations in its body follow the ordinary callable contract. It calls `emit` for literal pieces and `emitStr` or `emitRepr` for nested values. If the two representations coincide, a method can explicitly delegate. Ordinary module-world selection applies to every family. A missing or ambiguous method rejects on the required path, and a failing method propagates its exception once.
 
 For example, the [booter adapter](../applications/cod-booter/src/DiagnosticFormatting.cod) represents a [SourcePosition](../applications/cod-booter/src/SourceStorage.cod) using a one-based line and byte column. Both coordinates are zero for an unavailable position. A receiving module can export its adapted collectors and renderers together.
 
 ```cod
 export import "string.cod" { str, repr, emitStr, emitRepr };
-using "string.cod" Utf8WriteException;
 import "string.cod" emit;
 using "SourceStorage.cod" SourcePosition;
 
 proc emitStr(p:const SourcePosition in P) -> void
-    throws Utf8WriteException where {const owner P} {
+    where {const owner P} {
     if (p.line == 0u64 && p.column == 0u64) {
         emit("<unknown>");
         return;
@@ -104,7 +105,7 @@ proc emitStr(p:const SourcePosition in P) -> void
 }
 
 proc emitRepr(p:const SourcePosition in P) -> void
-    throws Utf8WriteException where {const owner P} {
+    where {const owner P} {
     emit("SourcePosition(line=");
     emitStr(p.line);
     emit(", column=");
@@ -114,7 +115,7 @@ proc emitRepr(p:const SourcePosition in P) -> void
 }
 ```
 
-A standard collector evaluates its argument once under the caller’s bindings. It allocates a private lexical builder and installs that builder as `@sout` for the dynamic extent of the streaming method. On normal completion it restores the previous binding and finishes the builder into the caller’s use-site owner. An escaping failure restores the previous binding and publishes no partial String. The collector requires no pre-existing output for its own rendering. Effects of evaluating an argument before entry still follow that argument’s contract. The renderer’s declared checked failures remain caller obligations.
+A standard collector evaluates its argument once under the caller’s bindings. It allocates a private lexical builder and installs that builder as `@sout` for the dynamic extent of the streaming method. On normal completion it restores the previous binding and finishes the builder into the caller’s use-site owner. An escaping failure restores the previous binding and publishes no partial String. The collector requires no pre-existing output for its own rendering. Effects of evaluating an argument before entry still follow that argument’s contract. Any independently declared checked failures of the selected callable remain caller obligations.
 
 For example, `ref text = repr(p);` leaves the outer writer alone, including when a formatter calls `repr(child)` while already streaming its parent. To contribute that collected text explicitly, use `emit(text);`. For incremental nested output use `emitRepr(child);` directly. Discarding `repr(p)` still performs collection and cleanup. Result use never switches a call from collection to streaming. A formatter that explicitly writes through a separately held writer still has its ordinary effects.
 
@@ -140,11 +141,24 @@ A new intrinsic is warranted only for an operation that genuinely needs compiler
 
 ## Failure, cleanup and acceptance
 
-A completed write contributes the supplied bytes in order, including U+0000. On successful return the writer has consumed the bytes or established independently live buffering. A synchronous backend may retry a short write from the first unwritten byte. A nonempty write that cannot make progress follows the backend’s wait-or-fail contract. An unrecoverable failure propagates under the writer's contract. Bytes already accepted by an external stream remain observable and the last accepted byte can fall inside a multibyte character. A checked failure declared by the generic formatter remains a caller obligation even when the installed writer happens to be a builder. Flush, close and publication of a file follow the external owner's contract. Installing a borrowed output acquires none of those responsibilities. Any adapter queuing bytes beyond a call must establish its own sufficiently long-lived storage.
+The library defines its own nominal `export data Utf8WriteError <: Error { code:u64; }` with the ordinary `Error` identity from `std:exceptions`. A terminal UTF-8 output failure raises that type. Calls to `writeUtf8`, `emit`, the streaming hooks and the collecting adapters can propagate it without a catch or a `throws` clause. A formatter usually cannot recover from losing its destination. The application boundary that knows how to abandon a report, handle a closed pipe or fail an export can catch the concrete error there. A higher-level operation promising durable publication can translate it into its own checked failure under its normal contract.
+
+```cod
+using "string.cod" Utf8WriteError;
+
+# The caller has installed the stream. The recovery helper records the code
+# through an independent channel.
+try { emitRepr(position); }
+catch (e:Utf8WriteError) { record_output_failure(e.code); };
+```
+
+A completed write contributes the supplied bytes in order, including U+0000. On successful return the writer has consumed the bytes or established independently live buffering. A short write reports progress; continue from the first unwritten byte when the backend permits it. For a nonempty write that cannot make progress, follow the backend’s wait-or-fail contract. On terminal failure, propagate the error once and preserve the accepted prefix, even if it ends inside a multibyte character. Scope cleanup restores the previous `@sout`. Flush, close and file publication retain the external owner’s contracts. Any adapter queuing bytes beyond a call must establish sufficiently long-lived storage.
+
+The unchecked classification applies to this writer failure. Allocation failure retains its own category; a custom formatter or provider that calls an unrelated checked operation still owes the declared handling contract. The standard adapter does not catch arbitrary exceptions and relabel them as output errors.
 
 For collection, finish before installing the field. If formatting or final construction throws, that final installation has not occurred. The former field and its borrowers remain usable unless the user's code independently changed them. Ordinary cleanup still runs for scratch resources, and prior initializer or output effects keep their semantics.
 
-Verify the same manifest rendered both ways. Compare bytes for empty input, non-ASCII text and an embedded NUL. Reuse a builder after finishing and an operand after concatenation, then end the source scope and verify the finished text under D. Redirect a nested formatter to an inner builder, inject a write failure, catch it outside the installation and emit again to the restored outer target. Exercise short writes and failure following a successful prefix. Stream many records with a bounded writer and per-record scratch, without constructing the complete manifest. A streaming call that needs the output with no live binding, an escaping reference to a dead workspace, and an attempt to access the symbol from a func must reject.
+Verify the same manifest rendered both ways. Compare bytes for empty input, non-ASCII text and an embedded NUL. Reuse a builder after finishing and an operand after concatenation, then end the source scope and verify the finished text under D. Redirect a nested formatter to an inner builder, inject a write failure, catch it outside the installation and emit again to the restored outer target. Exercise short writes and failure following a successful prefix. Stream many records with a bounded writer and per-record scratch, without constructing the complete manifest. Test propagation from a formatter without a catch or `throws`, optional recovery by `catch (e:Utf8WriteError)`, and an unrelated checked operation that still needs coverage. A streaming call that needs the output with no live binding, an escaping reference to a dead workspace, and an attempt to access the symbol from a func must reject.
 
 ## Booter prototype
 

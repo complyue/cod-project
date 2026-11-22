@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 — Unchecked UTF-8 output failure
+
+<a id="h-utf8-write-error-20261121"></a>
+**H-UTF8-WRITE-ERROR-20261121.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-21 (America/Los_Angeles), the project user proposed “unchecked `Utf8WriteError` 是不是更好？ 正常情况一般不会出这种错，应用发现有必要的地方再显式 catch”. Under the H-STRING-BUILD-20261121 prototype delegation, the design review adopts the library Error subtype and optional handling for terminal output failure. Short-write progress, ordinary unwinding, independent checked contracts, and the D-17 exception hierarchy continue. D-07-STRING-BUILD r4, registry r1044, P-678/P-679. The previous checked signature is at `a33e0b800247076e725d72b1e1bda1d4a56ab127:design/StringBuilding.md`.
+
 ## 2026-11-21 — Scoped output for public type formatters
 
 <a id="h-string-sout-20261121"></a>
