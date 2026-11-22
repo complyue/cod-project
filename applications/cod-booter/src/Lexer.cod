@@ -6,7 +6,7 @@ export func identifier() -> u8 { return 1u8; }
 export func symbol_name() -> u8 { return 2u8; }
 export func integer_literal() -> u8 { return 3u8; }
 export func real_literal() -> u8 { return 4u8; }
-export func module_path() -> u8 { return 5u8; }
+export func quoted_text() -> u8 { return 5u8; }
 export func punctuation() -> u8 { return 6u8; }
 
 export func unsupported_byte() -> u8 { return 7u8; }
@@ -381,7 +381,19 @@ export func here_word(source:const SourceBytes in S, token:const Token in T) -> 
 
 export func c_linkage(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    return token.kind == module_path() && token.past - token.first == 3u64 && source[token.first + 1u64] == 67u8; # "C"
+    return token.kind == quoted_text() && token.past - token.first == 3u64 && source[token.first + 1u64] == 67u8; # "C"
+}
+
+export func valid_module_path(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val escaped <- false;
+    val byte <- 0u8;
+    for (at in token.first + 1u64 .. token.past - 1u64) {
+        byte <- source[at];
+        if (escaped && byte != 34u8 && byte != 92u8) return false;
+        escaped <- !escaped && byte == 92u8;
+    };
+    return !escaped;
 }
 
 export func if_word(source:const SourceBytes in S, token:const Token in T) -> bool
@@ -647,34 +659,29 @@ func numeral_end(source:const SourceBytes in S, first:u64, past:u64,
     return;
 }
 
-func quoted_path_end(source:const SourceBytes in S, first:u64, past:u64,
+func quoted_text_end(source:const SourceBytes in S, first:u64, past:u64,
                       token:Token in T) -> void where {const owner S, owner T} {
     val escaped <- false;
     val byte <- 0u8;
     for (at in first + 1u64 .. past) {
         byte <- source[at];
+        if (byte == 10u8) {
+            token.kind <- newline_in_module_path();
+            token.past <- at;
+            return;
+        } else {};
         if (escaped) {
-            if (byte != 34u8 && byte != 92u8) { # '"' or backslash
-                token.kind <- invalid_module_path_escape();
-                token.past <- at + 1u64;
-                return;
-            } else {};
             escaped <- false;
         } else {
             if (byte == 34u8) {
-                token.kind <- module_path();
+                token.kind <- quoted_text();
                 token.past <- at + 1u64;
-                return;
-            } else {};
-            if (byte == 10u8) {
-                token.kind <- newline_in_module_path();
-                token.past <- at;
                 return;
             } else {};
             escaped <- byte == 92u8;
         };
     };
-    token.kind <- if (escaped) { invalid_module_path_escape() } else { unterminated_module_path() };
+    token.kind <- unterminated_module_path();
     token.past <- past;
     return;
 }
@@ -746,7 +753,7 @@ export func scan_token(source:const SourceBytes in S, first:u64,
         return;
     } else {};
     if (byte == 34u8) { # '"'
-        quoted_path_end(source, start, past, token);
+        quoted_text_end(source, start, past, token);
         return;
     } else {};
     val second_at <- start + 1u64;

@@ -32,7 +32,7 @@ proc verify_active_session() -> u8 {
     return llvm_verify(@llvmSession);
 }
 
-proc write_object(handle output:Path in A, handle diagnostic:DiagnosticDestination in D,
+proc write_object(output:const String in A, handle diagnostic:DiagnosticDestination in D,
                   commands:const NativeCommands in W, plan:const NativePlan in P) -> CompilerStatus
     where {const owner A, const owner W, const owner P, owner D} {
     try {
@@ -47,7 +47,7 @@ proc write_object(handle output:Path in A, handle diagnostic:DiagnosticDestinati
             report_backend_error(diagnostic, verified);
             return FinishFailed;
         } else {};
-        val emitted <- llvm_emit_object(@llvmSession, output);
+        val emitted <- llvm_emit_object(@llvmSession, output:CString);
         if (emitted != 0u8) {
             report_backend_error(diagnostic, emitted);
             return FinishFailed;
@@ -61,7 +61,7 @@ proc write_object(handle output:Path in A, handle diagnostic:DiagnosticDestinati
 
 proc lower_object(source:const SourceBytes in S, lines:const SourceLines in S,
                   spellings:const SourceBytes in B, exports:const ModuleExports in B,
-                  handle output:Path in A, handle diagnostic:DiagnosticDestination in D,
+                  output:const String in A, handle diagnostic:DiagnosticDestination in D,
                   tokens:Tokens in W, nodes:ExprNodes in W,
                   selected:SelectedExports in W, bindings:NameBindings in W, names:NameWork in W,
                   facts:OperandFacts in W, owners:CallOwners in W, sites:CompletionSites in W,
@@ -104,7 +104,7 @@ proc lower_object(source:const SourceBytes in S, lines:const SourceLines in S,
 
 proc compile_revision(source:const SourceBytes in S, lines:const SourceLines in S,
                       spellings:const SourceBytes in B, exports:const ModuleExports in B,
-                      handle output:Path in A, handle diagnostic:DiagnosticDestination in D) -> CompilerStatus
+                      output:const String in A, handle diagnostic:DiagnosticDestination in D) -> CompilerStatus
     where {const owner S, const owner B, const owner A, owner D} {
     ref workspace = make ModuleWorkspacePlan {
         source <- make ExpressionScratchPlan {
@@ -134,7 +134,7 @@ proc compile_revision(source:const SourceBytes in S, lines:const SourceLines in 
     }
 }
 
-export proc compile_object(handle input:Path in A, handle output:Path in A,
+export proc compile_object(handle input:Path in A, output:const String in A,
                            handle diagnostic:DiagnosticDestination in D,
                            spellings:const SourceBytes in B, exports:const ModuleExports in B) -> CompilerStatus
     where {const owner A, const owner B, owner D} {

@@ -16,7 +16,7 @@ using "ParserStorage.cod" {
     block_item_node, try_node, catch_clause_node, finally_clause_node, null_node, return_node,
     throw_node, local_storage_binding, case_node, case_arm_node, case_fallthrough_node, case_failure_node,
     enum_declaration_node, enum_member_node, enum_integer_node, type_assertion_node,
-    local_module_selection, local_resource_name, native_symbol_declaration_node, native_effect_node,
+    local_module_selection, local_resource_name, native_symbol_declaration_node, native_effect_node, text_literal_node,
 };
 using "ExpressionParser.cod" ParseResult;
 using "ModuleExports.cod" { SelectedExports, record_export, enum_member_export };
@@ -101,6 +101,12 @@ export func handle_binding() -> u8 { return 24u8; }
 export func here_receiver_binding() -> u8 { return 25u8; }
 export func enum_value() -> u8 { return 27u8; }
 export func native_symbol_binding() -> u8 { return 28u8; }
+export func builtin_string() -> u8 { return 29u8; }
+export func builtin_c_string() -> u8 { return 30u8; }
+
+export func text_type(kind:u8) -> bool {
+    return kind == builtin_string() || kind == builtin_c_string();
+}
 
 func symbol_binding(kind:u8) -> bool {
     return kind == symbolic_selection() || kind == native_symbol_binding();
@@ -250,10 +256,16 @@ func resolve_owner(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
     remember(bindings, name, bindings[found].declaration, owner_binding());
 }
 
-func scalar_name(source:const SourceBytes in S, nodes:const ExprNodes in N, name:u64) -> u8
+func builtin_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N, name:u64) -> u8
     where {const owner S, const owner N} {
     val first <- nodes[name].first;
     val length <- nodes[name].past - first;
+    if (length == 6u64 || (length == 7u64 && source[first] == 67u8)) {
+        val start <- nodes[name].past - 6u64;
+        if (source[start] == 83u8 && source[start + 1u64] == 116u8 && source[start + 2u64] == 114u8 &&
+            source[start + 3u64] == 105u8 && source[start + 4u64] == 110u8 && source[start + 5u64] == 103u8)
+            return if (length == 6u64) { builtin_string() } else { builtin_c_string() };
+    } else {};
     if (length == 3u64 && source[first] == 117u8 && source[first + 1u64] == 54u8 && source[first + 2u64] == 52u8)
         return builtin_u64();
     if (length == 4u64) {
@@ -281,7 +293,7 @@ func scalar_name(source:const SourceBytes in S, nodes:const ExprNodes in N, name
 func resolve_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                         work:const NameWork in W, state:NameState in R, name:u64) -> void
     where {const owner S, const owner N, owner B, const owner W, owner R} {
-    val built_in <- scalar_name(source, nodes, name);
+    val built_in <- builtin_type_name(source, nodes, name);
     if (built_in != 0u8) {
         remember(bindings, name, no_node(), built_in);
         return;
@@ -832,6 +844,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
     bindings[at].finalizer <- state.finalizer;
     val kind <- nodes[at].kind;
     if (kind == literal_node() || kind == narrow_integer_node() || kind == bool_node()) return;
+    if (kind == text_literal_node()) { remember(bindings, at, at, builtin_string()); return; } else {};
     if (kind == name_node() || kind == symbol_node()) {
         resolve_value(source, nodes, bindings, work, state, at);
         return;
@@ -849,7 +862,8 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         resolve_type_name(source, nodes, bindings, work, state, nodes[at].right);
         if (state.diagnostic != 0u8) return;
         val operand <- nodes[at].left;
-        if (nodes[operand].kind == name_node() && bindings[operand].kind != enum_value() &&
+        if (bindings[nodes[at].right].kind != builtin_c_string() &&
+            nodes[operand].kind == name_node() && bindings[operand].kind != enum_value() &&
             lookup(source, nodes, work, operand, 0u64, state.used) == no_node()) return;
         resolve_expression(source, nodes, bindings, work, state, operand);
         return;
@@ -1261,7 +1275,7 @@ func resolve_enum(source:const SourceBytes in S, nodes:const ExprNodes in N, bin
                   work:NameWork in W, state:NameState in R, form:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val backing <- nodes[form].number;
-    val kind <- scalar_name(source, nodes, backing);
+    val kind <- builtin_type_name(source, nodes, backing);
     val limit <- 18446744073709551615u64;
     if (kind == builtin_i64()) { (limit <- 9223372036854775807u64):void; } else {
         if (kind == builtin_u8()) { (limit <- 255u64):void; } else {

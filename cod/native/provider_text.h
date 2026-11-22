@@ -35,7 +35,10 @@ typedef struct {
     bool failed;
 } cod_provider_text;
 
-typedef enum { cod_provider_argument_scalar, cod_provider_argument_handle, cod_provider_argument_view } cod_provider_argument_kind;
+typedef enum {
+    cod_provider_argument_scalar, cod_provider_argument_handle, cod_provider_argument_view,
+    cod_provider_argument_text, cod_provider_argument_c_string
+} cod_provider_argument_kind;
 
 typedef struct {
     const char *type;

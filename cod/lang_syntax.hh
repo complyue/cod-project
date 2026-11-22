@@ -3,8 +3,10 @@
 
 #include "lang_source.hh"
 
+#include <cod_utf8.h>
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <compare>
 #include <filesystem>
 #include <map>
@@ -124,24 +126,18 @@ inline std::vector<Token> tokenize(const std::shared_ptr<const IndexedSource> &r
     }
     if (c == '"') {
       ++cursor;
-      std::string value;
-      while (cursor < source.size() && source[cursor] != '"') {
-        char next = source[cursor];
-        if (next == '\n')
-          fail(start, "newline in module path");
-        if (next == '\\') {
-          ++cursor;
-          if (cursor == source.size() || (source[cursor] != '\\' && source[cursor] != '"'))
-            fail(start, "module paths support only escaped backslash or quote");
-          next = source[cursor];
-        }
-        value += next;
+      bool escaped = false;
+      while (cursor < source.size()) {
+        const auto next = source[cursor];
+        if (next == '\n') fail(start, "newline in quoted text");
+        if (!escaped && next == '"') break;
+        escaped = !escaped && next == '\\';
         ++cursor;
       }
-      if (cursor == source.size())
-        fail(start, "unterminated module path");
+      if (cursor == source.size()) fail(start, "unterminated quoted text");
+      const auto raw = source.substr(offset + 1, cursor - offset - 1);
       ++cursor;
-      emit(TokenKind::string, std::move(value), offset);
+      emit(TokenKind::string, std::string(raw), offset);
       continue;
     }
     std::string punctuation(1, c);
@@ -175,7 +171,7 @@ enum class ArgumentMode { value, borrowed_read, borrowed_ref, borrowed_ptr, borr
 struct Type {
   enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64,
               named, unit, quantity, product, region_schema, region, regional, array, reference, null_ref, abstract_type, arguments, parameter,
-              exception, never, c_type_marker, native_handle, exception_holder, enumeration };
+              exception, never, c_type_marker, native_handle, exception_holder, enumeration, string, c_string };
   Kind kind;
   std::string name;
   size_t identity = 0;
@@ -226,6 +222,8 @@ inline bool integral(Type type) {
   return type == Type::integer || type == Type::uint8 || type == Type::uint32 || type == Type::uint64;
 }
 inline bool numeric(Type type) { return integral(type) || floating(type); }
+inline bool text_type(const Type &type) { return type.kind == Type::string || type.kind == Type::c_string; }
+inline bool widens_text(const Type &from, const Type &to) { return from.kind == Type::c_string && to.kind == Type::string; }
 inline Type representation(Type type) {
   return type.kind == Type::quantity ? *type.target : type;
 }
@@ -252,6 +250,8 @@ inline bool widens(Type from, Type to) {
 }
 inline std::string type_name(const Type &type) {
   switch (type.kind) {
+  case Type::string: return "String";
+  case Type::c_string: return "CString";
   case Type::exception_holder: return "exception :" + type_name(*type.target);
   case Type::native_handle: return (type.owned ? "own handle " : "handle ") + type.name;
   case Type::integer: return "i64";
@@ -315,7 +315,7 @@ struct Expression {
                     pointer_group, pointer, rebind, region_binding, callable, alias, capture_owner,
                     here_body, named_argument, break_value, continue_value, typed_expression, return_tail,
                     processor_composition, pipeline, here_binding, make_object, native_handle_binding, make_owned_handle, make_borrowed_handle,
-                    exception_binding, make_exception, rethrow_from, case_expression, case_arm,
+                    exception_binding, make_exception, rethrow_from, case_expression, case_arm, string_literal,
                     case_break, case_fallthrough, case_failure };
   enum class ExceptionPlacement { default_region, capacity, cause };
   Kind kind;
@@ -722,9 +722,57 @@ class Parser {
     return op;
   }
   void resource(Form &form, bool symbolic) {
-    if (peek().kind != TokenKind::string) fail(peek().at, "expected a quoted module path");
-    form.path = tokens_[cursor_++].text;
+    form.path = module_path();
     resource_selection(form, symbolic);
+  }
+  std::string module_path() {
+    if (peek().kind != TokenKind::string) fail(peek().at, "expected a quoted module path");
+    const auto token = name(TokenKind::string);
+    std::string result;
+    for (size_t i = 0; i < token.text.size(); ++i) {
+      auto byte = token.text[i];
+      if (byte == '\\') {
+        byte = token.text[++i];
+        if (byte != '\\' && byte != '"') fail(token.at, "module paths support only escaped backslash or quote");
+      }
+      result.push_back(byte);
+    }
+    return result;
+  }
+  static std::string text_literal(const Token &token) {
+    std::string result;
+    const auto raw = std::string_view(token.text);
+    for (size_t i = 0; i < raw.size(); ++i) {
+      const auto byte = raw[i];
+      if (byte == '\r') fail(token.at, "newline in text literal");
+      if (byte != '\\') { result.push_back(byte); continue; }
+      switch (raw[++i]) {
+      case '"': case '\\': result.push_back(raw[i]); break;
+      case 'n': result.push_back('\n'); break;
+      case 'r': result.push_back('\r'); break;
+      case 't': result.push_back('\t'); break;
+      case '0': result.push_back('\0'); break;
+      case 'u': {
+        if (i + 1 >= raw.size() || raw[i + 1] != '{') fail(token.at, "expected '{' in Unicode scalar escape");
+        const auto first = i + 2;
+        const auto close = raw.find('}', first);
+        if (close == raw.npos) fail(token.at, "unterminated Unicode scalar escape");
+        uint32_t value = 0;
+        const auto [end, status] = std::from_chars(raw.data() + first, raw.data() + close, value, 16);
+        if (status != std::errc{} || end != raw.data() + close || !cod_unicode_scalar(value))
+          fail(token.at, "invalid Unicode scalar escape");
+        uint8_t bytes[4];
+        const auto width = cod_utf8_encode(value, bytes);
+        result.append(reinterpret_cast<const char *>(bytes), width);
+        i = close;
+        break;
+      }
+      default: fail(token.at, "unknown text literal escape");
+      }
+    }
+    if (!cod_utf8_valid(reinterpret_cast<const uint8_t *>(result.data()), result.size()))
+      fail(token.at, "invalid UTF-8 in text literal");
+    return result;
   }
   void resource_selection(Form &form, bool symbolic) {
     form.symbolic = symbolic || peek().kind == TokenKind::symbol;
@@ -845,6 +893,8 @@ class Parser {
     else if (token.text == "void") type = Type::void_type;
     else if (token.text == "f32") type = Type::float32;
     else if (token.text == "f64") type = Type::float64;
+    else if (token.text == "String") type = Type::string;
+    else if (token.text == "CString") type = Type::c_string;
     return type;
   }
   void type_separator() { expect(":"); }
@@ -1433,6 +1483,12 @@ class Parser {
   Expr primary(HereAttachment attachment, bool owner_projection) {
     const bool pipeline_operand = attachment == HereAttachment::pipeline_body;
     auto token = peek();
+    if (token.kind == TokenKind::string) {
+      ++cursor_;
+      auto literal = make(Expression::Kind::string_literal, token);
+      literal->text = text_literal(token);
+      return literal;
+    }
     if (is("here") && tokens_[cursor_ + 1].kind == TokenKind::identifier) {
       expect("here");
       auto binding = make(Expression::Kind::here_binding, value_name());
@@ -2360,7 +2416,7 @@ public:
         if (take("units")) {
           if (!using_resource) fail(start.at, "UoMs support fresh definitions and using, not import or mixin");
           form->kind = Form::Kind::using_units;
-          form->path = name(TokenKind::string).text;
+          form->path = module_path();
           expect("{");
           do {
             auto source = ordinary_name();
@@ -2376,8 +2432,7 @@ public:
           if (!using_resource) fail(start.at, "combined symbol selection requires using; declare its destination first");
           form->using_symbol = true;
         }
-        if (peek().kind != TokenKind::string) fail(peek().at, "expected a quoted module path");
-        form->path = tokens_[cursor_++].text;
+        form->path = module_path();
         if (take("{")) {
           if (is("}")) fail(peek().at, "expected a selection in the module group");
           while (true) {

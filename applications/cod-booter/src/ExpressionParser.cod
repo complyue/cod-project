@@ -16,7 +16,7 @@ using "ParserStorage.cod" {
     range_header_node, logical_not_node, logical_and_node, logical_or_node, compare_node,
     equal_words, unequal_words, less_words, at_most_words, greater_words, at_least_words, no_node, type_assertion_node,
     case_node, case_arm_node, case_fallthrough_node, case_failure_node, case_pattern_node,
-    case_member_pattern, case_false_pattern, case_true_pattern, case_null_pattern, native_effect_node,
+    case_member_pattern, case_false_pattern, case_true_pattern, case_null_pattern, native_effect_node, text_literal_node,
 };
 using "Lexer.cod" {
     exception_word, own_word, handle_word, ref_word, make_word, typeof_word, from_word,
@@ -24,7 +24,7 @@ using "Lexer.cod" {
     func_word, region_word, capacity_word, identifier, integer_literal, punctuation, defer_word,
     catch_word, finally_word, try_word, const_word, behave_word, throw_word, symbol_name, in_word,
     ptr_word, val_word, null_word, return_word, void_word, if_word, for_word, continue_word,
-    break_word, else_word, true_word, false_word, not_word, case_word, of_word, fallthrough_word, effect_word,
+    break_word, else_word, true_word, false_word, not_word, case_word, of_word, fallthrough_word, effect_word, quoted_text,
 };
 using "SourceStorage.cod" { SourceBytes, Token };
 
@@ -69,6 +69,7 @@ func expected_index_close() -> u8 { return 42u8; }
 func expected_array_length_query() -> u8 { return 43u8; }
 func expected_case_of() -> u8 { return 46u8; }
 func expected_case_arrow() -> u8 { return 47u8; }
+func invalid_text_literal() -> u8 { return 113u8; }
 func unsupported_case_pattern() -> u8 { return 48u8; }
 func invalid_throwing_case_arm() -> u8 { return 49u8; }
 
@@ -917,6 +918,93 @@ func parse_case(source:const SourceBytes in S, tokens:const Tokens in T, nodes:E
     (result.case_control <- enclosing):void;
 }
 
+func utf8_width(source:const SourceBytes in S, at:u64, past:u64) -> u64 where {const owner S} {
+    val lead <- source[at];
+    if (lead < 128u8) return 1u64;
+    if (lead < 194u8 || lead > 244u8) return 0u64;
+    val width <- if (lead <= 223u8) { 2u64 } else { if (lead <= 239u8) { 3u64 } else { 4u64 } };
+    if (past - at < width) return 0u64;
+    val second <- source[at + 1u64];
+    if (second < 128u8 || second > 191u8 ||
+        (lead == 224u8 && second < 160u8) || (lead == 237u8 && second > 159u8) ||
+        (lead == 240u8 && second < 144u8) || (lead == 244u8 && second > 143u8)) return 0u64;
+    for (tail in at + 2u64 .. at + width) {
+        if (source[tail] < 128u8 || source[tail] > 191u8) return 0u64;
+    };
+    return width;
+}
+
+func hex_digit(byte:u8) -> u64 {
+    val digit:u64 <- byte;
+    if (byte >= 48u8 && byte <= 57u8) return digit - 48u64;
+    if (byte >= 65u8 && byte <= 70u8) return digit - 55u64;
+    if (byte >= 97u8 && byte <= 102u8) return digit - 87u64;
+    return 16u64;
+}
+
+func unicode_escape(source:const SourceBytes in S, brace:u64, past:u64, contains_zero:bool in N) -> u64
+    where {const owner S, owner N} {
+    if (brace + 1u64 >= past || source[brace] != 123u8) return no_node();
+    val codepoint <- 0u64;
+    val digit <- 0u64;
+    for (at in brace + 1u64 .. past) {
+        if (source[at] == 125u8) {
+            if (at == brace + 1u64 || (codepoint >= 55296u64 && codepoint <= 57343u64)) return no_node();
+            if (codepoint == 0u64) { (contains_zero <- true):void; } else {};
+            return at + 1u64;
+        } else {};
+        digit <- hex_digit(source[at]);
+        if (digit == 16u64) return no_node();
+        codepoint <- codepoint * 16u64 + digit;
+        if (codepoint > 1114111u64) return no_node();
+    };
+    return no_node();
+}
+
+func parse_text_literal(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
+                        result:ParseResult in R) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val first <- tokens[result.next].first;
+    val end <- tokens[result.next].past;
+    val at <- first + 1u64;
+    val past <- end - 1u64;
+    val byte <- 0u8;
+    val width <- 0u64;
+    val contains_zero <- false;
+    for (unused in first .. end) {
+        if (at == past) {
+            append_node(nodes, result, text_literal_node(), first, end,
+                if (contains_zero) { 1u64 } else { 0u64 }, no_node(), no_node(), first);
+            if (result.diagnostic == 0u8) { (result.next <- result.next + 1u64):void; } else {};
+            return;
+        } else {};
+        byte <- source[at];
+        if (byte == 13u8) { result.diagnostic <- invalid_text_literal(); return; } else {};
+        if (byte == 92u8) {
+            at <- at + 1u64;
+            if (at >= past) { result.diagnostic <- invalid_text_literal(); return; } else {};
+            byte <- source[at];
+            if (byte == 117u8) {
+                at <- unicode_escape(source, at + 1u64, past, contains_zero);
+                if (at == no_node()) { result.diagnostic <- invalid_text_literal(); return; } else {};
+            } else {
+                if (byte == 48u8) { (contains_zero <- true):void; } else {
+                    if (byte != 34u8 && byte != 92u8 && byte != 110u8 && byte != 114u8 && byte != 116u8) {
+                        result.diagnostic <- invalid_text_literal();
+                        return;
+                    } else {};
+                };
+                (at <- at + 1u64):void;
+            };
+        } else {
+            if (byte == 0u8) { (contains_zero <- true):void; } else {};
+            width <- utf8_width(source, at, past);
+            if (width == 0u64) { result.diagnostic <- invalid_text_literal(); return; } else {};
+            (at <- at + width):void;
+        };
+    };
+}
+
 func parse_native_effect(source:const SourceBytes in S, tokens:const Tokens in T,
                          nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
@@ -942,6 +1030,7 @@ func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
     val at <- result.next;
     if (at >= past) { result.diagnostic <- expected_operand(); return; } else {};
     val first <- tokens[at].first;
+    if (tokens[at].kind == quoted_text()) { parse_text_literal(source, tokens, nodes, result); return; } else {};
     if (effect_word(source, tokens[at])) { parse_native_effect(source, tokens, nodes, result, past); return; } else {};
     if (if_word(source, tokens[at])) { parse_conditional(source, tokens, nodes, result, past); return; } else {};
     if (case_word(source, tokens[at])) { parse_case(source, tokens, nodes, result, past); return; } else {};

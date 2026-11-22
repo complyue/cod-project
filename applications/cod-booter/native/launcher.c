@@ -138,6 +138,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: case pattern is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 1 && diagnostic->code == 49)
         fputs(": error: the unbraced throwing arm requires an unguarded catch-all\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 113)
+        fputs(": error: invalid UTF-8 text literal or escape\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 77)
         fputs(": error: catch annotation must name an exception type\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 7)
@@ -221,6 +223,12 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: no such member in the case subject's enum\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 96)
         fputs(": error: case guard requires bool\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 97)
+        fputs(": error: CString assertion requires String text\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 98)
+        fputs(": error: text literal contains an interior NUL and cannot supply CString\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 99)
+        fputs(": error: C provider requires a proved CString argument\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 20)
         fputs(": error: narrow integer execution is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 21)
@@ -278,12 +286,13 @@ static cod_native_status compile(const char *source, const char *object, cod_boo
                                  compiler_status *status) {
     *diagnostic = (cod_booter_diagnostic){0};
     const char *arguments[] = {source, object};
-    const cod_native_loan paths = {arguments, (uint64_t)(uintptr_t)arguments};
+    const cod_native_loan argument_owner = {arguments, (uint64_t)(uintptr_t)arguments};
     const cod_native_loan destination = {diagnostic, (uint64_t)(uintptr_t)diagnostic};
-    const cod_native_Path_borrow input = {(uint64_t)(uintptr_t)source, paths.owner};
-    const cod_native_Path_borrow output = {(uint64_t)(uintptr_t)object, paths.owner};
+    const cod_native_Path_borrow input = {(uint64_t)(uintptr_t)source, argument_owner.owner};
+    const size_t output_size = strlen(object);
+    const cod_native_text output = {(const uint8_t *)object, output_size, output_size + 1};
     const cod_native_DiagnosticDestination_borrow record = {destination.owner, destination.owner};
-    return cod_native_compile_cli_entry(&input, &output, &record, &paths, &destination, status);
+    return cod_native_compile_cli_entry(&input, &output, &record, &argument_owner, &destination, status);
 }
 
 int main(int argc, char **argv) {

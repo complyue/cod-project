@@ -228,6 +228,7 @@ class ScalarChecker {
   std::map<size_t, size_t> native_resource_owners_, native_owner_scopes_;
   std::set<size_t> scope_native_owner_places_;
   std::map<size_t, size_t> incoming_native_symbol_owners_;
+  std::optional<size_t> literal_text_owner_;
   std::map<const Expression *, size_t> checked_scope_owners_;
   bool proving_ = false;
   bool validating_ = false;
@@ -2356,6 +2357,11 @@ class ScalarChecker {
     for (const auto method : methods) message += " " + location_text(program_.methods[method].source->at);
     fail(at, message);
   }
+  static const Expression *text_literal_operand(const Expression &expr) {
+    const auto *operand = &expr;
+    while (operand->kind == Expression::Kind::grouped) operand = operand->children.front().get();
+    return operand->kind == Expression::Kind::string_literal ? operand : nullptr;
+  }
   ArgumentPreparation argument_preparation(const Expression &expr, std::string_view operation, const std::vector<Type> &prefix,
                                             const std::vector<ArgumentEvidence> &evidence, const Access &prefix_access, const Owners &prefix_owners, bool required = true, const TypeEvidenceState *state = nullptr) const {
     if (expr.intrinsic) return {};
@@ -2370,7 +2376,17 @@ class ScalarChecker {
     for (size_t i = prefix.size(); i < evidence.size(); ++i)
       complete = complete && evidence[i].type.has_value() && evidence[i].type != Type::never;
     const auto family = named_family(expr.text, state);
-    const auto candidates = method_candidates(family.methods, arguments, family.retained_types(), access, owners, state);
+    auto candidates = method_candidates(family.methods, arguments, family.retained_types(), access, owners, state);
+    if (candidates.methods.empty() && !candidates.type_match) {
+      bool contextual = false;
+      for (size_t i = prefix.size(); i < arguments.size(); ++i) {
+        if (arguments[i] != Type::string || !text_literal_operand(*expr.children[i])) continue;
+        arguments[i] = Type::c_string;
+        contextual = true;
+      }
+      if (contextual)
+        candidates = method_candidates(family.methods, arguments, family.retained_types(), access, owners, state);
+    }
     auto applicable = candidates.methods;
     if (complete) {
       applicable = most_specific(applicable, access, owners, state, candidates.widening);
@@ -4419,7 +4435,8 @@ class ScalarChecker {
         if (equality == OwnerMatch::mismatch) fail(expr.at, "arguments for one owner role have different actual owners");
       }
       if (!readonly && view.read_only) fail(operation.argument(expr, i + offset).at, "readonly argument cannot supply a writable borrowed parameter");
-      if (arguments[i] != contract.parameters[i]) implementation_gap(operation.argument(expr, i + offset).at, "borrowed exception upcasts");
+      if (arguments[i] != contract.parameters[i] && !widens_text(arguments[i], contract.parameters[i]))
+        implementation_gap(operation.argument(expr, i + offset).at, "borrowed exception upcasts");
     }
     operation.type = *contract.target;
     if (operation.type.kind == Type::exception)
@@ -6011,7 +6028,7 @@ class ScalarChecker {
     reject_c_type_payload(type, at);
     if (nominal_exception(type)) implementation_gap(at, "library-defined exception arguments and results require an owner-aware signature");
     if (bits_type(type) || binder(method, type) || (result && type == Type::void_type)) return;
-    if (borrowed_target && (type.kind == Type::product || (!result && type.kind == Type::array))) return;
+    if (borrowed_target && (type.kind == Type::product || (!result && (type.kind == Type::array || text_type(type))))) return;
     if (type.kind == Type::array)
       implementation_gap(at, "array parameter or result of type '" + type_name(type) + "'");
     if (type.kind == Type::procedure && type.target) {
@@ -6117,6 +6134,8 @@ class ScalarChecker {
                              Substitutions &substitutions, bool widening) {
     index = parameter_index(method, index);
     if (bind_type(method, method.parameters[index], argument, substitutions, true)) return true;
+    if (widening && argument_mode(method.input_parameters()[index]) == ArgumentMode::borrowed_ref &&
+        widens_text(argument, method.parameters[index])) return true;
     if (!widening || argument_mode(method.input_parameters()[index]) != ArgumentMode::value) return false;
     auto target = method.parameters[index];
     if (const auto type = binder(method, target)) {
@@ -6972,7 +6991,7 @@ class ScalarChecker {
       const bool value = parameter.owner.empty();
       const bool live_value = method.scope_inputs && method.scope_inputs->live_values.contains(i);
       const bool independent = parameter.declaration_kind == "val" || (value && arguments[i].kind == Type::procedure);
-      state.bindings[parameter.name] = arguments[i];
+      state.bindings[parameter.name] = text_type(method.parameters[i]) ? method.parameters[i] : arguments[i];
       state.definitions.erase(parameter.name);
       state.views[parameter.name] = {parameter.read_only || (parameter.declaration_kind == "val" && parameter.fixed_binding), true,
                                     live_value || parameter.declaration_kind == "val",
@@ -7541,10 +7560,10 @@ class ScalarChecker {
       result.storage_kind = a.storage_kind == b.storage_kind ? *a.storage_kind : PlaceKind::mixed;
     return result;
   }
-  enum class GroupResult { value, nullable_target, unsupported };
+  enum class GroupResult { value, target, unsupported };
   static GroupResult group_result(const Type &type, bool view, bool nullable, bool mixed) {
-    if (nullable)
-      return mixed ? GroupResult::unsupported : GroupResult::nullable_target;
+    if (nullable || (view && text_type(type)))
+      return mixed ? GroupResult::unsupported : GroupResult::target;
     if (!view || scalar_type(type) || type.kind == Type::procedure) return GroupResult::value;
     return GroupResult::unsupported;
   }
@@ -10541,10 +10560,16 @@ class ScalarChecker {
   }
   static void check_written_operand_type(const Type &type, ArgumentMode mode, const Location &at, bool aggregate_borrows) {
     if (mode == ArgumentMode::borrowed_handle && type.kind == Type::native_handle && !type.owned) return;
+    if (text_type(type) && mode == ArgumentMode::borrowed_ref) return;
     const bool aggregate = type.kind == Type::product || type.kind == Type::array;
     const bool borrowed = mode == ArgumentMode::borrowed_read || mode == ArgumentMode::borrowed_ref;
     if (scalar_type(type) || (aggregate_borrows && aggregate && borrowed)) return;
     implementation_gap(at, "written argument preparation requires scalar inputs");
+  }
+  static Type string_literal_type(const Expression &expr, const Type *expected) {
+    if (!expected || expected->kind != Type::c_string) return Type::string;
+    if (expr.text.find('\0') != std::string::npos) fail(expr.at, "text literal contains an interior NUL and cannot supply CString");
+    return Type::c_string;
   }
   CheckedOperation check_argument_expression(const Expression &operand, ArgumentMode mode, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, const Type *expected = nullptr,
@@ -10778,9 +10803,12 @@ class ScalarChecker {
       for (size_t i = 0; i < operation.inputs.size(); ++i) {
         const auto &input = operation.inputs[i];
         const auto &operand = *expr.children[i];
-        const auto type = type_evidence(operand, state, false, nullptr, nullptr,
+        const auto type = type_evidence(operand, state, false, text_type(input.type) ? &input.type : nullptr, nullptr,
             ExpectedTypeUse::materialization, completes, input.type.kind == Type::c_type_marker ? EvidenceRead::native_loan :
-            input.type.kind == Type::array ? EvidenceRead::target : EvidenceRead::payload);
+            input.type.kind == Type::array || text_type(input.type) ? EvidenceRead::target : EvidenceRead::payload);
+        if (state.required && type && *type != Type::never && text_type(input.type) &&
+            *type != input.type && !widens_text(*type, input.type))
+          fail(operand.at, "C provider requires '" + type_name(input.type) + "'");
         completes = completes && type != Type::never;
       }
       if (!completes) return Type::never;
@@ -10885,7 +10913,7 @@ class ScalarChecker {
         return Type::integer;
       }
       if (!state.validating_body) switch (expr.kind) {
-      case K::integer: case K::real: case K::boolean: case K::return_test: case K::null_ref: case K::name: case K::symbol:
+      case K::integer: case K::real: case K::boolean: case K::string_literal: case K::return_test: case K::null_ref: case K::name: case K::symbol:
       case K::unary: case K::binary: case K::call: case K::value_call: case K::behave: case K::perform: case K::field: case K::index:
       case K::conditional: case K::block: case K::grouped: case K::transfer: case K::rebind: case K::typed_expression:
       case K::make_object: case K::case_expression: case K::case_break: case K::case_failure: case K::case_fallthrough: break;
@@ -10896,6 +10924,10 @@ class ScalarChecker {
       }
     }
     switch (expr.kind) {
+    case K::string_literal:
+      view = {true, true, false};
+      target_facts.presence = TargetPresence::present;
+      return string_literal_type(expr, expected);
     case K::integer:
       if (state.required) return literal(expr).type;
       if (expr.text.ends_with("u8")) return Type::uint8;
@@ -11024,8 +11056,8 @@ class ScalarChecker {
         if (state.required) implementation_gap(expr.at, "parenthesized result with no proved value or nullable-target contract");
         return {};
       }
-      if (result == GroupResult::nullable_target) view = {source.read_only, true, {}, source.owner, false, {}, {}, {}, true};
-      if (result == GroupResult::nullable_target) {
+      if (result == GroupResult::target) {
+        view = {source.read_only, true, {}, source.owner, false, {}, {}, {}, source.nullable};
         target_facts = state.target;
         target_facts.selection.footprint.clear();
       } else {
@@ -11040,6 +11072,16 @@ class ScalarChecker {
     }
     case K::typed_expression: {
       const auto annotation = evidence_annotation(*expr.annotation, state);
+      if (annotation.kind == Type::c_string) {
+        const auto &operand = *expr.children.front();
+        const auto type = type_evidence(operand, state, false, &annotation, nullptr, expected_use, true, EvidenceRead::target, joining);
+        if (!type || type == Type::never) return type;
+        if (!text_type(*type)) fail(expr.at, "CString assertion requires String text");
+        view = state.value;
+        target_facts = state.target;
+        if (type->kind == Type::string) note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::type_assertion_failed)));
+        return annotation;
+      }
       if (annotation.kind == Type::enumeration) {
         const auto &operand = *expr.children.front();
         if (typed_enum_member(operand, annotation, &state)) return annotation;
@@ -11921,6 +11963,8 @@ class ScalarChecker {
           type = type_evidence(*expr.children[i], prepared, true, expected_argument, nullptr, use);
           selected = prepared.value;
           selected_target = prepared.target;
+        } else if (expected_argument && expected_argument->kind == Type::c_string && type == Type::string) {
+          if (const auto *literal = text_literal_operand(*expr.children[i])) type = string_literal_type(*literal, expected_argument);
         }
         complete = complete && type.has_value();
         exits = exits || type == Type::never;
@@ -14247,11 +14291,11 @@ class ScalarChecker {
         continue;
       }
       const bool handle = source.type.kind == Type::native_handle && !source.type.owned;
-      const bool readonly_array = source.type.kind == Type::array && !source.value_binding && source.read_only;
+      const bool readonly_view = (source.type.kind == Type::array || text_type(source.type)) && !source.value_binding && source.read_only;
       const bool scalar = numeric(source.type) || source.type.kind == Type::enumeration;
-      if (source.alias || !source.selection.empty() || (!scalar && !readonly_array && !handle) ||
+      if (source.alias || !source.selection.empty() || (!scalar && !readonly_view && !handle) ||
           (!source.value_binding && (source.nullable || (!source.read_only && !handle))))
-        implementation_gap(capture.at, "here access requires stable numeric or enum storage, a readonly array, or a borrowed handle");
+        implementation_gap(capture.at, "here access requires stable numeric or enum storage, a readonly array or text view, or a borrowed handle");
       const auto &operand = scope_operand(base, capture);
       if (handle) check_handle_loan(operand, supplier, operations);
       else check(operand, supplier, operations, false);
@@ -16037,6 +16081,17 @@ class ScalarChecker {
         }
         require_borrow_lifetime(value, operand.at, prepared);
         bind(*input.owner, one_owner(value), operand.at);
+      } else if (text_type(input.type)) {
+        if (prepared || delayed_) implementation_gap(operand.at, "deferred C text loans");
+        const auto type = check(operand, instance, operations, false, false, &input.type);
+        operation.arguments.push_back({ArgumentMode::borrowed_ref, input.type});
+        if (type == Type::never) { operation.type = Type::never; lexical_.live = false; continue; }
+        if (type != input.type && !widens_text(type, input.type))
+          fail(operand.at, "C provider requires '" + type_name(input.type) + "'");
+        const auto &view = operations.at(&operand);
+        prepare_borrow(view, ArgumentMode::borrowed_ref, operand.at);
+        require_live_view(view, operand.at);
+        bind(*input.owner, one_owner(view), operand.at);
       } else {
         const bool array = input.type.kind == Type::array;
         if (array && (prepared || delayed_)) implementation_gap(operand.at, "deferred C array loan");
@@ -16721,6 +16776,16 @@ class ScalarChecker {
     }
     switch (expr.kind) {
     case K::integer: case K::real: operation = literal(expr); break;
+    case K::string_literal:
+      operation.type = string_literal_type(expr, expected);
+      operation.view = operation.read_only = true;
+      operation.initialization.emplace();
+      if (!literal_text_owner_) {
+        literal_text_owner_ = next_scope_++;
+        native_owner_scopes_.emplace(*literal_text_owner_, 0);
+      }
+      operation.owners = {*literal_text_owner_};
+      break;
     case K::boolean:
       operation.type = Type::boolean; operation.integer = expr.text == "true";
       operation.predicate = constant_predicate(operation.integer);
@@ -16984,8 +17049,10 @@ class ScalarChecker {
           completes = false;
         } else {
           arguments.push_back(argument);
+          const bool borrowed_text = mode == ArgumentMode::borrowed_ref && text_type(argument);
           if (mode == ArgumentMode::value ||
-              (mode != ArgumentMode::borrowed_handle && argument.kind != Type::product && argument.kind != Type::array))
+              (mode != ArgumentMode::borrowed_handle && !borrowed_text &&
+               argument.kind != Type::product && argument.kind != Type::array))
             require_value(argument, expr.at);
         }
         operation.arguments.push_back({mode, arguments.back()});
@@ -16994,11 +17061,14 @@ class ScalarChecker {
         views.push_back(prepared);
         if (argument != Type::never) prepare_borrow(views.back(), mode, expr.children[i]->at);
       }
-      for (size_t i = 0; i < arguments.size(); ++i)
-        if (views[i].type != Type::never && ((evidence[i].type && *evidence[i].type != arguments[i]) ||
+      for (size_t i = 0; i < arguments.size(); ++i) {
+        const bool contextual_text = arguments[i] == Type::c_string && evidence[i].type == Type::string &&
+            text_literal_operand(*expr.children[i]);
+        if (views[i].type != Type::never && ((evidence[i].type && *evidence[i].type != arguments[i] && !contextual_text) ||
             (evidence[i].read_only && *evidence[i].read_only != views[i].read_only) ||
             (evidence[i].owner && checked_owner(*evidence[i].owner) != one_owner(views[i]))))
           implementation_gap(expr.children[i]->at, "operand type/access/owner evidence depends on completion or contextual inference");
+      }
       if (eager && (expr.intrinsic || !applicable_operation(expr.text, arguments, access_of(views), owners_of(views)))) {
         if (std::any_of(operation.arguments.begin(), operation.arguments.end(), [](const auto &argument) { return argument.mode != ArgumentMode::value; }))
           implementation_gap(expr.at, "builtin fallback requires value preparation before later operand effects");
@@ -17105,7 +17175,7 @@ class ScalarChecker {
       if (result == GroupResult::unsupported)
         implementation_gap(expr.at, "parenthesized result with no proved value or nullable-target contract");
       operation.exceptions = source.exceptions;
-      if (result == GroupResult::nullable_target) {
+      if (result == GroupResult::target) {
         if (read && operation.type == Type::null_ref)
           implementation_gap(expr.at, "untyped null in a payload expression; bind a typed ptr view first");
         view(source);
@@ -17125,6 +17195,18 @@ class ScalarChecker {
     case K::typed_expression: {
       const auto &operand = *expr.children.front();
       const auto annotation = resolve_annotation(*expr.annotation, instance);
+      if (annotation.kind == Type::c_string) {
+        const auto type = check(operand, instance, operations, false, false, &annotation, expected_use, false, indexed_use);
+        operation = operations.at(&operand);
+        if (type == Type::never) break;
+        if (!text_type(type)) fail(expr.at, "CString assertion requires String text");
+        prepare_borrow(operation, ArgumentMode::borrowed_ref, operand.at);
+        require_live_view(operation, operand.at);
+        operation.type = annotation;
+        operation.check_c_string = type.kind == Type::string;
+        if (operation.check_c_string) note_abrupt(expr.at, {exception_id(ExceptionCategory::type_assertion_failed)});
+        break;
+      }
       if (annotation.kind == Type::enumeration) {
         if (const auto member = typed_enum_member(operand, annotation)) {
           operation = enum_literal(*member);
@@ -18319,6 +18401,7 @@ class ScalarChecker {
     lexical_ = {}; cleanup_ = CleanupEquations{program_.exception_types}; scope_storage_.clear(); checked_scope_owners_.clear(); read_sites_.clear(); external_owners_.clear();
     native_resource_owners_.clear(); native_owner_scopes_.clear(); scope_native_owner_places_.clear();
     incoming_native_symbol_owners_.clear();
+    literal_text_owner_.reset();
     declared_sites_.clear(); declared_requirements_.clear();
     deferred_actions_with_checked_scopes_.clear();
     loop_controls_.clear(); delayed_controls_.clear(); deferred_inputs_.clear(); active_loops_.clear();
@@ -18600,7 +18683,9 @@ class ScalarChecker {
         const bool live_value = checking_method_->scope_inputs && checking_method_->scope_inputs->live_values.contains(p);
         const bool live_binding = checking_method_->scope_inputs && checking_method_->scope_inputs->live_bindings.contains(p);
         const auto mode = argument_mode(parameter);
-        const auto id = declare(parameter.name, instance.arguments[p], parameter.read_only || (value && parameter.fixed_binding),
+        const auto &declared = checking_method_->parameters[p];
+        const auto &type = text_type(declared) ? declared : instance.arguments[p];
+        const auto id = declare(parameter.name, type, parameter.read_only || (value && parameter.fixed_binding),
                                 value || live_value, parameter.at, !checking_method_->scope_inputs, &entry);
         const auto binding = storage_->at(id).binding;
         instance.frame.inputs.push_back({id, mode, live_binding || caller_bindings(*checking_method_)});
@@ -19372,18 +19457,22 @@ class ScalarChecker {
       std::optional<size_t> role;
       const bool handle = parameter.declaration_kind == "handle";
       const bool array = readonly_arrays && parameter.declaration_kind == "ref" && type.kind == Type::array;
+      const bool text = text_type(type) && (form.body || readonly_arrays);
       if (retained_parent == inputs.size()) {
         if (type.kind != Type::c_type_marker) fail(parameter.at, "C constructor parent requires a 'handle type' name");
         inputs.push_back({type, {}});
         continue;
       }
-      if (handle || array) {
+      if (handle || array || text) {
         const auto owner = std::ranges::find(form.owner_parameters, parameter.owner, &OwnerParameter::name);
         if (owner == form.owner_parameters.end() || owner->root || owner->explicit_parameter)
           fail(parameter.at, "C borrow requires a declared owner");
         if (handle && type.kind != Type::c_type_marker)
           fail(parameter.at, "handle parameter requires a 'handle type' name");
         if (handle) constrain_native_owner(native_owners, parameter, type);
+        if (text && (argument_mode(parameter) != ArgumentMode::borrowed_ref || !owner->read_only || !parameter.read_only ||
+                     (readonly_arrays && type != Type::c_string)))
+          fail(parameter.at, "C text parameters require readonly loans under a const owner and CString for provider calls");
         if (array) {
           if (!owner->read_only || !parameter.read_only)
             implementation_gap(parameter.at, "C operation array loans other than readonly views under a const owner");
@@ -19734,6 +19823,8 @@ class ScalarChecker {
         }
         prepared.parameters.push_back(resolve_signature(parameter.type));
         const auto mode = argument_mode(parameter);
+        if (text_type(prepared.parameters.back()) && (mode != ArgumentMode::borrowed_ref || !parameter.read_only))
+          fail(parameter.at, "text parameters require a readonly, non-null owner-qualified reference");
         signature_type(prepared, prepared.parameters.back(), parameter.at, false, mode != ArgumentMode::value);
       }
       if (handle_result) {
