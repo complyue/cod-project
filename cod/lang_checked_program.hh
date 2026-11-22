@@ -533,6 +533,7 @@ struct CheckedInstance {
   CheckedFrame frame;
   bool result_supplied = false;
   bool always_throws = false;
+  AbstractSymbolTargets incoming_abstract_targets = {};
 };
 struct CheckedHereContract {
   struct Component {

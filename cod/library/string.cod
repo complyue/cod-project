@@ -28,3 +28,15 @@ proc writeUtf8(out:StringBuilder in D, piece:const StringBuilder in S) -> void
     append(out, piece);
     return;
 }
+
+export proc emit(piece:const String in S) -> void
+    throws Utf8WriteException where {const owner S} {
+    writeUtf8(@io, piece);
+    return;
+}
+
+proc emit(piece:const StringBuilder in S) -> void
+    throws Utf8WriteException where {const owner S} {
+    writeUtf8(@io, piece);
+    return;
+}

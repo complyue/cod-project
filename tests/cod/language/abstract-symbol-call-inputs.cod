@@ -1,0 +1,41 @@
+using symbol "std:io" @print;
+using "../../../cod/library/string.cod" { StringBuilder, Utf8StreamOut, Utf8WriteException, emit as original_emit };
+using symbol "../../../cod/library/string.cod" @io;
+import "../../../cod/library/string.cod" { writeUtf8, emit as adapted_emit };
+
+data Output <: Utf8StreamOut { count:u64; }
+data UnusedOutput <: Utf8StreamOut { marker:u64; }
+
+proc writeUtf8(target:Output in O, piece:const String in S) -> void where {owner O, const owner S} {
+    target.count <- target.count + 1u64;
+    return;
+}
+
+proc through_source(piece:const String in S) -> void
+    throws Utf8WriteException where {const owner S} {
+    original_emit(piece);
+    return;
+}
+
+proc through_receiver(piece:const String in S) -> void
+    throws Utf8WriteException where {const owner S} {
+    adapted_emit(piece);
+    return;
+}
+
+proc test() -> void throws Utf8WriteException {
+    ref buffer = make StringBuilder();
+    ref output = make Output { count <- 0u64; };
+    effect @io = buffer;
+    through_source("initial");
+    {{
+        effect @io = output;
+        through_receiver("redirected");
+    }};
+    through_receiver("restored");
+    through_source("continued");
+    behave @print(output.count);
+    return;
+}
+
+try { test(); } catch (failure:const Utf8WriteException) { behave @print(failure.code); };

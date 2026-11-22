@@ -95,6 +95,9 @@ class ScalarChecker {
     }
   }
   CheckedProgram program_;
+  bool definition_pass_ = false;
+  std::map<const Form *, std::set<size_t>> abstract_effect_inputs_;
+  std::set<size_t> changed_abstract_inputs_;
   Type exception_type(size_t category) const { return program_.exception_type(category); }
   static std::set<size_t> concrete_categories(size_t count) {
     std::set<size_t> result;
@@ -1833,6 +1836,7 @@ class ScalarChecker {
     bool preparing(const Expression &expr) const { return prepared_call && prepared_call->expression == &expr; }
     bool same_definition_inputs(const TypeEvidenceState &other) const {
       return bindings == other.bindings && symbol_shadows == other.symbol_shadows && views == other.views && lexical_here == other.lexical_here &&
+          abstract_symbol_targets == other.abstract_symbol_targets &&
           owner_bindings == other.owner_bindings && owner_relations == other.owner_relations &&
           selections.bindings == other.selections.bindings && selections.facts == other.selections.facts &&
           selections.equal_selections == other.selections.equal_selections &&
@@ -2429,10 +2433,22 @@ class ScalarChecker {
     }
     cover_inputs(Type{Type::named, expr.text}, expr.at, plan, validate);
   }
-  size_t select_nominal_method(const Expression &expr, const NamedFamily &family, const std::vector<Type> &actual,
-                               const Access &access, const Owners &owners, const TypeEvidenceState *state = nullptr) const {
+  template <typename Operand>
+  bool symbolic_definition_domain(const std::vector<Type> &arguments, const std::vector<Operand> &operands) const {
+    if (!definition_pass_) return false;
+    for (size_t i = 0; i < arguments.size(); ++i)
+      if (arguments[i].kind == Type::abstract_type && operands[i].nominal_targets.empty()) return true;
+    return false;
+  }
+  std::optional<size_t> select_nominal_method(const Expression &expr, const NamedFamily &family, const std::vector<Type> &actual,
+                               const Access &access, const Owners &owners, bool definition_domain,
+                               const TypeEvidenceState *state = nullptr) const {
     const auto &retained = family.retained_types();
-    if (method_candidates(family.methods, actual, retained, access, owners, state).methods.empty()) {
+    const auto matches = method_candidates(family.methods, actual, retained, access, owners, state);
+    if (matches.methods.empty()) {
+      if (definition_domain && !matches.type_match) return {};
+      if (matches.type_match)
+        return select_method(family.methods, actual, expr.at, expr.text, retained, access, owners, state);
       std::string inputs;
       for (const auto &type : actual) {
         if (!inputs.empty()) inputs += ", ";
@@ -2460,8 +2476,10 @@ class ScalarChecker {
       for (const auto &type : arguments) types.push_back(type.value_or(Type{Type::never}));
       std::optional<ArgumentPreparation> common;
       bool compatible = true;
+      const auto definition_domain = symbolic_definition_domain(types, evidence);
       cover_nominal_call(expr, types, evidence, [&](const auto &actual) {
-        if (complete) select_nominal_method(expr, named_family(expr.text, state), actual, access, owners, state);
+        if (complete && !select_nominal_method(expr, named_family(expr.text, state), actual, access, owners, definition_domain, state))
+          return;
         auto selected_evidence = evidence;
         for (size_t i = 0; i < actual.size(); ++i)
           if (arguments[i] && arguments[i]->kind == Type::abstract_type) selected_evidence[i].type = actual[i];
@@ -2473,6 +2491,7 @@ class ScalarChecker {
       });
       if (!compatible && required)
         implementation_gap(expr.at, "abstract call alternatives require different argument preparation");
+      if (!common) implementation_gap(expr.at, "no callable contract for abstract arguments to '" + expr.text + "'");
       return compatible ? *common : ArgumentPreparation{};
     }
     const auto family = named_family(expr.text, state);
@@ -6589,8 +6608,14 @@ class ScalarChecker {
     }
   }
   size_t demand(size_t method, std::vector<Type> arguments, const Location &at, const std::vector<CheckedCaptureInput> &environment = {},
-                const std::vector<Type> &retained = {}, size_t query_environment = 0, const TypeEvidenceState *state = nullptr) {
+                const std::vector<Type> &retained = {}, size_t query_environment = 0, const TypeEvidenceState *state = nullptr,
+                const AbstractSymbolTargets &supplied_targets = {}) {
     auto &definition = program_.methods[method];
+    AbstractSymbolTargets abstract_targets;
+    if (!definition_pass_ && !supplied_targets.empty())
+      if (const auto required = abstract_effect_inputs_.find(definition.source); required != abstract_effect_inputs_.end())
+        for (const auto &[symbol, types] : supplied_targets)
+          if (required->second.contains(symbol)) abstract_targets.emplace(symbol, types);
     const auto declared = declared_results(definition, arguments);
     arguments = prepared_types(definition, arguments, retained);
     if (std::ranges::any_of(arguments, [](const auto &type) { return type.kind == Type::abstract_type; }))
@@ -6598,7 +6623,17 @@ class ScalarChecker {
     for (const auto id : definition.instances)
       if (program_.instances[id].arguments == arguments && program_.instances[id].environment == environment &&
           program_.instances[id].retained_types == retained && program_.instances[id].query_environment == query_environment) {
-        check_declared_results(definition, program_.instances[id].result, declared);
+        auto &instance = program_.instances[id];
+        check_declared_results(definition, instance.result, declared);
+        auto joined = instance.incoming_abstract_targets;
+        join_abstract_symbol_targets(joined, abstract_targets);
+        if (joined != instance.incoming_abstract_targets) {
+          if (validating_) throw std::logic_error("abstract call inputs changed during validation");
+          if (!instance.result_supplied && definition.source->implicit_scope)
+            implementation_gap(at, "an inferred callable result under multiple abstract effect input domains");
+          instance.incoming_abstract_targets = std::move(joined);
+          changed_abstract_inputs_.insert(id + 1);
+        }
         return id;
       }
     if (program_.instances.size() == instance_limit)
@@ -6649,7 +6684,7 @@ class ScalarChecker {
     context.insert(context.end(), retained.begin(), retained.end());
     program_.instances.push_back({method, arguments, *result.contract, {}, false, {}, {}, {}, environment,
                                   std::move(context), retained, *substitutions, query_environment, {},
-                                  result.origin == ResultOrigin::supplied, result.always_throws});
+                                  result.origin == ResultOrigin::supplied, result.always_throws, abstract_targets});
     program_.instances.back().effects = initial_effects(definition, arguments);
     if (caller_bindings(definition) && arguments.size() == 2 && arguments[0] == arguments[1] &&
         definition.input_parameters()[0].read_only == definition.input_parameters()[1].read_only)
@@ -6707,7 +6742,12 @@ class ScalarChecker {
     return demand(method, arguments, expr.at,
         family.context ? family.context->environment : family.definition ? family.definition->environment : std::vector<CheckedCaptureInput>{},
         family.retained_types(), family.context ? family.context->query_environment : family.definition ? family.definition->query : 0,
-        family.declaration);
+        family.declaration, incoming_abstract_targets(expr));
+  }
+  const AbstractSymbolTargets &incoming_abstract_targets(const Expression &expr) const {
+    static const AbstractSymbolTargets unknown;
+    // Deferred execution observes the binding at cleanup, after registration.
+    return !delayed_ && &expr != prepared_call_ ? lexical_.abstract_symbol_targets : unknown;
   }
   size_t select(const Expression &expr, const std::vector<Type> &arguments, const Access &access, const Owners &owners) {
     const auto family = named_family(expr.text);
@@ -6826,6 +6866,7 @@ class ScalarChecker {
     std::optional<LexicalState> continuation;
     std::optional<Type> result;
     auto preparation = operation.arguments;
+    const auto definition_domain = symbolic_definition_domain(arguments, views);
     cover_nominal_call(expr, arguments, views, [&](const auto &actual) {
       lexical_ = before;
       auto selected_views = views;
@@ -6834,8 +6875,9 @@ class ScalarChecker {
       auto call = operation;
       call.nominal_calls.clear();
       const auto family = named_family(expr.text);
-      const auto method = select_nominal_method(expr, family, actual, access_of(selected_views), owners_of(selected_views));
-      const auto target_id = demand_named(expr, family, method, actual);
+      const auto method = select_nominal_method(expr, family, actual, access_of(selected_views), owners_of(selected_views), definition_domain);
+      if (!method) return;
+      const auto target_id = demand_named(expr, family, *method, actual);
       finish_named_call(expr, actual, selected_views, call, false, true, completes, target_id);
       const auto &target = program_.instances[*call.callee];
       const auto type = *target.result.type;
@@ -6864,6 +6906,7 @@ class ScalarChecker {
       }
       continuation = lexical_;
     });
+    if (!continuation) implementation_gap(expr.at, "no callable contract for abstract arguments to '" + expr.text + "'");
     lexical_ = std::move(*continuation);
     operation.arguments = std::move(preparation);
     operation.type = completes ? *result : Type{Type::never};
@@ -7089,6 +7132,7 @@ class ScalarChecker {
     TypeEvidenceState context;
     const auto &method = *program_.methods[id].source;
     if (!lexical_methods_.contains(&method)) return context;
+    if (supplied && method.implicit_scope) context.abstract_symbol_targets = supplied->abstract_symbol_targets;
     const auto &dependencies = definition_dependencies(method);
     const auto available = supplied && supplied->method == id && supplied->declaration ? project_evidence(*supplied->declaration, dependencies)
         : checking_instance_ && checking_instance_->method == id && (!supplied || supplied->method == id) ? evidence_state(true, &dependencies)
@@ -12528,10 +12572,12 @@ class ScalarChecker {
       if (!local && std::ranges::any_of(arguments, [](const auto &type) { return type.kind == Type::abstract_type; })) {
         std::optional<Type> result;
         std::optional<TypeEvidenceState> continuation;
+        const auto definition_domain = symbolic_definition_domain(arguments, views);
         cover_nominal_call(expr, arguments, views, [&](const auto &actual) {
-          const auto id = select_nominal_method(expr, family, actual, access, owners, &state);
-          const auto &method = program_.methods[id];
-          const auto contract = infer_result(id, actual, retained, family.declaration ? family.declaration : &state).contract;
+          const auto id = select_nominal_method(expr, family, actual, access, owners, definition_domain, &state);
+          if (!id) return;
+          const auto &method = program_.methods[*id];
+          const auto contract = infer_result(*id, actual, retained, family.declaration ? family.declaration : &state).contract;
           if (!contract || contract->borrowed() || !(scalar_type(*contract->type) || contract->type == Type::void_type))
             implementation_gap(expr.at, "abstract dispatch without a common independent scalar or void result");
           if (result && *result != *contract->type)
@@ -12548,6 +12594,7 @@ class ScalarChecker {
           record_type_call(expr, branch, method, invokes);
           continuation = continuation ? merge_evidence(std::move(*continuation), branch) : std::move(branch);
         });
+        if (!continuation) implementation_gap(expr.at, "no callable contract for abstract arguments to '" + expr.text + "'");
         state = std::move(*continuation);
         return result;
       }
@@ -14296,7 +14343,7 @@ class ScalarChecker {
     }
     const auto query = retain_query_environment(program_.methods[profile], supplied, &state, operation.scope_owners,
                                                  std::move(scope_selections));
-    const auto target = demand(profile, arguments, expr.at, {}, retained, query, &state);
+    const auto target = demand(profile, arguments, expr.at, {}, retained, query, &state, incoming_abstract_targets(expr));
     operation.callee = target;
     const auto &selected = program_.instances[target];
     always_throws |= selected.always_throws;
@@ -19186,6 +19233,7 @@ class ScalarChecker {
     checking_method_ = &program_.methods[instance.method];
     check_flow([&](bool proving) {
       begin_check(instance.storage, instance.bindings, instance.operations, proving);
+      lexical_.abstract_symbol_targets = instance.incoming_abstract_targets;
       if (const auto &group = checking_method_->here_group; group && group->supplier_return.has_value())
         (*group->supplier_return ? return_inputs_.present : return_inputs_.absent).insert(0);
       instance.frame = {};
@@ -19505,6 +19553,8 @@ class ScalarChecker {
     size_t instances = 0, callables = program_.callables.size();
     const auto discover = [&] {
       while (instances < program_.instances.size()) enqueue(++instances);
+      for (const auto context : changed_abstract_inputs_) enqueue(context);
+      changed_abstract_inputs_.clear();
       if (callables != program_.callables.size()) {
         callables = program_.callables.size();
         for (const auto context : callable_effect_consumers_) enqueue(context);
@@ -19527,7 +19577,8 @@ class ScalarChecker {
       }
       // New obligations must establish their write guarantees before any read
       // closure can rely on them. Callable choices can also change guarantees.
-      if (reads && (instances != program_.instances.size() || callables != program_.callables.size())) return false;
+      if (reads && (instances != program_.instances.size() || callables != program_.callables.size() || !changed_abstract_inputs_.empty()))
+        return false;
       discover();
     }
     return true;
@@ -19633,6 +19684,63 @@ class ScalarChecker {
       visit(*method.source->body);
       for (const auto &capture : method.source->captures)
         if (const auto found = names.find(capture.name); found != names.end()) prepare_family_view(found->second, method.interpretation);
+    }
+  }
+
+  void find_abstract_effect_inputs() {
+    std::set<size_t> ambient;
+    for (size_t id = 0; id < program_.symbols.size(); ++id) {
+      const auto &symbol = program_.symbols[id];
+      if (symbol.reference && symbol.type->kind == Type::abstract_type) ambient.insert(id);
+    }
+    if (ambient.empty()) return;
+    // This source dependency identifies definitions that need independent
+    // checking before execution inputs are available. Only real calls contribute types.
+    std::vector<std::set<size_t>> callers(program_.methods.size());
+    std::vector<std::set<size_t>> inputs(program_.methods.size());
+    std::vector<size_t> dependent;
+    for (size_t id = 0; id < program_.methods.size(); ++id) {
+      const auto &method = program_.methods[id];
+      const auto &names = modules_[method.module];
+      auto &reads = inputs[id];
+      const auto visit = [&](auto &&self, const Expression &expr) -> void {
+        using K = Expression::Kind;
+        if (expr.kind == K::symbol || expr.kind == K::behave || expr.kind == K::perform) {
+          if (const auto found = names.symbols.find(expr.text); found != names.symbols.end()) {
+            const auto &symbol = program_.symbols[found->second];
+            if (expr.kind == K::symbol) {
+              if (ambient.contains(found->second)) reads.insert(found->second);
+            } else if (!symbol.intrinsic_print) reads.insert(ambient.begin(), ambient.end());
+          }
+        }
+        if (expr.kind == K::value_call && !expr.children.front()->definition) reads.insert(ambient.begin(), ambient.end());
+        if (!expr.intrinsic && (expr.kind == K::call || expr.kind == K::unary || expr.kind == K::binary ||
+                               expr.kind == K::processor_composition || expr.kind == K::pipeline)) {
+          if (const auto found = names.callables.find(expr.text); found != names.callables.end()) {
+            const auto view = family_views_.find({found->second, method.interpretation});
+            const auto &selected = view != family_views_.end() ? view->second.methods : program_.families[found->second].methods;
+            for (const auto target : selected) callers[target].insert(id);
+          }
+        }
+        if (expr.definition && expr.definition->body) self(self, *expr.definition->body);
+        for (const auto &child : expr.children) self(self, *child);
+      };
+      if (method.source->body) visit(visit, *method.source->body);
+      if (!reads.empty()) dependent.push_back(id);
+    }
+    while (!dependent.empty()) {
+      const auto id = dependent.back();
+      dependent.pop_back();
+      const auto &selected = inputs[id];
+      auto &required = abstract_effect_inputs_[program_.methods[id].source];
+      required.insert(selected.begin(), selected.end());
+      for (const auto caller : callers[id]) {
+        if (caller == id) continue;
+        auto &incoming = inputs[caller];
+        const auto previously = incoming.size();
+        incoming.insert(selected.begin(), selected.end());
+        if (previously != incoming.size()) dependent.push_back(caller);
+      }
     }
   }
 
@@ -20594,8 +20702,8 @@ class ScalarChecker {
     visit(visit, *form.body);
   }
 
-public:
-  CheckedProgram check(const SourceProgram &source) {
+  CheckedProgram check_program(const SourceProgram &source, bool definition_pass) {
+    definition_pass_ = definition_pass;
     modules_.resize(source.modules.size());
     std::optional<size_t> print_symbol;
     std::optional<Location> unsupported_here;
@@ -20615,6 +20723,12 @@ public:
         check_declared_results(method, method.result, declared_results(method, method.parameters));
     if (unsupported_here) implementation_gap(*unsupported_here, "this receiving pattern for a here body");
     prepare_interpretations();
+    find_abstract_effect_inputs();
+    std::vector<WarningDiagnostic> definition_warnings;
+    if (!definition_pass_ && !abstract_effect_inputs_.empty())
+      // The definition graph is deliberately independent of the native graph.
+      // A symbolic alternative may establish a source contract without creating an executable body.
+      definition_warnings = ScalarChecker{}.check_program(source, true).warnings;
     plan_initialization(source);
     if (!program_.native_entries.empty() && !program_.initializers.empty())
       implementation_gap(program_.initializers.front().expression->at, "module initialization in a C entry library");
@@ -20622,6 +20736,8 @@ public:
       const auto &method = *program_.methods[i].source;
       if (program_.methods[i].definition != i || !method.type_parameters.empty() || lexical_methods_.contains(&method)) continue;
       if (std::ranges::any_of(program_.methods[i].parameters, [](const auto &type) { return type.kind == Type::abstract_type; })) continue;
+      const bool abstract_effect_input = abstract_effect_inputs_.contains(&method);
+      if (definition_pass_ ? !abstract_effect_input : abstract_effect_input && !method.c_linkage) continue;
       demand(i, program_.methods[i].parameters, method.at);
     }
     check_entry();
@@ -20692,8 +20808,17 @@ public:
         }
       }
     }
+    for (auto &warning : definition_warnings) {
+      if (std::ranges::none_of(program_.warnings, [&](const auto &present) {
+            return present.kind == warning.kind && present.at.filename() == warning.at.filename() &&
+                present.at.span.first == warning.at.span.first && present.message == warning.message;
+          })) program_.warnings.push_back(std::move(warning));
+    }
     return std::move(program_);
   }
+
+public:
+  CheckedProgram check(const SourceProgram &source) { return check_program(source, false); }
 };
 
 } // namespace cod::language
