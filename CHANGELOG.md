@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review frontend support for in-place constructor calls
+
+<a id="k-placement-init-frontends-20261123"></a>
+**K-PLACEMENT-INIT-FRONTENDS-20261123.** [D-ARCH-REVIEW r72→r73](design/ImplementationArchitecture.md#checking-in-place-construction-of-a-regional-cycle), P-682/P-683, clears both source readers and the direct regional seed workload under [D-22-PLACEMENT-INIT](#h-placement-init-20261123). At `1afc9471b42709e70cab774bdf2c8338c4c770a8:design/ConstructionAndAcquisition.md` the two-node ref group supplies the acceptance source. Keep selected target, constructor completion and readable component distinct through operand effects and failure. CoD booter checked-state and backend additions retain separate structural review.
+
 ## 2026-11-23 — Initialize a reserved target in a ref group
 
 <a id="h-placement-init-20261123"></a>
