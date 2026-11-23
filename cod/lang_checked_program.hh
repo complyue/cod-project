@@ -132,6 +132,10 @@ struct CheckedOperation {
   std::optional<size_t> product_field;
   std::optional<size_t> exception_owner;
   std::optional<size_t> region_holder;
+  // Regional product rows contain relative field locators. The lexical
+  // controller identifies the actual live region used for projection.
+  std::optional<size_t> regional_product_holder;
+  bool allocates_scalar_field = false;
   std::vector<size_t> region_initializers;
   struct NativeAcquisition {
     size_t constructor;
@@ -1008,6 +1012,7 @@ inline CheckedBody checked_body(const CheckedProgram &program, const CheckedMeth
     const auto lower = [&](auto &&self, CheckedOperation &operation) -> void {
       optional(operation.place); optional(operation.callable_place); optional(operation.captured_place);
       optional(operation.exception_owner); optional(operation.region_holder);
+      optional(operation.regional_product_holder);
       const auto remap_allocator = [&](CheckedOperation::ArrayAllocator &allocator) {
         if (allocator.kind == CheckedOperation::ArrayAllocator::region) allocator.place = remap(allocator.place);
       };

@@ -3029,8 +3029,9 @@ class ScalarChecker {
     });
     for (const auto id : physical_slots(view.slots)) for (const auto owner : bindings_->at(id).place_owners) {
       if (external_owner(owner)) continue;
+      const auto lifetime = owner_lifetime_scope(owner);
       const auto scope = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) {
-        return entry.id == owner;
+        return entry.id == lifetime;
       });
       if (scope > cleanup) fail(at, "deferred reference binding does not outlive its cleanup scope");
     }
@@ -4781,6 +4782,14 @@ class ScalarChecker {
         (&expr != region_result_initializer_ || &expr == prepared_call_ || !operation.callee ||
          !program_.instances[*operation.callee].result.owns_region()))
       implementation_gap(expr.at, "an owning region result must initialize a fresh owning region declaration");
+    for (const auto &operand : operands) {
+      if (operand.type.kind != Type::product ||
+          std::ranges::none_of(operand.owners, [&](size_t owner) { return region_owners_.contains(owner); })) continue;
+      const auto &schema = product_schema(operand.type, expr.at);
+      // Ordinary callable product layouts expect stored addresses for ref/ptr fields.
+      if (std::ranges::any_of(schema.fields, &CheckedSchema::Field::stores_target))
+        implementation_gap(expr.at, "passing a regional product with stored reference targets to a callable");
+    }
     const auto fields = product_inputs(arguments, expr.at);
     const bool prepared = &expr == prepared_call_;
     const bool embedded_updates = std::ranges::any_of(summary.binding_sources, [&](const auto &effect) {
@@ -8199,9 +8208,21 @@ class ScalarChecker {
       implementation_gap(at, "allocation in a repeated or deferred group requires a separate full lexical scope");
     return declare(name, type, false, true, receiver ? receiver->at : at, receiver != nullptr);
   }
-  size_t reserve_product(const Type &type, const Location &at) {
+  void assign_regional_storage(size_t place, size_t owner) {
+    auto &target = storage_->at(place);
+    target.scope = owner;
+    target.subobject = true;
+    bindings_->at(target.binding).place_owners = {owner};
+    lexical_.owners.at(target.binding) = {owner};
+  }
+  size_t reserve_product(const Type &type, const Location &at, std::optional<size_t> owner = {}) {
     const auto root = reserve_lexical_construction(type, at);
     reserve_product_fields(root, at);
+    if (owner) {
+      // The admitted regional profile has no nested nominal storage fields.
+      assign_regional_storage(root, *owner);
+      for (const auto field : storage(root).fields) assign_regional_storage(field, *owner);
+    }
     return root;
   }
   void reserve_product_fields(size_t root, const Location &at) {
@@ -8451,6 +8472,8 @@ class ScalarChecker {
     if (owner.kind == EvidenceOwner::Kind::checked) return const_owner(owner.id);
     if (owner.kind == EvidenceOwner::Kind::parameter && state.method)
       return program_.methods[*state.method].input_owners().at(owner.id).read_only;
+    if (owner.kind == EvidenceOwner::Kind::scoped && owner.scope->kind == Expression::Kind::region_binding)
+      return owner.scope->read_only;
     return false;
   }
   static TypeEvidenceState merge_evidence(TypeEvidenceState left, const TypeEvidenceState &right, bool right_exits = false) {
@@ -9344,12 +9367,37 @@ class ScalarChecker {
     complete_product(roots, order, make.at);
     return owned_region_type(schema);
   }
+  bool regional_scalar_input(const Expression &input, TypeEvidenceState state) const {
+    const auto type = type_evidence(input, state, false, nullptr, nullptr, ExpectedTypeUse::materialization,
+                                    false, EvidenceRead::target);
+    return type && scalar_type(*type) && state.value.view == false && !state.value.mixed_view;
+  }
+  bool regional_evidence(const EvidenceOwner &owner) const {
+    return (owner.kind == EvidenceOwner::Kind::checked && region_owners_.contains(owner.id)) ||
+        (owner.kind == EvidenceOwner::Kind::scoped && owner.scope->kind == Expression::Kind::region_binding);
+  }
+  std::optional<EvidenceOwner> query_product_owner(const Expression &expr, const CheckedSchema &schema,
+                                                  const TypeEvidenceState &state) const {
+    if (expr.owner_name.empty() || expr.owner_name == "here") return state.full_scope_owner;
+    const auto owner = owner_evidence(expr.owner_name, state, expr.at);
+    if (!state.required) return owner;
+    if (owner && readonly_evidence_owner(*owner, state)) fail(expr.at, "const owner cannot allocate storage");
+    if (owner && regional_evidence(*owner)) {
+      require_regional_scalar_product(schema, expr.at);
+      if (owner->kind == EvidenceOwner::Kind::checked && lexical_.live && !owner_alive(owner->id))
+        fail(expr.at, "regional construction requires a live owner");
+      return owner;
+    }
+    if (compare_owners(owner, state.full_scope_owner, &state) != OwnerMatch::satisfied)
+      implementation_gap(expr.at, "product construction outside the current lexical owner");
+    return owner;
+  }
   bool query_product_initializers(const Expression &expr, const Type &type, const QueryProductPlace &product,
                                   TypeEvidenceState &state, bool track_places, bool reached = true) const {
     const auto &schema = product_schema(type, expr.at);
-    if (!expr.owner_name.empty() && expr.owner_name != "here" && state.required &&
-        compare_owners(owner_evidence(expr.owner_name, state, expr.at), state.full_scope_owner, &state) != OwnerMatch::satisfied)
-      implementation_gap(expr.at, "product construction outside the current lexical owner");
+    const auto owner = query_product_owner(expr, schema, state);
+    const bool regional = owner && regional_evidence(*owner);
+    if (regional && reached) note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::region_capacity_exceeded)));
     const auto order = product_initializers(schema, expr);
     const auto items = expr.initializer_items();
     bool completes = true;
@@ -9379,20 +9427,29 @@ class ScalarChecker {
         continue;
       }
       const auto &input = *item.children.back();
-      const auto value = direct ? type_bits_payload(input, field.type, state, reached && completes) :
+      const bool fresh_edge = regional && !direct && regional_scalar_input(input, state);
+      if (fresh_edge && reached && completes)
+        note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::region_capacity_exceeded)));
+      const auto value = direct || fresh_edge ? type_bits_payload(input, field.type, state, reached && completes) :
           type_evidence(input, state, false, nullptr, nullptr,
                         ExpectedTypeUse::materialization, reached && completes, EvidenceRead::target);
-      if (state.required && !direct && value && *value != Type::never) rebind_type(field.type, *value, at);
+      if (state.required && !direct && !fresh_edge && value && *value != Type::never) rebind_type(field.type, *value, at);
       if (track_places && reached && completes && value && *value != Type::never) {
         if (direct) {
           if (field.type == Type::boolean) state.selections.write_boolean({member}, state.target.branches);
+        } else if (fresh_edge) {
+          TargetEvidence initialized;
+          initialized.presence = TargetPresence::present;
+          initialized.places.insert(&item);
+          state.selections.initialize(initialized.places);
+          state.selections.assign({member, {member}}, initialized);
         } else {
           const auto &source = state.value;
           if (source.view != true || source.mixed_view)
             implementation_gap(at, "reference field initialization requires an existing target or null");
           rebind_access(field.source->read_only, source.read_only.value_or(true), at);
           if ((*value != Type::null_ref || source.owner) &&
-              compare_owners(source.owner, state.full_scope_owner, &state) != OwnerMatch::satisfied)
+              compare_owners(source.owner, owner, &state) != OwnerMatch::satisfied)
             fail(at, "reference field target must share the containing product's owner");
           if (field.storage == PlaceKind::reference) {
             if (source.nullable && state.target.presence != TargetPresence::present)
@@ -12401,8 +12458,7 @@ class ScalarChecker {
         view = {false, true, {}, owner};
         target_facts.presence = TargetPresence::present;
         target_facts.initialized = true;
-        const bool region = owner && ((owner->kind == EvidenceOwner::Kind::checked && region_owners_.contains(owner->id)) ||
-            (owner->kind == EvidenceOwner::Kind::scoped && owner->scope->kind == K::region_binding));
+        const bool region = owner && regional_evidence(*owner);
         const bool forwarded = owner && (owner->kind == EvidenceOwner::Kind::parameter || owner->kind == EvidenceOwner::Kind::retained);
         if (!region) note_type_allocation(state);
         if (region || forwarded) {
@@ -12507,7 +12563,7 @@ class ScalarChecker {
         reserve_query_product(state.selections, product, expr.at);
       }
       if (!query_product_initializers(expr, type, product, state, track_places)) return Type::never;
-      view = {false, true, {}, state.full_scope_owner};
+      view = {false, true, {}, query_product_owner(expr, product_schema(type, expr.at), state)};
       target_facts.presence = TargetPresence::present;
       if (track_places) target_facts.places.insert(product);
       return type;
@@ -18195,6 +18251,18 @@ class ScalarChecker {
     const auto owner = construction_destination(expr, required);
     if (owner != cleanup_scope_) implementation_gap(expr.at, "construction outside the current lexical owner");
   }
+  static void require_regional_scalar_product(const CheckedSchema &schema, const Location &at) {
+    if (std::ranges::any_of(schema.fields, [](const auto &field) { return !scalar_type(field.type); }))
+      implementation_gap(at, "regional product layout beyond scalar fields");
+  }
+  std::optional<size_t> regional_construction_holder(size_t owner, const CheckedSchema &schema,
+                                                      const Location &at) const {
+    const auto region = region_owners_.find(owner);
+    if (region == region_owners_.end()) return {};
+    if (lexical_.live && !owner_alive(owner)) fail(at, "regional construction requires a live owner");
+    require_regional_scalar_product(schema, at);
+    return region->second.holder;
+  }
   CheckedOperation construction_target(size_t place, const Type &type) const {
     CheckedOperation operation;
     operation.type = operation.operand_type = type;
@@ -18408,15 +18476,20 @@ class ScalarChecker {
     return operation;
   }
   CheckedOperation check_product_construction(const Expression &expr, const Type &type, CheckedInstance *instance,
-      std::map<const Expression *, CheckedOperation> &operations, std::optional<size_t> destination = {}, bool read = false) {
+      std::map<const Expression *, CheckedOperation> &operations, std::optional<size_t> destination = {}, bool read = false,
+      std::optional<size_t> regional_owner = {}) {
     const auto &schema = product_schema(type, expr.at);
     if (read) implementation_gap(expr.at, "reading a whole product as an independent value");
     if (expr.construction_type_query) implementation_gap(expr.at, "product construction through typeof");
     if (destination) check_construction_owner(expr, storage(*destination).scope);
     const auto order = product_initializers(schema, expr);
     const auto items = expr.initializer_items();
-    const auto root = destination ? *destination : reserve_product(type, expr.at);
+    const auto root = destination ? *destination : reserve_product(type, expr.at, regional_owner);
     auto operation = construction_target(root, type);
+    if (regional_owner) {
+      operation.regional_product_holder = regional_construction_holder(*regional_owner, schema, expr.at);
+      note_abrupt(expr.at, {exception_id(ExceptionCategory::region_capacity_exceeded)});
+    }
     for (size_t i = 0; i < order.size(); ++i) {
       const auto &item = *items[i];
       const auto &at = item.initializer_field_label()->at;
@@ -18442,6 +18515,13 @@ class ScalarChecker {
         continue;
       }
       const bool inline_product = direct && member.type.kind == Type::product;
+      std::optional<size_t> fresh_edge;
+      if (regional_owner && !direct && regional_scalar_input(*item.children.back(), evidence_state())) {
+        field.allocates_scalar_field = true;
+        note_abrupt(at, {exception_id(ExceptionCategory::region_capacity_exceeded)});
+        fresh_edge = reserve_lexical_construction(member.type, at);
+        assign_regional_storage(*fresh_edge, *regional_owner);
+      }
       Type supplied;
       if (inline_product) {
         const auto &nested = inline_product_initializer(item);
@@ -18450,8 +18530,9 @@ class ScalarChecker {
         auto initialized = check_product_construction(nested, constructed, instance, operations, place);
         supplied = initialized.type;
         operations.insert_or_assign(&nested, std::move(initialized));
-      } else if (direct) supplied = check_bits_payload(*item.children.back(), member.type, instance, operations);
-      else supplied = check(*item.children.back(), instance, operations, false);
+      } else if (direct || fresh_edge) supplied = check_bits_payload(*item.children.back(), member.type, instance, operations);
+      else supplied = check(*item.children.back(), instance, operations, false, false, nullptr,
+          ExpectedTypeUse::materialization, false, regional_owner ? IndexedUse::immediate_target : IndexedUse::value_only);
       field.type = supplied == Type::never ? Type{Type::never} : field.operand_type;
       operations.insert_or_assign(&item, std::move(field));
       if (supplied == Type::never) {
@@ -18462,7 +18543,12 @@ class ScalarChecker {
       if (inline_product) continue;
       if (operation.type == Type::never) continue;
       const auto &source = operations.at(item.children.back().get());
-      if (!direct) {
+      if (fresh_edge) {
+        initialize(*fresh_edge);
+        auto initialized = construction_target(*fresh_edge, member.type);
+        if (member.type == Type::boolean) write_predicate(initialized, predicate_of(source), at);
+        assign_targets(storage(place).binding, initialized, snapshot_selection(initialized, at));
+      } else if (!direct) {
         if (!source.view || source.mixed_view)
           implementation_gap(at, "reference field initialization requires an existing target or null");
         rebind_type(member.type, supplied, at);
@@ -20259,9 +20345,15 @@ class ScalarChecker {
       }
       const bool builder = program_.builder_type(type);
       const bool lexical_text = type.kind == Type::string || builder;
+      std::optional<size_t> regional_owner;
       if (!lexical_text) {
         if (expr.constructor_arguments) implementation_gap(expr.at, "ordinary constructor arguments");
-        check_construction_owner(expr, construction_owner);
+        const auto owner = construction_destination(expr, construction_owner);
+        if (owner != cleanup_scope_) {
+          if (type.kind == Type::product && regional_construction_holder(owner, product_schema(type, expr.at), expr.at))
+            regional_owner = owner;
+          else implementation_gap(expr.at, "construction outside the current lexical owner");
+        }
       }
       if (lexical_text) {
         if (builder) validate_builder_constructor(expr);
@@ -20294,7 +20386,7 @@ class ScalarChecker {
         operation = check_scalar_construction(expr, type, instance, operations, read && !discard, reservation_receiver);
       else {
         if (reservation_receiver) implementation_gap(expr.at, "reserving a non-scalar val with make");
-        operation = check_product_construction(expr, type, instance, operations, {}, read && !discard);
+        operation = check_product_construction(expr, type, instance, operations, {}, read && !discard, regional_owner);
       }
       break;
     }
@@ -20401,6 +20493,11 @@ class ScalarChecker {
       require_live_view(parent, expr.at);
       dereference(parent, expr.at);
       operation = project_product(parent, index, expr.at);
+      if (std::ranges::any_of(parent.owners, [&](size_t owner) { return region_owners_.contains(owner); })) {
+        const auto owner = one_owner(parent);
+        if (!owner) implementation_gap(expr.at, "regional product projection without one proved owner");
+        operation.regional_product_holder = regional_construction_holder(*owner, schema, expr.at);
+      }
       if (field.stores_target()) {
         operation.read_only = parent.read_only || field.readonly_target();
         operation.fixed_binding = parent.read_only || (field.direct_text_place() ? readonly_field(field) : field.source->fixed_binding);

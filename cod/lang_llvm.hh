@@ -102,6 +102,7 @@ class LLVMEmission {
   unsigned environment_field_ = 0;
   std::vector<Type> callable_types_;
   std::map<size_t, llvm::StructType *> product_layouts_;
+  std::map<size_t, llvm::StructType *> regional_product_layouts_;
   std::vector<llvm::Function *> general_, specialized_;
   struct HereEntry { llvm::Function *entry; llvm::StructType *activation; bool group; };
   std::map<size_t, HereEntry> here_entries_;
@@ -431,6 +432,17 @@ class LLVMEmission {
     ensure_inline_layout(Type{Type::product, {}, id});
     return product_layouts_.at(id);
   }
+  llvm::StructType *regional_product_layout(size_t id) {
+    auto [position, inserted] = regional_product_layouts_.try_emplace(id);
+    if (inserted) {
+      std::vector<llvm::Type *> fields;
+      for (const auto &field : program_->schemas.at(id).fields)
+        fields.push_back(field.stores_target() ? b_.getInt64Ty() : native_type(field.type));
+      if (fields.empty()) fields.push_back(b_.getInt8Ty());
+      position->second = llvm::StructType::get(context_, fields);
+    }
+    return position->second;
+  }
   const SumLayout &sum_layout(size_t id) {
     ensure_inline_layout(Type{Type::sum, {}, id});
     return sum_layouts_.at(id);
@@ -540,16 +552,12 @@ class LLVMEmission {
     auto *capability = b_.CreateInsertValue(llvm::PoisonValue::get(array_capability_), b_.getInt1(region), 0);
     return b_.CreateInsertValue(capability, backing, 1);
   }
-  llvm::Value *allocate_array(llvm::Value *capability, llvm::Value *bytes, std::uint64_t alignment, const Location &at) {
-    auto *regional = b_.CreateExtractValue(capability, 0);
-    auto *backing = b_.CreateExtractValue(capability, 1);
-    auto *region = block("array.region"), *lexical = block("array.lexical"), *ready = block("array.allocation.ready");
-    b_.CreateCondBr(regional, region, lexical);
-    b_.SetInsertPoint(region);
+  llvm::Value *reserve_region_extent(llvm::Value *backing, llvm::Value *bytes, std::uint64_t alignment,
+                                     const Location &at) {
     auto reserve = runtime("cod_lang_region_reserve", b_.getInt64Ty(),
         {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
     auto *offset = b_.CreateCall(reserve, {backing, bytes, integer(alignment)});
-    auto *reserved = block("array.region.reserved"), *full = block("array.region.full");
+    auto *reserved = block("region.extent.reserved"), *full = block("region.extent.full");
     b_.CreateCondBr(b_.CreateICmpNE(offset, integer(UINT64_MAX)), reserved, full);
     b_.SetInsertPoint(full);
     auto remaining = runtime("cod_lang_region_remaining", b_.getInt64Ty(), {b_.getPtrTy()});
@@ -558,7 +566,17 @@ class LLVMEmission {
                         integer(site(at)), null_pointer(), bytes, available));
     b_.CreateBr(control_->exit);
     b_.SetInsertPoint(reserved);
+    return offset;
+  }
+  llvm::Value *allocate_array(llvm::Value *capability, llvm::Value *bytes, std::uint64_t alignment, const Location &at) {
+    auto *regional = b_.CreateExtractValue(capability, 0);
+    auto *backing = b_.CreateExtractValue(capability, 1);
+    auto *region = block("array.region"), *lexical = block("array.lexical"), *ready = block("array.allocation.ready");
+    b_.CreateCondBr(regional, region, lexical);
+    b_.SetInsertPoint(region);
+    auto *offset = reserve_region_extent(backing, bytes, alignment, at);
     auto *regional_storage = region_address(backing, offset, bytes);
+    auto *regional_predecessor = b_.GetInsertBlock();
     b_.CreateBr(ready);
 
     b_.SetInsertPoint(lexical);
@@ -571,7 +589,7 @@ class LLVMEmission {
     fail_path(ExceptionCategory::out_of_memory, at);
     b_.SetInsertPoint(ready);
     auto *array = b_.CreatePHI(b_.getPtrTy(), 2);
-    array->addIncoming(regional_storage, reserved);
+    array->addIncoming(regional_storage, regional_predecessor);
     array->addIncoming(lexical_storage, lexical);
     return array;
   }
@@ -2579,6 +2597,32 @@ class LLVMEmission {
         {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
     return b_.CreateCall(address, {owner, offset, size});
   }
+  llvm::Value *regional_scalar_locator(llvm::Value *owner, llvm::Value *address) {
+    auto *base = region_address(owner, integer(0), integer(0));
+    auto *offset = b_.CreateSub(b_.CreatePtrToInt(address, b_.getInt64Ty()),
+                               b_.CreatePtrToInt(base, b_.getInt64Ty()));
+    return b_.CreateSelect(b_.CreateIsNull(address), integer(UINT64_MAX), offset);
+  }
+  llvm::Value *regional_scalar_target(llvm::Value *owner, llvm::Value *offset, llvm::Type *layout) {
+    auto *entry = b_.GetInsertBlock();
+    auto *present = block("region.field.present"), *join = block("region.field.target");
+    b_.CreateCondBr(b_.CreateICmpNE(offset, integer(UINT64_MAX)), present, join);
+    b_.SetInsertPoint(present);
+    const auto bytes = module_.getDataLayout().getTypeAllocSize(layout).getFixedValue();
+    auto *address = region_address(owner, offset, integer(bytes));
+    b_.CreateBr(join);
+    b_.SetInsertPoint(join);
+    auto *target = b_.CreatePHI(b_.getPtrTy(), 2);
+    target->addIncoming(null_pointer(), entry);
+    target->addIncoming(address, present);
+    return target;
+  }
+  llvm::Value *reserve_regional_product(llvm::Value *owner, llvm::Type *layout, const Location &at) {
+    const auto &target = module_.getDataLayout();
+    const auto bytes = target.getTypeAllocSize(layout).getFixedValue();
+    auto *offset = reserve_region_extent(owner, integer(bytes), target.getABITypeAlign(layout).value(), at);
+    return region_address(owner, offset, integer(bytes));
+  }
   llvm::Value *construct_region(const Expression &make) {
     const auto &input = *make.children.front();
     auto *capacity_value = emit_expression(input);
@@ -3157,8 +3201,14 @@ class LLVMEmission {
       return destination;
     }
     auto *target = view_address(arguments[1]);
-    b_.CreateStore(target, destination);
-    return target;
+    std::map<std::optional<size_t>, std::vector<size_t>> owners;
+    for (size_t i = 0; i < contexts_.size(); ++i)
+      owners[contexts_[i].at(expr.children.front().get()).regional_product_holder].push_back(i);
+    return contextual_value(expr, owners, "reference.store", [&](const auto &holder) {
+      if (holder) b_.CreateStore(regional_scalar_locator(load(storage_.at(*holder)), target), destination);
+      else b_.CreateStore(target, destination);
+      return target;
+    }, b_.getPtrTy());
   }
   llvm::Value *captured_value(const CheckedOperation &fact, const Location &at) {
     if (fact.callable) return own_value(materialize(fact, fact.type, at));
@@ -4190,16 +4240,26 @@ class LLVMEmission {
         auto *address = emit_expression(parent, Projection::target);
         if (!reachable()) return nullptr;
         address = checked_address(address, parent, expr.at);
-        std::map<std::pair<size_t, size_t>, std::vector<size_t>> projections;
+        using Field = std::tuple<size_t, size_t, std::optional<size_t>>;
+        std::map<Field, std::vector<size_t>> projections;
         for (size_t i = 0; i < contexts_.size(); ++i) {
           const auto &field = contexts_[i].at(&expr);
-          if (field.product_field) projections[{field.operand_type.identity, *field.product_field}].push_back(i);
+          if (field.product_field)
+            projections[{field.operand_type.identity, *field.product_field, field.regional_product_holder}].push_back(i);
         }
-        auto *field = contextual_value(expr, projections, "product.field", [&](const auto &member) -> llvm::Value * {
-          const auto [schema, number] = member;
-          auto *slot = b_.CreateStructGEP(product_layout(schema), address, number);
-          if (projection != Projection::slot && program_->schemas[schema].fields[number].stores_target())
+        auto *field = contextual_value(expr, projections, "product.field", [&](const Field &member) -> llvm::Value * {
+          const auto [schema, number, holder] = member;
+          auto *layout = holder ? regional_product_layout(schema) : product_layout(schema);
+          auto *slot = b_.CreateStructGEP(layout, address, number);
+          const auto &description = program_->schemas[schema].fields[number];
+          if (projection != Projection::slot && description.stores_target()) {
+            if (holder) {
+              auto *owner = load(storage_.at(*holder));
+              auto *offset = b_.CreateLoad(b_.getInt64Ty(), slot);
+              return regional_scalar_target(owner, offset, native_type(description.type));
+            }
             return b_.CreateLoad(b_.getPtrTy(), slot);
+          }
           return slot;
         }, b_.getPtrTy());
         if (!read) return field;
@@ -4297,6 +4357,22 @@ class LLVMEmission {
         b_.SetInsertPoint(ready);
         return discard ? empty_scalar() : value;
       }
+      if (fact.regional_product_holder) {
+        using Destination = std::pair<size_t, size_t>;
+        std::map<Destination, std::vector<size_t>> placements;
+        for (size_t i = 0; i < contexts_.size(); ++i) {
+          const auto &item = contexts_[i].at(&expr);
+          if (item.regional_product_holder)
+            placements[{item.operand_type.identity, *item.regional_product_holder}].push_back(i);
+        }
+        auto *address = contextual_value(expr, placements, "region.product", [&](const Destination &destination) {
+          auto *owner = load(storage_.at(destination.second));
+          auto *row = reserve_regional_product(owner, regional_product_layout(destination.first), expr.at);
+          emit_product_initializers(expr, row, owner);
+          return row;
+        }, b_.getPtrTy());
+        return discard ? empty_scalar() : address;
+      }
       auto *address = storage_.at(*fact.place);
       if (fact.operand_type.kind == Type::product) emit_product_initializers(expr, address);
       else if (const auto *initializer = expr.construction_initializer()) {
@@ -4387,16 +4463,40 @@ class LLVMEmission {
     default: throw std::logic_error("unchecked expression reached LLVM emission");
     }
   }
-  void emit_product_initializers(const Expression &expr, llvm::Value *address) {
+  void emit_product_initializers(const Expression &expr, llvm::Value *address, llvm::Value *regional_owner = nullptr) {
     const auto schema_id = contexts_.front().at(&expr).operand_type.identity;
-    auto *layout = product_layout(schema_id);
+    auto *layout = regional_owner ? regional_product_layout(schema_id) : product_layout(schema_id);
     const auto &schema = program_->schemas.at(schema_id);
     for (const auto &initializer : expr.initializer_items()) {
       const auto &input = *initializer->children.back();
       const auto index = *contexts_.front().at(initializer.get()).product_field;
       const auto &member = schema.fields[index];
       const bool direct = member.storage == PlaceKind::value;
-      if (member.direct_text_place()) {
+      if (regional_owner && !direct) {
+        auto *slot = b_.CreateStructGEP(layout, address, index);
+        std::map<bool, std::vector<size_t>> preparations;
+        for (size_t i = 0; i < contexts_.size(); ++i)
+          preparations[contexts_[i].at(initializer.get()).allocates_scalar_field].push_back(i);
+        contextual_value(*initializer, preparations, "region.field.init", [&](bool fresh) -> llvm::Value * {
+          llvm::Value *offset;
+          if (fresh) {
+            auto *scalar = native_type(member.type);
+            const auto &data = module_.getDataLayout();
+            auto *bytes = integer(data.getTypeAllocSize(scalar).getFixedValue());
+            offset = reserve_region_extent(regional_owner, bytes, data.getABITypeAlign(scalar).value(), initializer->at);
+            auto *value = emit_expression(input);
+            if (!reachable()) return nullptr;
+            auto *target = region_address(regional_owner, offset, bytes);
+            assign_place(target, convert_result(*initializer, input, value), *initializer, &CheckedOperation::operand_type);
+          } else {
+            auto *target = emit_expression(input, Projection::target);
+            if (!reachable()) return nullptr;
+            offset = regional_scalar_locator(regional_owner, target);
+          }
+          b_.CreateStore(offset, slot);
+          return b_.getTrue();
+        }, b_.getInt1Ty());
+      } else if (member.direct_text_place()) {
         emit_text_transfer(*initializer, b_.CreateStructGEP(layout, address, index));
       } else if (direct && member.type.kind == Type::product) {
         emit_product_initializers(input, b_.CreateStructGEP(layout, address, index));
