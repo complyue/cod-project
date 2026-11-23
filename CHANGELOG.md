@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-23 — Select, call and install a lexical symbolic procedure family
+
+<a id="h-lexical-symbolic-proc-20261123"></a>
+**H-LEXICAL-SYMBOLIC-PROC-20261123.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-23 (America/Los_Angeles), the project user proposed “允许 `effect proc @score;`” and “直接调用静态绑定的 `@score(...)`”, then confirmed “那就按我上面说的明确下来。” The user separately answered “Yes, introduce the symbol when the name is free” to the three-case `using proc` selector question. D-10r243, D-15r67 and P-161/P-613/P-614/P-692/P-693 distinguish source selection, static-family calls with current bindings, and scoped activation with snapshots. This updates H-373 and the invocation boundary of H-EFFECTFUL-PROC-INSTALL-20261118. It supersedes the missing-destination stop in K-QUALIFIED-PROCEDURE-USING-20261123 at `abecd35c618aad811f114c23c43153a648553471:applications/cod-booter/docs/ModuleGraph.md`. D-07r209, D-14r133, D-18 here-storage r16, D-21r32 and module graph r56 apply the same source decision. Other verbs, callable value kinds and native ABIs keep their separate scope.
+
+<a id="k-lexical-symbolic-proc-review-20261123"></a>
+**K-LEXICAL-SYMBOLIC-PROC-REVIEW-20261123.** Delegated pre-code review under H-PROJECT-ARCHITECTURE-REVIEW-20261122 clears D-ARCH-REVIEW r65 and the [module graph r56 paths](applications/cod-booter/docs/ModuleGraph.md#checking-a-symbolic-procedure-selector) for the seed and booter. Release of free-name selection can precede executable family invocation and activation. See the former selector review at `abecd35c618aad811f114c23c43153a648553471:applications/cod-booter/docs/ModuleGraph.md`.
+
 ## 2026-11-23 — Carry a borrowed package edge through a synchronous directory loan
 
 <a id="k-seed-readonly-here-product-20261123"></a>

@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 132 · Recorded: 2026-11-23 · Status: design draft with scoped confirmed requirements.
+Design revision: 133 · Recorded: 2026-11-23 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+[Confirmed symbolic procedure forms](../CHANGELOG.md#h-lexical-symbolic-proc-20261123) applies D-10-HANDLER-INSTALL to the separation of scoped procedure activation and regional ownership. [Lexical and dynamic calls](SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
 
 [D-10-ACTOR-CHAN](DesignAuthorityRegistry.md#d-10-actor-chan) supplies r132's [post-send feedback boundary](#post-send-state-without-implicit-null-dereferences). [H-ACTOR-CHAN-BOUNDARY-20261123](../CHANGELOG.md#h-actor-chan-boundary-20261123) requires fire-and-forget sending except for systemic faults likely to compromise subsequent sends. [K-ACTOR-CHAN-RESEARCH-20261123](../CHANGELOG.md#k-actor-chan-research-20261123) continues the existing H-262/H-263 source/view rules while removing the unselected per-message result example. C-54/C-65 and established owner/access invariants remain; the exact send-consumption point, fault result and revived-view policy are still pending. [D-32](ActorChannels.md) records the research workload.
 
@@ -799,19 +801,14 @@ H-184 gives the symbol-declaration form `symbol a : T1, b : T2`; every symbol de
 
 An ordinary named procedure can supply a lexical callable value. A symbol-named method registers or extends module-world semantics; explicit effects supply a dynamic binding. Naming does not determine purity: both forms may use effects. Runtime value construction captures required values under H-180; bare symbolic registration does not capture. Reinstalling an existing callable preserves its environment and actual owners. Using/import/mixin selects or constructs semantic information under H-230/H-232 without implicitly installing a receiver TLS value. Family views retain that interpretation when installed under another compatible symbol.
 
-The selected source contract separates method registration from installation; the family/stage compiler migration remains outstanding:
+A registered symbolic family can be called lexically or installed in the dynamic scope:
 
-```text
-proc step(value:i64) -> i64 { return value; }
-symbol step_effect : proc(i64) -> i64;
-effect @step_effect = step;
-proc @direct(value:i64) -> i64 { return value; }
-effect @direct;
+```cod
+proc @direct(value:i64) -> i64 { return value }
+effect proc @direct;
 ```
 
-`step(...)` is a lexical call using current dynamic bindings under H-189. `perform @step_effect(...)` restores the existing procedure's captures; `behave @step_effect(...)` uses current bindings. H-186/H-187's `proc @direct` also declares its typed symbol if absent. Neither `perform step(...)` nor `behave step(...)` is admitted; functions cannot call either procedure form. Callable types and this syntax do not settle whole-region owning-result types or optional extraction.
-
-This gives the ownership design a concrete boundary: procedure-valued effects are admitted separately from bits and region-resource data. A lexical procedure used as a factory still needs a defined owning-result contract; a lexical name alone does not grant freshness, purity or consuming authority. No arbitrary lexical capture lifetime or hidden heap capture cell is introduced.
+In a procedure context, `@direct(x)` uses the lexical family and current effects. Both `perform @direct(x)` and `behave @direct(x)` require a live installation. Replaying an activation requires the captured resource to remain live. None of these operations transfers ownership of its region. A lexical procedure returning a fresh region is checked by its owning-result contract. [Handler lifetime and installation](SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
 
 ## Whole-region construction needs a separate contract
 
@@ -1245,9 +1242,9 @@ Assignment reads its source without modifying it under H-223/H-224. H-293 preven
 
 A val/unmodified scalar field and a dense numeric array slot use <- for their directly stored bits; = cannot manufacture a pointer slot or change their layout. A ref/ptr scalar field uses <- to write its target bits and = to rebind its stored edge. The indexed payload counterpart is `([]<-)(container, index, value)` under H-307, alongside the distinct `([]=)` family. It supports logical writes with void results as well as destination views; see the logical indexed transfer contract below. Current `(=)`/`([]=)` methods can implement arbitrary memory edits and must be reviewed before reusing their evidence for the new distinction. Typed overloads remain subject to const, owner and lifetime checks; method bodies cannot opt out of intrinsic ownership rules.
 
-Symbolic bindings are separate from ordinary pointer destinations: `effect @x <- rhs` transfers bits/ownership, while `effect @x = rhs` rebinds a regional object reference or procedure. Bits symbols reject the `=` form. Both forms restore the preceding binding on scope exit. Its bits case installs a value; its owned-region case consumes an admitted owner into the dynamic scope. A previous binding/owner remains hidden and alive, then becomes reachable on scope exit. Ordinary bits stores are not rolled back on scope exit. Captured perform is a non-consuming replay path. Bare symbolic binding assignment remains forbidden. The proposed `@object <- rhs` edits its regional referent through an overload; it provides no second way to rebind @x.
+Symbolic bindings are separate from ordinary pointer destinations: `effect @x <- rhs` transfers bits/ownership, while `effect @x = rhs` rebinds a regional object reference. Bits symbols reject the `=` form. Both forms restore the preceding binding on scope exit. Its bits case installs a value; its owned-region case consumes an admitted owner into the dynamic scope. A previous binding/owner remains hidden and alive, then becomes reachable on scope exit. Ordinary bits stores are not rolled back on scope exit. Captured perform is a non-consuming replay path. Bare symbolic binding assignment remains forbidden. The proposed `@object <- rhs` edits its regional referent through an overload; it provides no second way to rebind @x.
 
-Procedure-valued effects install an existing value with `effect @p = procedure_value`, materialize a selected symbol family, or combine method definition/extension with installation. `effect @p;` installs without extension. Capture construction belongs to runtime materialization; module registration alone acquires no captured resource. Installation preserves the selected family/context and existing value captures without duplicating region ownership. They do not classify procedure descriptors as transferable owners or permit effect-arrow procedure binding. Typed effect installation, public owner transfer and captured replay retain separate checks.
+For a symbolic procedure, `effect proc @p;` installs the lexically selected family without extension. The combined definition can also install a handler. Activation snapshots required bindings and preserves their actual owners through the scope. Assignment installation and extracting a procedure value reject. [Handler contract](SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
 
 Ordinary owning assignment follows these boundaries.
 

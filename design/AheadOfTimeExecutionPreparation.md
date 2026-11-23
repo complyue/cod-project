@@ -1,6 +1,6 @@
 # Ahead-of-time execution preparation and runtime micro-dispatch
 
-Design revision: 31 · Recorded: 2026-11-18 America/Los_Angeles · Status: AOT execution-preparation behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
+Design revision: 32 · Recorded: 2026-11-18 America/Los_Angeles · Status: AOT execution-preparation behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
 
 During AOT compilation, CoD checks the required behavior and prepares native implementations, semantic method selectors and local micro-dispatch paths. Proven call-site facts can resolve selections, demand or reuse specializations and permit direct-call emission. Preparing selection code does not execute that selection or the source program’s runtime effects. At runtime, execution follows the prepared code and performs remaining selections using actual runtime evidence.
 
@@ -10,9 +10,11 @@ Function preparation selects code under a static signature. Here invocation reso
 
 ## Design authority
 
+[Confirmed symbolic procedure forms](../CHANGELOG.md#h-lexical-symbolic-proc-20261123) applies D-10-HANDLER-INSTALL to the explicit installation required by H-379. Check installation ordering and the selected family in the entry module. [Lexical and dynamic calls](SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
+
 - **Callable lowering.** [H-CALLABLE-MODEL-20261118](../CHANGELOG.md#h-callable-model-20261118), D-18-HERE-STORAGE and D-21 preserve actual-type dispatch and prepared target selection. Mainline chooses the representation. Across inlining and separate compilation, repeated or recursive here calls must reach the correct original slots.
 
-- **D-21r30, entry installation.** [D-10-HANDLER-INSTALL](DesignAuthorityRegistry.md#d-10-handler-install) governs the source forms for effectful procedures. [H-EFFECTFUL-PROC-INSTALL-20261118](../CHANGELOG.md#h-effectful-proc-install-20261118) excludes assignment installation. H-379 still requires the entry to establish the handler for its extended family. Acceptance requires this installation without a first-class handler operand. Name-only activation is under review.
+- **D-21r30, entry installation.** [D-10-HANDLER-INSTALL](DesignAuthorityRegistry.md#d-10-handler-install) governs the source forms for effectful procedures. [H-EFFECTFUL-PROC-INSTALL-20261118](../CHANGELOG.md#h-effectful-proc-install-20261118) excludes assignment installation. H-379 still requires the entry to establish the handler for its extended family. Acceptance requires this installation without a first-class handler operand. The scoped name-only form is `effect proc @p;`.
 
 - **Full-scope dependency continuity:** [K-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#k-full-scope-implementation-20261118) updates only the referenced r92 qualification. This document’s semantic revision, own qualification, acceptance and exclusions are unchanged.
 
@@ -279,7 +281,7 @@ TLS slots, explicit machine arguments, registers and elimination are physical ch
 
 ## Definition, publication and installation
 
-Selecting a symbol or publishing its method family has no runtime installation effect. Reaching a combined definition activates and installs the compatible family. Assignment-installing a separate definition, lexical callable or active handler rejects. The symbol remains available for static family selection and type checking. D-10 tracks whether a name-only activation may install the composed definitions. [Definition-installed effectful procedures](SymbolicDynamicScope.md#definition-installed-effectful-procedures)
+Selecting a symbol or publishing its method family has no runtime installation effect. Reaching a combined definition activates and installs the compatible family. Assignment-installing a separate definition, lexical callable or active handler rejects. The symbol remains available for static family selection and type checking. An entry can execute `effect proc @p;` to activate its composed definitions. A direct lexical `@p(...)` leaves the entry’s installation obligation intact. [Definition-installed effectful procedures](SymbolicDynamicScope.md#definition-installed-effectful-procedures)
 
 Export publishes the whole method set. A skipped branch installs nothing. Repeated execution creates distinct activations without registering methods again. Selecting a dependency retains its required once-only initialization.
 

@@ -152,7 +152,6 @@ Haskell，再按 CoD 的模块解释规则决定声明的可见性、优先级�
 | overload 中的 `default` | 有更具体的方法需要调用本族更通用的实现时，比较显式调用与委托的选取规则，涵盖多个候选及递归。模块的 `default { ... }` 与默认导出已经有独立决定。[模块选择](../design/ModuleWorlds.md#default-and-complete-public-selections) |
 | 异常所有权交接后的引用 | 用具体消费方检验两个独立需求：把完整 owner 连同另一个选定的异常目标交给 helper；包装成功后保留此前单独声明、仍指向同一 region 的借用。现有 `from original` 消费原 holder，`e.tip` 可以只读观察。[异常控制](../design/ExceptionControl.md) |
 | 初始化、借用与 sum 构造 | 用真实调用检验非 bits 或产生所有权的分支如何合流，或要求 initializer 的 sum 如何在已预留的位置完成构造、切换 variant 后如何处理原字段引用。另有无 owner 的纯 bits 构造表达式候选；目前新建实例写 `make`。[构造与分配](../design/ConstructionAndAcquisition.md) · [owner 和初始化](../design/RegionalOwnership.md) |
-| 仅凭名称激活 symbolic handler | 多个定义经模块组合后，如入口确需单写 `effect @p`，需明确选中哪些定义以及何处获取快照。现行定义安装和 `perform` / `behave` 已可直接使用。[定义安装](../design/SymbolicDynamicScope.md#definition-installed-effectful-procedures) |
 | 结构化结果与 generator 的扩展 | 当现有 receiving spec、`yields`、反馈和同步 `here` 无法表达某个调用时，以该调用界定需增加的行为。[generator 与循环](../design/RangedForAndGenerators.md) |
 | 尾调用、分数和单位 | 有实际递归深度要求时讨论尾调用的可保证范围及 ABI 条件。固定宽度分数依已有草案保留兼容性；更广的单位与索引运算需要各自的用例及取舍。[尾调用](../design/ConstFunctionsAndTailCalls.md#tco-and-the-callable-abi) · [分数](../design/FixedWidthFractions.md) · [单位与索引](../design/ScalarUnitsAndIndexTypes.md) |
 

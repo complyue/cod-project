@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 64. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 65. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+
+The [symbolic procedure review](../CHANGELOG.md#k-lexical-symbolic-proc-review-20261123) at r65 clears the two frontends’ [selector, lexical call and activation paths](../applications/cod-booter/docs/ModuleGraph.md#checking-a-symbolic-procedure-selector) under D-10-HANDLER-INSTALL and P-682/P-683. Each stage has its own acceptance through the normal compiler. The free-name selector can ship with the package migration.
 
 The [r64 review](../CHANGELOG.md#k-seed-readonly-here-product-20261123) clears [readonly product references in ordinary supplied bodies](#readonly-product-references-in-an-ordinary-here-body) under D-18-HERE-PARAM, D-14-REF-ARGUMENT and P-682/P-683. Check actual owner and access through the package edge’s ordinary CoD relay.
 

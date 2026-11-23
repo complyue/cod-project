@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 242 · Recorded: 2026-11-23 · Phase: language/application co-design.
+Design revision: 243 · Recorded: 2026-11-23 · Phase: language/application co-design.
 
 ## Design authority
+
+[Confirmed symbolic procedure forms](../CHANGELOG.md#h-lexical-symbolic-proc-20261123) covers [selection, installation and invocation](#lexical-selection-installation-and-invocation) under D-10-HANDLER-INSTALL, D-15-DEFAULT-EXPORTS and P-161/P-613/P-614. Separate family selection from activation so an application can call a known definition and explicitly choose its dynamic override. Check distinct lexical and installed families, current and replayed effects, scoped restoration and an occupied identity.
 
 [D-10-ACTOR-CHAN](DesignAuthorityRegistry.md#d-10-actor-chan), r242's [Actor section](#actor-concurrency-direction), records [H-ACTOR-CHAN-BOUNDARY-20261123](../CHANGELOG.md#h-actor-chan-boundary-20261123): Actor/chan terminology, one dedicated OS thread per Actor, isolated dynamic bindings, static message types and fire-and-forget sends except for systemic communication faults likely to compromise subsequent sends. P-702 constrains C-36/C-52 within that scope. [D-32 research](ActorChannels.md) evaluates nedh/sedh workloads; endpoint, owner-on-fault, queue, close and wire contracts remain pending. Existing ownership/callable invariants and whole-file qualification boundaries continue under [K-ACTOR-CHAN-RESEARCH-20261123](../CHANGELOG.md#k-actor-chan-research-20261123).
 
@@ -375,7 +377,7 @@ Acceptance covers one overload-backed update, persistent content after the enclo
 
 ### Definition-installed effectful procedures
 
-The restricted design admits a handler through a definition such as `effect @quote() -> u64 { ... };`. Source calls select its currently installed binding with `perform @quote()` or `behave @quote()`. Assigning a procedure into the slot, extracting the installed handler as a value, or adapting, returning or passing it through a callable type rejects. This applies even to a handler whose body returns a constant. A type-only use of a declared signature and compile-time imports of a symbol identity or its methods request no runtime handler. Independent bits, ref/ptr and owned-region effect bindings keep their respective installation rules.
+A reached installation can activate the selected family by name or supply a definition such as `effect @quote() -> u64 { ... };`. Dynamic calls select its currently installed binding with `perform @quote()` or `behave @quote()`. Assigning a procedure into the slot, extracting the installed handler as a value, or adapting, returning or passing it through a callable type rejects. This applies even to a handler whose body returns a constant. A type-only use of a declared signature and compile-time imports of a symbol identity or its methods request no runtime handler. Independent bits, ref/ptr and owned-region effect bindings keep their respective installation rules.
 
 ```cod
 symbol @rate:u64;
@@ -406,15 +408,43 @@ A diagnostic can identify the named procedure and suggest a direct call. The two
 
 A standalone `{{ ... }}` is an immediate call to its own definition. A generator's `yield` has a dedicated handoff to the caller's lexical loop body. Both retain their existing effect and binding checks. The proposed unified here parameter lets a receiver, including a func, invoke a procedural literal explicitly supplied from a proc. Its own code retains the restrictions of its declared kind. [Here callback example](CallableStorageAndHereAccess.md#an-effect-in-a-here-callback)
 
-**Definition and method reuse.** A declaration supplying a symbol's signature, a static method import and runtime installation are distinct. On a strict definition-with-body reading, bare `effect @quote;` cannot install anything. It also has a possible narrower meaning as activation of a statically selected definition, without extracting an installed handler. The term “definition installation” alone does not decide between these spellings. D-21 requires an entry module extending a dependency family to supply an explicit installation. Its existing name-only examples would need a replacement that activates the composed family in the entry context. Two nested definition sites offering the same signature raise a separate issue: existing combined definitions contribute methods in the module world. Dynamic shadowing cannot by itself resolve equally specific distinct bodies in a single family. Per-installation implementations versus shared family extension require a rule before promising this replacement for swapped handler values. [Entry composition](AheadOfTimeExecutionPreparation.md#entry-installation-and-unused-dependency-code)
+### Lexical selection, installation and invocation
+
+`using "./base.cod" proc @score` brings the exported symbol identity and its source-preserving procedure family into a free receiving name. A prior selection of the same identity is compatible. A different identity with that spelling conflicts, even with identical signatures. Looking up a shadowing non-symbol fails at the use site. Selecting a family grants its published use permissions. [Module selectors](ModuleWorlds.md#default-and-complete-public-selections)
+
+| Expression in a procedure context | Family and dynamic bindings |
+| --- | --- |
+| `@score(x)` | Select the family lexically at the call site. Apply ordinary method dispatch to the actual arguments. Its body uses current dynamic bindings. The call needs no installation for its own callee. |
+| `effect proc @score;` | Activate the lexically selected family and install its handler in the current dynamic scope. Snapshot the required symbolic bindings at activation. The expression yields void. |
+| `perform @score(x)` | Use the currently installed handler and replay its saved symbolic bindings. |
+| `behave @score(x)` | Use the currently installed handler with the dynamic bindings current at invocation. |
+
+For example, the client selects a family computing `x + 1u64`. Its caller has installed another interpretation of that same symbol which computes `x + 100u64`:
+
+```cod
+using "./base.cod" proc @score
+
+proc check_score() -> void {
+    assert @score(7u64) == 8u64
+    assert behave @score(7u64) == 107u64
+    {{
+        effect proc @score;
+        assert behave @score(7u64) == 8u64
+    }}
+    assert behave @score(7u64) == 107u64
+    return
+}
+```
+
+Normal and exceptional exits restore the preceding installation. A skipped installation creates no snapshot. Direct calls and activation both require a compatible family and live defining slots wherever a reachable method needs them. A bodyless signature can identify a symbol but supplies no executable method. Check the selected body's access, required effects, checked failures and cleanup in its defining interpretation. Ordinary `func` restrictions still apply. In a value position a procedure symbol cannot produce a stored callable. Two distinct equally specific methods in one lexical family remain subject to the ordinary ambiguity rules.
 
 ### Method registration and scoped installation
 
 A declaration can register or extend a symbol's module-world method family. Import and extension permissions, declaration promises, applicability and ambiguity govern that step. When execution reaches a combined definition, it activates the compatible family selected in the current module world and installs the resulting handler. A skipped branch installs nothing. Leaving the scope restores the prior installation on normal and exceptional exits. The result of installation is void.
 
-The [entry-module requirement](AheadOfTimeExecutionPreparation.md#entry-installation-and-unused-dependency-code) still needs an explicit installation point for an extended family. The choice about name-only activation above determines whether that point requires a body. An assignment from a selected source family or from an active binding cannot supply it.
+An entry that extends a dependency family can install its resulting interpretation with `effect proc @p;`. Preserve the normal entry ordering and activation checks. [Entry installation](AheadOfTimeExecutionPreparation.md#entry-installation-and-unused-dependency-code)
 
-The prototype currently accepts `effect proc`; treatment of that spelling, defaults and detailed grammar migration remains DD-AOT-07. The selected `effect @sym(...)` behavior is settled. A skipped runtime path installs nothing; repeated execution creates installations without repeatedly registering methods. Existing declaration/scope boundaries apply.
+The name-only form is `effect proc @sym;`. The combined definition uses `effect @sym(...) { ... }`. A skipped runtime path installs nothing; repeated execution creates installations without repeatedly registering methods. Existing declaration/scope boundaries apply.
 
 H-379 requires the entry module to explicitly install a dependency callable that it extends; omission is a compile error. Correct entry installation cancels the applicable dependency installations so they do not retain unused world code. [D-21](AheadOfTimeExecutionPreparation.md#entry-installation-and-unused-dependency-code) owns initialization-only cancellation with operand evaluation preserved and LLVM reachability acceptance; identity/coverage and native mechanisms remain under review.
 
@@ -497,7 +527,7 @@ A use makes the declared symbol part of the demanded program’s binding require
 
 ## Symbol origins, aliases and dynamic values
 
-H-112 requests explicit origins and local aliases. H-113 excludes lexical symbolic variables and ordinary symbolic assignment. H-114 places symbol identities and module-local aliases at compile time; runtime values bind under symbol identities. H-115 permits an alias-mapping table when importing a procedure body, with matching local spellings needing no explicit entry. H-116 specifies `using/import "<modu>" @src_name as @local_name` and requires the destination symbol to exist beforehand. H-212 assigns the receiving-context redefinition and its body maps to mixin; import now preserves definitions and grants extension permission. These rules determine the relationships below. H-117 supplies `symbol from` and the receiving-symbol-first `with` direction. H-118 authorizes their bounded implementation. The prototype also implements the H-119/H-120 combined using and identity-checked abbreviation under H-121.
+A kind-qualified `using` selects a procedure family and its nominal symbol under the published or explicitly selected local spelling. The name may be free or already denote that symbol. `symbol from` selects the vocabulary identity explicitly. Destination-directed imports and receiver-local mixins retain their own permission and mapping checks. [Module selectors](ModuleWorlds.md#default-and-complete-public-selections)
 
 ### Compilation and execution have different bindings
 
@@ -523,7 +553,7 @@ A symbol declaration registers an identity, declared TLS contract and local acce
 | Declare/select a symbol | Introduce or alias its identity and semantics. | None from selection alone. |
 | Define/extend a symbolic callable | Construct receiver-local method information under selection permissions. | None without effect. |
 | Combined effect definition | Select a compatible family in the current module interpretation. | Activate and install the scoped handler. |
-| `effect @p;` | Candidate activation of the composed definitions without a body at this site. | [Under review](#definition-installed-effectful-procedures). |
+| `effect proc @p;` | Activate the lexically selected compatible family. | Install it until scope exit. |
 | `effect @p = source;` or `effect @p = @source;` | Assignment installation of a symbolic procedure. | Reject. |
 
 Two names for one symbol identity address the same TLS slot. Static name/identity aliasing supplies no runtime installation or access to a stored procedure value.
@@ -580,7 +610,7 @@ Rust's `use path as name` illustrates local aliases for explicit source paths. R
 
 ### Module origins without local module names
 
-H-214 keeps source modules as selection origins without module-valued local bindings or qualified-access syntax. H-484 additionally permits compiler lookup relationships to their published namespaces. Using/import/mixin names the source at the selection site; calls use local lexical names, selected operator/intrinsic names or symbolic perform/behave. A single alias preserves the selected source identity; H-230 separately creates identities for extension-module callables and same-alias unions. Diagnostics can display package/module provenance without admitting Module.f or Module.@p as expressions. There is no qualified-call or qualified-definition escape from extension permissions. H-215 proposes a separate explicit import-as declaration for selected method names. H-217/H-483 gives implicit names lower priority; H-484 realizes that through source-namespace fallback without a runtime module object. H-226 resolves explicit versus implicit names before typed method dispatch, preserves operation identity through aliases and rejects a demanded unresolved implicit-name conflict. H-490 fixes the selection unit at whole callables; alias availability and remaining surface details retain their separate scope. [The method-selection review](DomainLanguageDesign.md#type-associated-method-visibility-and-extension) records H-225–H-227 and the remaining boundaries. Preserve this boundary unless an actual serious design obstacle is identified.
+H-214 keeps source modules as selection origins without module-valued local bindings or qualified-access syntax. H-484 additionally permits compiler lookup relationships to their published namespaces. Using/import/mixin names the source at the selection site; calls use local lexical names, selected operator/intrinsic names or symbolic procedure calls with lexical or dynamic selection. A single alias preserves the selected source identity; H-230 separately creates identities for extension-module callables and same-alias unions. Diagnostics can display package/module provenance without admitting Module.f or Module.@p as expressions. There is no qualified-call or qualified-definition escape from extension permissions. H-215 proposes a separate explicit import-as declaration for selected method names. H-217/H-483 gives implicit names lower priority; H-484 realizes that through source-namespace fallback without a runtime module object. H-226 resolves explicit versus implicit names before typed method dispatch, preserves operation identity through aliases and rejects a demanded unresolved implicit-name conflict. H-490 fixes the selection unit at whole callables; alias availability and remaining surface details retain their separate scope. [The method-selection review](DomainLanguageDesign.md#type-associated-method-visibility-and-extension) records H-225–H-227 and the remaining boundaries. Preserve this boundary unless an actual serious design obstacle is identified.
 
 ### Explicit method aliases and implicit method names
 
@@ -721,7 +751,7 @@ H-230 requires distinct callable identities for extension modules. Different loc
 
 ### Implementation boundary and acceptance
 
-The selected module contract uses using/import for existing definitions and mixin for receiver-local definitions. Source-preserving selections retain types, lexical resolution and captures; symbolic destinations must be declared before selection. Omitting as requires matching source/destination symbol identities, while explicit as can install the source-defined procedure under a different predeclared destination. Use `symbol from` to introduce the identity. Resource selections spell the kind, for example `proc @step`. Direct named-callable extension requires import under the extended local alias. The module contract keeps semantic-family provenance separate from extension/local-union identities and checks exports for every cross-module selector. Original methods with no ordinary callable dependencies deduplicate across contexts; distinct observable contexts are not silently erased. Import stores a receiving implementation context, using preserves the selected context, and scope restoration prevents cross-alias leakage. Selecting a type establishes lower-priority lookup through the source's published namespace, making associated behavior available along with its other public names. H-483 requires local ordinary definitions to shadow names brought implicitly by either type reuse form. Explicit callable imports retain their extension rules; symbol from establishes the same public-source fallback. The complete new surface is not established by this implementation evidence. Original methods deduplicate across paths. Cross-alias grants and extension of unrelated merged callable families remain separately scoped. These limits do not change the separate declaration rules for compiler operations.
+The selected module contract uses using/import for existing definitions and mixin for receiver-local definitions. Source-preserving selections retain types, lexical resolution and captures; a kind-qualified procedure `using` introduces the published identity into a free name and reuses a matching identity. A distinct occupied identity conflicts. `symbol from` remains available for explicit identity selection. Procedure installation requires an effect expression. Resource selections spell the kind, for example `proc @step`. Direct named-callable extension requires import under the extended local alias. The module contract keeps semantic-family provenance separate from extension/local-union identities and checks exports for every cross-module selector. Original methods with no ordinary callable dependencies deduplicate across contexts; distinct observable contexts are not silently erased. Import stores a receiving implementation context, using preserves the selected context, and scope restoration prevents cross-alias leakage. Selecting a type establishes lower-priority lookup through the source's published namespace, making associated behavior available along with its other public names. H-483 requires local ordinary definitions to shadow names brought implicitly by either type reuse form. Explicit callable imports retain their extension rules; symbol from establishes the same public-source fallback. The complete new surface is not established by this implementation evidence. Original methods deduplicate across paths. Cross-alias grants and extension of unrelated merged callable families remain separately scoped. These limits do not change the separate declaration rules for compiler operations.
 
 Mixin translates source-body symbol roles to receiving identities before checking required bindings and collecting captures. Repeated mixing uses the current provider's aliases; it does not rewrite the source initialization or existing definitions. Body maps are rejected on using/import, and built-in procedures have no body to mix. Lexical procedures may also be mixed under ordinary local names. A symbolic installation requires a definition. Operation-overload mixin remains outside this subset; mixin does not copy type definitions, function definitions or globals. UoM selection retains its separate using-units contract.
 
@@ -1311,14 +1341,14 @@ LLVM lowering uses typed places for referent, field and element access, with com
 
 ```text
 proc @p(arg:T) -> RT { ... }
-effect @p;  # Name-only activation is under review.
+effect proc @p;
 perform @p(argument);
 behave @p(argument);
 ```
 
 The method declaration defines or extends the symbol’s module-world family without a runtime binding. If no symbol exists, its explicit signature can introduce the nominal identity and declared contract under the existing declaration rules; an existing/imported symbol retains its identity and permissions. Declaration promises and compatible view checks remain distinct from method addition.
 
-Bare p names the registered symbol. The combined definition activates and installs a handler. Separate name-only activation of registered definitions is [under review](#definition-installed-effectful-procedures). Neither form supplies a first-class handler or grants functions dynamic access.
+Bare p names the registered symbol. A procedure context can call the selected family with `@p(...)`, install it with `effect proc @p;`, or define and install with a combined definition. [Lexical and dynamic calls](#lexical-selection-installation-and-invocation)
 
 A symbolic declaration’s `proc(T1, T2) -> RT` signature constrains handler invocation. Dispatch selects among the family’s methods by actual argument types in its module interpretation. [AOT execution preparation](AheadOfTimeExecutionPreparation.md) covers the required dispatch evidence.
 

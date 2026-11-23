@@ -1,8 +1,10 @@
 # Callable storage and direct lexical access
 
-Design revision: 15 · 2026-11-19 · Confirmed source contract
+Design revision: 16 · 2026-11-19 · Confirmed source contract
 
 ## Design authority
+
+[Confirmed symbolic procedure forms](../CHANGELOG.md#h-lexical-symbolic-proc-20261123) applies the existing D-18-HERE-STORAGE activation and owner checks to the lexical symbolic family. The ended-frame example below checks both operations. [Lexical and dynamic calls](SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
 
 [H-FUNCTOR-ARGUMENT-20261119](../CHANGELOG.md#h-functor-argument-20261119) applies ordinary argument preparation at r15 under D-18-HERE-STORAGE/P-611–P-612. The functor and any synchronous forward retain the selected receiver’s identity, access and lifetime. A later rebind of its source slot leaves that identity intact.
 
@@ -18,7 +20,7 @@ Design revision: 15 · 2026-11-19 · Confirmed source contract
 
 [H-HERE-BREAK-CONTINUE-20261118](../CHANGELOG.md#h-here-break-continue-20261118) confirms the two typed exits in r10 under [D-18-HERE-BREAK](DesignAuthorityRegistry.md#d-18-here-break), P-621/P-622. The block spelling identifies the originating call and keeps the result and cleanup destination explicit through forwarding. The table and forwarding case below are source acceptance criteria.
 
-Acceptance covers function selection without an enclosing activation, direct slot writes, synchronous forwarding across different owner counts, both brace forms, early feedback, reentrancy, cleanup and rejection of escape. Native layout, inlining and migration strategy are delegated to mainline. Name-only activation of mixed symbolic families remains a separate question.
+Acceptance covers function selection without an enclosing activation, direct slot writes, synchronous forwarding across different owner counts, both brace forms, early feedback, reentrancy, cleanup and rejection of escape. Native layout, inlining and migration strategy are delegated to mainline. Name-only activation checks the required live defining slots of the selected family.
 
 ## Callable value kinds
 
@@ -278,7 +280,7 @@ effect @install_price() -> void {
 behave @install_price();
 ```
 
-If name-only definition activation is retained, a later `effect @price;` would need a valid defining activation for cents whenever this method is visible and selectable. The shown inner activation has ended. If only the combined definition-with-body form survives, the name-only statement rejects at the source-form check. A method over initialized module slots has a different lifetime proof.
+At a later `effect proc @price;` or direct lexical call, the checker must prove that the defining activation for cents remains live whenever this method can be used. In this example the inner activation has ended, so that later use rejects. A method over initialized module slots has a different lifetime proof.
 
 ## Control, storage and interoperability
 

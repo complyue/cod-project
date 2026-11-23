@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 66 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 67 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+[Confirmed symbolic procedure forms](../CHANGELOG.md#h-lexical-symbolic-proc-20261123) qualifies D-15-DEFAULT-EXPORTS for a kind-qualified procedure `using`. P-692/P-693 preserve explicit origins, receiver permissions and equivalent written and expanded selectors. Check a free spelling, identical prior selection and a conflicting origin. [Lexical and dynamic calls](SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
 
 [Editorial continuity](../CHANGELOG.md#k-lexical-callee-examples-20261123) aligns lexical calls and symbolic procedure installation with [D-18 callable value kinds](CallableStorageAndHereAccess.md#callable-value-kinds) and [D-10 handler installation](SymbolicDynamicScope.md#definition-installed-effectful-procedures). Existing qualification boundaries apply.
 
@@ -359,7 +361,7 @@ default { var @sout, proc @flush }
 
 For each of `using`, `import` and `mixin`, writing only `"./hooks.cod"` has exactly the meaning of writing `"./hooks.cod" { var @sout, proc @flush }` after that verb. Substitution is a source-level equivalence. The compiler can retain checked selectors with their published spellings, kinds, origins and order. Apply ordinary privacy, renaming, destination, access, extension and body-availability rules at the receiving directive. If the explicitly written list would fail for one item, the omitted form fails there too. Items are never silently dropped to make a verb applicable. This also governs generated entries from the complete public table where module `{..}` is admitted. The public table excludes private entries and implicit fallback names. Type-associated methods and nested type-member selectors retain their existing rules.
 
-Use `var @name` for a symbolic variable resource and `proc @name` for a symbolic procedure resource in export, using, import and mixin selectors. The prefix states what is requested of the source. Match it to the published declaration and reject a missing or wrong kind. `var` in a selector declares no local place or writable access. It preserves the published storage and access contract, including a reference symbol’s owner role. `proc` selects the procedure family subject to the verb’s destination or body requirements. It does not extract a first-class procedure or perform a call. Bare `@name` remains the operand of the separate identity operation `symbol from "./hooks.cod" @name`. That operation can establish the typed identity before an `effect` installs anything. For a published variable, `using var` also selects that typed identity.
+Use `var @name` for a symbolic variable resource and `proc @name` for a symbolic procedure resource in export, using, import and mixin selectors. The prefix states what is requested of the source. Match it to the published declaration and reject a missing or wrong kind. `var` in a selector declares no local place or writable access. It preserves the published storage and access contract, including a reference symbol’s owner role. `proc` selects the procedure family under the receiving verb. For `using`, a free receiving name introduces the published identity and its source-preserving family. Reusing the same nominal identity succeeds. A different identity at that name rejects. `import` and `mixin` keep their own destination and body requirements. It does not extract a first-class procedure or perform a call. Bare `@name` remains the operand of the separate identity operation `symbol from "./hooks.cod" @name`. That operation can establish the typed identity before an `effect` installs anything. For a published variable, `using var` also selects that typed identity. For a published procedure, the `using proc` selector itself suffices.
 
 For `var` under `using`, apply the [same identity selection as `symbol from`](#selecting-a-symbolic-variable). A missing dynamic installation cannot make either declaration fail.
 
@@ -607,7 +609,8 @@ A declared symbol carries its identity and signature in the module world. H-381 
 | --- | --- | --- |
 | Declare or extend a symbolic procedure | Register the method under existing module permissions. | Registration alone installs nothing. |
 | `effect @sym(...) { ... }` | Check the definition in its selected family and interpretation. | Activate the definition, snapshot required bindings and install the scoped handler. |
-| `effect @sym;` | [Name-only activation remains under review](SymbolicDynamicScope.md#definition-installed-effectful-procedures). | |
+| `effect proc @sym;` | Resolve the lexical family under the ordinary selection rules. | Activate it and install the scoped handler. |
+| `@sym(args)` | Select the lexical family and apply ordinary argument dispatch. | Call under current dynamic bindings. |
 | `effect @sym = other` or `effect @sym = @other` for procedure symbols | Reject assignment installation. | |
 
 The installed handler retains its family and module interpretation. Several applicable methods participate in ordinary dispatch. Export, using/import/mixin and extension remain module construction; none implicitly installs a receiver TLS value. Dependency initialization still follows its once-only incorporation contract and can execute its own explicit effects.
