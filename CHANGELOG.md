@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review seed placement for products with regional scalar fields
+
+<a id="k-seed-regional-scalar-product-20261123"></a>
+**K-SEED-REGIONAL-SCALAR-PRODUCT-20261123.** [D-ARCH-REVIEW r69](design/ImplementationArchitecture.md#constructing-a-regional-product-with-scalar-edges), P-682/P-683, continues the delegated architecture review for D-22-REGIONAL-REF-INIT. At `e2e52a47162e658f70641c9159d5093638a32bc9:cod/lang_checked.hh`, both seed modes stop at the enclosing explicit regional placement. The reviewed increment shares field classification, preserves owner-relative selections and applies H-416 reservation order before each fresh scalar's RHS. The two-mode workload distinguishes failure, absence and a valid zero-offset target. CoD-written frontend coverage remains separate.
+
 ## 2026-11-23 — Apply ordinary value parameters to variadic element writes
 
 <a id="k-variadic-local-values-20261123"></a>
