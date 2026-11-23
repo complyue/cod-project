@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Rebind a borrowed native handle within its live owner
+
+<a id="h-native-handle-local-rebinding-20261123"></a>
+**H-NATIVE-HANDLE-LOCAL-REBINDING-20261123.** The project user confirmed in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-23 (America/Los_Angeles) that later `view = other` is allowed: “只要能证明 `O` 还活着，所有曾经的 `make handle ... in O` 就都还有效。” This settles the question left by K-BOOTER-HANDLE-BINDINGS-20261120 at `86631c0731a41c4cb3df9d455898ef9db6d6ecd1:applications/cod-booter/docs/LLVMInterop.md`. D-20-C-HANDLES interop r29→r30 applies P-646/P-647 to a mutable lexical borrow of the same CType and actual owner. Independent borrows, access limits, shorter foreign loans and owner cleanup retain their contracts.
+
 ## 2026-11-23 — Review package diagnostics on the normal graph route
 
 <a id="k-booter-package-diagnostic-sink-20261123"></a>

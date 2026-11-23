@@ -1,8 +1,10 @@
 # Native C providers, LLVM bindings and scoped cleanup
 
-Revision 29 · 2026-11-23 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
+Revision 30 · 2026-11-23 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
 
 ## Design authority
+
+At r30 the [user’s same-owner rebinding decision](../../../CHANGELOG.md#h-native-handle-local-rebinding-20261123) qualifies [borrowed handle locals](#borrowed-handle-locals-and-results) under [D-20-C-HANDLES](../../../design/DesignAuthorityRegistry.md#d-20-c-handles), P-646/P-647. A writable lexical binding can select another borrow under its original live owner. Verify independent selections and provider cleanup under that owner.
 
 [Interop r29](../../../CHANGELOG.md#k-native-callable-seed-status-20261123) updates the [bootstrap implementation status](#native-callable-kind-and-c-linkage) for D-20-C-DECLARATIONS under the r27 callable-kind and r28 Boolean result contracts.
 
@@ -181,7 +183,21 @@ In a lexical declaration, `=` binds the borrow produced by the initializer. Omit
 
 For an ordinary CoD callable, `-> handle T in O` ties the result to an actual owner established by an input. Each returning path must establish T and O and respect all access and loan-duration restrictions through cleanup and delivery to the caller. Returning an input through a lexical local is valid. Returning a child of a session acquired by the callee rejects when that session ends at return. A callback-confined borrow cannot escape its loan merely because its resource owner survives. Forwarding a readonly capability cannot authorize a writable native operation. Check both native words when a consumer passes the result on to C.
 
-Post-initialization `view = other;` for a native handle local is a separate question. The two alternatives are a mutable local that can select another compatible borrow under its original owner, and a local fixed to its initial borrow. Initialization and ordinary CoD results can be implemented independently of this choice.
+A mutable borrowed-handle local may be rebound after initialization. In `view = other`, both borrows must have the same nominal handle type and the compiler must prove the same live **owner instance** established for `view` at initialization. This also applies when the initializer inferred the owner. The assignment selects the new payload for subsequent reads of `view`. Every successful `make handle T(...) in session` remains valid under that live session, including after its original local is rebound.
+
+```cod
+# Inside a caller with a live owning LLVMSession named session
+handle view:ModuleView in session = make handle ModuleView(0u64) in session
+handle saved:ModuleView = view
+handle other:ModuleView = make handle ModuleView(1u64) in session
+view = other
+inspect_module(view)   # Module 1
+inspect_module(saved)  # Module 0
+```
+
+The provider retains responsibility for any child resources attached to the session. Rebinding registers no destructor and releases neither child. If the RHS fails before assignment, the local retains its previous selection. A borrow from a second live `LLVMSession` cannot replace `view`. The local’s binding mutability, the selected handle’s access and any shorter loan duration are checked independently. In particular, assigning a callback-confined borrow cannot make it usable after the callback returns.
+
+Verify the two observed payloads under the same native owner, preservation of the old selection on a failed RHS, rejection of a second session of the same CType, and release of each attached disposable child once at owner cleanup.
 
 ### Owning native handle effects
 
