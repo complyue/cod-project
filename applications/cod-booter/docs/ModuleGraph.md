@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 24. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 25. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
 
 [K-BOOTER-AST-TABLE-20261122](../../../CHANGELOG.md#k-booter-ast-table-20261122) continues that architecture for the [first indexed AST path](#first-indexed-ast-path). Its private representation uses the existing named-array constructor, valid bits transfer and constructor-pattern checks. Acceptance includes the parser, checker, lowering and emitted object.
 
@@ -33,6 +33,8 @@ The [fresh graph result review](../../../CHANGELOG.md#k-booter-fresh-graph-resul
 The [owning result syntax review](../../../CHANGELOG.md#k-booter-own-region-result-syntax-20261122) covers the CoD booter’s signature reader and its publication boundary.
 
 The [provider member name review](../../../CHANGELOG.md#k-booter-provider-member-names-20261122) covers the shared reserved spellings and field validation before rendering.
+
+The [constructor case parser review](../../../CHANGELOG.md#k-booter-constructor-case-syntax-20261122) covers typed reception items in the syntax reader and module index.
 
 ## Layer responsibilities
 
@@ -100,6 +102,24 @@ export data NodeLink = NoLink {} | LinkTo { node:NodeId; };
 Store a typed sum declaration and an ordered sequence of typed alternatives in the frame’s syntax table. Preserve the heading, including any parsed parent, and the ordinary module-item export marker. Each alternative retains its name, its span through the closing brace and its own fields. Reuse the product-field reader for their shared grammar, preserving order, type, binding mode and target access. Start a fresh field list for each alternative. The reader returns an absent last field for both a valid empty list and a parse failure. Check the diagnostic before accepting a fieldless alternative. Use the frame’s revision-bound links and checked lookup for all children.
 
 In both seed-built modes inspect the actual `NodeLink`, `ExprPayload`, `AstSlot` and `VisitSlot` declarations. The two occurrences of `Vacant` must remain accessible under their own declarations and source revisions. Accept a single alternative. Reject a missing alternative, a trailing separator, `||` between alternatives, a malformed field and a C-layout sum. Preserve the existing product and C-record paths. On the full sources, distinguish passing the original declaration site from checking the whole module. Until a semantic consumer supports the declaration, issue a located rejection before publishing an interface or emitting output. The [checked interface](#publishing-nominal-sum-interfaces) supplies constructor binding and module selection. Payload pattern checking, construction and lowering have separate review scopes. [Named sum constructors](../../../design/DomainLanguageDesign.md#named-sum-constructors)
+
+### Reading constructor fields in a case arm
+
+The booter’s syntax-table reader and module index use constructor patterns to receive named fields into branch-local values. The index contains this arm:
+
+```cod
+(Visiting { val first <- key_first; val past <- key_past; }) -> {
+    if (same_key(bytes, first, past, canonical)) return id;
+};
+```
+
+After the existing direct-arm delimiter check in `ExpressionParser`, recognize a constructor name followed by a braced receiving specification. Use the ordinary name reader with the appropriate role for the constructor, destination and field label. A fresh `val` item requires a destination and `<-`. Its optional selector is one field name. In `val node <-;`, the destination spelling supplies the selector. Two distinct locals may receive the same field. Conflicting new declarations are a separate checking error. An existing destination such as `latest <- id;` is valid wider receiving syntax and can receive a located unsupported-form diagnostic in this slice. Keep call expressions, projections and computed selectors outside the spec. [Receiving specifications](../../../design/ConstructionAndAcquisition.md#receiving-specifications)
+
+Store a distinct constructor-pattern node with its name and ordered reception items. Each item retains the destination name, optional explicit source label, `<-` location, source span and preceding-item link. Distinguish an explicitly written label from same-name omission. Store an empty braced spec as a constructor pattern with zero items. Preserve a bare `(Vacant)` as a named pattern for later resolution against the subject. The existing arm retains its optional guard, arrow and body, including the body’s brace form. The list records written order for inspection. It grants no sequential visibility between receivers. Branch locals become available to this arm’s guard and body under the ordinary match rules. [Case expressions and branch-local variables](../../../design/DomainLanguageDesign.md#case-expressions-and-branch-local-variables)
+
+Keep the nodes in the frame’s typed syntax table. Inspect only published, occupied children of the correct role and revision. Predecessors must lead to earlier items and terminate at the start of this list. An invalid link or an item that failed to parse cannot serve as an empty spec. The parser records names and spans. Later checking selects the constructor for the subject’s nominal sum, resolves labels against that alternative and checks access, readiness and receiving operations. Until those checks are supported, the existing source-profile pass must stop at the constructor pattern before ordinary name resolution, interface publication or lowering. The same gate applies to object, declaration and generated-provider routes.
+
+In both seed-built parser modes inspect the unedited `ParserStorage.syntax_boundary` and `ModuleIndex.find_visit` arms, including their renames, multiple fields and following siblings. Focused inputs cover a guard using its new local, bare names, empty braces, same-name omission, repeated source labels, and the existing wildcard, Boolean, null and enum forms. Check malformed items and delimiters, computed selectors, truncated or cross-revision links and wrong node roles. Verify the located unsupported-pattern stop with a source that reaches it, preserving any previously emitted object or provider pair. Executable matching and constructor calls require their own review.
 
 ### Parsing the graph region
 
