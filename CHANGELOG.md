@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — CoD visit publication through the object compiler
+
+<a id="k-booter-visit-publication-20261122"></a>
+**K-BOOTER-VISIT-PUBLICATION-20261122.** Delegated pre-code review under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122 cleared the CoD root visit, split source loans, builtin and file selection against published bounds, and checked interface and unit publication. The linked object contract is at `0367c29a59c3fa9a1bfef51363a899d2893786e6:applications/cod-booter/docs/ModuleGraph.md`, “Constructing a linked object from completed units”. D-20-MODULE-GRAPH r14 to r15, D-ARCH-REVIEW r16 to r17, P-680–P-683, registry r1065.
+
 ## 2026-11-22 — LLVM construction from published graph units
 
 <a id="k-booter-llvm-unit-projection-20261122"></a>
