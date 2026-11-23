@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 20. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 21. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
 
 [K-BOOTER-AST-TABLE-20261122](../../../CHANGELOG.md#k-booter-ast-table-20261122) continues that architecture for the [first indexed AST path](#first-indexed-ast-path). Its private representation uses the existing named-array constructor, valid bits transfer and constructor-pattern checks. Acceptance includes the parser, checker, lowering and emitted object.
 
@@ -25,6 +25,8 @@ The [sum parser and graph output review](../../../CHANGELOG.md#k-booter-sum-pars
 The [region syntax and terminal input review](../../../CHANGELOG.md#k-booter-region-parser-terminal-inputs-20261122) covers the graph driver’s source forms and the entry-owned graph used by its synchronous terminal.
 
 The [constructor identity review](../../../CHANGELOG.md#k-booter-sum-interfaces-20261122) covers checked publication and typed selection of nominal sum constructors.
+
+The [readonly budget declaration review](../../../CHANGELOG.md#k-booter-const-val-parser-20261122) covers the typed local syntax and its checking boundary.
 
 ## Layer responsibilities
 
@@ -108,6 +110,20 @@ own region graph:GraphRoot <- make region GraphRoot(budget -> capacity) {
 In the module parser recognize the `region Name {` heading. Reuse the field reader for the shared root syntax, retaining each field’s name, type, qualifiers and source order under the schema. In the expression parser preserve the local holder name, ownership, annotation and transfer operand. Represent acquisition separately with the named schema, capacity expression, `-> capacity` site and ordered initializer block. If the construction-local binder spelling is parsed, keep its declaration and span distinct from the receiving holder. The block uses ordinary ordered syntax, including repeated writes. Keep revision-bound links and spans through the closing brace. Existing native handle construction, exception capacity placement, product declarations and `make T in graph` retain their own syntax roles. [Region construction and named root initializers](../../../design/ConstructionAndAcquisition.md#region-construction-and-named-root-initializers)
 
 In both seed-built modes inspect the ten fields of the actual `GraphRoot` in `ObjectCompiler.cod`, the holder and its acquisition, and the runtime capacity operand. Check empty braces, a missing arrow or capacity label, a missing closing brace and the wrong binding operator for an owning holder. Distinguish a malformed construct from well-formed syntax with a mismatched schema or an uninitialized root. Schema resolution, readiness, ownership transfer and execution belong to the checker and backend. Until supported there, reject at the recognized source before publishing or emitting anything. Passing the original line 17 heading establishes parser progress only.
+
+### Parsing the graph budget declaration
+
+`ObjectCompiler.cod` uses a readonly local for the capacity passed to `make region`.
+
+```cod
+const val graph_budget <- 64u64 * 1024u64 * 1024u64;
+```
+
+At expression start, recognize the consecutive tokens `const val` with bounded lookahead. Share the ordinary `val` reader for the name, optional type annotation, `<-` and initializer expression. Keep `ValueLocal` and record declaration-leading const on the typed `LocalBinding`, including for an inferred type. Expose that fact through the binding inspector independently of readonly on an explicit type annotation. Preserve the span beginning at `const`, the assignment operator position and the revision-bound children. Set the flag to false for ordinary `val`. Other uses of `const` follow their existing grammar. [Scalar binding access](../../../design/ScalarCallResults.md#call-site-matrix-existing-variables)
+
+The parser can accept the declaration before the checker supports readonly locals. Until checking carries the access restriction through direct writes and writable borrows, report a located unsupported form wherever a checked or executable body would otherwise proceed as an ordinary mutable local. Declaration inspection can expose the syntax. This review covers that safeguard, the typed parser and its direct consumers.
+
+In both seed-built booter modes, parse the unedited object driver and inspect the budget initializer, the ten roots of `GraphRoot` and the capacity argument naming the budget. Compare inferred and annotated `const val` with ordinary `val`. Check missing name, wrong assignment operator and missing initializer at their source sites. A focused write or writable loan of the initialized constant must fail before emission. Keep existing local and parameter forms working.
 
 ### Typed syntax consumers
 

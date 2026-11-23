@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 24. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 25. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
 
 [K-BOOTER-AST-TABLE-20261122](../CHANGELOG.md#k-booter-ast-table-20261122) records the delegated review of the indexed AST workload and its seed prerequisites under the [work-method decision](../CHANGELOG.md#h-booter-work-method-20261122).
 
@@ -23,6 +23,8 @@ The [region parser and terminal input review](../CHANGELOG.md#k-booter-region-pa
 The [sum interface review](../CHANGELOG.md#k-booter-sum-interfaces-20261122) covers the declaration binder, checked graph publication and module selector.
 
 The [graph terminal allocator review](../CHANGELOG.md#k-booter-terminal-array-allocator-20261122) covers the seed checker and private call layout for the named traversal receiver and its direct root-count argument.
+
+The [graph budget parser review](../CHANGELOG.md#k-booter-const-val-parser-20261122) clears the expression parser, typed local binding and checker safeguard for the [readonly capacity declaration](../applications/cod-booter/docs/ModuleGraph.md#parsing-the-graph-budget-declaration).
 
 ## Before coding
 

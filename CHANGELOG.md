@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Preserve the graph budget’s readonly declaration in the booter parser
+
+<a id="k-booter-const-val-parser-20261122"></a>
+**K-BOOTER-CONST-VAL-PARSER-20261122.** Delegated pre-code review under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122 extends the region parser scope at `801f3ff1aaa0c27ed4f73670c3f5e4374ea1c881:applications/cod-booter/docs/ModuleGraph.md`, “Parsing the graph region”, to the preceding `const val` declaration. D-23 supplies the existing scalar access rule. D-20-MODULE-GRAPH r20 to r21, D-ARCH-REVIEW r24 to r25, P-680–P-683, registry r1073.
+
 ## 2026-11-22 — Forward the graph allocator through the named terminal receiver
 
 <a id="k-booter-terminal-array-allocator-20261122"></a>
