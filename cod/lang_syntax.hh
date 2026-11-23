@@ -1659,6 +1659,61 @@ class Parser {
     const auto close = closing_delimiter_[cursor_] - cursor_;
     return is("|", close + 1) || (is("->", close + 1) && (is("{", close + 2) || is("throw", close + 2)));
   }
+  bool starts_short_case_arm() const {
+    if (peek().kind != TokenKind::identifier) return false;
+    if (is("|", 1) || is("->", 1)) return true;
+    if (!is("{", 1)) return false;
+    const auto close = closing_delimiter_[cursor_ + 1];
+    if (close >= tokens_.size()) return false;
+    const auto next = close + 1 - cursor_;
+    return is("|", next) || is("->", next);
+  }
+  void case_reception(Expression &arm) {
+    ReceivingHeader reception;
+    labelled_receiving(reception);
+    validate_receivers(reception);
+    for (const auto &item : reception.items) {
+      auto binding = make(Expression::Kind::pointer, Token{TokenKind::identifier, item.name, item.at});
+      binding->annotation = item.annotation;
+      binding->declaration_kind = item.declaration_kind;
+      binding->fixed_binding = item.fixed_binding;
+      binding->read_only = item.read_only;
+      arm.case_bindings.push_back(std::move(binding));
+    }
+    arm.receiving = std::make_shared<ReceivingHeader>(std::move(reception));
+  }
+  Expr read_case_arm(bool short_head) {
+    using K = Expression::Kind;
+    auto arm = make(K::case_arm, short_head ? peek() : expect("("));
+    if (!short_head && is(")")) arm->text = "_";
+    else {
+      if (short_head) arm->text = ordinary_name().text;
+      else {
+        const auto pattern = peek();
+        if (pattern.kind != TokenKind::identifier || (!is(")", 1) && !is("{", 1)))
+          fail(pattern.at, "case pattern is outside the supported seed profile");
+        arm->text = tokens_[cursor_++].text;
+      }
+      if (is("{")) case_reception(*arm);
+    }
+    if (!short_head) expect(")");
+    if (take("|") && !is("->")) arm->children.push_back(expression(0, HereAttachment::immediate, false));
+    expect("->");
+    if (is("throw")) {
+      if (arm->text != "_" || arm->receiving || !arm->children.empty())
+        fail(peek().at, "the unbraced throwing arm requires an unguarded catch-all");
+      arm->children.push_back(make(K::case_failure, expect("throw")));
+    } else if (!short_head || is("{")) {
+      arm->children.push_back(block());
+    } else {
+      if (is("return") || is("break") || is("continue") || is("rethrow") || is("defer") || is("fallthrough"))
+        fail(peek().at, "use braces for explicit control in a case arm");
+      auto group = make(K::block, peek());
+      group->children.push_back(expression());
+      arm->children.push_back(finish(std::move(group)));
+    }
+    return finish(std::move(arm));
+  }
   Expr case_expression(const Token &token) {
     using K = Expression::Kind;
     auto result = make(K::case_expression, token);
@@ -1668,53 +1723,14 @@ class Parser {
     const bool previous = std::exchange(controls_.parsing_case, true);
     while (!take("}")) {
       if (peek().kind == TokenKind::end) fail(peek().at, "unterminated case body");
-      const bool short_head = peek().kind == TokenKind::identifier && is("->", 1);
-      if (!short_head && !starts_full_case_arm()) {
-        result->children.push_back(expression());
-      } else {
-        auto arm = make(K::case_arm, short_head ? peek() : expect("("));
-        if (short_head) {
-          arm->text = ordinary_name().text;
-        } else {
-          if (is(")")) arm->text = "_";
-          else {
-            const auto pattern = peek();
-            if (pattern.kind != TokenKind::identifier || (!is(")", 1) && !is("{", 1)))
-              fail(pattern.at, "case pattern is outside the supported seed profile");
-            arm->text = tokens_[cursor_++].text;
-            if (is("{")) {
-              ReceivingHeader reception;
-              labelled_receiving(reception);
-              validate_receivers(reception);
-              for (const auto &item : reception.items) {
-                auto binding = make(K::pointer, Token{TokenKind::identifier, item.name, item.at});
-                binding->annotation = item.annotation;
-                binding->declaration_kind = item.declaration_kind;
-                binding->fixed_binding = item.fixed_binding;
-                binding->read_only = item.read_only;
-                arm->case_bindings.push_back(std::move(binding));
-              }
-              arm->receiving = std::make_shared<ReceivingHeader>(std::move(reception));
-            }
-          }
-          expect(")");
-          if (take("|") && !is("->")) arm->children.push_back(expression(0, HereAttachment::immediate, false));
-        }
-        expect("->");
-        if (is("throw")) {
-          if (arm->text != "_" || !arm->children.empty())
-            fail(peek().at, "the unbraced throwing arm requires an unguarded catch-all");
-          arm->children.push_back(make(K::case_failure, expect("throw")));
-        } else if (!short_head || is("{")) {
-          arm->children.push_back(block());
-        } else {
-          if (is("return") || is("break") || is("continue") || is("rethrow") || is("defer") || is("fallthrough"))
-            fail(peek().at, "use braces for explicit control in a case arm");
-          auto group = make(K::block, peek());
-          group->children.push_back(expression());
-          arm->children.push_back(finish(std::move(group)));
-        }
-        result->children.push_back(finish(std::move(arm)));
+      const auto first = cursor_;
+      const auto saved = controls_;
+      try {
+        const bool short_head = starts_short_case_arm();
+        result->children.push_back(short_head || starts_full_case_arm() ? read_case_arm(short_head) : expression());
+      } catch (const LocatedFailure &failure) {
+        controls_ = saved;
+        result->children.push_back(recover_operand(first, failure.diagnostic, SyntaxRole::block_item));
       }
       if (!is("}")) expect(";");
       else take(";");
