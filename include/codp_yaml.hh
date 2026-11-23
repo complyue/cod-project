@@ -2,6 +2,8 @@
 
 #include "codp.hh"
 
+#include <set>
+
 #include "shilos/dict_yaml.hh"   // IWYU pragma: keep
 #include "shilos/list_yaml.hh"   // IWYU pragma: keep
 #include "shilos/str_yaml.hh"    // IWYU pragma: keep
@@ -577,6 +579,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodManifes
       throw yaml::TypeError("'locals' must be a mapping");
     }
     const auto &locals_map = std::get<yaml::Map>(it_locals->value.value);
+    std::set<UUID> local_packages;
     for (const auto &entry : locals_map) {
       const auto &uuid_str = entry.key;
       const auto &path_node = entry.value;
@@ -585,6 +588,8 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodManifes
       }
       std::string path_str = path_node.asString();
       UUID uuid(uuid_str);
+      if (!local_packages.insert(uuid).second)
+        throw yaml::TypeError("duplicate local package UUID '" + std::string(uuid_str) + "'");
       raw_ptr->addLocal(mr, uuid, path_str);
     }
   }
