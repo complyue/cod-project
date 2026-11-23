@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review the standalone booter’s prepared package inputs
+
+<a id="k-booter-prepared-package-crossing-20261123"></a>
+**K-BOOTER-PREPARED-PACKAGE-CROSSING-20261123.** Delegated structural review continues D-ARCH-REVIEW r51→r52 and D-20-MODULE-GRAPH r45→r46 under H-PROJECT-ARCHITECTURE-REVIEW-20261122 and K-MODULE-INPUTS-AND-DEFAULT-TABLES-20261123. The producer at `29190058:include/codp_module_inputs.hh` supplies the frame. CoD validates it once per compilation on demand. The OS boundary drains, closes and reaps before graph traversal resumes. Linked implementation, remote preparation and installation retain separate scope.
+
 ## 2026-11-23 — Distinguish published seed support from booter verification
 
 <a id="k-native-callable-seed-status-20261123"></a>
