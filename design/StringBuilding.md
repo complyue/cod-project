@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-07-STRING-BUILD](DesignAuthorityRegistry.md#d-07-string-build), revision 6. The project user requested one lexical working type, common formatting for immutable strings and UTF-8 streams, a scoped output for deep helpers, and user-defined display and diagnostic representations. They delegated library and intrinsic design and asked mainline to validate it in the booter. [H-STRING-BUILD-20261121](../CHANGELOG.md#h-string-build-20261121) identifies that prototype authority. The API choices below are the design review’s decisions within it. P-678 derives this scope from C-36, C-55 and C-80. P-679 identifies its borrowing, text, module-world and scoped-output dependencies. Existing [UTF-8, CString and field semantics](Utf8Strings.md) govern every output. Acceptance ends at the [booter workload](#booter-prototype). Public API stability, terminal encoding for arbitrary bytes, persistence formats, and a permanent intrinsic or C ABI have separate scope.
+[D-07-STRING-BUILD](DesignAuthorityRegistry.md#d-07-string-build), revision 7. The project user requested one lexical working type, common formatting for immutable strings and UTF-8 streams, a scoped output for deep helpers, and user-defined display and diagnostic representations. They delegated library and intrinsic design and asked mainline to validate it in the booter. [H-STRING-BUILD-20261121](../CHANGELOG.md#h-string-build-20261121) identifies that prototype authority. The API choices below are the design review’s decisions within it. P-678 derives this scope from C-36, C-55 and C-80. P-679 identifies its borrowing, text, module-world and scoped-output dependencies. Existing [UTF-8, CString and field semantics](Utf8Strings.md) govern every output. Acceptance ends at the [booter workload](#booter-prototype). Public API stability, terminal encoding for arbitrary bytes, persistence formats, and a permanent intrinsic or C ABI have separate scope.
 
 [H-STRING-SOUT-20261121](../CHANGELOG.md#h-string-sout-20261121) covers the user’s direction to omit the destination from public type formatters and name the scoped output `@sout`. The streaming and collecting family names below implement that direction under the delegated prototype scope. P-678/P-679 still apply. Verify direct output, nested collection without output leakage, and restoration after failure under the existing [reference-symbol contract](SymbolicDynamicScope.md#owner-parameter-reference-symbols-and-implementation-cost).
 
@@ -11,6 +11,8 @@
 [H-STRING-CONCAT-DISPLAY-20261121](../CHANGELOG.md#h-string-concat-display-20261121) extends the delegated prototype to [concatenation with displayable values](#concatenating-displayable-values). It uses the existing [operator method kinds](SymbolicDynamicScope.md#operator-and-intrinsic-overloads) and ordinary module-world selection. Test two non-text values, a custom display, missing-method rejection, operand effects and use in a func.
 
 [K-STRING-CONCAT-OPERANDS-20261121](../CHANGELOG.md#k-string-concat-operands-20261121) continues r5 for the standard display method’s [operand preparation](#preparing-display-operands). The caller uses existing reference-initialization and reference-argument rules to preserve a selected target or materialize independent bits. Acceptance compares a live scalar with its explicitly projected value across the same right-hand write. The delegation covers the bundled prototype and its private compiler support.
+
+The [module selection decision](../CHANGELOG.md#h-module-paths-and-default-exports-20261123) covers the public entry point at r7. `using "string.cod"` selects the library's default public families, including `str`, `repr` and `(++)`. An application extending a formatter family still selects it with `import`. The project package namespace takes precedence over the active toolchain's bundled library. Compiler privileges attached to a bundled method follow its defining identity. [Module path resolution](ModuleWorlds.md#resolving-source-module-paths) · [Default public selection](ModuleWorlds.md#default-and-complete-public-selections)
 
 The bundled module exposes one working type, `StringBuilder`. It builds a valid UTF-8 sequence in a full lexical scope. An immutable result belongs to the owner chosen for construction. A streaming consumer can write each piece while the producer is live. Standard operations are brought into scope through ordinary module selection.
 
@@ -135,7 +137,7 @@ For example, the [booter adapter](../applications/cod-booter/src/DiagnosticForma
 ```cod
 export import "string.cod" { str, repr, emitStr, emitRepr };
 import "string.cod" emit;
-using "SourceStorage.cod" SourcePosition;
+using "./SourceStorage.cod" SourcePosition;
 
 proc emitStr(p:const SourcePosition in P) -> void
     where {const owner P} {
