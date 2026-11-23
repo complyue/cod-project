@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review the standalone booter’s prepared library dependency
+
+<a id="k-booter-standalone-bundle-inputs-20261123"></a>
+**K-BOOTER-STANDALONE-BUNDLE-INPUTS-20261123.** D-ARCH-REVIEW r60→61 and D-20-MODULE-GRAPH r49→50 apply P-680–P-683 and H-MODULE-PATHS-AND-DEFAULT-EXPORTS-20261123 to the input tracking in `3cd933362ff0b3fa3e883de0c1cad830a2c4da51:applications/cod-booter/Makefile`. The [review](applications/cod-booter/docs/ModuleGraph.md#prepared-library-inputs-to-standalone-generation) continues the independent application build established at `86f894407cf51ffe4dc773c1db3dff505b6b8584:applications/cod-booter/Makefile` after the [November 21 standalone build handoff](codex://threads/01a1fd61-077d-75f3-b90d-c1b5e1266148). Its scope is consuming and tracking prepared inputs. Packaging, installation and bootstrap retain their separate authorization.
+
 ## 2026-11-23 — Review the seed’s indexed declared-place representation
 
 <a id="k-seed-indexed-declared-place-20261123"></a>
