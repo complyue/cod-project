@@ -15847,7 +15847,7 @@ class ScalarChecker {
   std::pair<CheckedOperation::SuppliedHere, std::optional<size_t>> demand_supplied_here(const Expression &body, const Type &contract,
       const CheckedHereContract &signature, std::vector<std::optional<size_t>> owners, const ResultContract &receiving,
       CheckedInstance *supplier, std::map<const Expression *, CheckedOperation> &operations,
-      std::optional<bool> native_owner_read_only = {}) {
+      std::optional<bool> native_owner_read_only = {}, bool ordinary_product_capture = false) {
     if (!body.definition) implementation_gap(body.at, "this receiving pattern for a here body");
     const auto &definition = *body.definition;
     std::optional<CheckedMethod::HereGroupResults> group;
@@ -15926,10 +15926,13 @@ class ScalarChecker {
       const bool readonly_view = (source.type.kind == Type::array || text_type(source.type)) && !source.value_binding && source.read_only;
       const bool writable_array = source.type.kind == Type::array && !source.value_binding && !source.read_only &&
           program_.bits_payload(program_.arrays.at(source.type.identity).element);
+      const bool writable_product = ordinary_product_capture && source.type.kind == Type::product &&
+          source.kind() == PlaceKind::reference && !source.read_only && program_.bits_payload(source.type);
       const bool scalar = numeric(source.type) || source.type.kind == Type::enumeration;
-      if (source.alias || !source.selection.empty() || (!scalar && !readonly_view && !writable_array && !handle) ||
-          (!source.value_binding && (source.nullable || (!source.read_only && !writable_array && !handle))))
-        implementation_gap(capture.at, "here access requires stable numeric or enum storage, an admitted array view, readonly text, or a borrowed handle");
+      const bool admitted_writable_view = writable_array || writable_product || handle;
+      if (source.alias || !source.selection.empty() || (!scalar && !readonly_view && !admitted_writable_view) ||
+          (!source.value_binding && (source.nullable || (!source.read_only && !admitted_writable_view))))
+        implementation_gap(capture.at, "here access requires stable numeric or enum storage, an admitted array or bits product view, readonly text, or a borrowed handle");
       const auto &operand = scope_operand(base, capture);
       if (handle) check_handle_loan(operand, supplier, operations);
       else check(operand, supplier, operations, false);
@@ -15938,12 +15941,23 @@ class ScalarChecker {
       if (view.targets.contains(null_target) || view.owners.size() != 1 ||
           (source.value_binding && (view.targets.size() != 1 || !view.place || storage(*view.place).borrowed)))
         implementation_gap(capture.at, "here access requires an initialized selection with one established owner");
-      if (writable_array) {
+      if (writable_array || writable_product) {
         if (!view.view || view.mixed_view || view.slots.size() != 1 || view.nullable_view ||
             view.read_only || const_owner(*view.owners.begin()))
-          implementation_gap(capture.at, "here writes require one live initialized writable array binding");
+          implementation_gap(capture.at, writable_product ?
+              "here product writes require one live initialized writable ref binding" :
+              "here writes require one live initialized writable array binding");
         require_live_view(view, capture.at);
-        require_initialized(view, capture.at, "supplier array");
+        require_initialized(view, capture.at, writable_product ? "supplier product" : "supplier array");
+      }
+      if (writable_product) {
+        // This profile transports a private supplier slot with a fixed target
+        // for the invocation. A callback can write the payload, not the slot.
+        require_slots_live(view.slots, capture.at, "here product's supplier slot has ended");
+        if (source.embedded_slot || !source.overlaps.empty() || source.place_owners.size() != 1 ||
+            !view.slots.contains(*binding) || !view.place || storage(*view.place).borrowed ||
+            storage(*view.place).subobject || (validating_ && rebound_.contains(*binding)))
+          implementation_gap(capture.at, "here product access requires a stable lexical ref to a local product");
       }
       // A receiver may enter the body zero or several times. Each invocation
       // reads the supplier's live slot with its established target owner.
@@ -16661,7 +16675,40 @@ class ScalarChecker {
       implementation_gap(expr.at, "a direct named terminal on a producer with a non-void completion");
     const auto &body = syntax.terminal ? terminal_here_body(expr, *syntax.terminal, signature, *contract.target, supplier)
                                        : *syntax.body;
-    return demand_supplied_here(body, contract, signature, std::move(owners), result, supplier, operations);
+    const bool ordinary_product_capture = &expr == &syntax.target && !receiver.source->c_linkage &&
+        receiver.here.size() == 1 && !syntax.terminal;
+    auto supplied = demand_supplied_here(body, contract, signature, std::move(owners), result, supplier, operations,
+        {}, ordinary_product_capture);
+    if (ordinary_product_capture) {
+      CheckedOperation writes;
+      for (const auto *capture : supplied.first.places) {
+        const auto &view = operations.at(capture);
+        if (view.type.kind != Type::product || view.read_only) continue;
+        // The receiver has no ordinary loan that may reach the captured
+        // product while a callback writes it.
+        for (size_t i = 0; i < views.size(); ++i)
+          if (argument_mode(parameter_at(receiver, i)) != ArgumentMode::value &&
+              std::ranges::any_of(views[i].owners, [&](size_t owner) {
+                return compare_owners(owner, *view.owners.begin()) != OwnerMatch::mismatch;
+              }))
+            implementation_gap(capture->at, "here product access with a potentially overlapping receiver operand");
+        std::vector<size_t> pending{*view.place};
+        while (!pending.empty()) {
+          const auto place = pending.back();
+          pending.pop_back();
+          if (!writes.targets.insert(place).second) continue;
+          const auto &fields = storage(place).fields;
+          pending.insert(pending.end(), fields.begin(), fields.end());
+        }
+      }
+      // The receiver may invoke the body zero or several times. No write is
+      // guaranteed, and any reachable completion may observe a changed field.
+      if (lexical_.live && !writes.targets.empty()) {
+        record_payload_write(writes);
+        invalidate_payloads(lexical_, payload_targets(writes));
+      }
+    }
+    return supplied;
   }
   static const Expression &ungrouped_expression(const Expression &expr) {
     const auto *operand = &expr;
