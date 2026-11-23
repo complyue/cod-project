@@ -10,6 +10,7 @@ using "ExpressionParser.cod" {
 using "ParserInput.cod" {
     ParseResult, punct_at, punct_pair_at, append_syntax_node, append_module_item, append_module, parse_identifier,
     parse_module_name, parse_resource_name, reset_parse_result, expected_name, expected_type, expected_c_linkage,
+    recover_syntax, seed_lexical_reports,
 };
 using "CallableSyntax.cod" { expected_owner_clause, parse_constraints, parse_parameter, parse_procedure_symbol_type };
 using "ParserStorage.cod" {
@@ -17,6 +18,7 @@ using "ParserStorage.cod" {
     BindingSites, FormalSites, SignatureSites, inspect_binding, inspect_formal, inspect_signature,
 };
 using "ParserStorage.cod" AstSlot { Vacant, Occupied };
+using "ParserStorage.cod" SyntaxRole { ModuleItemRole };
 using "ParserStorage.cod" ExprPayload {
     CallableDefinition, CEntryDefinition, ModulePathSyntax, ModuleSelection, AllMembers, ChosenMembers, ChosenMember,
     HandleType, NominalParent, RecordDefinition, AbstractType, HandleSymbol, ReferenceSymbol, Publication,
@@ -773,14 +775,24 @@ export func parse_module(source:const SourceBytes in S, tokens:const Tokens in T
                          nodes:ExprNodes in A, past:u64, result:ParseResult in R) -> void
     where {const owner S, const owner T, owner A, owner R} {
     reset_parse_result(0u64, result);
-    if (past > token_len(tokens)) { result.diagnostic <- expected_module_separator(); return; } else {};
+    if (past >= token_len(tokens)) { result.diagnostic <- expected_module_separator(); return; };
+    if (!seed_lexical_reports(tokens, nodes, result, 0u64, past)) return;
     val last <- no_node();
+    val start <- 0u64;
     for (unused in 0u64 .. past + 1u64) {
         if (result.next >= past) {
             append_module(nodes, result, source_len(source), last);
             return;
         } else {};
-        if (!parse_module_item(source, tokens, nodes, result, past, last)) return;
+        start <- result.next;
+        if (!parse_module_item(source, tokens, nodes, result, past, last)) {
+            result.supplied_here <- false;
+            result.case_control <- false;
+            if (!recover_syntax(source, tokens, nodes, result, start, past, ModuleItemRole)) return;
+            append_module_item(nodes, result, tokens[start].first, tokens[result.next].first, last, result.root, false);
+            if (result.diagnostic != 0u8) return;
+            if (result.next < past) { (result.next <- result.next + 1u64):void; }
+        };
         last <- result.root;
     };
     (result.diagnostic <- expected_module_separator()):void;

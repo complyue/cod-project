@@ -1,5 +1,5 @@
 using "Lexer.cod" {
-    const_word, exception_word, identifier, in_word, not_word, own_word, punctuation,
+    const_word, exception_word, identifier, in_word, lexical_error, not_word, own_word, punctuation,
     reserved_lexical_binder, reserved_module_name,
 };
 using "ParserStorage.cod" {
@@ -8,6 +8,7 @@ using "ParserStorage.cod" {
 using "ParserStorage.cod" NodeLink { NoLink, LinkTo };
 using "ParserStorage.cod" ExprPayload { NameReference, ModuleSyntax, ModuleItem, BlockSyntax, ScopeSyntax, BlockItem, AnnotatedBinding, OwnerQualifiedType };
 using "ParserStorage.cod" AstSlot { Occupied };
+using "ParserStorage.cod" { SyntaxRole { InitializerRole, ExpressionRole }, ExprPayload { ParseReport, ErrorReport } };
 using "SourceStorage.cod" SourceBytes;
 
 export data ParseResult {
@@ -18,9 +19,12 @@ export data ParseResult {
     diagnostic:u8;
     supplied_here:bool;
     case_control:bool;
+    reports:u64;
+    lexical_reports:u64;
+    exhausted:bool;
 }
 
-func node_storage_exhausted() -> u8 { return 5u8; }
+export func node_storage_exhausted() -> u8 { return 5u8; }
 
 export func expected_name() -> u8 { return 19u8; }
 
@@ -48,7 +52,11 @@ export func append_syntax_node(nodes:ExprNodes in A, result:ParseResult in R,
                                first:u64, past:u64, payload:const ExprPayload in P) -> void
     where {owner A, owner R, const owner P} {
     val id <- result.used;
-    if (id >= len(nodes)) { result.diagnostic <- node_storage_exhausted(); return; };
+    if (id >= len(nodes)) {
+        result.exhausted <- true;
+        result.diagnostic <- node_storage_exhausted();
+        return
+    };
     nodes[id] <- make Occupied {
         node <- make ExprNode {
             span <- make SourceSpan { first <- first; past <- past; };
@@ -191,6 +199,9 @@ export func reset_parse_result(first:u64, result:ParseResult in R) -> void where
     result.diagnostic <- 0u8;
     result.supplied_here <- false;
     result.case_control <- false;
+    result.reports <- 0u64;
+    result.lexical_reports <- 0u64;
+    result.exhausted <- false;
     return;
 }
 
@@ -221,4 +232,94 @@ export func parse_resource_name(source:const SourceBytes in S, tokens:const Toke
     append_syntax_node(nodes, result, first, tokens[at + 1u64].past, make NameReference {});
     result.next <- at + 3u64;
     return result.diagnostic == 0u8;
+}
+
+func append_parse_report(nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64, code:u8) -> u64
+    where {owner A, owner R} {
+    result.diagnostic <- 0u8;
+    append_syntax_node(nodes, result, first, past, make ParseReport { diagnostic <- code });
+    if (result.exhausted) return no_node();
+    result.reports <- result.reports + 1u64;
+    return result.root
+}
+
+export func seed_lexical_reports(tokens:const Tokens in T, nodes:ExprNodes in A,
+                                 result:ParseResult in R, first:u64, past:u64) -> bool
+    where {const owner T, owner A, owner R} {
+    if (first > past || past >= len(tokens)) return false;
+    for (at in first .. past) {
+        if (lexical_error(tokens[at].kind) &&
+            append_parse_report(nodes, result, tokens[at].first, tokens[at].past, tokens[at].kind) == no_node())
+            return false
+    };
+    result.lexical_reports <- result.reports;
+    return true
+}
+
+func lexical_report_at(nodes:const ExprNodes in A, result:const ParseResult in R, first:u64) -> u64
+    where {const owner A, const owner R} {
+    val lower <- 0u64;
+    val upper <- result.lexical_reports;
+    val middle <- 0u64;
+    val byte <- 0u64;
+    for (step in 0u64 .. 64u64) {
+        if (lower >= upper) return no_node();
+        middle <- lower + (upper - lower) / 2u64;
+        byte <- syntax_first(nodes, result.used, middle);
+        if (byte == first) return middle;
+        if (byte < first) { (lower <- middle + 1u64):void; } else { (upper <- middle):void; };
+    };
+    return no_node()
+}
+
+func is_recovery_separator(mark:u8, role:SyntaxRole) -> bool {
+    if (mark == 59u8 || mark == 125u8) return true;
+    return (role == InitializerRole || role == ExpressionRole) &&
+           (mark == 44u8 || mark == 41u8 || mark == 93u8)
+}
+
+# Recover to this list's separator. An unmatched opener does not let the
+# error swallow every later item before the remainder of the input ends.
+func recovery_boundary(source:const SourceBytes in S, tokens:const Tokens in T,
+                       first:u64, past:u64, role:SyntaxRole) -> u64 where {const owner S, const owner T} {
+    val parentheses <- 0u64;
+    val brackets <- 0u64;
+    val braces <- 0u64;
+    val fallback <- past;
+    val mark <- 0u8;
+    for (at in first .. past) {
+        mark <- punct_at(source, tokens, at, past);
+        if (is_recovery_separator(mark, role) && parentheses == 0u64 && brackets == 0u64 && braces == 0u64)
+            return at;
+        if (fallback == past && is_recovery_separator(mark, role) &&
+            (mark == 59u8 || mark == 125u8)) { (fallback <- at):void; };
+        if (mark == 40u8) { (parentheses <- parentheses + 1u64):void; };
+        if (mark == 91u8) { (brackets <- brackets + 1u64):void; };
+        if (mark == 123u8) { (braces <- braces + 1u64):void; };
+        if (mark == 41u8 && parentheses != 0u64) { (parentheses <- parentheses - 1u64):void; };
+        if (mark == 93u8 && brackets != 0u64) { (brackets <- brackets - 1u64):void; };
+        if (mark == 125u8 && braces != 0u64) { (braces <- braces - 1u64):void; };
+    };
+    if (parentheses != 0u64 || brackets != 0u64 || braces != 0u64) return fallback;
+    return past
+}
+
+export func recover_syntax(source:const SourceBytes in S, tokens:const Tokens in T,
+                           nodes:ExprNodes in A, result:ParseResult in R,
+                           start:u64, past:u64, role:SyntaxRole) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    if (result.exhausted || result.diagnostic == 0u8 || start > past || past >= len(tokens)) return false;
+    val failure <- past;
+    if (result.next < past) { (failure <- result.next):void; };
+    val first <- tokens[failure].first;
+    val report <- lexical_report_at(nodes, result, first);
+    if (report == no_node()) {
+        report <- append_parse_report(nodes, result, first, tokens[failure].past, result.diagnostic);
+        if (report == no_node()) return false
+    };
+    result.next <- recovery_boundary(source, tokens, start, past, role);
+    result.diagnostic <- 0u8;
+    append_syntax_node(nodes, result, tokens[start].first, tokens[result.next].first,
+                       make ErrorReport { role <- role; report <- make NodeId { revision <- result.revision; index <- report } });
+    return !result.exhausted
 }

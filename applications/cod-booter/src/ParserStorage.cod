@@ -22,6 +22,8 @@ export enum FormalMode:u8 {
     ReferenceSlotFormal;
 }
 
+export enum SyntaxRole:u8 { ModuleItemRole; BlockItemRole; InitializerRole; ExpressionRole; }
+
 export enum LocalMode:u8 { ValueLocal; ReferenceLocal; PointerLocal; ExceptionLocal; }
 export enum ArithmeticOperation:u8 { Addition; Subtraction; Multiplication; Division; Remainder; }
 export enum ComparisonRelation:u8 { Equal; Unequal; Less; AtMost; Greater; AtLeast; }
@@ -30,6 +32,8 @@ export data BinaryOperands { left_operand:NodeId; right_operand:NodeId; operator
 export data ExprPayload =
       IntegerLiteral { magnitude:u64; width:u64; }
     | NameReference {}
+    | ParseReport { diagnostic:u8; }
+    | ErrorReport { role:SyntaxRole; report:NodeId; }
     | BooleanLiteral { truth:bool; }
     | Negation { operand:NodeId; }
     | Conjunction { left_operand:NodeId; right_operand:NodeId; }
@@ -2464,4 +2468,38 @@ export func len(tokens:const Tokens in T) -> u64 where {const owner T} {
 
 func len(nodes:const ExprNodes in N) -> u64 where {const owner N} {
     return intrinsic (len)(nodes);
+}
+
+export func parse_report_code(nodes:const ExprNodes in N, used:u64, at:u64) -> u8 where {const owner N} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return 0u8;
+    return case nodes[at] of {
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (ParseReport { val code <- diagnostic; }) -> { code };
+                _ -> 0u8
+            }
+        };
+        _ -> 0u8
+    }
+}
+
+export func inspect_error_report(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+                                role:SyntaxRole in R, report:u64 in S) -> bool
+    where {const owner N, owner R, owner S} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (ErrorReport { val expected <- role; val link <- report; }) -> {
+                    if (!published_syntax_id(nodes, revision, at, link) ||
+                        parse_report_code(nodes, at, link.index) == 0u8) return false;
+                    role <- expected;
+                    report <- link.index;
+                    true
+                };
+                _ -> false
+            }
+        };
+        _ -> false
+    }
 }

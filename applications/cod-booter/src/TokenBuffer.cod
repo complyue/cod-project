@@ -10,7 +10,7 @@ export data ScanResult {
 }
 
 # The caller supplies initialized token storage. The produced token prefix
-# includes either EOF or the token that describes the first lexical error.
+# retains invalid tokens alongside valid tokens through EOF.
 export func scan_tokens(source:const SourceBytes in S, tokens:Tokens in T,
                         result:ScanResult in R) -> void where {const owner S, owner T, owner R} {
     result.used <- 0u64;
@@ -26,9 +26,8 @@ export func scan_tokens(source:const SourceBytes in S, tokens:Tokens in T,
             return;
         } else {};
         if (lexical_error(tokens[index].kind)) {
-            result.invalid_source <- true;
-            return;
-        } else {};
+            (result.invalid_source <- true):void
+        };
     };
 }
 

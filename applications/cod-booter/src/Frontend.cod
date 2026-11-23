@@ -1,6 +1,7 @@
 using "SourceStorage.cod" SourceBytes;
-using "ParserStorage.cod" { Tokens, ExprNodes };
+using "ParserStorage.cod" { Tokens, ExprNodes, parse_report_code, syntax_first, syntax_past, no_node };
 using "TokenBuffer.cod" { ScanResult, scan_tokens };
+using "Lexer.cod" lexical_error;
 using "ParserInput.cod" { ParseResult, reset_parse_result };
 using "ExpressionParser.cod" { parse_expression, unexpected_token };
 using "ModuleParser.cod" parse_module;
@@ -19,28 +20,47 @@ func scan_source(source:const SourceBytes in S, tokens:Tokens in T,
     result.diagnostic_past <- 0u64;
     if (!result.scan.complete) {
         reset_parse_result(0u64, result.tree);
+        result.tree.exhausted <- true;
+        result.diagnostic_first <- result.scan.next;
+        result.diagnostic_past <- result.scan.next;
         if (result.scan.invalid_source) {
-            result.diagnostic_first <- tokens[result.scan.used - 1u64].first;
-            (result.diagnostic_past <- tokens[result.scan.used - 1u64].past):void;
-        } else {
-            result.diagnostic_first <- result.scan.next;
-            (result.diagnostic_past <- result.scan.next):void;
+            for (at in 0u64 .. result.scan.used) {
+                if (lexical_error(tokens[at].kind)) {
+                    result.tree.diagnostic <- tokens[at].kind;
+                    result.diagnostic_first <- tokens[at].first;
+                    result.diagnostic_past <- tokens[at].past;
+                    return false
+                }
+            }
         };
-        return false;
-    } else {};
+        return false
+    };
 
     return true;
 }
 
-func finish_read(tokens:const Tokens in T, eof:u64, result:FrontendResult in R) -> bool
-    where {const owner T, owner R} {
-    if (result.tree.diagnostic == 0u8) {
-        if (result.tree.next == eof) return true;
-        (result.tree.diagnostic <- unexpected_token()):void;
-    } else {};
-    result.diagnostic_first <- tokens[result.tree.next].first;
-    result.diagnostic_past <- tokens[result.tree.next].past;
-    return false;
+func finish_read(tokens:const Tokens in T, nodes:const ExprNodes in N, eof:u64, result:FrontendResult in R) -> bool
+    where {const owner T, const owner N, owner R} {
+    if (!result.tree.exhausted && result.tree.reports == 0u64 && result.tree.diagnostic == 0u8 &&
+        result.tree.next == eof) return true;
+    val failed_at <- eof;
+    if (result.tree.next < eof) { (failed_at <- result.tree.next):void; };
+    result.diagnostic_first <- tokens[failed_at].first;
+    result.diagnostic_past <- tokens[failed_at].past;
+    if (result.tree.reports != 0u64) {
+        result.diagnostic_first <- no_node();
+        for (at in 0u64 .. result.tree.used) {
+            if (parse_report_code(nodes, result.tree.used, at) != 0u8 &&
+                syntax_first(nodes, result.tree.used, at) < result.diagnostic_first) {
+                result.tree.diagnostic <- parse_report_code(nodes, result.tree.used, at);
+                result.diagnostic_first <- syntax_first(nodes, result.tree.used, at);
+                result.diagnostic_past <- syntax_past(nodes, result.tree.used, at);
+                {}
+            };
+        }
+    };
+    if (result.tree.diagnostic == 0u8) { (result.tree.diagnostic <- unexpected_token()):void; };
+    return false
 }
 
 # The source and both initialized buffers remain live for the call. A failed
@@ -51,7 +71,7 @@ export func read_expression(source:const SourceBytes in S, tokens:Tokens in T,
     if (!scan_source(source, tokens, result)) return false;
     val eof <- result.scan.used - 1u64;
     parse_expression(source, tokens, nodes, 0u64, eof, result.tree);
-    return finish_read(tokens, eof, result);
+    return finish_read(tokens, nodes, eof, result);
 }
 
 export func read_module(source:const SourceBytes in S, tokens:Tokens in T,
@@ -60,5 +80,5 @@ export func read_module(source:const SourceBytes in S, tokens:Tokens in T,
     if (!scan_source(source, tokens, result)) return false;
     val eof <- result.scan.used - 1u64;
     parse_module(source, tokens, nodes, eof, result.tree);
-    return finish_read(tokens, eof, result);
+    return finish_read(tokens, nodes, eof, result);
 }

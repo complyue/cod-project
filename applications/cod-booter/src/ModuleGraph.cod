@@ -4,7 +4,7 @@ using "NativeSource.cod" {
 };
 using "NativeSourceUse.cod" source_use;
 using "NativeDiagnostics.cod" {
-    DiagnosticDestination, report_rejection, report_source_open_error, report_scratch_error,
+    DiagnosticDestination, report_rejection, report_parse_rejection, report_source_open_error, report_scratch_error,
 };
 using "SourceStorage.cod" { SourceBytes, SourceLines, Token };
 using "ParserStorage.cod" {
@@ -19,7 +19,7 @@ using "ParserStorage.cod" CallableSyntax { ModuleCallable };
 using "ParserStorage.cod" DeclarationSyntax { NominalRecord, EnumTypeDeclaration, LocalPublication };
 using "ParserStorage.cod" AstSlot { Vacant };
 using "TokenBuffer.cod" ScanResult;
-using "ParserInput.cod" ParseResult;
+using "ParserInput.cod" { ParseResult, node_storage_exhausted };
 using "Frontend.cod" { FrontendResult, read_module };
 using "ModuleExportStorage.cod" { ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces };
 using "ParserStorage.cod" FormalMode { ValueFormal };
@@ -311,20 +311,25 @@ array ModuleProgressRows[u64]:ModuleProgress;
 proc read_visit_frame(source:const SourceBytes in S, lines:const SourceLines in S,
                       handle diagnostic:DiagnosticDestination in D, tokens:Tokens in F, nodes:ExprNodes in F,
                       selected:SelectedExports in F, edges:DependencyEdges in F, decoded:SourceBytes in F,
-                      progress:ModuleProgressRows in F)
-    -> CompilerStatus where {const owner S, owner D, owner F} {
+                      progress:ModuleProgressRows in F, keys:const SourceBytes in K, key_first:u64, key_past:u64)
+    -> CompilerStatus where {const owner S, owner D, owner F, const owner K} {
     ref result = make FrontendResult {
         scan <- make ScanResult { used <- 0u64; next <- 0u64; complete <- false; invalid_source <- false; };
         tree <- make ParseResult {
             revision <- progress[0u64].revision; next <- 0u64; used <- 0u64; root <- no_node(); diagnostic <- 0u8;
             supplied_here <- false; case_control <- false;
+            reports <- 0u64; lexical_reports <- 0u64; exhausted <- false;
         };
         diagnostic_first <- no_node(); diagnostic_past <- no_node();
     };
     if (!read_module(source, tokens, nodes, result)) {
-        report_rejection(source, lines, diagnostic, module_read_failed(), result.tree.diagnostic,
-                         result.diagnostic_first, result.diagnostic_past, no_node());
-        return Rejected;
+        if (result.tree.exhausted && (result.tree.diagnostic == 0u8 || result.tree.diagnostic == node_storage_exhausted())) {
+            report_scratch_error(diagnostic, 1u32);
+            return ScratchFailed
+        };
+        if (!report_parse_rejection(source, lines, diagnostic, nodes, result, keys, key_first, key_past,
+                                    module_read_failed(), progress[0u64].entry != 0u8)) return ScratchFailed;
+        return if (result.tree.exhausted) { ScratchFailed } else { Rejected }
     };
     val count <- collect_dependency_edges(source, nodes, result.tree.used, result.tree.revision, edges);
     if (count == no_node() || !prepare_module_dependencies(selected, result.tree.used)) {
@@ -348,6 +353,17 @@ proc read_visit_frame(source:const SourceBytes in S, lines:const SourceLines in 
     progress[0u64].root <- result.tree.root;
     progress[0u64].dependencies <- count;
     return Complete;
+}
+
+proc read_opened_frame(handle opened:SourceRevision in S, handle diagnostic:DiagnosticDestination in D,
+                       tokens:Tokens in F, nodes:ExprNodes in F, selected:SelectedExports in F,
+                       edges:DependencyEdges in F, decoded:SourceBytes in F, progress:ModuleProgressRows in F,
+                       keys:const SourceBytes in K, const val key_first:u64, const val key_past:u64) -> CompilerStatus
+    where {const owner S, owner D, owner F, const owner K} {
+    return with_source(opened) (source, lines) => {
+        continue read_visit_frame(source, lines, diagnostic, tokens, nodes, selected, edges, decoded,
+                                  progress, keys, key_first, key_past)
+    }
 }
 
 func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
@@ -486,6 +502,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
             scan <- make ScanResult { used <- 0u64; next <- 0u64; complete <- true; invalid_source <- false; };
             tree <- make ParseResult {
                 revision <- progress[0u64].revision; next <- 0u64; used <- progress[0u64].used; root <- progress[0u64].root; diagnostic <- 0u8; supplied_here <- false; case_control <- false;
+            reports <- 0u64; lexical_reports <- 0u64; exhausted <- false;
             };
             diagnostic_first <- no_node(); diagnostic_past <- no_node();
         };
@@ -640,16 +657,12 @@ data VisitWorkspacePlan {
 }
 array VisitWorkspacePlans[u64]:VisitWorkspacePlan;
 
-proc plan_opened_workspace(source:const SourceBytes in S, lines:const SourceLines in S,
+proc plan_opened_workspace(source:const SourceBytes in S,
                            handle diagnostic:DiagnosticDestination in D, workspaces:VisitWorkspacePlans in F, purpose:GraphPurpose)
     -> CompilerStatus where {const owner S, owner D, owner F} {
     workspaces[0u64].source_size <- intrinsic (len)(source);
     val result <- if (purpose == (NativeObject:GraphPurpose)) { (plan_module_workspace(source, workspaces[0u64].plan)) }
-        else { if (plan_module_source(source, workspaces[0u64].plan.source)) { Complete } else { Rejected } };
-    if (result == Rejected) {
-        report_rejection(source, lines, diagnostic, module_read_failed(), workspaces[0u64].plan.source.diagnostic,
-                         workspaces[0u64].plan.source.diagnostic_first, workspaces[0u64].plan.source.diagnostic_past, no_node());
-    };
+        else { if (plan_module_source(source, workspaces[0u64].plan.source)) { Complete } else { ScratchFailed } };
     if (result == ScratchFailed) { report_scratch_error(diagnostic, 2u32); };
     return result;
 }
@@ -682,16 +695,13 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
     failure <- 0u8;
     ref workspaces = make VisitWorkspacePlans(1u64, make VisitWorkspacePlan {
         plan <- make ModuleWorkspacePlan {
-            source <- make ExpressionScratchPlan {
-                token_count <- 0u64; node_capacity <- 0u64;
-                diagnostic <- 0u8; diagnostic_first <- no_node(); diagnostic_past <- no_node();
-            };
+            source <- make ExpressionScratchPlan { token_count <- 0u64; node_capacity <- 0u64; syntax_capacity <- 0u64; };
             commands <- 0u64;
         };
         source_size <- 0u64;
     });
     val planned <- with_source(opened) (source, lines) => {
-        continue plan_opened_workspace(source, lines, diagnostic, workspaces, purpose);
+        continue plan_opened_workspace(source, diagnostic, workspaces, purpose);
     };
     if (planned != Complete) return planned;
 
@@ -699,7 +709,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
     try {
         val capacity <- workspaces[0u64].plan.source.node_capacity;
         ref tokens = make Tokens(workspaces[0u64].plan.source.token_count, make Token { kind <- 0u8; first <- 0u64; past <- 0u64; });
-        ref nodes = make ExprNodes(capacity, make Vacant {});
+        ref nodes = make ExprNodes(workspaces[0u64].plan.source.syntax_capacity, make Vacant {});
         ref selected = make SelectedExports(capacity, make SelectedExport {
             dependency_module <- 0u64; identity <- 0u64; kind <- 0u8; checked <- 0u8;
             origin_module <- 0u64; owner_module <- 0u64; owner_identity <- 0u64; shape <- 0u8;
@@ -773,9 +783,8 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal;
         });
         allocating <- false;
-        val parsed <- with_source(opened) (source, lines) => {
-            continue read_visit_frame(source, lines, diagnostic, tokens, nodes, selected, edges, decoded, progress);
-        };
+        val parsed <- read_opened_frame(opened, diagnostic, tokens, nodes, selected, edges, decoded,
+                                       progress, keys, key_first, key_past);
         if (parsed != Complete) return parsed;
         const val child_depth <- depth + 1u64;
         effect @followDependency(edge:u64) -> u8 {
