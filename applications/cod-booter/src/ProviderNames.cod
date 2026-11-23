@@ -1,0 +1,133 @@
+using "../../../cod/library/string.cod" { emit, emitStr };
+using "std:text-storage" { utf8_slice, utf8_size, utf8_byte };
+using "SourceStorage.cod" SourceBytes;
+
+func ascii_letter(byte:u8) -> bool {
+    return (byte >= 65u8 && byte <= 90u8) || (byte >= 97u8 && byte <= 122u8);
+}
+
+func ascii_digit(byte:u8) -> bool {
+    return byte >= 48u8 && byte <= 57u8;
+}
+
+proc emit_identifier_byte(byte:u8) -> void {
+    val index:u64 <- byte;
+    if (ascii_digit(byte)) {
+        emit(utf8_slice("0123456789", index - 48u64, index - 47u64));
+        return;
+    };
+    if (byte >= 65u8 && byte <= 90u8) {
+        emit(utf8_slice("ABCDEFGHIJKLMNOPQRSTUVWXYZ", index - 65u64, index - 64u64));
+        return;
+    };
+    if (byte >= 97u8 && byte <= 122u8) {
+        emit(utf8_slice("abcdefghijklmnopqrstuvwxyz", index - 97u64, index - 96u64));
+        return;
+    };
+    emit("_");
+    return;
+}
+
+proc emit_path_byte(byte:u8) -> void {
+    if (byte != 120u8 && (ascii_letter(byte) || ascii_digit(byte))) {
+        emit_identifier_byte(byte);
+        return;
+    };
+    val index:u64 <- byte;
+    val high <- index / 16u64;
+    val low <- index % 16u64;
+    emit("x");
+    emit(utf8_slice("0123456789abcdef", high, high + 1u64));
+    emit(utf8_slice("0123456789abcdef", low, low + 1u64));
+    return;
+}
+
+func valid_identifier(spellings:const SourceBytes in S, first:u64, past:u64) -> bool where {const owner S} {
+    if (first >= past || past > intrinsic (len)(spellings)) return false;
+    if (!ascii_letter(spellings[first]) && spellings[first] != 95u8) return false;
+    for (i in first + 1u64 .. past) {
+        if (!ascii_letter(spellings[i]) && !ascii_digit(spellings[i]) && spellings[i] != 95u8) return false;
+    };
+    return true;
+}
+
+func matches_rule(spellings:const SourceBytes in S, first:u64, past:u64,
+                  rules:const String in R, rule_first:u64, rule_past:u64, prefix:bool)
+    -> bool where {const owner S, const owner R} {
+    val width <- rule_past - rule_first;
+    if (width == 0u64 || width > past - first || (!prefix && width != past - first)) return false;
+    for (i in 0u64 .. width) {
+        if (spellings[first + i] != utf8_byte(rules, rule_first + i)) return false;
+    };
+    return true;
+}
+
+func matches_reservation(spellings:const SourceBytes in S, first:u64, past:u64,
+                         rules:const String in R, prefix:bool) -> bool where {const owner S, const owner R} {
+    val rule_first <- 0u64;
+    for (i in 0u64 .. utf8_size(rules)) {
+        if (utf8_byte(rules, i) == 10u8) {
+            if (matches_rule(spellings, first, past, rules, rule_first, i, prefix)) return true;
+            (rule_first <- i + 1u64):void;
+        };
+    };
+    return false;
+}
+
+func reserved_member(spellings:const SourceBytes in S, first:u64, past:u64) -> bool where {const owner S} {
+    # BEGIN GENERATED MEMBER RESERVATIONS
+    return matches_reservation(spellings, first, past, "alignas\nalignof\nauto\nbool\nbreak\ncase\nchar\nconst\nconstexpr\ncontinue\ndefault\ndo\ndouble\nelse\nenum\nextern\nfalse\nfloat\nfor\ngoto\nif\ninline\nint\nlong\nnullptr\nregister\nrestrict\nreturn\nshort\nsigned\nsizeof\nstatic\nstatic_assert\nstruct\nswitch\nthread_local\ntrue\ntypedef\ntypeof\ntypeof_unqual\nunion\nunsigned\nvoid\nvolatile\nwhile\nNULL\n", false) ||
+        matches_reservation(spellings, first, past, "_\nINT\nUINT\nPTRDIFF_\nSIZE_\nWCHAR_\nWINT_\nSIG_ATOMIC_\n", true);
+    # END GENERATED MEMBER RESERVATIONS
+}
+
+export proc emit_provider_identifier(spellings:const SourceBytes in S, first:u64, past:u64)
+    -> bool where {const owner S} {
+    if (!valid_identifier(spellings, first, past)) return false;
+    for (i in first .. past) { emit_identifier_byte(spellings[i]); };
+    return true;
+}
+
+export func valid_provider_member(spellings:const SourceBytes in S, used:u64, first:u64, past:u64)
+    -> bool where {const owner S} {
+    return used <= intrinsic (len)(spellings) && past <= used &&
+        valid_identifier(spellings, first, past) && !reserved_member(spellings, first, past);
+}
+
+export proc emit_provider_member(spellings:const SourceBytes in S, used:u64, first:u64, past:u64)
+    -> bool where {const owner S} {
+    if (!valid_provider_member(spellings, used, first, past)) return false;
+    for (i in first .. past) { emit_identifier_byte(spellings[i]); };
+    return true;
+}
+
+export proc emit_provider_enum_name(paths:const SourceBytes in G, entry_first:u64, entry_past:u64,
+                                    module_first:u64, module_past:u64, spellings:const SourceBytes in G,
+                                    type_first:u64, type_past:u64)
+    -> bool where {const owner G} {
+    val path_size <- intrinsic (len)(paths);
+    if (entry_first >= entry_past || module_first >= module_past || entry_past > path_size ||
+        module_past > path_size || !valid_identifier(spellings, type_first, type_past))
+        return false;
+    val entry_size <- entry_past - entry_first;
+    val module_size <- module_past - module_first;
+    val common <- 0u64;
+    val matching <- true;
+    for (i in 0u64 .. entry_size) {
+        if (matching && i < module_size && paths[entry_first + i] == paths[module_first + i]) {
+            if (paths[entry_first + i] == 47u8) { (common <- i + 1u64):void; };
+        } else {
+            (matching <- false):void;
+        };
+    };
+    emit("cod_enum_");
+    for (i in entry_first + common .. entry_past) {
+        if (paths[i] == 47u8) { emit("x2ex2ex2f"); };
+    };
+    for (i in module_first + common .. module_past) { emit_path_byte(paths[i]); };
+    emit("_");
+    emitStr(type_past - type_first);
+    emit("_");
+    for (i in type_first .. type_past) { emit_identifier_byte(spellings[i]); };
+    return true;
+}
