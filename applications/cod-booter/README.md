@@ -1,8 +1,10 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 26 · Recorded: 2026-11-22 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 27 · Recorded: 2026-11-23 · Phase: initial seed delivery through alternating booter and seed development.
 
 ## Design authority
+
+- At r27 [D-20-PARSE-RECOVERY](../../design/DesignAuthorityRegistry.md#d-20-parse-recovery), P-688/P-689, covers [whole-file recovery](#whole-file-parser-recovery). The project user [requires all parsers to continue and allows role-bearing error nodes](../../CHANGELOG.md#h-whole-file-parser-recovery-20261123). Acceptance covers independent faults in one file with useful syntax after them, all reports at the user-facing boundary and preservation of prior artifacts.
 
 - [D-20-DIAGNOSTIC-NAMES](../../design/DesignAuthorityRegistry.md#d-20-diagnostic-names), P-684/P-685, at r26 records the [two-name diagnostic principle](../../CHANGELOG.md#h-diagnostic-names-20261122). A reader can connect the spelling at a use site to its defining identity under charter §§8–9. Apply it at all stages within P-627/P-628. Acceptance covers renamed use sites, defining-module qualification and runtime construction provenance.
 
@@ -98,7 +100,7 @@ All five planned repositories will live in the [e-wrks GitHub organization](http
 | `cod-seed` | The C++ seed compiler, the CoD-written booter and the C-native components they use, including the region core and LLVM bindings. The booter stays in this repository after the split. |
 | `cod` | The future production CoD compiler written in CoD, including full diagnostics and the additional analysis they require. |
 | `codup` | Toolchain version management in the role of rustup. CoD package dependency resolution and lockfiles have their own [codp design](../../design/CodProjectStructureAndPkgMgmt.md). |
-| `codmate` | The Language Server Protocol server and IDE plugins. |
+| `codmate` | The Language Server Protocol server and IDE plugins, including [reference-site doclet tooltips and navigation](../../design/DomainLanguageDesign.md#definition-doclets). |
 
 After the split, a change to what a CoD program means belongs in `cod-lang`. Each compiler repository documents how it implements the rule, its current coverage and any known gaps.
 
@@ -121,6 +123,24 @@ Specify and check the initial region and LLVM operations alongside the booter in
 The C++ seed and the CoD-written booter in `e-wrks/cod-seed` share one diagnostic policy across parsing, name resolution, type checking, ownership, control flow and code generation. Both enforce the checks needed for correct compilation. Report failed checks directly, using the reason and source location when available. Unsupported programs receive a direct diagnostic. Accepted programs retain required runtime checks. The booter’s added responsibility here is exception handling. Its delivery requires no extra analysis or diagnostic output beyond the seed policy.
 
 The future compiler in `e-wrks/cod` owns full diagnostics, including extra passes, cross-path reasoning, counterexamples, explanatory notes and suggested fixes. For a lifetime error, the seed and booter can report the failed check. Reconstructing other paths to explain the error belongs in `e-wrks/cod`. The same boundary applies to optional coverage warnings, overload explanations, receiving-overlap warnings and implicit-import suggestions.
+
+#### Whole-file parser recovery
+
+Every project parser processes the complete input it is asked to parse. For a CoD file this includes lexical scanning, delimiter matching and parsing through EOF, in the C++ seed, the CoD booter and future compiler and editor frontends. A syntax error yields a located diagnostic and a recovered tree. Keep parsing later items in the same list, including independently malformed siblings inside a procedure. Entry points that parse a bounded subproduction give control back to their enclosing parser at the corresponding boundary.
+
+The AST admits an explicit error-report node wherever syntax was expected, including expressions, types, names, patterns, statements and declarations. Record the expected role, the diagnostic or its stable reference, and a half-open span in the original revision. A missing operand may have a zero-width span immediately before its separator. If one fault leaves several slots incomplete, those placeholders may refer to the same report. A missing optional child retains its ordinary representation. Keep correctly parsed children and siblings accessible. Ordinary consumers must distinguish the error alternative before projecting a concrete role. Tools can traverse the valid parts. A file with any syntax error fails compilation, and its recovered forms cannot publish definitions, generate artifacts or replace previous output.
+
+Recover at a boundary justified by the current grammar and delimiter nesting. Each recovery consumes bad input, returns a synchronizing token to an enclosing production that will consume it, or ends at EOF. This also applies to lexical errors and delimiter prepasses. A new line between tokens is ordinary whitespace. A malformed token gets one primary report for the same fault; an independent later error gets its own report. An unterminated triple-quoted token may legitimately cover the remaining bytes through EOF. Preserve that span and any earlier reports. An exhausted physical resource can end the parse with an explicit incomplete outcome.
+
+```cod
+proc sample() -> u64 {
+    val first <- ;
+    val second <- ;
+    return 7u64
+}
+```
+
+For this file return a recovered procedure with two separate missing-expression reports and an intact final return. Report both to the caller in source order. Also exercise a lexical error before a syntax error, unmatched delimiters, a fault near EOF and valid definitions after damaged input. Error nodes and diagnostic iteration can refer to the same evidence. A first-error compatibility field may expose the primary diagnostic, but every independent recovered diagnostic must be available and reported by the normal command. The bootstrap stages can report concise codes and locations; full explanations remain production compiler work. [Native reporting boundary](docs/LLVMInterop.md#builtin-catalog-and-rejection-reporting)
 
 #### Names in diagnostics
 

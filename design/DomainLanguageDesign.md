@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 203
+Discussion revision: 204
 
 Recorded: 2026-11-23
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r204, [D-07-DOCLETS](DesignAuthorityRegistry.md#d-07-doclets) qualifies [documentation at definitions and references](#definition-doclets) under [the project user’s doclet decision](../CHANGELOG.md#h-definition-doclets-20261123). P-686/P-687 connect readable source to stable definition identity and navigation. Acceptance covers a renamed reference, two overloads, an in-doclet link and an ordinary triple-quoted expression.
 
 At r203, [the short-arm decision](../CHANGELOG.md#h-short-case-arms-20261123) extends D-07-CASE/P-625–P-626 to bare constructor, enum-member and wildcard heads and single expression bodies. It reuses the same pattern lookup, result and control contracts. Acceptance covers equivalent long and short arms over real booter syntax rows and closed enum values.
 
@@ -914,6 +916,21 @@ DL-04's root-type compatibility identifier identifies a representation agreement
 The native source prototype reports selected implementation contexts alongside ambiguous method candidates and identifies the selected procedure declaration when a function demands an effectful method. These are source/checker diagnostics, not an implemented semantic-graph IDE protocol.
 
 **Decision evidence:** render and reload a shared graph with imports; make one text edit and one equivalent structural edit; retain meaning and useful diagnostics. The current C++ clangd acceptance does not establish these future DSL capabilities.
+
+#### Definition doclets
+
+A triple-quoted token in leading documentation position attaches to the next named definition in the same declaration list. Put it directly before the definition, including its `export` or other declaration prefixes. Comments and whitespace, including blank lines, may intervene. A semicolon or an unrelated item ends this association. Line placement alone cannot turn a return operand into documentation. Use grammar position to decide attachment for a declaration, method overload, data constructor or named field. A closing delimiter ends the current list. A doclet cannot drift across that boundary or past a malformed declaration onto its next valid sibling. A triple-quoted operand, initializer or callable result remains a [runtime text literal](Utf8Strings.md#multiline-string-literals).
+
+```cod
+"""Checks whether a row contains a node. See [AstSlot](AstSlot)."""
+export func occupied(slot:const AstSlot in O) -> bool where {const owner O} {
+    case slot of { Occupied -> true; Vacant -> false }
+}
+```
+
+The seed and booter need only accept the documented definition and skip its doclet in that position. Doclets have no evaluation, storage, checked effects or export identity. Future `codmate` analysis retains the doclet’s source range and the documented declaration’s identity. A tooltip at a reference follows the resolved definition, including through renamed imports and re-exports. A call resolved to one overload shows that declaration’s documentation. Where an incomplete reference has multiple candidates, the IDE preserves the distinction between them.
+
+The tooltip supports navigable links in its text. In the example the link label is `AstSlot` and the destination is the definition selected by that name in the **documented declaration’s** context. Opening the tooltip in another module cannot retarget the link to that module’s same-spelled type. An unresolved or ambiguous link keeps its text available. Rich markup, rendering and IDE protocol details belong to the tooling. Verify the feature from a reference site with a renamed import and a shadowing name. Verify separately that adding the doclet leaves compiler behavior unchanged and returning the same text still produces its bytes.
 
 <a id="dl-11"></a>
 ### DL-11 — C/C++ and other runtimes

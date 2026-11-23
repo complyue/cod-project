@@ -1,6 +1,6 @@
 # UTF-8 strings and C string arguments
 
-Design revision 5 · 2026-11-23 · Qualified for UTF-8 text, owner-bound ADT fields and the first synchronous native argument profile.
+Design revision 6 · 2026-11-23 · Qualified for UTF-8 text, owner-bound ADT fields and the first synchronous native argument profile.
 
 ## Design authority
 
@@ -11,6 +11,8 @@ Design revision 5 · 2026-11-23 · Qualified for UTF-8 text, owner-bound ADT fie
 [D-07-STRING-BUILD](DesignAuthorityRegistry.md#d-07-string-build) records the user's authorization of the [string.cod prototype](StringBuilding.md) and its booter workload under [H-STRING-BUILD-20261121](../CHANGELOG.md#h-string-build-20261121). The library owns rendering policy. The UTF-8 and field contracts here supply its text and destination guarantees.
 
 [K-TEXT-PROC-RETURN](../CHANGELOG.md#k-text-proc-return) continues r3 for explicit successful completion in the field-transfer method examples.
+
+At r6 the [doclet decision](../CHANGELOG.md#h-definition-doclets-20261123) distinguishes the same token in declaration position from a text expression. [D-07-DOCLETS](DesignAuthorityRegistry.md#d-07-doclets) covers its tooling use.
 
 At r5 the [newline and long-text decision](../CHANGELOG.md#h-newline-and-long-text-20261123) extends D-07-UTF8/P-674–P-675 to [multiline literals](#multiline-string-literals). The same UTF-8, byte-preservation, owner and NUL contracts apply. Verify the bytes passed to a bounded native writer and the indexed position following a multiline token.
 
@@ -26,7 +28,7 @@ Use `String` and `CString` as builtin type names in the ordinary type-name gramm
 
 ### Multiline string literals
 
-Three consecutive double quotes open a multiline `String` literal in a runtime expression. The first unescaped sequence of three double quotes closes it. Opening and closing delimiters may occur anywhere an ordinary text expression can occur. Six consecutive quotes give the empty string. One or two unescaped quotes in the content are ordinary characters unless they begin the closing delimiter. To include a run of three quotes or content quotes immediately before the closing delimiter, use the existing `\"` escape for each such content quote.
+In a leading documentation position the same token is a [definition doclet](DomainLanguageDesign.md#definition-doclets). Three consecutive double quotes open a multiline `String` literal in a runtime expression. The first unescaped sequence of three double quotes closes it. Opening and closing delimiters may occur anywhere an ordinary text expression can occur. Six consecutive quotes give the empty string. One or two unescaped quotes in the content are ordinary characters unless they begin the closing delimiter. To include a run of three quotes or content quotes immediately before the closing delimiter, use the existing `\"` escape for each such content quote.
 
 ```cod
 val text <- """first
