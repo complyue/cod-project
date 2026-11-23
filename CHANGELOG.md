@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review package diagnostics on the normal graph route
+
+<a id="k-booter-package-diagnostic-sink-20261123"></a>
+**K-BOOTER-PACKAGE-DIAGNOSTIC-SINK-20261123.** D-ARCH-REVIEW r53→r54 and D-20-MODULE-GRAPH r47→r48 continue the package crossing under H-MODULE-PATHS-AND-DEFAULT-EXPORTS-20261123 and H-PROJECT-ARCHITECTURE-REVIEW-20261122. The [diagnostic sink design](applications/cod-booter/docs/ModuleGraph.md#package-diagnostics-on-the-normal-graph-route) extends the invocation-owned sink at `a1beef94a5de52e6765d13f88f19077a259e8ab4:applications/cod-booter/native/compile_diagnostic.h`. Mainline owns normal CLI integration and compatibility verification.
+
 ## 2026-11-23 — Rewrite Idiomatic CoD against settled language contracts
 
 <a id="k-idiomatic-cod-rewrite-20261123"></a>

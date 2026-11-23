@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 53. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 54. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+
+The [r54 review](../CHANGELOG.md#k-booter-package-diagnostic-sink-20261123) clears the [normal graph wiring and package diagnostic sink](../applications/cod-booter/docs/ModuleGraph.md#package-diagnostics-on-the-normal-graph-route). CoD owns lookup, source attribution and the publication gate. The C provider retains complete byte records for the launcher, which prints and releases them on each invocation.
 
 The [r53 review](../CHANGELOG.md#k-booter-package-loader-here-place-20261123) clears the [writable product used by the package loader](#writable-supplier-product-access) under D-18-HERE-PARAM and the existing native loan contract. P-682/P-683 apply to the checker, its activation projection and the linked loader workload.
 
