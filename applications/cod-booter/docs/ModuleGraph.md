@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 23. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 24. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
 
 [K-BOOTER-AST-TABLE-20261122](../../../CHANGELOG.md#k-booter-ast-table-20261122) continues that architecture for the [first indexed AST path](#first-indexed-ast-path). Its private representation uses the existing named-array constructor, valid bits transfer and constructor-pattern checks. Acceptance includes the parser, checker, lowering and emitted object.
 
@@ -31,6 +31,8 @@ The [readonly budget declaration review](../../../CHANGELOG.md#k-booter-const-va
 The [fresh graph result review](../../../CHANGELOG.md#k-booter-fresh-graph-result-20261122) covers construction rollback, a direct owning result and cleanup at the receiving entry.
 
 The [owning result syntax review](../../../CHANGELOG.md#k-booter-own-region-result-syntax-20261122) covers the CoD booter’s signature reader and its publication boundary.
+
+The [provider member name review](../../../CHANGELOG.md#k-booter-provider-member-names-20261122) covers the shared reserved spellings and field validation before rendering.
 
 ## Layer responsibilities
 
@@ -372,6 +374,18 @@ The CoD renderer needs checked signatures and the selected target’s ABI facts.
 Rendering or checking failure occurs before the file operation. The native publisher validates its loans, serializes cooperating writers in the destination directory, stages both files and checks writes and closes before replacing the public names. If the second replacement fails, restore the previous header or remove a newly installed header when there was no predecessor. If restoration also fails, report the existing publication I/O failure and preserve the available backup. Free temporary resources on all exits. Keep provider diagnostics and ordinary CLI status distinct from a native transport failure. An unlocked reader or a crash between renames can observe a mixed pair. [Existing pair publication](../native/provider_output.c)
 
 Exercise both commands through the real launcher in both seed modes. Compare both generated files byte for byte with the seed for the same production declarations, including the entries and file operation used by this route. Compile the emitted stubs, relink the actual booter with them, and run the checked cross-module and deferred-release workloads. Check an imported nominal type through a renamed re-export, padded record layout, invalid owner, unsupported declaration, and preservation of a prior pair on semantic rejection and an injected second replacement failure. The graph and renderer can bootstrap from the seed-generated interface. Delivery uses the CoD renderer to generate the production pair.
+
+### Reserved member names in generated C
+
+A CoD field that becomes a bare C struct member must satisfy the provider header’s spelling rules. Apply them to record fields used in native array views and to checked constructor failure payloads. Keep ordinary CoD field names, path escaping and prefixed enum constants under their respective naming rules. The reserved set belongs to the generated-header profile and is the same in both bootstrap compilers.
+
+Maintain one data file, `cod/native/provider_member_names.def`, with one literal ASCII spelling per row and two row forms, `COD_PROVIDER_EXACT("NULL")` and `COD_PROVIDER_PREFIX("UINT")`. Exact rows match the entire field name. Prefix rows match from byte zero, including when the field name equals the prefix. Both comparisons are case-sensitive. Preserve the existing set in the migration. For example, `NULL` and `INTake` reject, while `NULLx`, `intake` and `volatile_count` pass this reservation check.
+
+The seed and the existing C renderer consume the rows directly through the private `provider_names.h` predicate. A deterministic maintenance tool projects the same rows into a marked, checked-in block of `ProviderNames.cod` as two newline-delimited ASCII string literals passed to a handwritten CoD matcher. The generated block contains only the data and the call that supplies it. The tool validates the row forms and spellings, writes only the marked block on regeneration, and offers a read-only drift check. Normal builds consume the committed sources. This arrangement needs no runtime file, native predicate call, LLVM query or build-configuration change.
+
+CoD validates the field’s nonempty ASCII identifier and its byte range against the graph’s **published** spelling prefix before matching. Compare that bounded span directly against entries in the literal lists. A match reports the existing reserved-member failure for the offending field. An invalid range or malformed identifier follows the existing invalid-input path. Validate selected record and failure fields before rendering them, retaining their defining field locations where available. A rejection leaves the published header and stubs intact. [Provider publication](#generating-and-publishing-the-provider-pair)
+
+Verify the migration against the previous predicate over every exact spelling and prefix, including longer names, case distinctions, and close permitted spellings. Exercise the CoD matcher with a name sliced from a larger buffer and a range that extends beyond the published prefix. In both modes test a reserved record field and a reserved failure field through the real provider route, preserving an existing output pair. A valid neighboring spelling must still render and compile. Keep the existing production pair parity and Clang layout checks. The read-only regeneration check must detect a stale projection.
 
 ### Target layout for provider rows
 

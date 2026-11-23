@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Share the provider’s reserved member spellings
+
+<a id="k-booter-provider-member-names-20261122"></a>
+**K-BOOTER-PROVIDER-MEMBER-NAMES-20261122.** Delegated pre-code review under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122 continues K-BOOTER-PROVIDER-PUBLICATION-20261122. Preserve the 46 exact names (including `NULL`) and eight prefixes at `0aeafeed0a0edaa65e04bf92356e0277e76fec43:cod/native/provider_names.h`, using one row list for the seed and the CoD-written renderer. D-20-MODULE-GRAPH r23 to r24, D-ARCH-REVIEW r27 to r28, P-680–P-683, registry r1076.
+
 ## 2026-11-22 — Read the graph factory’s owning result in CoD
 
 <a id="k-booter-own-region-result-syntax-20261122"></a>
