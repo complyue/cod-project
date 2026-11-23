@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-22 — Review seed exception naming and booter publication of diagnostic names
+
+<a id="k-seed-nominal-diagnostic-names-20261122"></a>
+**K-SEED-NOMINAL-DIAGNOSTIC-NAMES-20261122.** Delegated architecture review under H-PROJECT-ARCHITECTURE-REVIEW-20261122 continues H-DIAGNOSTIC-NAMES-20261122 at `1d5d7f42fc88351c76c86ae9a78384015e6b3c1f:applications/cod-booter/README.md`, “Names in diagnostics”. D-ARCH-REVIEW r38 to r39 clears the seed emitter’s category-checked site record, private lookup and use of the existing C reporter, with independent evidence for named throws and generated native acquisition failures. D-20-DIAGNOSTIC-NAMES/P-684–P-685 retains its confirmed scope.
+
+<a id="k-booter-publication-plan-20261122"></a>
+**K-BOOTER-PUBLICATION-PLAN-20261122.** Delegated architecture review continues the graph publication and name projection at `86f319eb52e375a1b044700fe40fdf6266d26e8a:applications/cod-booter/docs/ModuleGraph.md`, “Exception identity, layout and names in the object”. D-20-MODULE-GRAPH r35 to r36 and D-ARCH-REVIEW r39 clear one visit-local publication row carrying the fixed origin and measured extents through reservation. Verify growth between source loans and prior output on failure. General product access from a supplied `here` body remains an independent compiler capability.
+
 ## 2026-11-22 — Preserve the source name at each constructing throw
 
 <a id="k-booter-throw-site-names-20261122"></a>
