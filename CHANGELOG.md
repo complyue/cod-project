@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Identify the written type in an uncovered checked throw
+
+<a id="k-seed-checked-throw-names-20261123"></a>
+**K-SEED-CHECKED-THROW-NAMES-20261123.** The delegated architecture review continues D-20-DIAGNOSTIC-NAMES at `499638e08258f02269b361e1248ac2b7a8f5d75d:applications/cod-booter/README.md`, “Names in diagnostics”. D-ARCH-REVIEW r40 to r41 clears retaining occurrence evidence outside solver state and sharing the checked defining-name formatter with the emitter. Handling obligations and cleanup follow the established exception contract.
+
 ## 2026-11-23 — Short case arms and layout-independent CoD syntax
 
 <a id="h-short-case-arms-20261123"></a>
