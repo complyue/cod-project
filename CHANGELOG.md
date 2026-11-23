@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Check the diagnostic helper's independent u32 inputs
+
+<a id="k-booter-checked-u32-helper-20261123"></a>
+**K-BOOTER-CHECKED-U32-HELPER-20261123.** [D-20-MODULE-GRAPH r60](applications/cod-booter/docs/ModuleGraph.md#checking-u32-in-the-diagnostic-helper) and D-ARCH-REVIEW r70, P-680–P-683, continue the [imported helper review](#k-booter-source-handle-helper-20261123). The helper at `5a0c93f9b94c9d3714e65169b280f342dcf7f224:applications/cod-booter/src/NativeDiagnostics.cod` takes an exact u32 and receives a backend u8 under H-261. The clearance covers source checking and published source facts for an independent u32 and preserves separate executable and C transport admission.
+
 ## 2026-11-23 — Apply ordinary argument preparation when forwarding a value pack
 
 <a id="k-value-pack-forwarding-20261123"></a>

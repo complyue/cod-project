@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 59. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 60. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+
+The [r60 review](../../../CHANGELOG.md#k-booter-checked-u32-helper-20261123) applies P-680/P-681 and H-261 to [source checking of u32 diagnostic codes](#checking-u32-in-the-diagnostic-helper). Verify independent scalar selection through the real helper and the released command corpus, with an independent gate for executable coverage.
 
 The [r59 dependency visit review](../../../CHANGELOG.md#k-booter-variadic-dependency-visit-20261123) qualifies the [structural membership and terminal check](#variadic-membership-during-a-dependency-visit) under P-680/P-681 and D-10-VARARGS. Verify the importer’s conflict location and the child’s saved location on the three normal commands.
 
@@ -630,6 +632,29 @@ Verify the real catch in the frozen ModuleGraph and its importing modules in bot
 modes. Exercise an unproved or mismatched handle, readonly access, two distinct owners supplied
 to a shared role, a malformed header and a callee with an uncovered checked failure. Preserve
 earlier output on rejection and replay all 38 declaration and provider inputs.
+
+#### Checking u32 in the diagnostic helper
+
+`report_backend_error` receives a `u8` code. The selected private `report_native_error` takes
+that code by value as `u32` and passes it to the existing `u32` input of `write_diagnostic`.
+`report_scratch_error` already receives a `u32` and uses the same path. Check both calls under
+[whole-type lossless widening](../../../design/ScalarUnitsAndIndexTypes.md#quantity-types-and-lossless-widening).
+
+Represent the exact source type in the booter's operand facts and checked callable interfaces
+for independent formals, operands and results. At the selected by-value input, check readability
+and preparation in written order. Keep the expression's actual type and the formal's expected
+type distinct. Exact `u32` passes directly. A `u8` supplies a lossless value to `u32`.
+Preserve nominal handle, owner, access and completion checks through the private helper and C
+call. An external reference requires its declared target type. Distinct enum identities and
+Boolean values retain their own contracts. Shared scalar predicates also feed object lowering,
+so keep executable admission explicit for each supported width and operation.
+
+In both linked modes check the unedited helpers, including an independent value above 255 and a
+CoD helper returning `u32` to a matching input. Reject an implicit `u64`-variable-to-`u32`
+narrowing, wrong nominal input and damaged signature evidence. Check the existing object-profile
+boundary and preserve prior outputs on rejection. Replay the 38 declaration/provider inputs,
+the reached catch and the actual path wrapper. Existing C signatures and provider bytes remain
+the compatibility baseline.
 
 ### Reading a scalar field from a caught exception
 

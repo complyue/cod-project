@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 69. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 70. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+
+The [r70 review](../CHANGELOG.md#k-booter-checked-u32-helper-20261123) continues r66 for the booter's [checked diagnostic-code arguments](../applications/cod-booter/docs/ModuleGraph.md#checking-u32-in-the-diagnostic-helper). P-682/P-683 cover the ordinary source type, value preparation at the selected call and independent object-lowering gate.
 
 The [r69 review](../CHANGELOG.md#k-seed-regional-scalar-product-20261123) covers [regional product construction in the seed](#constructing-a-regional-product-with-scalar-edges) under D-22-REGIONAL-REF-INIT and P-682/P-683. Check the actual region, field representation, reservation order and publication on failure in both seed modes.
 
