@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Initialize a regional scalar ref field from independent bits
+
+<a id="h-regional-ref-field-initialization-20261123"></a>
+**H-REGIONAL-REF-FIELD-INITIALIZATION-20261123.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-23 (America/Los_Angeles), the project user replied “同意” to `remaining = 12u64` creating a fresh target in the counter's region during construction without a second `make`. In the paired example `remaining = first.remaining` binds the existing target. [D-22r68](design/ConstructionAndAcquisition.md#initializing-a-regional-scalar-ref-field), D-22-REGIONAL-REF-INIT / P-351–P-352, settles this part of the H-425 proposal at `98a24cd5a547509131620e67a7d45e3a333a880a:design/ConstructionAndAcquisition.md`. H-438 owner access, H-428 initialization effects and the readonly-reception rules still apply.
+
 ## 2026-11-23 — Drop branch-specific defaults from an inferred function signature
 
 <a id="h-inferred-function-defaults-20261123"></a>

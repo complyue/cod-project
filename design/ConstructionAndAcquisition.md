@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 67 · Recorded: 2026-11-21 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 68 · Recorded: 2026-11-23 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+At r68 [D-22-REGIONAL-REF-INIT](DesignAuthorityRegistry.md#d-22-regional-ref-init) covers [initializing a regional scalar ref field](#initializing-a-regional-scalar-ref-field). The [StockCounter decision](../CHANGELOG.md#h-regional-ref-field-initialization-20261123) resolves the field case proposed in H-425. C-39/C-65/C-72 and P-352 tie a readable initializer to its actual storage owner. D-14, D-23 and D-28-ALLOC supply the edge, value/view and allocation checks. Verify fresh identity, shared identity, a wrong owner, and failure before publication. This decision covers ordinary object field initialization and leaves allocator layout and nullable field materialization separately scoped.
 
 [D-07-STRING-FIELDS](DesignAuthorityRegistry.md#d-07-string-fields) records the r67 prototype spelling `val var tgt:String` for a direct place under [H-STRING-BUILD-20261121](../CHANGELOG.md#h-string-build-20261121). Verify first initialization, replacement and stable prior borrows. The `in` annotation selects the place owner, and the text remains non-bits. [String field contract](Utf8Strings.md#direct-string-fields).
 
@@ -66,7 +68,7 @@ Design revision: 67 · Recorded: 2026-11-21 · Status: DBMR design confirmed (mo
 
 - **Group-scope continuity:** [K-KNOT-COST-20261115](../CHANGELOG.md#k-knot-cost-20261115) covers r16→17 under H-317/P-284, H-428 and H-444. C-65/C-72 and candidate P-348/P-350 preserve ordered, checked construction and visible effects under charter §§3.3/6.3/8; no value path is newly qualified. Ordinary groups gain no forward data bindings or provisional ref escape; required-ref cycles remain deferred after D-28's cost assessment. Future pure knot-tying belongs to D-19-KNOT. Acceptance and whole-document exclusions remain unchanged; no implementation claim follows. H-447/[K-INIT-CONFIRM-20261115](../CHANGELOG.md#k-init-confirm-20261115) continues r17→18 with the confirmed staged-acceptance plan; it introduces no forward names, rollback or automatic incomplete-object publication.
 
-- **Registry / coverage:** [D-22](DesignAuthorityRegistry.md#d-22), revision 57. H-383–H-386 confirms the scoped construction requirements; H-425–H-427 develops RHS normalization and intentional lifetime separation without move semantics. H-428 confirms allocation effects without language checkpoints/rewind. [H-429](../CHANGELOG.md#h-429) establishes distinct regional/lexical storage directions; [D-28](RegionalAndLexicalStorageRefactor.md) owns that refactoring and the proposed C++ external_ptr naming. [H-430](../CHANGELOG.md#h-430) rules out automatic/in-place language growth in favor of consuming replacement; [H-431](../CHANGELOG.md#h-431) selects ordinary owned-parameter failure cleanup. H-432 proposes lossless resize(r, new_cap) for growth and shrinkage. Detailed RHS, capacity/error mapping and resize backend protocols remain under review; P-348–P-350 and whole-document qualification remain pending-human. H-433 sets the lexical pointer-bearing goal; H-478/D-28-ADT selects one nominal ADT across both domains. Bits-only lexical construction remains an implementation fallback, with physical layout/encoding and complete coverage still outstanding. H-435 selects dynamic lexical capacity and owner-base-relative lexical storage independently of the remaining ADT/ABI work. H-436 separates lexical slot location from reference contents and permits register/stack optimization. [K-OWNER-ALLOCATION-20261114](../CHANGELOG.md#k-owner-allocation-20261114) records H-438 allocation through non-const owners and optional const-owner restriction with writable targets, using H-437 shared owner information. [K-REFERENCE-IDENTITY-20261114](../CHANGELOG.md#k-reference-identity-20261114) integrates H-439/H-440 owner-plus-locator identity and is null, preserving established access, result and lifetime behavior. Current bounded source/native coverage is recorded in the [source capability reference](../tests/cod/language/README.md). Placement, allocator transport and whole-document qualification remain separate.
+- **Registry / coverage:** [D-22](DesignAuthorityRegistry.md#d-22), revision 68. H-383–H-386 confirms the scoped construction requirements; H-425–H-427 develops RHS normalization and intentional lifetime separation without move semantics. H-428 confirms allocation effects without language checkpoints/rewind. [H-429](../CHANGELOG.md#h-429) establishes distinct regional/lexical storage directions; [D-28](RegionalAndLexicalStorageRefactor.md) owns that refactoring and the proposed C++ external_ptr naming. [H-430](../CHANGELOG.md#h-430) rules out automatic/in-place language growth in favor of consuming replacement; [H-431](../CHANGELOG.md#h-431) selects ordinary owned-parameter failure cleanup. H-432 proposes lossless resize(r, new_cap) for growth and shrinkage. Detailed RHS, capacity/error mapping and resize backend protocols remain under review; P-348–P-350 and whole-document qualification remain pending-human. H-433 sets the lexical pointer-bearing goal; H-478/D-28-ADT selects one nominal ADT across both domains. Bits-only lexical construction remains an implementation fallback, with physical layout/encoding and complete coverage still outstanding. H-435 selects dynamic lexical capacity and owner-base-relative lexical storage independently of the remaining ADT/ABI work. H-436 separates lexical slot location from reference contents and permits register/stack optimization. [K-OWNER-ALLOCATION-20261114](../CHANGELOG.md#k-owner-allocation-20261114) records H-438 allocation through non-const owners and optional const-owner restriction with writable targets, using H-437 shared owner information. [K-REFERENCE-IDENTITY-20261114](../CHANGELOG.md#k-reference-identity-20261114) integrates H-439/H-440 owner-plus-locator identity and is null, preserving established access, result and lifetime behavior. Current bounded source/native coverage is recorded in the [source capability reference](../tests/cod/language/README.md). Placement, allocator transport and whole-document qualification remain separate.
 - **Candidate value path:** C-39/C-65/C-72 → C-01/C-06 (P-348) makes storage, access and lifetime intent explicit and checkable in readable source, including distinct lexical/regional construction and explicit initialization effects; C-09/C-54 → C-05 (P-349) separates persistent data from acquisition responsibility and preserves inspectable preparation effects. D-22 organizes these responsibilities through P-350. Charter §§2–5/§7–8 governs those boundaries; §§6/12 requires practical native execution and measured costs. These scoped paths do not qualify the wider ownership or DBMR designs.
 - **Dependencies:** P-351: D-01 physical allocation/relative references; D-14 owners, capabilities, fields and qualifiers; D-23 scalar value/view reception; D-17 initialization, failure and cleanup; D-10/D-15/D-18/D-21 dynamic context, values and native dispatch; D-16 bits validity, layout and numeric compatibility. Dependency edges grant no authority.
 - **Invariants / non-goals:** no ordinary reference ownership, per-object cleanup, owner-free heap graphs, cross-owner stored edge, implicit graph copy/move, lifetime extension or native callable environment in a regional field. Lexical scopes are not backed by implicit regions; D-28 records H-435 owner-base lexical views and H-478 same-nominal lexical ADTs; physical carrier/layout protocols remain separate. Regional C++ types remain region-only and noncopyable. Actual-owner unions, abstract-result RTTI, fraction execution, pure/TCO and the compiler pilot remain separate.
@@ -565,7 +567,8 @@ The proposed compiler check for the confirmed construction behavior carries the 
 | Ordinary data, receiver selects a const owner | Reject construction in that owner, including a fresh readonly result or otherwise admitted implicit target materialization. Do not silently choose another owner. |
 | Ordinary data, receiver selects a non-const owner | H-438 permits construction using that actual owner; retain placement, policy, capacity, initialization and failure checks. |
 | Initializer retains a reference result | Check actual owner/access. A non-bits graph is never implicitly copied; independent bits materialization and readonly reference reception remain distinct below. |
-| Ref/ptr field initialized without explicit make | Independent bits may materialize a target under the proposed owner-directed construction rule. Reference results retain their target and access; readonly-to-writable binding rejects without allocation fallback. Regional materialization remains under review. |
+| Regional scalar `ref` field initialized with `=` | An independent bits result initializes a fresh target in the containing object's actual region. A compatible reference binds its existing same-owner target. [Field rule and example](#initializing-a-regional-scalar-ref-field) |
+| Regional scalar `ptr` field | A compatible target retains its owner and access. An explicit null initializer establishes absence. Implicit fresh-target allocation from independent bits for a nullable regional field remains a separate question. |
 
 An explicit `in here` selects the current full lexical scope and must agree with any required owner. Omission uses the context first. A required owner that is ambiguous, inaccessible or readonly cannot be bypassed by allocating locally. The construction form is `make`; `local` remains available as an ordinary identifier.
 
@@ -579,6 +582,37 @@ own region arena:Root <- make region Root(bytes -> capacity) { ... };
 ```
 
 Completed construction must preserve initializer order and effects and publish only a valid initialized result. Bare typed reservation has the separate identity-only contract below. Existing D-17 failed acquisition cleanup does not promise rollback of effects or arbitrary reservations in an already-live region. Nested constructor naming/access, partial construction and allocator-policy interaction require review before implementing an uncovered case. Explicit owner spelling cannot bypass readonly allocation checks or same-owner stored edges.
+
+### Initializing a regional scalar ref field
+
+During ordinary ADT construction, a scalar `ref` field can receive either independent bits or a
+reference to existing storage. Evaluate the initializer once. For independent bits, the
+containing object's actual region supplies storage for one fresh scalar target. Check the
+scalar type and allocation permission and initialize the target before making the field
+available for reading. The author can write the initializer without a nested `make`.
+
+```cod
+data StockCounter { ref remaining:u64; }
+
+ref first = make StockCounter in r { remaining = 12u64; }
+ref shared = make StockCounter in r { remaining = first.remaining; }
+ref snapshot = make StockCounter in r { remaining = (first.remaining); }
+
+shared.remaining <- 9u64
+# first.remaining now reads 9. snapshot.remaining still reads 12.
+```
+
+The second constructor binds the target already owned by `r`. The third reads its bits and
+initializes a distinct target in `r`. Two initializers using the same literal also yield
+distinct targets. Binding an existing view checks its actual owner and target access. A view
+from another region or a readonly view supplied to a writable field fails those checks.
+An explicit scalar projection such as `(source.remaining)` supplies independent bits.
+
+Only the fresh-target path uses additional region capacity for that scalar. Insufficient
+capacity takes the ordinary construction failure path. The enclosing result stays unpublished.
+Earlier successful allocations and effects in an existing region follow the ordinary
+initialization rules. Later `=` on an initialized field rebinds the edge to an existing target,
+and `<-` writes through the selected target. An inline `val` field holds its payload directly.
 
 ### Sum instances and independent bits
 
@@ -713,14 +747,7 @@ Here readonly describes target access (`ref r:const T`), not declaration-leading
 
 H-PARENTHESIZED-VALUES-20261118 selects the [parenthesized value-expression rule](SymbolicDynamicScope.md#parenthesized-value-expressions-and-operator-idioms): `(x)` projects readable scalar bits to an independent val result. Nested grouping is idempotent with respect to this category; it performs no ownership transfer, invalidation or C++ move. A bare addressable storage expression still supplies its place/view, including when the storage was declared val; the declaration’s storage kind and the expression’s result category are distinct. A scalar view returned by an operator follows the same projection rule when explicitly parenthesized.
 
-```text
-data Box { ref n:u64; }
-# r supplies live allocation access.
-val local:u64 <- 7u64;
-ref a:Box in r = make Box in r { n = (local); }; # Fresh copied bits in r.
-ref b:Box in r = make Box in r { n = a.n; };     # Mutable view: alias a.n.
-ref c:Box in r = make Box in r { n = (a.n); };   # Fresh copied bits, even in r.
-```
+See [regional scalar field initialization](#initializing-a-regional-scalar-ref-field) for the identity difference between binding a bare field and initializing from its parenthesized bits.
 
 A `val T in O` remains invalid. Fresh target placement comes from the receiver/containing object or the full-scope default, with usable allocation access; the copied value carries no owner. No owner-mismatch heuristic selects copying. Independent targets remain distinct even when their bits compare equal. Direct/val fields use `<-` to initialize inline payloads, without a separate target. Ref declaration `<-` stays rejected; later `=` rebinding and `<-` payload writes retain their separate contracts. D-14's ptr transfer-declaration shorthand is not silently extended or removed.
 
