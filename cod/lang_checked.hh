@@ -437,6 +437,23 @@ class ScalarChecker {
     }
     observed_.lexical_allocations.insert(null_target - 1 - *actual);
   }
+  CheckedOperation::ArrayAllocator array_allocator(std::optional<size_t> actual, const Location &at) const {
+    using Allocator = CheckedOperation::ArrayAllocator;
+    if (actual == cleanup_scope_) return {Allocator::lexical};
+    if (!actual || (lexical_.live && !owner_alive(*actual)))
+      implementation_gap(at, "array allocation without a proved live destination owner");
+    if (const_owner(*actual)) fail(at, "const owner cannot allocate storage");
+    if (const auto region = region_owners_.find(*actual); region != region_owners_.end())
+      return {Allocator::region, region->second.holder};
+    if (external_owner(*actual) && checking_method_ && !checking_method_->here_inputs() &&
+        !checking_method_->source->c_linkage)
+      return {Allocator::input, null_target - 1 - *actual};
+    implementation_gap(at, "array allocation without a proved lexical or regional allocator");
+  }
+  void observe_array_allocation(const CheckedOperation::ArrayAllocator &allocator) {
+    if (lexical_.live && allocator.kind == CheckedOperation::ArrayAllocator::input)
+      observed_.array_allocations.insert(allocator.place);
+  }
   size_t owner_lifetime_scope(size_t owner) const {
     if (const auto region = region_owners_.find(owner); region != region_owners_.end())
       return region->second.lifetime;
@@ -4512,6 +4529,7 @@ class ScalarChecker {
         }
         if (first) { effects = next; effects.lexical_allocations = std::move(owners); first = false; continue; }
         effects.lexical_allocations.merge(owners);
+        effects.array_allocations.insert(next.array_allocations.begin(), next.array_allocations.end());
         effects.reads.insert(next.reads.begin(), next.reads.end());
         effects.symbols.insert(next.symbols.begin(), next.symbols.end());
         effects.written_inputs.insert(next.written_inputs.begin(), next.written_inputs.end());
@@ -4770,6 +4788,19 @@ class ScalarChecker {
           require_lexical_allocator(operation.lexical_result_owner, expr.at);
         else require_lexical_allocator(one_owner(views.at(first_owner_operand(callee, owner))), expr.at);
       } else require_lexical_allocator(owners.at(owner), expr.at);
+    }
+    if (!summary.array_allocations.empty()) {
+      if (prepared || operation.callable_call || immediate_scope || !operation.callee)
+        implementation_gap(expr.at, "array allocator forwarding outside a synchronous named call");
+      const auto &callee = program_.methods[program_.instances[*operation.callee].method];
+      auto forwarded = std::make_shared<std::map<size_t, CheckedOperation::ArrayAllocator>>();
+      for (const auto role : summary.array_allocations) {
+        const auto actual = one_owner(views.at(first_owner_operand(callee, role)));
+        const auto allocator = array_allocator(actual, expr.at);
+        observe_array_allocation(allocator);
+        forwarded->emplace(role, allocator);
+      }
+      operation.array_allocator_arguments = std::move(forwarded);
     }
     operation.type = *contract.target;
     if (operation.type.kind == Type::exception)
@@ -6968,6 +6999,23 @@ class ScalarChecker {
     const auto &definition = *method.source;
     const auto &parameters = method.input_parameters();
     const bool uses_caller_bindings = caller_bindings(method);
+    for (size_t i = 0; i < operation.arguments.size(); ++i) if (parameters[i].selects_caller_ref_slot()) {
+      const auto &operand = operation.argument(expr, i);
+      const auto &view = views.at(i);
+      if (&expr == prepared_call_ || delayed_)
+        implementation_gap(operand.at, "deferred use of a caller array binding slot");
+      if (view.type != Type::never) {
+        const auto slots = physical_slots(view.slots);
+        if (ungrouped_expression(operand).kind != Expression::Kind::name || slots.size() != 1 ||
+            !bindings_->at(*slots.begin()).requires_initialized || view.indexed_target || view.nullable_view ||
+            view.read_only || !one_owner(view))
+          fail(operand.at, "ref var requires a live initialized writable array binding");
+        reference_destination(view, operand.at);
+        require_live_view(view, operand.at);
+        require_initialized(view, operand.at, "caller array binding");
+      }
+      operation.arguments[i].binding_slot = true;
+    }
     for (size_t i = 0; i < operation.arguments.size(); ++i)
       if (operation.arguments[i].binding_slot != caller_place(method, i))
         implementation_gap(expr.at, "selected method requires unproved place preparation");
@@ -7448,7 +7496,7 @@ class ScalarChecker {
       const auto &parameter = method.input_parameters()[i];
       const bool value = parameter.owner.empty();
       const bool live_value = method.scope_inputs && method.scope_inputs->live_values.contains(i);
-      const bool place = parameter.selects_caller_place();
+      const bool place = parameter.selects_caller_place() && !parameter.selects_caller_ref_slot();
       const bool local_value = parameter.declaration_kind == "val" && !place;
       const bool independent = local_value || (value && arguments[i].kind == Type::procedure);
       state.bindings[parameter.name] = text_type(method.parameters[i]) ? method.parameters[i] : arguments[i];
@@ -12184,7 +12232,14 @@ class ScalarChecker {
         view = {false, true, {}, owner};
         target_facts.presence = TargetPresence::present;
         target_facts.initialized = true;
-        note_type_allocation(state);
+        const bool region = owner && ((owner->kind == EvidenceOwner::Kind::checked && region_owners_.contains(owner->id)) ||
+            (owner->kind == EvidenceOwner::Kind::scoped && owner->scope->kind == K::region_binding));
+        const bool forwarded = owner && (owner->kind == EvidenceOwner::Kind::parameter || owner->kind == EvidenceOwner::Kind::retained);
+        if (!region) note_type_allocation(state);
+        if (region || forwarded) {
+          note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::invalid_capacity)));
+          note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::region_capacity_exceeded)));
+        }
         return type;
       }
       if (type.kind == Type::sum) {
@@ -17819,9 +17874,7 @@ class ScalarChecker {
     CheckedOperation operation;
     operation.type = Type::never;
     operation.operand_type = type;
-    const auto region = region_owners_.find(owner);
-    if (region != region_owners_.end()) operation.region_holder = region->second.holder;
-    else operation.lexical_allocation = CheckedOperation::LexicalAllocation{owner, CheckedOperation::LexicalAllocation::array};
+    operation.array_allocator = array_allocator(owner, expr.at);
     const auto length = check(*expr.children.front(), instance, operations);
     if (length == Type::never) return operation;
     transfer_type(length, Type::uint64, expr.children.front()->at);
@@ -17831,13 +17884,13 @@ class ScalarChecker {
     operation.view = true;
     operation.owners = {owner};
     operation.initialization.emplace();
-    if (operation.region_holder) {
-      if (lexical_.live && !owner_alive(owner)) fail(expr.at, "region allocation owner has ended");
+    using Allocator = CheckedOperation::ArrayAllocator;
+    const auto allocator = *operation.array_allocator;
+    observe_array_allocation(allocator);
+    if (allocator.kind != Allocator::lexical)
       note_abrupt(expr.at, {exception_id(ExceptionCategory::invalid_capacity), exception_id(ExceptionCategory::region_capacity_exceeded)});
-    } else {
-      require_lexical_allocator(owner, expr.at);
+    if (allocator.kind != Allocator::region)
       note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
-    }
     return operation;
   }
   CheckedOperation check_region_acquisition(const Expression &expr, CheckedInstance *instance,
@@ -20377,7 +20430,8 @@ class ScalarChecker {
   template <typename Visit> void visit_binding_inputs(const Visit &visit) const {
     const auto &inputs = checking_instance_->frame.inputs;
     for (size_t parameter = 0; parameter < inputs.size(); ++parameter) {
-      if (!inputs[parameter].binding_slot || checking_method_->input_parameters()[parameter].selects_caller_place()) continue;
+      const auto &formal = checking_method_->input_parameters()[parameter];
+      if (!inputs[parameter].binding_slot || (formal.selects_caller_place() && !formal.selects_caller_ref_slot())) continue;
       const auto binding = storage(inputs[parameter].place).binding;
       if (!checking_method_->scope_inputs || rebound_.contains(binding)) visit(parameter, binding);
     }
@@ -20598,7 +20652,7 @@ class ScalarChecker {
       }
       for (size_t p = 0; p < checking_method_->input_parameters().size(); ++p) {
         const auto &parameter = checking_method_->input_parameters()[p];
-        const bool place = parameter.selects_caller_place();
+        const bool place = parameter.selects_caller_place() && !parameter.selects_caller_ref_slot();
         const bool value = parameter.declaration_kind == "val" && !place;
         const bool live_value = checking_method_->scope_inputs && checking_method_->scope_inputs->live_values.contains(p);
         const bool live_binding = checking_method_->scope_inputs && checking_method_->scope_inputs->live_bindings.contains(p);
@@ -20841,9 +20895,12 @@ class ScalarChecker {
     } else {
       const auto allocations = known.lexical_allocations.size();
       known.lexical_allocations.insert(effects.lexical_allocations.begin(), effects.lexical_allocations.end());
+      const auto array_allocations = known.array_allocations.size();
+      known.array_allocations.insert(effects.array_allocations.begin(), effects.array_allocations.end());
       const auto written_count = known.written_inputs.size();
       known.written_inputs.insert(effects.written_inputs.begin(), effects.written_inputs.end());
-      changed = known.written_inputs.size() != written_count || known.lexical_allocations.size() != allocations;
+      changed = known.written_inputs.size() != written_count || known.lexical_allocations.size() != allocations ||
+          known.array_allocations.size() != array_allocations;
       const auto failure_count = known.escaping_failures.size();
       known.escaping_failures.insert(effects.escaping_failures.begin(), effects.escaping_failures.end());
       changed |= known.escaping_failures.size() != failure_count;
@@ -22019,7 +22076,14 @@ class ScalarChecker {
         if (!parameter.owner.empty() && !owners.contains(parameter.owner)) fail(parameter.at, "unknown parameter owner '" + parameter.owner + "'");
         if (parameter.variadic && form->body) implementation_gap(parameter.at, "variadic method bodies");
         if (parameter.automatic_conversion) implementation_gap(parameter.at, "automatic parameter conversion contract");
-        if (parameter.selects_caller_place()) {
+        if (parameter.selects_caller_ref_slot()) {
+          const auto type = resolve_signature(parameter.type);
+          if (type.kind != Type::array || parameter.owner.empty() || parameter.read_only || parameter.fixed_binding)
+            fail(parameter.at, "ref var requires a writable owner-qualified named array binding");
+          if (form->kind != Form::Kind::procedure || !operation.empty() || !form->body || here || form->symbolic ||
+              form->c_linkage || lexical_methods_.contains(form) || prepared.result.borrowed())
+            implementation_gap(parameter.at, "ref var named-array input outside an ordinary procedure with an independent result");
+        } else if (parameter.selects_caller_place()) {
           if (resolve_signature(parameter.type) != Type::string || parameter.read_only || parameter.fixed_binding)
             fail(parameter.at, "a direct String place parameter requires writable val var storage");
           if (operation != "<-" || &parameter != &prepared.input_parameters().front() || !form->body ||
