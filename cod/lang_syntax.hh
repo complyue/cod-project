@@ -2630,8 +2630,7 @@ public:
         if (!take(",") || is("}")) break;
       }
       expect("}");
-      if (identity) take(";");
-      else expect(";");
+      take(";");
     };
     const auto parse_module_item = [&] {
       if (peek().kind == TokenKind::multiline_string && module_doclet_target(1)) ++cursor_;
