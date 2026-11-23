@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Generate and publish the booter’s provider files through CoD
+
+<a id="k-booter-provider-publication-20261122"></a>
+**K-BOOTER-PROVIDER-PUBLICATION-20261122.** Delegated review under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122 cleared the common CoD declaration pass, target-aware CoD rendering of both production files and the narrow native file publisher. H-BOOTER-GENERATED-C-20261120 supplies the provider contract. The prior combined implementation is at `136672feb1ea9ca186a87f2028dd628b46c1efd0:applications/cod-booter/native/provider_output.c`. D-20-MODULE-GRAPH r15 to r16, D-ARCH-REVIEW r18 to r19, P-680–P-683, registry r1067.
+
 ## 2026-11-22 — Writable root field in a scoped dependency handler
 
 <a id="k-booter-handler-scalar-loan-20261122"></a>
