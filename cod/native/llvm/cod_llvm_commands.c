@@ -90,12 +90,14 @@ static LLVMValueRef cod_llvm_text_literal(cod_llvm_construction *state, uint64_t
     if (!unit->source) return NULL;
     spelling = unit->source + first;
   }
-  if (!spelling || spelling[0] != '"' || spelling[extent - 1] != '"') return NULL;
-  const size_t width = extent - 2;
+  if (!spelling) return NULL;
+  const size_t delimiter = cod_text_literal_delimiter(spelling, extent);
+  if (!delimiter || extent < 2 * delimiter || memcmp(spelling, spelling + extent - delimiter, delimiter)) return NULL;
+  const size_t width = extent - 2 * delimiter;
   uint8_t *bytes = malloc(width ? width : 1);
   if (!bytes) return NULL;
   size_t length;
-  if (cod_decode_text_literal(spelling + 1, width, bytes, &length)) {
+  if (cod_decode_text_literal(spelling + delimiter, width, delimiter == 3, bytes, &length)) {
     free(bytes);
     return NULL;
   }
