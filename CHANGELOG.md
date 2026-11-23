@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Clarify bulk symbol rights and review checked throw object integration
+
+<a id="k-bulk-symbol-selection-and-checked-object-20261123"></a>
+**K-BULK-SYMBOL-SELECTION-AND-CHECKED-OBJECT-20261123.** Delegated continuity from `d8d165eb1776a828197aa6438f6885c368bc9376:design/ModuleWorlds.md`, “Default and complete public selections”, clarifies bulk symbol identity and existing explicit callable-family grants at D-15r63. Under the same baseline’s `applications/cod-booter/docs/ModuleGraph.md`, “Lowering an owning exception through cleanup”, D-20-MODULE-GRAPH r41 to r42 and D-ARCH-REVIEW r46 to r47 clear shared frame evidence through ordinary source-to-object emission. Native operations and protected callback lowering for the path wrapper remain separate.
+
 ## 2026-11-23 — Review bootstrap package inputs and default selection tables
 
 <a id="k-module-inputs-and-default-tables-20261123"></a>
