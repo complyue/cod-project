@@ -1,6 +1,6 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 233 · Recorded: 2026-11-22 · Phase: language/application co-design.
+Design revision: 234 · Recorded: 2026-11-23 · Phase: language/application co-design.
 
 ## Design authority
 
@@ -46,7 +46,7 @@ Design revision: 233 · Recorded: 2026-11-22 · Phase: language/application co-d
 
 - **Full-scope dependency continuity:** [K-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#k-full-scope-implementation-20261118) updates only the referenced r92 qualification. This document’s semantic revision, own qualification, acceptance and exclusions are unchanged.
 
-- **Semicolon omission and syntax UX.** [D-10-SEMICOLON-UX](DesignAuthorityRegistry.md#d-10-semicolon-ux) at r233 records the [authoring and grammar principles](../CHANGELOG.md#h-idiomatic-semicolons-20261122) alongside the [original omission and warning decision](../CHANGELOG.md#h-semicolon-ux-20261117). P-570–P-572 connect readable source to C-06. The [examples](#semicolon-omission-and-syntax-ux) cover an ordinary tail and a separator that changes callback attachment. Specific newline rules, warning heuristics and frontend support retain their own scope.
+- **Semicolon omission and syntax UX.** [D-10-SEMICOLON-UX](DesignAuthorityRegistry.md#d-10-semicolon-ux) at r234 includes the [newline decision](../CHANGELOG.md#h-newline-and-long-text-20261123) and records the [authoring and grammar principles](../CHANGELOG.md#h-idiomatic-semicolons-20261122) alongside the [original omission and warning decision](../CHANGELOG.md#h-semicolon-ux-20261117). P-570–P-572 connect readable source to C-06. The [examples](#semicolon-omission-and-syntax-ux) cover an ordinary tail and a separator that changes callback attachment. Specific newline rules, warning heuristics and frontend support retain their own scope.
 
 - **Trailing here arguments.** [H-CALLABLE-MODEL-20261118](../CHANGELOG.md#h-callable-model-20261118), D-10-TRAILING-CALLBACK/P-567–P-569, continues first-slot insertion and default evaluation order. D-18 r127 governs live lexical access, nonescape and the control destination selected by the braces.
 
@@ -982,6 +982,8 @@ A single written semicolon suffices for the unbraced return and guard. The usual
 An omitted alternative completes normally with no payload. A context that requires a value on that path rejects, including a value-taking initializer or a non-void feedback tail. The ordinary return still contributes to its lexical destination's result checks and runs that destination's cleanup. Inside a single-brace loop body the guard can return from the supplying callable. Inside `{{ ... }}` it returns from that full-scope invocation. [Callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies)
 
 ### Semicolon omission and syntax UX
+
+**Between tokens, newlines are whitespace.** Any sequence of tokens separated by whitespace parses identically when those gaps use spaces or line breaks. Indentation and a physical line ending cannot end a statement, insert a semicolon, select an arm, or change a return operand or callback attachment. Design productions to work across lines wherever a token boundary permits whitespace. An identifier or a compound token such as `->` retains its lexical spelling. A `#` line comment ends at the line boundary or end of input. Newlines inside [triple-quoted text](Utf8Strings.md#multiline-string-literals) belong to the literal. Source locations still refer to the original file.
 
 **In idiomatic CoD, omit semicolons by default.** Write one when the intended parse requires it or when it makes a boundary substantially easier for a reader to see. For example, the final expression in this function is already delimited by the closing brace.
 

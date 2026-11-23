@@ -1,6 +1,6 @@
 # UTF-8 strings and C string arguments
 
-Design revision 4 · 2026-11-21 · Qualified for UTF-8 text, owner-bound ADT fields and the first synchronous native argument profile.
+Design revision 5 · 2026-11-23 · Qualified for UTF-8 text, owner-bound ADT fields and the first synchronous native argument profile.
 
 ## Design authority
 
@@ -12,15 +12,30 @@ Design revision 4 · 2026-11-21 · Qualified for UTF-8 text, owner-bound ADT fie
 
 [K-TEXT-PROC-RETURN](../CHANGELOG.md#k-text-proc-return) continues r3 for explicit successful completion in the field-transfer method examples.
 
+At r5 the [newline and long-text decision](../CHANGELOG.md#h-newline-and-long-text-20261123) extends D-07-UTF8/P-674–P-675 to [multiline literals](#multiline-string-literals). The same UTF-8, byte-preservation, owner and NUL contracts apply. Verify the bytes passed to a bounded native writer and the indexed position following a multiline token.
+
 ## Source text
 
 The builtin `String` denotes immutable, length-delimited UTF-8 text. Its byte length includes every encoded scalar, including U+0000. The empty string has byte length zero. Text preserves the source sequence, including canonically equivalent spellings with different byte sequences. Runtime text need not undergo Unicode normalization. UTF-8 validity follows [RFC 3629, §§3–4](https://www.rfc-editor.org/rfc/rfc3629#section-3).
 
 A quoted runtime expression can supply a string wherever its backing lives long enough. Literal backing can live in the read-only image. Runtime borrows retain the actual owner of their backing. A readonly parameter alone cannot rule out mutation through another reference or native code. Validate external bytes once only when they remain stable throughout the loan. Otherwise establish immutable backing in a suitable owner before publishing the string. An address and a length do not make the text a transferable bits value or a relocatable regional field.
 
-The literal grammar accepts UTF-8 source characters, escaped quotes and backslashes, `\n`, `\r`, `\t`, `\0` and a Unicode scalar escape such as `\u{1F680}`. Malformed sequences, unknown escapes, unescaped newlines, surrogate escapes and values above U+10FFFF reject at the literal. Keep the module-path escape grammar and the exact foreign linkage marker `"C"` in their respective grammar positions. Inside a runtime literal `#` and `//` are text. The indexed source revision and its location table continue to use original byte offsets.
+The ordinary double-quoted literal grammar accepts UTF-8 source characters, escaped quotes and backslashes, `\n`, `\r`, `\t`, `\0` and a Unicode scalar escape such as `\u{1F680}`. Malformed sequences, unknown escapes, unescaped newlines, surrogate escapes and values above U+10FFFF reject at the literal. Keep the module-path escape grammar and the exact foreign linkage marker `"C"` in their respective grammar positions. Inside a runtime literal `#` and `//` are text. The indexed source revision and its location table continue to use original byte offsets.
 
 Use `String` and `CString` as builtin type names in the ordinary type-name grammar. `CString` refines `String` with the property that its content contains no U+0000. Its encoded byte length excludes any native terminator. A `CString` can be passed onward as `CString` or widened to `String` under its existing owner. A binding declared as `String` uses the explicit assertion when a `CString` is required. A NUL-free literal can also directly initialize that argument. This contextual literal rule does not infer a narrower declared variable type or select overloads by scanning a runtime argument.
+
+### Multiline string literals
+
+Three consecutive double quotes open a multiline `String` literal in a runtime expression. The first unescaped sequence of three double quotes closes it. Opening and closing delimiters may occur anywhere an ordinary text expression can occur. Six consecutive quotes give the empty string. One or two unescaped quotes in the content are ordinary characters unless they begin the closing delimiter. To include a run of three quotes or content quotes immediately before the closing delimiter, use the existing `\"` escape for each such content quote.
+
+```cod
+val text <- """first
+  second"""
+```
+
+With an LF in the source this yields the same bytes as `"first\n  second"`. Preserve physical LF or CRLF as written, including a line break immediately after the opening delimiter or before the closing delimiter. Spaces and tabs are content even on the closing delimiter’s line. The ordinary text escapes and UTF-8 validation apply. A backslash followed by a physical newline is an invalid escape. Within the literal, `#`, `//`, braces and semicolons are text. An unterminated delimiter or malformed escape gives a located error in the original source revision.
+
+The value uses the same immutable backing, byte length, owner and `CString` admission rules as ordinary text. The module path and foreign linkage productions keep their own quoted token forms. Either production may span whitespace between its tokens. A formatter may preserve a multiline literal verbatim or use an equivalent escaped spelling that yields identical bytes.
 
 ## Storage and transfer policies
 
