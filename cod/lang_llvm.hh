@@ -2295,7 +2295,7 @@ class LLVMEmission {
     for (const auto id : symbols) {
       auto *binding = symbols_.at(id);
       SavedEffect effect{id, b_.CreateLoad(binding->getValueType(), binding, "effect.previous")};
-      if (program_->symbols[id].type->kind == Type::procedure) {
+      if (program_->symbols[id].type->kind == Type::procedure && !program_->symbols[id].live_scope) {
         effect.owned = slot(scalar_, "effect.owned"); b_.CreateStore(empty_scalar(), effect.owned);
         if (const auto outer = effect_values_.find(id); outer != effect_values_.end()) effect.parent = outer->second;
         effect_values_[id] = effect.owned;
@@ -2498,6 +2498,63 @@ class LLVMEmission {
     b_.CreateStore(load(resource), b_.CreateStructGEP(action->layout, record, 1));
     b_.CreateStore(record, scope_->head);
     return empty_scalar();
+  }
+  llvm::StructType *scoped_effect_layout(size_t method) {
+    const auto &target = program_->methods.at(method);
+    const auto &call = call_layouts_.at(method);
+    const auto explicit_inputs = target.scope_inputs->named->explicit_parameters;
+    std::vector<llvm::Type *> fields(call.operands - explicit_inputs, scalar_);
+    fields.insert(fields.end(), call.owners, b_.getPtrTy());
+    fields.insert(fields.end(), call.array_owners.size(), array_capability_);
+    return llvm::StructType::get(context_, fields);
+  }
+  llvm::Value *install_scoped_effect(const Expression &expr, const CheckedOperation &operation) {
+    if (!operation.publishes_effect) return empty_scalar();
+    const auto method = program_->instances.at(*operation.scoped_effect).method;
+    auto *layout = scoped_effect_layout(method);
+    auto *record = slot(layout, "scoped.effect.activation");
+    unsigned field = 0;
+    for (size_t i = 0; i < operation.arguments.size(); ++i) {
+      const auto &input = operation.argument(expr, i);
+      const auto projection = operation.arguments[i].binding_slot ? Projection::slot : Projection::target;
+      auto *address = emit_expression(input, projection);
+      if (!reachable()) return nullptr;
+      b_.CreateStore(pack_view(address, input), b_.CreateStructGEP(layout, record, field++));
+    }
+    for (const auto &[owner, input] : input_frame(method).owners) {
+      auto *identity = owner_identity(operation.scope_owners.at(null_target - 1 - owner), expr.at);
+      b_.CreateStore(identity, b_.CreateStructGEP(layout, record, field++));
+    }
+    for (const auto role : call_layouts_.at(method).array_owners) {
+      auto *capability = array_capability(operation.array_allocator_arguments->at(role));
+      b_.CreateStore(capability, b_.CreateStructGEP(layout, record, field++));
+    }
+    if (field != layout->getNumElements()) throw std::logic_error("invalid scoped effect activation layout");
+    b_.CreateStore(record, symbols_.at(*operation.symbol));
+    return empty_scalar();
+  }
+  llvm::Value *invoke_scoped_effect(const Expression &expr, size_t symbol) {
+    auto *record = b_.CreateLoad(b_.getPtrTy(), symbols_.at(symbol), "scoped.effect.selected");
+    return temporary_scope(expr.at, scalar_, [&]() -> llvm::Value * {
+      std::vector<llvm::Value *> arguments;
+      for (size_t i = 0; i < expr.children.size(); ++i) {
+        arguments.push_back(prepare_argument(expr, i, true));
+        if (!reachable()) return nullptr;
+      }
+      const auto target = program_->symbols.at(symbol).scoped_instance.value();
+      const auto method = program_->instances.at(target).method;
+      auto *callee = specialize_ ? specialized_.at(target) : general_.at(method);
+      auto *valid = block("scoped.effect.installed"), *missing = block("scoped.effect.unbound");
+      b_.CreateCondBr(b_.CreateIsNotNull(record), valid, missing);
+      b_.SetInsertPoint(missing);
+      fail_path(ExceptionCategory::unsound_runtime_typing, expr.at);
+      b_.SetInsertPoint(valid);
+      auto *layout = scoped_effect_layout(method);
+      for (unsigned field = 0; field < layout->getNumElements(); ++field)
+        arguments.push_back(b_.CreateLoad(layout->getElementType(field), b_.CreateStructGEP(layout, record, field)));
+      if (callee->arg_size() != arguments.size()) throw std::logic_error("invalid scoped effect invocation layout");
+      return propagate(b_.CreateCall(callee, arguments));
+    });
   }
   llvm::Value *region_address(llvm::Value *owner, llvm::Value *offset, llvm::Value *size) {
     auto address = runtime("cod_lang_region_address", b_.getPtrTy(),
@@ -3615,6 +3672,7 @@ class LLVMEmission {
       }
       return choose(expr, arguments, choices(expr, inputs), scalar_, [&](const Choice &choice) { return eager_builtin(expr, arguments, choice); });
     }
+    if (fact.scoped_effect) return install_scoped_effect(expr, fact);
     if (fact.callable) {
       const bool installation = expr.kind == K::effect || expr.kind == K::procedure_effect;
       const auto materialize = [&](const CheckedOperation &value) {
@@ -3774,6 +3832,8 @@ class LLVMEmission {
       [[fallthrough]];
     }
     case K::value_call: case K::call: case K::behave: case K::perform: case K::pipeline: case K::processor_composition: {
+      if (fact.symbol && program_->symbols[*fact.symbol].live_scope)
+        return invoke_scoped_effect(expr, *fact.symbol);
       if (fact.builtin == BuiltinOperation::lexical_result)
         return emit_expression(*expr.children.front(), projection, discard);
       if (fact.builtin == BuiltinOperation::text_size || fact.builtin == BuiltinOperation::text_byte ||
@@ -4815,6 +4875,7 @@ public:
     const auto collect_operations = [&](const auto &operations) {
       for (const auto &[expr, operation] : operations) {
         if (operation.callee) retain_method(program.instances[*operation.callee].method);
+        if (operation.scoped_effect) retain_method(program.instances[*operation.scoped_effect].method);
         for (const auto &call : operation.nominal_calls) retain_method(program.instances[call.callee].method);
         if (operation.opened_source) {
           prepared_sources.insert(*operation.opened_source);
@@ -4830,7 +4891,8 @@ public:
           }
         }
         const bool installation = expr->kind == Expression::Kind::effect || expr->kind == Expression::Kind::procedure_effect;
-        if (operation.symbol && (expr->kind == Expression::Kind::symbol || (installation && operation.publishes_effect) || operation.callable_call))
+        if (operation.symbol && (expr->kind == Expression::Kind::symbol || (installation && operation.publishes_effect) ||
+            operation.callable_call || program.symbols[*operation.symbol].live_scope))
           used_symbols.insert(*operation.symbol);
       }
     };
@@ -4848,7 +4910,9 @@ public:
       const auto &symbol = program.symbols[i];
       llvm::GlobalVariable *slot = nullptr;
       if (used_symbols.contains(i) && symbol.type) {
-        auto *layout = symbol.reference ? llvm::StructType::get(context_, {scalar_, b_.getPtrTy()}) : scalar_;
+        llvm::Type *layout = scalar_;
+        if (symbol.live_scope) layout = b_.getPtrTy();
+        else if (symbol.reference) layout = llvm::StructType::get(context_, {scalar_, b_.getPtrTy()});
         slot = new llvm::GlobalVariable(module_, layout, false, llvm::GlobalValue::InternalLinkage,
             llvm::Constant::getNullValue(layout), "cod.symbol." + std::to_string(i));
         slot->setThreadLocalMode(llvm::GlobalVariable::GeneralDynamicTLSModel);

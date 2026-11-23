@@ -29,9 +29,11 @@ struct LexicalState {
     std::map<size_t, size_t> native_symbol_entry = {};
     SymbolBorrows borrowed_symbol_entry = {};
     AbstractSymbolTargets abstract_symbol_entry = {};
+    std::set<size_t> local_scoped_entry = {};
   };
   std::vector<Scope> scopes{{0, {}}};
   std::set<size_t> bound_symbols, required_symbols;
+  std::set<size_t> local_scoped_symbols;
   std::map<size_t, size_t> native_symbol_owners;
   SymbolBorrows borrowed_symbol_owners;
   AbstractSymbolTargets abstract_symbol_targets;
@@ -246,6 +248,8 @@ class ScalarChecker {
   mutable std::map<const Form *, std::set<std::string>> definition_dependencies_;
   std::map<const Form *, std::set<std::string>> free_types_;
   std::map<const Form *, std::set<std::string>> enclosing_names_;
+  std::map<size_t, const Form *> scoped_symbol_sites_;
+  std::map<size_t, const Expression *> scoped_installations_;
   std::set<const Form *> warned_captures_;
   std::set<size_t> warned_missing_return_;
   std::set<std::tuple<std::string, size_t, std::string>> warned_shadow_;
@@ -3986,6 +3990,8 @@ class ScalarChecker {
     if (validating_) fail(site.at, site.diagnostic);
   }
   void require_symbol(LexicalState &state, size_t symbol, const Location &at) {
+    if (delayed_ && state.live && program_.symbols[symbol].live_scope)
+      implementation_gap(at, "deferred access to a live scoped procedure activation");
     if (validating_ && state.live && program_.symbols[symbol].reference) {
       if (delayed_) implementation_gap(at, "deferred lookup of a borrowed symbol");
       const auto installed = state.borrowed_symbol_owners.find(symbol);
@@ -5337,6 +5343,8 @@ class ScalarChecker {
     lexical_.bindings_available = a_exits ? b.bindings_available : b_exits ? a.bindings_available : intersect(a.bindings_available, b.bindings_available);
     lexical_.available = a_exits ? b.available : b_exits ? a.available : intersect(a.available, b.available);
     lexical_.bound_symbols = a_exits ? b.bound_symbols : b_exits ? a.bound_symbols : intersect(a.bound_symbols, b.bound_symbols);
+    lexical_.local_scoped_symbols = a_exits ? b.local_scoped_symbols :
+        b_exits ? a.local_scoped_symbols : intersect(a.local_scoped_symbols, b.local_scoped_symbols);
     if (a_exits) lexical_.borrowed_symbol_owners = b.borrowed_symbol_owners;
     else if (!b_exits) join_symbol_borrows(lexical_.borrowed_symbol_owners, b.borrowed_symbol_owners);
     if (a_exits) lexical_.abstract_symbol_targets = b.abstract_symbol_targets;
@@ -5485,6 +5493,7 @@ class ScalarChecker {
     const auto &scope = state.scopes.back();
     if (scope.symbol_entry) {
       state.bound_symbols = *scope.symbol_entry;
+      state.local_scoped_symbols = scope.local_scoped_entry;
       state.native_symbol_owners = scope.native_symbol_entry;
       state.borrowed_symbol_owners = scope.borrowed_symbol_entry;
       state.abstract_symbol_targets = scope.abstract_symbol_entry;
@@ -6875,7 +6884,8 @@ class ScalarChecker {
       const bool readable = parameter.read_only &&
           (mode == ArgumentMode::borrowed_ref || mode == ArgumentMode::borrowed_read);
       const bool ordinary = !definition.scope_inputs && (readable || writable);
-      if ((!here_borrow && !captured_array && !ordinary) || definition.source->symbolic || caller_bindings(definition))
+      if ((!here_borrow && !captured_array && !ordinary) ||
+          (definition.source->symbolic && !captured_array) || caller_bindings(definition))
         implementation_gap(at, "array parameters require supported readonly borrows or writable refs to initialized elements");
     }
     const auto &supplied = program_.query_environments[query_environment].result;
@@ -7026,11 +7036,20 @@ class ScalarChecker {
       distinct_bindings = !left.empty() && !right.empty() && intersect(left, right).empty();
     }
     const auto &effects = read_effects(*operation.callee, distinct_bindings);
-    for (size_t i = 0; i < views.size(); ++i)
-      if (views[i].indexed_target && argument_mode(parameters[i]) != ArgumentMode::value &&
-          (uses_caller_bindings || &expr == prepared_call_ || target.result.borrowed() ||
-           target.result.type->kind == Type::procedure || !effects.binding_sources.empty()))
+    for (size_t i = 0; i < views.size(); ++i) {
+      const auto &view = views[i];
+      if (!view.indexed_target || argument_mode(parameters[i]) == ArgumentMode::value) continue;
+      const bool delayed = &expr == prepared_call_ || delayed_;
+      const bool escapes_result = target.result.borrowed() || target.result.type->kind == Type::procedure;
+      if (view.region_holder && view.place) {
+        const bool escapes_slot = std::ranges::any_of(effects.binding_sources, [&](const auto &binding) {
+          return binding.second.contains(i);
+        });
+        if (delayed || escapes_result || escapes_slot || operation.arguments[i].binding_slot)
+          implementation_gap(operation.argument(expr, i).at, "retaining a borrowed region root field");
+      } else if (uses_caller_bindings || &expr == prepared_call_ || escapes_result || !effects.binding_sources.empty())
         implementation_gap(expr.at, "a call that can retain an indexed array target");
+    }
     if (uses_caller_bindings) {
       for (size_t i = 0; i < views.size(); ++i) {
         if (&expr == prepared_call_) require_deferred_slots(views[i], expr.at);
@@ -15232,6 +15251,86 @@ class ScalarChecker {
     return demand(profile, call.arguments, at, {}, retained, query, &state,
                   expr ? incoming_abstract_targets(*expr) : AbstractSymbolTargets{});
   }
+  void check_scoped_effect(const Expression &expr, size_t symbol_id, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation) {
+    if (!instance || delayed_ || !active_loops_.empty() ||
+        !checking_method_->type_parameters.empty() || !checking_method_->retained_types.empty())
+      implementation_gap(expr.at, "scoped procedure installation outside one visit activation");
+    const auto &symbol = program_.symbols.at(symbol_id);
+    const auto base = program_.families.at(module_names().families.at(symbol_id)).methods.front();
+    const auto base_method = program_.methods.at(base);
+    const auto &contract = *symbol.type;
+    const auto explicit_parameters = base_method.input_parameters();
+    if (base_method.parameters != contract.parameters || base_method.result.type != *contract.target ||
+        base_method.result.borrowed() || base_method.throws_types != contract.throws_types ||
+        std::ranges::any_of(explicit_parameters, [](const auto &parameter) {
+          return argument_mode(parameter) != ArgumentMode::value;
+        }) || !std::ranges::all_of(contract.parameters, scalar_type))
+      implementation_gap(expr.at, "live scoped handler outside its fixed scalar parameter and result contract");
+
+    ScopeCall call;
+    call.arguments = base_method.parameters;
+    call.views.resize(call.arguments.size());
+    auto &inputs = call.inputs;
+    inputs.lexical_method = base;
+    inputs.named = CheckedMethod::ScopeInputs::NamedEntry{explicit_parameters.size(), {}};
+    inputs.parameters.assign(explicit_parameters.begin(), explicit_parameters.end());
+    inputs.nonnull.resize(explicit_parameters.size(), false);
+    operation.argument_sources.emplace();
+    std::map<std::string, Capture> captures;
+    const auto &dependencies = free_bindings(*expr.definition);
+    for (const auto *names : {&dependencies.captures, &dependencies.queries})
+      for (const auto &name : *names) captures.try_emplace(name.name, name);
+    for (const auto &[name, capture] : captures) {
+      const auto slot = lexical_.lookup(name);
+      if (!slot) continue;
+      const auto source = binding(*slot);
+      const auto type = source.type;
+      const bool fixed_scalar_input = scalar_type(type) && source.fixed && source.requires_initialized &&
+          std::ranges::any_of(instance->frame.inputs, [&](const auto &input) {
+            return input.mode == ArgumentMode::borrowed_ref && !input.binding_slot && storage(input.place).binding == *slot;
+          });
+      if (source.owner_binding ||
+          (type.kind != Type::array && type.kind != Type::native_handle &&
+           (!scalar_type(type) || (!source.read_only && !fixed_scalar_input))))
+        implementation_gap(capture.at, "scoped handler capture requires an initialized array, readonly scalar, fixed scalar ref formal or native handle");
+      if (!source.selection.empty() || source.alias)
+        implementation_gap(capture.at, "scoped handler capture through an unproved lexical slot");
+      inputs.named->bindings.insert(name);
+      append_scope_input(call, capture, scope_operand(base, capture, &expr), slot, instance, operations, operation, true);
+      const auto &view = call.views.back();
+      if (fixed_scalar_input) require_slots_live(view.slots, capture.at, "scoped handler's supplying reference slot has ended");
+      if (type.kind != Type::native_handle) {
+        if (view.nullable_view || !one_owner(view)) fail(capture.at, "scoped handler requires one live non-null target");
+        require_initialized(view, capture.at, "scoped handler target");
+      }
+    }
+    scope_owner_relations(inputs, operation.scope_owners);
+    const auto profile = scope_profile(std::move(inputs), base_method.result, base_method.throws_types);
+    const auto target = demand(profile, call.arguments, expr.at);
+    auto &selected = program_.symbols.at(symbol_id).scoped_instance;
+    if (selected && *selected != target)
+      implementation_gap(expr.at, "scoped handler with more than one checked frame layout");
+    selected = target;
+    const auto &effects = read_effects(target);
+    for (const auto dependency : effects.symbols) require_symbol(lexical_, dependency, expr.at);
+    if (validating_ && !effects.symbols.empty())
+      implementation_gap(expr.at, "live scoped handler requires a nonempty symbolic snapshot");
+    for (const auto role : effects.lexical_allocations)
+      require_lexical_allocator(operation.scope_owners.at(role), expr.at);
+    if (!effects.array_allocations.empty()) {
+      auto forwarded = std::make_shared<std::map<size_t, CheckedOperation::ArrayAllocator>>();
+      for (const auto role : effects.array_allocations) {
+        const auto allocator = array_allocator(operation.scope_owners.at(role), expr.at);
+        observe_array_allocation(allocator);
+        forwarded->emplace(role, allocator);
+      }
+      operation.array_allocator_arguments = std::move(forwarded);
+    }
+    operation.scoped_effect = target;
+    scoped_installations_.insert_or_assign(symbol_id, &expr);
+    operation.type = Type::void_type;
+  }
   void finish_lexical_call(const Expression &expr, const NamedFamily &family, size_t method_id,
       const std::vector<Type> &arguments, const std::vector<CheckedOperation> &views, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation,
@@ -15336,9 +15435,20 @@ class ScalarChecker {
   }
   void check_value_call(const Expression &expr, const Type &contract, size_t offset, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
-    const auto *choices = operation.invokes_here ? nullptr : observed_callables(expr);
+    const bool scoped = operation.symbol && program_.symbols[*operation.symbol].live_scope;
+    if (scoped && (&expr == prepared_call_ || delayed_))
+      implementation_gap(expr.at, "deferred invocation of a live scoped procedure");
+    const CheckedOperation *installation = nullptr;
+    if (scoped && lexical_.local_scoped_symbols.contains(*operation.symbol)) {
+      const auto site = scoped_installations_.at(*operation.symbol);
+      const auto found = operations.find(site);
+      if (found == operations.end() || !found->second.scoped_effect)
+        throw std::logic_error("locally installed scoped effect lacks its checked activation");
+      installation = &found->second;
+    }
+    const auto *choices = operation.invokes_here || scoped ? nullptr : observed_callables(expr);
     if (choices) operation.callable_choices = *choices;
-    if (!operation.invokes_here && (!proving_ || !capture_free_callables(choices)))
+    if (!operation.invokes_here && !scoped && (!proving_ || !capture_free_callables(choices)))
       note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && !contract.pure_callable)
       fail(expr.at, "a function cannot invoke a procedure");
@@ -15351,7 +15461,7 @@ class ScalarChecker {
     }
     const auto count = operation.argument_count(expr);
     if (count - offset != contract.parameters.size()) fail(expr.at, "callable argument count does not match its view");
-    operation.callable_call = !operation.invokes_here; operation.operand_type = contract;
+    operation.callable_call = !operation.invokes_here && !scoped; operation.operand_type = contract;
     operation.arguments.resize(count);
     if (offset) operation.arguments[0] = {ArgumentMode::value, contract};
     bool completes = true;
@@ -15373,9 +15483,46 @@ class ScalarChecker {
       arguments[i - offset] = argument;
       auto &view = views[i - offset] = prepared;
       if (argument != Type::never) prepare_borrow(view, mode, operand.at);
-      operation.arguments[i] = {mode, operation.invokes_here || argument == Type::never ? parameter : argument};
+      operation.arguments[i] = {mode, operation.invokes_here || scoped || argument == Type::never ? parameter : argument};
     }
     if (!completes) { operation.type = Type::never; return; }
+    if (scoped) {
+      const auto target = program_.symbols[*operation.symbol].scoped_instance;
+      if (installation) {
+        const auto &activation = program_.instances.at(*installation->scoped_effect);
+        const auto &method = program_.methods.at(activation.method);
+        auto effects = read_effects(*installation->scoped_effect);
+        // Allocation authority was selected with the activation. Ordinary
+        // completion facts still come from the invoked lexical body.
+        effects.array_allocations.clear();
+        effects.lexical_allocations.clear();
+        effects.symbols.clear();
+        operation.argument_sources.emplace();
+        for (const auto &argument : expr.children) operation.argument_sources->push_back(argument.get());
+        for (size_t i = 0; i < installation->arguments.size(); ++i) {
+          const auto &source = *installation->argument_sources->at(i);
+          const auto &captured = operations.at(&source);
+          const auto &argument = installation->arguments[i];
+          auto view = argument.binding_slot ? read_binding(source, false, captured.binding) : captured;
+          require_live_view(view, source.at);
+          if (argument.type.kind != Type::native_handle)
+            require_initialized(view, source.at, "scoped handler input");
+          arguments.push_back(view.type);
+          views.push_back(std::move(view));
+          operation.arguments.push_back(argument);
+          operation.argument_sources->push_back(&source);
+        }
+        const auto internal = callable_type(method, activation.arguments, activation.result);
+        const auto reasons = direct_call_reasons(internal, effects);
+        finish_call(expr, internal, effects, reasons, arguments, views, operation, read, discard, offset);
+      } else {
+        const auto effects = target ? read_effects(*target) : CallEffects{};
+        if (validating_ && (!target || !effects.binding_sources.empty() || !effects.written_inputs.empty()))
+          implementation_gap(expr.at, "mutating scoped handler invocation without a locally selected activation");
+        finish_call(expr, contract, {}, call_reasons(contract), arguments, views, operation, read, discard, offset);
+      }
+      return;
+    }
     if (operation.invokes_here && validating_ && proving_ && lexical_.live)
       for (size_t i = 0; i < views.size(); ++i) {
         if (const auto role = signature->inputs[i].owner; role)
@@ -17927,6 +18074,19 @@ class ScalarChecker {
     const auto binding = storage(place).binding;
     bindings_->at(binding).owner_binding = owner;
     bindings_->at(binding).fixed = true;
+    for (const auto &root : roots.fields) {
+      auto field = null_target;
+      if (scalar_type(root.type)) {
+        field = declare("$region.root." + std::to_string(storage_->size()), root.type,
+                        expr.read_only || readonly_field(root), true, root.source->at, false);
+        auto &target = storage_->at(field);
+        target.subobject = true;
+        target.scope = owner;
+        lexical_.owners.at(target.binding) = {owner};
+        if (completes) initialize(field);
+      }
+      storage_->at(place).fields.push_back(field);
+    }
     if (completes) initialize(place);
     operation.region_holder = place;
     operation.type = completes ? Type{Type::void_type} : Type{Type::never};
@@ -18909,7 +19069,23 @@ class ScalarChecker {
         if (expr.children.empty()) {
           if (symbol.type->kind != Type::procedure) fail(expr.at, "a scalar symbol installation requires an explicit value");
           const auto id = *operation.symbol;
+          const auto site = scoped_symbol_sites_.find(id);
+          if (site != scoped_symbol_sites_.end() && expr.definition.get() != site->second)
+            fail(expr.at, "scoped procedure installation requires its lexical definition site");
+          if (symbol.live_scope) {
+            check_scoped_effect(expr, id, instance, operations, operation);
+            if (!cancelled && lexical_.live) {
+              lexical_.bound_symbols.insert(id);
+              lexical_.local_scoped_symbols.insert(id);
+            }
+            break;
+          }
           operation = materialize_symbol(id, *symbol.type, expr.at);
+          if (site != scoped_symbol_sites_.end()) {
+            for (const auto target : program_.callables[*operation.callable].implementations())
+              for (const auto dependency : read_effects(target).symbols)
+                require_symbol(lexical_, dependency, expr.at);
+          }
           operation.symbol = id; operation.operand_type = operation.type; operation.type = Type::void_type;
           operation.publishes_effect = !cancelled;
           if (!cancelled && lexical_.live) lexical_.bound_symbols.insert(id);
@@ -19279,7 +19455,7 @@ class ScalarChecker {
       lexical_.live = lexical_.live && body_possible;
       refresh_input_facts(lexical_);
       lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols, lexical_.native_symbol_owners,
-                                 lexical_.borrowed_symbol_owners, lexical_.abstract_symbol_targets});
+                                 lexical_.borrowed_symbol_owners, lexical_.abstract_symbol_targets, lexical_.local_scoped_symbols});
       operation.place = declare(expr.text, index, true, true, expr.at);
       initialize(*operation.place);
       loop_controls_.insert(*operation.place);
@@ -19302,7 +19478,7 @@ class ScalarChecker {
       lexical_ = before;
       lexical_.live = lexical_.live && empty_possible;
       lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols, lexical_.native_symbol_owners,
-                                 lexical_.borrowed_symbol_owners, lexical_.abstract_symbol_targets});
+                                 lexical_.borrowed_symbol_owners, lexical_.abstract_symbol_targets, lexical_.local_scoped_symbols});
       const auto otherwise = expr.children.size() == 4 ? check_loop_body(*expr.children[3], instance, operations) : Type{Type::void_type};
       leave_scope();
       const auto empty_state = lexical_;
@@ -19808,10 +19984,16 @@ class ScalarChecker {
         operation.operand_type = schema;
         operation.product_field = index;
         operation.region_holder = region.holder;
+        const auto field_place = storage(region.holder).fields.at(index);
+        if (field_place != null_target) {
+          select_targets(operation, {field_place});
+          operation.selection_identity = lexical_.selection_identities.at(storage(field_place).binding);
+        }
         operation.owners = {owner};
         operation.view = operation.indexed_target = true;
         operation.read_only = region.read_only || readonly_field(field);
         operation.initialization.emplace();
+        if (read && operation.place) operation.predicate = stored_predicate(operation);
         break;
       }
       if (base.kind == K::name) if (const auto binding = lexical_.lookup(base.text);
@@ -19978,6 +20160,7 @@ class ScalarChecker {
         delayed_ = true;
         deferred_action_ = action;
         lexical_.bound_symbols.clear();
+        lexical_.local_scoped_symbols.clear();
         lexical_.native_symbol_owners.clear();
         lexical_.borrowed_symbol_owners.clear();
         lexical_.abstract_symbol_targets.clear();
@@ -21955,9 +22138,7 @@ class ScalarChecker {
         return;
       }
       if (expr.definition) {
-        if (expr.kind == Expression::Kind::procedure_effect) {
-          if (parent) implementation_gap(expr.at, "symbolic family definitions inside callable bodies");
-        } else lexical_methods_.emplace(expr.definition.get(), 0);
+        if (expr.kind != Expression::Kind::procedure_effect) lexical_methods_.emplace(expr.definition.get(), 0);
         if (parent) parents.emplace(expr.definition.get(), parent);
         definitions.push_back(expr.definition.get());
         if (expr.definition->body) collect(*expr.definition->body, expr.definition.get());
@@ -22135,8 +22316,17 @@ class ScalarChecker {
       for (const auto &parameter : form->type_parameters)
         if (parameter.bound) implementation_gap(parameter.at, "bounded type parameters");
       std::optional<size_t> symbol;
+      bool live_symbol_scope = false;
       if (form->symbolic) {
         if (here) implementation_gap(here->at, "here signatures of symbolic callable families");
+        if (const auto enclosing = parents.find(form); enclosing != parents.end()) {
+          const auto &outer = free_bindings(*enclosing->second).declarations;
+          const auto &dependencies = free_bindings(*form);
+          for (const auto *uses : {&dependencies.captures, &dependencies.queries})
+            live_symbol_scope |= std::ranges::any_of(*uses, [&](const auto &use) { return outer.contains(use.name); });
+          if (!module_names().symbols.contains(form->name) || !prepared.type_parameters.empty())
+            implementation_gap(form->at, "scoped effect without a fixed declared procedure symbol");
+        }
         if (module_names().types.contains(form->name)) implementation_gap(form->at, "same-scope type and symbol declarations");
         if (const auto found = module_names().symbols.find(form->name); found != module_names().symbols.end()) symbol = found->second;
         else {
@@ -22166,6 +22356,12 @@ class ScalarChecker {
         if (!module_names().families.contains(*symbol)) module_names().families.emplace(*symbol, new_family());
         prepared.family = module_names().families.at(*symbol);
         const auto &family = program_.families[*prepared.family];
+        if (form->body && parents.contains(form)) {
+          if (!family.methods.empty() || !scoped_symbol_sites_.emplace(*symbol, form).second)
+            implementation_gap(form->at, "a scoped procedure symbol with more than one definition site");
+          program_.symbols[*symbol].live_scope = live_symbol_scope;
+        } else if (form->body && scoped_symbol_sites_.contains(*symbol))
+          implementation_gap(form->at, "a scoped procedure symbol with more than one definition site");
         if (form->body && family.module == module_ && family.imported_from) {
           module_names().extensions[*prepared.family].emplace(form->name, form->at);
           if (!module_) entry_extensions_.try_emplace(*symbol, form);
@@ -22300,6 +22496,10 @@ class ScalarChecker {
     for (size_t i = 0; i < program_.methods.size(); ++i) {
       const auto &method = *program_.methods[i].source;
       if (program_.methods[i].definition != i || !method.type_parameters.empty() || lexical_methods_.contains(&method)) continue;
+      if (const auto family = program_.methods[i].family) {
+        const auto symbol = program_.families[*family].symbol;
+        if (symbol && program_.symbols[*symbol].live_scope) continue;
+      }
       if (std::ranges::any_of(program_.methods[i].parameters, [](const auto &type) { return type.kind == Type::abstract_type; })) continue;
       const bool abstract_effect_input = abstract_effect_inputs_.contains(&method);
       if (definition_pass_ ? !abstract_effect_input : abstract_effect_input && !method.c_linkage) continue;
@@ -22334,6 +22534,14 @@ class ScalarChecker {
         throw std::logic_error("call effects changed after validation");
     }
     if (reaching_callables() != callable_choices_) throw std::logic_error("callable flow changed after validation");
+    if (std::ranges::any_of(program_.symbols, &CheckedSymbol::live_scope)) for (const auto &value : program_.callables) {
+      const auto snapshots = program_.captured_symbols(value);
+      if (std::ranges::any_of(snapshots, [&](size_t symbol) { return program_.symbols[symbol].live_scope; })) {
+        const auto implementations = value.implementations();
+        implementation_gap(program_.methods[program_.instances[*implementations.begin()].method].source->at,
+                           "replaying a live scoped procedure through a scalar callable image");
+      }
+    }
     for (auto &method : program_.methods) if (!method.instances.empty()) {
       // Carry definition-result evidence only when ordinary type context cannot
       // distinguish the checked bodies. Fixed contracts need no extra native input.
@@ -22375,7 +22583,7 @@ class ScalarChecker {
           implementation_gap(method.source->at, "a C entry owner supplying a lexical allocator");
         for (const auto symbol : effects.symbols) {
           const auto &binding = program_.symbols.at(symbol);
-          if (binding.reference || (binding.type && binding.type->kind == Type::native_handle))
+          if (binding.reference || binding.live_scope || (binding.type && binding.type->kind == Type::native_handle))
             fail(method.source->at, "cannot prove an installed binding for symbol '" + binding.name + "' at C entry");
         }
       }
