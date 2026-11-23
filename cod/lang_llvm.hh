@@ -395,7 +395,8 @@ class LLVMEmission {
     std::uint64_t bytes = 0;
     for (const auto &alternative : program_->sums.at(id).alternatives) {
       std::vector<llvm::Type *> fields;
-      for (const auto &field : alternative.fields) fields.push_back(known_inline_layout(field.type));
+      for (const auto &field : alternative.fields)
+        fields.push_back(field.stores_target() ? b_.getInt64Ty() : known_inline_layout(field.type));
       auto *payload = llvm::StructType::get(context_, fields);
       if (data.getABITypeAlign(payload) > data.getABITypeAlign(alignment_type)) alignment_type = payload;
       bytes = std::max(bytes, data.getTypeAllocSize(payload).getFixedValue());
@@ -2619,7 +2620,7 @@ class LLVMEmission {
     target->addIncoming(address, present);
     return target;
   }
-  llvm::Value *reserve_regional_product(llvm::Value *owner, llvm::Type *layout, const Location &at) {
+  llvm::Value *reserve_regional_row(llvm::Value *owner, llvm::Type *layout, const Location &at) {
     const auto &target = module_.getDataLayout();
     const auto bytes = target.getTypeAllocSize(layout).getFixedValue();
     auto *offset = reserve_region_extent(owner, integer(bytes), target.getABITypeAlign(layout).value(), at);
@@ -3882,6 +3883,55 @@ class LLVMEmission {
       return b_.CreateGEP(element, array_data(view, element), index);
     }, b_.getPtrTy());
   }
+  llvm::Value *emit_regional_initializer(const Expression &expr, llvm::Value *destination, size_t written) {
+    using Plan = std::tuple<size_t, size_t, size_t, std::optional<size_t>>;
+    std::map<Plan, std::vector<size_t>> plans;
+    for (size_t i = 0; i < contexts_.size(); ++i) {
+      const auto &operation = contexts_[i].at(&expr);
+      const auto constructor = *operation.sum_constructor;
+      plans[{constructor.sum, constructor.alternative, *operation.regional_sum_holder, operation.callee}].push_back(i);
+    }
+    return contextual_value(expr, plans, "region.sum.initializer", [&](const Plan &plan) -> llvm::Value * {
+      const auto [sum, alternative, holder, callee] = plan;
+      const SumConstructor constructor{sum, alternative};
+      const auto &description = program_->sums.at(sum).alternatives.at(alternative);
+      std::vector<llvm::Value *> arguments;
+      for (size_t i = 0; i < written; ++i) {
+        auto *value = prepare_argument(expr, i, false);
+        if (!reachable()) return nullptr;
+        arguments.push_back(value);
+      }
+      if (!callee) throw std::logic_error("reachable regional initializer without a checked body");
+
+      // The frame uses ordinary reference slots. Their selections become
+      // relative locators only after the initializer and its cleanup return.
+      std::vector<std::pair<llvm::AllocaInst *, llvm::Value *>> edges;
+      for (size_t i = 0; i < description.fields.size(); ++i) {
+        const auto &field = description.fields[i];
+        auto *address = sum_field_address(destination, constructor, i);
+        llvm::Value *supplied = address;
+        if (field.stores_target()) {
+          auto *selection = slot(b_.getPtrTy(), "initializer.reference");
+          b_.CreateStore(null_pointer(), selection);
+          edges.emplace_back(selection, address);
+          supplied = selection;
+        }
+        auto *view = b_.CreateInsertValue(empty_scalar(), b_.CreatePtrToInt(supplied, b_.getInt64Ty()), 0);
+        arguments.push_back(b_.CreateInsertValue(view, b_.getInt32(tag(field.type)), 1));
+      }
+      const auto method = program_->instances.at(*callee).method;
+      auto *entry = specialize_ ? specialized_.at(*callee) : general_.at(method);
+      propagate(native_call(expr, entry, method, std::move(arguments), {}, callee));
+      if (contexts_.front().at(&expr).type == Type::never) {
+        b_.CreateUnreachable();
+        return nullptr;
+      }
+      auto *owner = load(storage_.at(holder));
+      for (const auto &[selection, field] : edges)
+        b_.CreateStore(regional_scalar_locator(owner, load(selection)), field);
+      return destination;
+    }, b_.getPtrTy());
+  }
   llvm::Value *emit_checked_expression(const Expression &expr, Projection projection, bool discard) {
     const bool read = carries_value(projection);
     using K = Expression::Kind;
@@ -4355,10 +4405,21 @@ class LLVMEmission {
           if (!reachable()) return nullptr;
           continue;
         }
+        if (declaration->kind == K::bare_ref_slot) {
+          const auto id = contexts_.front().at(declaration.get()).binding.value();
+          if (auto *slot = bindings_.at(id).reference_slot) b_.CreateStore(null_pointer(), slot);
+          continue;
+        }
         declare_local(*declaration);
         if (!reachable()) return nullptr;
       }
       return empty_scalar();
+    }
+    case K::init_reserved: {
+      auto *destination = emit_expression(*expr.children.front(), Projection::target);
+      if (!reachable()) return nullptr;
+      emit_regional_initializer(expr, destination, expr.children.size() - 1);
+      return reachable() ? empty_scalar() : nullptr;
     }
     case K::transfer: case K::rebind: {
       if (fact.rebind_native_handle) {
@@ -4482,6 +4543,29 @@ class LLVMEmission {
         if (!read) return member;
         return discard ? empty_scalar() : load_place(member, expr);
       }
+      if (fact.regional_sum_holder) {
+        const auto &parent = *expr.children.front();
+        auto *address = emit_expression(parent, Projection::target);
+        if (!reachable()) return nullptr;
+        using Field = std::tuple<size_t, size_t, size_t, size_t>;
+        std::map<Field, std::vector<size_t>> projections;
+        for (size_t i = 0; i < contexts_.size(); ++i) {
+          const auto &field = contexts_[i].at(&expr);
+          if (field.regional_sum_holder)
+            projections[{field.sum_constructor->sum, field.sum_constructor->alternative,
+                         *field.product_field, *field.regional_sum_holder}].push_back(i);
+        }
+        auto *target = contextual_value(expr, projections, "region.sum.field", [&](const Field &member) {
+          const auto [sum, alternative, field, holder] = member;
+          auto *slot = sum_field_address(address, {sum, alternative}, field);
+          const auto &description = program_->sums.at(sum).alternatives.at(alternative).fields.at(field);
+          if (!description.stores_target()) return static_cast<llvm::Value *>(slot);
+          auto *owner = load(storage_.at(holder));
+          auto *offset = b_.CreateLoad(b_.getInt64Ty(), slot);
+          return regional_scalar_target(owner, offset, sum_layout(description.type.identity).storage);
+        }, b_.getPtrTy());
+        return !read ? target : discard ? empty_scalar() : load_place(target, expr);
+      }
       if (fact.product_field) {
         const auto &parent = *expr.children.front();
         auto *address = emit_expression(parent, Projection::target);
@@ -4551,6 +4635,28 @@ class LLVMEmission {
       return emit_attached_native_handle(expr);
     case K::make_object: {
       if (fact.array_allocator) return emit_array_construction(expr, discard);
+      if (fact.regional_sum_holder) {
+        using Destination = std::tuple<size_t, size_t, size_t>;
+        std::map<Destination, std::vector<size_t>> placements;
+        for (size_t i = 0; i < contexts_.size(); ++i) {
+          const auto &item = contexts_[i].at(&expr);
+          if (item.regional_sum_holder)
+            placements[{item.sum_constructor->sum, item.sum_constructor->alternative, *item.regional_sum_holder}].push_back(i);
+        }
+        auto *address = contextual_value(expr, placements, "region.sum.reservation", [&](const Destination &destination) {
+          const auto &[sum, alternative, holder] = destination;
+          auto *owner = load(storage_.at(holder));
+          const auto &layout = sum_layout(sum);
+          auto *target = reserve_regional_row(owner, layout.storage, expr.at);
+          const auto tag = layout.alternatives.at(alternative).tag;
+          b_.CreateStore(integer(tag), b_.CreateStructGEP(layout.storage, target, 0));
+          return target;
+        }, b_.getPtrTy());
+        if (fact.invokes_regional_initializer && reachable())
+          address = emit_regional_initializer(expr, address, expr.children.size());
+        if (!reachable()) return nullptr;
+        return discard ? empty_scalar() : address;
+      }
       if (fact.sum_constructor) {
         const auto constructor = *fact.sum_constructor;
         auto *address = storage_.at(*fact.place);
@@ -4614,7 +4720,7 @@ class LLVMEmission {
         }
         auto *address = contextual_value(expr, placements, "region.product", [&](const Destination &destination) {
           auto *owner = load(storage_.at(destination.second));
-          auto *row = reserve_regional_product(owner, regional_product_layout(destination.first), expr.at);
+          auto *row = reserve_regional_row(owner, regional_product_layout(destination.first), expr.at);
           emit_product_initializers(expr, row, owner);
           return row;
         }, b_.getPtrTy());
@@ -4983,7 +5089,7 @@ class LLVMEmission {
       query_environment_ = function->getArg(call.query_index());
     llvm::Value *requires_return = nullptr;
     const auto needs_return = [&](size_t id) {
-      return method.source->completion_requires_return(*program_->instances[id].result.type);
+      return !method.regional_initializer && method.source->completion_requires_return(*program_->instances[id].result.type);
     };
     if (instance) {
       if (needs_return(*instance)) requires_return = b_.getTrue();

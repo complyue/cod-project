@@ -135,6 +135,7 @@ struct CheckedOperation {
   // Regional product rows contain relative field locators. The lexical
   // controller identifies the actual live region used for projection.
   std::optional<size_t> regional_product_holder;
+  std::optional<size_t> regional_sum_holder;
   bool allocates_scalar_field = false;
   std::vector<size_t> region_initializers;
   struct NativeAcquisition {
@@ -186,6 +187,7 @@ struct CheckedOperation {
   std::shared_ptr<const std::map<size_t, ArrayAllocator>> array_allocator_arguments;
   std::optional<size_t> lexical_result_owner;
   std::optional<SumConstructor> sum_constructor;
+  bool invokes_regional_initializer = false;
   std::vector<size_t> sum_initializers;
   CasePattern case_pattern;
   std::vector<size_t> case_payload_fields;
@@ -319,6 +321,9 @@ struct CheckedStorage {
   size_t binding = 0;
   bool subobject = false;
   std::vector<size_t> fields = {};
+  std::optional<SumConstructor> reserved_alternative = {};
+  bool identity_only = false;
+  bool initializer_field = false;
 };
 
 enum class PlaceKind { value, reference, pointer, mixed };
@@ -358,9 +363,12 @@ struct CheckedSum {
   struct Alternative {
     const SumAlternative *source;
     std::vector<CheckedSchema::Field> fields;
+    std::vector<size_t> initializers = {};
   };
   const Form *source;
   std::vector<Alternative> alternatives;
+  bool regional_only = false;
+  size_t module = 0;
 };
 
 struct CheckedAbstractType {
@@ -419,6 +427,7 @@ struct CheckedBinding {
   const Expression *pipeline = nullptr;
   bool direct_text_place = false;
   bool native_borrow_slot = false;
+  bool reservation_slot = false;
   PlaceKind kind() const { return place_kind(value_binding, requires_initialized); }
 };
 
@@ -520,6 +529,7 @@ struct ViewEvidence {
   NominalTargets nominal_targets = {};
   bool direct_text_place = false;
   bool native_borrow_slot = false;
+  bool reservation_slot = false;
   void project_target() {
     value_binding.reset();
     fixed_binding.reset();
@@ -528,6 +538,7 @@ struct ViewEvidence {
     storage_kind.reset();
     direct_text_place = false;
     native_borrow_slot = false;
+    reservation_slot = false;
   }
   template <typename Map> void map_owners(Map map) {
     if (owner) owner = map(*owner);
@@ -656,6 +667,8 @@ struct CheckedMethod {
   const Form *source = nullptr;
   std::string operation; // Semantic operation identity, independent of the local alias.
   size_t module = 0, interpretation = 0, definition = null_target;
+  std::optional<SumConstructor> regional_initializer;
+  std::optional<size_t> regional_initializer_fields;
   std::optional<size_t> family;
   std::vector<size_t> nested;
   std::vector<size_t> instances;
@@ -906,8 +919,8 @@ struct CheckedProgram {
     return type.kind == Type::product && schemas.at(type.identity).lexical_builder;
   }
   bool bits_payload(const Type &type) const {
-    // The nominal layout check admits only direct bits fields in sums.
-    return scalar_type(type) || type.kind == Type::sum ||
+    return scalar_type(type) ||
+        (type.kind == Type::sum && !sums.at(type.identity).regional_only) ||
         (type.kind == Type::product && schemas.at(type.identity).bits);
   }
   template <typename Visit>
@@ -916,7 +929,7 @@ struct CheckedProgram {
       for (const auto &field : schemas.at(type.identity).fields) if (!field.stores_target()) visit(field);
     } else {
       for (const auto &alternative : sums.at(type.identity).alternatives)
-        for (const auto &field : alternative.fields) visit(field);
+        for (const auto &field : alternative.fields) if (!field.stores_target()) visit(field);
     }
   }
   bool conforms_to(const Type &actual, const Type &bound) const {

@@ -1338,6 +1338,44 @@
     ]
   },
   {
+    "file": "regional-sum-reservation-prefix.cod",
+    "exit": 0,
+    "stdout": "99\n42\n99\n42\ntrue\ntrue\n"
+  },
+  {
+    "file": "regional-sum-reservation-unbound.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "reserved ref binding has no definitely selected target"
+  },
+  {
+    "file": "regional-sum-placement-init.cod",
+    "exit": 0,
+    "stdout": "true\ntrue\n1\n2\n"
+  },
+  {
+    "file": "regional-sum-initializer-prefix.cod",
+    "exit": 0,
+    "stdout": "98\n42\n98\n42\n51\n1\n71\n50\n70\n99\n42\n51\n1\n71\n52\n2\n72\ntrue\ntrue\n"
+  },
+  {
+    "file": "regional-sum-initializer-duplicate.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "initializer already entered for this selected target"
+  },
+  {
+    "file": "regional-sum-initializer-abrupt.cod",
+    "exit": 0,
+    "stdout": "7\n42\n"
+  },
+  {
+    "file": "regional-sum-initializer-early-read.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "an identity-only constructor input cannot expose payload fields"
+  },
+  {
     "file": "owned-region-lifecycle.cod",
     "stdout": "9\n9\n9\n11\n10\n101\n102\n1\n2\n2\n3\n4\n5\n6\n7\n8\n0\n",
     "exit": 0

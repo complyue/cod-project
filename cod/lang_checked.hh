@@ -38,6 +38,7 @@ struct LexicalState {
   SymbolBorrows borrowed_symbol_owners;
   AbstractSymbolTargets abstract_symbol_targets;
   std::set<size_t> bindings_available, available, initialized, present;
+  std::set<size_t> started_initializers;
   struct InputFacts {
     std::set<size_t> initialized;
     CleanupEquations::Selections selections;
@@ -400,6 +401,7 @@ class ScalarChecker {
   const Expression *region_result_initializer_ = nullptr;
   const Expression *abstract_operand_ = nullptr;
   std::set<size_t> abstract_input_bindings_;
+  std::set<size_t> initializing_reference_fields_;
   struct CaseResultUse {
     bool borrowed = false;
     bool projects = false;
@@ -3102,7 +3104,13 @@ class ScalarChecker {
       // readable object. A fresh embedded slot can establish the edge first.
       const bool first_binding = allow_first_binding && binding.embedded_slot &&
           physical.contains(id) && lexical_.targets.at(id).empty();
-      if (binding.requires_initialized && !first_binding) require_initialized(source, at, "ref target");
+      const bool first_reservation = allow_first_binding && binding.reservation_slot && physical.contains(id) &&
+          lexical_.targets.at(id) == std::set<size_t>{null_target} &&
+          source.place && storage(*source.place).reserved_alternative &&
+          source.targets == std::set<size_t>{*source.place};
+      if (binding.requires_initialized && !first_binding && !first_reservation &&
+          !initializing_reference_fields_.contains(id))
+        require_initialized(source, at, "ref target");
     }
   }
   void record_rebinding(size_t binding, bool deferred = false) {
@@ -4255,6 +4263,9 @@ class ScalarChecker {
     for (const auto reason : call_reasons(method)) {
       effects.initialized[reason] = borrowed;
       effects.present[reason] = borrowed;
+      for (const auto p : borrowed)
+        if (p < method.input_parameters().size() && method.input_parameters()[p].not_init_ref)
+          effects.initialized[reason].erase(p);
     }
     // Value possibilities grow from no observed return, independently of
     // the optimistic initialization/presence guarantees above.
@@ -5311,10 +5322,13 @@ class ScalarChecker {
       const auto product = pending.back();
       pending.pop_back();
       const auto &object = storage(product);
-      const auto &schema = product_schema(object.type, at);
+      if (object.reserved_alternative)
+        require_initialized(product, at, object.type.name + " constructor", {}, selected);
+      const auto &fields = object.reserved_alternative ? sum_alternative(*object.reserved_alternative).fields
+                                                       : product_schema(object.type, at).fields;
       for (size_t index = 0; index < object.fields.size(); ++index) {
         const auto place = object.fields[index];
-        const auto &field = schema.fields[index];
+        const auto &field = fields[index];
         const auto &name = field.source->name;
         if (field.storage == PlaceKind::value && !storage(place).fields.empty()) {
           enqueue(place);
@@ -5329,17 +5343,30 @@ class ScalarChecker {
           continue;
         }
         for (const auto target : targets->second) {
-          if (storage(target).fields.empty()) require_initialized(target, at, name + " target", {}, selected);
+          const auto &referent = storage(target);
+          if (referent.fields.empty() && !referent.reserved_alternative)
+            require_initialized(target, at, name + " target", {}, selected);
           else enqueue(target);
         }
       }
     }
   }
+  bool selects_identity_only_target(const CheckedOperation &view) const {
+    return std::ranges::any_of(view.targets, [&](size_t target) {
+      return target != null_target && storage(target).identity_only;
+    });
+  }
   void require_initialized(const CheckedOperation &view, const Location &at, const std::string &name) {
-    if (view.initialized_target()) return;
+    if (lexical_.live && selects_identity_only_target(view))
+      fail(at, "an identity-only constructor input cannot supply a readable target");
+    const bool ready = view.initialized_target();
+    if (ready && !regional_sum(view.type)) return;
     for (const auto place : view.targets) {
+      const bool reservation = place != null_target && storage(place).reserved_alternative.has_value();
+      if (!reservation && ready) continue;
       const auto selected = selected_target(view, place, true);
-      if (place != null_target && !storage(place).fields.empty()) require_product_initialized(place, at, selected);
+      if (reservation || (place != null_target && !storage(place).fields.empty()))
+        require_product_initialized(place, at, selected);
       else require_initialized(place, at, name, current_binding(view), selected);
     }
   }
@@ -5355,7 +5382,7 @@ class ScalarChecker {
     before.when = missing_initialization(lexical_, place, target);
     before.uninitialized = lexical_.uninitialized;
     if (before.when.empty()) return;
-    if (!storage(place).borrowed) {
+    if (!storage(place).borrowed || storage(place).initializer_field) {
       const auto diagnostic = "read of '" + name + "' before definite initialization of every possible target";
       if (!delayed_ && in_immediate_scope()) {
         require_local_read({at, diagnostic}, before.when);
@@ -5457,6 +5484,8 @@ class ScalarChecker {
       }
     lexical_.bindings_available = a_exits ? b.bindings_available : b_exits ? a.bindings_available : intersect(a.bindings_available, b.bindings_available);
     lexical_.available = a_exits ? b.available : b_exits ? a.available : intersect(a.available, b.available);
+    if (a_exits) lexical_.started_initializers = b.started_initializers;
+    else if (!b_exits) lexical_.started_initializers.insert(b.started_initializers.begin(), b.started_initializers.end());
     lexical_.bound_symbols = a_exits ? b.bound_symbols : b_exits ? a.bound_symbols : intersect(a.bound_symbols, b.bound_symbols);
     lexical_.local_scoped_symbols = a_exits ? b.local_scoped_symbols :
         b_exits ? a.local_scoped_symbols : intersect(a.local_scoped_symbols, b.local_scoped_symbols);
@@ -7029,7 +7058,10 @@ class ScalarChecker {
       const auto &parameter = parameter_at(definition, i);
       const auto mode = argument_mode(parameter);
       const bool live_slot = definition.scope_inputs && definition.scope_inputs->live_bindings.contains(i);
-      if (mode == ArgumentMode::value || (definition.scope_inputs && !live_slot) ||
+      const bool constructor_peer = definition.regional_initializer_fields &&
+          i < *definition.regional_initializer_fields && parameter.not_init_ref &&
+          mode == ArgumentMode::borrowed_ref;
+      if (mode == ArgumentMode::value || (definition.scope_inputs && !live_slot && !constructor_peer) ||
           definition.source->symbolic || caller_bindings(definition))
         implementation_gap(at, std::string(arguments[i].kind == Type::product ? "product" : "sum") +
             " parameters require an ordinary borrowed target or a live lexical reference slot");
@@ -7544,6 +7576,7 @@ class ScalarChecker {
         context.bindings.emplace(*found);
         auto view = available.views.at(capture.name);
         view.native_borrow_slot = false;
+        view.reservation_slot = false;
         context.views.emplace(capture.name, std::move(view));
       } else if (query && lexical_self(capture.name, available.method)) {
         context.bindings.emplace(capture.name, callable_query({*available.method}, nullptr, capture.at, available));
@@ -8065,7 +8098,10 @@ class ScalarChecker {
   CheckedOperation project_product(const CheckedOperation &parent, size_t index, const Location &at,
                                     bool preserve_null = false) {
     const auto &schema = nominal_exception(parent.type) ? scalar_exception_schema(parent.type, at) : product_schema(parent.type, at);
-    const auto &field = schema.fields.at(index);
+    return project_aggregate_field(parent, schema.fields.at(index), index, at, preserve_null);
+  }
+  CheckedOperation project_aggregate_field(const CheckedOperation &parent, const CheckedSchema::Field &field,
+                                            size_t index, const Location &at, bool preserve_null = false) {
     const auto places = product_field_targets(parent.targets, index, at, preserve_null);
     CheckedOperation result;
     select_targets(result, places);
@@ -8330,6 +8366,7 @@ class ScalarChecker {
     if (a.storage_kind && b.storage_kind)
       result.storage_kind = a.storage_kind == b.storage_kind ? *a.storage_kind : PlaceKind::mixed;
     result.native_borrow_slot = a.native_borrow_slot && b.native_borrow_slot && a.place_owners == b.place_owners;
+    result.reservation_slot = a.reservation_slot && b.reservation_slot && a.place_owners == b.place_owners;
     return result;
   }
   enum class GroupResult { value, target, unsupported };
@@ -9361,9 +9398,29 @@ class ScalarChecker {
   const CheckedSum::Alternative &sum_alternative(SumConstructor constructor) const {
     return program_.sums.at(constructor.sum).alternatives.at(constructor.alternative);
   }
+  bool regional_sum(const Type &type) const {
+    return type.kind == Type::sum && program_.sums.at(type.identity).regional_only;
+  }
+  bool regional_sum_reservation(const Expression &expr, SumConstructor constructor) const {
+    return program_.sums.at(constructor.sum).regional_only && !expr.initializer_block && !expr.constructor_arguments;
+  }
+  void require_reservation_slot(const Expression &decl, const Expression &group, const Type &type) const {
+    if (!regional_sum(type) || group.fixed_binding || !decl.owner_name.empty())
+      implementation_gap(decl.at, "bare ref outside an inferred local regional sum reservation");
+  }
+  size_t selected_sum_field(SumConstructor constructor, const Expression &expr) const {
+    const auto &alternative = sum_alternative(constructor);
+    for (size_t field = 0; field < alternative.fields.size(); ++field)
+      if (alternative.fields[field].source->name == expr.text) return field;
+    fail(expr.at, "unknown field '" + expr.text + "' of '" + alternative.source->name.text + "'");
+  }
   std::vector<size_t> sum_initializers(const Expression &expr, SumConstructor constructor) const {
     const auto &alternative = sum_alternative(constructor);
     const auto &name = alternative.source->name.text;
+    if (!alternative.initializers.empty())
+      fail(expr.at, "initializer block cannot replace a declared initializer for '" + name + "'");
+    if (program_.sums.at(constructor.sum).regional_only)
+      implementation_gap(expr.at, "field initializers for a reference-bearing regional sum");
     if (module_names().callables.contains(expr.annotation->name))
       implementation_gap(expr.at, "construction with a visible initializer family for '" + name + "'");
     if (expr.constructor_arguments || !expr.initializer_block)
@@ -12278,6 +12335,10 @@ class ScalarChecker {
           return native_handle_type(*found->second, false);
         }
         target_facts = named_type_target(state, expr.text);
+        if (view.reservation_slot && read != EvidenceRead::binding_slot && state.required &&
+            proving_ && validating_ && state.checks_reaching_paths() &&
+            target_facts.presence != TargetPresence::present)
+          fail(expr.at, "reserved ref binding has no definitely selected target");
         return found->second;
       }
       if (const auto family = named_family(expr, &state); !family.methods.empty()) {
@@ -12383,6 +12444,20 @@ class ScalarChecker {
       if (!expr.children.empty()) { view = state.value; target_facts = state.target; }
       return exits ? std::optional<Type>{Type::never} : result;
     }
+    case K::init_reserved: {
+      const auto &name = *expr.children.front();
+      const auto type = child(0, false, true, EvidenceRead::target);
+      if (type == Type::never) return type;
+      if (state.required) {
+        if (!type || !regional_sum(*type) || !state.value.owner ||
+            state.target.presence == TargetPresence::absent)
+          fail(name.at, "init requires a selected reserved regional sum target");
+        if (state.value.read_only != false || readonly_evidence_owner(*state.value.owner, state))
+          fail(name.at, "init requires a writable target and owner");
+        implementation_gap(expr.at, "invoking the selected constructor on a reserved regional sum");
+      }
+      return Type::void_type;
+    }
     case K::pointer_group: {
       bool completes = true;
       for (const auto &declaration : expr.children) {
@@ -12398,6 +12473,28 @@ class ScalarChecker {
             declaration->owner_name.empty() ? std::optional<EvidenceOwner>{} : owner_evidence(declaration->owner_name, state, declaration->at);
         const auto declared = declaration->annotation ?
             std::optional<Type>{evidence_annotation(*declaration->annotation, state)} : std::nullopt;
+        if (declaration->kind == K::bare_ref_slot) {
+          if (!declared || !regional_sum(*declared)) {
+            if (state.required) implementation_gap(declaration->at, "bare ref outside a regional sum reservation");
+            return {};
+          }
+          if (state.required) require_reservation_slot(*declaration, expr, *declared);
+          const auto &name = declaration->text;
+          state.bindings[name] = declared;
+          state.local_declarations[name] = declaration.get();
+          state.definitions.erase(name);
+          state.owner_bindings.erase(name);
+          auto &slot = state.views[name];
+          slot = {declaration->read_only, true, false, {}, false, false, declaration->read_only};
+          slot.storage_kind = PlaceKind::reference;
+          slot.reservation_slot = true;
+          if (state.full_scope_owner) slot.place_owners.insert(*state.full_scope_owner);
+          state.selections.remove_binding(name);
+          TargetEvidence absent;
+          absent.presence = TargetPresence::absent;
+          state.selections.bind(name, declaration.get(), std::move(absent));
+          continue;
+        }
         const auto &initializer = *declaration->children.front();
         const bool reservation = reserves_value_receiver(expr, initializer);
         const bool text_placement = declared_owner && constructs_lexical_text(initializer, &state);
@@ -12645,6 +12742,19 @@ class ScalarChecker {
       if (type.kind == Type::sum) {
         const auto constructor = sum_constructor(expr);
         if (!constructor) fail(expr.at, "make requires a named data constructor for '" + type.name + "'");
+        if (regional_sum_reservation(expr, *constructor)) {
+          auto owner = expr.owner_name.empty() || expr.owner_name == "here" ? state.full_scope_owner
+              : owner_evidence(expr.owner_name, state, expr.at);
+          if (!owner || !regional_evidence(*owner) || readonly_evidence_owner(*owner, state)) {
+            if (state.required) implementation_gap(expr.at, "a sum reservation without a writable named region");
+            return {};
+          }
+          view = {false, true, {}, owner};
+          target_facts.presence = TargetPresence::present;
+          if (track_places) target_facts.places.insert(&expr);
+          note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::region_capacity_exceeded)));
+          return type;
+        }
         if (!expr.owner_name.empty() && expr.owner_name != "here" && state.required &&
             compare_owners(owner_evidence(expr.owner_name, state, expr.at), state.full_scope_owner, &state) != OwnerMatch::satisfied)
           implementation_gap(expr.at, "sum construction outside the current lexical owner");
@@ -12845,11 +12955,22 @@ class ScalarChecker {
               const auto *field = std::get_if<QueryProductPlace>(&slot);
               return field && field->reservation;
             }) && state.selections.presence(destination.selection) == TargetPresence::absent;
-        if (!view.nullable && !first_product_binding) require_type_initialized(state, state.target, {}, expr.at);
+        const auto &operand = ungrouped_expression(*expr.children[1]);
+        const auto constructor = operand.kind == K::make_object ? sum_constructor(operand) : std::nullopt;
+        const bool first_reservation = view.reservation_slot && !view.owner && constructor &&
+            regional_sum_reservation(operand, *constructor) && !state.preparing(expr);
+        if (!view.nullable && !first_product_binding && !first_reservation)
+          require_type_initialized(state, state.target, {}, expr.at);
         if (!selected.read_only || (!view.slot_read_only && *selected.read_only))
           implementation_gap(expr.at, "reference target access is not established");
         rebind_access(view.slot_read_only.value_or(false), *selected.read_only, expr.at);
-        if (*source != Type::null_ref || selected.owner) {
+        if (first_reservation) {
+          const auto &name = ungrouped_expression(*expr.children[0]);
+          if (name.kind != K::name || !selected.owner)
+            implementation_gap(expr.at, "regional reservation requires a direct lexical ref slot and one owner");
+          state.views.at(name.text).owner = selected.owner;
+          view.owner = selected.owner;
+        } else if (*source != Type::null_ref || selected.owner) {
           const auto relation = compare_owners(view.owner, selected.owner, &state);
           if (relation == OwnerMatch::mismatch) fail(expr.at, "reference rebinding cannot change the initializer-fixed owner");
           if (relation == OwnerMatch::unknown) implementation_gap(expr.at, "reference assignment requires an established owner equality");
@@ -13978,6 +14099,34 @@ class ScalarChecker {
         target_facts.presence = TargetPresence::present;
         return field.type;
       }
+      if (type && regional_sum(*type)) {
+        std::optional<SumConstructor> constructor;
+        const auto &places = state.target.places;
+        if (places.size() == 1) {
+          const auto &place = *places.begin();
+          if (const auto *reservation = std::get_if<const Expression *>(&place);
+              reservation && (*reservation)->kind == K::make_object)
+            constructor = sum_constructor(**reservation);
+          else if (const auto *id = std::get_if<size_t>(&place); id && storage_ && *id < storage_->size())
+            constructor = storage(*id).reserved_alternative;
+        }
+        if (!constructor || constructor->sum != type->identity ||
+            state.value.mixed_view || !state.value.owner) {
+          if (state.required) implementation_gap(expr.at, "regional sum field selection without one proved alternative and owner");
+          return {};
+        }
+        if (read == EvidenceRead::binding_slot)
+          implementation_gap(expr.at, "retaining a regional sum field slot outside its initializer");
+        if (state.required && state.checks_initialization())
+          require_type_initialized(state, state.target, base.text, expr.at);
+        const auto &field = sum_alternative(*constructor).fields.at(selected_sum_field(*constructor, expr));
+        const auto access = state.value.read_only.value_or(true) ||
+            (field.stores_target() ? field.readonly_target() : readonly_field(field));
+        view = {access, true, !field.stores_target(), state.value.owner};
+        view.storage_kind = field.storage;
+        target_facts.presence = TargetPresence::present;
+        return field.type;
+      }
       if (type && type->kind == Type::product) {
         const auto &schema = product_schema(*type, expr.at);
         const auto index = product_field(schema, expr);
@@ -14358,6 +14507,7 @@ class ScalarChecker {
       state.views.at(name).storage_kind = binding.kind();
       state.views.at(name).direct_text_place = binding.direct_text_place;
       state.views.at(name).native_borrow_slot = binding.native_borrow_slot;
+      state.views.at(name).reservation_slot = binding.reservation_slot;
       if (!track_selection || binding.owner_binding || physical_selection.empty()) return;
       if (binding.value_binding) {
         if (physical_selection.size() == 1) {
@@ -15331,6 +15481,38 @@ class ScalarChecker {
     program_.methods.push_back(std::move(method));
     profiles.push_back(id);
     return id;
+  }
+  size_t demand_regional_initializer(size_t method_id, const Location &at) {
+    const auto &method = program_.methods.at(method_id);
+    const auto constructor = *method.regional_initializer;
+    CheckedMethod::ScopeInputs inputs{};
+    inputs.lexical_method = method_id;
+    inputs.owners = method.input_owners();
+    const auto &owner = inputs.owners.front().name;
+    const auto written = method.input_parameters();
+    inputs.parameters.assign(written.begin(), written.end());
+    inputs.nonnull.resize(written.size(), true);
+    inputs.named = CheckedMethod::ScopeInputs::NamedEntry{written.size(), {}};
+    inputs.relations = {{OwnerMatch::satisfied}};
+    auto types = method.parameters;
+    for (const auto &field : sum_alternative(constructor).fields) {
+      auto parameter = *field.source;
+      parameter.owner = owner;
+      const auto ordinal = types.size();
+      if (field.stores_target()) {
+        parameter.caller_place = Parameter::CallerPlace::reference_slot;
+        inputs.live_bindings.insert(ordinal);
+      } else {
+        parameter.declaration_kind = "val";
+        inputs.live_values.insert(ordinal);
+      }
+      inputs.parameters.push_back(std::move(parameter));
+      inputs.nonnull.push_back(!field.stores_target());
+      types.push_back(field.type);
+    }
+    const auto profile = scope_profile(std::move(inputs), method.result, method.throws_types);
+    program_.methods.at(profile).regional_initializer_fields = written.size();
+    return demand(profile, std::move(types), at);
   }
   size_t scope_owner_role(CheckedMethod::ScopeInputs &inputs, std::vector<size_t> &owners, size_t actual,
                           const Location &at, bool native = false) const {
@@ -18584,6 +18766,127 @@ class ScalarChecker {
     }
     return source;
   }
+  CheckedOperation reserve_regional_sum(const Expression &expr, SumConstructor constructor, size_t owner) {
+    const auto region = region_owners_.find(owner);
+    if (region == region_owners_.end())
+      implementation_gap(expr.at, "a sum reservation without a writable named region");
+    if (lexical_.live && !owner_alive(owner)) fail(expr.at, "sum reservation requires a live region");
+    const auto type = sum_type(constructor.sum);
+    const auto root = reserve_lexical_construction(type, expr.at);
+    assign_regional_storage(root, owner);
+    storage_->at(root).reserved_alternative = constructor;
+    for (const auto &field : sum_alternative(constructor).fields) {
+      const auto direct = !field.stores_target();
+      const auto name = "$sum.field." + std::to_string(storage_->size()) + "." + field.source->name;
+      const auto place = declare(name, field.type, field.readonly_target(), direct, field.source->at,
+                                 false, nullptr, !direct);
+      assign_regional_storage(place, owner);
+      storage_->at(root).fields.push_back(place);
+      auto &binding = bindings_->at(storage(place).binding);
+      binding.requires_initialized = !direct;
+      binding.fixed = field.source->fixed_binding;
+    }
+    auto operation = construction_target(root, type);
+    operation.sum_constructor = constructor;
+    operation.regional_sum_holder = region->second.holder;
+    note_abrupt(expr.at, {exception_id(ExceptionCategory::region_capacity_exceeded)});
+    return operation;
+  }
+  void check_regional_initializer(const Expression &expr, CheckedOperation target, CheckedInstance *instance,
+                                 std::map<const Expression *, CheckedOperation> &operations,
+                                 CheckedOperation &operation, bool fresh) {
+    const auto root = *target.place;
+    const auto owner = *one_owner(target);
+    const auto constructor = *storage(root).reserved_alternative;
+    const auto &sum = program_.sums.at(constructor.sum);
+    if (sum.module != module_ || interpretation_ != 0 || !region_owners_.contains(owner) ||
+        delayed_ || !active_loops_.empty())
+      implementation_gap(expr.at, "regional sum initializer outside a direct local owner and interpretation");
+    const auto &alternative = sum_alternative(constructor);
+    const auto supplied = std::span(expr.children).subspan(fresh ? 0 : 1);
+    std::vector<size_t> family;
+    for (const auto method : alternative.initializers)
+      if (program_.methods.at(method).parameters.size() == supplied.size()) family.push_back(method);
+    const auto &name = alternative.source->name.text;
+    if (family.empty()) fail(expr.at, "no applicable initializer for '" + name + "'");
+
+    operation.sum_constructor = constructor;
+    operation.regional_sum_holder = region_owners_.at(owner).holder;
+    operation.invokes_regional_initializer = true;
+    std::vector<Type> arguments;
+    std::vector<CheckedOperation> views;
+    operation.argument_sources.emplace();
+    for (size_t i = 0; i < supplied.size(); ++i) {
+      const auto &input = *supplied[i];
+      const auto mode = argument_mode(program_.methods.at(family.front()).input_parameters()[i]);
+      if (input.spread || input.checked_ref_argument || input.kind == Expression::Kind::named_argument ||
+          std::ranges::any_of(family, [&](size_t method) {
+            return argument_mode(program_.methods.at(method).input_parameters()[i]) != mode;
+          }))
+        implementation_gap(input.at, "regional initializer arguments require a proved positional preparation mode");
+      auto value = check_argument_expression(input, mode, instance, operations);
+      operation.argument_sources->push_back(&input);
+      operation.arguments.push_back({mode, value.type});
+      if (value.type == Type::never) {
+        operation.type = Type::never;
+        return;
+      }
+      if (mode == ArgumentMode::borrowed_ref) {
+        require_live_view(value, input.at);
+        if (one_owner(value) != owner || !value.place || value.mixed_view ||
+            value.targets != std::set<size_t>{*value.place} || !storage(*value.place).reserved_alternative)
+          fail(input.at, "not init ref requires one selected target in the initializer's actual region");
+      }
+      arguments.push_back(value.type);
+      views.push_back(std::move(value));
+    }
+    const auto selected = select_method(family, arguments, expr.at, name, {}, access_of(views), owners_of(views));
+    if (checking_method_ && checking_method_->source->kind == Form::Kind::function &&
+        program_.methods.at(selected).source->kind == Form::Kind::procedure)
+      fail(expr.at, "a function cannot invoke a procedure initializer");
+    require_live_view(target, expr.at);
+    if (lexical_.live && lexical_.started_initializers.contains(root))
+      fail(expr.at, "initializer already entered for this selected target");
+    lexical_.started_initializers.insert(root);
+
+    const auto callee = demand_regional_initializer(selected, expr.at);
+    const auto &called = program_.instances.at(callee);
+    const auto &method = program_.methods.at(called.method);
+    const auto &effects = read_effects(callee);
+    const auto contract = callable_type(method, called.arguments, called.result);
+    operation.callee = callee;
+    operation.scope_owners = {owner};
+    for (size_t i = 0; i < arguments.size(); ++i) operation.arguments[i].type = called.arguments[i];
+    for (const auto place : storage(root).fields) {
+      const auto ordinal = arguments.size();
+      const auto &parameter = method.input_parameters()[ordinal];
+      auto field = read_binding(expr, false, storage(place).binding);
+      arguments.push_back(field.type);
+      views.push_back(std::move(field));
+      operation.arguments.push_back({argument_mode(parameter), arguments.back(), parameter.selects_caller_ref_slot()});
+      operation.argument_sources->push_back(&expr);
+    }
+    const auto reasons = direct_call_reasons(contract, effects);
+    finish_call(expr, contract, effects, reasons, arguments, views, operation, false, true, 0, true);
+    if (!lexical_.live) return;
+    const auto completed = effects.initialized.find(0);
+    if (completed == effects.initialized.end()) {
+      lexical_.live = false;
+      operation.type = Type::never;
+      return;
+    }
+    const auto &fields = storage(root).fields;
+    for (size_t i = 0; i < fields.size(); ++i)
+      if (completed->second.contains(supplied.size() + i)) initialize(fields[i]);
+    initialize(root);
+    if (fresh) {
+      operation.place = root;
+      operation.type = target.type;
+      operation.view = true;
+      operation.targets = std::move(target.targets);
+      operation.owners = std::move(target.owners);
+    }
+  }
   CheckedOperation check_sum_construction(const Expression &expr, SumConstructor constructor, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, bool read) {
     if (read) implementation_gap(expr.at, "reading a whole sum as an independent value");
@@ -19372,6 +19675,13 @@ class ScalarChecker {
       operation = named_value(expr, callable_expectation(expected), read);
       if (operation.binding) {
         const auto &binding = bindings_->at(*operation.binding);
+        if (initializing_reference_fields_.contains(*operation.binding) && !write_slot && lexical_.live &&
+            proving_ && validating_ && !missing_initialization(lexical_, *binding.embedded_slot).empty())
+          fail(expr.at, "initializer field '" + expr.text + "' has no established reference target");
+        if (binding.reservation_slot && !write_slot && lexical_.live &&
+            (operation.targets == std::set<size_t>{null_target} || (proving_ && validating_ &&
+              (operation.targets.empty() || operation.targets.contains(null_target)))))
+          fail(expr.at, "reserved ref binding has no definitely selected target");
         if (binding.direct_text_place && !write_slot && indexed_use != IndexedUse::transfer_destination) {
           const auto place = *binding.embedded_slot;
           if (proving_ && validating_ && lexical_.live && !missing_initialization(lexical_, place).empty())
@@ -20197,12 +20507,44 @@ class ScalarChecker {
       operation.exceptions = exception_value_categories(operation.type);
       break;
     }
+    case K::init_reserved: {
+      const auto &name = *expr.children.front();
+      const auto binding = lexical_.lookup(name.text);
+      if (!binding) fail(name.at, "init requires an existing ref binding");
+      const auto &slot = bindings_->at(*binding);
+      if (!slot.requires_initialized || slot.value_binding || slot.nullable || !regional_sum(slot.type))
+        fail(name.at, "init requires a reference to a reserved regional sum");
+      const auto target = read_binding(name, false, binding);
+      const auto owner = one_owner(target);
+      if (!owner || !target.place || !storage(*target.place).reserved_alternative ||
+          target.targets != std::set<size_t>{*target.place})
+        fail(name.at, "init requires one selected reserved target and its actual owner");
+      require_live_view(target, name.at);
+      if (target.read_only || const_owner(*owner))
+        fail(name.at, "init requires a writable target and owner");
+      operations.insert_or_assign(&name, target);
+      check_regional_initializer(expr, target, instance, operations, operation, false);
+      break;
+    }
     case K::pointer_group: {
       const bool callable_value = expr.declaration_kind == "func" || expr.declaration_kind == "proc";
       const bool value = expr.declaration_kind == "val" || callable_value;
       for (const auto &declaration : expr.children) {
         if (declaration->kind == K::block) {
           if (check(*declaration, instance, operations, true, true) == Type::never) operation.type = Type::never;
+          continue;
+        }
+        if (declaration->kind == K::bare_ref_slot) {
+          const auto type = resolve_local_type(*declaration->annotation, instance, declaration->at, true);
+          require_reservation_slot(*declaration, expr, type);
+          // Absent paths must survive a join with a successful reservation.
+          const auto id = bind(declaration->text, type, {null_target}, declaration->read_only, false, false, declaration->at);
+          auto &slot = bindings_->at(id);
+          slot.reservation_slot = true;
+          slot.requires_initialized = true;
+          CheckedOperation binding;
+          binding.binding = id;
+          operations.insert_or_assign(declaration.get(), std::move(binding));
           continue;
         }
         std::optional<size_t> owner;
@@ -20485,6 +20827,13 @@ class ScalarChecker {
     }
     case K::break_value: case K::continue_value: case K::return_tail: case K::return_value: {
       if (!instance) fail(expr.at, "return requires an enclosing callable");
+      if (checking_method_->regional_initializer && expr.kind == K::return_tail) {
+        child(0, true, true);
+        operation.type = Type::void_type;
+        break;
+      }
+      if (checking_method_->regional_initializer)
+        fail(expr.at, "return cannot target a regional sum initializer");
       const auto &group = checking_method_->here_group;
       const bool tail = expr.kind == K::return_tail;
       if (tail && !lexical_.live) {
@@ -20628,6 +20977,17 @@ class ScalarChecker {
     case K::make_object: {
       if (const auto constructor = sum_constructor(expr)) {
         if (reservation_receiver) implementation_gap(expr.at, "reserving a non-scalar val with make");
+        if (regional_sum_reservation(expr, *constructor)) {
+          if (read && !discard) implementation_gap(expr.at, "reading a sum reservation as a value");
+          operation = reserve_regional_sum(expr, *constructor, construction_destination(expr, construction_owner));
+          break;
+        }
+        if (regional_sum(sum_type(constructor->sum)) && expr.constructor_arguments) {
+          if (read && !discard) implementation_gap(expr.at, "reading a whole regional sum as an independent value");
+          const auto target = reserve_regional_sum(expr, *constructor, construction_destination(expr, construction_owner));
+          check_regional_initializer(expr, target, instance, operations, operation, true);
+          break;
+        }
         check_construction_owner(expr, construction_owner);
         operation = check_sum_construction(expr, *constructor, instance, operations, read && !discard);
         break;
@@ -20785,6 +21145,32 @@ class ScalarChecker {
         read_view(parent, expr.at, expr.children.front()->text);
         check_exception_field(expr, source);
         operation.type = Type::uint64;
+        break;
+      }
+      if (regional_sum(source)) {
+        if (lexical_.live && selects_identity_only_target(parent))
+          fail(expr.at, "an identity-only constructor input cannot expose payload fields");
+        if (!parent.view || parent.mixed_view || !parent.place ||
+            parent.targets != std::set<size_t>{*parent.place} || !storage(*parent.place).reserved_alternative)
+          implementation_gap(expr.at, "regional sum field selection without one proved alternative");
+        const auto owner = one_owner(parent);
+        if (!owner || !region_owners_.contains(*owner))
+          implementation_gap(expr.at, "regional sum field selection without one proved owner");
+        require_live_view(parent, expr.at);
+        require_initialized(parent, expr.at, base.text);
+        const auto constructor = *storage(*parent.place).reserved_alternative;
+        const auto index = selected_sum_field(constructor, expr);
+        const auto &field = sum_alternative(constructor).fields.at(index);
+        if (field.stores_target() && !write_slot && read)
+          implementation_gap(expr.at, "reading a whole regional sum as an independent value");
+        if (write_slot)
+          implementation_gap(expr.at, "retaining a regional sum field slot outside its initializer");
+        operation = project_aggregate_field(parent, field, index, expr.at);
+        operation.sum_constructor = constructor;
+        operation.regional_sum_holder = region_owners_.at(*owner).holder;
+        if (field.stores_target())
+          operation = select_product_reference(std::move(operation), field, expr.at, !lexical_.live);
+        if (read) operation.predicate = stored_predicate(operation);
         break;
       }
       if (source.kind != Type::product) implementation_gap(expr.at, "field selection for this target type");
@@ -21308,6 +21694,7 @@ class ScalarChecker {
     native_resource_owners_.clear(); native_owner_scopes_.clear(); scope_native_owner_places_.clear(); region_owners_.clear();
     incoming_native_symbol_owners_.clear();
     abstract_input_bindings_.clear();
+    initializing_reference_fields_.clear();
     abstract_operand_ = nullptr;
     literal_text_owner_.reset();
     declared_sites_.clear(); declared_requirements_.clear();
@@ -21401,6 +21788,9 @@ class ScalarChecker {
     }
     if (validating_ && reason == 0) for (size_t i = 0; i < checking_method_->input_parameters().size(); ++i) {
       const auto &parameter = checking_method_->input_parameters()[i];
+      const auto first_field = checking_method_->regional_initializer_fields;
+      if (first_field && i >= *first_field && !known.contains(i))
+        fail(parameter.at, "initializer field '" + parameter.name + "' must be initialized on every successful completion");
       if (parameter.initializes_caller_place() && !known.contains(i))
         fail(parameter.at, "init String place must be written on every successful completion");
     }
@@ -21597,6 +21987,9 @@ class ScalarChecker {
       }
       for (size_t p = 0; p < checking_method_->input_parameters().size(); ++p) {
         const auto &parameter = checking_method_->input_parameters()[p];
+        const auto first_field = checking_method_->regional_initializer_fields;
+        const bool field = first_field && p >= *first_field;
+        const bool reference_field = field && parameter.selects_caller_ref_slot();
         const bool place = parameter.selects_caller_place() && !parameter.selects_caller_ref_slot();
         const bool value = parameter.declaration_kind == "val" && !place;
         const bool live_value = checking_method_->scope_inputs && checking_method_->scope_inputs->live_values.contains(p);
@@ -21606,8 +21999,11 @@ class ScalarChecker {
         const auto type = parameter.variadic ? Type{Type::arguments}
             : text_type(declared) ? declared : instance.arguments[p];
         const auto id = declare(parameter.name, type, place || parameter.read_only || (value && parameter.fixed_binding),
-                                value || live_value, parameter.at, !checking_method_->scope_inputs, &entry, place);
+                                value || live_value, parameter.at, !checking_method_->scope_inputs, &entry, place || reference_field);
         const auto binding = storage_->at(id).binding;
+        if (reference_field) initializing_reference_fields_.insert(binding);
+        storage_->at(id).identity_only = parameter.not_init_ref.has_value();
+        storage_->at(id).initializer_field = field;
         if (declared.kind == Type::abstract_type) abstract_input_bindings_.insert(binding);
         instance.frame.inputs.push_back({id, mode, live_binding || caller_place(*checking_method_, p)});
         if (const auto &profile = checking_method_->scope_inputs; profile && profile->native_owner_inputs.contains(p))
@@ -21630,7 +22026,7 @@ class ScalarChecker {
           incoming_selections_.emplace(id, lexical_.selection_identities.at(binding));
           std::erase(scope_storage_[0], id);
           lexical_.owners[binding] = {owner};
-          if (place) bindings_->at(binding).place_owners = {owner};
+          if (place || reference_field) bindings_->at(binding).place_owners = {owner};
           const bool nonnull = checking_method_->scope_inputs && checking_method_->scope_inputs->nonnull.at(p);
           if (parameter.declaration_kind == "ptr" && !nonnull) {
             lexical_.targets[binding].insert(null_target);
@@ -21638,10 +22034,11 @@ class ScalarChecker {
             entry.selections.assign(binding, selection_targets(lexical_.targets[binding], lexical_.null_sources.at(binding)));
             if (!proving) { possible_targets_[binding].insert(null_target); possible_null_sources_[binding] = {id}; }
           }
-          if (nonnull || place || mode != ArgumentMode::borrowed_ptr) entry.present.insert(id);
+          if (!reference_field && (nonnull || place || mode != ArgumentMode::borrowed_ptr)) entry.present.insert(id);
         }
-        if (mode != ArgumentMode::borrowed_ptr || (live_value && method.supplied_scope) ||
-            (place && !parameter.initializes_caller_place())) entry.initialized.insert(id);
+        if (!field && !parameter.not_init_ref &&
+            (mode != ArgumentMode::borrowed_ptr || (live_value && method.supplied_scope) ||
+             (place && !parameter.initializes_caller_place()))) entry.initialized.insert(id);
         if (instance.arguments[p].kind == Type::exception)
           entry.exceptions.emplace(id, ExceptionFacts::input(p, exception_value_categories(instance.arguments[p])));
         if (instance.arguments[p] == Type::boolean) seed_boolean_input(id, p);
@@ -21739,7 +22136,7 @@ class ScalarChecker {
       std::optional<LexicalState> case_scan;
       const auto completion = finish_scope(completed, flow, &outcomes, 0, method.at,
                                            method.case_scan_scope ? &case_scan : nullptr).type;
-      const bool requires_return = method.completion_requires_return(*instance.result.type);
+      const bool requires_return = !checking_method_->regional_initializer && method.completion_requires_return(*instance.result.type);
       if (validating_ && proving && requires_return && completion != Type::never &&
           warned_missing_return_.insert(instance.method).second)
         program_.warnings.push_back({Warning::missing_return, method.at, method.requires_explicit_return()
@@ -21780,7 +22177,11 @@ class ScalarChecker {
     for (const auto place : payload_writes_.places)
       if (storage(place).borrowed) observed_.written_inputs.insert(input_ordinal(place));
     std::erase_if(observed_.uninitialized, [](const auto &entry) { return entry.second.empty(); });
-    for (const auto reason : call_reasons(*checking_method_)) observed_.initialized.try_emplace(reason);
+    // Initializer completion uses the observed normal entry to decide
+    // whether the reserved target can become ready.
+    for (const auto reason : call_reasons(*checking_method_))
+      if (reason || !checking_method_->regional_initializer_fields)
+        observed_.initialized.try_emplace(reason);
     for (const auto reason : call_reasons(*checking_method_)) observed_.present.try_emplace(reason);
     if (!instance.result.borrowed() && *instance.result.type == Type::boolean && observed_.returned.boolean.empty())
       observed_.returned.boolean = CleanupEquations::unknown_boolean();
@@ -22440,26 +22841,44 @@ class ScalarChecker {
     const auto identity = program_.sums.size();
     if (!module_names().types.emplace(form.name, Type{Type::sum, form.name, identity}).second)
       fail(form.at, "duplicate type binding '" + form.name + "'");
-    auto &sum = program_.sums.emplace_back(CheckedSum{&form, {}});
+    auto &sum = program_.sums.emplace_back(CheckedSum{&form, {}, false, module_});
     for (const auto &alternative : form.sum_alternatives) {
       bind_sum_constructor(alternative.name, {identity, sum.alternatives.size()});
       sum.alternatives.push_back({&alternative, {}});
     }
   }
 
+  std::optional<SumConstructor> regional_initializer(const Form &form, bool lexical) const {
+    if (lexical || form.symbolic || form.operation) return {};
+    const auto selected = module_names().constructors.find(form.name);
+    if (selected == module_names().constructors.end()) return {};
+    const auto constructor = selected->second;
+    const auto &sum = program_.sums.at(constructor.sum);
+    if (!sum.regional_only) return {};
+    if (sum.module != module_ || form.c_linkage || form.exporting || !form.body ||
+        !form.type_parameters.empty() || form.owner_parameters.size() != 1 ||
+        form.owner_parameters.front().read_only ||
+        (!form.parameters.empty() && form.parameters.front().here))
+      implementation_gap(form.at, "initializer outside the local regional sum constructor profile");
+    return constructor;
+  }
+
   void resolve_sum_fields(CheckedSum &sum) {
     if (sum.source->parent_type)
       implementation_gap(sum.source->at, "sum conformance to a parent type");
+    const auto &nominal = module_names().types.at(sum.source->name);
     for (auto &alternative : sum.alternatives) {
       std::set<std::string> names;
       for (const auto &field : alternative.source->fields) {
         if (!names.insert(field.name).second)
           fail(field.at, "duplicate field '" + field.name + "' in '" + alternative.source->name.text + "'");
         const auto type = resolve_type(field.type);
-        if ((!field.declaration_kind.empty() && field.declaration_kind != "val") ||
-            (!scalar_type(type) && type.kind != Type::product && type.kind != Type::sum))
-          implementation_gap(field.at, "sum payload fields outside direct bits storage");
-        alternative.fields.push_back({&field, type, PlaceKind::value});
+        const bool self_edge = field.declaration_kind == "ref" && type == nominal;
+        if (!self_edge && ((!field.declaration_kind.empty() && field.declaration_kind != "val") ||
+            (!scalar_type(type) && type.kind != Type::product && type.kind != Type::sum)))
+          implementation_gap(field.at, "sum payload fields outside direct bits and same-sum regional refs");
+        sum.regional_only |= self_edge;
+        alternative.fields.push_back({&field, type, self_edge ? PlaceKind::reference : PlaceKind::value});
       }
     }
   }
@@ -22520,6 +22939,8 @@ class ScalarChecker {
         implementation_gap(array.source->at, "array index domain '" + type_name(array.index) + "'");
       if (array.element.kind == Type::procedure)
         fail(array.source->at, "callable views require lexical storage and cannot be array elements");
+      if (array.element.kind == Type::sum && !program_.bits_payload(array.element))
+        implementation_gap(array.source->at, "regional reference-bearing sum array elements");
       if (!scalar_type(array.element) && array.element.kind != Type::product && array.element.kind != Type::sum)
         implementation_gap(array.source->at, "array element type '" + type_name(array.element) + "'");
     }
@@ -22600,8 +23021,10 @@ class ScalarChecker {
             implementation_gap(field.source->at, "inline field with a reference-bearing product");
           }
           if (type.identity >= first_product) field_layout = type.identity - first_product;
-        } else if (type.kind == Type::sum && type.identity >= first_sum) {
-          field_layout = sum_start + type.identity - first_sum;
+        } else if (type.kind == Type::sum) {
+          if (!program_.bits_payload(type))
+            implementation_gap(field.source->at, "inline field with a reference-bearing sum");
+          if (type.identity >= first_sum) field_layout = sum_start + type.identity - first_sum;
         }
         if (field_layout) {
           ++layout.pending;
@@ -22995,6 +23418,10 @@ class ScalarChecker {
     for (const auto &form : forms) if (form->body)
       collect(*form->body, form->kind == Form::Kind::expression ? nullptr : form.get());
     for (const auto *form : definitions) {
+      const auto constructor = regional_initializer(*form, lexical_methods_.contains(form));
+      for (const auto &parameter : form->parameters)
+        if (parameter.not_init_ref && !constructor)
+          implementation_gap(*parameter.not_init_ref, "not init ref outside a regional sum initializer");
       std::vector<CheckedNativeInput> native_inputs;
       if (form->c_linkage) {
         if (form->symbolic || form->operation || !form->type_parameters.empty() || form->explicit_captures ||
@@ -23043,6 +23470,7 @@ class ScalarChecker {
       prepared.source = form;
       prepared.operation = operation;
       prepared.module = module_;
+      prepared.regional_initializer = constructor;
       for (const auto &p : form->type_parameters) prepared.type_parameters.push_back(p.name);
       if (const auto parent = parents.find(form); parent != parents.end()) {
         prepared.parent = method_ids.at(parent->second);
@@ -23063,7 +23491,15 @@ class ScalarChecker {
           (!prepared.here.front().here.empty() || form->result_type != Type::void_type))
         implementation_gap(form->at, "a source-attachment method requires a generator result contract");
       const bool handle_result = form->result_kind == "handle";
-      if (form->result_type) {
+      if (constructor) {
+        const auto &owner = form->owner_parameters.front().name;
+        if (form->result_type &&
+            (resolve_signature(*form->result_type) != sum_type(constructor->sum) ||
+             form->result_owner != owner || form->result_const ||
+             (!form->result_kind.empty() && form->result_kind != "ref")))
+          fail(form->at, "initializer result must be a writable reference to its sum in the destination owner");
+        prepared.result.type = Type::void_type;
+      } else if (form->result_type) {
         prepared.result.type = resolve_signature(*form->result_type);
         if (handle_result) {
           if (form->kind != Form::Kind::procedure || form->symbolic || !operation.empty() || lexical_methods_.contains(form))
@@ -23084,8 +23520,8 @@ class ScalarChecker {
           prepared.result.mode = ResultMode::owned_region;
         } else reject_c_type_payload(*prepared.result.type, form->at);
       }
-      prepared.result.owner = form->result_owner;
-      if (!form->result_owner.empty()) {
+      if (!constructor) prepared.result.owner = form->result_owner;
+      if (!prepared.result.owner.empty()) {
         prepared.result.mode = handle_result ? ResultMode::borrowed_handle :
             form->result_kind == "ptr" ? ResultMode::borrowed_ptr : ResultMode::borrowed_ref;
         prepared.result.read_only = form->result_const;
@@ -23108,6 +23544,16 @@ class ScalarChecker {
         prepared.throws_types.push_back(resolved);
       }
       std::set<std::string> names;
+      if (constructor) for (const auto &field : sum_alternative(*constructor).fields) {
+        if (!field.stores_target() && !scalar_type(field.type))
+          implementation_gap(field.source->at, "an inline aggregate field in a regional sum initializer");
+        if ((!field.stores_target() && readonly_field(field)) ||
+            (field.stores_target() && field.source->fixed_binding))
+          implementation_gap(field.source->at, "a fixed field in a regional sum initializer");
+        if (owners.contains(field.source->name))
+          fail(field.source->at, "an initializer field conflicts with its destination owner name");
+        names.insert(field.source->name);
+      }
       std::map<std::string, size_t> native_owners;
       for (size_t i = 0; i < prepared.here.size(); ++i)
         if (!names.insert(form->parameters[i].name).second) fail(form->parameters[i].at, "duplicate parameter name");
@@ -23147,6 +23593,15 @@ class ScalarChecker {
         prepared.parameters.push_back(resolve_signature(parameter.type));
         require_ordinary_callable_type(prepared.parameters.back(), parameter.at);
         const auto mode = argument_mode(parameter);
+        if (constructor) {
+          const auto &argument = prepared.parameters.back();
+          const bool independent = mode == ArgumentMode::value && scalar_type(argument) && parameter.owner.empty();
+          const bool identity = mode == ArgumentMode::borrowed_ref && parameter.not_init_ref &&
+              argument == sum_type(constructor->sum) &&
+              parameter.owner == form->owner_parameters.front().name;
+          if (parameter.variadic || parameter.selects_caller_place() || (!independent && !identity))
+            implementation_gap(parameter.at, "argument outside the direct regional sum initializer profile");
+        }
         if (!parameter.selects_caller_place() && text_type(prepared.parameters.back()) &&
             (mode != ArgumentMode::borrowed_ref || !parameter.read_only))
           fail(parameter.at, "text parameters require a readonly, non-null owner-qualified reference");
@@ -23239,6 +23694,21 @@ class ScalarChecker {
         continue;
       }
       const auto id = program_.methods.size();
+      if (constructor) {
+        auto &initializers = program_.sums.at(constructor->sum).alternatives.at(constructor->alternative).initializers;
+        for (const auto other : initializers) {
+          const auto &definition = program_.methods[other];
+          if (implies(prepared, definition) && implies(definition, prepared) &&
+              same_access(prepared, definition) && implies_owners(prepared, definition) && implies_owners(definition, prepared))
+            fail(form->at, "duplicate initializer signature for '" + form->name + "'");
+        }
+        // The alternative selects the initializer family. A bare ordinary
+        // call cannot enter a body with unbound destination fields.
+        program_.methods.push_back(std::move(prepared));
+        method_ids.emplace(form, id);
+        initializers.push_back(id);
+        continue;
+      }
       if (form->c_linkage) {
         if (!scalar_type(*prepared.result.type) && *prepared.result.type != Type::void_type)
           implementation_gap(form->at, "C entry results other than direct scalars or void");
@@ -23300,8 +23770,9 @@ class ScalarChecker {
       require_implemented_source_forms(parameter, at, "owning exception callable type");
   }
 
-  static void require_implemented_source_forms(const Parameter &parameter) {
-    if (parameter.not_init_ref) implementation_gap(*parameter.not_init_ref, "not init ref parameters");
+  static void require_implemented_source_forms(const Parameter &parameter, bool check_after_nominal_registration = false) {
+    if (parameter.not_init_ref && !check_after_nominal_registration)
+      implementation_gap(*parameter.not_init_ref, "not init ref parameters");
     require_implemented_source_forms(parameter.type, parameter.at, "owning exception parameter");
     if (!parameter.here) return;
     for (const auto &input : parameter.here->parameters) require_implemented_source_forms(input);
@@ -23309,13 +23780,14 @@ class ScalarChecker {
   }
 
   static void require_implemented_source_forms(const Form &form) {
-    for (const auto &parameter : form.parameters) require_implemented_source_forms(parameter);
+    const bool named_co_d_definition = !form.c_linkage &&
+        (form.kind == Form::Kind::function || form.kind == Form::Kind::procedure);
+    for (const auto &parameter : form.parameters)
+      require_implemented_source_forms(parameter, named_co_d_definition);
     if (form.result_type) require_implemented_source_forms(*form.result_type, form.at, "owning exception result");
     if (!form.body) return;
     const auto visit = [&](auto &&self, const Expression &expr) -> void {
       using K = Expression::Kind;
-      if (expr.kind == K::bare_ref_slot) implementation_gap(expr.at, "bare ref slots");
-      if (expr.kind == K::init_reserved) implementation_gap(expr.at, "initializing a reserved target");
       if (expr.kind == K::predicate_assertion && expr.children.size() > 1)
         implementation_gap(expr.children[1]->at, "predicate assertion with a written diagnostic");
       if (expr.kind == K::exception_binding) implementation_gap(expr.at, "owning exception local");
@@ -23374,6 +23846,10 @@ class ScalarChecker {
     for (size_t i = 0; i < program_.methods.size(); ++i) {
       const auto &method = *program_.methods[i].source;
       if (program_.methods[i].definition != i || !method.type_parameters.empty() || lexical_methods_.contains(&method)) continue;
+      if (program_.methods[i].regional_initializer) {
+        demand_regional_initializer(i, method.at);
+        continue;
+      }
       if (const auto family = program_.methods[i].family) {
         const auto symbol = program_.families[*family].symbol;
         if (symbol && program_.symbols[*symbol].live_scope) continue;
