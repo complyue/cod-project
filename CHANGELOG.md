@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — A variadic method stands alone in its family
+
+<a id="h-variadic-method-family-20261123"></a>
+**H-VARIADIC-METHOD-FAMILY-20261123.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-23 (America/Los_Angeles), the project user proposed “杜绝 variadic overloads 形成，发现迹象就reject” and answered “同意。” to rejecting even a fixed-plus-variadic pair when the family forms. [D-10r245](design/SymbolicDynamicScope.md#runtime-array-expansion-and-one-variadic-parameter), D-10-VARARGS/D-10-ARGUMENTS, P-403–P-406 replace H-450 and the crossed-preference portion of H-475 at `5da3e593d42f3dd0f9564e840fbd94732fb1ef8b:design/SymbolicDynamicScope.md`. Matching declaration/definition and repeated paths to one method count once. H-449 expansion, explicit default/empty-pack requests and fixed-only default ranking retain their scopes. Multiple expansions and physical pack transport are separate.
+
 ## 2026-11-23 — Check a borrowed diagnostic handle across an ordinary module call
 
 <a id="k-booter-source-handle-helper-20261123"></a>
