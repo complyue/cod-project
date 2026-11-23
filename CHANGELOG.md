@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-22 — Show resolved diagnostic names and prefer semicolon omission
+
+<a id="h-diagnostic-names-20261122"></a>
+**H-DIAGNOSTIC-NAMES-20261122.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-22 (America/Los_Angeles), the project user directed “诊断信息中，对于使用别名的情况，应该同时展示别名与canonical全名，这条作为明确设计原则。” D-20-DIAGNOSTIC-NAMES/P-684–P-685 records the display principle at roadmap r26. D-07r202 and D-20-MODULE-GRAPH r34 apply it to names selected across modules and the named throw reviewed at `5ae9814ea32faef0ca8a7624601b8e775a8445f2:applications/cod-booter/docs/ModuleGraph.md`, “Exception identity, layout and names in the object”. Source identity, stage responsibilities and execution support retain their separate scope.
+
+<a id="h-idiomatic-semicolons-20261122"></a>
+**H-IDIOMATIC-SEMICOLONS-20261122.** In the same design discussion on 2026-11-22, the project user directed “只有分号是消歧义必须的，或者写出来能明显改善读者体验的地方，才写分号，否则不要写出来。 CoD语言设计也要将通过分号消歧义的必要范围最小化。” D-10r233 extends the H-SEMICOLON-UX-20261117 authoring and grammar principle at `5ae9814ea32faef0ca8a7624601b8e775a8445f2:design/SymbolicDynamicScope.md`, “Semicolon omission and syntax UX”. D-10-SEMICOLON-UX/P-570–P-572. Specific grammar changes and formatter behavior need their own coverage. Registry r1087.
+
 ## 2026-11-22 — Carry the defining exception name and field layout across object units
 
 <a id="k-booter-exception-artifact-20261122"></a>

@@ -63,6 +63,12 @@ Run test scripts only when asked. Confirm the component if unclear. Set `COD_TES
 - Preserve zero-cost relocation, ownership and publication in the C region service. Consult [the region protocols](design/MemoryRegionAndRegionalTypes.md) before changing regional pointers or allocation. Ask when a change could affect region invariants.
 - In shilos, construct regional objects only in a region, with `memory_region&`, and preserve their no-copy/no-move model. Use `regional_ptr<T>` for intra-region references to regional or bits types, and `global_ptr<T, RT>` across regions. Prefer `auto_region<RT>` and match the allocator and release operation. Release memory regions through their protocol and never through C++ `delete`.
 
+## Writing CoD source and diagnostics
+
+In CoD source and examples, omit a semicolon when the boundary is clear. Write one when it disambiguates the parse or materially helps the reader see the intended grouping. When designing syntax, minimize the cases that require a semicolon. Preserve the grammar of each supported form. [Semicolon omission and syntax UX](design/SymbolicDynamicScope.md#semicolon-omission-and-syntax-ux)
+
+When a diagnostic refers to a resolved name/identity alias, show the name used at the reported site **and** the canonical fully qualified name of its referent. Carry this through renamed re-exports and runtime reports tied to a named source use. [Names in diagnostics](applications/cod-booter/README.md#names-in-diagnostics)
+
 ## Terminology and component conventions
 
 - Follow [CoD operation terminology](design/CallableViewsAndCaptures.md#copying-moving-and-graph-transfer) for bits transfer, reference binding, ownership transfer, callable construction/capture and graph transfer. Native byte copying and C++ moves grant no CoD permission. Callable views require lexical storage, including when part of a compound value.
