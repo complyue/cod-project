@@ -15929,11 +15929,14 @@ class ScalarChecker {
         continue;
       }
       const bool handle = source.type.kind == Type::native_handle && !source.type.owned;
-      const bool readonly_view = (source.type.kind == Type::array || text_type(source.type)) && !source.value_binding && source.read_only;
+      const bool product = ordinary_product_capture && source.type.kind == Type::product &&
+          source.kind() == PlaceKind::reference && program_.bits_payload(source.type);
+      const bool readonly_product = product && source.read_only;
+      const bool readonly_view = (source.type.kind == Type::array || text_type(source.type) || readonly_product) &&
+          !source.value_binding && source.read_only;
       const bool writable_array = source.type.kind == Type::array && !source.value_binding && !source.read_only &&
           program_.bits_payload(program_.arrays.at(source.type.identity).element);
-      const bool writable_product = ordinary_product_capture && source.type.kind == Type::product &&
-          source.kind() == PlaceKind::reference && !source.read_only && program_.bits_payload(source.type);
+      const bool writable_product = product && !source.read_only;
       const bool scalar = numeric(source.type) || source.type.kind == Type::enumeration;
       const bool admitted_writable_view = writable_array || writable_product || handle;
       if (source.alias || !source.selection.empty() || source.indexed_element_owner ||
@@ -15957,14 +15960,21 @@ class ScalarChecker {
         require_live_view(view, capture.at);
         require_initialized(view, capture.at, writable_product ? "supplier product" : "supplier array");
       }
-      if (writable_product) {
-        // This profile transports a private supplier slot with a fixed target
-        // for the invocation. A callback can write the payload, not the slot.
+      if (product) {
+        // Ordinary borrowed ref inputs receive the caller's selected target in
+        // a private local slot. This loan cannot capture a caller-owned slot.
         require_slots_live(view.slots, capture.at, "here product's supplier slot has ended");
         if (source.embedded_slot || !source.overlaps.empty() || source.place_owners.size() != 1 ||
-            !view.slots.contains(*binding) || !view.place || storage(*view.place).borrowed ||
+            view.slots.size() != 1 || !view.slots.contains(*binding) || !view.place ||
+            (writable_product && storage(*view.place).borrowed) ||
             storage(*view.place).subobject || (validating_ && rebound_.contains(*binding)))
-          implementation_gap(capture.at, "here product access requires a stable lexical ref to a local product");
+          implementation_gap(capture.at, writable_product ?
+              "here product access requires a stable lexical ref to a local product" :
+              "here readonly product access requires a stable lexical ref under a live owner");
+        if (readonly_product) {
+          require_live_view(view, capture.at);
+          require_initialized(view, capture.at, "readonly supplier product");
+        }
       }
       // A receiver may enter the body zero or several times. Each invocation
       // reads the supplier's live slot with its established target owner.
