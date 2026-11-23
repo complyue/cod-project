@@ -1,6 +1,6 @@
 # Typed enums
 
-Design revision: 4 · 2026-11-23
+Design revision: 5 · 2026-11-23
 
 ## Design authority
 
@@ -8,7 +8,7 @@ Design revision: 4 · 2026-11-23
 
 [H-MODULE-SOURCE-STYLE-20261121](../CHANGELOG.md#h-module-source-style-20261121) continues r1 to r2 for the public declaration example. The [module contract](ModuleWorlds.md#public-definitions-and-grouped-selections) supplies its publication semantics. [K-ENUM-STATUS-WIRING](../CHANGELOG.md#k-enum-status-wiring) continues r2 to r3 for the first workload’s source links and keeps the accepted exchange and validation contract.
 
-The [short case arm decision](../CHANGELOG.md#h-short-case-arms-20261123) qualifies enum r4 for source spelling and case coverage under D-07-ENUM. Verify both spellings of one member with the subject’s member table and a shadowing lexical name. The C exchange contract retains its existing scope.
+The [short case arm decision](../CHANGELOG.md#h-short-case-arms-20261123) qualifies enum r4 for source spelling and case coverage under D-07-ENUM. Verify both spellings of one member with the subject’s member table and a shadowing lexical name. The [r5 guard spelling](../CHANGELOG.md#h-guarded-short-heads-20261123) applies the same identity and coverage rules when a predicate follows a bare member.
 
 ## Declaration and value identity
 
@@ -55,7 +55,7 @@ Exporting the type publishes its complete member table. `using` and `import` may
 
 In an expression `name:E`, first resolve the visible type E and use ordinary lookup for the operand. A lexically bound value takes precedence, even if asserting it as E then fails. Only when the single identifier has no ordinary binding and E identifies a concrete enum may the checker resolve it in E's member table. An ambiguous or inaccessible name stays an error. For example, a local `Complete:u8` makes `Complete:NativeError` an integer-to-enum assertion that is statically impossible. With no such binding, it denotes member Complete. A bare `Complete` without an ordinary binding still fails. An expected argument or return type does not search for enum members. General `expr : E` retains [ordinary expression typing](SymbolicDynamicScope.md#nonnumeric-assertion-contract); a numeric code needs explicit domain decoding by the application or a checked native boundary.
 
-In either member-pattern spelling, `OldRejected -> expr` or `(OldRejected) -> { expr }`, the static enum type of the subject supplies the member table. The token names a constant pattern; it introduces no variable and reads no shadowing local. A misspelling rejects. In a guard or arm body the same spelling uses ordinary expression lookup. A member has no variant payload to receive. `isa` remains a type test. [Case semantics](DomainLanguageDesign.md#case-expressions-and-branch-local-variables) govern subject evaluation, source-order effects, guards, fallthrough and result completion. The explicit wildcard `_ -> throw;` raises `UnexpectedCaseError` when reached.
+In either member-pattern spelling, `OldRejected -> expr` or `(OldRejected) -> { expr }`, the static enum type of the subject supplies the member table. The token names a constant pattern; it introduces no variable and reads no shadowing local. A misspelling rejects. In `OldRejected | retryable() -> retry()`, the member test precedes the guard. If the guard declines, scanning continues. Names inside the guard and body use ordinary expression lookup. A member has no variant payload to receive. `isa` remains a type test. [Case semantics](DomainLanguageDesign.md#case-expressions-and-branch-local-variables) govern subject evaluation, source-order effects, guards, fallthrough and result completion. The explicit wildcard `_ -> throw;` raises `UnexpectedCaseError` when reached.
 
 Coverage counts distinct canonical members of the complete declaration, independently of the selected names. For `enum Decision:u8 { Yes; OldYes = Yes; No; }`, unguarded completing arms for OldYes and No cover the entire domain. Arms for Yes and OldYes leave No uncovered. A guard that can decline or a matching arm that always falls through supplies no independent proof of completion. Repeated spellings may still have different guards or lead to later observable work. A void case may be partial. Value cases follow the existing static completion/fallback rule. A nullable subject also needs the usual null handling. Coverage must respect possible changes to a borrowed subject during matching.
 

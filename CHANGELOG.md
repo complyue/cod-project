@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Short case heads with field reception and guards
+
+<a id="h-guarded-short-heads-20261123"></a>
+**H-GUARDED-SHORT-HEADS-20261123.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on Nov 23 (America/Los_Angeles), the project user requested `Dispatched { val count <- cartons; } -> count;` and added “含 guard 的也最好不要求必须 () 吧”. D-07-CASE r206 extends H-SHORT-CASE-ARMS-20261123 from `a50ef654db52f37d192defaac7edfbc7d0e55e7f:design/DomainLanguageDesign.md`. P-625/P-626 and enum r5/P-659 preserve the pattern identity, reception, guard effects and completion of the full spelling. Guide r2 applies it to Shipment. The scoped D-ARCH-REVIEW r55 assessment clears both direct arm readers to share the existing pattern, guard and body representations.
+
 ## 2026-11-23 — Rebind a borrowed native handle within its live owner
 
 <a id="h-native-handle-local-rebinding-20261123"></a>

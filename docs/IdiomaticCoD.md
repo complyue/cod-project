@@ -12,10 +12,11 @@ dependencies are identified where needed.
 
 ## Design authority
 
-Guide revision 1 applies the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
+Guide revision 2 applies the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
 [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics), P-694/P-695, and the
 [canonical source style](IdiomaticsGuideline.md#canonical-code-style). The
-[continuity record](../CHANGELOG.md#k-idiomatic-cod-rewrite-20261123) identifies its source baseline.
+[guide baseline](../CHANGELOG.md#k-idiomatic-cod-rewrite-20261123) and the
+[case spelling update](../CHANGELOG.md#h-guarded-short-heads-20261123) identify its scope.
 The design sections linked throughout own the language rules, including identity, permissions,
 owners, effects, control and cleanup. This guide explains their use without extending those rules.
 Acceptance applies the guideline's semantic, example, coverage and mandatory style checks.
@@ -47,7 +48,7 @@ export data Shipment =
 """Returns the dispatched carton count for [Shipment](Shipment)."""
 export func cartons_sent(shipment:const Shipment in O) -> u64 where {const owner O} {
     case shipment of {
-        (Dispatched { val count <- cartons; }) -> { count };
+        Dispatched { val count <- cartons; } -> count;
         Queued -> 0u64
     }
 }
