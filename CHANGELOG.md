@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Word spellings for Boolean conjunction and disjunction
+
+<a id="h-boolean-word-operators-20261123"></a>
+**H-BOOLEAN-WORD-OPERATORS-20261123.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on Nov 23 (America/Los_Angeles), the project user requested “加上 and/or 等效于 &&/||” to give authors a choice of source spelling. D-10 r237→238 adds the two infix spellings to the operator contract at `a4d2e60d18aa50ee7d597e931cfb605d9b49cbf9:design/SymbolicDynamicScope.md`. The design review applies H-442 and P-130/P-136 to shared precedence and operation identity, retaining ordinary identifier positions and Boolean short-circuit execution. D-ARCH-REVIEW r56 clears both frontend infix readers and the corresponding source and runtime checks.
+
 ## 2026-11-23 — Short case heads with field reception and guards
 
 <a id="h-guarded-short-heads-20261123"></a>

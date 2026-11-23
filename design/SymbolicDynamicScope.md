@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 237 · Recorded: 2026-11-23 · Phase: language/application co-design.
+Design revision: 238 · Recorded: 2026-11-23 · Phase: language/application co-design.
 
 ## Design authority
+
+The [Boolean word-operator decision](../CHANGELOG.md#h-boolean-word-operators-20261123) qualifies [short-circuit conjunction and disjunction](#short-circuit-conjunction-and-disjunction) at r238 under D-10, C-41/C-37 and P-130/P-136. Readable predicates share one control-flow contract. Check precedence, conditional effects, null refinement and ordinary uses of the two names.
 
 [D-10](DesignAuthorityRegistry.md#d-10) r237 applies H-257/P-229 and [D-18-FUNC-VALUES](DesignAuthorityRegistry.md#d-18-func-values) to [lexical calls and shadowing](#lexical-calls-and-shadowing). The example distinguishes the module function, a nearer function parameter and a non-callable shadow. [Continuity and related documents](../CHANGELOG.md#k-lexical-callee-examples-20261123)
 
@@ -1625,7 +1627,20 @@ not flag && ready;     # Same grouping as (!flag) && ready.
 
 The call argument `not null p` uses the [owner-qualified reference arguments](RegionalOwnership.md#owner-qualified-reference-arguments) grammar. It produces the argument reference or raises checked NPE. Boolean negation continues to use its ordinary operand grammar.
 
-Unary not binds as tightly as !, so not a is b groups as (not a) is b; it does not mean not (a is b). The two-word a is not b remains a single identity comparison, equivalent to either parenthesized negation of a is b. Nullability refinement recognizes equivalent negated null tests without re-evaluating operands or retaining facts across invalidating writes. Acceptance covers both builtin spellings, nesting, shared method identity, explicit/intrinsic forms, mixed precedence, once-only side effects, null access and branch refinement. These are selected source rules, not a claim that the current parser accepts the new word spelling.
+Unary not binds as tightly as !, so not a is b groups as (not a) is b; it does not mean not (a is b). The two-word a is not b remains a single identity comparison, equivalent to either parenthesized negation of a is b. Nullability refinement recognizes equivalent negated null tests without re-evaluating operands or retaining facts across invalidating writes. Acceptance covers both builtin spellings, nesting, shared method identity, explicit/intrinsic forms, mixed precedence, once-only side effects, null access and branch refinement.
+
+<a id="short-circuit-conjunction-and-disjunction"></a>
+**Short-circuit conjunction and disjunction.** In infix position, `and` spells `&&` and `or` spells `||`. Each accepts Boolean operands and produces independent `val bool` on normal completion. Evaluate the left operand once. Conjunction evaluates the right operand once when the left is true. Disjunction evaluates it once when the left is false. On a skipped path the right operand performs no read, call or cleanup registration. Either spelling uses the same static checks, branch refinements, failure propagation and cleanup.
+
+```cod
+func may_ship(paid:bool, held:bool, override_ok:bool) -> bool {
+    paid and not held or override_ok
+}
+```
+
+This groups as `(paid && (!held)) || override_ok`. Comparisons bind more tightly than conjunction, and conjunction binds more tightly than disjunction. Operators of the same level associate left, including mixed spellings. CoD's unary `not` keeps the precedence of `!`. In `p is not null and ready(p)`, the right operand has the same non-null evidence as with `&&`.
+
+Match each word as a complete identifier token where the grammar accepts a binary operator. In a name or operand position it keeps ordinary lookup. For example, `func and(or:bool) -> bool { or }` declares an ordinary function, and `and(false)` calls it. A field such as `policy.or` and a label such as `value -> and` keep their meanings. A newline is whitespace. An explicit separator can end one expression before a call to a function named `and` or `or`. Both infix spellings denote built-in control expressions and introduce no callable overload.
 
 Operation spelling is separate from callable kind. H-155 permits function and procedure overloads under one operation, distinguished by parameter types. Under H-197/H-198, a function overload may write explicitly supplied regional storage; an overload accessing dynamic resources must be a procedure. Selected procedure overloads remain forbidden within functions. Conversion formulas are functions without dynamic-context access; the keyword itself supplies no automatic read-only guarantee.
 
