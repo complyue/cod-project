@@ -17,6 +17,7 @@
 #include <set>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -845,6 +846,14 @@ struct CheckedProgram {
   std::vector<CheckedExceptionCategory> exception_types = intrinsic_exception_types();
   Type exception_type(size_t category) const {
     return {Type::exception, std::string(exception_types.at(category).name), category};
+  }
+  std::string exception_display_name(size_t category, std::string_view spelling = {}) const {
+    const auto &type = exception_types.at(category);
+    if (!type.schema) return std::string(type.name);
+    const auto &definition = *schemas.at(*type.schema).source;
+    const auto canonical = definition.at.filename() + "::" + std::string(type.name);
+    if (spelling.empty()) return canonical;
+    return std::string(spelling) + " (canonical " + canonical + ")";
   }
   Type append_exception_type(const Form &source, bool checked) {
     const auto category = exception_types.size();

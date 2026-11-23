@@ -380,6 +380,7 @@ class ScalarChecker {
   };
   struct AbruptFlow { size_t depth; std::vector<AbruptPath> paths; std::set<size_t> declared{}; };
   AbruptFlow *abrupt_ = nullptr;
+  std::map<std::pair<Location, size_t>, std::string_view> named_throw_sites_;
   std::optional<size_t> caught_;
   std::set<size_t> catch_bindings_;
   std::map<size_t, const AbruptFlow *> owned_catches_;
@@ -5573,6 +5574,13 @@ class ScalarChecker {
       if (frame->bindings.contains(id)) { frame->required.insert(id); captured = true; }
     return captured;
   }
+  [[noreturn]] void report_uncovered_exception(const Location &at, size_t category) const {
+    const auto occurrence = named_throw_sites_.find({at, category});
+    const auto spelling = occurrence == named_throw_sites_.end() ? std::string_view{} : occurrence->second;
+    fail(at, "checked exception '" + program_.exception_display_name(category, spelling) +
+             "' requires a covering catch or throws declaration");
+  }
+
   void note_abrupt(const Location &at, ExceptionFacts exceptions = {}, Completion completion = {2, false},
                    bool immediate_scope_failure = false, std::optional<HereExit> here_exit = {},
                    bool receiver_transfer_pending = false, const Expression *case_result = nullptr) {
@@ -5587,7 +5595,7 @@ class ScalarChecker {
         if (checking_method_ && (checking_method_->source->implicit_scope || checking_method_->here_group))
           observed_.scope_checked_failures.insert(category);
         else if (validating_ && (!checking_method_ || !checking_method_->throws_categories.contains(category)))
-          fail(at, "checked exception '" + std::string(program_.exception_types[category].name) + "' requires a covering catch or throws declaration");
+          report_uncovered_exception(at, category);
       }
       return;
     }
@@ -11646,7 +11654,7 @@ class ScalarChecker {
       if (!completion.exception()) continue;
       const auto category = completion.category();
       if (program_.exception_types[category].checked && !signature.throws_categories.contains(category))
-        fail(supplied.at, "checked exception '" + std::string(program_.exception_types[category].name) + "' requires a covering catch or throws declaration");
+        report_uncovered_exception(supplied.at, category);
     }
     return completes ? *receiving.type : Type{Type::never};
   }
@@ -20236,7 +20244,10 @@ class ScalarChecker {
           initializer.product_field = order[i];
           operations.insert_or_assign(&item, std::move(initializer));
         }
-        if (completes) note_abrupt(expr.at, {type.identity});
+        if (completes && lexical_.live) {
+          named_throw_sites_.try_emplace({expr.at, type.identity}, expr.annotation->name);
+          note_abrupt(expr.at, {type.identity});
+        }
         operation.operand_type = type;
         operation.type = Type::never;
         break;

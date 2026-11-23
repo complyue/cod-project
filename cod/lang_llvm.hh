@@ -4771,16 +4771,10 @@ class LLVMEmission {
       selected_site->addCase(integer(i + 1), named);
       b_.SetInsertPoint(named);
       auto *matches = b_.CreateICmpEQ(function_->getArg(0), integer(nominal->category));
-      auto *display = b_.CreateGlobalString(std::string(nominal->spelling) + " (canonical " +
-                                            qualified_exception_name(nominal->category) + ")");
+      auto *display = b_.CreateGlobalString(program_->exception_display_name(nominal->category, nominal->spelling));
       b_.CreateRet(b_.CreateSelect(matches, display, null_pointer()));
     }
     b_.SetInsertPoint(unnamed); b_.CreateRet(null_pointer());
-  }
-  std::string qualified_exception_name(size_t category) const {
-    const auto &type = program_->exception_types.at(category);
-    const auto &definition = *program_->schemas.at(*type.schema).source;
-    return definition.at.filename() + "::" + std::string(type.name);
   }
   void emit_uncaught_failure() {
     auto *category = load(completion_.category);
@@ -4801,7 +4795,7 @@ class LLVMEmission {
         select->addCase(integer(i), nominal);
         b_.SetInsertPoint(nominal);
         auto *used_name = b_.CreateCall(named_exception_site_, {category, where});
-        auto *canonical = b_.CreateGlobalString(qualified_exception_name(i));
+        auto *canonical = b_.CreateGlobalString(program_->exception_display_name(i));
         auto *name = b_.CreateSelect(b_.CreateIsNotNull(used_name), used_name, canonical);
         b_.CreateCall(report, {name, where});
         b_.CreateUnreachable();
