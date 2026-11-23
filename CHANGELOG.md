@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review the booter reader for reference identity
+
+<a id="k-booter-identity-reader-20261123"></a>
+**K-BOOTER-IDENTITY-READER-20261123.** [D-ARCH-REVIEW r75→r76](design/ImplementationArchitecture.md#reading-reference-identity-in-the-booter), P-682/P-683. The [confirmed ref group](#h-placement-init-20261123) uses [H-439](#h-439), [H-440](#h-440) and [H-441](#h-441) for its reciprocal identity observations. Preserve the equality precedence, two-word operator and owner-qualified null from `3eede442a282f5976b0714ab18c4e4f90970928b:design/RegionalAndLexicalStorageRefactor.md`. Acceptance covers both operand links and the located checking boundary.
+
 ## 2026-11-23 — Review the Boolean assertion in the regional constructor
 
 <a id="k-constructor-assert-review-20261123"></a>
