@@ -2448,6 +2448,30 @@ class ScalarChecker {
       fail(expr.at, "print requires one primitive scalar argument");
     return Type::void_type;
   }
+  const CheckedSymbol &lexical_procedure_symbol(const Expression &expr, const TypeEvidenceState *state = nullptr) const {
+    const auto method = state ? state->method : checking_instance_ ? std::optional{checking_instance_->method} : std::nullopt;
+    if (method && program_.methods[*method].source->kind == Form::Kind::function)
+      fail(expr.at, "a function cannot invoke a procedure");
+    const bool shadowed = state ? symbol_shadowed(expr.text, *state) :
+        lexical_.lookup(expr.text).has_value() || active_here(expr.text) || query_environment().symbol_shadows.contains(expr.text);
+    const auto &symbol = program_.symbols[resolve_symbol(expr.text, expr.at, shadowed, method)];
+    if (!symbol.intrinsic_print && (symbol.reference || !symbol.type || symbol.type->kind != Type::procedure || symbol.type->pure_callable))
+      fail(expr.at, "nearest symbol '@" + expr.text + "' is not a procedure");
+    if (symbol.live_scope)
+      implementation_gap(expr.at, "a lexical symbolic call requiring an unproved defining activation");
+    return symbol;
+  }
+  static std::optional<size_t> module_call_family(const ModuleNames &names, const Expression &expr) {
+    if (expr.lexical_symbol_call) {
+      const auto symbol = names.symbols.find(expr.text);
+      if (symbol == names.symbols.end()) return {};
+      if (const auto family = names.families.find(symbol->second); family != names.families.end())
+        return family->second;
+    } else if (const auto family = names.callables.find(expr.text); family != names.callables.end()) {
+      return family->second;
+    }
+    return {};
+  }
   NamedFamily named_family(const std::string &name, const TypeEvidenceState *state = nullptr) const {
     const ModuleLookup lookup(module_, state && state->method ? program_.methods[*state->method].module : module_);
     const ModuleLookup context(interpretation_, state && state->method ? program_.methods[*state->method].interpretation : interpretation_);
@@ -2479,7 +2503,17 @@ class ScalarChecker {
     const auto found = module_names().callables.find(name);
     return found == module_names().callables.end() ? NamedFamily{} : NamedFamily{family_methods(found->second)};
   }
+  NamedFamily named_family(const Expression &expr, const TypeEvidenceState *state = nullptr) const {
+    if (!expr.lexical_symbol_call) return named_family(expr.text, state);
+    if (state && !state->complete) return {};
+    lexical_procedure_symbol(expr, state);
+    const ModuleLookup lookup(module_, state && state->method ? program_.methods[*state->method].module : module_);
+    const ModuleLookup context(interpretation_, state && state->method ? program_.methods[*state->method].interpretation : interpretation_);
+    if (const auto family = module_call_family(module_names(), expr)) return {family_methods(*family)};
+    return {};
+  }
   std::string_view operation_name(const Expression &expr, const TypeEvidenceState *state = nullptr) const {
+    if (expr.lexical_symbol_call) return {};
     if (expr.intrinsic) return expr.text;
     if (state ? (state->bindings.contains(expr.text) || state->owner_bindings.contains(expr.text) ||
                  state->symbol_shadows.contains(expr.text)) : lexical_.lookup(expr.text).has_value()) return {};
@@ -2568,7 +2602,7 @@ class ScalarChecker {
       bool compatible = true;
       const auto definition_domain = symbolic_definition_domain(types, evidence);
       cover_nominal_call(expr, types, evidence, [&](const auto &actual) {
-        if (complete && !select_nominal_method(expr, named_family(expr.text, state), actual, access, owners, definition_domain, state))
+        if (complete && !select_nominal_method(expr, named_family(expr, state), actual, access, owners, definition_domain, state))
           return;
         auto selected_evidence = evidence;
         for (size_t i = 0; i < actual.size(); ++i)
@@ -2584,7 +2618,7 @@ class ScalarChecker {
       if (!common) implementation_gap(expr.at, "no callable contract for abstract arguments to '" + expr.text + "'");
       return compatible ? *common : ArgumentPreparation{};
     }
-    const auto family = named_family(expr.text, state);
+    const auto family = named_family(expr, state);
     auto candidates = method_candidates(family.methods, arguments, family.retained_types(), access, owners, state);
     if (candidates.methods.empty() && !candidates.type_match) {
       bool contextual = false;
@@ -6330,9 +6364,10 @@ class ScalarChecker {
       }
       if ((expr.kind == K::null_ref || expr.kind == K::return_test) && !expr.owner_name.empty() && expr.owner_name != "here")
         use(expr.owner_name, expr.at, bound, query);
-      if (expr.kind == K::symbol || expr.kind == K::effect || expr.kind == K::touch || expr.kind == K::perform || expr.kind == K::behave)
+      if (expr.lexical_symbol_call || expr.kind == K::symbol || expr.kind == K::effect || expr.kind == K::touch ||
+          expr.kind == K::perform || expr.kind == K::behave)
         use(expr.text, expr.at, bound, query, true);
-      if (expr.kind == K::name || (expr.kind == K::call && !expr.intrinsic && !swap_operation(expr.text) &&
+      if (expr.kind == K::name || (expr.kind == K::call && !expr.lexical_symbol_call && !expr.intrinsic && !swap_operation(expr.text) &&
           !identity_operation(expr.text) && !eager_operation(expr.text)))
         use(expr.text, expr.at, bound, query);
       for (const auto &child : expr.children) visit(*child, bound, query);
@@ -7017,7 +7052,7 @@ class ScalarChecker {
     return !delayed_ && &expr != prepared_call_ ? lexical_.abstract_symbol_targets : unknown;
   }
   size_t select(const Expression &expr, const std::vector<Type> &arguments, const Access &access, const Owners &owners) {
-    const auto family = named_family(expr.text);
+    const auto family = named_family(expr);
     if (family.definition) check_query_binding(expr.text, expr.at);
     if (family.methods.empty()) fail(expr.at, has_declarations(expr.text)
         ? "no applicable implementation for declared callable '" + expr.text + "'" : "unknown callable '" + expr.text + "'");
@@ -7171,7 +7206,7 @@ class ScalarChecker {
         if (arguments[i].kind == Type::abstract_type) selected_views[i].type = actual[i];
       auto call = operation;
       call.nominal_calls.clear();
-      const auto family = named_family(expr.text);
+      const auto family = named_family(expr);
       const auto method = select_nominal_method(expr, family, actual, access_of(selected_views), owners_of(selected_views), definition_domain);
       if (!method) return;
       const auto target_id = demand_named(expr, family, *method, actual);
@@ -8589,17 +8624,22 @@ class ScalarChecker {
             if (symbol == names.symbols.end() || !program_.symbols.at(symbol->second).intrinsic_print) return false;
             continue;
           }
-          const auto family = names.callables.find(name);
-          if (family == names.callables.end()) {
+          const auto family = module_call_family(names, *call);
+          if (!family) {
+            if (call->lexical_symbol_call) {
+              const auto symbol = names.symbols.find(name);
+              if (symbol == names.symbols.end() || !program_.symbols.at(symbol->second).intrinsic_print) return false;
+              continue;
+            }
             if (!eager_operation(name) && !swap_operation(name) && !identity_operation(name))
               return false;
             continue;
           }
           // A body may select any applicable method in its interpretation.
           // Close the whole family without demanding instances from a query.
-          const auto *methods = &program_.families.at(family->second).methods;
+          const auto *methods = &program_.families.at(*family).methods;
           if (method.interpretation) {
-            const auto view = family_views_.find({family->second, method.interpretation});
+            const auto view = family_views_.find({*family, method.interpretation});
             if (view == family_views_.end() || !view->second.unproved.empty()) return false;
             methods = &view->second.methods;
           }
@@ -9363,7 +9403,7 @@ class ScalarChecker {
   bool check_type_text_transfer(const Expression &expr, const Type &destination_type, const ViewEvidence &destination,
       const Type &source, TypeEvidenceState &state, bool initializing = false, bool reached = true) const {
     if (!state.required) return false;
-    const auto family = named_family(expr.text, &state);
+    const auto family = named_family(expr, &state);
     if (family.methods.empty()) fail(expr.at, "a direct String field requires a visible '<-' method");
     const bool place = destination_type == Type::string;
     if (place && destination.fixed_binding != false) fail(expr.at, "cannot write through a readonly direct String place");
@@ -10887,7 +10927,7 @@ class ScalarChecker {
     }
     if (unproved_groups.empty()) return {};
     const bool lexical = lexical_methods_.contains(method.source);
-    const auto family = lexical ? named_family(expr.text) : NamedFamily{};
+    const auto family = lexical ? named_family(expr) : NamedFamily{};
     if (lexical && !family.declaration) return {};
     const TypeEvidenceState module_context;
     const auto &context = family.declaration ? *family.declaration : module_context;
@@ -11494,7 +11534,7 @@ class ScalarChecker {
   }
   void check_complete_named_call(const Expression &expr, CheckedInstance *supplier,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {
-    const auto family = named_family(expr.text);
+    const auto family = named_family(expr);
     const bool live_lexical = has_lexical_places(family);
     if (((family.context || family.definition) && !live_lexical) || &expr == prepared_call_)
       implementation_gap(expr.at, "a named argument list for a lexical or deferred callable");
@@ -11549,7 +11589,7 @@ class ScalarChecker {
     if (!expr.has_here_body() || expr.kind != Expression::Kind::call || expr.intrinsic ||
         active_here(expr.text, &state) || state.preparing(expr) || state.exits || state.checks_initialization())
       implementation_gap(expr.at, "type inspection of this call receiving a here argument");
-    const auto family = named_family(expr.text, &state);
+    const auto family = named_family(expr, &state);
     if (family.declaration || state.here_control)
       implementation_gap(expr.at, "type inspection of a lexical here receiver or nested supplied group");
     const auto binding = bind_written_call(expr, family, std::span<const Expr>{expr.children}.first(expr.children.size() - 1), 1);
@@ -11743,7 +11783,7 @@ class ScalarChecker {
       note_type_allocation(state);
       return Type::void_type;
     }
-    if (expr.kind == K::call && !expr.intrinsic) if (const auto native = native_operation(expr.text, &state)) {
+    if (expr.kind == K::call && !expr.lexical_symbol_call && !expr.intrinsic) if (const auto native = native_operation(expr.text, &state)) {
       const auto &operation = program_.native_operations[*native];
       if (state.validating_body)
         check_native_invocation_kind(state.method ? program_.methods[*state.method].source : nullptr,
@@ -11945,6 +11985,9 @@ class ScalarChecker {
         const auto id = resolve_symbol(expr.text, expr.at, symbol_shadowed(expr.text, state), state.method);
         const auto &symbol = program_.symbols[id];
         const auto &type = symbol.type;
+        if (expr.kind == K::procedure_effect && !expr.definition &&
+            (symbol.reference || !type || type->kind != Type::procedure || type->pure_callable))
+          fail(expr.at, "effect proc requires a procedure symbol");
         if (symbol.reference && !expr.children.empty()) {
           const auto operand = child(0, false, true, EvidenceRead::target);
           if (operand == Type::never) return Type::never;
@@ -11998,7 +12041,7 @@ class ScalarChecker {
         target_facts = named_type_target(state, expr.text);
         return found->second;
       }
-      if (const auto family = named_family(expr.text, &state); !family.methods.empty()) {
+      if (const auto family = named_family(expr, &state); !family.methods.empty()) {
         note_family_type_capture(state, family);
         if (expected_callable) {
           if (program_.methods[family.methods.front()].family && has_declarations(expr.text))
@@ -12464,7 +12507,7 @@ class ScalarChecker {
       auto destination = state.target;
       const auto destination_revision = state.selections.writes;
       const bool text_transfer = expr.kind == K::transfer && (view.direct_text_place ||
-          (type && type->kind == Type::product && !named_family(expr.text, &state).methods.empty()));
+          (type && type->kind == Type::product && !named_family(expr, &state).methods.empty()));
       if (expr.kind == K::transfer && !text_transfer && type != Type::never) read_type_target(state, view, state.target);
       const auto *context = expr.kind == K::transfer && type && type->kind == Type::procedure ? &*type : nullptr;
       const auto source = type_evidence(*expr.children[1], state, context != nullptr, context, nullptr,
@@ -12982,6 +13025,8 @@ class ScalarChecker {
       }
       [[fallthrough]];
     case K::unary: case K::call: case K::value_call: case K::behave: case K::perform: {
+      if (expr.lexical_symbol_call && !state.complete) return {};
+      const bool lexical_print = expr.lexical_symbol_call && lexical_procedure_symbol(expr, &state).intrinsic_print;
       if (expr.kind == K::call && builtin_indexed_transfer(expr, operation_name(expr, &state), &state)) {
         if (expr.children.size() != 3) fail(expr.at, "builtin indexed transfer requires an array, index and source");
         if (state.required && state.preparing(expr))
@@ -13022,12 +13067,12 @@ class ScalarChecker {
       const bool invokes = !state.preparing(expr);
       std::optional<Type> target;
       bool local = false, implicit = false, independent_callee = false;
-      if (expr.kind == K::behave || expr.kind == K::perform) {
+      if (lexical_print || expr.kind == K::behave || expr.kind == K::perform) {
         if (!state.complete) return {};
         if (state.validating_body && state.method && program_.methods[*state.method].source->kind == Form::Kind::function)
           fail(expr.at, "a function cannot invoke a dynamic procedure");
-        const auto id = resolve_symbol(expr.text, expr.at, symbol_shadowed(expr.text, state), state.method);
-        if (program_.symbols[id].intrinsic_print) {
+        const auto &symbol = program_.symbols[resolve_symbol(expr.text, expr.at, symbol_shadowed(expr.text, state), state.method)];
+        if (symbol.intrinsic_print) {
           if (state.required) print_result(expr);
           bool exits = false;
           for (const auto &item : expr.children) {
@@ -13038,8 +13083,8 @@ class ScalarChecker {
           if (!exits && !invokes) record_type_invocation(expr, state, call_reasons(std::set<size_t>{}), true);
           return exits ? Type::never : Type::void_type;
         }
-        if (state.required) dynamic_procedure_type(program_.symbols[id], expr.at);
-        target = program_.symbols[id].type; local = true;
+        if (state.required) dynamic_procedure_type(symbol, expr.at);
+        target = symbol.type; local = true;
       } else if (expr.kind == K::value_call) {
         const auto &callee = *expr.children.front();
         const bool scope_expectation = expected_use == ExpectedTypeUse::callable_result;
@@ -13054,7 +13099,7 @@ class ScalarChecker {
             scope_callable_evidence(callee, state, scope_expectation ? expected : nullptr,
                                     scope_expectation && contextual && !state.required, target_facts, joining, case_scope) : child(0);
         local = true;
-      } else if (!expr.intrinsic && state.complete) {
+      } else if (!expr.lexical_symbol_call && !expr.intrinsic && state.complete) {
         if (state.required && state.bindings.contains(expr.text)) check_query_binding(expr.text, expr.at);
         if (const auto found = state.bindings.find(expr.text); found != state.bindings.end() && !state.definitions.contains(expr.text)) {
           target = found->second; local = true;
@@ -13069,7 +13114,7 @@ class ScalarChecker {
       const size_t offset = expr.kind == K::value_call ? 1 : 0;
       if (local && !implicit && target && target->kind == Type::procedure)
         note_type_allocation(state);
-      if (!local && !expr.intrinsic && state.exits) note_family_type_capture(state, named_family(expr.text, &state));
+      if (!local && !expr.intrinsic && state.exits) note_family_type_capture(state, named_family(expr, &state));
       const bool ordered = state.required || state.selections.tracking;
       auto probe = state;
       // Only a traversal followed by ordered checking is speculative.
@@ -13294,7 +13339,7 @@ class ScalarChecker {
           return Type::void_type;
         }
         const bool reference = name == "<=>";
-        const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr.text, &state);
+        const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr, &state);
         const auto methods = method_candidates(family.methods, arguments, family.retained_types(), access, owners, &state);
         if (reference && invokes && state.selections.tracking && methods.methods.empty()) {
           const auto &left = operand_targets[0].selection, &right = operand_targets[1].selection;
@@ -13376,7 +13421,7 @@ class ScalarChecker {
         return Type::void_type;
       }
       if (!complete) return {};
-      const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr.text, &state);
+      const auto family = expr.intrinsic ? NamedFamily{} : named_family(expr, &state);
       const auto &retained = family.retained_types();
       if (!local && std::ranges::any_of(arguments, [](const auto &type) { return type.kind == Type::abstract_type; })) {
         std::optional<Type> result;
@@ -14228,13 +14273,13 @@ class ScalarChecker {
     return result;
   }
   std::vector<ArgumentEvidence> argument_evidence(const Expression &expr) const {
-    if (expr.intrinsic || named_family(expr.text).methods.empty()) return std::vector<ArgumentEvidence>(expr.children.size());
+    if (expr.intrinsic || named_family(expr).methods.empty()) return std::vector<ArgumentEvidence>(expr.children.size());
     return argument_evidence(expr, evidence_state());
   }
   bool builtin_indexed_transfer(const Expression &expr, std::string_view operation,
                                const TypeEvidenceState *state = nullptr) const {
     return operation == "[]<-" &&
-        (expr.intrinsic || (named_family(expr.text, state).methods.empty() && !has_declarations(expr.text)));
+        (expr.intrinsic || (named_family(expr, state).methods.empty() && !has_declarations(expr.text)));
   }
   struct CallableSelection {
     std::vector<Type> retained;
@@ -15684,7 +15729,7 @@ class ScalarChecker {
     if (!state && pipeline_binding(operand)) return true;
     if (operand.kind != K::call) return false;
     bool prepared = false;
-    for (const auto id : named_family(expr.text, state).methods) {
+    for (const auto id : named_family(expr, state).methods) {
       const auto &method = program_.methods[id];
       if (method.here.empty() && accepts_arity(method, expr.children.size())) return false;
       if (method.here.size() + method.parameters.size() == expr.children.size() &&
@@ -16120,7 +16165,7 @@ class ScalarChecker {
     if (expr.kind == K::processor_composition || expr.kind == K::pipeline) return true;
     if (expr.kind != K::name && expr.kind != K::call) return false;
     if (pipeline_binding(expr) || active_here(expr.text, &state)) return true;
-    const auto family = named_family(expr.text, &state);
+    const auto family = named_family(expr, &state);
     bool bounded = false;
     for (const auto id : family.methods) {
       const auto &method = program_.methods[id];
@@ -16224,7 +16269,7 @@ class ScalarChecker {
     using K = Expression::Kind;
     if ((expr.kind != K::call && expr.kind != K::name) || expr.intrinsic || expr.has_here_body() || active_here(expr.text))
       implementation_gap(expr.at, "preparing a traversal requires a direct producer or processor call");
-    auto family = named_family(expr.text);
+    auto family = named_family(expr);
     if (family.context || family.definition)
       implementation_gap(expr.at, "preparing a lexical producer or processor definition");
     std::erase_if(family.methods, [&](size_t id) {
@@ -17767,7 +17812,7 @@ class ScalarChecker {
   }
   CheckedOperation named_value(const Expression &expr, const Type *expected = nullptr, bool read = true) {
     if (const auto binding = lexical_.lookup(expr.text)) return named_binding(expr, *binding, expected, read);
-    const auto family = named_family(expr.text);
+    const auto family = named_family(expr);
     if (!family.methods.empty()) return materialize_definition(family, expected, expr.at);
     if (has_declarations(expr.text)) fail(expr.at, "no applicable implementation for declared callable '" + expr.text + "'");
     if (module_names().symbols.contains(expr.text))
@@ -18447,7 +18492,7 @@ class ScalarChecker {
         reference_destination(destination, expr.at, true);
     }
     if (!direct_place) prepare_borrow(destination, ArgumentMode::borrowed_ref, expr.at);
-    const auto family = named_family(expr.text);
+    const auto family = named_family(expr);
     if (family.methods.empty()) fail(expr.at, "a direct String field requires a visible '<-' method");
     operation.arguments = {{direct_place ? ArgumentMode::borrowed_ptr : ArgumentMode::borrowed_ref, destination.type, direct_place},
                            {ArgumentMode::borrowed_ref, Type::never}};
@@ -18752,7 +18797,15 @@ class ScalarChecker {
          (expr.kind != K::return_test && expr.owner_name == "here")))
       implementation_gap(expr.at, "supplier-owned allocation, owner selection or defer from a here group");
     if (expr.spread) implementation_gap(expr.at, "spread arguments");
-    if (expr.kind == K::call && !expr.intrinsic) if (const auto native = native_operation(expr.text)) {
+    if (expr.lexical_symbol_call && lexical_procedure_symbol(expr).intrinsic_print) {
+      print_result(expr);
+      const auto argument = check(*expr.children.front(), instance, operations);
+      operation.arguments.push_back({ArgumentMode::value, argument});
+      operation.type = print_result(expr, argument);
+      if (argument != Type::never) operation.builtin = BuiltinOperation::print;
+      return operations.insert_or_assign(&expr, std::move(operation)).first->second.type;
+    }
+    if (expr.kind == K::call && !expr.lexical_symbol_call && !expr.intrinsic) if (const auto native = native_operation(expr.text)) {
       const auto &provider = program_.native_operations[*native];
       check_native_invocation_kind(checking_method_ ? checking_method_->source : nullptr,
                                    *provider.contract.source, expr.at, &expr == prepared_call_);
@@ -19041,7 +19094,7 @@ class ScalarChecker {
         };
         if (reference) operation.builtin = BuiltinOperation::reference_swap;
         if (left.type == Type::never || right.type == Type::never) {
-          if (!reference && (expr.intrinsic || named_family(expr.text).methods.empty())) check_bits_destinations();
+          if (!reference && (expr.intrinsic || named_family(expr).methods.empty())) check_bits_destinations();
           operation.type = Type::never; break;
         }
         if (reference) {
@@ -19101,7 +19154,7 @@ class ScalarChecker {
         }
         break;
       }
-      if (expr.kind == K::value_call || (!expr.intrinsic && lexical_.lookup(expr.text) && named_family(expr.text).methods.empty())) {
+      if (expr.kind == K::value_call || (!expr.intrinsic && lexical_.lookup(expr.text) && named_family(expr).methods.empty())) {
         const size_t offset = expr.kind == K::value_call ? 1 : 0;
         const auto *definition = offset ? expr.children.front()->definition.get() : nullptr;
         if (definition && definition->implicit_scope) {
@@ -19206,10 +19259,10 @@ class ScalarChecker {
       std::vector<Type> arguments;
       std::vector<CheckedOperation> views;
       bool completes = true;
-      const bool declared_builtin = eager && !expr.intrinsic && named_family(expr.text).methods.empty() && has_declarations(expr.text);
+      const bool declared_builtin = eager && !expr.intrinsic && named_family(expr).methods.empty() && has_declarations(expr.text);
       const bool builtin_signature = eager && (expr.intrinsic ||
-          (named_family(expr.text).methods.empty() && !has_declarations(expr.text)));
-      const auto family = named_family(expr.text);
+          (named_family(expr).methods.empty() && !has_declarations(expr.text)));
+      const auto family = named_family(expr);
       if (expr.kind == K::binary && expr.text == "++" && family.methods.empty())
         fail(expr.at, "no selected method family for operator '++'");
       if (!family.methods.empty() && (family.context || family.definition) && !has_lexical_places(family)) {
@@ -19239,7 +19292,7 @@ class ScalarChecker {
             preparation = argument_preparation(expr, name, arguments, evidence, source_access, source_owners);
           }
           if (!preparation.type && !builtin_signature) {
-            if (!eager && !expr.intrinsic && named_family(expr.text).methods.empty())
+            if (!eager && !expr.intrinsic && named_family(expr).methods.empty())
               fail(expr.at, "unknown callable '" + expr.text + "'");
             implementation_gap(expr.children[i]->at, "cannot establish a parameter type for an abruptly completing operand");
           }
@@ -19302,6 +19355,9 @@ class ScalarChecker {
       const auto &symbol = program_.symbols[*operation.symbol];
       if (method && method->kind == Form::Kind::function)
         fail(expr.at, "a function cannot access dynamic bindings");
+      const bool named_activation = expr.kind == K::procedure_effect && !expr.definition;
+      if (named_activation && (symbol.reference || !symbol.type || symbol.type->kind != Type::procedure || symbol.type->pure_callable))
+        fail(expr.at, "effect proc requires a procedure symbol");
       if (symbol.reference) {
         check_reference_symbol(expr, symbol, instance, operations, operation);
         break;
@@ -19330,7 +19386,9 @@ class ScalarChecker {
           if (symbol.type->kind != Type::procedure) fail(expr.at, "a scalar symbol installation requires an explicit value");
           const auto id = *operation.symbol;
           const auto site = scoped_symbol_sites_.find(id);
-          if (site != scoped_symbol_sites_.end() && expr.definition.get() != site->second)
+          if (named_activation && site != scoped_symbol_sites_.end() && symbol.live_scope)
+            implementation_gap(expr.at, "effect proc requiring an unproved defining activation");
+          if (!named_activation && site != scoped_symbol_sites_.end() && expr.definition.get() != site->second)
             fail(expr.at, "scoped procedure installation requires its lexical definition site");
           if (symbol.live_scope) {
             check_scoped_effect(expr, id, instance, operations, operation);
@@ -19975,7 +20033,7 @@ class ScalarChecker {
         break;
       }
       if (direct_text_destination(target) || direct_text_field(*expr.children[0], target) ||
-          (target.type.kind == Type::product && !named_family(expr.text).methods.empty())) {
+          (target.type.kind == Type::product && !named_family(expr).methods.empty())) {
         check_text_transfer(expr, instance, operations, target, operation);
         break;
       }
@@ -21548,15 +21606,18 @@ class ScalarChecker {
     for (size_t id = 0; id < program_.methods.size(); ++id) {
       const auto &method = program_.methods[id];
       if (!method.interpretation) continue;
-      const auto &names = modules_.at(method.module).callables;
+      const auto &names = modules_.at(method.module);
+      const auto context = method.interpretation;
+      const auto &source = *method.source;
       const std::function<void(const Expression &)> visit = [&](const Expression &expr) {
-        if (const auto found = names.find(expr.text); found != names.end())
-          prepare_family_view(found->second, method.interpretation);
+        if (const auto family = module_call_family(names, expr))
+          prepare_family_view(*family, context);
         for (const auto &child : expr.children) visit(*child);
       };
-      visit(*method.source->body);
-      for (const auto &capture : method.source->captures)
-        if (const auto found = names.find(capture.name); found != names.end()) prepare_family_view(found->second, method.interpretation);
+      visit(*source.body);
+      for (const auto &capture : source.captures)
+        if (const auto found = names.callables.find(capture.name); found != names.callables.end())
+          prepare_family_view(found->second, context);
     }
   }
 
@@ -21589,9 +21650,9 @@ class ScalarChecker {
         if (expr.kind == K::value_call && !expr.children.front()->definition) reads.insert(ambient.begin(), ambient.end());
         if (!expr.intrinsic && (expr.kind == K::call || expr.kind == K::unary || expr.kind == K::binary ||
                                expr.kind == K::processor_composition || expr.kind == K::pipeline)) {
-          if (const auto found = names.callables.find(expr.text); found != names.callables.end()) {
-            const auto view = family_views_.find({found->second, method.interpretation});
-            const auto &selected = view != family_views_.end() ? view->second.methods : program_.families[found->second].methods;
+          if (const auto family = module_call_family(names, expr)) {
+            const auto view = family_views_.find({*family, method.interpretation});
+            const auto &selected = view != family_views_.end() ? view->second.methods : program_.families[*family].methods;
             for (const auto target : selected) callers[target].insert(id);
           }
         }

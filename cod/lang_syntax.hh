@@ -372,6 +372,7 @@ struct Expression {
   std::unique_ptr<Expression> binding_name_error, annotation_error;
   std::shared_ptr<Form> definition = {};
   bool intrinsic = false;
+  bool lexical_symbol_call = false;
   bool fixed_binding = false;
   bool read_only = false;
   bool scoped = false;
@@ -2006,6 +2007,14 @@ class Parser {
       fail(token.at, "use ref/ptr for reference bindings or val for independent bits storage");
 
     if (take("effect")) {
+      if (is("proc") && tokens_[cursor_ + 1].kind == TokenKind::symbol && !is("(", 2)) {
+        expect("proc");
+        auto activation = make(Expression::Kind::procedure_effect, token);
+        activation->text = name(TokenKind::symbol).text;
+        if (!is(";") && !is("}") && peek().kind != TokenKind::end)
+          fail(peek().at, "expected the end of the procedure activation");
+        return activation;
+      }
       if (is("proc") || is("procedure") || (peek().kind == TokenKind::symbol && is("(", 1))) {
         auto definition = std::make_shared<Form>();
         definition->at = peek().at;
@@ -2097,7 +2106,13 @@ class Parser {
     }
     if (token.kind == TokenKind::symbol) {
       ++cursor_;
-      return make(Expression::Kind::symbol, token);
+      const bool call = is("(") && !(pipeline_operand && here_header());
+      auto expr = make(call ? Expression::Kind::call : Expression::Kind::symbol, token);
+      if (call) {
+        expr->lexical_symbol_call = true;
+        arguments(*expr, !pipeline_operand);
+      }
+      return expr;
     }
     if (token.kind == TokenKind::identifier) {
       ++cursor_;
