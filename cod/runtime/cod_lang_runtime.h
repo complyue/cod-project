@@ -29,6 +29,7 @@ void cod_lang_release_exception_region(void *owner);
 void *cod_lang_region_acquire(uint64_t capacity);
 uint64_t cod_lang_region_reserve(void *owner, uint64_t bytes, uint64_t alignment);
 void *cod_lang_region_address(void *owner, uint64_t offset, uint64_t bytes);
+uint64_t cod_lang_region_remaining(const void *owner);
 void cod_lang_region_release(void *owner);
 void *cod_lang_acquire_deferred_aggregate(uint64_t members, uint64_t *failure_category);
 void cod_lang_retain_deferred_failure(void *aggregate, uint64_t position, uint64_t category, uint64_t site,

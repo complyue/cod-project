@@ -303,6 +303,11 @@ void *cod_lang_region_address(void *owner, uint64_t offset, uint64_t bytes) {
     return cod_region_storage_address(owner, (cod_region_extent){(size_t)offset, (size_t)bytes});
 }
 
+uint64_t cod_lang_region_remaining(const void *owner) {
+    const cod_region_storage *region = owner;
+    return region->capacity - region->used;
+}
+
 void cod_lang_region_release(void *owner) {
     if (!owner) return;
     cod_region_storage_release(owner);

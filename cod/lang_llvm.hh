@@ -53,7 +53,13 @@ class LLVMEmission {
   // scope-owned images; they are not regional-storable bits.
   llvm::StructType *exception_ = llvm::StructType::get(context_, std::vector<llvm::Type *>(5, b_.getInt64Ty()));
   llvm::StructType *scalar_ = llvm::StructType::create(context_, {b_.getInt64Ty(), b_.getInt32Ty()}, "cod.scalar");
-  llvm::StructType *array_view_ = llvm::StructType::create(context_, {b_.getPtrTy(), b_.getInt64Ty()}, "cod.array.view");
+  enum class ArrayBacking { inline_elements, foreign_loan };
+  llvm::StructType *array_header_ =
+      llvm::StructType::create(context_, {b_.getInt64Ty(), b_.getInt8Ty()}, "cod.array.header");
+  llvm::StructType *borrowed_array_ =
+      llvm::StructType::create(context_, {array_header_, b_.getPtrTy()}, "cod.array.borrowed");
+  llvm::StructType *native_array_view_ =
+      llvm::StructType::create(context_, {b_.getPtrTy(), b_.getInt64Ty()}, "cod.native.array.view");
   llvm::StructType *text_view_ = llvm::StructType::create(context_, {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()}, "cod.text.view");
   llvm::StructType *outcome_ = llvm::StructType::create(context_,
       {scalar_, b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty(), b_.getInt64Ty()}, "cod.outcome");
@@ -481,6 +487,36 @@ class LLVMEmission {
       body.CreateRetVoid();
     }
   }
+  std::uint64_t array_prefix(llvm::Type *element) const {
+    const auto &layout = module_.getDataLayout();
+    return llvm::alignTo(layout.getTypeAllocSize(array_header_).getFixedValue(), layout.getABITypeAlign(element));
+  }
+  llvm::Value *array_length(llvm::Value *array) {
+    return b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(array_header_, array, 0), "array.length");
+  }
+  llvm::Value *array_data(llvm::Value *array, llvm::Type *element) {
+    auto *kind = b_.CreateLoad(b_.getInt8Ty(), b_.CreateStructGEP(array_header_, array, 1), "array.backing");
+    auto *direct = block("array.inline"), *loan = block("array.external"), *join = block("array.data");
+    b_.CreateCondBr(b_.CreateICmpEQ(kind, b_.getInt8(static_cast<unsigned>(ArrayBacking::inline_elements))), direct, loan);
+    b_.SetInsertPoint(direct);
+    auto *inline_data = b_.CreateGEP(b_.getInt8Ty(), array, integer(array_prefix(element)));
+    b_.CreateBr(join);
+    b_.SetInsertPoint(loan);
+    auto *external = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(borrowed_array_, array, 1));
+    b_.CreateBr(join);
+    b_.SetInsertPoint(join);
+    auto *data = b_.CreatePHI(b_.getPtrTy(), 2);
+    data->addIncoming(inline_data, direct);
+    data->addIncoming(external, loan);
+    return data;
+  }
+  llvm::Value *native_array_loan(llvm::Value *array, const Type &type) {
+    auto *loan = slot(native_array_view_, "native.array.loan");
+    auto *element = inline_layout(program_->arrays.at(type.identity).element);
+    b_.CreateStore(array_data(array, element), b_.CreateStructGEP(native_array_view_, loan, 0));
+    b_.CreateStore(array_length(array), b_.CreateStructGEP(native_array_view_, loan, 1));
+    return loan;
+  }
   llvm::Value *emit_array_construction(const Expression &expr, bool discard) {
     const auto &length = *expr.children.front();
     const auto &fill = *expr.children.back();
@@ -488,18 +524,20 @@ class LLVMEmission {
     if (!reachable()) return nullptr;
 
     using Allocation = CheckedOperation::LexicalAllocation;
-    std::map<std::tuple<size_t, size_t, StorageFormat, StorageFormat>, std::vector<size_t>> alternatives;
+    using Plan = std::tuple<std::optional<size_t>, size_t, size_t, StorageFormat, StorageFormat>;
+    std::map<Plan, std::vector<size_t>> alternatives;
     for (size_t i = 0; i < contexts_.size(); ++i) {
       const auto &context = contexts_[i];
       const auto &fact = context.at(&expr);
       if (context.at(&length).type == Type::never) continue;
-      const auto &allocation = fact.lexical_allocation.value();
-      if (allocation.kind != Allocation::array) throw std::logic_error("inconsistent checked array constructor");
-      alternatives[{allocation.owner, fact.operand_type.identity, StorageFormat{context.at(&length).type},
+      const auto owner = fact.region_holder ? size_t{} : fact.lexical_allocation.value().owner;
+      if (!fact.region_holder && fact.lexical_allocation->kind != Allocation::array)
+        throw std::logic_error("inconsistent checked array constructor");
+      alternatives[{fact.region_holder, owner, fact.operand_type.identity, StorageFormat{context.at(&length).type},
                     StorageFormat{context.at(&fill).type}}].push_back(i);
     }
     auto *view = contextual_value(expr, alternatives, "array.construct", [&](const auto &selection) -> llvm::Value * {
-      const auto &[owner, schema, length_format, fill_format] = selection;
+      const auto &[region, owner, schema, length_format, fill_format] = selection;
       const auto &array = program_->arrays.at(schema);
       const bool aggregate = inline_aggregate_type(array.element);
       auto *fill_value = emit_expression(fill, aggregate ? Projection::target : Projection::value);
@@ -508,27 +546,46 @@ class LLVMEmission {
       auto *element = inline_layout(array.element);
       const auto &layout = module_.getDataLayout();
       const auto element_alignment = layout.getABITypeAlign(element);
-      const auto alignment = std::max(element_alignment, layout.getABITypeAlign(array_view_));
+      const auto alignment = std::max(element_alignment, layout.getABITypeAlign(array_header_));
       const auto stride = layout.getTypeAllocSize(element).getFixedValue();
-      const auto prefix = llvm::alignTo(layout.getTypeAllocSize(array_view_).getFixedValue(), element_alignment);
+      const auto prefix = array_prefix(element);
       constexpr auto limit = std::uint64_t{std::numeric_limits<std::ptrdiff_t>::max()};
       if (alignment.value() > alignof(std::max_align_t) || !stride || prefix > limit)
-        implementation_gap(expr.at, "target layout for lexical array backing");
+        implementation_gap(expr.at, "target layout for array backing");
 
       auto *count = convert(count_value, length_format.type(), Type::uint64);
-      auto *fits = block("array.size.valid"), *failed = block("array.allocation.failed");
-      b_.CreateCondBr(b_.CreateICmpULE(count, integer((limit - prefix) / stride)), fits, failed);
+      auto *fits = block("array.size.valid"), *overflow = block("array.size.overflow");
+      b_.CreateCondBr(b_.CreateICmpULE(count, integer((limit - prefix) / stride)), fits, overflow);
+      b_.SetInsertPoint(overflow);
+      fail_path(region ? ExceptionCategory::invalid_capacity : ExceptionCategory::out_of_memory, expr.at);
       b_.SetInsertPoint(fits);
       auto *bytes = b_.CreateAdd(integer(prefix), b_.CreateMul(count, integer(stride)));
-      auto allocate = runtime("cod_lang_lexical_extent_allocate", b_.getPtrTy(),
-          {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
-      auto *storage = b_.CreateCall(allocate, {owner_identity(owner, expr.at), bytes, integer(alignment.value())});
-      auto *ready = block("array.allocation.ready");
-      b_.CreateCondBr(b_.CreateIsNotNull(storage), ready, failed);
-      b_.SetInsertPoint(failed);
-      fail_path(ExceptionCategory::out_of_memory, expr.at);
+      auto *ready = block("array.allocation.ready"), *failed = block("array.allocation.failed");
+      llvm::Value *storage;
+      if (region) {
+        auto *actual = load(storage_.at(*region));
+        auto reserve = runtime("cod_lang_region_reserve", b_.getInt64Ty(),
+            {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
+        auto *offset = b_.CreateCall(reserve, {actual, bytes, integer(alignment.value())});
+        b_.CreateCondBr(b_.CreateICmpNE(offset, integer(UINT64_MAX)), ready, failed);
+        b_.SetInsertPoint(failed);
+        auto remaining = runtime("cod_lang_region_remaining", b_.getInt64Ty(), {b_.getPtrTy()});
+        auto *available = b_.CreateCall(remaining, {actual});
+        save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::region_capacity_exceeded)),
+                            integer(site(expr.at)), null_pointer(), bytes, available));
+        b_.CreateBr(control_->exit);
+        b_.SetInsertPoint(ready);
+        storage = region_address(actual, offset, bytes);
+      } else {
+        auto allocate = runtime("cod_lang_lexical_extent_allocate", b_.getPtrTy(),
+            {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
+        storage = b_.CreateCall(allocate, {owner_identity(owner, expr.at), bytes, integer(alignment.value())});
+        b_.CreateCondBr(b_.CreateIsNotNull(storage), ready, failed);
+        b_.SetInsertPoint(failed);
+        fail_path(ExceptionCategory::out_of_memory, expr.at);
+        b_.SetInsertPoint(ready);
+      }
 
-      b_.SetInsertPoint(ready);
       auto *data = b_.CreateGEP(b_.getInt8Ty(), storage, integer(prefix));
       auto *value = aggregate ? fill_value : fill_format.kind == Type::enumeration ? unpack(fill_value, array.element)
           : convert(fill_value, fill_format.type(), array.element);
@@ -546,8 +603,9 @@ class LLVMEmission {
       index->addIncoming(next, store);
       b_.CreateBr(test);
       b_.SetInsertPoint(complete);
-      b_.CreateStore(data, b_.CreateStructGEP(array_view_, storage, 0));
-      b_.CreateStore(count, b_.CreateStructGEP(array_view_, storage, 1));
+      b_.CreateStore(count, b_.CreateStructGEP(array_header_, storage, 0));
+      b_.CreateStore(b_.getInt8(static_cast<unsigned>(ArrayBacking::inline_elements)),
+                     b_.CreateStructGEP(array_header_, storage, 1));
       return storage;
     }, b_.getPtrTy());
     return discard ? empty_scalar() : view;
@@ -1110,11 +1168,12 @@ class LLVMEmission {
         } else if (input.owner) {
           argument = emit_expression(operand, Projection::target);
           if (!reachable()) return nullptr;
-          if (input.type.kind == Type::array) argument = checked_address(argument, operand, operand.at);
         } else {
           argument = native_scalar_argument(operand, input.type);
           if (!reachable()) return nullptr;
         }
+        if (input.type.kind == Type::array)
+          argument = native_array_loan(checked_address(argument, operand, operand.at), input.type);
         arguments.push_back(argument);
         types.push_back(argument->getType());
       }
@@ -1145,12 +1204,19 @@ class LLVMEmission {
     llvm::IRBuilder<> body(llvm::BasicBlock::Create(context_, "entry", bridge));
     auto *state = bridge->getArg(0);
     auto *views = bridge->getArg(1);
-    auto *arrays = llvm::StructType::get(context_, std::vector<llvm::Type *>(native.arrays().size(), array_view_));
+    auto *arrays = llvm::StructType::get(context_, std::vector<llvm::Type *>(native.arrays().size(), native_array_view_));
     auto *callback = body.CreateLoad(here_, body.CreateStructGEP(frame, state, 0));
     std::vector<llvm::Value *> arguments;
     for (size_t i = 0; i < native.arrays().size(); ++i) {
-      auto *address = body.CreateStructGEP(arrays, views, i);
-      auto *view = body.CreateInsertValue(empty_scalar(), body.CreatePtrToInt(address, body.getInt64Ty()), 0);
+      auto *native_view = body.CreateStructGEP(arrays, views, i);
+      auto *external = body.CreateAlloca(borrowed_array_, nullptr, "native.array.header");
+      auto *header = body.CreateStructGEP(borrowed_array_, external, 0);
+      auto *data = body.CreateLoad(pointer, body.CreateStructGEP(native_array_view_, native_view, 0));
+      auto *count = body.CreateLoad(body.getInt64Ty(), body.CreateStructGEP(native_array_view_, native_view, 1));
+      body.CreateStore(count, body.CreateStructGEP(array_header_, header, 0));
+      body.CreateStore(body.getInt8(static_cast<unsigned>(ArrayBacking::foreign_loan)), body.CreateStructGEP(array_header_, header, 1));
+      body.CreateStore(data, body.CreateStructGEP(borrowed_array_, external, 1));
+      auto *view = body.CreateInsertValue(empty_scalar(), body.CreatePtrToInt(external, body.getInt64Ty()), 0);
       arguments.push_back(body.CreateInsertValue(view, body.getInt32(tag(native.arrays()[i].type)), 1));
     }
     arguments.push_back(body.CreateLoad(pointer, body.CreateStructGEP(frame, state, 1)));
@@ -3406,7 +3472,7 @@ class LLVMEmission {
       const auto &shape = program_->arrays.at(schema);
       auto *index = b_.CreateZExtOrTrunc(convert(index_value, Type{index_kind}, shape.index), b_.getInt64Ty());
       if (bounds_checks_) {
-        auto *length = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(array_view_, view, 1), "array.length");
+        auto *length = array_length(view);
         auto *in_range = b_.CreateICmpULT(index, length);
         if (shape.index == Type::integer)
           in_range = b_.CreateAnd(in_range, b_.CreateICmpSGE(index, integer(0)));
@@ -3418,8 +3484,8 @@ class LLVMEmission {
         b_.CreateBr(control_->exit);
         b_.SetInsertPoint(valid);
       }
-      auto *data = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(array_view_, view, 0), "array.data");
-      return b_.CreateGEP(inline_layout(shape.element), data, index);
+      auto *element = inline_layout(shape.element);
+      return b_.CreateGEP(element, array_data(view, element), index);
     }, b_.getPtrTy());
   }
   llvm::Value *emit_checked_expression(const Expression &expr, Projection projection, bool discard) {
@@ -3698,7 +3764,7 @@ class LLVMEmission {
         if (!reachable()) return nullptr;
         address = checked_address(address, operand, expr.at);
         if (discard) return empty_scalar();
-        auto *length = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(array_view_, address, 1), "array.length");
+        auto *length = array_length(address);
         return pack(length, Type::uint64);
       }
       return temporary_scope(expr.at, !fact.borrowed_result || read ? scalar_ : static_cast<llvm::Type *>(b_.getPtrTy()), [&]() -> llvm::Value * {
@@ -4031,7 +4097,7 @@ class LLVMEmission {
     case K::make_borrowed_handle:
       return emit_attached_native_handle(expr);
     case K::make_object: {
-      if (fact.lexical_allocation && fact.lexical_allocation->kind == CheckedOperation::LexicalAllocation::array)
+      if (fact.region_holder || (fact.lexical_allocation && fact.lexical_allocation->kind == CheckedOperation::LexicalAllocation::array))
         return emit_array_construction(expr, discard);
       if (fact.sum_constructor) {
         const auto constructor = *fact.sum_constructor;
