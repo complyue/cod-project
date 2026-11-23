@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 235 · Recorded: 2026-11-23 · Phase: language/application co-design.
+Design revision: 236 · Recorded: 2026-11-23 · Phase: language/application co-design.
 
 ## Design authority
+
+The [variable identity decision](../CHANGELOG.md#h-using-symbolic-variable-identity-20261123) at r236 places a symbolic variable read at the operation that uses the dynamic binding. Its two [declaration spellings](ModuleWorlds.md#selecting-a-symbolic-variable) supply identical static identity and owner-role evidence.
 
 The [module selector decision](../CHANGELOG.md#h-module-default-selector-substitution-20261123) at r235 distinguishes `symbol from` identity selection from [kind-qualified resource selection](ModuleWorlds.md#default-and-complete-public-selections). This updates the source spelling for reuse. Symbolic procedure installation, destination checks and the dynamic owner contracts retain their existing scope.
 

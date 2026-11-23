@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Selecting a symbolic variable names its identity before installation
+
+<a id="h-using-symbolic-variable-identity-20261123"></a>
+**H-USING-SYMBOLIC-VARIABLE-IDENTITY-20261123.** In the [CoD design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-23 (America/Los_Angeles), the project user proposed that reading `@sout` is dynamically scoped and effectful, and that at declaration `using "string.cod" { var @sout }` and `symbol from "string.cod" { @sout }` are fully equivalent. The design review accepts that rule and closes the variable-selection question at `118f87074307c947181529aa2878bd2afb149577:design/ModuleWorlds.md`, “Default and complete public selections”. D-15r65 (P-662/P-663 and P-692/P-693), D-10r236, D-07-STRING-BUILD r9 and D-20-MODULE-GRAPH r44 separate static selection from the actual read. H-502 continues to govern visibility when the read executes.
+
 ## 2026-11-23 — Substitute kind-qualified module selectors under the receiving verb
 
 <a id="h-module-default-selector-substitution-20261123"></a>
