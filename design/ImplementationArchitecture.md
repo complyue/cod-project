@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 31. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 32. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
 
 [K-BOOTER-AST-TABLE-20261122](../CHANGELOG.md#k-booter-ast-table-20261122) records the delegated review of the indexed AST workload and its seed prerequisites under the [work-method decision](../CHANGELOG.md#h-booter-work-method-20261122).
 
@@ -37,6 +37,8 @@ The [constructor case syntax review](../CHANGELOG.md#k-booter-constructor-case-s
 The [aggregate schema review](../CHANGELOG.md#k-booter-aggregate-schemas-20261122) clears the [CoD declaration traversal and publication of storage facts](../applications/cod-booter/docs/ModuleGraph.md#checking-aggregate-fields-before-publication) used by the typed AST.
 
 The [graph formal syntax review](../CHANGELOG.md#k-booter-slot-formal-syntax-20261122) clears the [named slot and fixed value parameter parser](../applications/cod-booter/docs/ModuleGraph.md#parsing-parameters-for-graph-table-growth) for the module index and its callers.
+
+The [symbolic procedure syntax review](../CHANGELOG.md#k-booter-symbolic-procedure-syntax-20261122) clears the [declaration, scoped definition and corresponding profile checks](../applications/cod-booter/docs/ModuleGraph.md#parsing-the-dependency-procedure) for the dependency visit.
 
 ## Before coding
 
