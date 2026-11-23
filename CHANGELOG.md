@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Return a Boolean from a native predicate
+
+<a id="h-native-boolean-result-20261123"></a>
+**H-NATIVE-BOOLEAN-RESULT-20261123.** In the [CoD design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-23 (America/Los_Angeles), the project user requested `path_ready(...) -> bool` for use directly in a condition and suggested a named byte representation in C. D-20-C-DECLARATIONS interop r28 spells it `typedef uint8_t COD_BOOL;` and applies existing canonical Boolean and provider failure checks to ordinary results under P-644/P-645. D-ARCH-REVIEW r50 extends the reviewed path provider work at `36c6b9fd40909d19d3dece8bd346bef5d291d755:design/ImplementationArchitecture.md`, “Checking callable kind at C linkage”. This scope covers the two result adapters and the actual predicate use.
+
 ## 2026-11-23 — Review native callable-kind checking and the path provider migration
 
 <a id="k-native-callable-kind-architecture-20261123"></a>
