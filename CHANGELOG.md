@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review borrowed-handle replacement and its publication check
+
+<a id="k-lexical-handle-rebind-check-20261123"></a>
+**K-LEXICAL-HANDLE-REBIND-CHECK-20261123.** [D-ARCH-REVIEW r73→r74](design/ImplementationArchitecture.md#checking-rebinding-of-a-borrowed-handle-local), P-682/P-683, clears seed checking and pair installation plus the CoD booter’s source gate under the [same-owner rebinding decision](#h-native-handle-local-rebinding-20261123). The two-session negative distinguishes actual owner from CType at `566c16c9:applications/cod-booter/docs/LLVMInterop.md`, “Borrowed handle locals and results”. Native booter object emission retains separate review.
+
 ## 2026-11-23 — Review frontend support for in-place constructor calls
 
 <a id="k-placement-init-frontends-20261123"></a>
