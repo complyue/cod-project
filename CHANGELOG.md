@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Read the graph factory’s owning result in CoD
+
+<a id="k-booter-own-region-result-syntax-20261122"></a>
+**K-BOOTER-OWN-REGION-RESULT-SYNTAX-20261122.** Delegated pre-code review under H-PROJECT-ARCHITECTURE-REVIEW-20261122 extends the booter signature parser and typed readers to the factory source at `27c7ef1bd63cb79413e939986adc8d66abf7f0d6:applications/cod-booter/docs/ModuleGraph.md`, “Returning the freshly constructed graph”. D-14 supplies the optional region root annotation. Unsupported checked results must stop before publication or emission. D-20-MODULE-GRAPH r22 to r23, D-ARCH-REVIEW r26 to r27, P-680–P-683, registry r1075.
+
 ## 2026-11-22 — Return a fresh graph owner to each typed command
 
 <a id="k-booter-fresh-graph-result-20261122"></a>
