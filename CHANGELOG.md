@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Distinguish a present zero from an absent regional ptr field
+
+<a id="h-regional-ptr-field-initialization-20261123"></a>
+**H-REGIONAL-PTR-FIELD-INITIALIZATION-20261123.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-23 (America/Los_Angeles), the project user answered “同意” to allowing `limit = 0u64` to create a fresh present target in the containing region for a nullable scalar field. In the paired example `limit = null` establishes absence. [D-22r69](design/ConstructionAndAcquisition.md#initializing-a-regional-scalar-ptr-field), D-22-REGIONAL-REF-INIT / P-351–P-352, extends the scoped ref-field decision at `5ac88ddf5880bc0d2b28a84677dcc890f93046f6:design/ConstructionAndAcquisition.md`. Existing borrowing, initialization-failure and later assignment contracts govern both fields.
+
 ## 2026-11-23 — Initialize a regional scalar ref field from independent bits
 
 <a id="h-regional-ref-field-initialization-20261123"></a>
