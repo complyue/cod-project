@@ -2157,6 +2157,16 @@ class ScalarChecker {
   static bool variadic(const CheckedMethod &method) {
     return !method.input_parameters().empty() && method.input_parameters().back().variadic;
   }
+  void check_variadic_family_member(std::span<const size_t> members, const CheckedMethod &addition,
+                                    const Location &at) const {
+    for (const auto member : members) {
+      const auto &existing = program_.methods[member];
+      if (existing.definition == addition.definition) continue;
+      if (variadic(existing) || variadic(addition))
+        fail(at, "a variadic method must be the only method in its callable family; conflicts with " +
+            location_text(existing.source->at));
+    }
+  }
   static bool accepts_arity(const CheckedMethod &method, size_t count) {
     return variadic(method) ? count + 1 >= method.parameters.size() : count == method.parameters.size();
   }
@@ -21580,8 +21590,10 @@ class ScalarChecker {
       const auto previous = std::find_if(view.methods.begin(), view.methods.end(), [&](size_t candidate) {
         return program_.methods[candidate].definition == program_.methods[method].definition;
       });
-      if (previous == view.methods.end()) view.methods.push_back(method);
-      else *previous = method;
+      if (previous == view.methods.end()) {
+        check_variadic_family_member(view.methods, program_.methods[method], program_.families[*replacement].at);
+        view.methods.push_back(method);
+      } else *previous = method;
     }
     std::map<size_t, size_t> definitions;
     for (const auto method : view.methods) definitions.emplace(program_.methods[method].definition, method);
@@ -21592,7 +21604,10 @@ class ScalarChecker {
         const auto definition = program_.methods[method].definition;
         if (retained.contains(definition)) continue;
         const auto [found, added] = definitions.emplace(definition, method);
-        if (added) view.methods.push_back(method);
+        if (added) {
+          check_variadic_family_member(view.methods, program_.methods[method], program_.families[id].at);
+          view.methods.push_back(method);
+        }
         else if (found->second != method)
           view.unproved = "multiple selected interpretations of one inherited definition require an independent equivalence proof";
       }
@@ -22621,7 +22636,6 @@ class ScalarChecker {
         if (!names.insert(parameter.name).second) fail(parameter.at, "duplicate parameter name");
         if (form->supplied_scope) continue; // The selected receiver supplies this signature.
         if (!parameter.owner.empty() && !owners.contains(parameter.owner)) fail(parameter.at, "unknown parameter owner '" + parameter.owner + "'");
-        if (parameter.variadic && form->body) implementation_gap(parameter.at, "variadic method bodies");
         if (parameter.automatic_conversion) implementation_gap(parameter.at, "automatic parameter conversion contract");
         if (parameter.selects_caller_ref_slot()) {
           const auto type = resolve_signature(parameter.type);
@@ -22709,6 +22723,7 @@ class ScalarChecker {
           fail(form->at, "symbolic procedure definition requires a procedure symbol");
       }
       const bool lexical = lexical_methods_.contains(form);
+      if (form->body) prepared.definition = program_.methods.size();
       if (symbol && module_names().selected_symbols.contains(*symbol))
         fail(form->at, "using and symbol selection do not grant callable extension permission");
       if (!symbol && !lexical && module_names().selected_callables.contains(form->name))
@@ -22722,6 +22737,7 @@ class ScalarChecker {
         if (!module_names().families.contains(*symbol)) module_names().families.emplace(*symbol, new_family());
         prepared.family = module_names().families.at(*symbol);
         const auto &family = program_.families[*prepared.family];
+        if (form->body) check_variadic_family_member(family.methods, prepared, form->at);
         if (form->body && parents.contains(form)) {
           if (!family.methods.empty() || !scoped_symbol_sites_.emplace(*symbol, form).second)
             implementation_gap(form->at, "a scoped procedure symbol with more than one definition site");
@@ -22735,6 +22751,7 @@ class ScalarChecker {
       } else if (!lexical) {
         if (!module_names().callables.contains(form->name)) module_names().callables.emplace(form->name, new_family());
         prepared.family = module_names().callables.at(form->name);
+        if (form->body) check_variadic_family_member(program_.families[*prepared.family].methods, prepared, form->at);
         if (module_names().imported_aliases.contains(form->name))
           module_names().extensions[*prepared.family].emplace(form->name, form->at);
       }
@@ -22748,7 +22765,6 @@ class ScalarChecker {
           implementation_gap(form->at, "C entry results other than direct scalars or void");
         program_.native_entries.push_back({id, std::move(native_inputs), *prepared.result.type});
       }
-      prepared.definition = id;
       std::vector<size_t> local_family;
       auto &family = prepared.family ? program_.families[*prepared.family].methods : local_family;
       for (const auto other : lexical ? std::vector<size_t>{} : family) {
@@ -22850,6 +22866,8 @@ class ScalarChecker {
         check_declared_results(method, method.result, declared_results(method, method.parameters));
     if (unsupported_here) implementation_gap(*unsupported_here, "this receiving pattern for a here body");
     prepare_interpretations();
+    for (const auto &method : program_.methods)
+      if (variadic(method)) implementation_gap(method.input_parameters().back().at, "variadic method bodies");
     find_abstract_effect_inputs();
     std::vector<WarningDiagnostic> definition_warnings;
     if (!definition_pass_ && !abstract_effect_inputs_.empty())
