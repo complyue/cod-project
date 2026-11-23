@@ -2,6 +2,12 @@
 
 Respond in English unless the user explicitly asks otherwise.
 
+## Design discussion and development mainline
+
+The design discussion maintains the language contracts, reviews proposed implementation architecture before coding, and records its decisions. It may inspect source and existing evidence, challenge a delay or a gap in coverage, and ask mainline for the failing command, input, or missing evidence. It brings unresolved design trade-offs to the project user.
+
+Development mainline owns implementation, regression fixes, the compatibility baseline and its execution, and the decision to integrate, switch production and push the implementation. Mainline publishes when the cleared acceptance conditions are met. If a delayed cutover needs a compatibility run, code patch or implementation push, the design discussion asks mainline to perform it and follows up on the result. [Responsibilities and example](design/ImplementationArchitecture.md#design-review-and-delivery-responsibilities)
+
 ## Before coding
 
 1. Identify the component, intended behavior and acceptance workload. Ask which component to change if the request leaves that unclear.
