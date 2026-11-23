@@ -12,12 +12,13 @@ dependencies are identified where needed.
 
 ## Design authority
 
-Guide revision 3 applies the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
+Guide revision 4 applies the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
 [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics), P-694/P-695, and the
 [canonical source style](IdiomaticsGuideline.md#canonical-code-style). The
 [guide baseline](../CHANGELOG.md#k-idiomatic-cod-rewrite-20261123),
 [case spelling](../CHANGELOG.md#h-guarded-short-heads-20261123) and
-[arithmetic updates](../CHANGELOG.md#h-augmented-transfer-tokens-20261123) identify its scope.
+[arithmetic updates](../CHANGELOG.md#h-augmented-transfer-tokens-20261123) identify its scope. The
+[operator-token decision](../CHANGELOG.md#h-maximal-operator-runs-20261123) covers spacing between symbolic operators.
 The design sections linked throughout own the language rules, including identity, permissions,
 owners, effects, control and cleanup. This guide explains their use without extending those rules.
 Acceptance applies the guideline's semantic, example, coverage and mandatory style checks.
@@ -963,7 +964,9 @@ independent formatting checks at submission or integration, is the recommended e
 
 Put spaces around an augmented transfer token, as in `stock <-:- 1u64`. The four characters
 together specify a read, arithmetic operation and transfer back to the selected place.
-[Augmented transfer](../design/SymbolicDynamicScope.md#augmented-transfer)
+Separate consecutive operators you intend to apply individually. Write `n <- -1` for a negative
+assignment, `ready && !closed` for a negated condition, or `not not flag` for double negation.
+[Symbolic operator tokens](../design/SymbolicDynamicScope.md#symbolic-operator-tokens) · [Augmented transfer](../design/SymbolicDynamicScope.md#augmented-transfer)
 
 Omit semicolons when token boundaries already make the intended structure clear. Retain necessary
 separators, including those separating ambiguous expressions or required by a receiving list.

@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 206
+Discussion revision: 207
 
 Recorded: 2026-11-23
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r207, LI-04 writes the starred unit and its first conversion arrow as separate tokens under [D-10-OPERATOR-RUNS](DesignAuthorityRegistry.md#d-10-operator-runs). H-136–H-138 govern selection of the same direct or declared route. [Decision](../CHANGELOG.md#h-maximal-operator-runs-20261123)
 
 [Editorial continuity](../CHANGELOG.md#k-lexical-callee-examples-20261123) aligns lexical calls and symbolic procedure installation with [D-18 callable value kinds](CallableStorageAndHereAccess.md#callable-value-kinds) and [D-10 handler installation](SymbolicDynamicScope.md#definition-installed-effectful-procedures). Existing qualification boundaries apply.
 
@@ -1038,7 +1040,7 @@ H-133–H-138, H-148–H-150 and H-153–H-155/H-158/H-159 resolve the following
 | LI-01 | Result references from a function | H-133/H-197: returning an existing input-reachable reference retains its source-region lifetime. Mutation is allowed; returning a view cannot keep a locally released region alive. |
 | LI-02 | UoM definition reuse | H-134: fresh definitions and one-shot using only; no UoM import. Select the intended UoMs and their associated conversions together. Partial selections exclude conversions involving omitted UoMs; repeated using does not extend the bundle. |
 | LI-03 | Conversion during method selection | H-135: H-260/H-261 `amount:f64(m)` preserves unit identity while allowing lossless representation widening; `amount:f64(m*)` also permits selected unit conversions. This is a user-declared parameter policy, not a universal language restriction. |
-| LI-04 | Conversion route selection | H-136: discover routes at compile time, choose a unique route automatically, warn about unresolved alternatives and allow warnings-as-errors. H-137/H-138: a direct conversion wins; otherwise use the declared indirect route, illustrated by `m*<-cm<-mm`. |
+| LI-04 | Conversion route selection | H-136: discover routes at compile time, choose a unique route automatically, warn about unresolved alternatives and allow warnings-as-errors. H-137/H-138: a direct conversion wins; otherwise use the declared indirect route, illustrated by `m* <- cm <- mm`. |
 | LI-05 | Argument/conversion order | H-148: evaluate each argument once and finish its selected conversions before evaluating the next argument. An earlier failure prevents later argument effects. |
 | LI-06 | Local value names | H-149: nested scopes may shadow outer locals; declarations within one scope must be unique. The initializer sees the outer value, and scope exit restores its visibility. Function parameters and loop bindings share their body’s declaration scope. |
 | LI-07 | Reserved expression names | Reserve literal and control spellings that preclude lookup. The ten [ordinary names](SymbolicDynamicScope.md#ordinary-names-for-traversal-and-storage) use ordinary binding and dispatch. `touch @symbol` declares a symbolic dependency. |

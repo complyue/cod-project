@@ -1,8 +1,10 @@
 # Scalar units, strict brands and array index domains
 
-Discussion revision: 36 · Recorded: 2026-11-17 · Status: alternatives under discussion.
+Discussion revision: 37 · Recorded: 2026-11-23 · Status: alternatives under discussion.
 
 ## Design authority
+
+- **Conversion route spelling:** [D-10-OPERATOR-RUNS](DesignAuthorityRegistry.md#d-10-operator-runs) at D-11 r37 separates the automatic-conversion marker from the first route arrow. Check the explicit route against the same units and selected conversion before and after the spelling migration. [Decision](../CHANGELOG.md#h-maximal-operator-runs-20261123)
 
 - **Current capture-review reference:** [K-REPLACEMENT-EFFECTS-20261117](../CHANGELOG.md#k-replacement-effects-20261117) keeps the separate D-18 value-input qualification current. This file changes only review references; its semantic revision, governing value paths, constraints and acceptance are unchanged. The registry owns the current review scope.
 
@@ -39,7 +41,7 @@ H-256 requests prompt implementation planning for representation-independent UoM
 
 Acceptance for this prerequisite should demonstrate one shared unit identity used with multiple supported integer/floating representations, preservation of distinct same-spelled unit identities, typed conversions with differing input/output representations, rejected incompatible routes, source/receiver isolation and preserved per-argument conversion order. No fraction runtime is needed to establish those properties. K-402 records native acceptance of this prerequisite; full fraction execution remains deferred.
 
-H-260 selects independent `unit m;` declarations and quantity annotations such as `f64(m)`, `u64(m)` and `x::f64(m*<-cm<-mm)`. `m(3u64)` associates m's identity with the supplied u64 bits; `scalar` exposes the underlying representation. H-261 selects whole-type lossless widening.
+H-260 selects independent `unit m;` declarations and quantity annotations such as `f64(m)`, `u64(m)` and `x:f64(m* <- cm <- mm)`. `m(3u64)` associates m's identity with the supplied u64 bits; `scalar` exposes the underlying representation. H-261 selects whole-type lossless widening.
 
 ### Quantity types and lossless widening
 
@@ -146,9 +148,9 @@ H-135 makes acceptance a declaration-site choice:
 
 | Parameter annotation | Meaning |
 | --- | --- |
-| `amount::f64(m)` | Require the `m` identity; permit lossless representation widening but no implicit unit conversion. |
-| `amount::f64(m*)` | Permit automatic conversion to `m` using the selected pure conversion functions. |
-| `amount::f64(m*<-cm<-mm)` | Permit conversion to `m`; a direct conversion wins, otherwise use the declared indirect route `mm → cm → m` when it connects the supplied unit to `m`. |
+| `amount:f64(m)` | Require the `m` identity; permit lossless representation widening but no implicit unit conversion. |
+| `amount:f64(m*)` | Permit automatic conversion to `m` using the selected pure conversion functions. |
+| `amount:f64(m* <- cm <- mm)` | Permit conversion to `m`; a direct conversion wins, otherwise use the declared indirect route `mm → cm → m` when it connects the supplied unit to `m`. |
 
 The star is a parameter conversion policy, not a new UoM identity, a compound unit or a runtime flag on the numeric value. Matching `m` needs no conversion. An actual conversion changes the value through the selected pure formulas; it does not unify source and destination identities. Scalar representation and rounding remain part of those formulas and the numeric contract.
 
@@ -180,9 +182,9 @@ H-130 chooses Julia-style parameter-type method dispatch. Conversion permission 
 Illustrative method shapes, pending the complete numeric/array grammar:
 
 ```text
-function consume(amount::f64(m)) { ... }
-function consume_convertible(amount::f64(m*)) { ... }
-function consume_via_cm(amount::f64(m*<-cm<-mm)) { ... }
+function consume(amount:f64(m)) { ... }
+function consume_convertible(amount:f64(m*)) { ... }
+function consume_via_cm(amount:f64(m* <- cm <- mm)) { ... }
 
 convert_index(layout::PoolLayout, set::SetIndex, slot::LocalSlot)::GlobalSlot
 getindex(a::SlotWeights, i::GlobalSlot)::Weight

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-23 — Read maximal symbolic operator runs and assign future infix parsing
+
+<a id="h-maximal-operator-runs-20261123"></a>
+**H-MAXIMAL-OPERATOR-RUNS-20261123.** On Nov 23 (America/Los_Angeles) the project user chose “Use maximal runs and migrate adjacent operators” in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). D-10 r240→241 supersedes the joined `n<--1` guarantee at `ba669065025466feb5b761c8cbbe22b1d2a93806:design/SymbolicDynamicScope.md`. P-700/P-701 cover a whole token and source span independent of known operators. The five arithmetic updates retain their P-698/P-699 expansion. D-ARCH-REVIEW r59 and guide r4 apply the rule to frontend migration and authored examples. D-11 r37 and D-07 r207 separate the two existing tokens in starred conversion routes.
+
+<a id="k-infix-fixity-roadmap-20261123"></a>
+**K-INFIX-FIXITY-ROADMAP-20261123.** The same user specified “自定义操作符留给 e-wrks/cod 编译器去实现，seed/booter 不需要支持” and identified Edh’s parser as implementation precedent. [DesignTopics](docs/DesignTopics.md#4-用户定义中缀操作符的优先级与结合性) records the future compiler scope and reference. Declaration syntax, precedence scale and module rules remain open.
+
 ## 2026-11-23 — Adopt the five colon-marked arithmetic updates
 
 <a id="h-augmented-transfer-tokens-20261123"></a>

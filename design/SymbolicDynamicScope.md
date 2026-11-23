@@ -1,10 +1,12 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 240 · Recorded: 2026-11-23 · Phase: language/application co-design.
+Design revision: 241 · Recorded: 2026-11-23 · Phase: language/application co-design.
 
 ## Design authority
 
-The [augmented transfer expansion](../CHANGELOG.md#h-augmented-transfer-place-20261123) at r239 uses one [declared place](CallableViewsAndCaptures.md#declared-place-aliases) for the destination and the left operand. D-10-AUGMENTED-TRANSFER and P-698/P-699 cover this meaning. The [r240 spelling decision](../CHANGELOG.md#h-augmented-transfer-tokens-20261123) selects five colon-marked arithmetic updates and preserves ordinary transfer of a negative operand.
+The [augmented transfer expansion](../CHANGELOG.md#h-augmented-transfer-place-20261123) at r239 uses one [declared place](CallableViewsAndCaptures.md#declared-place-aliases) for the destination and the left operand. D-10-AUGMENTED-TRANSFER and P-698/P-699 cover this meaning. The [r240 spelling decision](../CHANGELOG.md#h-augmented-transfer-tokens-20261123) selects five colon-marked arithmetic updates.
+
+[H-MAXIMAL-OPERATOR-RUNS-20261123](../CHANGELOG.md#h-maximal-operator-runs-20261123) qualifies [symbolic operator tokens](#symbolic-operator-tokens) under [D-10-OPERATOR-RUNS](DesignAuthorityRegistry.md#d-10-operator-runs), P-700/P-701. Source readers can recover identical token boundaries before importing a module or checking a type. Verify separated prefix operators, the five updates, reserved spellings and the full span of an unknown run. Declarations of new infix operators and their precedence and associativity are planned for the future CoD compiler.
 
 The [Boolean word-operator decision](../CHANGELOG.md#h-boolean-word-operators-20261123) qualifies [short-circuit conjunction and disjunction](#short-circuit-conjunction-and-disjunction) at r238 under D-10, C-41/C-37 and P-130/P-136. Readable predicates share one control-flow contract. Check precedence, conditional effects, null refinement and ordinary uses of the two names.
 
@@ -1607,6 +1609,14 @@ The parser and source tools must preserve the parenthesized expression boundary 
 
 **Acceptance and remaining work:** distinguish bare/parenthesized scalar places and returned readonly/writable views; preserve snapshots across later writes; retain operator-result views for unparenthesized chains; reject scalar projected destinations/identity operands; distinguish nested grouping from call/type/operator-name delimiters. Preserve target-read readiness, actual owners, numeric/UoM/fraction validity, callable value rules and D-17 cleanup. Source policy is selected; typed group representation, complete generic/non-bits carrier integration and checker/native migration are not established by older parser evidence that erases parentheses.
 
+### Symbolic operator tokens
+
+At the start of a symbolic token, the lexer consumes the longest contiguous run of operator characters. Its spelling and source span are fixed before grammar, module lookup or type checking. The current alphabet is `!`, `$`, `%`, `&`, `*`, `+`, `-`, `.`, `/`, `:`, `<`, `=`, `>` and `|`. Whitespace (including a newline), identifiers and structural delimiters `()[]{};,` end a run. Symbol names beginning with `@`, comments beginning with `#`, quoted text and numeric literals follow their own lexical rules. In particular, `1e-3` has an exponent sign, `1.5` has a decimal point, and `1..3` has a range token between two integers.
+
+Classify the exact spelling. For example, `->`, `=>`, `<:`, `:=`, `..` and the five augmented transfers are each one token. Grammar still determines where each can occur. Exact `//` is reserved for fraction construction and exact `::` retains its existing rejection. A longer run beginning with either spelling is still a single token. An unsupported spelling such as `<+>` retains its whole span for an error at its use. [Fraction construction and comments](FixedWidthFractions.md#construction-comments-and-output)
+
+Write `n <- -1` to store negative one, `! !flag` or `not not flag` to negate twice, and `a && !b` for a conjunction with a negated operand. The joined forms contain the single spellings `<--`, `!!` and `&&!` respectively, each currently unsupported. A single known operator may touch an identifier or literal, as in `n+1`. The same boundaries apply in operator names and in source emitted by tools.
+
 ### Augmented transfer
 
 The five augmented transfer tokens are `<-:+`, `<-:-`, `<-:*`, `<-:/` and `<-:%`. They apply `+`, `-`, `*`, `/` and `%` respectively, then transfer the result back through the selected place. Each token consists of four adjacent characters. Write spaces around the whole token in idiomatic source. Line breaks may occur at the same boundaries as spaces.
@@ -1622,7 +1632,7 @@ The expansion introduces no full scope. Its result is the result of the final tr
 
 For `bins[next_bin()] <-:+ incoming()`, first select the place designated by the indexed expression, calling `next_bin()` once. Then the ordinary transfer selects its destination and the addition prepares its left operand before `incoming()` runs. For a ref or ptr variable, the declared place is its binding slot. Reads and writes through it follow ordinary target selection, including the destination selected before the RHS. A container that offers only a logical indexed setter supplies no place for this expansion. A writable field or array element still requires valid storage, readability for the operation and write access for the transfer. The ordinary overload families, type and unit checks, ownership, failures and cleanup apply. A failed binary operation skips the final transfer. Effects already performed retain their usual semantics. [Place selection](CallableViewsAndCaptures.md#declared-place-aliases) · [Indexed transfer](RegionalOwnership.md#logical-indexed-transfer)
 
-Augmented transfer has ordinary transfer precedence and consumes the complete expression to its right. Each component operation uses its usual overload selection. The five spellings introduce no independent overload families. Starting with signed `n` equal to 10, `n <-:- 1` produces 9 in the destination. Both `n <- -1` and `n<--1` store −1 by ordinary transfer. The same expansion with `/` uses ordinary division, including its existing type and unit rules. [Fraction construction](FixedWidthFractions.md#construction-comments-and-output) has separate syntax.
+Augmented transfer has ordinary transfer precedence and consumes the complete expression to its right. Each component operation uses its usual overload selection. The five spellings introduce no independent overload families. Starting with signed `n` equal to 10, `n <-:- 1` produces 9 in the destination. Write `n <- -1` for ordinary transfer of −1 and `n <-:- -1` to subtract −1. The same expansion with `/` uses ordinary division, including its existing type and unit rules. [Fraction construction](FixedWidthFractions.md#construction-comments-and-output) has separate syntax.
 
 ### Operator and intrinsic overloads
 
@@ -1639,7 +1649,7 @@ H-153 reserves a set of keywords against ordinary-name declarations and uses par
 
 ```text
 not flag;              # Same as !flag.
-not not flag;          # Same as !!flag.
+not not flag;          # Same as ! !flag.
 not (p is null);       # Same as !(p is null), and p is not null.
 not flag && ready;     # Same grouping as (!flag) && ready.
 ```

@@ -125,6 +125,26 @@
 - [私有构造与结果输出](../design/ConstFunctionsAndTailCalls.md#private-construction-and-escape)
 - [knot-tying 目标](../design/ConstFunctionsAndTailCalls.md#knot-tying-as-a-pure-design-goal)
 
+## 4. 用户定义中缀操作符的优先级与结合性
+
+规划目标是让库声明新的中缀操作符，并在声明处指定优先级、左结合、右结合或不可连续结合。
+此功能由未来的 `e-wrks/cod` 编译器实现。seed 和 booter 负责按已确认的字符集合读取完整 token，
+并报告当前不支持的拼写。新操作符的声明写法、可供用户定义的拼写范围和跨模块规则留待讨论。
+[CoD 的操作符 token](../design/SymbolicDynamicScope.md#symbolic-operator-tokens)
+
+例如，假定某个库定义 `a <+> b` 的结果为 `10 * a + b`。对于整数表达式
+`1 <+> 2 <+> 3`，左结合得 123，右结合得 33，不可结合则要求作者明确分组。
+再用 `1 <+> 2 * 3` 检验该声明与内置乘法的相对优先级。
+比较操作符经重导出、同名 family 合并或声明不同 overload 后如何确定同一个表达式的分组，
+以及两个同优先级、不同结合性的操作符相邻时如何报错。
+
+Edh 的声明解析器会把操作符的优先级和结合性记入表中，并检查重复声明是否一致；
+表达式解析器在读取中缀操作符时查表，用这些信息决定分组。可以用同一组例子比较 Edh 和
+Haskell，再按 CoD 的模块解释规则决定声明的可见性、优先级区间与缺省行为。
+[Edh 声明处理](https://github.com/e-wrks/edh/blob/a2e9b95ef1f84cc5677499512c69d4b03a12cbdc/elr/src/Language/Edh/Parser.hs#L1046-L1138) ·
+[Edh 中缀分组](https://github.com/e-wrks/edh/blob/a2e9b95ef1f84cc5677499512c69d4b03a12cbdc/elr/src/Language/Edh/Parser.hs#L2216-L2276) ·
+[Haskell 2010 §4.4.2](https://www.haskell.org/onlinereport/haskell2010/haskellch4.html) · [CoD 的模块解释](../design/ModuleWorlds.md)
+
 ## 按实际用例重启的小议题
 
 | 议题 | 何时值得讨论、需要确定什么 |
