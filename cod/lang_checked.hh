@@ -15618,10 +15618,12 @@ class ScalarChecker {
       }
       const bool handle = source.type.kind == Type::native_handle && !source.type.owned;
       const bool readonly_view = (source.type.kind == Type::array || text_type(source.type)) && !source.value_binding && source.read_only;
+      const bool writable_array = source.type.kind == Type::array && !source.value_binding && !source.read_only &&
+          program_.bits_payload(program_.arrays.at(source.type.identity).element);
       const bool scalar = numeric(source.type) || source.type.kind == Type::enumeration;
-      if (source.alias || !source.selection.empty() || (!scalar && !readonly_view && !handle) ||
-          (!source.value_binding && (source.nullable || (!source.read_only && !handle))))
-        implementation_gap(capture.at, "here access requires stable numeric or enum storage, a readonly array or text view, or a borrowed handle");
+      if (source.alias || !source.selection.empty() || (!scalar && !readonly_view && !writable_array && !handle) ||
+          (!source.value_binding && (source.nullable || (!source.read_only && !writable_array && !handle))))
+        implementation_gap(capture.at, "here access requires stable numeric or enum storage, an admitted array view, readonly text, or a borrowed handle");
       const auto &operand = scope_operand(base, capture);
       if (handle) check_handle_loan(operand, supplier, operations);
       else check(operand, supplier, operations, false);
@@ -15630,6 +15632,13 @@ class ScalarChecker {
       if (view.targets.contains(null_target) || view.owners.size() != 1 ||
           (source.value_binding && (view.targets.size() != 1 || !view.place || storage(*view.place).borrowed)))
         implementation_gap(capture.at, "here access requires an initialized selection with one established owner");
+      if (writable_array) {
+        if (!view.view || view.mixed_view || view.slots.size() != 1 || view.nullable_view ||
+            view.read_only || const_owner(*view.owners.begin()))
+          implementation_gap(capture.at, "here writes require one live initialized writable array binding");
+        require_live_view(view, capture.at);
+        require_initialized(view, capture.at, "supplier array");
+      }
       // A receiver may enter the body zero or several times. Each invocation
       // reads the supplier's live slot with its established target owner.
       if (validating_ && proving_ && lexical_.live && !view.initialized_target() &&
@@ -17810,7 +17819,9 @@ class ScalarChecker {
     CheckedOperation operation;
     operation.type = Type::never;
     operation.operand_type = type;
-    operation.lexical_allocation = CheckedOperation::LexicalAllocation{owner, CheckedOperation::LexicalAllocation::array};
+    const auto region = region_owners_.find(owner);
+    if (region != region_owners_.end()) operation.region_holder = region->second.holder;
+    else operation.lexical_allocation = CheckedOperation::LexicalAllocation{owner, CheckedOperation::LexicalAllocation::array};
     const auto length = check(*expr.children.front(), instance, operations);
     if (length == Type::never) return operation;
     transfer_type(length, Type::uint64, expr.children.front()->at);
@@ -17820,8 +17831,13 @@ class ScalarChecker {
     operation.view = true;
     operation.owners = {owner};
     operation.initialization.emplace();
-    require_lexical_allocator(owner, expr.at);
-    note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
+    if (operation.region_holder) {
+      if (lexical_.live && !owner_alive(owner)) fail(expr.at, "region allocation owner has ended");
+      note_abrupt(expr.at, {exception_id(ExceptionCategory::invalid_capacity), exception_id(ExceptionCategory::region_capacity_exceeded)});
+    } else {
+      require_lexical_allocator(owner, expr.at);
+      note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
+    }
     return operation;
   }
   CheckedOperation check_region_acquisition(const Expression &expr, CheckedInstance *instance,
