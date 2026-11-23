@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review the bootstrap recovery path through diagnostic delivery
+
+<a id="k-parser-recovery-architecture-20261123"></a>
+**K-PARSER-RECOVERY-ARCHITECTURE-20261123.** Delegated pre-code review under H-PROJECT-ARCHITECTURE-REVIEW-20261122 continues the recovery contract at `a53ca1f9368c6182594197eacf4f53733fea228f:applications/cod-booter/README.md`, “Whole-file parser recovery”. D-ARCH-REVIEW r41 to r42 covers stable report references, lexer and scratch preflight, complete-file publication gates and the launcher-owned ordered snapshot. The two-operand workload and subsequent production-by-production migration share that structure. D-20-PARSE-RECOVERY/P-688–P-689 retains its confirmed scope.
+
 ## 2026-11-23 — Definition doclets and whole-file syntax recovery
 
 <a id="h-definition-doclets-20261123"></a>
