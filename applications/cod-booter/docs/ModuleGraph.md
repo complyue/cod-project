@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 17. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 18. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
 
 [K-BOOTER-AST-TABLE-20261122](../../../CHANGELOG.md#k-booter-ast-table-20261122) continues that architecture for the [first indexed AST path](#first-indexed-ast-path). Its private representation uses the existing named-array constructor, valid bits transfer and constructor-pattern checks. Acceptance includes the parser, checker, lowering and emitted object.
 
@@ -19,6 +19,8 @@ The [linked object review](../../../CHANGELOG.md#k-booter-llvm-unit-projection-2
 The [visit publication review](../../../CHANGELOG.md#k-booter-visit-publication-20261122) covers source loans, builtin and dependency selection, and publication through the real object entry.
 
 The [provider publication review](../../../CHANGELOG.md#k-booter-provider-publication-20261122) covers the declaration driver, the CoD renderer and the native file boundary. The [target layout review](../../../CHANGELOG.md#k-booter-provider-target-layout-20261122) covers native ABI queries for this renderer.
+
+The [sum parser and graph output review](../../../CHANGELOG.md#k-booter-sum-parser-graph-output-20261122) covers nominal sum declarations in the typed syntax table and calls that consume the completed graph while G is live.
 
 ## Layer responsibilities
 
@@ -74,6 +76,18 @@ The parser issues IDs for published rows. Given the originating compilation and 
 Two compilations may both issue `(revision = 1, index = 0)`. Their IDs are meaningful only inside their originating G. Keep IDs private to that compilation's parser, checker and lowering data flow. A nested compilation starts with its own inputs and returns its ordinary output or status. Its caller resumes with the original frame. Any interface that could mix IDs from independent invocations must establish their origin separately before lookup. A numeric match supplies neither that evidence nor access to storage. Native interfaces receive their existing source loans or completed outputs. A process-wide key allocator is unnecessary.
 
 Exercise two real frames in one compilation whose occupied rows have the same index, and reject each foreign ID before projection. Reopen the same path and check that the old ID fails. In nested independent compilations, exercise colliding numeric pairs and verify that each call resolves its own source span and restores the outer frame. Keep the valid-ID growth and failed-publication checks in the parser-to-object workload.
+
+### Parsing nominal sum declarations
+
+An ordinary data heading followed by `=` introduces one or more named alternatives separated by `|`. Each alternative has its own braced field list. The parser needs this form to read its own representation of an optional syntax link.
+
+```cod
+export data NodeLink = NoLink {} | LinkTo { node:NodeId; };
+```
+
+Store a typed sum declaration and an ordered sequence of typed alternatives in the frame’s syntax table. Preserve the heading, including any parsed parent, and the ordinary module-item export marker. Each alternative retains its name, its span through the closing brace and its own fields. Reuse the product-field reader for their shared grammar, preserving order, type, binding mode and target access. Start a fresh field list for each alternative. The reader returns an absent last field for both a valid empty list and a parse failure. Check the diagnostic before accepting a fieldless alternative. Use the frame’s revision-bound links and checked lookup for all children.
+
+In both seed-built modes inspect the actual `NodeLink`, `ExprPayload`, `AstSlot` and `VisitSlot` declarations. The two occurrences of `Vacant` must remain accessible under their own declarations and source revisions. Accept a single alternative. Reject a missing alternative, a trailing separator, `||` between alternatives, a malformed field and a C-layout sum. Preserve the existing product and C-record paths. On the full sources, distinguish passing the original declaration site from checking the whole module. Until a semantic consumer supports the declaration, issue a located rejection before publishing an interface or emitting output. Binding constructor identities, selecting them across modules, checking payload patterns and lowering uses have separate review scopes. [Named sum constructors](../../../design/DomainLanguageDesign.md#named-sum-constructors)
 
 ### Typed syntax consumers
 
@@ -223,6 +237,10 @@ In both seed modes, link a real root and child twice with different child result
 ## Checking declarations and publishing generated providers
 
 The launcher routes `--check-declarations SOURCE` and `--emit-c-provider SOURCE DIRECTORY` through generated CoD entries. Both run the declaration pass on the same module graph used for object compilation. Preserve checking of ordinary definitions, selected declarations and owner contracts, including diagnostics at the requesting import. Checking alone finishes after graph validation. Provider generation then reads the published interfaces, spelling prefixes and canonical module keys under the live G. Both routes can finish without producing LLVM commands or acquiring an object-emission session.
+
+**Consuming the completed graph.** The common CoD driver owns the region and lexical table holders through traversal and the selected terminal operation. Dispatch the CLI purpose in that scope after a successful visit. Declaration checking can return its status immediately. Object emission calls `write_object`. Provider generation calls a named CoD renderer with the published interface, spelling and name ranges it needs. Each reader binds `where {const owner G}` from ordinary readonly graph arguments. Pass the published counts and keep each output path, sink or diagnostic under its own actual owner. A traversal failure skips terminal work. A terminal failure unwinds its local resources while G is live. The owning scope releases G once on either exit. Exercise all three CLI purposes with real inputs, including failure before and during output and file preservation under the publication contract.
+
+An externally supplied `here finish(keys:const Keys in G, ...)` with no ordinary input establishing G would need a contract for lending a region created inside the receiver. Synchronous execution keeps storage live during the callback. It supplies no binding for G in that signature. `in here` names the invocation's lexical owner. A helper that receives ordinary graph borrows can invoke a compatible here body under that established owner. The three CLI purposes need only direct named terminal calls. [Owner-qualified arguments](../../../design/RegionalOwnership.md#owner-qualified-reference-arguments) · [Borrowed yields and owner scope](../../../design/RangedForAndGenerators.md#borrowed-yields-and-owner-scope)
 
 **Generating the pair.** CoD resolves each required native constructor, entry, operation and referenced type by its defining identity. Include private native declarations that need C bindings, such as the launcher's `compile_cli` entry. A renamed re-export keeps that identity. Generate a shared declaration once, and check conflicting generated names and reserved field names before publishing. For enum names use the defining module’s canonical path bytes relative to the entry source directory. Apply the existing byte escaping even to a non-UTF-8 path component. Keep all member spellings and one validation case per distinct member identity. Preserve the seed’s deterministic declaration and preamble order. [Generated C contract](LLVMInterop.md#generated-c-providers-for-the-first-booter)
 
