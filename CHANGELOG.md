@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Return a fresh graph owner to each typed command
+
+<a id="k-booter-fresh-graph-result-20261122"></a>
+**K-BOOTER-FRESH-GRAPH-RESULT-20261122.** Delegated pre-code review under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122 clears the direct factory and new owning holder described at `78cf63ec694e79ea724b218f72fdb2eeb0cd047b:applications/cod-booter/docs/ModuleGraph.md`, “Supplying the output destination”. The seed must prove cleanup cannot cancel the prepared result on an admitted return path. E4 and D-22-REGION-INIT govern ownership delivery and partial-initialization rollback. D-20-MODULE-GRAPH r21 to r22, D-ARCH-REVIEW r25 to r26, P-680–P-683, registry r1074.
+
 ## 2026-11-22 — Preserve the graph budget’s readonly declaration in the booter parser
 
 <a id="k-booter-const-val-parser-20261122"></a>
