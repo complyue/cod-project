@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Report the namespace entries that determined a package lookup
+
+<a id="k-booter-package-claim-origins-20261123"></a>
+**K-BOOTER-PACKAGE-CLAIM-ORIGINS-20261123.** D-20-MODULE-GRAPH r53→54 and D-ARCH-REVIEW r62→63 correct the canonical-path requirement for shadow and ambiguity reporting at `ab4e279abd92789b4253cbffb6b7dc4e87ec8c2b:applications/cod-booter/docs/ModuleGraph.md`, “Package diagnostics on the normal graph route”. Under H-MODULE-PATHS-AND-DEFAULT-EXPORTS-20261123 and K-BOOTER-PACKAGE-DIAGNOSTIC-SINK-20261123, the [reviewed boundary](applications/cod-booter/docs/ModuleGraph.md#package-diagnostics-on-the-normal-graph-route) uses observed namespace spellings for claims and canonical identity for opening and graph reuse. P-680–P-683 and P-690/P-691 retain their scope.
+
 ## 2026-11-23 — Preserve the procedure destination check in the selector migration
 
 <a id="k-qualified-procedure-using-20261123"></a>
