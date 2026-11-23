@@ -2561,24 +2561,21 @@ class LLVMEmission {
         {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
     return b_.CreateCall(address, {owner, offset, size});
   }
-  llvm::Value *acquire_region(const Expression &binding) {
-    const auto *initializer = binding.children.front().get();
-    while (initializer->kind == Expression::Kind::grouped) initializer = initializer->children.front().get();
-    const auto &make = *initializer;
+  llvm::Value *construct_region(const Expression &make) {
     const auto &input = *make.children.front();
     auto *capacity_value = emit_expression(input);
     if (!reachable()) return nullptr;
     auto *capacity = choose(input, {capacity_value}, choices(input, {&input}), b_.getInt64Ty(),
         [&](const Choice &choice) { return convert(capacity_value, choice.inputs.front(), Type::uint64); });
-    using Plan = std::tuple<size_t, size_t, std::vector<size_t>>;
+    using Plan = std::pair<size_t, std::vector<size_t>>;
     std::map<Plan, std::vector<size_t>> plans;
     for (size_t i = 0; i < contexts_.size(); ++i) {
-      const auto &fact = contexts_[i].at(&binding);
+      const auto &fact = contexts_[i].at(&make);
       if (contexts_[i].at(&input).type != Type::never)
-        plans[{*fact.region_holder, fact.operand_type.identity, fact.region_initializers}].push_back(i);
+        plans[{fact.operand_type.identity, fact.region_initializers}].push_back(i);
     }
-    return contextual_value(binding, plans, "region.acquire", [&](const Plan &plan) -> llvm::Value * {
-      const auto &[holder, schema_id, order] = plan;
+    return contextual_value(make, plans, "region.acquire", [&](const Plan &plan) -> llvm::Value * {
+      const auto &[schema_id, order] = plan;
       auto *layout = product_layout(schema_id);
       const auto &roots = program_->schemas.at(schema_id).fields;
       const auto &target = module_.getDataLayout();
@@ -2646,6 +2643,27 @@ class LLVMEmission {
       if (!completed) return nullptr;
       b_.SetInsertPoint(completed);
 
+      return owner;
+    }, b_.getPtrTy());
+  }
+  llvm::Value *acquire_region(const Expression &binding) {
+    const auto *initializer = binding.children.front().get();
+    while (initializer->kind == Expression::Kind::grouped) initializer = initializer->children.front().get();
+    llvm::Value *owner;
+    if (initializer->kind == Expression::Kind::make_region) {
+      owner = construct_region(*initializer);
+    } else {
+      auto *result = emit_expression(*initializer);
+      if (!reachable()) return nullptr;
+      owner = b_.CreateIntToPtr(b_.CreateExtractValue(result, 0), b_.getPtrTy());
+    }
+    if (!reachable()) return nullptr;
+    std::map<size_t, std::vector<size_t>> holders;
+    for (size_t i = 0; i < contexts_.size(); ++i) {
+      const auto &fact = contexts_[i].at(&binding);
+      if (fact.region_holder) holders[*fact.region_holder].push_back(i);
+    }
+    return contextual_value(binding, holders, "region.enroll", [&](size_t holder) -> llvm::Value * {
       const auto action = std::ranges::find_if(scope_->actions, [&](const auto &entry) {
         return entry.region_release && entry.action == &binding;
       });
@@ -4074,7 +4092,13 @@ class LLVMEmission {
     }
     case K::return_value: case K::break_value: case K::continue_value: {
       llvm::Value *value = empty_scalar();
-      if (!expr.children.empty()) {
+      if (fact.operand_type.kind == Type::region && fact.operand_type.owned) {
+        const auto *make = expr.children.front().get();
+        while (make->kind == K::grouped) make = make->children.front().get();
+        auto *owner = construct_region(*make);
+        if (!reachable()) return nullptr;
+        value = b_.CreateInsertValue(value, b_.CreatePtrToInt(owner, b_.getInt64Ty()), 0);
+      } else if (!expr.children.empty()) {
         value = emit_expression(*expr.children.front(), fact.borrowed_result ? Projection::target : Projection::value);
         if (!reachable()) return nullptr;
         if (fact.borrowed_result) {
