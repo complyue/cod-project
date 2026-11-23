@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 31. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 32. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
 
 [K-BOOTER-AST-TABLE-20261122](../../../CHANGELOG.md#k-booter-ast-table-20261122) continues that architecture for the [first indexed AST path](#first-indexed-ast-path). Its private representation uses the existing named-array constructor, valid bits transfer and constructor-pattern checks. Acceptance includes the parser, checker, lowering and emitted object.
 
@@ -43,6 +43,8 @@ The [graph formal syntax review](../../../CHANGELOG.md#k-booter-slot-formal-synt
 The [symbolic procedure syntax review](../../../CHANGELOG.md#k-booter-symbolic-procedure-syntax-20261122) covers the declaration and reached definition used by the dependency visit.
 
 The [production cutover review](../../../CHANGELOG.md#k-booter-production-cutover-checks-20261122) clears the standalone build membership, the fixed reference formal used by the visit and the frontend checks for the path wrapper’s constructing throw. The [owned throw lowering review](../../../CHANGELOG.md#k-booter-owned-throw-lowering-20261122) clears the private completion, nominal tag and cleanup operations for that wrapper and the [frontend proof of its ready-path feedback](#checking-the-forwarded-path-callback).
+
+The [export kind review](../../../CHANGELOG.md#k-booter-export-kinds-20261122) covers the [shared selection row](#builtin-and-source-export-kinds) and the compatibility checks for the standalone provider command.
 
 ## Layer responsibilities
 
@@ -281,6 +283,14 @@ After all child visits succeed, the parent uses the next artifact function base 
 `ModuleGraph` stages and bounds-checks the interfaces, spellings, commands and other unit material before committing. Grow graph tables from their published prefixes and complete all fallible work before exposing the new counts and `Checked` row. Execute the final updates with no intervening callback or fallible step. A failed visit leaves earlier publications intact and the failed module unavailable. G releases any private storage it acquired. On root success the dispatcher reaches the [LLVM construction operation](#constructing-a-linked-object-from-completed-units) after all visit frames and source acquisitions have ended.
 
 Exercise builtin and file imports in the same root, same-spelled functions from distinct files under local names, and two paths to one canonical child. Check a missing or wrong-kind selection, an empty interface prefix, an incomplete header, and a plausible row beyond the published boundary. Fail publication in a second child and verify the first child’s published data, the second import’s span and the previous output. Use the real parser, checker, lowering and dispatcher in both seed modes for the [linked object acceptance](#constructing-a-linked-object-from-completed-units).
+
+### Builtin and source export kinds
+
+The immutable builtin catalog and the compilation graph both supply rows to the same selector. `kind` must identify one meaning after a row has been selected, including after a permitted re-export through a file module. Preserve the canonical builtin kind numbers and any intentional shared meanings. Zero denotes an unused selection. Reserve 1–127 for catalog meanings and 128–255 for private source-only export kinds, assigning 128 to a nominal sum. Give every private kind in this row its own high code, including the file-declared enum and its members, records, callables and lexical builders. Keep the numeric domains for syntax, interface shapes and nominal identities independent. [Canonical catalog](../../../cod/lang_intrinsic_catalog.h) · [Selection and publication](../src/ModuleExports.cod)
+
+Check the builtin range at its existing catalog boundary before a malformed kind can be selected or published. Enforce the range before narrowing a newly declared numeric code to the byte field. Keep the existing C layout and catalog/graph owner checks. A graph row can carry an original builtin meaning after re-export. Only a genuine source sum can demand a graph sum interface or constructors. A written member selector on a builtin operation still rejects.
+
+Run singleton and grouped selection of `prepare_display_operands`, an adjacent text operation, valid enum and sum selectors and a renamed sum re-export. Check rejection of an invalid member selector and a reserved catalog kind with earlier output intact. In both standalone modes compare generated C and header bytes for the same 37 pre-cutover source modules, including `DiagnosticFormatting.cod` and `ProviderNames.cod`, compile the generated provider fixture, and run the existing cross-module object workload. [Builtin catalog contract](LLVMInterop.md#builtin-catalog-and-rejection-reporting)
 
 ### Publishing nominal sum interfaces
 

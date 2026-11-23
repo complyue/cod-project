@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Separate builtin and source-only export kind codes
+
+<a id="k-booter-export-kinds-20261122"></a>
+**K-BOOTER-EXPORT-KINDS-20261122.** Delegated pre-code review under H-PROJECT-ARCHITECTURE-REVIEW-20261122 continues the selector at `336d5ab26163f5736f853d032891929c5da6263d:applications/cod-booter/docs/ModuleGraph.md`, “Selecting and publishing a completed visit”, and the immutable catalog contract in D-20-C-PROVIDERS. The correction separates all private source export kinds from builtin codes in the shared row and covers provider compatibility on the pre-cutover inputs. D-20-MODULE-GRAPH r31 to r32, D-ARCH-REVIEW r34 to r35, P-680–P-683, registry r1084.
+
 ## 2026-11-22 — Build the standalone booter through the CoD graph
 
 <a id="k-booter-cod-cutover-20261122"></a>
