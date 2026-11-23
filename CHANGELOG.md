@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review the seed guard in the opening-bid workload
+
+<a id="k-seed-effect-only-guard-20261123"></a>
+**K-SEED-EFFECT-ONLY-GUARD-20261123.** [D-ARCH-REVIEW r71→r72](design/ImplementationArchitecture.md#braced-control-only-guards-in-the-seed), P-682/P-683, applies the [ordinary guard](#h-guards-and-loop-discard-20261121) and [semicolon](#h-idiomatic-semicolons-20261122) decisions to the non-final braced guard at `a1e72853f0d70e6dd08be66d8f104e2eeae4494c:design/SymbolicDynamicScope.md`, “Indexed by-value elements”. The scalar control also reaches the conditional join before the fix. Verify token-based delimiting, empty-alternative equivalence, discarded transfer and normal or exceptional effects in both seed modes.
+
 ## 2026-11-23 — Apply ordinary target selection to variadic elements
 
 <a id="k-variadic-element-selection-20261123"></a>
