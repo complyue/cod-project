@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 43. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 44. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
 
 The [role clarification](../CHANGELOG.md#h-design-review-delivery-roles-20261122) defines the design discussion’s authority through review and assigns delivery to development mainline. [Design review and delivery responsibilities](#design-review-and-delivery-responsibilities)
 
@@ -47,6 +47,8 @@ The [exception artifact review](../CHANGELOG.md#k-booter-exception-artifact-2026
 The [export kind review](../CHANGELOG.md#k-booter-export-kinds-20261122) clears the private row encoding and [catalog validation](../applications/cod-booter/docs/ModuleGraph.md#builtin-and-source-export-kinds) for both standalone modes.
 
 The [shared call and exception selection review](../CHANGELOG.md#k-booter-here-and-exception-selection-20261123) clears checked evidence shared by the lexical signature, operand and completion passes, plus the separate publication-only and receiver-import paths for a checked exception. Both use the [module graph contract](../applications/cod-booter/docs/ModuleGraph.md#publishing-a-checked-nominal-exception).
+
+The [checked call interface review](../CHANGELOG.md#k-booter-imported-checked-call-20261123) covers the CoD graph’s published callable signature, its use by the caller’s operand and completion checks, and the independent requirement for executable lowering.
 
 The [production cutover review](../CHANGELOG.md#k-booter-production-cutover-checks-20261122) clears [standalone membership](../applications/cod-booter/docs/ModuleGraph.md#standalone-build-cutover), the graph’s fixed reference formals and [frontend construction and completion checks](../applications/cod-booter/docs/ModuleGraph.md#checking-a-constructing-throw-in-the-path-wrapper). The [owned throw lowering review](../CHANGELOG.md#k-booter-owned-throw-lowering-20261122) covers the [CoD nominal tags, private LLVM outcome and runtime cleanup](../applications/cod-booter/docs/ModuleGraph.md#lowering-an-owning-exception-through-cleanup) for the real path wrapper, plus the [shared call check for forwarded feedback](../applications/cod-booter/docs/ModuleGraph.md#checking-the-forwarded-path-callback).
 
