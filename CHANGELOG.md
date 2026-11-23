@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Move booter production membership to the CoD driver
+
+<a id="k-booter-production-cutover-checks-20261122"></a>
+**K-BOOTER-PRODUCTION-CUTOVER-CHECKS-20261122.** Delegated review under H-PROJECT-ARCHITECTURE-REVIEW-20261122 clears the standalone source membership cutover and two frontend prerequisites under the graph and provider acceptance at `796707a56cae875ffb7282ca6e53ce50c3a09aba:applications/cod-booter/docs/ModuleGraph.md`, “Generating and publishing the provider pair”. H-NATIVE-BUILD-BOUNDARY-20261121, D-14/D-23 and the confirmed scopes of D-17 govern the build, fixed reference binding and checked constructing throw. The owned-payload backend awaits separate structural review. D-20-MODULE-GRAPH r28 to r29, D-ARCH-REVIEW r32 to r33, P-680–P-683, registry r1081.
+
 ## 2026-11-22 — Read a symbolic dependency procedure and its scoped definition
 
 <a id="k-booter-symbolic-procedure-syntax-20261122"></a>
