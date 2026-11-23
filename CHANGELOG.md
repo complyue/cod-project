@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Several arrays can supply one variadic tail in written order
+
+<a id="h-ordered-pack-expansions-20261123"></a>
+**H-ORDERED-PACK-EXPANSIONS-20261123.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-23 (America/Los_Angeles), the project user replied “同意，允许。” to allowing `invoice_total(base, fees..., taxes...)` with left-to-right expansion, increasing element index and failure before later operands or entry. [D-10-VARARGS r246](design/SymbolicDynamicScope.md#runtime-array-expansion-and-one-variadic-parameter), P-403/P-404 extends the single-tail contract at `84d5f51203dd1cb1832c5424bc088a53c58bcbda:design/SymbolicDynamicScope.md`. Existing value/borrow modes and cleanup apply. Pack storage, escape and executable lowering remain separately scoped.
+
 ## 2026-11-23 — A variadic method stands alone in its family
 
 <a id="h-variadic-method-family-20261123"></a>

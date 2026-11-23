@@ -1,6 +1,6 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 245 · Recorded: 2026-11-23 · Phase: language/application co-design.
+Design revision: 246 · Recorded: 2026-11-23 · Phase: language/application co-design.
 
 ## Design authority
 
@@ -123,7 +123,7 @@ The [module selector decision](../CHANGELOG.md#h-module-default-selector-substit
 
 - **Expression typing and predicate assertions:** [D-10-TYPED-EXPR](DesignAuthorityRegistry.md#d-10-typed-expr) and [D-10-ASSERT](DesignAuthorityRegistry.md#d-10-assert), H-453/H-466–H-471, cover the sections below. [K-ASSERT-SPECIALIZATION-20261115](../CHANGELOG.md#k-assert-specialization-20261115), P-407–P-413, integrates concrete-type operation selection, static resolution and explicit assert-based non-null refinement. Candidate C-10/C-65 paths serve charter §§3.1/3.3/4.3/6.3/8 through readable intent, checked flow facts and preserved effects. Pure numeric value conversion retains warnings/UB; other admitted assertions resolve statically or check at runtime with unchecked failure. Owner/access/init, callable contracts, cleanup and D-26 prepared coverage remain. Acceptance and remaining grammar/evidence boundaries are below; local decisions do not qualify the whole design or claim source implementation. Julia remains comparative evidence only.
 
-- **Variadic method families.** At r245 [D-10-VARARGS](DesignAuthorityRegistry.md#d-10-varargs) covers [family formation and the single logical pack](#runtime-array-expansion-and-one-variadic-parameter). The [user decision](../CHANGELOG.md#h-variadic-method-family-20261123) requires a variadic method to stand alone in the resulting family. H-449 covers expansion, and H-475 covers explicit defaults and contextual empty packs. P-403 connects readable call structure to C-57/C-89. P-404 preserves element types, owners, access, initialization and native coverage. Verify local registration, module composition and deduplication of the same method before any call. Broader pack operations and representation retain their own review.
+- **Variadic method families.** At r245 [D-10-VARARGS](DesignAuthorityRegistry.md#d-10-varargs) covers [family formation and the single logical pack](#runtime-array-expansion-and-one-variadic-parameter). The [multiple-expansion decision](../CHANGELOG.md#h-ordered-pack-expansions-20261123) at r246 covers source order, value-element preparation and failure before entry. The [family decision](../CHANGELOG.md#h-variadic-method-family-20261123) requires a variadic method to stand alone in the resulting family. H-449 covers expansion, and H-475 covers explicit defaults and contextual empty packs. P-403 connects readable call structure to C-57/C-89. P-404 preserves element types, owners, access, initialization and native coverage. Verify local registration, module composition and deduplication of the same method before any call. Broader pack operations and representation retain their own review.
 
 - **Builtin bounds policy:** [H-448](../CHANGELOG.md#h-448)/[K-BOUNDS-POLICY-20261115](../CHANGELOG.md#k-bounds-policy-20261115) continues r151→152 with [D-17-BOUNDS](ExceptionControl.md#unchecked-bounds-exceptions-and-optional-checks), C-63/C-65/P-401–P-402 and charter §§4.3/6.3/8/12. Builtin indexing raises unchecked IndexOutOfBoundsError with runtime checks on by default; explicit opt-out affects bounds only. Evaluation, owner/access, initialization and checked NPE remain unchanged. Acceptance and unsafe-range consequences belong to D-17; broader executable pack contracts and implementation remain separate, and whole-file qualification is unchanged.
 
@@ -854,18 +854,39 @@ batch_id(7u64, entries...)  # entries is a runtime-sized u64 array.
 batch_id(7u64, []...)       # The formal supplies the empty pack's element type.
 ```
 
+Several expanded arrays can supply the same final parameter in one call:
+
+```cod
+func invoice_total(base:u64, charges:u64...) -> u64;
+
+invoice_total(1_000u64, fees..., taxes...)
+```
+
+Prepare each argument expression once in source order. For each expansion, prepare its
+elements in increasing index order before starting the next argument. If `fees` supplies
+10 and 20 and `taxes` supplies 3, the callee receives one tail containing 10, 20, 3.
+Preparing an empty expansion still evaluates its expression once. A later expression that
+writes into the fees array cannot change independent values already prepared from it.
+For an admitted borrowed element the preparation selects the actual target with its existing
+access and owner. A later write to that target remains observable through the borrow.
+
+If preparation fails, preserve earlier effects and ordinary cleanup, skip all later arguments
+and propagate the failure before entering the callee. These are observable argument rules.
+They permit an implementation to avoid allocating a concatenated array when it can preserve
+the same observations.
+
 A typed empty array supplies its element type. An explicit `[]...` needs its element type and
 any required owner to follow from the signature or other inputs. It cannot infer either from
 absent elements. Ordinary [native coverage](AheadOfTimeExecutionPreparation.md#generic-and-recursive-native-coverage)
 and repeated-type constraints apply.
 
-The selected parameter mode governs element passage. Supported value elements are independent values, so writes to callee value elements cannot modify the source array. Borrowed elements retain their actual targets, owners, access and initialization obligations. Expansion introduces no regional copy/move, lifetime extension or permission upgrade. Any dynamically selected borrowed element must retain a statically unique owner; treating the tail as one parameter does not make unrelated owners interchangeable. Ordinary source-order argument preparation and failures remain observable; the precise interleaving of element preparation within an expansion remains part of the operational review.
+The selected parameter mode governs element passage. Supported value elements are independent values, so writes to callee value elements cannot modify the source array. Borrowed elements retain their actual targets, owners, access and initialization obligations. Expansion introduces no regional copy/move, lifetime extension or permission upgrade. Any dynamically selected borrowed element must retain a statically unique owner; treating the tail as one parameter does not make unrelated owners interchangeable. The same source-order preparation and failure rules apply when forwarding a pack.
 
 No public pack type, heap allocation, permanent ABI or native specialization per length is selected. Arbitrary iterator expansion is outside this initial scope. Initial implementation may accept a conservative, sound subset and diagnose unsupported cases; it must not choose a different overload or discard owner/access/initialization constraints to make an unsupported call run.
 
-**Acceptance.** Reject uncalled fixed-plus-variadic and variadic-plus-variadic families at formation, locally and at the first receiving module that combines the methods. Check both declaration orders, disjoint types and differing prefixes. Accept fixed-only overloads, a standalone variadic method, a matching declaration and definition, and two import paths that select one defining method. For a valid variadic method check empty, singleton and longer array expansion, implicit trailing arguments, contextual `[]...`, and element-type, owner, access and initialization failures. Preserve independent value elements, borrowed target identities and the bounds policy whenever indexing is supported.
+**Acceptance.** Reject uncalled fixed-plus-variadic and variadic-plus-variadic families at formation, locally and at the first receiving module that combines the methods. Check both declaration orders, disjoint types and differing prefixes. Accept fixed-only overloads, a standalone variadic method, a matching declaration and definition, and two import paths that select one defining method. For a valid variadic method check empty, singleton and longer array expansion, implicit trailing arguments, contextual `[]...`, and element-type, owner, access and initialization failures. Exercise multiple expansions with empty and nonempty arrays, a later operand mutating the first array, and an earlier failure that skips the later operand and the callee. Preserve independent value elements, borrowed target identities and the bounds policy whenever indexing is supported.
 
-**Still under review:** multiple expansions and precise preparation order; indexed element result/mutation modes; escaping/storage and callable-view contracts; physical pack transport. The proposed body operations are `len(rest)`, `rest[i]` and forwarding through `other(first, rest...)`; their remaining details need the operational contract before implementation delegation.
+**Still under review:** indexed element result/mutation modes; escaping/storage and callable-view contracts; physical pack transport. The proposed body operations are `len(rest)`, `rest[i]` and forwarding through `other(first, rest...)`; their remaining details need the operational contract before implementation delegation.
 
 H-448 separately settles the builtin bounds policy through [D-17](ExceptionControl.md#unchecked-bounds-exceptions-and-optional-checks): out-of-range indexing raises unchecked IndexOutOfBoundsError under default runtime checks, with an explicit compiler opt-out at the programmer's risk. No throws annotation is required for this exception. It does not qualify broader pack operations or change argument evaluation, owners, initialization or the selected user-defined indexing method's contract.
 
