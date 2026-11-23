@@ -157,6 +157,29 @@ export proc report_rejection(source:const SourceBytes in S, lines:const SourceLi
     return
 }
 
+export proc report_stored_rejection(handle diagnostic:DiagnosticDestination in D, stage:u8, code:u8,
+                                    first:const SourcePosition in F, past:const SourcePosition in P,
+                                    keys:const SourceBytes in K, key_first:u64, key_past:u64,
+                                        entry:bool) -> bool
+    where {owner D, const owner F, const owner P, const owner K} {
+    if (!entry) {
+        try {
+            ref rows = make ParseDiagnosticRows(1u64, make ParseDiagnosticRow {
+                code <- code; first_line <- first.line; first_column <- first.column;
+                past_line <- past.line; past_column <- past.column;
+            });
+            if (write_parse_reports(diagnostic, rows, 1u64, keys, key_first, key_past,
+                stage) != 0u8)
+                return false
+        } catch (error:const OutOfMemoryError) {
+            return false
+        }
+    };
+    return write_diagnostic(diagnostic, stage, code, first.line, first.column, past.line,
+        past.column,
+                            0u64, 0u64, 0u64) == 0u8
+}
+
 export proc report_source_open_error(handle diagnostic:DiagnosticDestination in D, os_error:u64) -> void where {owner D} {
     (write_diagnostic(diagnostic, 0u8, 0u32, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64, os_error)):void;
     return;

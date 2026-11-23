@@ -21,7 +21,8 @@ using "./ParserStorage.cod" {
 using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid,
     ContinueValue, ContinueVoid, BreakValue, BreakVoid,
-    CallableDefinition, ScopedProcedureDefinition, CProviderDeclaration, CEntryDefinition,
+    CallableDefinition, CallablePromise, ScopedProcedureDefinition, CProviderDeclaration,
+        CEntryDefinition,
     ArgumentItem, NamedArgument, SymbolReference, SymbolicInvocation, HereInvocation, HereSupply, HereReceiver,
     RangeHeader, RangeLoop, Parenthesized, Transfer, AugmentedTransfer, Rebind,
     InitializerTransfer, InitializerRebind,
@@ -1373,6 +1374,14 @@ export func parse_callable(source:const SourceBytes in S, tokens:const Tokens in
         });
         return;
     } else {};
+    if (!native && !lexical && punct_at(source, tokens, result.next, past) == 59u8) {
+        append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, header),
+            make CallablePromise {
+            header <- make NodeId { revision <- result.revision; index <- header; };
+            function_form <- function_form
+        });
+        return
+    };
     parse_callable_body(source, tokens, nodes, result, past);
     if (result.diagnostic != 0u8) return;
     val body <- result.root;

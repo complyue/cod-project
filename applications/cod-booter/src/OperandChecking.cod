@@ -85,6 +85,7 @@ using "./ModuleExports.cod" {
     SelectedExports, exception_type_export, symbol_export, print_export_identity,
     exception_root_identity, text_size_export, text_byte_export, callable_export, ordinary_callable_shape,
 };
+using "./ModuleExportStorage.cod" FamilyMembership { FixedMethods };
 using "./ModuleExportStorage.cod" {
     enum_type, ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header
 };
@@ -1361,6 +1362,7 @@ export func publish_native_interfaces(nodes:const ExprNodes in N, names:const Na
             if (arity != no_node()) {
                 if (arity + 1u64 > intrinsic (len)(contracts) - count) return no_node();
                 write_interface_header(contracts[count], module_id, at, callable_binding(), facts[at].kind, arity);
+                contracts[count].membership <- (FixedMethods:FamilyMembership);
                 contracts[count].native_function <- base + at;
                 contracts[count].callable_kind <- if (callable.function_form) {
                     CheckedFunction:InterfaceCallableKind

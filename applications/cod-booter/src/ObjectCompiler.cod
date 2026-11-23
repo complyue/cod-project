@@ -6,6 +6,7 @@ using "./NativeDiagnostics.cod" {
 };
 using "./SourceStorage.cod" SourceBytes;
 using "./ParserStorage.cod" { no_node, FormalMode { ValueFormal } };
+using "./ModuleExportStorage.cod" FamilyMembership { UnprovedMembership };
 using "./ModuleExportStorage.cod" {
     ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces
 };
@@ -18,7 +19,9 @@ using "./ModuleIndex.cod" VisitSlot { Vacant };
 using "./NativeCommands.cod" {
     NativeCommand, NativeCommands, NativeUnitRow, NativeUnitRows, NativeLiteralRange, NativeLiteralRanges,
 };
-using "./ModuleGraph.cod" { compile_graph, GraphPurpose { Declarations, NativeObject } };
+using "./ModuleGraph.cod" {
+    compile_graph, complete_graph_profile, GraphPurpose { Declarations, NativeObject }
+};
 using symbol "./NativeLLVM.cod" @llvmSession;
 using "./NativeLLVM.cod" {
     LLVMSession, LLVMOpenException, llvm_construct_units, llvm_verify, llvm_emit_object
@@ -157,6 +160,7 @@ proc traverse_graph(here finish(commands:const NativeCommands in G, units:const 
         enum_code <- 0u64; native_function <- no_node(); callable_kind <- NoCallableKind;
         native_reception <- 0u8;
         native_passes_owner <- 0u8;
+        membership <- UnprovedMembership;
         sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal;
     }) in G;
     ref commands = make NativeCommands(0u64,
@@ -173,6 +177,8 @@ proc traverse_graph(here finish(commands:const NativeCommands in G, units:const 
                                   literal_used, function_used, package_ready, package_rows,
                                       package_bytes);
     if (compiled != Complete) return compiled;
+    val profile <- complete_graph_profile(diagnostic, visits, keys, used, key_used, interface_used);
+    if (profile != Complete) return profile;
     return finish(commands, units, literals, spellings, keys, visits, interfaces, command_used, unit_used, literal_used,
                   spelling_used, key_used, function_used, used, interface_used);
 }

@@ -22,7 +22,8 @@ using "./ParserStorage.cod" DeclarationSyntax {
     EnumTypeDeclaration, AbstractTypeDeclaration, NativeSymbolDeclaration, ReferenceSymbolDeclaration, LocalPublication, NominalSum,
 };
 using "./ParserStorage.cod" CallableSyntax {
-    InvalidCallable, OtherCallableSyntax, ModuleCallable, LexicalCallable, CProvider, CEntry
+    InvalidCallable, OtherCallableSyntax, ModuleCallable, ModuleCallablePromise, LexicalCallable,
+        CProvider, CEntry,
 };
 using "./ParserStorage.cod" SignatureSyntax {
     SignatureHead, ValueResultClause, BorrowedResultClause, ExceptionResultClause, ThrowsSignatureClause,
@@ -53,7 +54,9 @@ using "./ParserStorage.cod" HereSyntax { HereReady };
 using "./ParserStorage.cod" NameSyntax { OrdinaryName, SymbolicName };
 using "./ParserStorage.cod" {
     ExprNodes, NodeId, len as syntax_len, DeclarationSites, inspect_declaration, CallableSites, inspect_callable,
-    SignatureSites, inspect_signature, find_signature_clause, ModuleSelectionSites, inspect_module_selection, DeclarationSyntax,
+    SignatureSites, inspect_signature, find_signature_clause, ModuleSelectionSites,
+        inspect_module_selection,
+    DeclarationSyntax, formal_variadic_at,
     BindingSites, inspect_binding, inspect_type_annotation, FormalSites, inspect_formal, is_scope_block,
     DirectCallSites, direct_invocation, CaseSites, CaseArmSites, inspect_case, inspect_case_arm,
     BoundHandleSites, HandleConstructionSites, inspect_handle_binding, inspect_handle_construction, inspect_group,
@@ -74,7 +77,10 @@ using "./ModuleExports.cod" {
     SelectedExports, record_export, enum_member_export, exception_type_export,
     builder_storage_export, lexical_builder_export, lexical_result_export, callable_export, ordinary_callable_shape,
 };
-using "./ModuleExportStorage.cod" { enum_type, sum_type, constructor_type };
+using "./ModuleExportStorage.cod" {
+    enum_type, sum_type, constructor_type, ModuleInterfaces, find_interface,
+    FamilyMembership { UnprovedMembership, PromiseOnly, FixedMethods, VariadicMethod },
+};
 using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
 
 export data NameBinding {
@@ -227,6 +233,10 @@ func declaration_in_case_arm() -> u8 { return 90u8; }
 func continue_crosses_case() -> u8 { return 91u8; }
 func missing_case_arm() -> u8 { return 92u8; }
 func unsupported_constructor_initializer() -> u8 { return 118u8; }
+func conflicting_variadic_family() -> u8 { return 129u8 }
+func unsupported_variadic_body() -> u8 { return 130u8 }
+func unsupported_callable_promise() -> u8 { return 131u8 }
+export func unprovided_callable_promise() -> u8 { return 132u8 }
 export func expected_value_binding() -> u8 { return 14u8; }
 
 func reject_name(state:NameState in R, node:u64, diagnostic:u8) -> void where {owner R} {
@@ -322,6 +332,15 @@ func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
         reject_name(state, name, expected_value_binding());
         return;
     } else {};
+    if (kind == callable_binding()) {
+        ref promise = make CallableSites { signature <- no_node(); body <- no_node(); function_form
+            <- false; };
+        if (inspect_callable(nodes, state.syntax_revision, state.syntax_used, declaration,
+            promise) == ModuleCallablePromise) {
+            reject_name(state, name, unprovided_callable_promise());
+            return
+        }
+    };
     if (kind == handle_binding() && !handle_available(nodes, bindings, declaration, name)) {
         reject_name(state, name, unproved_guard_binding());
         return;
@@ -1595,6 +1614,26 @@ func signature_name(nodes:const ExprNodes in N, revision:u64, used:u64, signatur
     return sites.name;
 }
 
+export func variadic_method_formal(nodes:const ExprNodes in N, revision:u64, used:u64, form:u64)
+    -> u64 where {const owner N} {
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <-
+        false; };
+    val shape <- inspect_callable(nodes, revision, used, form, callable);
+    if ((shape != ModuleCallable && shape != LexicalCallable) || callable.body >= used)
+        return no_node();
+    ref head = make u64 { no_node() };
+    if (!find_signature_clause(nodes, revision, used, callable.signature, SignatureHead, head))
+        return no_node();
+    ref sites = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node();
+        parameter_tail <- no_node(); readonly <- false;
+    };
+    if (inspect_signature(nodes, revision, used, head, sites) != SignatureHead ||
+        formal_variadic_at(nodes, revision, used, sites.parameter_tail) == no_node())
+            return no_node();
+    return sites.parameter_tail
+}
+
 export func definition_name(nodes:const ExprNodes in N, revision:u64, used:u64, form:u64) -> u64 where {const owner N} {
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
     val mode <- inspect_callable(nodes, revision, used, form, callable);
@@ -1750,10 +1789,27 @@ export func transfer_name(source:const SourceBytes in S, nodes:const ExprNodes i
     return syntax_past(nodes, syntax_len(nodes), name) == first + 2u64 && source[first] == 60u8 && source[first + 1u64] == 45u8;
 }
 
+func selected_family_membership(selected:const SelectedExports in E, site:u64,
+                                interfaces:const ModuleInterfaces in I,
+                                    published:u64) -> FamilyMembership
+    where {const owner E, const owner I} {
+    if (site >= intrinsic (len)(selected) || selected[site].kind != callable_export() ||
+        selected[site].shape != ordinary_callable_shape() || selected[site].origin_module == 0u64)
+        return (UnprovedMembership:FamilyMembership);
+    val row <- find_interface(interfaces, published, selected[site].origin_module,
+        selected[site].identity);
+    if (row == no_node() || interfaces[row].interface_kind != callable_binding())
+        return (UnprovedMembership:FamilyMembership);
+    if (interfaces[row].membership == (VariadicMethod:FamilyMembership) &&
+        interfaces[row].native_function != no_node()) return (UnprovedMembership:FamilyMembership);
+    return interfaces[row].membership
+}
+
 func register_callables(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                          selected:const SelectedExports in E, work:NameWork in W, state:NameState in R,
+                         interfaces:const ModuleInterfaces in I, published:u64,
                          first:u64, allow_families:bool) -> void
-    where {const owner S, const owner N, owner B, const owner E, owner W, owner R} {
+    where {const owner S, const owner N, owner B, const owner E, owner W, owner R, const owner I} {
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     ref sites = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
     val item <- first;
@@ -1761,6 +1817,8 @@ func register_callables(source:const SourceBytes in S, nodes:const ExprNodes in 
     val name <- no_node();
     val found <- no_node();
     val family <- no_node();
+    val variadic <- false;
+    val inherited <- (UnprovedMembership:FamilyMembership);
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (item == no_node()) return;
         if (inspect_sequence_entry(nodes, state.syntax_revision, state.syntax_used, item, entry) != ModuleSequence) {
@@ -1776,6 +1834,29 @@ func register_callables(source:const SourceBytes in S, nodes:const ExprNodes in 
                 (found == no_node() && selected[name].constructor_selection != no_node())) {
                 reject_name(state, form, unsupported_constructor_initializer());
                 return;
+            };
+            variadic <- variadic_method_formal(nodes, state.syntax_revision, state.syntax_used,
+                form) != no_node();
+            if (found != no_node() && bindings[found].kind == ordinary_selection() &&
+                extensible_selection(nodes, selected, bindings[found].declaration,
+                    state.syntax_revision, state.syntax_used)) {
+                family <- bindings[found].declaration;
+                inherited <- selected_family_membership(selected, family, interfaces, published);
+                if (inherited == (VariadicMethod:FamilyMembership) ||
+                    (variadic && inherited == (FixedMethods:FamilyMembership))) {
+                    reject_name(state, form, conflicting_variadic_family());
+                    return
+                }
+            };
+            if (found != no_node() && bindings[found].kind == callable_binding()) {
+                family <- bindings[found].declaration;
+                if (variadic_method_formal(nodes, state.syntax_revision, state.syntax_used,
+                    form) != no_node() ||
+                    variadic_method_formal(nodes, state.syntax_revision, state.syntax_used,
+                        family) != no_node()) {
+                    reject_name(state, form, conflicting_variadic_family());
+                    return
+                }
             };
             if (found != no_node() && bindings[found].kind == callable_binding() &&
                 (allow_families || transfer_name(source, nodes, name))) {
@@ -1796,6 +1877,30 @@ func register_callables(source:const SourceBytes in S, nodes:const ExprNodes in 
         };
         item <- work[item].next;
     };
+}
+
+func register_callable_promises(source:const SourceBytes in S, nodes:const ExprNodes in N,
+                                 bindings:NameBindings in B, work:NameWork in W,
+                                     state:NameState in R) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    ref promise = make CallableSites { signature <- no_node(); body <- no_node(); function_form <-
+        false; };
+    val name <- no_node();
+    for (at in 0u64 .. state.syntax_used) {
+        if (inspect_callable(nodes, state.syntax_revision, state.syntax_used, at,
+            promise) == ModuleCallablePromise) {
+            name <- signature_name(nodes, state.syntax_revision, state.syntax_used,
+                promise.signature);
+            if (name == no_node()) { reject_name(state, at, invalid_module_tree()); return };
+            if (lookup(source, nodes, work, name, 0u64, state.used) != no_node()) {
+                reject_name(state, name, unsupported_callable_promise());
+                return
+            };
+            declare_name(source, nodes, bindings, work, state, name, at, callable_binding(),
+                duplicate_binding());
+            remember(bindings, at, at, callable_binding())
+        }
+    }
 }
 
 func register_c_callable(source:const SourceBytes in S, nodes:const ExprNodes in N,
@@ -2370,7 +2475,8 @@ func resolve_module_form(source:const SourceBytes in S, nodes:const ExprNodes in
         };
         return;
     };
-    if (mode == ModuleCallable || mode == CProvider || mode == CEntry) {
+    if (mode == ModuleCallable || mode == ModuleCallablePromise || mode == CProvider ||
+        mode == CEntry) {
         resolve_callable(source, nodes, bindings, work, state, form);
         return;
     };
@@ -2415,13 +2521,46 @@ func resolve_module_bodies(source:const SourceBytes in S, nodes:const ExprNodes 
     };
 }
 
+export func first_module_variadic_formal(nodes:const ExprNodes in N, revision:u64, used:u64) -> u64
+    where {const owner N} {
+    ref declaration = make CallableSites { signature <- no_node(); body <- no_node(); function_form
+        <- false; };
+    val suffix <- no_node();
+    for (at in 0u64 .. used) {
+        if (inspect_callable(nodes, revision, used, at, declaration) == ModuleCallable) {
+            suffix <- variadic_method_formal(nodes, revision, used, at);
+            if (suffix != no_node()) return suffix
+        }
+    };
+    return no_node()
+}
+
+func check_callable_profile(nodes:const ExprNodes in N, state:NameState in R, allow_structural:bool)
+    -> void where {const owner N, owner R} {
+    ref declaration = make CallableSites { signature <- no_node(); body <- no_node(); function_form
+        <- false; };
+    val unsupported <- no_node();
+    val form <- OtherCallableSyntax;
+    for (at in 0u64 .. state.syntax_used) {
+        form <- inspect_callable(nodes, state.syntax_revision, state.syntax_used, at, declaration);
+        unsupported <- variadic_method_formal(nodes, state.syntax_revision, state.syntax_used, at);
+        if (unsupported != no_node() && (!allow_structural || form != ModuleCallable)) {
+            reject_name(state, unsupported, unsupported_variadic_body());
+            return
+        }
+    }
+}
+
 # Consume a successful parse from the same source revision. Both work arrays
 # need one element per syntax node. A populated binding identifies a declaration
 # in the syntax buffer or a builtin kind. On failure, use only the diagnostic.
 export func resolve_module_names(source:const SourceBytes in S, nodes:const ExprNodes in N, tree:const ParseResult in T,
                                   selected:const SelectedExports in E, bindings:NameBindings in B, work:NameWork in W,
-                                  declarations_only:bool, report:NameResolutionResult in R) -> bool
-    where {const owner S, const owner N, const owner T, const owner E, owner B, owner W, owner R} {
+                                  interfaces:const ModuleInterfaces in I, published:u64,
+                                  declarations_only:bool, allow_structural:bool,
+                                      report:NameResolutionResult in R) -> bool
+    where {const owner S, const owner N, const owner T, const owner E, owner B, owner W,
+        const owner I, owner R} {
     report.node <- no_node();
     report.enclosing_defer <- no_node();
     report.diagnostic <- invalid_module_tree();
@@ -2463,7 +2602,16 @@ export func resolve_module_names(source:const SourceBytes in S, nodes:const Expr
     };
 
     register_module(source, nodes, bindings, selected, work, state, first);
-    if (state.diagnostic == 0u8) { register_callables(source, nodes, bindings, selected, work, state, first, declarations_only); };
+    if (state.diagnostic == 0u8) {
+        register_callables(source, nodes, bindings, selected, work, state, interfaces, published,
+            first, declarations_only)
+    };
+    if (state.diagnostic == 0u8) {
+        register_callable_promises(source, nodes, bindings, work, state)
+    };
+    if (state.diagnostic == 0u8) {
+        check_callable_profile(nodes, state, allow_structural)
+    };
     if (state.diagnostic == 0u8) { register_native_callables(source, nodes, bindings, work, state,
         first); } else {};
     if (state.diagnostic == 0u8) {

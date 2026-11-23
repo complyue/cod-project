@@ -136,7 +136,9 @@ export data ExprPayload =
     | ScopedProcedureHeader { name:NodeId; parameters:NodeLink; opening:u64; }
     | AnnotatedBinding { name:NodeId; annotation:NodeId; readonly:bool; colon:u64; }
     | OwnerQualifiedType { target:NodeId; declared_owner:NodeId; anchor:u64; }
-    | Formal { previous:NodeLink; binding:NodeId; mode:FormalMode; binding_const:bool; }
+    | Formal {
+        previous:NodeLink; binding:NodeId; mode:FormalMode; binding_const:bool; variadic_at:u64;
+      }
     | HereFormal { previous:NodeLink; signature:NodeId; }
     | OwnerConstraint { previous:NodeLink; declared_owner:NodeId; readonly:bool; }
     | TypeConstraint { previous:NodeId; type_name:NodeId; }
@@ -146,6 +148,7 @@ export data ExprPayload =
     | OwningRegionResult { previous:NodeId; schema:NodeLink; readonly:bool; }
     | ThrowsClause { previous:NodeId; exception_type:NodeId; }
     | CallableDefinition { header:NodeId; body:NodeId; function_form:bool; lexical:bool; }
+    | CallablePromise { header:NodeId; function_form:bool; }
     | CProviderDeclaration { header:NodeId; function_form:bool; }
     | CEntryDefinition { header:NodeId; body:NodeId; function_form:bool; }
     | ArgumentItem { previous:NodeLink; operand:NodeId; checked_ref:bool; selection_at:u64; }
@@ -1261,8 +1264,15 @@ export func inspect_formal(nodes:const ExprNodes in N, revision:u64, used:u64, a
         (Vacant) -> { InvalidFormal:FormalSyntax };
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of {
-                (Formal { val binding <- binding; val mode <- mode; val previous <- previous; val fixed <- binding_const; }) -> {
+                (Formal {
+                    val binding <- binding; val mode <- mode; val previous <- previous;
+                    val fixed <- binding_const; val suffix <- variadic_at;
+                }) -> {
                     if (!published_syntax_id(nodes, revision, at, binding)) return InvalidFormal:FormalSyntax;
+                    if (suffix != no_node() &&
+                        (suffix < syntax_past(nodes, at, binding.index) ||
+                         suffix > syntax.span.past || syntax.span.past - suffix != 3u64))
+                        return InvalidFormal:FormalSyntax;
                     if ((fixed || mode == (ReferenceSlotFormal:FormalMode)) &&
                         !valid_prefixed_formal(nodes, revision, at, binding.index, previous, mode, fixed))
                         return InvalidFormal:FormalSyntax;
@@ -1281,6 +1291,24 @@ export func inspect_formal(nodes:const ExprNodes in N, revision:u64, used:u64, a
             }
         };
     };
+}
+
+export func formal_variadic_at(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64)
+    -> u64 where {const owner N} {
+    ref sites = make FormalSites {
+        binding <- no_node(); signature <- no_node(); mode <- (ValueFormal:FormalMode);
+    };
+    if (inspect_formal(nodes, revision, used, at, sites) != (OrdinaryFormal:FormalSyntax))
+        return no_node();
+    return case nodes[at] of {
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (Formal { val suffix <- variadic_at; }) -> { suffix };
+                _ -> no_node()
+            }
+        };
+        _ -> no_node()
+    }
 }
 
 export func formal_binding_is_fixed(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64) -> bool
@@ -1470,7 +1498,10 @@ export func inspect_scoped_procedure(nodes:const ExprNodes in N, revision:u64, u
     };
 }
 
-export enum CallableSyntax:u8 { OtherCallableSyntax; InvalidCallable; ModuleCallable; LexicalCallable; CProvider; CEntry; }
+export enum CallableSyntax:u8 {
+    OtherCallableSyntax; InvalidCallable; ModuleCallable; LexicalCallable; CProvider; CEntry;
+        ModuleCallablePromise;
+}
 export data CallableSites { signature:u64; body:u64; function_form:bool; }
 
 func callable_function_form(payload:const ExprPayload in P) -> bool where {const owner P} {
@@ -1510,6 +1541,14 @@ export func inspect_callable(nodes:const ExprNodes in N, revision:u64, used:u64,
                 (CEntryDefinition { val head <- header; val body <- body; }) -> {
                     read_callable_definition(nodes, revision, at, head, body,
                         callable_function_form(syntax.payload), sites, CEntry:CallableSyntax)
+                };
+                (CallablePromise { val head <- header; val function_form <-; }) -> {
+                    if (!published_syntax_id(nodes, revision, at,
+                        head)) return InvalidCallable:CallableSyntax;
+                    sites.signature <- head.index;
+                    sites.body <- no_node();
+                    sites.function_form <- function_form;
+                    ModuleCallablePromise:CallableSyntax
                 };
                 (CProviderDeclaration { val head <- header; }) -> {
                     if (!published_syntax_id(nodes, revision, at, head)) return InvalidCallable:CallableSyntax;

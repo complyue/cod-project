@@ -10,10 +10,12 @@ using "./PackageInputs.cod" { PackageSourceRoot, PackageSourceRoots };
 using "./PackageGraphPaths.cod" { PackageEdge, prepare_logical_dependency, report_package_issue };
 using "./PackageDiagnostics.cod" { package_issue, package_delivery_failure };
 using "./NativeDiagnostics.cod" {
-    DiagnosticDestination, report_rejection, report_parse_rejection, report_source_open_error, report_scratch_error,
+    DiagnosticDestination, report_rejection, report_parse_rejection, report_stored_rejection,
+        report_source_open_error, report_scratch_error,
 };
 using "./SourceStorage.cod" DelimiterLink { OrdinaryToken };
-using "./SourceStorage.cod" { SourceBytes, SourceLines, Token };
+using "./SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition, Token };
+using "./SourceAccess.cod" locate_source_position;
 using "./ParserStorage.cod" {
     Tokens, ExprNodes, no_node, syntax_first, syntax_past, ModuleSelectionSites, inspect_module_selection,
     first_module_item, SequenceEntry, inspect_sequence_entry, CallableSites, inspect_callable,
@@ -22,7 +24,7 @@ using "./ParserStorage.cod" {
 using "./ParserStorage.cod" ModuleSelectionMode { UseResource };
 using "./ParserStorage.cod" SelectionSyntax { SelectionReady };
 using "./ParserStorage.cod" SequenceSyntax { ModuleSequence };
-using "./ParserStorage.cod" CallableSyntax { ModuleCallable };
+using "./ParserStorage.cod" CallableSyntax { ModuleCallable, ModuleCallablePromise };
 using "./ParserStorage.cod" DeclarationSyntax {
     NominalRecord, EnumTypeDeclaration, LocalPublication
 };
@@ -30,6 +32,7 @@ using "./ParserStorage.cod" AstSlot { Vacant };
 using "./TokenBuffer.cod" ScanResult;
 using "./ParserInput.cod" { ParseResult, node_storage_exhausted };
 using "./Frontend.cod" { FrontendResult, read_module };
+using "./ModuleExportStorage.cod" FamilyMembership { UnprovedMembership };
 using "./ModuleExportStorage.cod" {
     ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces
 };
@@ -47,7 +50,9 @@ using "./ModuleFrontend.cod" {
     ModuleBindingResult, select_parsed_module, bind_selected_module, module_read_failed, module_binding_failed,
     module_selection_failed, module_operands_failed, binding_diagnostic, rejected_unsupported_declaration,
 };
-using "./NameResolution.cod" { NameBinding, NameBindings, NameWorkSlot, NameWork, record_type };
+using "./NameResolution.cod" {
+    NameBinding, NameBindings, NameWorkSlot, NameWork, record_type, first_module_variadic_formal
+};
 using "./NativeDeclarations.cod" {
     ModulePublication, NativeDeclarationResult, prepare_module_calls, check_module_interfaces, publish_interfaces,
     publish_module_exports,
@@ -68,7 +73,10 @@ using "./NativeCommands.cod" {
     NativeLiteralRange, NativeLiteralRanges, text_literal,
 };
 using "./ModuleIndex.cod" {
-    Visits, KeyLookup, lookup_path, insert_visit, visit_is_checked, growth_capacity, reserve_keys, mark_checked,
+    Visits, KeyLookup, lookup_path, insert_visit, visit_has_membership, growth_capacity,
+        reserve_keys, mark_checked,
+    earliest_profile_stop, mark_structural_only, VariadicProfileStop, structural_visit_dependency,
+    VisitSlot { StructuralOnly },
 };
 using "./ModuleLowering.cod" native_unsupported;
 using "./CompilerStatus.cod" CompilerStatus {
@@ -177,6 +185,7 @@ proc reserve_interfaces(ref var rows:ModuleInterfaces in G, used:u64, required:u
         enum_code <- 0u64; native_function <- no_node(); callable_kind <- NoCallableKind;
         native_reception <- 0u8;
         native_passes_owner <- 0u8;
+        membership <- UnprovedMembership;
         sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal;
     }) in G;
     for (i in 0u64 .. used) { next[i] <- rows[i]; };
@@ -326,6 +335,8 @@ data ModuleProgress {
     command_count:u64;
     labels:u64;
     slots:u64;
+    variadic_stop:VariadicProfileStop;
+    structural_dependency:bool;
 }
 array ModuleProgressRows[u64]:ModuleProgress;
 
@@ -392,7 +403,7 @@ func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
                       spellings:const SourceBytes in G, published:const ModuleExports in G, spelling_size:u64,
                       export_count:u64, interfaces:const ModuleInterfaces in G, interface_count:u64, selected:SelectedExports in W,
                       names:NameBindings in W, work:NameWork in W, facts:AggregateFacts in F,
-                      result:ModuleBindingResult in R, native:bool) -> bool
+                      result:ModuleBindingResult in R, native:bool, allow_structural:bool) -> bool
     where {const owner S, owner W, const owner B, const owner G, owner F, owner R} {
     if (!select_parsed_module(source, nodes, catalog_spellings, catalog_exports, spellings, published,
                              spelling_size, export_count, selected, native, result)) return false;
@@ -412,7 +423,8 @@ func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
         binding_diagnostic(nodes, result, module_selection_failed(), members.diagnostic, members.node);
         return false;
     };
-    if (!bind_selected_module(source, nodes, selected, names, work, interfaces, interface_count, facts, native, result))
+    if (!bind_selected_module(source, nodes, selected, names, work, interfaces, interface_count,
+        facts, native, allow_structural, result))
         return false;
     if (native) return true;
     val used <- result.frontend.tree.used;
@@ -453,7 +465,8 @@ func library_declaration(nodes:const ExprNodes in N, tree:const ParseResult in T
     };
     if (inspect_module_selection(nodes, tree.revision, tree.used, at, selection) == SelectionReady) return true;
     ref callable_site = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
-    if (inspect_callable(nodes, tree.revision, tree.used, at, callable_site) == ModuleCallable) return true;
+    val form <- inspect_callable(nodes, tree.revision, tree.used, at, callable_site);
+    if (form == ModuleCallable || form == ModuleCallablePromise) return true;
     ref declaration = make DeclarationSites {
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
         index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
@@ -509,6 +522,15 @@ proc compile_graph_unit(source:const SourceBytes in S, lines:const SourceLines i
     return Complete;
 }
 
+func locate_variadic_profile(source:const SourceBytes in S, lines:const SourceLines in S,
+                             stop:VariadicProfileStop in F, past:u64) -> void
+    where {const owner S, owner F} {
+    stop.first_byte <- past - 3u64;
+    stop.past_byte <- past;
+    locate_source_position(source, lines, stop.first_byte, stop.first);
+    locate_source_position(source, lines, stop.past_byte, stop.past)
+}
+
 proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in S,
                        handle diagnostic:DiagnosticDestination in D, nodes:const ExprNodes in W,
                        selected:SelectedExports in W, names:NameBindings in W, work:NameWork in W,
@@ -530,18 +552,24 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         };
         stage <- 0u8; diagnostic <- 0u8; related_first <- no_node();
     };
-    val native <- progress[0u64].purpose == (NativeObject:GraphPurpose);
+    val used <- result.frontend.tree.used;
+    val formal <- first_module_variadic_formal(nodes, result.frontend.tree.revision, used);
+    val structural <- formal != no_node() || progress[0u64].structural_dependency;
+    val native <- !structural && progress[0u64].purpose == (NativeObject:GraphPurpose);
     ref aggregate_facts = make AggregateFacts(result.frontend.tree.used, UnprovedAggregate);
     if (!bind_graph_names(source, nodes, catalog_spellings, catalog_exports, spellings, published, spelling_size,
                           export_count, published_interfaces, interface_count, selected, names, work,
-                          aggregate_facts, result, native)) {
+                          aggregate_facts, result, native, structural)) {
         val code <- if (result.stage == module_read_failed()) { result.frontend.tree.diagnostic } else { result.diagnostic };
         report_rejection(source, lines, diagnostic, result.stage, code,
                          result.frontend.diagnostic_first, result.frontend.diagnostic_past, result.related_first);
         if (native && rejected_unsupported_declaration(result)) return FormUnsupported;
         return Rejected;
     } else {};
-    val used <- result.frontend.tree.used;
+    if (formal != no_node()) {
+        locate_variadic_profile(source, lines, progress[0u64].variadic_stop, syntax_past(nodes,
+            used, formal))
+    };
     if (native) {
         val checked_unit <- compile_graph_unit(source, lines, diagnostic, nodes, selected, names, work, progress,
                                                published_interfaces, interface_count, facts, owners, sites, commands, result);
@@ -662,7 +690,15 @@ proc publish_visit(handle opened:SourceRevision in S, progress:const ModuleProgr
         write_unit_row(units, unit_used, command_first, command_past, literal_first, literal_past, key_first, key_past,
                        sizes[0u64].source_bytes, progress[0u64].labels, progress[0u64].slots);
     };
-    if (!mark_checked(visits, module - 1u64, export_first, export_past)) return ScratchFailed;
+    if (progress[0u64].variadic_stop.first.line != 0u64) {
+        if (has_commands || progress[0u64].functions != 0u64 ||
+            !mark_structural_only(visits, module - 1u64, export_first, export_past,
+                                  interface_first, interface_past,
+                                      progress[0u64].variadic_stop)) return ScratchFailed
+    } else {
+        if (!mark_checked(visits, module - 1u64, export_first, export_past,
+                          progress[0u64].structural_dependency)) return ScratchFailed
+    };
     export_used <- export_past;
     interface_used <- interface_past;
     spelling_used <- spelling_past;
@@ -798,6 +834,12 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             count <- 0u64; interface_count <- 0u64;
             purpose <- purpose; entry <- if (depth == 0u64) { 1u8 } else { 0u8 };
             function_base <- 0u64; functions <- 0u64; command_count <- 0u64; labels <- 0u64; slots <- 0u64;
+            variadic_stop <- make VariadicProfileStop {
+                first_byte <- 0u64; past_byte <- 0u64;
+                first <- make SourcePosition { line <- 0u64; column <- 0u64; };
+                past <- make SourcePosition { line <- 0u64; column <- 0u64; };
+            };
+            structural_dependency <- false;
         });
         ref staged = make ModuleExports(capacity, make ModuleExport {
             module_first <- 0u64; module_past <- 0u64; name_first <- 0u64; name_past <- 0u64;
@@ -813,6 +855,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             enum_code <- 0u64; native_function <- no_node(); callable_kind <- NoCallableKind;
             native_reception <- 0u8;
             native_passes_owner <- 0u8;
+            membership <- UnprovedMembership;
             sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal;
         });
         allocating <- false;
@@ -830,12 +873,18 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
                 package_paths, key_first, key_past)
         };
         val edge_code <- 0u8;
+        val dependency <- 0u64;
         for (edge in 0u64 .. progress[0u64].dependencies) {
             edge_code <- behave @followDependency(edge);
             if (edge_code != 0u8) {
                 failure <- edge_code;
                 return reject_dependency(opened, diagnostic, edge_code, edges[edge].first, edges[edge].past);
             };
+            dependency <- selected[edges[edge].site].dependency_module;
+            if (dependency > used) return ScratchFailed;
+            if (dependency != 0u64 && structural_visit_dependency(visits, dependency - 1u64)) {
+                (progress[0u64].structural_dependency <- true):void
+            }
         };
         if (purpose == (NativeObject:GraphPurpose) &&
             (progress[0u64].used == 0u64 || progress[0u64].used >= no_node() - function_used))
@@ -847,7 +896,8 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         val bound <- with_source(opened) (source, lines) => {
             continue bind_graph_module(source, lines, diagnostic, nodes, selected, names, work, staged, progress,
                                        builtin_spellings, builtins, spellings, exports, spelling_size, export_count,
-                                       staged_interfaces, interfaces, interface_count, facts, owners, sites, staged_commands);
+                                       staged_interfaces, interfaces, interface_count, facts,
+                                           owners, sites, staged_commands);
         };
         if (bound != Complete) return bound;
         return publish_visit(opened, progress, staged, staged_interfaces, staged_commands, visits, exports, interfaces,
@@ -857,6 +907,26 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         if (!allocating) { throw; };
         report_scratch_error(diagnostic, 3u32);
         return ScratchFailed;
+    }
+}
+
+export proc complete_graph_profile(handle diagnostic:DiagnosticDestination in D,
+    visits:const Visits in G,
+                                   keys:const SourceBytes in G, used:u64, key_used:u64,
+                                   interface_used:u64) -> CompilerStatus where {owner D,
+                                       const owner G} {
+    ref stopped = make u64 { no_node() };
+    if (!earliest_profile_stop(visits, used, key_used, interface_used,
+        stopped)) return ScratchFailed;
+    if (stopped == no_node()) return Complete;
+    return case visits[stopped] of {
+        (StructuralOnly { val first <- key_first; val past <- key_past; val pending <- stop; }) -> {
+            if (!report_stored_rejection(diagnostic, module_binding_failed(), 130u8, pending.first,
+                pending.past,
+                                         keys, first, past, stopped == 0u64)) return ScratchFailed;
+            Rejected
+        };
+        _ -> ScratchFailed
     }
 }
 
@@ -956,7 +1026,7 @@ proc visit_child(handle parent_path:Path in P, handle entry:Path in A,
         lookup_path(owner_path, visits, keys, used, match_key);
         val child_id <- match_key.id;
         if (child_id < used) {
-            if (!visit_is_checked(visits, child_id)) return 6u8;
+            if (!visit_has_membership(visits, child_id)) return 6u8;
         } else {
             if (depth >= 128u64) return 9u8;
             handle child_path:Path = make handle Path() in owner_path;

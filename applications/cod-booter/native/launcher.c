@@ -149,6 +149,14 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: native handle binding is unproved on this path\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 13)
         fputs(": error: this module declaration is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 129)
+        fputs(": error: a variadic method must be the only method in its callable family\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 130)
+        fputs(": error: executing a variadic method body is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 131)
+        fputs(": error: checking conformance to a callable promise is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 132)
+        fputs(": error: a callable promise supplies no implementation on this path\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 49)
         fputs(": error: a declaration in a loop body or else requires an explicit {{ ... }} scope\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 50)

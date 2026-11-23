@@ -1,7 +1,7 @@
 using "./Lexer.cod" {
     const_word, exception_word, handle_word, here_word, identifier, init_word, in_word, own_word, owner_word,
     ptr_word, ref_word, region_word, reserved_lexical_binder, reserved_module_name, throws_word, val_word, var_word,
-    where_word, within_word,
+    where_word, within_word, punctuation,
 };
 using "./ParserInput.cod" {
     ParseResult, append_syntax_node, append_qualified_type, exception_binder_width,
@@ -11,6 +11,7 @@ using "./ParserInput.cod" {
 using "./ParserStorage.cod" {
     ExprNodes, Tokens, NodeId, syntax_first, syntax_past, exception_result_node, no_node, ref_result_node,
     result_clause_node, throws_clause_node, BindingSites, inspect_binding, is_here_formal,
+    formal_variadic_at,
 };
 using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
 using "./ParserStorage.cod" ExprPayload {
@@ -33,6 +34,14 @@ func direct_place_head(source:const SourceBytes in S, tokens:const Tokens in T, 
     where {const owner S, const owner T} {
     return at + 2u64 < past && val_word(source, tokens[at]) && var_word(source, tokens[at + 1u64]) &&
         punct_at(source, tokens, at + 2u64, past) != 58u8;
+}
+
+func ellipsis_at(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64)
+    -> bool where {const owner S, const owner T} {
+    if (at >= past || tokens[at].kind != punctuation()) return false;
+    val first <- tokens[at].first;
+    return tokens[at].past - first == 3u64 && source[first] == 46u8 &&
+        source[first + 1u64] == 46u8 && source[first + 2u64] == 46u8
 }
 
 # Formal parameters link to their preceding parameter and retain the typed name.
@@ -111,18 +120,26 @@ export func parse_parameter(source:const SourceBytes in S, tokens:const Tokens i
         preceding = make LinkTo { node <- make NodeId { revision <- result.revision; index <- previous; }; };
         {};
     };
-    append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, binding), make Formal {
+    val suffix <- no_node();
+    val end <- syntax_past(nodes, result.used, binding);
+    if (!field && ellipsis_at(source, tokens, result.next, past)) {
+        suffix <- tokens[result.next].first;
+        end <- tokens[result.next].past;
+        (result.next <- result.next + 1u64):void
+    };
+    append_syntax_node(nodes, result, first, end, make Formal {
         previous <- preceding;
         binding <- make NodeId { revision <- result.revision; index <- binding; };
         mode <- kind;
         binding_const <- binding_const;
+        variadic_at <- suffix;
     });
     return result.diagnostic == 0u8;
 }
 
 func parse_parameters(source:const SourceBytes in S, tokens:const Tokens in T,
                       nodes:ExprNodes in A, result:ParseResult in R,
-                      past:u64, allow_here:bool, multiple_here:bool) -> u64
+                      past:u64, allow_here:bool, multiple_here:bool, allow_variadic:bool) -> u64
     where {const owner S, const owner T, owner A, owner R} {
     val last <- no_node();
     if (punct_at(source, tokens, result.next, past) == 41u8) return last; # ')'
@@ -139,6 +156,11 @@ func parse_parameters(source:const SourceBytes in S, tokens:const Tokens in T,
         };
         last <- result.root;
         delimiter <- punct_at(source, tokens, result.next, past);
+        if (formal_variadic_at(nodes, result.revision, result.used, last) != no_node() &&
+            (!allow_variadic || delimiter != 41u8)) {
+            result.diagnostic <- expected_parameter_list();
+            return no_node()
+        };
         if (delimiter == 41u8) return last; # ')'
         if (delimiter != 44u8) { result.diagnostic <- expected_parameter_list(); return no_node(); } else {}; # ','
         result.next <- result.next + 1u64;
@@ -302,7 +324,7 @@ func parse_here_parameter(source:const SourceBytes in S, tokens:const Tokens in 
     val name <- start_parameter_list(source, tokens, nodes, result, past, true, false);
     if (name == no_node()) return;
     val open <- tokens[result.next - 1u64].first;
-    val parameters <- parse_parameters(source, tokens, nodes, result, past, false, false);
+    val parameters <- parse_parameters(source, tokens, nodes, result, past, false, false, false);
     if (result.diagnostic != 0u8) return;
     finish_callable_head(tokens, nodes, result, name, parameters, open);
     if (result.diagnostic != 0u8) return;
@@ -332,7 +354,7 @@ func parse_callable_head(source:const SourceBytes in S, tokens:const Tokens in T
     val name <- start_parameter_list(source, tokens, nodes, result, past, false, operators);
     if (name == no_node()) return;
     val open <- tokens[result.next - 1u64].first;
-    val parameters <- parse_parameters(source, tokens, nodes, result, past, true, !native);
+    val parameters <- parse_parameters(source, tokens, nodes, result, past, true, !native, !native);
     if (result.diagnostic != 0u8) return;
     finish_callable_head(tokens, nodes, result, name, parameters, open);
 }
@@ -428,7 +450,12 @@ export func parse_callable_signature(source:const SourceBytes in S, tokens:const
     where {const owner S, const owner T, owner A, owner R} {
     parse_callable_head(source, tokens, nodes, result, past, native, operators);
     if (result.diagnostic != 0u8) return;
+    val has_result <- punct_pair_at(source, tokens, result.next, past, 45u8, 62u8);
     parse_signature_clauses(source, tokens, nodes, result, past, native);
+    if (result.diagnostic == 0u8 && !native && !has_result &&
+        punct_at(source, tokens, result.next, past) == 59u8) {
+        (result.diagnostic <- expected_type()):void
+    };
 }
 
 export func parse_scoped_procedure_signature(source:const SourceBytes in S, tokens:const Tokens in T,
@@ -436,7 +463,7 @@ export func parse_scoped_procedure_signature(source:const SourceBytes in S, toke
     where {const owner S, const owner T, owner A, owner R} {
     val open <- result.next;
     result.next <- open + 1u64;
-    val parameters <- parse_parameters(source, tokens, nodes, result, past, true, true);
+    val parameters <- parse_parameters(source, tokens, nodes, result, past, true, true, true);
     if (result.diagnostic != 0u8) return;
     val close <- result.next;
     ref entries = make NoLink {};
