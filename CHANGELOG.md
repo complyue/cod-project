@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Checked table-holder updates through a local dependency call
+
+<a id="k-booter-handler-holder-20261122"></a>
+**K-BOOTER-HANDLER-HOLDER-20261122.** Delegated review under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122 continues the visit activation and initialized holder contracts at `57031f53ffd5a6f005ae29fbb0ee4f50c9296d61:applications/cod-booter/docs/ModuleGraph.md`. The scoped seed checker maps hidden slot inputs of a proved local installation to the ordinary per-completion call effects. D-20-MODULE-GRAPH r12 to r13, D-ARCH-REVIEW r13 to r14, P-680–P-683, registry r1062.
+
 ## 2026-11-22 — CoD module index for the first linked dependency edge
 
 <a id="k-booter-module-index-20261122"></a>
