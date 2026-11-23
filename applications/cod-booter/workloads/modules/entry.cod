@@ -1,4 +1,4 @@
-using "text-metric.cod" { measured_size as count, selected_text };
+using "./text-metric.cod" { measured_size as count, selected_text };
 using "std:text-storage" utf8_size;
 using symbol "std:io" @print;
 

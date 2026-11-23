@@ -1,10 +1,10 @@
-using "ParserStorage.cod" {
+using "./ParserStorage.cod" {
     ExprNodes, len, literal_node, add_node, multiply_node, group_node, no_node, published_syntax_id,
 };
-using "ParserStorage.cod" AstSlot { Vacant, Occupied };
-using "ParserStorage.cod" ExprPayload { IntegerLiteral, Parenthesized, ArithmeticExpression };
-using "ParserStorage.cod" ArithmeticOperation { Addition, Multiplication };
-using "ParserInput.cod" ParseResult;
+using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
+using "./ParserStorage.cod" ExprPayload { IntegerLiteral, Parenthesized, ArithmeticExpression };
+using "./ParserStorage.cod" ArithmeticOperation { Addition, Multiplication };
+using "./ParserInput.cod" ParseResult;
 
 # This small expression backend accepts only its existing four operations.
 # The slots here are backend operands in postorder.

@@ -109,6 +109,15 @@ private:
     return {};
   }
 
+  fs::path getLanguageLibrary() const {
+    const auto installed = toolchain_root_ / "lib" / "cod";
+    if (fs::is_directory(installed)) return installed;
+    const auto development = toolchain_root_.parent_path() / "cod" / "library";
+    if (fs::is_regular_file(toolchain_root_ / "CMakeCache.txt") && fs::is_directory(development))
+      return development;
+    return installed;
+  }
+
   fs::path getLanguageRuntime() const {
     constexpr auto archive_name = "libcod-runtime.a";
     if (const char *override = std::getenv("COD_RUNTIME_ARCHIVE"); override && *override) {
@@ -651,7 +660,8 @@ std::vector<std::string> CodTool::buildCompilerArgs(const CodReplConfig &config)
 int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry, bool check_only,
                             const LanguageEmission &emission, const cod::language::WarningOptions &warnings) const {
   try {
-    auto compilation = cod::language::Compiler{warnings, emission.specialize, emission.bounds_checks}.compile(fs::absolute(entry),
+    auto compilation = cod::language::Compiler{warnings, emission.specialize, emission.bounds_checks}.compile(
+        fs::absolute(entry), {getLanguageLibrary(), config.project_root},
         emission.ir.has_value(), !check_only || emission.bitcode.has_value(), emission.providers.has_value());
     for (const auto &warning : compilation.warnings) std::cerr << warning << '\n';
     if (config.verbose) {
@@ -966,7 +976,6 @@ int main(int argc, const char **argv) {
       std::cerr << "Error: CoD source mode cannot be combined with --eval\n";
       return 1;
     }
-    if (config.project_root.empty()) config.project_root = language_entry->parent_path();
     return CodTool{}.compileLanguage(config, *language_entry, check_only, emission, warnings);
   }
   if (warnings.as_errors || !warnings.errors.empty()) {

@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
-symbol from "vocabulary.cod" @x;
+symbol from "./vocabulary.cod" @x;
 effect @x <- 7;
-symbol from "identity-provider.cod" @x as @alias;
+symbol from "./identity-provider.cod" @x as @alias;
 behave @print(@alias);
 behave @print(@x);

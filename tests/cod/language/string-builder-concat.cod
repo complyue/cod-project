@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-using "../../../cod/library/string.cod" { (++), (++) as concatenate, append };
+using "string.cod" { (++), (++) as concatenate, append };
 
 proc operand(trace:u64 in W, order:u64, piece:const String in P) -> ref const String in P
     where {owner W, const owner P} {

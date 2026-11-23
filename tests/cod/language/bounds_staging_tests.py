@@ -21,7 +21,7 @@ export at;export seed;export link;
 '''
 SOURCE = TYPES+'''
 using symbol "std:io" @print;
-using "lib.cod" at;using "lib.cod" seed;using "lib.cod" link;
+using "./lib.cod" at;using "./lib.cod" seed;using "./lib.cod" link;
 val e<-seed();val history<-link(e,e);val common:Exception<-history;
 behave @print(at(history,0u64,DEPTHu64).category);
 behave @print(at(common,0u64,DEPTHu64).category);

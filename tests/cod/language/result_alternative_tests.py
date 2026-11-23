@@ -27,8 +27,8 @@ runner.CASES = {
     'conditional_does_not_gain_implicit_widening': ('func f(flag:bool){return if(flag){1u32}else{2u64};}', 2, '', 'conditional join with different scalar result types'),
     'module_interpretations_keep_independent_anchors': ({
         'base.cod': 'func score(x:T)->u64 where T{return 1u64;}func f(n:u64){return if(n==0u64){score(n)}else{f(n-1u64)};}export score;export f;',
-        'ext.cod': 'import "base.cod" score;func score(x:u64)->u64{return 7u64;}using "base.cod" f as frozen;export frozen;export import "base.cod" f as adapted;',
-        'main.cod': IO + 'using "ext.cod" frozen;using "ext.cod" adapted;behave @print(frozen(10u64));behave @print(adapted(10u64));',
+        'ext.cod': 'import "./base.cod" score;func score(x:u64)->u64{return 7u64;}using "./base.cod" f as frozen;export frozen;export import "./base.cod" f as adapted;',
+        'main.cod': IO + 'using "./ext.cod" frozen;using "./ext.cod" adapted;behave @print(frozen(10u64));behave @print(adapted(10u64));',
     }, 0, '1\n7\n', ''),
 }
 runner.CASE_ARGUMENTS = {}

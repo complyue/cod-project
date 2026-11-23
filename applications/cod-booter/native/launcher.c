@@ -356,11 +356,60 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: no such constructor of the selected sum type\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == 18)
         fputs(": error: conflicting sum constructor selections\n", stderr);
+    else if (diagnostic->stage == 2 && diagnostic->code == module_package_delivery_failed)
+        fputs(": error: could not retain package resolution diagnostics\n", stderr);
     else
         fprintf(stderr, ": error: %s failed (code %" PRIu32 ")\n", diagnostic_phase(diagnostic->stage), diagnostic->code);
     if (diagnostic->related.line)
         fprintf(stderr, "%s:%" PRIu64 ":%" PRIu64 ": related location\n",
                 input, diagnostic->related.line, diagnostic->related.column);
+}
+
+static void write_path_bytes(const unsigned char *bytes, size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+        const unsigned char byte = bytes[i];
+        if (byte < 32 || byte == 127) fprintf(stderr, "\\x%02x", (unsigned)byte);
+        else if (byte == '\\' || byte == '\'') {
+            fputc('\\', stderr);
+            fputc(byte, stderr);
+        } else fputc(byte, stderr);
+    }
+}
+
+static void report_package(const cod_booter_package_diagnostic *diagnostic) {
+    const unsigned char *importer = diagnostic->bytes;
+    const unsigned char *spelling = importer + diagnostic->importer_size;
+    const unsigned char *candidate = spelling + diagnostic->spelling_size;
+    const unsigned char *other = candidate + diagnostic->candidate_size;
+    write_path_bytes(importer, diagnostic->importer_size);
+    fprintf(stderr, ":%" PRIu64 ":%" PRIu64 ": %s: ", diagnostic->first.line,
+            diagnostic->first.column, diagnostic->kind == package_shadow ? "warning" : "error");
+    switch (diagnostic->kind) {
+    case package_shadow: fputs("package module '", stderr); break;
+    case package_ambiguity: fputs("ambiguous package module '", stderr); break;
+    case package_missing: fputs("module is absent from the project packages and active bundled library: '", stderr); break;
+    case package_lookup_failure: fputs("could not inspect or open package module '", stderr); break;
+    case package_input_failure: fputs("could not load package inputs for module '", stderr); break;
+    case invalid_module_path: fputs("invalid source module path '", stderr); break;
+    case package_process_failure: fputs("paired codp failed for module '", stderr); break;
+    }
+    write_path_bytes(spelling, diagnostic->spelling_size);
+    fputc('\'', stderr);
+    if (diagnostic->candidate_size) {
+        fputs(diagnostic->kind == package_shadow ? " selects '" :
+              diagnostic->kind == package_ambiguity ? " claimed by '" : " at '", stderr);
+        write_path_bytes(candidate, diagnostic->candidate_size);
+        fputc('\'', stderr);
+    }
+    if (diagnostic->other_size) {
+        fputs(diagnostic->kind == package_shadow ? " and shadows '" : " and '", stderr);
+        write_path_bytes(other, diagnostic->other_size);
+        fputc('\'', stderr);
+    }
+    if (diagnostic->os_error)
+        fprintf(stderr, diagnostic->kind == package_process_failure
+            ? " (producer status %" PRIu64 ")" : " (system error %" PRIu64 ")", diagnostic->os_error);
+    fputc('\n', stderr);
 }
 
 typedef cod_enum_CompilerStatusx2ecod_14_CompilerStatus compiler_status;
@@ -376,16 +425,30 @@ static cod_native_DiagnosticDestination_borrow diagnostic_record(cod_booter_diag
 
 static int finish_command(const char *input, cod_native_status result, compiler_status status,
                           cod_booter_diagnostic_sink *diagnostic) {
+    bool package_failure = false;
+    for (cod_booter_package_diagnostic *report = diagnostic->package_reports; report;) {
+        cod_booter_package_diagnostic *next = report->next;
+        report_package(report);
+        package_failure |= report->kind != package_shadow;
+        free(report);
+        report = next;
+    }
     if (result != COD_NATIVE_OK) {
         fputs("cod-booter: invalid native entry\n", stderr);
     } else if (status != cod_enum_CompilerStatusx2ecod_14_CompilerStatus_member_Complete) {
         for (size_t i = 0; i < diagnostic->count; ++i)
             report(diagnostic->path, status, &diagnostic->reports[i]);
-        if (!diagnostic->count || diagnostic->primary.stage != diagnostic->reports[0].stage)
+        const bool detailed_package_failure = package_failure && diagnostic->primary.stage == 2 &&
+            diagnostic->primary.code == module_package_diagnostic;
+        if (!detailed_package_failure &&
+            (!diagnostic->count || diagnostic->primary.stage != diagnostic->reports[0].stage))
             report(input, status, &diagnostic->primary);
         if (diagnostic->snapshot_failed)
             fprintf(stderr, "%s: error: could not retain the complete parser diagnostics\n", input);
     }
+    if (diagnostic->package_delivery_failed &&
+        (diagnostic->primary.stage != 2 || diagnostic->primary.code != module_package_delivery_failed))
+        fprintf(stderr, "%s: error: could not retain package resolution diagnostics\n", input);
     free(diagnostic->reports);
     free(diagnostic->path);
     return result == COD_NATIVE_OK ? status : 70;

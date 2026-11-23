@@ -2,5 +2,5 @@ symbol @next : i64;
 symbol @update : proc() -> i64;
 procedure @update -> i64 { return perform @next }
 
-export @next;
-export @update;
+export var @next;
+export proc @update;

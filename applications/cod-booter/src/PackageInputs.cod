@@ -1,0 +1,147 @@
+using "./SourceStorage.cod" SourceBytes;
+using "./SourceAccess.cod" same_bytes;
+
+export data PackageInputPlan { rows:u64; bytes:u64; }
+export data PackageSourceRoot {
+    uuid_first:u64;
+    path_first:u64;
+    path_past:u64;
+}
+export array PackageSourceRoots[u64]:PackageSourceRoot;
+
+data InputRoot { uuid_first:u64; path_first:u64; path_past:u64; }
+
+func input_word(input:const SourceBytes in I, first:u64) -> u64 where {const owner I} {
+    val word <- 0u64;
+    val byte:u64 <- 0u64;
+    for (offset in 0u64 .. 8u64) {
+        byte <- (input[first + 7u64 - offset]);
+        (word <- word * 256u64 + byte):void
+    };
+    return word
+}
+
+func read_header(input:const SourceBytes in I, count:u64 in C) -> bool
+    where {const owner I, owner C} {
+    val size <- intrinsic (len)(input);
+    if (size < 16u64) return false;
+    # CODPKG01
+    if (input[0u64] != 67u8 || input[1u64] != 79u8 ||
+        input[2u64] != 68u8 || input[3u64] != 80u8 ||
+        input[4u64] != 75u8 || input[5u64] != 71u8 ||
+        input[6u64] != 48u8 || input[7u64] != 49u8) return false;
+    val rows <- input_word(input, 8u64);
+    if (rows > (size - 16u64) / 45u64) return false;
+    count <- rows;
+    return true
+}
+
+func valid_uuid(input:const SourceBytes in I, first:u64) -> bool where {const owner I} {
+    val byte <- 0u8;
+    for (offset in 0u64 .. 36u64) {
+        byte <- input[first + offset];
+        if (offset == 8u64 || offset == 13u64 || offset == 18u64 || offset == 23u64) {
+            if (byte != 45u8) return false
+        } else {
+            if ((byte < 48u8 || byte > 57u8) && (byte < 97u8 || byte > 102u8))
+                return false
+        }
+    };
+    return true
+}
+
+func read_root(input:const SourceBytes in I, first:u64, root:InputRoot in R) -> bool
+    where {const owner I, owner R} {
+    val size <- intrinsic (len)(input);
+    if (first > size || size - first < 45u64 || !valid_uuid(input, first)) return false;
+    val length <- input_word(input, first + 36u64);
+    val path <- first + 44u64;
+    if (length == 0u64 || length > size - path || input[path] != 47u8) return false;
+    val past <- path + length;
+    for (offset in path .. past) {
+        if (input[offset] == 0u8) return false
+    };
+    root.uuid_first <- first;
+    root.path_first <- path;
+    root.path_past <- past;
+    return true
+}
+
+export func plan_package_inputs(input:const SourceBytes in I, plan:PackageInputPlan in P) -> bool
+    where {const owner I, owner P} {
+    ref count = make u64 { 0u64 };
+    if (!read_header(input, count)) return false;
+    ref root = make InputRoot { uuid_first <- 0u64; path_first <- 0u64; path_past <- 0u64; };
+    val read <- 16u64;
+    val required <- 0u64;
+    for (index in 0u64 .. count) {
+        if (!read_root(input, read, root)) return false;
+        required <- required + 36u64 + (root.path_past - root.path_first);
+        (read <- root.path_past):void
+    };
+    if (read != intrinsic (len)(input)) return false;
+    plan.rows <- count;
+    plan.bytes <- required;
+    return true
+}
+
+func contains_uuid(
+    input:const SourceBytes in I, root:const InputRoot in R,
+    rows:const PackageSourceRoots in G, bytes:const SourceBytes in G, used:u64) -> bool
+    where {const owner I, const owner R, const owner G} {
+    val previous <- 0u64;
+    for (index in 0u64 .. used) {
+        previous <- rows[index].uuid_first;
+        if (same_bytes(input, root.uuid_first, root.uuid_first + 36u64,
+                       bytes, previous, previous + 36u64)) return true
+    };
+    return false
+}
+
+func copy_bytes(
+    input:const SourceBytes in I, first:u64, size:u64, output:SourceBytes in O, start:u64) -> void
+    where {const owner I, owner O} {
+    for (offset in 0u64 .. size) {
+        output[start + offset] <- input[first + offset]
+    };
+    return
+}
+
+func stage_root(
+    input:const SourceBytes in I, root:const InputRoot in R, rows:PackageSourceRoots in G,
+    bytes:SourceBytes in G, row:u64, first:u64, past:u64) -> void
+    where {const owner I, const owner R, owner G} {
+    copy_bytes(input, root.uuid_first, 36u64, bytes, first);
+    copy_bytes(input, root.path_first, past - first - 36u64, bytes, first + 36u64);
+    rows[row] <- make PackageSourceRoot {
+        uuid_first <- first; path_first <- first + 36u64; path_past <- past;
+    };
+    return
+}
+
+# The caller lends the capture's immutable backing and separately owned graph
+# staging storage. A failed decode leaves the published counts untouched.
+export func decode_package_inputs(
+    input:const SourceBytes in I, rows:PackageSourceRoots in G,
+    bytes:SourceBytes in G, published:PackageInputPlan in P) -> bool
+    where {const owner I, owner G, owner P} {
+    ref plan = make PackageInputPlan { rows <- 0u64; bytes <- 0u64; };
+    if (!plan_package_inputs(input, plan) || plan.rows > intrinsic (len)(rows) ||
+        plan.bytes > intrinsic (len)(bytes)) return false;
+    ref root = make InputRoot { uuid_first <- 0u64; path_first <- 0u64; path_past <- 0u64; };
+    val read <- 16u64;
+    val written <- 0u64;
+    val next <- 0u64;
+    for (index in 0u64 .. plan.rows) {
+        if (!read_root(input, read, root) || contains_uuid(input, root, rows, bytes, index))
+            return false;
+        next <- written + 36u64 + (root.path_past - root.path_first);
+        stage_root(input, root, rows, bytes, index, written, next);
+        read <- root.path_past;
+        (written <- next):void
+    };
+    if (read != intrinsic (len)(input) || written != plan.bytes) return false;
+    published.rows <- plan.rows;
+    published.bytes <- written;
+    return true
+}

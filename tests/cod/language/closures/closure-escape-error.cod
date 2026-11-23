@@ -1,4 +1,4 @@
-using "structural-api.cod" Counter;
+using "./structural-api.cod" Counter;
 function bad() -> func()->const u64 {
   own region state:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
   val var ticks -> state.ticks;

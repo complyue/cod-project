@@ -3,7 +3,7 @@ data Sample { value:i64; }
 data Bundle { ptr item:Sample; }
 function view(sample:Sample in O1) -> Sample where {owner O1} { return deref(sample) }
 function item(bundle:Bundle in O1) -> Sample throws NullPointerException where {owner O1} { return deref(deref(bundle).item) }
-using "abstract-library.cod" rank_entity;
+using "./abstract-library.cod" rank_entity;
 function observe_maybe(sample:Sample in O1, keep:bool) -> i64 throws NullPointerException where {owner O1} {
   ptr chosen:Sample = null in here;
   if (keep) { chosen = sample; {} } else {};

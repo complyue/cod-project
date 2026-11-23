@@ -1,4 +1,4 @@
-using "module-export-adapter.cod" Payload;
+using "./module-export-adapter.cod" Payload;
 region symbol @arena;
 effect @arena <- region(4096u64);
 helper(create(@arena));

@@ -1,6 +1,6 @@
-using "../../../cod/library/string.cod" { StringBuilder, append };
-using "ModuleExportStorage.cod" ModuleInterfaces;
-using "NameResolution.cod" { builtin_bool, builtin_c_string, builtin_string, c_operation, c_entry,
+using "string.cod" { StringBuilder, append };
+using "./ModuleExportStorage.cod" ModuleInterfaces;
+using "./NameResolution.cod" { builtin_bool, builtin_c_string, builtin_string, c_operation, c_entry,
     text_type };
 
 export proc begin_provider_pair(header:StringBuilder in H, stubs:StringBuilder in S) -> void

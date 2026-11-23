@@ -72,7 +72,7 @@ CASES = {
         'else{{{val x<-x-1u64;return f(x);}}};}behave @print(f(20u64));', '7\n', ['x']),
     'imported_interpretations_once': ({
         'library.cod': 'func f(x:u64)->u64{{{val x<-x;return x;}}}export f;',
-        'main.cod': IO + 'using "library.cod" f as a;import "library.cod" f as b;'
+        'main.cod': IO + 'using "./library.cod" f as a;import "./library.cod" f as b;'
                     'behave @print(a(7u64));behave @print(b(8u64));',
     }, '7\n8\n', ['x']),
     'captured_slots_are_not_declarations': (IO + 'func constant()->u64{return 7u64;}func f(x:func()->u64)->u64{'

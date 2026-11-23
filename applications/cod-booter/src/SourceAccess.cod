@@ -1,4 +1,4 @@
-using "SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
+using "./SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
 
 export func len(source:const SourceBytes in S) -> u64 where {const owner S} {
     return intrinsic (len)(source);

@@ -1,37 +1,39 @@
-using "Lexer.cod" {
+using "./Lexer.cod" {
     own_word, quoted_text, multiline_text, identifier, using_word, as_word, symbol_word, symbol_name,
     from_word, proc_word, func_word, ref_word, ptr_word, where_word, const_word, in_word,
     data_word, array_word, export_word, handle_word, c_linkage, enum_word, integer_literal,
     import_word, type_word, region_word, valid_module_path, invalid_module_path_escape,
 };
-using "ExpressionParser.cod" {
+using "./ExpressionParser.cod" {
     callable_local_head, parse_symbol, parse_callable, parse_next_expression, integer_width, parse_integer_magnitude,
 };
-using "ParserInput.cod" {
+using "./ParserInput.cod" {
     ParseResult, punct_at, punct_pair_at, append_syntax_node, append_module_item, append_module, parse_identifier,
     parse_module_name, parse_resource_name, reset_parse_result, expected_name, expected_type, expected_c_linkage,
     closing_token, recover_syntax_until, seed_lexical_reports,
 };
-using "CallableSyntax.cod" { expected_owner_clause, parse_constraints, parse_parameter, parse_procedure_symbol_type };
-using "ParserStorage.cod" {
+using "./CallableSyntax.cod" {
+    expected_owner_clause, parse_constraints, parse_parameter, parse_procedure_symbol_type
+};
+using "./ParserStorage.cod" {
     Tokens, ExprNodes, NodeId, len as token_len, no_node, syntax_first, syntax_past, ModuleSelectionMode,
     BindingSites, FormalSites, SignatureSites, inspect_binding, inspect_formal, inspect_signature,
 };
-using "ParserStorage.cod" AstSlot { Vacant, Occupied };
-using "ParserStorage.cod" SyntaxRole { ModuleItemRole };
-using "ParserStorage.cod" ExprPayload {
+using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
+using "./ParserStorage.cod" SyntaxRole { ModuleItemRole };
+using "./ParserStorage.cod" ExprPayload {
     CallableDefinition, CEntryDefinition, ModulePathSyntax, ModuleSelection, AllMembers, ChosenMembers, ChosenMember,
     HandleType, NominalParent, RecordDefinition, AbstractType, HandleSymbol, ReferenceSymbol, Publication,
     ArrayDefinition, EnumInteger, EnumMember, EnumDefinition, SumDefinition, SumArm, RegionDefinition,
 };
-using "ParserStorage.cod" FormalSyntax { OrdinaryFormal };
-using "ParserStorage.cod" FormalMode { ValueFormal, HandleFormal, RetainedHandleFormal };
-using "ParserStorage.cod" BindingSyntax { TypedBinding };
-using "ParserStorage.cod" SignatureSyntax { OwnerSignatureClause };
-using "ParserStorage.cod" NodeLink { NoLink, LinkTo };
-using "ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource, ReexportResource };
-using "SourceStorage.cod" SourceBytes;
-using "SourceAccess.cod" { len as source_len, same_bytes };
+using "./ParserStorage.cod" FormalSyntax { OrdinaryFormal };
+using "./ParserStorage.cod" FormalMode { ValueFormal, HandleFormal, RetainedHandleFormal };
+using "./ParserStorage.cod" BindingSyntax { TypedBinding };
+using "./ParserStorage.cod" SignatureSyntax { OwnerSignatureClause };
+using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
+using "./ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource, ReexportResource };
+using "./SourceStorage.cod" SourceBytes;
+using "./SourceAccess.cod" { len as source_len, same_bytes };
 
 func expected_module_path() -> u8 { return 22u8; }
 func expected_module_separator() -> u8 { return 25u8; }

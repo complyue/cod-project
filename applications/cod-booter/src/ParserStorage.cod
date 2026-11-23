@@ -1,4 +1,4 @@
-using "SourceStorage.cod" Token;
+using "./SourceStorage.cod" Token;
 
 export array Tokens[u64]:Token;
 

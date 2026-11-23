@@ -1,17 +1,17 @@
-using "../../../cod/library/string.cod" { StringBuilder, emit, emitStr };
-using symbol "../../../cod/library/string.cod" @sout;
-using "SourceStorage.cod" SourceBytes;
-using "ParserStorage.cod" no_node;
-using "ModuleExportStorage.cod" { ModuleInterfaces, find_interface };
-using "NameResolution.cod" {
+using "string.cod" { StringBuilder, emit, emitStr };
+using symbol "string.cod" @sout;
+using "./SourceStorage.cod" SourceBytes;
+using "./ParserStorage.cod" no_node;
+using "./ModuleExportStorage.cod" { ModuleInterfaces, find_interface };
+using "./NameResolution.cod" {
     array_type, record_type, builtin_bool, builtin_u8, builtin_u32, builtin_u64, builtin_i64, builtin_f32, builtin_f64,
 };
-using "NativeProviderLayout.cod" {
+using "./NativeProviderLayout.cod" {
     ProviderLayout, provider_alloc_size, provider_abi_alignment, provider_struct_alignment,
     ABIRepresentation { ABIInt8, ABIInt32, ABIInt64, ABIFloat32, ABIFloat64 },
 };
-using "ProviderRecordLayout.cod" { ABIRecordLayout, append_layout_field, finish_layout };
-using "ProviderNames.cod" emit_provider_member;
+using "./ProviderRecordLayout.cod" { ABIRecordLayout, append_layout_field, finish_layout };
+using "./ProviderNames.cod" emit_provider_member;
 
 enum ScalarSpelling:u8 { UnsupportedScalar; UInt8; UInt32; UInt64; Int64; Float32; Float64; }
 array FieldOffsets[u64]:u64;

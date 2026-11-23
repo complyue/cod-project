@@ -1,14 +1,17 @@
-using "ParserStorage.cod" AstSlot { Vacant, Occupied };
-using "ParserStorage.cod" ExprPayload { DiscardedExpression, CheckedTypeAssertion, RaisePending, RaiseValue, CaseFallthrough, CaseFailure };
-using "ParserStorage.cod" BinarySyntax { ArithmeticBinary, ComparisonBinary };
-using "ParserStorage.cod" ArithmeticOperation { Addition };
-using "ParserStorage.cod" ComparisonRelation { Equal };
-using "ParserStorage.cod" InvocationSyntax { OrdinaryInvocation, EffectfulInvocation };
-using "ParserStorage.cod" DeferSyntax { DeferCall, DeferBody };
-using "ParserStorage.cod" LocalMode { ValueLocal, ReferenceLocal, ExceptionLocal };
-using "ParserStorage.cod" NameSyntax { OrdinaryName };
-using "ParserStorage.cod" CompletionSyntax { ReturnCompletion, BreakCompletion };
-using "ParserStorage.cod" {
+using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
+using "./ParserStorage.cod" ExprPayload {
+    DiscardedExpression, CheckedTypeAssertion, RaisePending, RaiseValue, CaseFallthrough,
+        CaseFailure
+};
+using "./ParserStorage.cod" BinarySyntax { ArithmeticBinary, ComparisonBinary };
+using "./ParserStorage.cod" ArithmeticOperation { Addition };
+using "./ParserStorage.cod" ComparisonRelation { Equal };
+using "./ParserStorage.cod" InvocationSyntax { OrdinaryInvocation, EffectfulInvocation };
+using "./ParserStorage.cod" DeferSyntax { DeferCall, DeferBody };
+using "./ParserStorage.cod" LocalMode { ValueLocal, ReferenceLocal, ExceptionLocal };
+using "./ParserStorage.cod" NameSyntax { OrdinaryName };
+using "./ParserStorage.cod" CompletionSyntax { ReturnCompletion, BreakCompletion };
+using "./ParserStorage.cod" {
     ExprNodes, len as syntax_len, no_node,
     is_function,
     checked_ref_argument,
@@ -21,27 +24,31 @@ using "ParserStorage.cod" {
     inspect_local_binding, LocalBindingSites, inspect_invocation, DirectCallSites, inspect_field_selection, FieldSelectionSites,
     published_syntax_id, completion_syntax, completion_operand, name_syntax, ungrouped,
 };
-using "ParserStorage.cod" GuardClauseSyntax { HandlerClause, CleanupClause };
-using "ParserStorage.cod" SequenceSyntax { ClauseSequence, BlockSequence, ModuleSequence, ArgumentSequence };
-using "ParserStorage.cod" CallableSyntax { ModuleCallable };
-using "ParserStorage.cod" SignatureSyntax { ThrowsSignatureClause };
-using "ParserStorage.cod" LogicalSyntax { LogicalNot, LogicalAnd, LogicalOr, InvalidLogical };
-using "ParserStorage.cod" RhsEvaluation { ConditionalRhs, SkipsRhs, TakesRhs };
-using "ParserStorage.cod" ConstructionSyntax { StorageReservation, PositionalConstruction, BracedConstruction };
-using "ParserStorage.cod" AssignmentSyntax {
+using "./ParserStorage.cod" GuardClauseSyntax { HandlerClause, CleanupClause };
+using "./ParserStorage.cod" SequenceSyntax {
+    ClauseSequence, BlockSequence, ModuleSequence, ArgumentSequence
+};
+using "./ParserStorage.cod" CallableSyntax { ModuleCallable };
+using "./ParserStorage.cod" SignatureSyntax { ThrowsSignatureClause };
+using "./ParserStorage.cod" LogicalSyntax { LogicalNot, LogicalAnd, LogicalOr, InvalidLogical };
+using "./ParserStorage.cod" RhsEvaluation { ConditionalRhs, SkipsRhs, TakesRhs };
+using "./ParserStorage.cod" ConstructionSyntax {
+    StorageReservation, PositionalConstruction, BracedConstruction
+};
+using "./ParserStorage.cod" AssignmentSyntax {
     PlaceTransfer, PlaceRebind, FieldTransfer, FieldRebind, AugmentedPlaceTransfer,
 };
-using "ParserStorage.cod" GroupSyntax { ParenthesizedExpression };
-using "ParserStorage.cod" LiteralRange { EmptyLiteralRange, NonemptyLiteralRange };
-using "ParserInput.cod" ParseResult;
-using "NameResolution.cod" {
+using "./ParserStorage.cod" GroupSyntax { ParenthesizedExpression };
+using "./ParserStorage.cod" LiteralRange { EmptyLiteralRange, NonemptyLiteralRange };
+using "./ParserInput.cod" ParseResult;
+using "./NameResolution.cod" {
     NameBindings, NameWork, enclosing_callable, exception_binding,
 };
-using "OperandChecking.cod" {
+using "./OperandChecking.cod" {
     OperandFacts, nullable_ptr, borrowed_ref, never_result, void_result, has_value_tail,
     unreachable_case_item, misses_case_arm, has_terminal_defer_before, present_target, absent_target, selected_target_presence,
 };
-using "ModuleExports.cod" {
+using "./ModuleExports.cod" {
     exception_root_identity, null_pointer_identity, missing_return_identity, unexpected_case_identity,
     out_of_memory_identity, index_out_of_bounds_identity, type_assertion_failed_identity, text_byte_export,
 };

@@ -1,6 +1,6 @@
-using "world-integration.cod" relay;
-using "world-first.cod" local_score;
-using "world-second.cod" second;
+using "./world-integration.cod" relay;
+using "./world-first.cod" local_score;
+using "./world-second.cod" second;
 region symbol @arena;
 effect @arena <- region(4096u64);
 {

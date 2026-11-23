@@ -1,6 +1,6 @@
 using "std:exceptions" Exception;
-using "CompilerStatus.cod" CompilerStatus;
-using "SourceStorage.cod" SourceBytes;
+using "./CompilerStatus.cod" CompilerStatus;
+using "./SourceStorage.cod" SourceBytes;
 
 export handle type PathOwner;
 export handle type Path in PathOwner;

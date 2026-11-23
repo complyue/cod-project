@@ -1,5 +1,5 @@
 data Node { score:i64; ptr next:Node; }
-symbol from "region-factory-vocabulary.cod" @arena;
+symbol from "./region-factory-vocabulary.cod" @arena;
 symbol @make : proc(i64) -> Node;
 symbol @initial : Node;
 symbol @read : proc() -> Node;
@@ -8,9 +8,9 @@ effect @initial = alloc @arena Node(7, null);
 procedure @read() -> Node { return @initial }
 procedure @make(x:i64) -> Node { return alloc @arena Node(adjust(x), null) }
 
-export @arena;
-export @initial;
-export @make;
-export @read;
+export var @arena;
+export var @initial;
+export proc @make;
+export proc @read;
 export Node;
 export adjust;

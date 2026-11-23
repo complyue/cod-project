@@ -69,8 +69,8 @@ runner.CASES = {
         2, '', 'required checked exception'),
     'selected_module_interpretation': ({
         'base.cod': BASE.replace('n0+n31', 'helper(n0)') + 'func helper(x:T)->u64 where T{return 1u64;}export base;export helper;',
-        'extension.cod': 'import "base.cod" base;import "base.cod" helper;func helper(x:u64)->u64{return 7u64;}export base;',
-        'main.cod': IO + 'using "base.cod" base as original;using "extension.cod" base as extended;' +
+        'extension.cod': 'import "./base.cod" base;import "./base.cod" helper;func helper(x:u64)->u64{return 7u64;}export base;',
+        'main.cod': IO + 'using "./base.cod" base as original;using "./extension.cod" base as extended;' +
             f'func a:{VIEW}=original;func b:{VIEW}=extended;' +
             f'behave @print(a({ARGUMENTS}));behave @print(b({ARGUMENTS}));behave @print(a({ARGUMENTS}));',
     }, 0, '1\n7\n1\n', ''),

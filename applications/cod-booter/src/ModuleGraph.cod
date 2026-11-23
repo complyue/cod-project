@@ -1,62 +1,78 @@
 using "std:exceptions" { OutOfMemoryError, RegionCapacityExceededError };
-using "NativeSource.cod" {
+using "./NativeSource.cod" {
     Path, PathOwner, PathNotReadyException, PathStorageException, SourceRevision, SourceOpenException, prepare_root, prepare_child,
 };
-using "NativeSourceUse.cod" source_use;
-using "NativeDiagnostics.cod" {
+using "./NativeSourceUse.cod" source_use;
+using "./ModulePaths.cod" { classify_module_path, ModulePathKind { InvalidPath, SourceRelative } };
+using "./NativeDiagnostics.cod" PackageDiagnosticKind { InvalidModulePath };
+using "./PackageInputs.cod" { PackageSourceRoot, PackageSourceRoots };
+using "./PackageGraphPaths.cod" { PackageEdge, prepare_logical_dependency, report_package_issue };
+using "./PackageDiagnostics.cod" { package_issue, package_delivery_failure };
+using "./NativeDiagnostics.cod" {
     DiagnosticDestination, report_rejection, report_parse_rejection, report_source_open_error, report_scratch_error,
 };
-using "SourceStorage.cod" DelimiterLink { OrdinaryToken };
-using "SourceStorage.cod" { SourceBytes, SourceLines, Token };
-using "ParserStorage.cod" {
+using "./SourceStorage.cod" DelimiterLink { OrdinaryToken };
+using "./SourceStorage.cod" { SourceBytes, SourceLines, Token };
+using "./ParserStorage.cod" {
     Tokens, ExprNodes, no_node, syntax_first, syntax_past, ModuleSelectionSites, inspect_module_selection,
     first_module_item, SequenceEntry, inspect_sequence_entry, CallableSites, inspect_callable,
     DeclarationSites, inspect_declaration,
 };
-using "ParserStorage.cod" ModuleSelectionMode { UseResource };
-using "ParserStorage.cod" SelectionSyntax { SelectionReady };
-using "ParserStorage.cod" SequenceSyntax { ModuleSequence };
-using "ParserStorage.cod" CallableSyntax { ModuleCallable };
-using "ParserStorage.cod" DeclarationSyntax { NominalRecord, EnumTypeDeclaration, LocalPublication };
-using "ParserStorage.cod" AstSlot { Vacant };
-using "TokenBuffer.cod" ScanResult;
-using "ParserInput.cod" { ParseResult, node_storage_exhausted };
-using "Frontend.cod" { FrontendResult, read_module };
-using "ModuleExportStorage.cod" { ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces };
-using "ParserStorage.cod" FormalMode { ValueFormal };
-using "ModuleExportStorage.cod" { SumInterfacePayload { NoSumInterface }, AggregateStorage { UnprovedAggregate } };
-using "ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
-using "AggregateSchemas.cod" AggregateFacts;
-using "ModuleExports.cod" {
+using "./ParserStorage.cod" ModuleSelectionMode { UseResource };
+using "./ParserStorage.cod" SelectionSyntax { SelectionReady };
+using "./ParserStorage.cod" SequenceSyntax { ModuleSequence };
+using "./ParserStorage.cod" CallableSyntax { ModuleCallable };
+using "./ParserStorage.cod" DeclarationSyntax {
+    NominalRecord, EnumTypeDeclaration, LocalPublication
+};
+using "./ParserStorage.cod" AstSlot { Vacant };
+using "./TokenBuffer.cod" ScanResult;
+using "./ParserInput.cod" { ParseResult, node_storage_exhausted };
+using "./Frontend.cod" { FrontendResult, read_module };
+using "./ModuleExportStorage.cod" {
+    ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces
+};
+using "./ParserStorage.cod" FormalMode { ValueFormal };
+using "./ModuleExportStorage.cod" {
+    SumInterfacePayload { NoSumInterface }, AggregateStorage { UnprovedAggregate }
+};
+using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
+using "./AggregateSchemas.cod" AggregateFacts;
+using "./ModuleExports.cod" {
     SelectedExport, SelectedExports, next_module_dependency, prepare_module_dependencies, ExportResolutionResult,
     resolve_enum_selections, resolve_sum_selections, verify_aggregate_selections,
 };
-using "ModuleFrontend.cod" {
+using "./ModuleFrontend.cod" {
     ModuleBindingResult, select_parsed_module, bind_selected_module, module_read_failed, module_binding_failed,
     module_selection_failed, module_operands_failed, binding_diagnostic, rejected_unsupported_declaration,
 };
-using "NameResolution.cod" { NameBinding, NameBindings, NameWorkSlot, NameWork, record_type };
-using "NativeDeclarations.cod" {
+using "./NameResolution.cod" { NameBinding, NameBindings, NameWorkSlot, NameWork, record_type };
+using "./NativeDeclarations.cod" {
     ModulePublication, NativeDeclarationResult, prepare_module_calls, check_module_interfaces, publish_interfaces,
     publish_module_exports,
 };
-using "DeclarationTypes.cod" { prepare_native_operand_types, publish_type_interfaces, DeclaredExpressionResult, check_declared_expressions };
-using "Compiler.cod" ExpressionScratchPlan;
-using "ModuleDriver.cod" { plan_module_source, plan_module_workspace, ModuleWorkspacePlan };
-using "OperandChecking.cod" {
+using "./DeclarationTypes.cod" {
+    prepare_native_operand_types, publish_type_interfaces, DeclaredExpressionResult,
+        check_declared_expressions
+};
+using "./Compiler.cod" ExpressionScratchPlan;
+using "./ModuleDriver.cod" { plan_module_source, plan_module_workspace, ModuleWorkspacePlan };
+using "./OperandChecking.cod" {
     OperandFact, OperandFacts, OwnerEvidence, CallOwners, OperandCheckResult, prepare_imported_calls, publish_native_interfaces,
 };
-using "CompletionChecking.cod" { CompletionSite, CompletionSites };
-using "ModuleCompiler.cod" compile_bound_commands;
-using "NativeCommands.cod" {
+using "./CompletionChecking.cod" { CompletionSite, CompletionSites };
+using "./ModuleCompiler.cod" compile_bound_commands;
+using "./NativeCommands.cod" {
     NativeCommand, NativeCommands, NativePlan, NativeUnitRow, NativeUnitRows,
     NativeLiteralRange, NativeLiteralRanges, text_literal,
 };
-using "ModuleIndex.cod" {
+using "./ModuleIndex.cod" {
     Visits, KeyLookup, lookup_path, insert_visit, visit_is_checked, growth_capacity, reserve_keys, mark_checked,
 };
-using "ModuleLowering.cod" native_unsupported;
-using "CompilerStatus.cod" CompilerStatus { Complete, Rejected, FormUnsupported, LoweringFailed, ScratchFailed, SourceOpenFailed };
+using "./ModuleLowering.cod" native_unsupported;
+using "./CompilerStatus.cod" CompilerStatus {
+    Complete, Rejected, FormUnsupported, LoweringFailed, ScratchFailed, SourceOpenFailed
+};
 
 export enum GraphPurpose:u8 { Declarations; NativeObject; }
 
@@ -675,6 +691,8 @@ symbol @followDependency:proc(u64) -> u8;
 proc reject_dependency(handle opened:SourceRevision in S, handle diagnostic:DiagnosticDestination in D,
                        const val code:u8, const val first:u64, const val past:u64)
     -> CompilerStatus where {const owner S, owner D} {
+    if (code == package_issue()) return Rejected;
+    if (code == package_delivery_failure()) return ScratchFailed;
     return with_source(opened) (source, lines) => {
         report_rejection(source, lines, diagnostic, module_selection_failed(), code, first, past, no_node());
         continue if (code == 16u8) { FormUnsupported } else { Rejected };
@@ -682,6 +700,7 @@ proc reject_dependency(handle opened:SourceRevision in S, handle diagnostic:Diag
 }
 
 proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in P,
+                         handle entry:Path in A,
                          handle diagnostic:DiagnosticDestination in D, const val purpose:GraphPurpose,
                          builtin_spellings:const SourceBytes in B,
                          builtins:const ModuleExports in B,
@@ -693,8 +712,14 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
                          const export_used:u64 in G, const interface_used:u64 in G,
                          const spelling_used:u64 in G, const command_used:u64 in G, const unit_used:u64 in G,
                          const literal_used:u64 in G, const function_used:u64 in G,
-                         revision:u64, id:u64, key_first:u64, key_past:u64, depth:u64, failure:u8 in R)
-    -> CompilerStatus where {const owner S, const owner P, owner D, const owner B, owner G, owner R} {
+                         const package_ready:bool in G, const package_rows:u64 in G,
+                         const package_bytes:u64 in G,
+                         ref var package_roots:PackageSourceRoots in G,
+                         ref var package_paths:SourceBytes in G,
+                         revision:u64, id:u64, const val key_first:u64, const val key_past:u64,
+                         depth:u64, failure:u8 in R)
+    -> CompilerStatus
+    where {const owner S, const owner P, const owner A, owner D, const owner B, owner G, owner R} {
     failure <- 0u8;
     ref workspaces = make VisitWorkspacePlans(1u64, make VisitWorkspacePlan {
         plan <- make ModuleWorkspacePlan {
@@ -793,10 +818,13 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         if (parsed != Complete) return parsed;
         const val child_depth <- depth + 1u64;
         effect @followDependency(edge:u64) -> u8 {
-            return visit_child(path, diagnostic, purpose, builtin_spellings, builtins, edges, decoded, selected, edge, child_depth,
-                               visits, keys, used, key_used, next_revision, exports, interfaces, spellings, commands, units,
-                               literals, export_used, interface_used, spelling_used, command_used, unit_used,
-                               literal_used, function_used);
+            return visit_child(path, entry, opened, diagnostic, purpose, builtin_spellings,
+                builtins,
+                edges, decoded, selected, edge, child_depth, visits, keys, used, key_used,
+                next_revision, exports, interfaces, spellings, commands, units, literals,
+                export_used, interface_used, spelling_used, command_used, unit_used, literal_used,
+                function_used, package_ready, package_rows, package_bytes, package_roots,
+                package_paths, key_first, key_past)
         };
         val edge_code <- 0u8;
         for (edge in 0u64 .. progress[0u64].dependencies) {
@@ -837,7 +865,9 @@ export proc compile_graph(handle input:Path in A, handle diagnostic:DiagnosticDe
                           ref var spellings:SourceBytes in G, ref var commands:NativeCommands in G,
                           ref var units:NativeUnitRows in G, ref var literals:NativeLiteralRanges in G,
                           export_used:u64 in G, interface_used:u64 in G, spelling_used:u64 in G,
-                          command_used:u64 in G, unit_used:u64 in G, literal_used:u64 in G, function_used:u64 in G)
+                          command_used:u64 in G, unit_used:u64 in G, literal_used:u64 in G,
+                          function_used:u64 in G, package_ready:bool in G,
+                          package_rows:u64 in G, package_bytes:u64 in G)
     -> CompilerStatus where {const owner A, owner D, const owner B, owner G} {
     try {
         own handle opened:SourceRevision <- make own handle SourceRevision(input);
@@ -855,11 +885,18 @@ export proc compile_graph(handle input:Path in A, handle diagnostic:DiagnosticDe
         val root <- used;
         if (key.id != root || insert_visit(canonical, key.length, visits, keys, used, key_used, next_revision) != Complete)
             return ScratchFailed;
+        ref package_roots = make PackageSourceRoots(0u64, make PackageSourceRoot {
+            uuid_first <- 0u64; path_first <- 0u64; path_past <- 0u64;
+        }) in G;
+        ref package_paths = make SourceBytes(0u64, 0u8) in G;
         ref failure = make u8 { 0u8 };
-        return visit_open_revision(opened, path, diagnostic, purpose, builtin_spellings, builtins,
+        return visit_open_revision(opened, path, input, diagnostic, purpose, builtin_spellings,
+            builtins,
                                    visits, keys, used, key_used, next_revision, exports, interfaces, spellings,
                                    commands, units, literals, export_used, interface_used, spelling_used,
-                                   command_used, unit_used, literal_used, function_used, revision, root, first, key_used, 0u64, failure);
+                                   command_used, unit_used, literal_used, function_used,
+                                   package_ready, package_rows, package_bytes, package_roots,
+                                   package_paths, revision, root, first, key_used, 0u64, failure)
     } catch (error:const SourceOpenException) {
         report_source_open_error(diagnostic, error.os_error);
         return SourceOpenFailed;
@@ -872,7 +909,9 @@ export proc compile_graph(handle input:Path in A, handle diagnostic:DiagnosticDe
     }
 }
 
-proc visit_child(handle parent_path:Path in P, handle diagnostic:DiagnosticDestination in D, purpose:GraphPurpose,
+proc visit_child(handle parent_path:Path in P, handle entry:Path in A,
+                 handle importing:SourceRevision in S,
+                 handle diagnostic:DiagnosticDestination in D, purpose:GraphPurpose,
                  builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B,
                  edges:const DependencyEdges in F, decoded:const SourceBytes in F, selected:SelectedExports in F,
                  edge:u64, depth:u64,
@@ -882,15 +921,34 @@ proc visit_child(handle parent_path:Path in P, handle diagnostic:DiagnosticDesti
                  ref var spellings:SourceBytes in G, ref var commands:NativeCommands in G,
                  ref var units:NativeUnitRows in G, ref var literals:NativeLiteralRanges in G,
                  export_used:u64 in G, interface_used:u64 in G, spelling_used:u64 in G, command_used:u64 in G,
-                 unit_used:u64 in G, literal_used:u64 in G, function_used:u64 in G)
-    -> u8 where {const owner P, owner D, const owner B, owner F, owner G} {
+                 unit_used:u64 in G, literal_used:u64 in G, function_used:u64 in G,
+                 package_ready:bool in G, package_rows:u64 in G, package_bytes:u64 in G,
+                 ref var package_roots:PackageSourceRoots in G,
+                 ref var package_paths:SourceBytes in G, import_first:u64, import_past:u64)
+    -> u8 where {const owner P, const owner A, const owner S, owner D, const owner B, owner F,
+        owner G} {
     val first <- edges[edge].decoded_first;
     val past <- edges[edge].decoded_past;
-    ref spelling = make SourceBytes(past - first, 0u8);
-    copy_span(decoded, first, past, spelling, 0u64);
     try {
         own handle owner_path:PathOwner <- make own handle PathOwner();
-        if (prepare_child(owner_path, parent_path, spelling, past - first) != 0u64) return 1u8;
+        val kind <- classify_module_path(decoded, first, past);
+        if (kind == SourceRelative) {
+            ref spelling = make SourceBytes(past - first, 0u8);
+            copy_span(decoded, first, past, spelling, 0u64);
+            if (prepare_child(owner_path, parent_path, spelling, past - first) != 0u64) return 1u8
+        } else {
+            ref request = make PackageEdge {
+                first <- edges[edge].first; past <- edges[edge].past;
+                spelling_first <- first; spelling_past <- past;
+                importer_first <- import_first; importer_past <- import_past;
+            };
+            if (kind == InvalidPath) return report_package_issue(
+                importing, diagnostic, InvalidModulePath, 0u64, keys, decoded, request);
+            val prepared <- prepare_logical_dependency(
+                entry, importing, diagnostic, owner_path, keys, decoded, request,
+                package_ready, package_roots, package_paths, package_rows, package_bytes);
+            if (prepared != 0u8) return prepared
+        };
         ref match_key = make KeyLookup { id <- 0u64; length <- 0u64; };
         lookup_path(owner_path, visits, keys, used, match_key);
         val child_id <- match_key.id;
@@ -905,13 +963,18 @@ proc visit_child(handle parent_path:Path in P, handle diagnostic:DiagnosticDesti
             if (insert_visit(owner_path, match_key.length, visits, keys, used, key_used, next_revision) != Complete)
                 return 8u8;
             ref child_failure = make u8 { 0u8 };
-            val compiled <- visit_open_revision(child_source, child_path, diagnostic, purpose, builtin_spellings, builtins,
+            val compiled <- visit_open_revision(child_source, child_path, entry, diagnostic,
+                                               purpose, builtin_spellings, builtins,
                                                visits, keys, used, key_used, next_revision, exports, interfaces, spellings,
                                                commands, units, literals, export_used, interface_used, spelling_used,
                                                command_used, unit_used, literal_used, function_used,
+                                               package_ready, package_rows, package_bytes,
+                                               package_roots, package_paths,
                                                revision, child_id, key_first, key_used, depth, child_failure);
             if (compiled != Complete) {
-                if (child_failure == 6u8 || child_failure == 9u8) return child_failure;
+                if (child_failure == 6u8 || child_failure == 9u8 ||
+                    child_failure == package_issue() || child_failure == package_delivery_failure())
+                    return child_failure;
                 if (compiled == FormUnsupported) return 16u8;
                 return 7u8;
             };

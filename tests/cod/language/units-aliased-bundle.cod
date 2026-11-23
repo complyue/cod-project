@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-using units "units-reexport.cod" {metres as m, cm, mm};
+using units "./units-reexport.cod" {metres as m, cm, mm};
 function length(x:f64(m*)) -> f64 { return scalar(x) }
 behave @print(length(cm(250.0)));
 behave @print(length(mm(1500.0)));

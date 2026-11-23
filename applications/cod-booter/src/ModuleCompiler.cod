@@ -1,16 +1,16 @@
-using "SourceStorage.cod" SourceBytes;
-using "ParserStorage.cod" { Tokens, ExprNodes, no_node };
-using "ModuleExports.cod" { ModuleExports, SelectedExports };
-using "NameResolution.cod" { NameBindings, NameWork };
-using "OperandChecking.cod" { OperandFacts, CallOwners };
-using "CompletionChecking.cod" CompletionSites;
-using "ModuleFrontend.cod" {
+using "./SourceStorage.cod" SourceBytes;
+using "./ParserStorage.cod" { Tokens, ExprNodes, no_node };
+using "./ModuleExports.cod" { ModuleExports, SelectedExports };
+using "./NameResolution.cod" { NameBindings, NameWork };
+using "./OperandChecking.cod" { OperandFacts, CallOwners };
+using "./CompletionChecking.cod" CompletionSites;
+using "./ModuleFrontend.cod" {
     ModuleBindingResult, analyze_bound_operands, analyze_bound_completion, bind_module, binding_diagnostic,
     module_completion_failed,
 };
-using "NativeCommands.cod" { NativeCommands, NativePlan };
-using "ModuleLowering.cod" lower_native_module;
-using "InitializationChecking.cod" { InitializationResult, check_native_initialization };
+using "./NativeCommands.cod" { NativeCommands, NativePlan };
+using "./ModuleLowering.cod" lower_native_module;
+using "./InitializationChecking.cod" { InitializationResult, check_native_initialization };
 
 # The mapped revision and all working buffers remain live through lowering.
 # Only successful completion publishes commands for native construction.

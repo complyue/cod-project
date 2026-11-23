@@ -65,7 +65,7 @@ for name, history in HISTORIES.items():
         if context == 'nested':
             source = {
                 'inner.cod': method(body) + 'export (<=>);',
-                'main.cod': IO + 'using "inner.cod" (<=>) as inner;' + method('inner(a,b);') + BASE + invocation + SHOW,
+                'main.cod': IO + 'using "./inner.cod" (<=>) as inner;' + method('inner(a,b);') + BASE + invocation + SHOW,
             }
         runner.CASES[context + '_' + name] = (source, 0 if valid else 2, output, '' if valid else DIAGNOSTIC)
 

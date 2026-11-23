@@ -28,7 +28,7 @@ runner.CASES = {
  'deferred_method_in_method': (IO+method('defer intrinsic (<=>)(left,right);')+BASE+'p<=>q;'+OUT('p()')+OUT('q()'),0,'2\n1\n',''),
  'nested_deferred_method': (IO+method('if(left()<right()){defer (<=>)(left,right);intrinsic (<=>)(left,right);}else{};')+BASE+'p<=>q;'+OUT('p()')+OUT('q()'),0,'2\n1\n',''),
  'deferred_late_payload': (IO+OBSERVE+BASE+'{{defer (<=>)(p,q);first<-three:void;}};'+OUT('p()')+OUT('q()'),0,'3\n2\n3\n',''),
- 'imported_named_alias': ({'ops.cod':SWAP+'export (<=>);','main.cod':IO+'using "ops.cod" (<=>) as swap;'+BASE+'swap(p,q);'+OUT('p()')+OUT('q()')},0,'2\n1\n',''),
+ 'imported_named_alias': ({'ops.cod':SWAP+'export (<=>);','main.cod':IO+'using "./ops.cod" (<=>) as swap;'+BASE+'swap(p,q);'+OUT('p()')+OUT('q()')},0,'2\n1\n',''),
  'mixed_deferred_queue': (IO+SWAP+BASE+'{{defer (<=>)(p,q);defer intrinsic (=)(p,r);}};'+OUT('p()')+OUT('q()'),0,'2\n3\n',''),
  'self_slot': (IO+OBSERVE+BASE+'p<=>p;'+OUT('p()'),0,'1\n1\n',''),
  'local_helper_bindings': (IO+'func helper(ref left:'+TYPE+' in O,ref right:'+TYPE+' in O)->void where {owner O}{intrinsic (<=>)(left,right);}'+method('helper(left,right);')+BASE+'p<=>q;'+OUT('p()')+OUT('q()'),0,'1\n2\n',''),

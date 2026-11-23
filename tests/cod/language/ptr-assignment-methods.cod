@@ -28,6 +28,6 @@ function readonly_choice(value:Choice in O) -> const Choice in O where {owner O}
 export (=);
 export Node;
 export Choice;
-export @replacement;
+export var @replacement;
 export access;
 export readonly_choice;

@@ -1,10 +1,10 @@
 using symbol "std:io" @print;
-using "method-view-library.cod" Sample;
-using "method-view-shadow.cod" Sample as SameSample;
-using "method-view-library.cod" score;
-using "method-view-first.cod" run as first;
-using "method-view-second.cod" run as second;
-using "method-view-shadow.cod" run as shadow;
+using "./method-view-library.cod" Sample;
+using "./method-view-shadow.cod" Sample as SameSample;
+using "./method-view-library.cod" score;
+using "./method-view-first.cod" run as first;
+using "./method-view-second.cod" run as second;
+using "./method-view-shadow.cod" run as shadow;
 region symbol @arena;
 effect @arena <- region(4096u64);
 {

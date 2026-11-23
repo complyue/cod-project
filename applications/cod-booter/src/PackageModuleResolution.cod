@@ -1,0 +1,67 @@
+using "./ModulePaths.cod" { classify_module_path, ModulePathKind { PackagePath } };
+using "./NativeModuleInputs.cod" probe_package_module;
+using "./PackageInputs.cod" PackageSourceRoots;
+using "./SourceStorage.cod" SourceBytes;
+
+export data PackageResolution =
+    MissingModule {} |
+    SearchFailed { os_error:u64; } |
+    AmbiguousModule { first_root:u64; second_root:u64; } |
+    PackageModule { root:u64; };
+export array PackageResolutions[u64]:PackageResolution;
+
+export func absent_module() -> u64 { return 18446744073709551615u64 }
+
+export proc probe_package_roots(
+    rows:const PackageSourceRoots in G, paths:const SourceBytes in G, row_count:u64, path_used:u64,
+    module:const SourceBytes in M, first:u64, past:u64, resolution:PackageResolutions in R)
+    -> void where {const owner G, const owner M, owner R} {
+    if (row_count > intrinsic (len)(rows) || path_used > intrinsic (len)(paths) ||
+        classify_module_path(module, first, past) != PackagePath) {
+        resolution[0u64] <- make SearchFailed { os_error <- 0u64; };
+        return
+    };
+    val selected <- row_count;
+    val competing <- row_count;
+    val failed <- false;
+    val error <- 0u64;
+    val start <- 0u64;
+    val end <- 0u64;
+    val status <- absent_module();
+    for (row in 0u64 .. row_count) {
+        if (!failed && competing == row_count) {
+            start <- rows[row].path_first;
+            end <- rows[row].path_past;
+            if (start >= end || end > path_used) {
+                failed <- true
+            } else {
+                status <- probe_package_module(paths, start, end, module, first, past);
+                if (status != absent_module()) {
+                    if (status != 0u64) {
+                        error <- status;
+                        failed <- true
+                    } else {
+                        if (selected < row_count) { competing <- row; }
+                        else { selected <- row; }
+                    };
+                }
+            };
+        }
+    };
+    if (failed) {
+        resolution[0u64] <- make SearchFailed { os_error <- error; };
+        return
+    };
+    if (competing < row_count) {
+        resolution[0u64] <- make AmbiguousModule {
+            first_root <- selected; second_root <- competing;
+        };
+        return
+    };
+    if (selected < row_count) {
+        resolution[0u64] <- make PackageModule { root <- selected; };
+        return
+    };
+    resolution[0u64] <- make MissingModule {};
+    return
+}

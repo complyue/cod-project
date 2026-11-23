@@ -1,20 +1,20 @@
-using "abstract-library.cod" narrow_sibling;
+using "./abstract-library.cod" narrow_sibling;
 using symbol "std:io" @print;
-using "abstract-second-adapter.cod" Sample as Point;
-using "abstract-library.cod" Entity;
-using "abstract-library.cod" Weighted;
-using "abstract-library.cod" Separate;
-import "abstract-library.cod" rank;
-using "abstract-library.cod" relay;
-using "abstract-library.cod" upcast;
-import "abstract-library.cod" through;
-using "abstract-library.cod" choose_sibling;
-using "abstract-library.cod" repeat;
-using "abstract-library.cod" paired as combine;
-using "abstract-library.cod" pair_context;
-import "abstract-library.cod" adapted;
-import "abstract-library.cod" unit_context;
-using units "units-library.cod" {m, cm, mm};
+using "./abstract-second-adapter.cod" Sample as Point;
+using "./abstract-library.cod" Entity;
+using "./abstract-library.cod" Weighted;
+using "./abstract-library.cod" Separate;
+import "./abstract-library.cod" rank;
+using "./abstract-library.cod" relay;
+using "./abstract-library.cod" upcast;
+import "./abstract-library.cod" through;
+using "./abstract-library.cod" choose_sibling;
+using "./abstract-library.cod" repeat;
+using "./abstract-library.cod" paired as combine;
+using "./abstract-library.cod" pair_context;
+import "./abstract-library.cod" adapted;
+import "./abstract-library.cod" unit_context;
+using units "./units-library.cod" {m, cm, mm};
 function rank(x:Point in O1) -> i64 where {owner O1} { return x.value }
 function reversed(x:Weighted in O1) -> i64 where {owner O1} { return 4 }
 function reversed(x:Entity in O1) -> i64 where {owner O1} { return 3 }

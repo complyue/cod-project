@@ -1,39 +1,47 @@
-using "ParserStorage.cod" OwnerConstraintSyntax { NotOwnerConstraint, ReadonlyOwnerConstraint, WritableOwnerConstraint };
-using "ParserStorage.cod" FormalSyntax { OrdinaryFormal };
-using "ParserStorage.cod" BindingSyntax { TypedBinding, InvalidBindingSyntax };
-using "ParserStorage.cod" FormalMode {
+using "./ParserStorage.cod" OwnerConstraintSyntax {
+    NotOwnerConstraint, ReadonlyOwnerConstraint, WritableOwnerConstraint
+};
+using "./ParserStorage.cod" FormalSyntax { OrdinaryFormal };
+using "./ParserStorage.cod" BindingSyntax { TypedBinding, InvalidBindingSyntax };
+using "./ParserStorage.cod" FormalMode {
     ValueFormal, ExplicitValueFormal, ReferenceFormal, PointerFormal, PlaceFormal, InitializingPlaceFormal,
 };
-using "ParserStorage.cod" SignatureSyntax { SignatureHead, ValueResultClause, BorrowedResultClause, ThrowsSignatureClause };
-using "ParserStorage.cod" DeclarationSyntax { NominalRecord, EnumTypeDeclaration };
-using "ParserStorage.cod" BinarySyntax { ArithmeticBinary, ComparisonBinary, InvalidBinary };
-using "ParserStorage.cod" ArithmeticOperation { Addition };
-using "ParserStorage.cod" ComparisonRelation { Equal, Unequal };
-using "ParserStorage.cod" InvocationSyntax { EffectfulInvocation };
-using "ParserStorage.cod" TextLiteralSyntax { InteriorNulLiteral };
-using "ParserStorage.cod" CallableSyntax { ModuleCallable };
-using "ParserStorage.cod" LocalMode { ValueLocal, ReferenceLocal, PointerLocal, ExceptionLocal };
-using "ParserStorage.cod" TextLiteralSyntax { NulFreeLiteral };
-using "ParserStorage.cod" DirectInvocationSyntax { DirectInvocationReady };
-using "SourceStorage.cod" SourceBytes;
-using "ParserStorage.cod" AstSlot { Vacant, Occupied };
-using "ParserStorage.cod" ExprPayload {
+using "./ParserStorage.cod" SignatureSyntax {
+    SignatureHead, ValueResultClause, BorrowedResultClause, ThrowsSignatureClause
+};
+using "./ParserStorage.cod" DeclarationSyntax { NominalRecord, EnumTypeDeclaration };
+using "./ParserStorage.cod" BinarySyntax { ArithmeticBinary, ComparisonBinary, InvalidBinary };
+using "./ParserStorage.cod" ArithmeticOperation { Addition };
+using "./ParserStorage.cod" ComparisonRelation { Equal, Unequal };
+using "./ParserStorage.cod" InvocationSyntax { EffectfulInvocation };
+using "./ParserStorage.cod" TextLiteralSyntax { InteriorNulLiteral };
+using "./ParserStorage.cod" CallableSyntax { ModuleCallable };
+using "./ParserStorage.cod" LocalMode { ValueLocal, ReferenceLocal, PointerLocal, ExceptionLocal };
+using "./ParserStorage.cod" TextLiteralSyntax { NulFreeLiteral };
+using "./ParserStorage.cod" DirectInvocationSyntax { DirectInvocationReady };
+using "./SourceStorage.cod" SourceBytes;
+using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
+using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid, RangeHeader, RangeLoop, Parenthesized,
     BooleanLiteral, TextLiteral, NullLiteral, DiscardedExpression, BreakValue, BreakVoid, CaseFallthrough,
     CaseFailure, RaiseValue, RaisePending,
 };
-using "ParserStorage.cod" NodeLink { NoLink, LinkTo };
-using "ParserStorage.cod" CallableSyntax { InvalidCallable };
-using "ParserStorage.cod" DeferSyntax { InvalidDefer, DeferCall };
-using "ParserStorage.cod" InvocationSyntax { InvalidCallSyntax };
-using "ParserStorage.cod" GuardClauseSyntax { HandlerClause, CleanupClause, InvalidGuardClause };
-using "ParserStorage.cod" CasePatternSyntax { AnyCaseTarget, NullCaseTarget, FalseCaseTarget, TrueCaseTarget, NamedCaseMember };
-using "ParserStorage.cod" SequenceSyntax { ModuleSequence, ClauseSequence, EnumSequence, InvalidSequence };
-using "ParserStorage.cod" {
+using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
+using "./ParserStorage.cod" CallableSyntax { InvalidCallable };
+using "./ParserStorage.cod" DeferSyntax { InvalidDefer, DeferCall };
+using "./ParserStorage.cod" InvocationSyntax { InvalidCallSyntax };
+using "./ParserStorage.cod" GuardClauseSyntax { HandlerClause, CleanupClause, InvalidGuardClause };
+using "./ParserStorage.cod" CasePatternSyntax {
+    AnyCaseTarget, NullCaseTarget, FalseCaseTarget, TrueCaseTarget, NamedCaseMember
+};
+using "./ParserStorage.cod" SequenceSyntax {
+    ModuleSequence, ClauseSequence, EnumSequence, InvalidSequence
+};
+using "./ParserStorage.cod" {
     ProtectedSites, inspect_protected, CatchSites, inspect_catch_binding, HandlerSites, inspect_handler,
     GuardClauseSites, inspect_guard_clause, CaseArmSites, CasePatternSyntax, inspect_case_arm, case_pattern, completion_operand,
 };
-using "ParserStorage.cod" {
+using "./ParserStorage.cod" {
     ExprNodes, published_syntax_id, len as syntax_len, no_node,
     is_function,
     inspect_assignment, AssignmentSites, ConstructionSites, inspect_construction,
@@ -49,34 +57,38 @@ using "ParserStorage.cod" {
     inspect_logical, LogicalSites, boolean_literal, unequal_words,
     ungrouped,
 };
-using "ParserStorage.cod" DeferSyntax { DeferBody };
-using "ParserStorage.cod" LogicalSyntax { LogicalNot, LogicalAnd, LogicalOr, InvalidLogical };
-using "ParserStorage.cod" RhsEvaluation { ConditionalRhs, TakesRhs };
-using "ParserStorage.cod" BooleanSyntax { LiteralTrue, LiteralFalse };
-using "ParserStorage.cod" ConstructionSyntax { StorageReservation, PositionalConstruction, BracedConstruction, InvalidConstruction };
-using "ParserStorage.cod" SequenceSyntax { ArgumentSequence, BlockSequence, FormalSequence };
-using "ParserStorage.cod" GroupSyntax { ParenthesizedExpression };
-using "ParserStorage.cod" AssignmentSyntax {
+using "./ParserStorage.cod" DeferSyntax { DeferBody };
+using "./ParserStorage.cod" LogicalSyntax { LogicalNot, LogicalAnd, LogicalOr, InvalidLogical };
+using "./ParserStorage.cod" RhsEvaluation { ConditionalRhs, TakesRhs };
+using "./ParserStorage.cod" BooleanSyntax { LiteralTrue, LiteralFalse };
+using "./ParserStorage.cod" ConstructionSyntax {
+    StorageReservation, PositionalConstruction, BracedConstruction, InvalidConstruction
+};
+using "./ParserStorage.cod" SequenceSyntax { ArgumentSequence, BlockSequence, FormalSequence };
+using "./ParserStorage.cod" GroupSyntax { ParenthesizedExpression };
+using "./ParserStorage.cod" AssignmentSyntax {
     PlaceTransfer, PlaceRebind, FieldTransfer, FieldRebind, InvalidAssignment,
     AugmentedPlaceTransfer,
 };
-using "ParserStorage.cod" NameSyntax { OrdinaryName };
-using "ParserStorage.cod" name_syntax;
-using "ParserStorage.cod" LiteralRange { EmptyLiteralRange, NonemptyLiteralRange, InvalidRange };
-using "ParserInput.cod" ParseResult;
-using "NameResolution.cod" {
+using "./ParserStorage.cod" NameSyntax { OrdinaryName };
+using "./ParserStorage.cod" name_syntax;
+using "./ParserStorage.cod" LiteralRange { EmptyLiteralRange, NonemptyLiteralRange, InvalidRange };
+using "./ParserInput.cod" ParseResult;
+using "./NameResolution.cod" {
     NameBindings, NameWork, enclosing_callable, builtin_u64,
     builtin_void, builtin_bool, ordinary_selection, symbolic_selection, callable_binding,
     formal_binding, local_binding, loop_index, exception_binding, find_enum_member,
     record_type, find_record_field, has_exception_parent, builtin_string, builtin_c_string, builtin_u8, owner_binding,
     definition_name, transfer_name, record_initializer_label,
 };
-using "ModuleExports.cod" {
+using "./ModuleExports.cod" {
     SelectedExports, exception_type_export, symbol_export, print_export_identity,
     exception_root_identity, text_size_export, text_byte_export, callable_export, ordinary_callable_shape,
 };
-using "ModuleExportStorage.cod" { enum_type, ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header };
-using "ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind, CheckedFunction,
+using "./ModuleExportStorage.cod" {
+    enum_type, ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header
+};
+using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind, CheckedFunction,
     CheckedProcedure };
 
 # An owner is a lexical scope or an owner parameter's declaration. Exception

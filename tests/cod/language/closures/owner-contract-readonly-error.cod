@@ -1,4 +1,4 @@
-using "structural-api.cod" Counter;
+using "./structural-api.cod" Counter;
 function reader(region state:const Counter) -> (func()->const u64 with {region state}) {
   return func [state] () -> const u64 { return state.ticks }
 }

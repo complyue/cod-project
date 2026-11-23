@@ -1,7 +1,9 @@
-using "SourceStorage.cod" { SourceBytes, Token, DelimiterLink { OrdinaryToken, UnmatchedDelimiter, MatchedDelimiter } };
-using "ParserInput.cod" punct_at;
-using "ParserStorage.cod" { Tokens, len, no_node };
-using "Lexer.cod" { scan_token, end_of_source, lexical_error };
+using "./SourceStorage.cod" {
+    SourceBytes, Token, DelimiterLink { OrdinaryToken, UnmatchedDelimiter, MatchedDelimiter }
+};
+using "./ParserInput.cod" punct_at;
+using "./ParserStorage.cod" { Tokens, len, no_node };
+using "./Lexer.cod" { scan_token, end_of_source, lexical_error };
 
 export data ScanResult {
     used:u64;

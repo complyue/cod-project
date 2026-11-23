@@ -42,7 +42,7 @@ runner.CASES = {
  'unchecked_retains_index_type': (PRELUDE+'cause_at(seed(),true);',2,'','cause_at requires an exception and a u64 index'),
 }
 runner.CASES['imported_policy'] = ({'lib.cod':TYPES+SEED+'func at()->const Exception{return cause_at(seed(),0u64);}export at;',
- 'main.cod':IO+TYPES+'using "lib.cod" at;try{at();{}}catch(e:const IndexOutOfBoundsError){'+OUT('e.category')+'};'},0,'8\n',WARN)
+ 'main.cod':IO+TYPES+'using "./lib.cod" at;try{at();{}}catch(e:const IndexOutOfBoundsError){'+OUT('e.category')+'};'},0,'8\n',WARN)
 runner.CASE_ARGUMENTS = {name:['--no-bounds-checks'] for name in runner.CASES if name.startswith('unchecked_')}
 runner.CASE_SHADOWS = {}
 runner.EXTRA_SOURCES = [Path(__file__)]

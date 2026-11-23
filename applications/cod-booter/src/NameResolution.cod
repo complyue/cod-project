@@ -1,7 +1,7 @@
-using "SourceStorage.cod" SourceBytes;
-using "SourceAccess.cod" same_bytes;
-using "ParserStorage.cod" AstSlot { Vacant, Occupied };
-using "ParserStorage.cod" ExprPayload {
+using "./SourceStorage.cod" SourceBytes;
+using "./SourceAccess.cod" same_bytes;
+using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
+using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid, BlockSyntax, ScopeSyntax,
     SymbolReference, SymbolicInvocation, HereInvocation, ContinueValue, ContinueVoid, BreakValue, BreakVoid, RangeLoop,
     Parenthesized, Transfer, Rebind, InitializerTransfer, InitializerRebind, NamedConstruction,
@@ -12,41 +12,45 @@ using "ParserStorage.cod" ExprPayload {
     BindSymbolEffect, InstallSymbolEffect, CheckedTypeAssertion, ProtectedBlock, DeferredBlock, DeferredInvocation,
     CallableDefinition,
 };
-using "ParserStorage.cod" NodeLink { NoLink, LinkTo };
-using "ParserStorage.cod" SequenceSyntax {
+using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
+using "./ParserStorage.cod" SequenceSyntax {
     OtherSequenceSyntax, InvalidSequence, ModuleSequence, BlockSequence, ArgumentSequence, HereReceiverSequence, FormalSequence, ClauseSequence, EnumSequence, SumSequence,
 };
-using "ParserStorage.cod" DeclarationSyntax {
+using "./ParserStorage.cod" DeclarationSyntax {
     OtherDeclaration, InvalidDeclaration, NominalRecord, NativeRecord, HandleTypeDeclaration, ArrayTypeDeclaration,
     EnumTypeDeclaration, AbstractTypeDeclaration, NativeSymbolDeclaration, ReferenceSymbolDeclaration, LocalPublication, NominalSum,
 };
-using "ParserStorage.cod" CallableSyntax { InvalidCallable, OtherCallableSyntax, ModuleCallable, LexicalCallable, CProvider, CEntry };
-using "ParserStorage.cod" SignatureSyntax {
+using "./ParserStorage.cod" CallableSyntax {
+    InvalidCallable, OtherCallableSyntax, ModuleCallable, LexicalCallable, CProvider, CEntry
+};
+using "./ParserStorage.cod" SignatureSyntax {
     SignatureHead, ValueResultClause, BorrowedResultClause, ExceptionResultClause, ThrowsSignatureClause,
     TypeSignatureClause, OwnerSignatureClause, InvalidSignature, OtherSignatureSyntax,
 };
-using "ParserStorage.cod" BindingSyntax { InvalidBindingSyntax, TypedBinding };
-using "ParserStorage.cod" FormalMode { ValueFormal, PlaceFormal, InitializingPlaceFormal };
-using "ParserStorage.cod" FormalSyntax { InvalidFormal, OrdinaryFormal, HereFormalSyntax };
-using "ParserStorage.cod" HandleBindingSyntax { OwnHandleBinding, BorrowHandleBinding };
-using "ParserStorage.cod" HandleConstructionSyntax { OwnHandleMake, BorrowHandleMake };
-using "ParserStorage.cod" GuardClauseSyntax { InvalidGuardClause, HandlerClause, CleanupClause };
-using "ParserStorage.cod" CompletionSyntax { ReturnCompletion };
-using "ParserStorage.cod" GroupSyntax { InvalidGroup, ParenthesizedExpression };
-using "ParserStorage.cod" LocalMode { ExceptionLocal };
-using "ParserStorage.cod" DirectInvocationSyntax { DirectInvocationReady };
-using "ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource, ReexportResource };
-using "ParserStorage.cod" SelectionSyntax { InvalidSelection, SelectionReady };
-using "ParserStorage.cod" LogicalSyntax { LogicalNot, LogicalAnd, LogicalOr };
-using "ParserStorage.cod" RhsEvaluation { ConditionalRhs };
-using "ParserStorage.cod" ConstructionSyntax { PositionalConstruction, BracedConstruction, StorageReservation };
-using "ParserStorage.cod" AssignmentSyntax {
+using "./ParserStorage.cod" BindingSyntax { InvalidBindingSyntax, TypedBinding };
+using "./ParserStorage.cod" FormalMode { ValueFormal, PlaceFormal, InitializingPlaceFormal };
+using "./ParserStorage.cod" FormalSyntax { InvalidFormal, OrdinaryFormal, HereFormalSyntax };
+using "./ParserStorage.cod" HandleBindingSyntax { OwnHandleBinding, BorrowHandleBinding };
+using "./ParserStorage.cod" HandleConstructionSyntax { OwnHandleMake, BorrowHandleMake };
+using "./ParserStorage.cod" GuardClauseSyntax { InvalidGuardClause, HandlerClause, CleanupClause };
+using "./ParserStorage.cod" CompletionSyntax { ReturnCompletion };
+using "./ParserStorage.cod" GroupSyntax { InvalidGroup, ParenthesizedExpression };
+using "./ParserStorage.cod" LocalMode { ExceptionLocal };
+using "./ParserStorage.cod" DirectInvocationSyntax { DirectInvocationReady };
+using "./ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource, ReexportResource };
+using "./ParserStorage.cod" SelectionSyntax { InvalidSelection, SelectionReady };
+using "./ParserStorage.cod" LogicalSyntax { LogicalNot, LogicalAnd, LogicalOr };
+using "./ParserStorage.cod" RhsEvaluation { ConditionalRhs };
+using "./ParserStorage.cod" ConstructionSyntax {
+    PositionalConstruction, BracedConstruction, StorageReservation
+};
+using "./ParserStorage.cod" AssignmentSyntax {
     PlaceTransfer, PlaceRebind, FieldTransfer, FieldRebind, AugmentedPlaceTransfer,
 };
-using "ParserStorage.cod" ExprPayload { AugmentedTransfer };
-using "ParserStorage.cod" HereSyntax { HereReady };
-using "ParserStorage.cod" NameSyntax { OrdinaryName, SymbolicName };
-using "ParserStorage.cod" {
+using "./ParserStorage.cod" ExprPayload { AugmentedTransfer };
+using "./ParserStorage.cod" HereSyntax { HereReady };
+using "./ParserStorage.cod" NameSyntax { OrdinaryName, SymbolicName };
+using "./ParserStorage.cod" {
     ExprNodes, NodeId, len as syntax_len, DeclarationSites, inspect_declaration, CallableSites, inspect_callable,
     SignatureSites, inspect_signature, find_signature_clause, ModuleSelectionSites, inspect_module_selection, DeclarationSyntax,
     BindingSites, inspect_binding, inspect_type_annotation, FormalSites, inspect_formal, is_scope_block,
@@ -64,13 +68,13 @@ using "ParserStorage.cod" {
     ungrouped,
     local_resource_name,
 };
-using "ParserInput.cod" ParseResult;
-using "ModuleExports.cod" {
+using "./ParserInput.cod" ParseResult;
+using "./ModuleExports.cod" {
     SelectedExports, record_export, enum_member_export, exception_type_export,
     builder_storage_export, lexical_builder_export, lexical_result_export, callable_export, ordinary_callable_shape,
 };
-using "ModuleExportStorage.cod" { enum_type, sum_type, constructor_type };
-using "ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
+using "./ModuleExportStorage.cod" { enum_type, sum_type, constructor_type };
+using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
 
 export data NameBinding {
     kind:u8;

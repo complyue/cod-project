@@ -60,7 +60,7 @@ case('ordinary_helper_local_slots',definition=INNER+WRAPPER,setup=BASE.replace('
 for body_name,body in [('swap','intrinsic (<=>)(left,right);'),('restore','ptr saved=left;left=right;left=saved:void;')]:
     for readonly in (False,True):
         setup=BASE if not readonly else BASE.replace('ptr p=x,q=y;','ptr p=x;ptr q:const i64=y;')
-        main=IO+'using "inner.cod" (<=>) as inner;'+HEAD+'{inner(left,right);}'+setup+'try{ro<=>other;'+OUT+'}catch(e:const NullPointerException){behave @print(99);};'
+        main=IO+'using "./inner.cod" (<=>) as inner;'+HEAD+'{inner(left,right);}'+setup+'try{ro<=>other;'+OUT+'}catch(e:const NullPointerException){behave @print(99);};'
         runner.CASES['nested_'+body_name+('_bad' if readonly else '')]=({'inner.cod':HEAD+'{'+body+'}export (<=>);','main.cod':main},2 if readonly else 0,'' if readonly else ('7\n1\n' if body_name=='swap' else '1\n7\n'),'permission preservation' if readonly else '')
 RECURSIVE=HEAD.replace(' where',' throws NullPointerException where')+'{if(left==0){intrinsic (<=>)(left,right);}else{(<=>)(right,left);};}'
 case('recursive_swap',definition=RECURSIVE,setup=BASE.replace('y<-7','y<-0'),output='0\n1\n')
@@ -95,7 +95,7 @@ case('distinct_slots_with_same_target', definition=HEAD+RESTORE_LEFT,
      setup=READONLY_LEFT.replace('ptr q=y;', 'ptr q=x;'), output='1\n1\n')
 runner.CASES['nested_restore_distinct_mixed_access'] = ({
     'inner.cod': HEAD+RESTORE_LEFT+'export (<=>);',
-    'main.cod': IO+'using "inner.cod" (<=>) as inner;'+HEAD+'{inner(left,right);}'+READONLY_LEFT+
+    'main.cod': IO+'using "./inner.cod" (<=>) as inner;'+HEAD+'{inner(left,right);}'+READONLY_LEFT+
                 'try{ro<=>other;'+OUT+'}catch(e:const NullPointerException){behave @print(99);};',
 }, 0, '1\n7\n', '')
 runner.CASES['prepared_restore_distinct_mixed_access'] = (

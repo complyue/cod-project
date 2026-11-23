@@ -1,16 +1,19 @@
-using "SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
-using "SourceAccess.cod" locate_source_position;
-using "ParserStorage.cod" { Tokens, ExprNodes, no_node, syntax_first, syntax_past };
-using "ModuleExports.cod" { ModuleExports, SelectedExports };
-using "NameResolution.cod" { NameBindings, NameWork };
-using "OperandChecking.cod" { OperandFacts, CallOwners };
-using "CompletionChecking.cod" CompletionSites;
-using "ModuleFrontend.cod" { ModuleBindingResult, rejected_unsupported_declaration };
-using "NativeCommands.cod" { NativeCommands, NativePlan };
-using "ModuleCompiler.cod" compile_module_commands;
-using "ModuleLowering.cod" native_unsupported;
-using "Compiler.cod" { ExpressionScratchPlan, plan_expression_scratch };
-using "CompilerStatus.cod" CompilerStatus { Complete, Rejected, FormUnsupported, OpenFailed, LoweringFailed, FinishFailed, ScratchFailed, SourceOpenFailed };
+using "./SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
+using "./SourceAccess.cod" locate_source_position;
+using "./ParserStorage.cod" { Tokens, ExprNodes, no_node, syntax_first, syntax_past };
+using "./ModuleExports.cod" { ModuleExports, SelectedExports };
+using "./NameResolution.cod" { NameBindings, NameWork };
+using "./OperandChecking.cod" { OperandFacts, CallOwners };
+using "./CompletionChecking.cod" CompletionSites;
+using "./ModuleFrontend.cod" { ModuleBindingResult, rejected_unsupported_declaration };
+using "./NativeCommands.cod" { NativeCommands, NativePlan };
+using "./ModuleCompiler.cod" compile_module_commands;
+using "./ModuleLowering.cod" native_unsupported;
+using "./Compiler.cod" { ExpressionScratchPlan, plan_expression_scratch };
+using "./CompilerStatus.cod" CompilerStatus {
+    Complete, Rejected, FormUnsupported, OpenFailed, LoweringFailed, FinishFailed, ScratchFailed,
+        SourceOpenFailed
+};
 
 export data ModuleWorkspacePlan {
     source:ExpressionScratchPlan;

@@ -1,9 +1,9 @@
 using symbol "std:io" @print;
-using "structural-api.cod" Node;
-using "structural-api.cod" Counter;
-using "structural-api.cod" Cursor;
-using "structural-api.cod" advance;
-using "structural-api.cod" owner_ticks;
+using "./structural-api.cod" Node;
+using "./structural-api.cod" Counter;
+using "./structural-api.cod" Cursor;
+using "./structural-api.cod" advance;
+using "./structural-api.cod" owner_ticks;
 region First { val ticks:u64; ptr current:Node; val spare:u64; }
 region Second { val tag:u8; val spare:u64; ptr current:Node; val ticks:u64; }
 own region first:First <- make First(capacity = 512u64) { ticks <- 3u64; current = null; spare <- 17u64 };

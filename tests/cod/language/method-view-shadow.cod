@@ -1,4 +1,4 @@
-using "method-view-library.cod" Sample;
+using "./method-view-library.cod" Sample;
 function score(x:Sample in O1) -> i64 where {owner O1} { return 13 }
 function len(x:bool) -> i64 { return 7 }
 function run(region arena) -> i64 {

@@ -1,54 +1,58 @@
-using "ParserStorage.cod" AstSlot { Vacant, Occupied };
-using "ParserStorage.cod" ExprPayload {
+using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
+using "./ParserStorage.cod" ExprPayload {
     NameReference, IntegerLiteral, BooleanLiteral, NamedThrow, LocalBinding, Formal, ExceptionResult, TypeConstraint, SumDefinition,
     IndexSelection, ArrayLength, DeferredClauses, LocalCallableSlot, CallableDefinition, RaiseWithCause,
     RethrowWithCause, NamedArgument, OwningHandleBinding, BorrowedHandleBinding, OwnHandleConstruction,
     BorrowHandleConstruction, HereInvocation, RegionDefinition, OwningRegionBinding, RegionConstruction, OwningRegionResult,
     ConstructorCasePattern, ProcedureSymbol, ScopedProcedureDefinition,
 };
-using "ParserStorage.cod" ConstructionSyntax {
+using "./ParserStorage.cod" ConstructionSyntax {
     OtherConstruction, InvalidConstruction, ExceptionConstructionSyntax, PositionalConstruction,
 };
-using "ParserStorage.cod" DeclarationSyntax { NominalRecord, LocalPublication, EnumTypeDeclaration, OtherDeclaration };
-using "ParserStorage.cod" CallableSyntax { ModuleCallable, CProvider, CEntry };
-using "ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
-using "ParserStorage.cod" SignatureSyntax { BorrowedResultClause };
-using "ParserStorage.cod" SequenceSyntax { ModuleSequence };
-using "ParserStorage.cod" ModuleSelectionMode { UseResource, ReexportResource };
-using "ParserStorage.cod" SelectionSyntax { SelectionReady };
-using "ParserStorage.cod" LocalMode { ExceptionLocal };
-using "ParserStorage.cod" FormalMode { ValueFormal, ExceptionFormal, HandleFormal, RetainedHandleFormal, ReferenceSlotFormal };
-using "ParserStorage.cod" {
+using "./ParserStorage.cod" DeclarationSyntax {
+    NominalRecord, LocalPublication, EnumTypeDeclaration, OtherDeclaration
+};
+using "./ParserStorage.cod" CallableSyntax { ModuleCallable, CProvider, CEntry };
+using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
+using "./ParserStorage.cod" SignatureSyntax { BorrowedResultClause };
+using "./ParserStorage.cod" SequenceSyntax { ModuleSequence };
+using "./ParserStorage.cod" ModuleSelectionMode { UseResource, ReexportResource };
+using "./ParserStorage.cod" SelectionSyntax { SelectionReady };
+using "./ParserStorage.cod" LocalMode { ExceptionLocal };
+using "./ParserStorage.cod" FormalMode {
+    ValueFormal, ExceptionFormal, HandleFormal, RetainedHandleFormal, ReferenceSlotFormal
+};
+using "./ParserStorage.cod" {
     ExprNodes, Tokens, no_node, ConstructionSites, inspect_construction, syntax_first, syntax_past,
     first_module_item, SequenceEntry, inspect_sequence_entry, module_item_publication,
     DeclarationSites, inspect_declaration, CallableSites, inspect_callable, ModuleSelectionSites, inspect_module_selection,
     SignatureSites, inspect_signature, BindingSites, inspect_type_annotation, CatchSites, inspect_catch_binding, is_here_formal,
 };
-using "SourceStorage.cod" SourceBytes;
-using "Frontend.cod" { FrontendResult, read_module };
-using "ParserInput.cod" ParseResult;
-using "ModuleExports.cod" {
+using "./SourceStorage.cod" SourceBytes;
+using "./Frontend.cod" { FrontendResult, read_module };
+using "./ParserInput.cod" ParseResult;
+using "./ModuleExports.cod" {
     ModuleExports, SelectedExports, ExportResolutionResult, resolve_module_exports,
     prepare_module_dependencies, export_storage_exhausted, exception_type_export, error_root_identity,
 };
-using "NameResolution.cod" {
+using "./NameResolution.cod" {
     NameBindings, NameWork, NameResolutionResult, unsupported_module_declaration,
     unsupported_ordinary_construction,
     resolve_module_names, text_type, is_lexical_builder, owner_binding, ordinary_selection, record_type,
 };
-using "NativeDeclarations.cod" {
+using "./NativeDeclarations.cod" {
     NativeDeclarationResult, check_native_declarations, declared_exception_type, native_declaration_first, unsupported_owning_region_result,
 };
-using "AggregateSchemas.cod" AggregateFacts;
-using "ModuleExportStorage.cod" {
+using "./AggregateSchemas.cod" AggregateFacts;
+using "./ModuleExportStorage.cod" {
     ModuleInterfaceRow, ModuleInterfaces, AggregateStorage { UnprovedAggregate }, SumInterfacePayload { NoSumInterface },
 };
-using "OperandChecking.cod" {
+using "./OperandChecking.cod" {
     OperandFacts, CallOwners, OperandCheckResult, check_module_operands,
     unsupported_case_subject, unsupported_case_pattern, unsupported_product_layout, unsupported_text_operation,
     unsupported_transfer_signature, unproved_transfer_owner, unsupported_imported_call,
 };
-using "CompletionChecking.cod" {
+using "./CompletionChecking.cod" {
     CompletionSites, CompletionCheckResult, check_module_completion, unsupported_case_transfer,
 };
 

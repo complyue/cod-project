@@ -64,9 +64,9 @@ func failing=fail_after;
 try {region discarded=failing(state);} catch(e:const InvalidCapacityError){behave @print(state.value);};
 
 # The result retains an interface established only in the selected adapter.
-using "record-vocabulary.cod" Arena;
-using "record-vocabulary.cod" Entity;
-using "region-result-adapter.cod" qualify_region;
+using "./record-vocabulary.cod" Arena;
+using "./record-vocabulary.cod" Entity;
+using "./region-result-adapter.cod" qualify_region;
 function score(region r:Entity)->const u64 {return r.count}
 own region arena:Arena<-make Arena(capacity=256u64){count<-17u64};
 func qualify=qualify_region;

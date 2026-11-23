@@ -10,7 +10,7 @@ FIXTURE = FIXTURE.updated(source_files={
                  'intrinsic (<=>)(a,b);}export (<=>);'),
 })
 FIXTURE = FIXTURE.updated(source='using "std:exceptions" NullPointerException;'
-    'using "swap.cod" (<=>) as inner;' + FIXTURE.source + '''
+    'using "./swap.cod" (<=>) as inner;' + FIXTURE.source + '''
 func (<=>)(ptr a:T in O,ptr b:T in O)->void where {T,owner O}{inner(a,b);}
 func (<=>)(ptr a:u64 in O,ptr b:u64 in O)->void throws NullPointerException where {owner O}{
  if(a>0u64){a<-a-1u64;intrinsic (<=>)(a,b);a<=>b;}else{};

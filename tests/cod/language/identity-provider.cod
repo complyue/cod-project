@@ -1,7 +1,7 @@
 using symbol "std:io" @print;
-symbol from "vocabulary.cod" @x;
+symbol from "./vocabulary.cod" @x;
 effect @x <- 41;
 behave @print(600);
 
-export @print;
-export @x;
+export proc @print;
+export var @x;

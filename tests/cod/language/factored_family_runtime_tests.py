@@ -45,7 +45,7 @@ for original, expected in (('checkpoints==7', 'checkpoints==8'), ('creation_fail
     FIXTURE = FIXTURE.updated(harness=FIXTURE.harness.replace(original, expected))
 FIXTURE = FIXTURE.updated(source_files={**FIXTURE.source_files,
     'factored-choices.cod': family(name='factored_choose') + 'export factored_choose;'})
-FIXTURE = FIXTURE.updated(source='using "factored-choices.cod" factored_choose;' + FIXTURE.source + SOURCE,
+FIXTURE = FIXTURE.updated(source='using "./factored-choices.cod" factored_choose;' + FIXTURE.source + SOURCE,
     expected_values=[*FIXTURE.expected_values, '64138', '33136', '101', '202', '64138000', '33136', '32137'])
 
 if __name__ == '__main__':

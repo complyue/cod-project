@@ -1,8 +1,8 @@
-using "NativeSource.cod" Path;
-using "NativeCatalog.cod" { IntrinsicCatalog, catalog_use };
-using "NativeDiagnostics.cod" DiagnosticDestination;
-using "ObjectCompiler.cod" { compile_object, check_declarations, compile_providers };
-using "CompilerStatus.cod" CompilerStatus;
+using "./NativeSource.cod" Path;
+using "./NativeCatalog.cod" { IntrinsicCatalog, catalog_use };
+using "./NativeDiagnostics.cod" DiagnosticDestination;
+using "./ObjectCompiler.cod" { compile_object, check_declarations, compile_providers };
+using "./CompilerStatus.cod" CompilerStatus;
 
 proc "C" compile_cli(handle input:Path in A, output:const String in A,
                      handle diagnostic:DiagnosticDestination in D) -> CompilerStatus where {const owner A, owner D} {

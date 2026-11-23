@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-symbol from "vocabulary.cod" @x;
+symbol from "./vocabulary.cod" @x;
 effect @x <- 7;
-symbol from "symbol-source.cod" @token;
+symbol from "./symbol-source.cod" @token;
 behave @print(@x);

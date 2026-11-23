@@ -1,2 +1,2 @@
-using "std:io" @print as @output;
+using "std:io" proc @print as @output;
 symbol from "std:io" @print as @output;

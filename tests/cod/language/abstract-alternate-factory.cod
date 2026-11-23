@@ -1,5 +1,5 @@
-export import "abstract-data.cod" Sample;
-using "abstract-library.cod" Alternate;
+export import "./abstract-data.cod" Sample;
+using "./abstract-library.cod" Alternate;
 data Sample <: Alternate;
 function make_alternate(region arena) -> Alternate { return deref(alloc arena Sample(29)) }
 function make_alternate_reference(region arena) -> Sample { return alloc arena Sample(29) }

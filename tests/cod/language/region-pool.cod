@@ -1,9 +1,9 @@
 using "std:exceptions" NullPointerException;
 using symbol "std:io" @assert;
 using symbol "std:io" @print;
-using units "reusable-pool.cod" {Slot};
-using "reusable-pool.cod" (==);
-using "pool-adapter.cod" Pool;
+using units "./reusable-pool.cod" {Slot};
+using "./reusable-pool.cod" (==);
+using "./pool-adapter.cod" Pool;
 using "std:exceptions" RegionCapacityExceededError;
 try {
 # Fail at the root, first array header, second header and second payload.

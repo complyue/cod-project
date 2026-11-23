@@ -1,8 +1,8 @@
-symbol from "procedure-vocabulary.cod" @bias;
+symbol from "./procedure-vocabulary.cod" @bias;
 effect @bias <- 10;
 proc read(x:i64) -> i64 { return @bias + x }
 proc @automatic(x:i64) -> i64 { return read(x) }
 
-export @automatic;
-export @bias;
+export proc @automatic;
+export var @bias;
 export read;

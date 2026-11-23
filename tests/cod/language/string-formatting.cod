@@ -1,8 +1,9 @@
 using symbol "std:io" @print;
 using "std:text-storage" { utf8_size, utf8_byte };
-using "../../../cod/library/string.cod" Utf8WriteError;
-using "../../../applications/cod-booter/src/SourceStorage.cod" SourcePosition;
-import "../../../applications/cod-booter/src/DiagnosticFormatting.cod" { str as display, repr as debug };
+using "string.cod" Utf8WriteError;
+using "./../../../applications/cod-booter/src/SourceStorage.cod" SourcePosition;
+import "./../../../applications/cod-booter/src/DiagnosticFormatting.cod" { str as display,
+    repr as debug };
 
 func same_text(left:const String in L, right:const String in R) -> bool
     where {const owner L, const owner R} {

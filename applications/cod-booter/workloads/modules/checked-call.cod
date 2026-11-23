@@ -1,4 +1,4 @@
-using "fallible-count.cod" read_count as read;
+using "./fallible-count.cod" read_count as read;
 using "std:exceptions" NullPointerException;
 using symbol "std:io" @print;
 

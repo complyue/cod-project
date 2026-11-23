@@ -63,7 +63,7 @@ def main():
         directory = Path(scratch)
         depth = 512
         for i in range(depth):
-            body = f'using "pure-{i+1}.cod" f as next;\n' if i + 1 < depth else ''
+            body = f'using "./pure-{i+1}.cod" f as next;\n' if i + 1 < depth else ''
             step = '(x * 16807u64) % 2147483647u64'
             body += 'function f(x:u64) -> u64 { ' + (f'next({step})' if i + 1 < depth else step) + ' }\n'
             (directory / f'pure-{i}.cod').write_text(body + 'export f;\n')
@@ -93,17 +93,17 @@ export f;
         print(json.dumps({'case': 'deep-leaf-diagnostic', 'passed': diagnostic_passed}), flush=True)
 
         depth = 1000
-        (directory / 'operation-vocabulary.cod').write_text('symbol @base : i64;\nexport @base;\n')
+        (directory / 'operation-vocabulary.cod').write_text('symbol @base : i64;\nexport var @base;\n')
         (directory / 'operation-leaf.cod').write_text(
-            '''symbol from "operation-vocabulary.cod" @base;
+            '''symbol from "./operation-vocabulary.cod" @base;
 unit Argument;
 procedure (+)(value:i64(Argument), delta:i64) -> i64 { return scalar(value) + delta + @base }
 export Argument;
 export (+);
 ''')
         lines = ['using symbol "std:io" @print;',
-                 'symbol from "operation-vocabulary.cod" @base;',
-                 'using units "operation-leaf.cod" {Argument};', 'using "operation-leaf.cod" (+);',
+                 'symbol from "./operation-vocabulary.cod" @base;',
+                 'using units "./operation-leaf.cod" {Argument};', 'using "./operation-leaf.cod" (+);',
                  'effect @base <- 5;']
         for i in range(depth):
             lines.append(f'symbol @p{i} : proc(i64) -> i64;')
@@ -141,8 +141,8 @@ export (+);
             for side in ('a', 'b'):
                 body = ''
                 if level < layers:
-                    body = (f'using "dag-{level+1}-a.cod" f as a;\n'
-                            f'using "dag-{level+1}-b.cod" f as b;\n')
+                    body = (f'using "./dag-{level+1}-a.cod" f as a;\n'
+                            f'using "./dag-{level+1}-b.cod" f as b;\n')
                 body += 'function f(x:i64) -> i64 { ' + ('a(x) + b(x)' if level < layers else 'x + 1') + ' }\n'
                 (directory / f'dag-{level}-{side}.cod').write_text(body + 'export f;\n')
         entry = directory / 'dag-main.cod'
@@ -157,17 +157,17 @@ export (+);
         (directory / 'factory-state.cod').write_text('region State { value:u64; }\nexport State;\n')
         for level in range(layers, -1, -1):
             for side in ('a', 'b'):
-                body = 'using "factory-state.cod" State;\n'
+                body = 'using "./factory-state.cod" State;\n'
                 if level < layers:
-                    body += (f'using "factory-{level+1}-a.cod" f as a;\n'
-                             f'using "factory-{level+1}-b.cod" f as b;\n')
+                    body += (f'using "./factory-{level+1}-a.cod" f as a;\n'
+                             f'using "./factory-{level+1}-b.cod" f as b;\n')
                 body += 'function f(region s:State) -> func()->const u64 with {region s} { '
                 body += ('func discarded = a(s); b(s)' if level < layers else
                          'func () -> const u64 { s.value }')
                 (directory / f'factory-{level}-{side}.cod').write_text(body + ' }\nexport f;\n')
         entry = directory / 'factory-main.cod'
         entry.write_text('using symbol "std:io" @print;\nusing "factory-state.cod" State;\n'
-                         'using "factory-0-a.cod" f;\n'
+                         'using "./factory-0-a.cod" f;\n'
                          'own region state:State <- make State(capacity = 64u64) { value <- 3u64 };\n'
                          'func selected = f(state);\nbehave @print(selected());\n')
         results.append(run(executable, root, entry, '3\n', 'layered-callable-factories-2047-calls'))
@@ -181,9 +181,9 @@ export (+);
         (directory / 'record-vocabulary.cod').write_text((record_fixtures / 'record-vocabulary.cod').read_text())
         (directory / 'record-adapter.cod').write_text((record_fixtures / 'record-adapter.cod').read_text())
         depth = 32
-        lines = ['using symbol "std:io" @print;', 'using "record-vocabulary.cod" Node;',
-                 'using "record-vocabulary.cod" Entity;', 'using "record-vocabulary.cod" Arena;',
-                 'using "record-adapter.cod" qualify;']
+        lines = ['using symbol "std:io" @print;', 'using "./record-vocabulary.cod" Node;',
+                 'using "./record-vocabulary.cod" Entity;', 'using "./record-vocabulary.cod" Arena;',
+                 'using "./record-adapter.cod" qualify;']
         for level in range(depth + 1):
             body = 'node.value <- node.value+1u64; '
             body += (f'if(b){{step{level-1}(node,b)}}else{{step{level-1}(node,!b)}}' if level else 'qualify(node)')
@@ -235,41 +235,41 @@ export create;
             (directory / f'regional-interface-{i}.cod').write_text(
                 f'using "{parent}" Link as Parent;\ntype Link <: Parent;\nexport Link;\n')
         (directory / 'regional-adapter.cod').write_text(
-            'export import "regional-types.cod" Node;\nusing "regional-interface-0.cod" Link;\ndata Node <: Link;\n')
+            'export import "./regional-types.cod" Node;\nusing "regional-interface-0.cod" Link;\ndata Node <: Link;\n')
         (directory / 'regional-rank.cod').write_text(
-            '''using "regional-interface.cod" Link;
+            '''using "./regional-interface.cod" Link;
 function score(node:Link in O) -> i64 where {owner O} { return -1 }
 export score;
 ''')
         for name, value in [('first', 2), ('second', 3)]:
             (directory / f'regional-rank-{name}.cod').write_text(
-                'using "regional-adapter.cod" Node;\n'
-                'import "regional-rank.cod" score as weight;\n'
+                'using "./regional-adapter.cod" Node;\n'
+                'import "./regional-rank.cod" score as weight;\n'
                 f'function weight(node:Node in O) -> i64 where {{owner O}} {{ {value} }}\n'
-                'import "regional-0.cod" shared_measure as chain;\n'
+                'import "./regional-0.cod" shared_measure as chain;\n'
                 'function measure(node:Node in O) -> i64 where {owner O} { chain(node) }\nexport weight;\nexport measure;\n')
-        (directory / 'regional-vocabulary.cod').write_text('using "regional-types.cod" Node;\nsymbol @root : Node;\nexport @root;\n')
+        (directory / 'regional-vocabulary.cod').write_text('using "./regional-types.cod" Node;\nsymbol @root : Node;\nexport var @root;\n')
         (directory / 'regional-body.cod').write_text(
-            '''using "regional-types.cod" Node;
+            '''using "./regional-types.cod" Node;
 using "std:exceptions" NullPointerException;
-symbol from "regional-vocabulary.cod" @root as @input;
+symbol from "./regional-vocabulary.cod" @root as @input;
 symbol @walk : proc() -> Node throws NullPointerException;
 function find(node:Node in O) -> Node throws NullPointerException where {owner O} { return node.next }
 procedure @walk() -> Node throws NullPointerException { return find(deref(@input)) }
-export @walk;
+export proc @walk;
 ''')
         for i in range(depth):
             body = ('using "std:exceptions" NullPointerException;\nusing "regional-types.cod" Node;\nusing "regional-interface.cod" Link as Root;\n'
-                    f'using "regional-interface-{i}.cod" Link;\n')
-            body += ('symbol from "regional-vocabulary.cod" @root;\n'
+                    f'using "./regional-interface-{i}.cod" Link;\n')
+            body += ('symbol from "./regional-vocabulary.cod" @root;\n'
                      f'symbol @node{i} : Node;\neffect @node{i} = @root;\nsymbol @walk : proc() -> Node throws NullPointerException;\n')
             if i + 1 < depth:
-                body += f'using "regional-{i+1}.cod" find as next;\nusing "regional-{i+1}.cod" retain as retain_next;\n'
-                body += f'using "regional-{i+1}.cod" measure as measure_next;\n'
-                body += f'using "regional-{i+1}.cod" borrow as borrow_next;\n'
-            body += 'using "regional-rank.cod" score as weigh;\n'
+                body += f'using "./regional-{i+1}.cod" find as next;\nusing "regional-{i+1}.cod" retain as retain_next;\n'
+                body += f'using "./regional-{i+1}.cod" measure as measure_next;\n'
+                body += f'using "./regional-{i+1}.cod" borrow as borrow_next;\n'
+            body += 'using "./regional-rank.cod" score as weigh;\n'
             if i + 1 < depth:
-                body += f'import "regional-{i+1}.cod" shared_measure as shared_next;\n'
+                body += f'import "./regional-{i+1}.cod" shared_measure as shared_next;\n'
             body += 'function shared_measure(node:Link in O) -> i64 where {owner O} { '
             body += ('shared_next(node) + ' if i + 1 < depth else '') + 'weigh(node) }\n'
             body += 'function borrow(region arena)-> region { ' + ('borrow_next(arena)' if i + 1 < depth else 'arena') + ' }\n'
@@ -280,27 +280,27 @@ export @walk;
             body += ('next(deref(node.next))' if i + 1 < depth else 'node.next') + ' }\n'
             source = f'regional-{i+1}.cod' if i + 1 < depth else 'regional-body.cod'
             role = f'node{i+1}' if i + 1 < depth else 'input'
-            body += f'mixin "{source}" @walk as @walk with {{ @node{i} as @{role}; }};\n'
-            body += 'export find;\nexport retain;\nexport measure;\nexport borrow;\nexport shared_measure;\nexport @walk;\n'
-            body += f'export @node{i};\n'
+            body += f'mixin "./{source}" proc @walk as @walk with {{ @node{i} as @{role}; }};\n'
+            body += 'export find;\nexport retain;\nexport measure;\nexport borrow;\nexport shared_measure;\nexport proc @walk;\n'
+            body += f'export var @node{i};\n'
             (directory / f'regional-{i}.cod').write_text(body)
         entry = directory / 'regional-main.cod'
         entry.write_text('using symbol "std:io" @print;\nusing symbol "std:io" @assert;\nusing "std:exceptions" NullPointerException;\n'
-                         'using "regional-adapter.cod" Node;\nusing "regional-types.cod" create;\n'
-                         'symbol from "regional-vocabulary.cod" @root as @head;\n'
+                         'using "./regional-adapter.cod" Node;\nusing "regional-types.cod" create;\n'
+                         'symbol from "./regional-vocabulary.cod" @root as @head;\n'
                          'region symbol @arena;\nsymbol @tail : Node;\nsymbol @alternate : Node;\n'
                          'effect @arena <- region(16384u64);\n'
                          'effect @tail = alloc @arena Node(11.0f32, null);\n'
                          f'effect @head = fold (i in 0u32 .. {depth}u32, node = @tail) {{\n'
                          '  alloc @arena Node(f32(i), node)\n};\n'
-                         'using "regional-0.cod" find;\nusing "regional-0.cod" retain;\nusing symbol "regional-0.cod" @walk;\n'
+                         'using "./regional-0.cod" find;\nusing "regional-0.cod" retain;\nusing symbol "regional-0.cod" @walk;\n'
                          'behave @print(retain(deref(@head)).value);\n'
-                         'using "regional-0.cod" measure;\nbehave @print(measure(deref(@head)));\n'
-                         'symbol from "regional-0.cod" @node0 as @selected;\n'
+                         'using "./regional-0.cod" measure;\nbehave @print(measure(deref(@head)));\n'
+                         'symbol from "./regional-0.cod" @node0 as @selected;\n'
                          'try {behave @print(deref(find(deref(@head))).value)} catch(e:const NullPointerException){behave @assert(false)};\n'
                          'setfield(@tail, value, 29.0f32);\n'
                          'try {behave @print(deref(find(deref(@head))).value)} catch(e:const NullPointerException){behave @assert(false)};\n'
-                         'using "regional-0.cod" borrow;\n'
+                         'using "./regional-0.cod" borrow;\n'
                          '{\nregion original = @arena;\nval old_used <- used_bytes(original);\n'
                          'effect @arena <- region(4096u64);\n'
                          'region borrowed = borrow(@arena);\nval initial <- used_bytes(borrowed);\n'
@@ -311,9 +311,9 @@ export @walk;
                          'effect @selected = @alternate;\n'
                          'try {behave @print(deref(perform @walk()).value)} catch(e:const NullPointerException){behave @assert(false)};\n'
                          'try {behave @print(deref(behave @walk()).value)} catch(e:const NullPointerException){behave @assert(false)};\n};\n'
-                         'using "regional-rank-first.cod" measure as first;\n'
-                         'using "regional-rank-second.cod" measure as second;\n'
-                         'using "regional-0.cod" shared_measure;\n'
+                         'using "./regional-rank-first.cod" measure as first;\n'
+                         'using "./regional-rank-second.cod" measure as second;\n'
+                         'using "./regional-0.cod" shared_measure;\n'
                          'behave @print(first(deref(@head)));\n'
                          'behave @print(second(deref(@head)));\n'
                          'behave @print(shared_measure(deref(@head)));\n')
@@ -322,9 +322,9 @@ export @walk;
         # A same-alias union supplies both providers to an imported helper.
         # Separately used helpers retain their own implementation contexts.
         entry.write_text(entry.read_text() +
-                         'using "regional-rank-first.cod" weight;\n'
-                         'using "regional-rank-second.cod" weight;\n'
-                         'import "regional-0.cod" shared_measure as combined;\n'
+                         'using "./regional-rank-first.cod" weight;\n'
+                         'using "./regional-rank-second.cod" weight;\n'
+                         'import "./regional-0.cod" shared_measure as combined;\n'
                          'combined(deref(@head));\n')
         command = [str(executable), '--check', str(entry)]
         diagnostic = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=120)

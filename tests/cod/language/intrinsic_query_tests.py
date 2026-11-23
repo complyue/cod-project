@@ -48,8 +48,8 @@ for mode in ('behave', 'perform'):
         expression = mode+' @action(1u64)'
         runner.CASES[key+'_query'] = (query(expression,declaration),2,'','dynamic invocation requires a procedure symbol')
         runner.CASES[key+'_execution'] = (declaration+expression+';',2,'','dynamic invocation requires a procedure symbol')
-runner.CASES['imported_print_identity'] = ({'io.cod':IO+'export @print;', 'main.cod':'using symbol "io.cod" @print as @output;val slot<-make local i64;val result<-make local typeof({perform @output(slot);7}){9};behave @output(result);'},0,'9\n','')
-runner.CASES['imported_function_symbol_rejects'] = ({'api.cod':'symbol @action:func(u64)->u64;export @action;', 'main.cod':query('behave @selected(1u64)','using symbol "api.cod" @action as @selected;')},2,'','dynamic invocation requires a procedure symbol')
+runner.CASES['imported_print_identity'] = ({'io.cod':IO+'export proc @print;', 'main.cod':'using symbol "./io.cod" @print as @output;val slot<-make local i64;val result<-make local typeof({perform @output(slot);7}){9};behave @output(result);'},0,'9\n','')
+runner.CASES['imported_function_symbol_rejects'] = ({'api.cod':'symbol @action:func(u64)->u64;export var @action;', 'main.cod':query('behave @selected(1u64)','using symbol "./api.cod" @action as @selected;')},2,'','dynamic invocation requires a procedure symbol')
 for name, prefix, arguments, diagnostic in (
     ('zero', '', '', 'print requires one scalar argument'),
     ('two', '', '1,2', 'print requires one scalar argument'),

@@ -20,7 +20,23 @@ IRFLAGS ?= -O1
 quote = '$(subst ','"'"',$(1))'
 find_tool = $(or $(shell command -v $(call quote,$(1))),$(error $(2) executable not found: $(1)))
 
-seed := $(abspath $(call find_tool,$(COD_SEED),COD_SEED))
+seed := $(realpath $(call find_tool,$(COD_SEED),COD_SEED))
+ifeq ($(seed),)
+$(error Cannot resolve COD_SEED: $(COD_SEED))
+endif
+seed_prefix := $(abspath $(dir $(seed))/..)
+seed_library_dir := $(seed_prefix)/lib/cod
+ifeq ($(shell test -d "$(seed_library_dir)" && printf yes),)
+development_library := $(abspath $(seed_prefix)/../cod/library)
+ifneq ($(shell test -f "$(seed_prefix)/CMakeCache.txt" && test -d "$(development_library)" && printf yes),)
+seed_library_dir := $(development_library)
+endif
+endif
+seed_library_path := $(seed_library_dir)/string.cod
+seed_library := $(shell test -f "$(seed_library_path)" && realpath -e -- "$(seed_library_path)")
+ifeq ($(seed_library),)
+$(error CoD library input not found for $(seed): $(seed_library_path))
+endif
 llvm_config := $(abspath $(call find_tool,$(LLVM_CONFIG),LLVM_CONFIG))
 clang := $(abspath $(call find_tool,$(CLANG),CLANG))
 runtime_archive := $(abspath $(COD_RUNTIME_ARCHIVE))
@@ -50,6 +66,15 @@ llvm_libdir := $(call llvm_query,--libdir)
 
 entry := src/CompilerCLI.cod
 cod_sources := $(sort $(shell find src -type f -name '*.cod'))
+# A package can shadow the library. Let the seed recheck the source closure when a project is active.
+source_project := $(shell directory=$$(dirname -- "$(or $(realpath $(entry)),$(abspath $(entry)))"); \
+	while :; do \
+		manifest="$$directory/CodProject.yaml"; \
+		if test -e "$$manifest" || test -L "$$manifest"; then printf yes; break; fi; \
+		test "$$directory" != / || break; \
+		directory=$$(dirname -- "$$directory"); \
+	done)
+package_recheck := $(if $(or $(source_project),$(filter --project,$(COD_SEED_FLAGS))),FORCE)
 native_sources := $(sort $(wildcard native/*.c))
 generated_names := cod_providers.h cod_providers.c driver.ll
 generated := $(addprefix $(out)/,$(generated_names))
@@ -65,6 +90,7 @@ $(out) $(out)/native:
 # Preserve stamp mtimes when the effective inputs are unchanged.
 $(out)/seed.inputs: FORCE | $(out)
 	@printf '%s\n' $(call quote,$(seed)) $(call quote,$(COD_SEED_FLAGS)) \
+		$(call quote,$(seed_library)) $(if $(source_project),'project source lookup') \
 		$(foreach source,$(cod_sources),$(call quote,$(source))) > "$@.tmp"
 	@if cmp -s "$@.tmp" "$@"; then rm "$@.tmp"; else mv "$@.tmp" "$@"; fi
 
@@ -76,7 +102,7 @@ $(out)/native.inputs: FORCE | $(out)
 		$(foreach source,$(native_sources),$(call quote,$(source))) > "$@.tmp"
 	@if cmp -s "$@.tmp" "$@"; then rm "$@.tmp"; else mv "$@.tmp" "$@"; fi
 
-$(generated) &: $(entry) $(cod_sources) $(seed) $(out)/seed.inputs Makefile | $(out)
+$(generated) &: $(entry) $(cod_sources) $(seed) $(seed_library) $(out)/seed.inputs Makefile $(package_recheck) | $(out)
 	@set -eu; stage=$$(mktemp -d "$(out)/.seed.XXXXXX"); \
 		trap 'rm -rf "$$stage"' EXIT; trap 'exit 1' HUP INT TERM; \
 		"$(seed)" $(COD_SEED_FLAGS) --no-cache --check "$(entry)" \

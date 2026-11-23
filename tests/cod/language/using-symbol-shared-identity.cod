@@ -1,10 +1,10 @@
 using symbol "std:io" @print;
-symbol from "vocabulary.cod" @p;
-symbol from "vocabulary.cod" @x;
+symbol from "./vocabulary.cod" @p;
+symbol from "./vocabulary.cod" @x;
 procedure @p -> i64 { return 900 }
 behave @print(perform @p);
 effect @x <- 7;
-using symbol "source.cod" @p;
+using symbol "./source.cod" @p;
 effect @x <- 8;
 behave @print(perform @p);
 behave @print(behave @p);

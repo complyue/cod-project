@@ -1,5 +1,5 @@
-using "ParserStorage.cod" no_node;
-using "NativeCommands.cod" {
+using "./ParserStorage.cod" no_node;
+using "./NativeCommands.cod" {
     NativeCommands, NativePlan, initialization_access, place_address, load_target, store_target,
     copy_word, position_block, word_constant, jump, branch_equal, branch_catchable, begin_function,
     declare_function, return_outcome, finish_program, write_flow_flag, branch_on_flow_flag,

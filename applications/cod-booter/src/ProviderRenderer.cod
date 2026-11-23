@@ -1,20 +1,26 @@
-using "../../../cod/library/string.cod" { StringBuilder, append };
-using symbol "../../../cod/library/string.cod" @sout;
-using "SourceStorage.cod" SourceBytes;
-using "SourceAccess.cod" same_bytes;
-using "ModuleIndex.cod" { Visits, CanonicalKeyRange, checked_module_key };
-using "ModuleExportStorage.cod" { ModuleInterfaces, enum_type, find_interface };
-using "NameResolution.cod" { c_constructor, c_entry, c_operation, c_handle_type, array_type, record_type };
-using "ProviderTypeNames.cod" { ProviderPrefixes, emit_provider_interface_name, find_provider_handle };
-using "ProviderNames.cod" provider_member_error;
-using "ProviderText.cod" { ProviderPreamble, prepare_provider_preamble, write_provider_preamble,
+using "string.cod" { StringBuilder, append };
+using symbol "string.cod" @sout;
+using "./SourceStorage.cod" SourceBytes;
+using "./SourceAccess.cod" same_bytes;
+using "./ModuleIndex.cod" { Visits, CanonicalKeyRange, checked_module_key };
+using "./ModuleExportStorage.cod" { ModuleInterfaces, enum_type, find_interface };
+using "./NameResolution.cod" {
+    c_constructor, c_entry, c_operation, c_handle_type, array_type, record_type
+};
+using "./ProviderTypeNames.cod" {
+    ProviderPrefixes, emit_provider_interface_name, find_provider_handle
+};
+using "./ProviderNames.cod" provider_member_error;
+using "./ProviderText.cod" { ProviderPreamble, prepare_provider_preamble, write_provider_preamble,
                            write_provider_borrow, finish_provider_header };
-using "ProviderViews.cod" ABIPrimitiveLayouts;
-using "ProviderEnums.cod" write_provider_enum;
-using "ProviderConstructors.cod" write_provider_constructor;
-using "ProviderCalls.cod" { native_argument_array, write_provider_call_views, write_provider_callable };
-using "ProviderHere.cod" write_provider_here;
-using "ParserStorage.cod" no_node;
+using "./ProviderViews.cod" ABIPrimitiveLayouts;
+using "./ProviderEnums.cod" write_provider_enum;
+using "./ProviderConstructors.cod" write_provider_constructor;
+using "./ProviderCalls.cod" {
+    native_argument_array, write_provider_call_views, write_provider_callable
+};
+using "./ProviderHere.cod" write_provider_here;
+using "./ParserStorage.cod" no_node;
 
 data ProviderTypeUse { seen:bool; borrowed:bool; }
 array ProviderTypeUses[u64]:ProviderTypeUse;

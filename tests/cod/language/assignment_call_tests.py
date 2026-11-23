@@ -60,7 +60,7 @@ for prefix in ('', 'intrinsic '):
         for arguments in ('', 'a', 'a,a,a'):
             runner.CASES[prefix+op+'_arity_'+arguments] = ('val a<-1;'+prefix+'('+op+')('+arguments+');',2,'','assignment requires a destination and a source')
         runner.CASES[prefix+op+'_deferred'] = ('val a<-1,b<-2;ptr p=a;defer '+prefix+'('+op+')(p,b);',0,'','')
-runner.CASES['imported_body'] = ({'helper.cod':'func update(ref x:i64 in O)->i64 where {owner O}{return intrinsic (<-)(x,7);}export update;', 'main.cod':IO+'using "helper.cod" update;val a<-1;'+OUT('update(a)')},0,'7\n','')
+runner.CASES['imported_body'] = ({'helper.cod':'func update(ref x:i64 in O)->i64 where {owner O}{return intrinsic (<-)(x,7);}export update;', 'main.cod':IO+'using "./helper.cod" update;val a<-1;'+OUT('update(a)')},0,'7\n','')
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {}
 runner.EXTRA_SOURCES = [Path(__file__)]

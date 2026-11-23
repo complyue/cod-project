@@ -13,7 +13,7 @@ symbol @combine : proc(u64(normalized), u64) -> u64;
 procedure @combine(x:u64(normalized*), y:u64) -> u64 { return scalar(x) + y }
 
 export (+);
-export @combine;
+export proc @combine;
 export combine;
 export normalize;
 export normalized;

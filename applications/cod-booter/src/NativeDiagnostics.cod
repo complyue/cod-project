@@ -1,7 +1,7 @@
-using "SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
-using "SourceAccess.cod" locate_source_position;
-using "ParserStorage.cod" { ExprNodes, parse_report_code, syntax_first, syntax_past, no_node };
-using "Frontend.cod" FrontendResult;
+using "./SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
+using "./SourceAccess.cod" locate_source_position;
+using "./ParserStorage.cod" { ExprNodes, parse_report_code, syntax_first, syntax_past, no_node };
+using "./Frontend.cod" FrontendResult;
 using "std:exceptions" OutOfMemoryError;
 
 handle type LauncherDiagnostics;
@@ -23,6 +23,24 @@ array ReportIndices[u64]:u64;
 proc "C" write_parse_reports(handle diagnostic:DiagnosticDestination in D, rows:const ParseDiagnosticRows in R, used:u64,
                              keys:const SourceBytes in K, first:u64, past:u64, stage:u8) -> u8
     where {owner D, const owner R, const owner K};
+
+export enum PackageDiagnosticKind:u8 {
+    PackageShadow = 1u8;
+    PackageAmbiguity = 2u8;
+    PackageMissing = 3u8;
+    PackageLookupFailure = 4u8;
+    PackageInputFailure = 5u8;
+    InvalidModulePath = 6u8;
+    PackageProcessFailure = 7u8;
+}
+
+export proc "C" append_package_diagnostic(
+    handle diagnostic:DiagnosticDestination in D, kind:PackageDiagnosticKind, os_error:u64,
+    first_line:u64, first_column:u64, past_line:u64, past_column:u64,
+    importer:const SourceBytes in I, import_first:u64, import_past:u64,
+    spelling:const SourceBytes in M, first:u64, past:u64,
+    candidate:const SourceBytes in A, other:const SourceBytes in B)
+    -> u8 where {owner D, const owner I, const owner M, const owner A, const owner B};
 
 func report_after(nodes:const ExprNodes in N, used:u64, left:u64, right:u64) -> bool where {const owner N} {
     val left_at <- syntax_first(nodes, used, left);

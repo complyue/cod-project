@@ -1,6 +1,6 @@
-using "record-vocabulary.cod" Arena;
-using "record-vocabulary.cod" Entity;
-using "region-result-adapter.cod" qualify_region;
+using "./record-vocabulary.cod" Arena;
+using "./record-vocabulary.cod" Entity;
+using "./region-result-adapter.cod" qualify_region;
 function plain(region r:Arena)->region :Arena in r {return r}
 function score(region r:Entity)->const u64 {return r.count}
 own region arena:Arena<-make Arena(capacity=256u64){count<-17u64};

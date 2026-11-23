@@ -1,3 +1,3 @@
 region symbol @arena;
 
-export @arena;
+export var @arena;

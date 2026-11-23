@@ -1,13 +1,17 @@
-using "../../../cod/library/string.cod" { StringBuilder, emit, emitStr };
-using symbol "../../../cod/library/string.cod" @sout;
-using "SourceStorage.cod" SourceBytes;
-using "ModuleIndex.cod" Visits;
-using "ModuleExportStorage.cod" { ModuleInterfaces, enum_type };
-using "NameResolution.cod" { c_operation, c_handle_type, array_type, builtin_u8 };
-using "ProviderTypeNames.cod" { ProviderPrefixes, find_provider_handle, emit_provider_handle_type };
-using "ProviderCalls.cod" { emit_indexed_name, native_argument_array, emit_invalid_view, emit_provider_result_type };
-using "ProviderViews.cod" { ABIPrimitiveLayouts, write_provider_view };
-using "ParserStorage.cod" no_node;
+using "string.cod" { StringBuilder, emit, emitStr };
+using symbol "string.cod" @sout;
+using "./SourceStorage.cod" SourceBytes;
+using "./ModuleIndex.cod" Visits;
+using "./ModuleExportStorage.cod" { ModuleInterfaces, enum_type };
+using "./NameResolution.cod" { c_operation, c_handle_type, array_type, builtin_u8 };
+using "./ProviderTypeNames.cod" {
+    ProviderPrefixes, find_provider_handle, emit_provider_handle_type
+};
+using "./ProviderCalls.cod" {
+    emit_indexed_name, native_argument_array, emit_invalid_view, emit_provider_result_type
+};
+using "./ProviderViews.cod" { ABIPrimitiveLayouts, write_provider_view };
+using "./ParserStorage.cod" no_node;
 
 proc emit_here_name(name:const String in N, ending:const String in E) -> void where {const owner N, const owner E} {
     emit("cod_native_");

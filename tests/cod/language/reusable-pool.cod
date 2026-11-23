@@ -2,12 +2,12 @@ using "std:exceptions" NullPointerException;
 # Stable typed slots; returning a slot changes membership, not object lifetime.
 # A Slot is valid only for this pool and until its next release. Callers must
 # return an acquired slot exactly once and stop using it after release.
-using units "pool-interface.cod" {Slot};
-using "pool-interface.cod" (==);
-import "pool-interface.cod" read;
-import "pool-interface.cod" cell;
-import "pool-interface.cod" acquire;
-import "pool-interface.cod" release;
+using units "./pool-interface.cod" {Slot};
+using "./pool-interface.cod" (==);
+import "./pool-interface.cod" read;
+import "./pool-interface.cod" cell;
+import "./pool-interface.cod" acquire;
+import "./pool-interface.cod" release;
 array Payloads[u32(Slot)]:i64;
 array Links[u32(Slot)]:u32(Slot);
 data Pool { head:u32(Slot); ptr payloads:Payloads; ptr links:Links; }

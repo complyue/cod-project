@@ -1,9 +1,9 @@
 using symbol "std:io" @print;
-using "record-vocabulary.cod" Node;
-using "record-vocabulary.cod" Entity;
-using "record-vocabulary.cod" Arena;
-using "record-forward.cod" recursive;
-using "record-forward.cod" plain;
+using "./record-vocabulary.cod" Node;
+using "./record-vocabulary.cod" Entity;
+using "./record-vocabulary.cod" Arena;
+using "./record-forward.cod" recursive;
+using "./record-forward.cod" plain;
 function score(value:Entity in r)->const u64 where {region r:Arena} {return 77u64}
 own region arena:Arena <- make Arena(capacity=256u64){count <- 0u64};
 ref item=alloc arena Node(5u64);

@@ -1,5 +1,5 @@
-using "structural-api.cod" Node;
-using "structural-api.cod" Cursor;
+using "./structural-api.cod" Node;
+using "./structural-api.cod" Cursor;
 own region first:Cursor <- make Cursor(capacity = 256u64) { ticks <- 0u64; current = null };
 own region second:Cursor <- make Cursor(capacity = 256u64) { ticks <- 0u64; current = null };
 second.current = alloc second Node(3);

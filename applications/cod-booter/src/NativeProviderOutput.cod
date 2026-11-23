@@ -1,4 +1,4 @@
-using "NativeSource.cod" Path;
+using "./NativeSource.cod" Path;
 
 export proc "C" publish_provider_pair(handle directory:Path in A, header:const String in H,
                                       stubs:const String in S) -> u64

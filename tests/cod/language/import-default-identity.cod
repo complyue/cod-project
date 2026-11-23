@@ -3,7 +3,7 @@ symbol @step : proc() -> i64;
 symbol @x : i64;
 function helper() -> i64 { return 9 }
 effect @x <- 7;
-mixin "source.cod" @p as @step;
+mixin "./source.cod" proc @p as @step;
 effect @x <- 8;
 behave @print(perform @step);
 behave @print(behave @step);

@@ -170,6 +170,7 @@ class ScalarChecker {
       bool operator==(const Resource &) const = default;
     };
     std::map<std::string, Resource> exports;
+    std::vector<std::string> public_order, defaults;
   };
   std::vector<ModuleNames> modules_;
   std::map<size_t, const Form *> entry_extensions_;
@@ -21696,6 +21697,7 @@ class ScalarChecker {
   void publish(const std::string &name, const ModuleNames::Resource &resource, const Location &at) {
     const auto [published, inserted] = module_names().exports.emplace(name, resource);
     if (!inserted && published->second != resource) fail(at, "conflicting public alias '" + name + "'");
+    if (inserted) module_names().public_order.push_back(name);
   }
 
   void select_enum_members(const Form &form, const Type &type) {
@@ -21737,40 +21739,55 @@ class ScalarChecker {
     }
   }
 
-  void select_module_resource(const Form &form, size_t dependency) {
+  std::optional<Form::ResourceNature> publication_nature(const ModuleNames::Resource &resource) const {
+    if (resource.kind != ModuleNames::Resource::Kind::symbol) return {};
+    const auto &symbol = program_.symbols.at(resource.symbol);
+    return symbol.intrinsic_print || (symbol.type && symbol.type->kind == Type::procedure)
+        ? Form::ResourceNature::procedure : Form::ResourceNature::variable;
+  }
+
+  void check_using_procedure_identity(const Form &form, const std::string &local,
+                                     size_t symbol, const std::set<std::string_view> &fresh_symbols) {
+    const auto destination = module_names().symbols.find(local);
+    if (fresh_symbols.contains(local) ||
+        (destination != module_names().symbols.end() && destination->second != symbol))
+      fail(form.at, "conflicting symbol identity for '" + local + "'");
+  }
+
+  void bind_module_resource(const Form &form, const std::string &local, ModuleNames::Resource resource,
+                            std::optional<Form::ResourceNature> nature,
+                            const std::set<std::string_view> &fresh_symbols) {
     using Resource = ModuleNames::Resource;
     const bool importing = form.kind == Form::Kind::import_resource;
     const bool reexporting = form.kind == Form::Kind::export_from_resource;
-    if (form.kind != Form::Kind::using_resource && form.kind != Form::Kind::symbol_from && !importing && !reexporting)
-      implementation_gap(form.at, "mixin body redefinition remains unproved");
-    const auto &exports = modules_.at(dependency).exports;
-    const auto found = exports.find(form.name);
-    if (found == exports.end()) fail(form.at, "source module does not export '" + form.name + "'");
-    auto resource = found->second;
-    if (form.symbolic != (resource.kind == Resource::Kind::symbol))
-      fail(form.at, "selected resource does not match the requested symbol or lexical category");
+    if (nature && publication_nature(resource) != nature)
+      fail(form.at, "symbolic resource kind does not match its publication");
     if (form.selected_members) {
       if (resource.kind != Resource::Kind::type) fail(form.at, "member selection requires a type");
       if (resource.type.kind == Type::sum) select_sum_constructors(form, resource.type);
       else select_enum_members(form, resource.type);
     }
     if (reexporting) {
-      publish(form.alias, resource, form.at);
+      publish(local, resource, form.at);
       return;
     }
     if (resource.kind == Resource::Kind::symbol) {
-      if (form.kind == Form::Kind::using_resource && !form.using_symbol)
-        implementation_gap(form.at, "symbolic destination selection; select its identity with 'symbol from' and install explicitly");
+      // A qualified using selects the published procedure policy. The
+      // installation and the extension grant use their own operations.
+      // See ModuleWorlds.md#selecting-a-symbolic-procedure-family.
+      if (form.kind == Form::Kind::using_resource && !form.using_symbol &&
+          nature == Form::ResourceNature::procedure)
+        check_using_procedure_identity(form, local, resource.symbol, fresh_symbols);
       if (importing) {
-        const auto destination = module_names().symbols.find(form.alias);
+        const auto destination = module_names().symbols.find(local);
         if (destination == module_names().symbols.end())
           fail(form.at, "select the destination symbol identity before importing its callable family");
         if (destination->second != resource.symbol)
           implementation_gap(form.at, "callable import into a different symbol identity; use explicit effect installation for a value");
         if (!resource.family) fail(form.at, "symbol does not export a callable family");
       }
-      const auto [alias, inserted] = module_names().symbols.emplace(form.alias, resource.symbol);
-      if (!inserted && alias->second != resource.symbol) fail(form.at, "conflicting symbol alias '" + form.alias + "'");
+      const auto [alias, inserted] = module_names().symbols.emplace(local, resource.symbol);
+      if (!inserted && alias->second != resource.symbol) fail(form.at, "conflicting symbol alias '" + local + "'");
       bool receiver_import = false;
       if (resource.family) {
         const auto source = *resource.family;
@@ -21788,21 +21805,54 @@ class ScalarChecker {
       if (receiver_import) module_names().selected_symbols.erase(resource.symbol);
       else module_names().selected_symbols.insert(resource.symbol);
     } else if (resource.kind == Resource::Kind::native_operation) {
-      const auto [binding, inserted] = module_names().native_operations.emplace(form.alias, *resource.native_operation);
+      const auto [binding, inserted] = module_names().native_operations.emplace(local, *resource.native_operation);
       if (!inserted && binding->second != *resource.native_operation)
-        fail(form.at, "conflicting native provider selection '" + form.alias + "'");
+        fail(form.at, "conflicting native provider selection '" + local + "'");
     } else if (resource.kind == Resource::Kind::type) {
-      const auto [alias, inserted] = module_names().types.emplace(form.alias, resource.type);
-      if (!inserted && alias->second != resource.type) fail(form.at, "conflicting type alias '" + form.alias + "'");
+      const auto [alias, inserted] = module_names().types.emplace(local, resource.type);
+      if (!inserted && alias->second != resource.type) fail(form.at, "conflicting type alias '" + local + "'");
     } else {
       if (importing) resource.family = import_family(*resource.family, form.at);
-      const auto [alias, inserted] = module_names().callables.emplace(form.alias, *resource.family);
+      const auto [alias, inserted] = module_names().callables.emplace(local, *resource.family);
       if (!inserted && alias->second != *resource.family)
         implementation_gap(form.at, "same-alias callable composition remains unproved");
-      if (importing) module_names().imported_aliases.insert(form.alias);
-      else module_names().selected_callables.insert(form.alias);
+      if (importing) module_names().imported_aliases.insert(local);
+      else module_names().selected_callables.insert(local);
     }
-    if (form.exporting) publish(form.alias, resource, form.at);
+    if (form.exporting) publish(local, resource, form.at);
+  }
+
+  void select_module_resource(const Form &form, size_t dependency,
+                              const std::set<std::string_view> &fresh_symbols) {
+    using Resource = ModuleNames::Resource;
+    if (form.kind != Form::Kind::using_resource && form.kind != Form::Kind::symbol_from &&
+        form.kind != Form::Kind::import_resource && form.kind != Form::Kind::export_from_resource)
+      implementation_gap(form.at, "mixin body redefinition remains unproved");
+    const auto &publisher = modules_.at(dependency);
+    if (form.selection != Form::Selection::named) {
+      const auto &names = form.selection == Form::Selection::defaults ? publisher.defaults : publisher.public_order;
+      if (form.selection == Form::Selection::defaults && names.empty())
+        fail(form.at, "source module has no default exports; select names explicitly or use '{..}'");
+      for (const auto &name : names) {
+        const auto &resource = publisher.exports.at(name);
+        bind_module_resource(form, name, resource, publication_nature(resource), fresh_symbols);
+      }
+      return;
+    }
+    const auto found = publisher.exports.find(form.name);
+    if (found == publisher.exports.end()) fail(form.at, "source module does not export '" + form.name + "'");
+    if (form.symbolic != (found->second.kind == Resource::Kind::symbol))
+      fail(form.at, "selected resource does not match the requested symbol or lexical category");
+    bind_module_resource(form, form.alias, found->second, form.resource_nature, fresh_symbols);
+  }
+
+  void mark_default_export(const std::string &name, std::optional<Form::ResourceNature> nature, const Location &at) {
+    auto &publisher = module_names();
+    const auto found = publisher.exports.find(name);
+    if (found == publisher.exports.end() || publication_nature(found->second) != nature)
+      fail(at, std::string("default selection requires a public name with the stated kind '") + (nature ? "@" : "") + name + "'");
+    if (std::ranges::find(publisher.defaults, name) == publisher.defaults.end())
+      publisher.defaults.push_back(name);
   }
 
   void publish_module(const SourceModule &source) {
@@ -21821,7 +21871,17 @@ class ScalarChecker {
       } else if (const auto native = module_names().native_operations.find(form->name); native != module_names().native_operations.end()) {
         resource.kind = Resource::Kind::native_operation; resource.native_operation = native->second;
       } else fail(form->at, "unknown exported resource '" + form->name + "'");
+      if (form->resource_nature && publication_nature(resource) != form->resource_nature)
+        fail(form->at, "symbolic resource kind does not match its definition");
       publish(form->name, resource, form->at);
+    }
+    for (const auto &form : source.forms) {
+      if (form->default_exporting) {
+        const auto &resource = module_names().exports.at(form->name);
+        mark_default_export(form->name, publication_nature(resource), form->at);
+      }
+      for (const auto &mark : form->default_names)
+        mark_default_export(mark.name.text, mark.nature, mark.name.at);
     }
   }
 
@@ -22410,10 +22470,18 @@ class ScalarChecker {
   void register_module(const SourceModule &source, std::optional<size_t> &print_symbol,
                        std::optional<Location> &unsupported_here) {
     const auto &forms = source.forms;
+    std::set<std::string_view> fresh_symbols;
+    for (const auto &form : forms)
+      if (form->kind == Form::Kind::symbol) fresh_symbols.insert(form->name);
     for (const auto &form : forms)
       if (const auto dependency = source.dependencies.find(form.get()); dependency != source.dependencies.end())
-        select_module_resource(*form, dependency->second);
+        select_module_resource(*form, dependency->second, fresh_symbols);
     for (const auto &form : forms) {
+      if (form->path.starts_with("std:") && form->selection != Form::Selection::named) {
+        if (form->selection == Form::Selection::defaults)
+          fail(form->at, "intrinsic module has no default exports; select names explicitly");
+        implementation_gap(form->at, "complete selection of an intrinsic catalog module");
+      }
       if ((form->kind == Form::Kind::using_resource || form->kind == Form::Kind::import_resource) &&
           form->path == COD_LANG_TEXT_STORAGE_MODULE && !form->using_symbol) {
         if (form->selected_members) implementation_gap(form->at, "member selection outside an enum");
@@ -22462,17 +22530,25 @@ class ScalarChecker {
         continue;
       }
       if (form->kind == Form::Kind::expression || form->kind == Form::Kind::export_resource ||
-          form->kind == Form::Kind::data || form->kind == Form::Kind::sum_data || form->kind == Form::Kind::abstract_type ||
+          form->kind == Form::Kind::default_exports || form->kind == Form::Kind::data || form->kind == Form::Kind::sum_data || form->kind == Form::Kind::abstract_type ||
           form->kind == Form::Kind::native_handle_type ||
           form->kind == Form::Kind::region_definition || form->kind == Form::Kind::array ||
           form->kind == Form::Kind::enumeration)
         continue;
       if ((form->kind == Form::Kind::using_resource || form->kind == Form::Kind::import_resource) &&
           (form->path == COD_LANG_EXCEPTION_MODULE || form->path == COD_LANG_TEXT_STORAGE_MODULE) && !form->using_symbol) continue;
-      if (form->kind == Form::Kind::using_resource && form->using_symbol && form->path == COD_LANG_IO_MODULE && form->name == COD_LANG_PRINT_NAME) {
+      if (form->kind == Form::Kind::using_resource && form->symbolic &&
+          form->path == COD_LANG_IO_MODULE && form->name == COD_LANG_PRINT_NAME) {
+        if (form->resource_nature == Form::ResourceNature::variable)
+          fail(form->at, "symbolic resource kind does not match its publication");
         if (!print_symbol) {
           print_symbol = program_.symbols.size();
           program_.symbols.push_back({{}, true, COD_LANG_PRINT_NAME});
+        }
+        if (form->resource_nature == Form::ResourceNature::procedure) {
+          check_using_procedure_identity(*form, form->alias, *print_symbol, fresh_symbols);
+          module_names().symbols.try_emplace(form->alias, *print_symbol);
+          continue;
         }
         if (!module_names().symbols.emplace(form->alias, *print_symbol).second) fail(form->at, "duplicate print symbol binding");
         continue;

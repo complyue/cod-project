@@ -57,7 +57,7 @@ runner.CASES = {
 for name, alias in (('named_builtin_alias', 'negate'), ('operator_builtin_alias', '(+)')):
     runner.CASES[name] = ({
         'ops.cod': 'func (!)(a:i64)->bool{return a==0;}export (!);',
-        'main.cod': 'using "ops.cod" (!) as ' + alias + ';' + source(alias + '((p is null)||(q is null))', 'p'),
+        'main.cod': 'using "./ops.cod" (!) as ' + alias + ';' + source(alias + '((p is null)||(q is null))', 'p'),
     }, 0, '7\n0\n0\n0\n', '')
 
 runner.CASE_ARGUMENTS = {}

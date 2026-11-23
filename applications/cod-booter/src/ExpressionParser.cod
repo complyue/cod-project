@@ -1,11 +1,11 @@
-using "ParserInput.cod" {
+using "./ParserInput.cod" {
     ParseResult, append_syntax_node, append_block_item, append_block,
     exception_binder_width, expected_name, expected_type, parse_binding_name, parse_local_binding_name,
     parse_identifier, punct_at, punct_pair_at, reset_parse_result, expected_c_linkage, closing_token, recover_syntax, recover_block_separator, seed_lexical_reports,
 };
-using "CallableSyntax.cod" { parse_callable_signature, parse_scoped_procedure_signature };
-using "Lexer.cod" { and_word, or_word };
-using "ParserStorage.cod" {
+using "./CallableSyntax.cod" { parse_callable_signature, parse_scoped_procedure_signature };
+using "./Lexer.cod" { and_word, or_word };
+using "./ParserStorage.cod" {
     AssignmentOperands, ungrouped, is_invocation, name_syntax,
     function_definition,
     procedure_definition,
@@ -18,7 +18,7 @@ using "ParserStorage.cod" {
     logical_and_node, logical_or_node, compare_node,
     equal_words, unequal_words, less_words, at_most_words, greater_words, at_least_words, no_node,
 };
-using "ParserStorage.cod" ExprPayload {
+using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid,
     ContinueValue, ContinueVoid, BreakValue, BreakVoid,
     CallableDefinition, ScopedProcedureDefinition, CProviderDeclaration, CEntryDefinition,
@@ -37,15 +37,17 @@ using "ParserStorage.cod" ExprPayload {
     BooleanCasePattern, NullCasePattern, MemberCasePattern, ConstructorCasePattern, CaseValueReceiver,
     CaseArm, CaseExpression, CaseFailure, CaseFallthrough,
 };
-using "ParserStorage.cod" { LocalMode, ArithmeticOperation, ComparisonRelation, BinaryOperands };
-using "ParserStorage.cod" LocalMode { ValueLocal, ReferenceLocal, PointerLocal, ExceptionLocal };
-using "ParserStorage.cod" ArithmeticOperation { Addition, Subtraction, Multiplication, Division, Remainder };
-using "ParserStorage.cod" ComparisonRelation { Equal, Unequal, Less, AtMost, Greater, AtLeast };
-using "ParserStorage.cod" AstSlot { Vacant, Occupied };
-using "ParserStorage.cod" NodeLink { NoLink, LinkTo };
-using "ParserStorage.cod" NameSyntax { OrdinaryName };
-using "ParserStorage.cod" BindingSyntax { TypedBinding };
-using "Lexer.cod" {
+using "./ParserStorage.cod" { LocalMode, ArithmeticOperation, ComparisonRelation, BinaryOperands };
+using "./ParserStorage.cod" LocalMode { ValueLocal, ReferenceLocal, PointerLocal, ExceptionLocal };
+using "./ParserStorage.cod" ArithmeticOperation {
+    Addition, Subtraction, Multiplication, Division, Remainder
+};
+using "./ParserStorage.cod" ComparisonRelation { Equal, Unequal, Less, AtMost, Greater, AtLeast };
+using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
+using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
+using "./ParserStorage.cod" NameSyntax { OrdinaryName };
+using "./ParserStorage.cod" BindingSyntax { TypedBinding };
+using "./Lexer.cod" {
     exception_word, own_word, handle_word, ref_word, make_word, typeof_word, from_word,
     rethrow_word, reserved_value_name, intrinsic_word, len_word, reserved_lexical_binder, reserved_module_name, proc_word,
     func_word, region_word, capacity_word, identifier, integer_literal, defer_word,
@@ -54,8 +56,8 @@ using "Lexer.cod" {
     break_word, else_word, true_word, false_word, c_linkage, not_word, case_word, of_word, fallthrough_word, effect_word,
     quoted_text, multiline_text, punctuation,
 };
-using "ParserStorage.cod" SyntaxRole { InitializerRole, BlockItemRole, ExpressionRole };
-using "SourceStorage.cod" { SourceBytes, Token };
+using "./ParserStorage.cod" SyntaxRole { InitializerRole, BlockItemRole, ExpressionRole };
+using "./SourceStorage.cod" { SourceBytes, Token };
 
 func expected_operand() -> u8 { return 1u8; }
 func expected_close() -> u8 { return 2u8; }

@@ -1,10 +1,10 @@
 using symbol "std:io" @print;
 using "std:text-storage" { utf8_byte, utf8_size };
-using "../../../cod/library/string.cod" { StringBuilder, Utf8WriteError };
-using symbol "../../../cod/library/string.cod" @sout;
-import "../../../cod/library/string.cod" { (++), (++) as concatenate, emit };
-import "../../../applications/cod-booter/src/DiagnosticFormatting.cod" emitStr;
-using "../../../applications/cod-booter/src/SourceStorage.cod" SourcePosition;
+using "string.cod" { StringBuilder, Utf8WriteError };
+using symbol "string.cod" @sout;
+import "string.cod" { (++), (++) as concatenate, emit };
+import "./../../../applications/cod-booter/src/DiagnosticFormatting.cod" emitStr;
+using "./../../../applications/cod-booter/src/SourceStorage.cod" SourcePosition;
 
 data BrokenDisplay { code:u64; }
 

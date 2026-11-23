@@ -1,13 +1,13 @@
-using "../../../cod/library/string.cod" { StringBuilder, emit, emitStr };
-using symbol "../../../cod/library/string.cod" @sout;
-using "SourceStorage.cod" SourceBytes;
-using "ParserStorage.cod" no_node;
-using "ModuleExportStorage.cod" { ModuleInterfaces, enum_type, find_interface };
-using "ModuleIndex.cod" Visits;
-using "NameResolution.cod" { builtin_bool, c_constructor, c_handle_type, record_type };
-using "ProviderNames.cod" { emit_provider_identifier, emit_provider_member };
-using "ProviderViews.cod" emit_provider_scalar_type;
-using "ProviderTypeNames.cod" {
+using "string.cod" { StringBuilder, emit, emitStr };
+using symbol "string.cod" @sout;
+using "./SourceStorage.cod" SourceBytes;
+using "./ParserStorage.cod" no_node;
+using "./ModuleExportStorage.cod" { ModuleInterfaces, enum_type, find_interface };
+using "./ModuleIndex.cod" Visits;
+using "./NameResolution.cod" { builtin_bool, c_constructor, c_handle_type, record_type };
+using "./ProviderNames.cod" { emit_provider_identifier, emit_provider_member };
+using "./ProviderViews.cod" emit_provider_scalar_type;
+using "./ProviderTypeNames.cod" {
     ProviderPrefixes, emit_provider_interface_name, emit_provider_handle_type, emit_provider_bits_type, find_provider_handle,
     first_prior_handle_with_role,
 };

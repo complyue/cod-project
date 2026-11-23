@@ -1,11 +1,11 @@
-using "../../../cod/library/string.cod" emit;
-using "SourceStorage.cod" SourceBytes;
-using "ModuleIndex.cod" { Visits, CanonicalKeyRange, checked_module_key };
-using "ModuleExportStorage.cod" { ModuleInterfaces, enum_type, find_interface };
-using "NameResolution.cod" { c_handle_type, c_constructor };
-using "ProviderNames.cod" { emit_provider_identifier, emit_provider_enum_name };
-using "ProviderViews.cod" emit_provider_scalar_type;
-using "ParserStorage.cod" no_node;
+using "string.cod" emit;
+using "./SourceStorage.cod" SourceBytes;
+using "./ModuleIndex.cod" { Visits, CanonicalKeyRange, checked_module_key };
+using "./ModuleExportStorage.cod" { ModuleInterfaces, enum_type, find_interface };
+using "./NameResolution.cod" { c_handle_type, c_constructor };
+using "./ProviderNames.cod" { emit_provider_identifier, emit_provider_enum_name };
+using "./ProviderViews.cod" emit_provider_scalar_type;
+using "./ParserStorage.cod" no_node;
 
 export data ProviderPrefixes {
     modules:u64;

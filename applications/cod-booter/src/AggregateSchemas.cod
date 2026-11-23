@@ -1,4 +1,4 @@
-using "ParserStorage.cod" {
+using "./ParserStorage.cod" {
     ExprNodes, no_node, DeclarationSites, inspect_declaration, FormalSites, inspect_formal, BindingSites, inspect_binding,
     SumArmSites, inspect_sum_arm, first_sequence_entry, SequenceEntry, inspect_sequence_entry,
     DeclarationSyntax { NominalRecord, NativeRecord, NominalSum },
@@ -6,12 +6,12 @@ using "ParserStorage.cod" {
     FormalSyntax { OrdinaryFormal }, BindingSyntax { TypedBinding },
     FormalMode { ValueFormal, ExplicitValueFormal, ReferenceFormal, PointerFormal },
 };
-using "NameResolution.cod" {
+using "./NameResolution.cod" {
     NameBindings, NameWork, record_type, ordinary_selection, native_scalar, builtin_string,
     has_exception_parent, lexical_builder_record,
 };
-using "ModuleExports.cod" { SelectedExports, record_export, enum_export, sum_export };
-using "ModuleExportStorage.cod" {
+using "./ModuleExports.cod" { SelectedExports, record_export, enum_export, sum_export };
+using "./ModuleExportStorage.cod" {
     ModuleInterfaces, checked_aggregate_storage, enum_type, sum_type,
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, CLayoutBitsRecord, NonBitsAggregate },
 };

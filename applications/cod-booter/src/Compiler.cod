@@ -1,13 +1,15 @@
-using "SourceStorage.cod" DelimiterLink { OrdinaryToken };
-using "SourceStorage.cod" { SourceBytes, Token };
-using "SourceAccess.cod" len;
-using "Lexer.cod" { scan_token, end_of_source };
-using "ParserStorage.cod" { Tokens, ExprNodes, no_node, syntax_first, syntax_past };
-using "Frontend.cod" { FrontendResult, read_expression };
-using "Lowering.cod" { lower_expression, ArithmeticOperands, arithmetic_operands };
-using "CompilerStatus.cod" CompilerStatus { Complete, Rejected, FormUnsupported, OpenFailed, LoweringFailed, FinishFailed, ScratchFailed };
+using "./SourceStorage.cod" DelimiterLink { OrdinaryToken };
+using "./SourceStorage.cod" { SourceBytes, Token };
+using "./SourceAccess.cod" len;
+using "./Lexer.cod" { scan_token, end_of_source };
+using "./ParserStorage.cod" { Tokens, ExprNodes, no_node, syntax_first, syntax_past };
+using "./Frontend.cod" { FrontendResult, read_expression };
+using "./Lowering.cod" { lower_expression, ArithmeticOperands, arithmetic_operands };
+using "./CompilerStatus.cod" CompilerStatus {
+    Complete, Rejected, FormUnsupported, OpenFailed, LoweringFailed, FinishFailed, ScratchFailed
+};
 
-export from "CompilerStatus.cod" CompilerStatus;
+export from "./CompilerStatus.cod" CompilerStatus;
 
 export data ExpressionScratchPlan {
     token_count:u64;

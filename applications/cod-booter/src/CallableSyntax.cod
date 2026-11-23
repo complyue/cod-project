@@ -1,28 +1,28 @@
-using "Lexer.cod" {
+using "./Lexer.cod" {
     const_word, exception_word, handle_word, here_word, identifier, init_word, in_word, own_word, owner_word,
     ptr_word, ref_word, region_word, reserved_lexical_binder, reserved_module_name, throws_word, val_word, var_word,
     where_word, within_word,
 };
-using "ParserInput.cod" {
+using "./ParserInput.cod" {
     ParseResult, append_syntax_node, append_qualified_type, exception_binder_width,
     expected_name, expected_type, parse_binding_name,
     parse_identifier, parse_module_name, parse_resource_name, punct_at, punct_pair_at,
 };
-using "ParserStorage.cod" {
+using "./ParserStorage.cod" {
     ExprNodes, Tokens, NodeId, syntax_first, syntax_past, exception_result_node, no_node, ref_result_node,
     result_clause_node, throws_clause_node, BindingSites, inspect_binding, is_here_formal,
 };
-using "ParserStorage.cod" NodeLink { NoLink, LinkTo };
-using "ParserStorage.cod" ExprPayload {
+using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
+using "./ParserStorage.cod" ExprPayload {
     CallableHeader, ValueResult, BorrowedResult, ExceptionResult, OwningRegionResult, ThrowsClause, Formal, HereFormal,
     OwnerConstraint, TypeConstraint, ProcedureSymbol, ProcedureTypeInput, ProcedureTypeAnnotation, ScopedProcedureHeader,
 };
-using "ParserStorage.cod" FormalMode {
+using "./ParserStorage.cod" FormalMode {
     ValueFormal, ExplicitValueFormal, ReferenceFormal, PointerFormal, PlaceFormal, InitializingPlaceFormal,
     HandleFormal, RetainedHandleFormal, ExceptionFormal, ReferenceSlotFormal,
 };
-using "ParserStorage.cod" BindingSyntax { TypedBinding };
-using "SourceStorage.cod" SourceBytes;
+using "./ParserStorage.cod" BindingSyntax { TypedBinding };
+using "./SourceStorage.cod" SourceBytes;
 
 func expected_parameter_list() -> u8 { return 23u8; }
 export func expected_owner_clause() -> u8 { return 24u8; }

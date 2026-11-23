@@ -1,4 +1,4 @@
 using symbol "std:io" @print;
-symbol from "destination-vocabulary.cod" @step;
-using "source.cod" @p as @step;
+symbol from "./destination-vocabulary.cod" @step;
+using "./source.cod" proc @p as @step;
 behave @print(perform @step);

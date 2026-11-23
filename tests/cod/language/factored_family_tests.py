@@ -277,8 +277,8 @@ runner.CASES['selected_module_interpretation'] = ({
     'base.cod': ('func helper(x:T)->u64 where T{return 1u64;}' +
         'func choose(' + parameters(first='u32') + ')->u64{return helper(n0);}' +
         'func choose(' + PARAMETERS + ')->u64{return helper(n0);}export choose;export helper;'),
-    'extension.cod': 'import "base.cod" choose;import "base.cod" helper;func helper(x:u32)->u64{return 7u64;}export choose;',
-    'main.cod': IO + 'using "base.cod" choose as original;using "extension.cod" choose as extended;' +
+    'extension.cod': 'import "./base.cod" choose;import "./base.cod" helper;func helper(x:u32)->u64{return 7u64;}export choose;',
+    'main.cod': IO + 'using "./base.cod" choose as original;using "./extension.cod" choose as extended;' +
         'func first:' + VIEW + '=original;func second:' + VIEW + '=extended;'
         'behave @print(first(' + ARGUMENTS + '));behave @print(second(' + ARGUMENTS + '));'
         'behave @print(second(' + arguments(first='u64') + '));behave @print(first(' + ARGUMENTS + '));',

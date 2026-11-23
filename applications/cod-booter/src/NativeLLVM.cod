@@ -1,6 +1,6 @@
 using "std:exceptions" Exception;
-using "NativeCommands.cod" { NativeCommands, NativeUnitRows, NativeLiteralRanges };
-using "SourceStorage.cod" SourceBytes;
+using "./NativeCommands.cod" { NativeCommands, NativeUnitRows, NativeLiteralRanges };
+using "./SourceStorage.cod" SourceBytes;
 
 export handle type LLVMSession;
 export symbol @llvmSession :own handle LLVMSession;

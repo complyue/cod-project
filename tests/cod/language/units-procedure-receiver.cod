@@ -5,10 +5,11 @@ function adjust(x:f64) -> f64 { return x + 100.0 }
 symbol @receiver_distance : f64(normalized);
 symbol @receiver_read : proc(f64(normalized)) -> f64;
 effect @receiver_distance <- normalized(10.0);
-mixin "units-procedure-source.cod" @read as @receiver_read with { @receiver_distance as @distance; };
+mixin "./units-procedure-source.cod" proc @read as @receiver_read with { @receiver_distance as
+    @distance; };
 
-export @receiver_distance;
-export @receiver_read;
+export var @receiver_distance;
+export proc @receiver_read;
 export adjust;
 export normalize;
 export normalized;

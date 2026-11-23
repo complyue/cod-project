@@ -85,7 +85,7 @@ runner.CASES.update({
  'aborted_inconsistent_inputs_unproved': ('func (+)(x:u32,y:u64)->u64;func (+)(x:u64,y:u64)->u64;func f()->u64{(+)({return 7u64;},2u64);return 0u64;}f();',2,'','cannot establish a parameter type'),
  'aborted_borrowed_declaration_unproved': ('func (+)(ref x:u64 in O,ref y:u64 in O)->u64 where {owner O};func f()->u64{(+)({return 7u64;},2u64);return 0u64;}f();',2,'','cannot establish a parameter type'),
  'surviving_branch_keeps_checked_failure': (NPE+'func (+)(x:u64,y:u64)->u64 throws NullPointerException;func f(flag:bool)->u64{return (+)(if(flag){return 7u64;}else{1u64},2u64);}f(true);',2,'','requires a covering catch'),
- 'aborted_alias': ({'ops.cod':NPE+'func (+)(x:u64,y:u64)->u64 throws NullPointerException;export (+);','main.cod':IO+'using "ops.cod" (+) as add;func f()->u64{add({return 7u64;},2u64);return 0u64;}behave @print(f());'},0,'7\n',''),
+ 'aborted_alias': ({'ops.cod':NPE+'func (+)(x:u64,y:u64)->u64 throws NullPointerException;export (+);','main.cod':IO+'using "./ops.cod" (+) as add;func f()->u64{add({return 7u64;},2u64);return 0u64;}behave @print(f());'},0,'7\n',''),
 })
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {

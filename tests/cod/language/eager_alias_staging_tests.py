@@ -13,7 +13,7 @@ from callable_value_staging_tests import inventory
 OPS = 'func (-)(a:bool,b:bool)->bool{return a&&b;}export (-);'
 SOURCE = '''
 using symbol "std:io" @print;
-using "ops.cod" (-);using "ops.cod" (-) as calculate;using "ops.cod" (-) as (+);
+using "./ops.cod" (-);using "./ops.cod" (-) as calculate;using "./ops.cod" (-) as (+);
 func step(value:T,next:T,n:u64)->const T where T{
  if(n==0u64){
   WRITE

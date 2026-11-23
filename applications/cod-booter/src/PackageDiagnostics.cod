@@ -1,0 +1,55 @@
+using "./CompilerStatus.cod" CompilerStatus { Complete, ScratchFailed };
+using "./NativeSource.cod" SourceRevision;
+using "./NativeSourceUse.cod" source_use;
+using "./NativeDiagnostics.cod" {
+    DiagnosticDestination, PackageDiagnosticKind { PackageShadow }, PackageDiagnosticKind,
+    append_package_diagnostic, report_rejection,
+};
+using "./SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
+using "./SourceAccess.cod" locate_source_position;
+using "./ParserStorage.cod" no_node;
+
+export func package_issue() -> u8 { return 19u8 }
+export func package_delivery_failure() -> u8 { return 20u8 }
+
+proc report_at(
+    source:const SourceBytes in S, lines:const SourceLines in S,
+    handle diagnostic:DiagnosticDestination in D, kind:PackageDiagnosticKind, os_error:u64,
+    first:u64, past:u64, importer:const SourceBytes in I, import_first:u64, import_past:u64,
+    spelling:const SourceBytes in M, start:u64, end:u64,
+    candidate:const SourceBytes in A, other:const SourceBytes in B)
+    -> CompilerStatus
+    where {const owner S, owner D, const owner I, const owner M, const owner A, const owner B} {
+    ref start_position = make SourcePosition { line <- 0u64; column <- 0u64; };
+    ref end_position = make SourcePosition { line <- 0u64; column <- 0u64; };
+    locate_source_position(source, lines, first, start_position);
+    locate_source_position(source, lines, past, end_position);
+    val delivered <- append_package_diagnostic(
+        diagnostic, kind, os_error, start_position.line, start_position.column,
+        end_position.line, end_position.column, importer, import_first, import_past,
+        spelling, start, end, candidate, other);
+    if (delivered != 0u8) {
+        report_rejection(source, lines, diagnostic, 2u8, package_delivery_failure(),
+            first, past, no_node());
+        return ScratchFailed
+    };
+    if (kind != PackageShadow) {
+        report_rejection(source, lines, diagnostic, 2u8, package_issue(), first, past, no_node())
+    };
+    return Complete
+}
+
+export proc report_package_path(
+    handle importing:SourceRevision in S, handle diagnostic:DiagnosticDestination in D,
+    const val kind:PackageDiagnosticKind, const val os_error:u64,
+    const val first:u64, const val past:u64,
+    importer:const SourceBytes in I, const val import_first:u64, const val import_past:u64,
+    spelling:const SourceBytes in M, const val start:u64, const val end:u64,
+    candidate:const SourceBytes in A, other:const SourceBytes in B)
+    -> CompilerStatus
+    where {const owner S, owner D, const owner I, const owner M, const owner A, const owner B} {
+    return source_use(importing) (source, lines) => {
+        continue report_at(source, lines, diagnostic, kind, os_error, first, past,
+            importer, import_first, import_past, spelling, start, end, candidate, other)
+    }
+}

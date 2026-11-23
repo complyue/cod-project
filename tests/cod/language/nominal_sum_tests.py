@@ -16,7 +16,7 @@ export data SyntaxPayload =
 
 SAVED_SUBJECT = """
 using symbol "std:io" @print;
-using "syntax.cod" SyntaxPayload as Payload { ByteLiteral, Call, Empty };
+using "./syntax.cod" SyntaxPayload as Payload { ByteLiteral, Call, Empty };
 
 proc inspect() -> u64 {
     ref original:Payload = make ByteLiteral { value <- 7u8; };
@@ -34,8 +34,8 @@ behave @print(inspect());
 """
 
 FOREIGN_CONSTRUCTOR = """
-using "syntax.cod" SyntaxPayload { Empty };
-using "foreign.cod" Foreign { Call };
+using "./syntax.cod" SyntaxPayload { Empty };
+using "./foreign.cod" Foreign { Call };
 
 proc inspect() -> u64 {
     ref node:SyntaxPayload = make Empty {};

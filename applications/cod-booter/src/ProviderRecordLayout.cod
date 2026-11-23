@@ -1,4 +1,4 @@
-using "ParserStorage.cod" no_node;
+using "./ParserStorage.cod" no_node;
 
 export data ABIRecordLayout {
     size:u64;

@@ -1,9 +1,9 @@
 using symbol "std:io" @print;
-symbol from "region-factory-vocabulary.cod" @arena;
+symbol from "./region-factory-vocabulary.cod" @arena;
 effect @arena <- region(4096u64);
-using "region-factory-source.cod" Node as SourceNode;
-using symbol "region-factory-source.cod" @make as @source_make;
-using symbol "region-factory-source.cod" @read;
+using "./region-factory-source.cod" Node as SourceNode;
+using symbol "./region-factory-source.cod" @make as @source_make;
+using symbol "./region-factory-source.cod" @read;
 data Node { score:i64; ptr next:Node; }
 function adjust(x:i64) -> i64 { return x + 10 }
 function score(node:Node in O1) -> i64 where {owner O1} { return node.score + 100 }
@@ -11,7 +11,7 @@ function score(node:SourceNode in O1) -> i64 where {owner O1} { return node.scor
 symbol @make : proc(i64) -> Node;
 symbol @local : Node;
 symbol @source : SourceNode;
-mixin "region-factory-source.cod" @make as @make;
+mixin "./region-factory-source.cod" proc @make as @make;
 effect @local = perform @make(5);
 effect @source = behave @source_make(5);
 behave @print(score(deref(@local)));
@@ -22,8 +22,8 @@ behave @print(score(deref(@source)));
   setfield(retained, score, 9);
 };
 effect @arena <- region(4096u64);
-symbol from "region-factory-source.cod" @initial;
+symbol from "./region-factory-source.cod" @initial;
 effect @initial = alloc @arena SourceNode(11, null);
-using symbol "region-factory-source.cod" @read as @again;
+using symbol "./region-factory-source.cod" @read as @again;
 behave @print(deref(perform @again()).score);
 behave @print(deref(behave @read()).score);

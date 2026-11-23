@@ -494,8 +494,14 @@ struct SumAlternative {
 };
 struct Form {
   enum class Kind { symbol, symbol_from, function, procedure, data, sum_data, region_definition, array, unit, using_units, global,
-                    using_resource, import_resource, mixin_resource, export_resource, export_from_resource,
+                    using_resource, import_resource, mixin_resource, export_resource, export_from_resource, default_exports,
                     expression, abstract_type, conformance, enumeration, native_handle_type, syntax_error };
+  enum class Selection { named, defaults, all_public };
+  enum class ResourceNature { variable, procedure };
+  struct DefaultMark {
+    Token name;
+    std::optional<ResourceNature> nature;
+  };
   Kind kind;
   Location at;
   std::string name;
@@ -505,6 +511,9 @@ struct Form {
   bool explicit_alias = false;
   bool using_symbol = false;
   bool exporting = false;
+  bool default_exporting = false;
+  Selection selection = Selection::named;
+  std::optional<ResourceNature> resource_nature;
   bool owning_handle_symbol = false;
   bool conversion = false;
   bool operation = false;
@@ -517,6 +526,7 @@ struct Form {
   std::vector<UnitSelection> units;
   std::vector<EnumMember> enum_members;
   std::vector<SumAlternative> sum_alternatives;
+  std::vector<DefaultMark> default_names;
   std::optional<std::vector<Token>> selected_members; // An empty list selects every member spelling.
   std::vector<Parameter> parameters;
   std::vector<Capture> captures;
@@ -951,6 +961,11 @@ class Parser {
     return result;
   }
   void resource_selection(Form &form, bool symbolic) {
+    if (!symbolic) {
+      form.resource_nature = resource_nature();
+      if (!form.resource_nature && peek().kind == TokenKind::symbol)
+        fail(peek().at, "symbolic resource selectors require 'var' or 'proc'");
+    }
     form.symbolic = symbolic || peek().kind == TokenKind::symbol;
     const auto kind = form.symbolic ? TokenKind::symbol : TokenKind::identifier;
     form.name = form.symbolic ? name(kind).text : lexical_name(&form.operation).text;
@@ -959,6 +974,14 @@ class Parser {
     if (!form.explicit_alias) form.alias_operation = form.operation;
     if (form.alias_operation && identity_operation(form.alias))
       fail(form.at, "reference identity is an intrinsic operation and cannot be an imported user operation");
+  }
+  std::optional<Form::ResourceNature> resource_nature() {
+    if ((is("var") || is("proc")) && tokens_[cursor_ + 1].kind == TokenKind::symbol) {
+      if (take("var")) return Form::ResourceNature::variable;
+      expect("proc");
+      return Form::ResourceNature::procedure;
+    }
+    return {};
   }
   void resource_item(Form &form) {
     resource_selection(form, form.using_symbol);
@@ -1425,6 +1448,7 @@ class Parser {
            (is("=", prefix + 2) || is(":", prefix + 2));
   }
   bool module_doclet_target(size_t head) const {
+    if (is("default", head) && is("export", head + 1)) ++head;
     if (is("export", head)) ++head;
     if (cursor_ + head + 1 >= tokens_.size()) return false;
     const auto next = tokens_[cursor_ + head + 1].kind;
@@ -2559,11 +2583,24 @@ public:
   }
 
 private:
+  bool default_mark_head() const {
+    return is("default") && (is("{", 1) || is("export", 1));
+  }
+
+  bool module_selection_boundary() const {
+    if (is("proc") && tokens_[cursor_ + 1].kind == TokenKind::symbol && !is("(", 2)) return false;
+    return peek().kind == TokenKind::end || is(";") || module_doclet_target(0) ||
+        (is("default") && is("export", 1)) ||
+        (is("symbol") && is("from", 1)) ||
+        is("export") || is("using") || is("import") || is("mixin") ||
+        (peek().kind == TokenKind::multiline_string && module_doclet_target(1));
+  }
+
   void synchronize_module(size_t first) {
     cursor_ = first;
     if (is("effect") && is("proc", 1) && tokens_[first + 2].kind == TokenKind::symbol) cursor_ += 2;
     while (peek().kind != TokenKind::end) {
-      if (cursor_ != first && (module_doclet_target(0) || is("export") || is("using") ||
+      if (cursor_ != first && (module_doclet_target(0) || default_mark_head() || is("export") || is("using") ||
           is("import") || is("mixin"))) return;
       if (take(";")) return;
       const auto close = closing_delimiter_[cursor_];
@@ -2578,6 +2615,24 @@ public:
       form->span = {form->at.span.first, tokens_[cursor_ - 1].at.span.past};
       forms.push_back(std::move(form));
     };
+    const auto append_selection_group = [&](const Form &directive, bool identity) {
+      if (is("}")) fail(peek().at, "expected a selection in the module group");
+      while (true) {
+        auto item = std::make_unique<Form>();
+        item->at = peek().at;
+        item->kind = directive.kind;
+        item->path = directive.path;
+        item->using_symbol = directive.using_symbol;
+        item->exporting = directive.exporting;
+        if (identity) resource_selection(*item, true);
+        else resource_item(*item);
+        append(std::move(item));
+        if (!take(",") || is("}")) break;
+      }
+      expect("}");
+      if (identity) take(";");
+      else expect(";");
+    };
     const auto parse_module_item = [&] {
       if (peek().kind == TokenKind::multiline_string && module_doclet_target(1)) ++cursor_;
       auto start = peek();
@@ -2585,8 +2640,40 @@ public:
       form->at = start.at;
       const auto native_handle_head = [&] { return is("handle") && is("type", 1); };
       const auto reference_symbol_head = [&] { return (is("ref") || is("ptr")) && is("symbol", 1); };
+      if (is("default") && is("{", 1)) {
+        expect("default");
+        expect("{");
+        form->kind = Form::Kind::default_exports;
+        while (!is("}")) {
+          const auto nature = resource_nature();
+          if (!nature && peek().kind == TokenKind::symbol)
+            fail(peek().at, "symbolic default selectors require 'var' or 'proc'");
+          auto selector = nature ? name(TokenKind::symbol) : lexical_name();
+          form->default_names.push_back({std::move(selector), nature});
+          if (!take(",")) break;
+        }
+        expect("}");
+        take(";");
+        append(std::move(form));
+        return;
+      }
+      if (is("default") && is("export", 1)) {
+        expect("default");
+        form->default_exporting = true;
+      }
       if (take("export")) {
+        if ((is("var") || (is("proc") && !is("(", 2))) && tokens_[cursor_ + 1].kind == TokenKind::symbol) {
+          if (form->default_exporting) fail(start.at, "default export requires a named definition");
+          form->kind = Form::Kind::export_resource;
+          form->resource_nature = resource_nature();
+          form->symbolic = true;
+          form->name = name(TokenKind::symbol).text;
+          if (!take(";") && !default_mark_head() && !module_selection_boundary()) expect(";");
+          append(std::move(form));
+          return;
+        }
         if (is("from") && tokens_[cursor_ + 1].kind == TokenKind::string) {
+          if (form->default_exporting) fail(start.at, "default export requires a named definition");
           expect("from");
           form->kind = Form::Kind::export_from_resource;
           resource(*form, false);
@@ -2598,12 +2685,14 @@ public:
         const bool named_type = native_handle_head() || (is("data") && (next == TokenKind::identifier || next == TokenKind::string)) ||
             ((is("type") || is("array") || is("enum")) && next == TokenKind::identifier);
         const bool named_callable = (is("func") || is("function") || is("proc") || is("procedure")) && !callable_binding();
-        if (is("import") || (is("symbol") && next == TokenKind::symbol) || reference_symbol_head() || named_type || named_callable) {
+        const bool named_definition = (is("symbol") && next == TokenKind::symbol) || reference_symbol_head() || named_type || named_callable;
+        if (form->default_exporting && !named_definition) fail(start.at, "default export requires a named definition");
+        if (is("import") || named_definition) {
           form->exporting = true;
         } else {
           form->kind = Form::Kind::export_resource;
-          form->symbolic = peek().kind == TokenKind::symbol;
-          form->name = form->symbolic ? name(TokenKind::symbol).text : lexical_name(&form->operation).text;
+          if (peek().kind == TokenKind::symbol) fail(peek().at, "symbolic exports require 'var' or 'proc'");
+          form->name = lexical_name(&form->operation).text;
           expect(";");
           append(std::move(form));
           return;
@@ -2638,7 +2727,12 @@ public:
           expect("from");
           if (region_symbol) fail(start.at, "use 'symbol from' to select a symbol identity; 'region symbol' declares one");
           form->kind = Form::Kind::symbol_from;
-          resource(*form, true);
+          form->path = module_path();
+          if (take("{")) {
+            append_selection_group(*form, true);
+            return;
+          }
+          resource_selection(*form, true);
         } else {
           std::vector<std::pair<Form *, std::string>> declarations;
           do {
@@ -2649,6 +2743,7 @@ public:
             declaration->at = token.at;
             declaration->symbolic = true;
             declaration->exporting = form->exporting;
+            declaration->default_exporting = form->default_exporting;
             if (region_symbol) {
               declaration->result_type = region_annotation(false);
             } else {
@@ -2808,21 +2903,23 @@ public:
           form->using_symbol = true;
         }
         form->path = module_path();
+        const bool bulk_allowed = !form->using_symbol;
         if (take("{")) {
-          if (is("}")) fail(peek().at, "expected a selection in the module group");
-          while (true) {
-            auto item = std::make_unique<Form>();
-            item->at = peek().at;
-            item->kind = form->kind;
-            item->path = form->path;
-            item->using_symbol = form->using_symbol;
-            item->exporting = form->exporting;
-            resource_item(*item);
-            append(std::move(item));
-            if (!take(",") || is("}")) break;
+          if (take("..")) {
+            if (!bulk_allowed) fail(start.at, "complete module selection requires an unqualified receiver verb");
+            expect("}");
+            take(";");
+            form->selection = Form::Selection::all_public;
+            append(std::move(form));
+            return;
           }
-          expect("}");
-          expect(";");
+          append_selection_group(*form, false);
+          return;
+        }
+        if (bulk_allowed && module_selection_boundary()) {
+          take(";");
+          form->selection = Form::Selection::defaults;
+          append(std::move(form));
           return;
         }
         resource_item(*form);

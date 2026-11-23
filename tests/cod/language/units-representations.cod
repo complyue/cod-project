@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-using units "units-representations-library.cod" {m as metres, cm, mm};
+using units "./units-representations-library.cod" {m as metres, cm, mm};
 function number(x:f64(metres)) -> f64 { return scalar(x) }
 function distance(x:f64(metres*)) -> f64 { return scalar(x) }
 function declared(x:f64(metres* <- cm <- mm)) -> f64 { return scalar(x) }

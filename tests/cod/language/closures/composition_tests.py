@@ -25,7 +25,7 @@ def main():
             name = f"layer-{index}.cod"
             capture = " [prior]" if index % 2 else ""
             (scratch / name).write_text(f'using "{previous}" reader as previous;\n'
-                'using "base.cod" Shape;\n'
+                'using "./base.cod" Shape;\n'
                 'function reader(region state:Shape) -> func()->const u64 with {region state} {\n'
                 '  func prior = previous(state);\n'
                 f'  return func{capture} () -> const u64 {{ return prior() + 1u64; }};\n}}\nexport reader;\n')

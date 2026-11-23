@@ -1,13 +1,13 @@
-symbol from "diamond-vocab.cod" @gain;
-symbol from "diamond-vocab.cod" @read;
+symbol from "./diamond-vocab.cod" @gain;
+symbol from "./diamond-vocab.cod" @read;
 using symbol "std:io" @print;
 symbol @right : proc() -> i64;
 effect @gain <- 7;
-using "diamond-shared.cod" @read;
+using "./diamond-shared.cod" proc @read;
 behave @print(behave @read());
 procedure @right() -> i64 { return perform @read() }
 
-export @gain;
-export @print;
-export @read;
-export @right;
+export var @gain;
+export proc @print;
+export proc @read;
+export proc @right;

@@ -1,4 +1,4 @@
-using "structural-api.cod" Counter;
+using "./structural-api.cod" Counter;
 region Equal { val ticks:u64; }
 function select(region state:Counter) -> const u64 { return 1u64 }
 function select(region state:Equal) -> const u64 { return 2u64 }

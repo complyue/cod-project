@@ -1,26 +1,40 @@
 using "std:exceptions" { OutOfMemoryError, RegionCapacityExceededError };
-using "../../../cod/library/string.cod" StringBuilder;
-using "NativeSource.cod" Path;
-using "NativeDiagnostics.cod" { DiagnosticDestination, report_backend_error, report_scratch_error, report_provider_error };
-using "SourceStorage.cod" SourceBytes;
-using "ParserStorage.cod" { no_node, FormalMode { ValueFormal } };
-using "ModuleExportStorage.cod" { ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces };
-using "ModuleExportStorage.cod" { SumInterfacePayload { NoSumInterface }, AggregateStorage { UnprovedAggregate } };
-using "ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
-using "ModuleIndex.cod" Visits;
-using "ModuleIndex.cod" VisitSlot { Vacant };
-using "NativeCommands.cod" {
+using "string.cod" StringBuilder;
+using "./NativeSource.cod" Path;
+using "./NativeDiagnostics.cod" {
+    DiagnosticDestination, report_backend_error, report_scratch_error, report_provider_error
+};
+using "./SourceStorage.cod" SourceBytes;
+using "./ParserStorage.cod" { no_node, FormalMode { ValueFormal } };
+using "./ModuleExportStorage.cod" {
+    ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces
+};
+using "./ModuleExportStorage.cod" {
+    SumInterfacePayload { NoSumInterface }, AggregateStorage { UnprovedAggregate }
+};
+using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
+using "./ModuleIndex.cod" Visits;
+using "./ModuleIndex.cod" VisitSlot { Vacant };
+using "./NativeCommands.cod" {
     NativeCommand, NativeCommands, NativeUnitRow, NativeUnitRows, NativeLiteralRange, NativeLiteralRanges,
 };
-using "ModuleGraph.cod" { compile_graph, GraphPurpose { Declarations, NativeObject } };
-using symbol "NativeLLVM.cod" @llvmSession;
-using "NativeLLVM.cod" { LLVMSession, LLVMOpenException, llvm_construct_units, llvm_verify, llvm_emit_object };
-using "NativeProviderLayout.cod" { ProviderLayout, ProviderLayoutException };
-using "NativeProviderOutput.cod" publish_provider_pair;
-using "ProviderViews.cod" { ABIPrimitiveLayouts, ABIPrimitiveLayout, measure_provider_primitives };
-using "ProviderTypeNames.cod" ProviderPrefixes;
-using "ProviderRenderer.cod" { provider_record_layout_needed, provider_boundary_error, render_provider_pair };
-using "CompilerStatus.cod" CompilerStatus { Complete, Rejected, OpenFailed, LoweringFailed, FinishFailed, ScratchFailed };
+using "./ModuleGraph.cod" { compile_graph, GraphPurpose { Declarations, NativeObject } };
+using symbol "./NativeLLVM.cod" @llvmSession;
+using "./NativeLLVM.cod" {
+    LLVMSession, LLVMOpenException, llvm_construct_units, llvm_verify, llvm_emit_object
+};
+using "./NativeProviderLayout.cod" { ProviderLayout, ProviderLayoutException };
+using "./NativeProviderOutput.cod" publish_provider_pair;
+using "./ProviderViews.cod" {
+    ABIPrimitiveLayouts, ABIPrimitiveLayout, measure_provider_primitives
+};
+using "./ProviderTypeNames.cod" ProviderPrefixes;
+using "./ProviderRenderer.cod" {
+    provider_record_layout_needed, provider_boundary_error, render_provider_pair
+};
+using "./CompilerStatus.cod" CompilerStatus {
+    Complete, Rejected, OpenFailed, LoweringFailed, FinishFailed, ScratchFailed
+};
 
 region GraphRoot {
     used:u64;
@@ -33,6 +47,9 @@ region GraphRoot {
     unit_used:u64;
     literal_used:u64;
     function_used:u64;
+    package_ready:bool;
+    package_rows:u64;
+    package_bytes:u64;
 }
 
 proc write_object(commands:const NativeCommands in G, units:const NativeUnitRows in G,
@@ -106,6 +123,7 @@ func fresh_graph() -> own region :GraphRoot {
         used <- 0u64; key_used <- 0u64; next_revision <- 1u64;
         export_used <- 0u64; interface_used <- 0u64; spelling_used <- 0u64;
         command_used <- 0u64; unit_used <- 0u64; literal_used <- 0u64; function_used <- 0u64;
+        package_ready <- false; package_rows <- 0u64; package_bytes <- 0u64;
     };
 }
 
@@ -118,7 +136,9 @@ proc traverse_graph(here finish(commands:const NativeCommands in G, units:const 
                     builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B,
                     initial_keys:SourceBytes in G, used:u64 in G, key_used:u64 in G, next_revision:u64 in G,
                     export_used:u64 in G, interface_used:u64 in G, spelling_used:u64 in G,
-                    command_used:u64 in G, unit_used:u64 in G, literal_used:u64 in G, function_used:u64 in G)
+                    command_used:u64 in G, unit_used:u64 in G, literal_used:u64 in G,
+                        function_used:u64 in G,
+                    package_ready:bool in G, package_rows:u64 in G, package_bytes:u64 in G)
     -> CompilerStatus where {const owner A, owner D, const owner B, owner G} {
     ref visits = make Visits(0u64, make Vacant {}) in G;
     ref keys = initial_keys;
@@ -148,7 +168,10 @@ proc traverse_graph(here finish(commands:const NativeCommands in G, units:const 
     ref literals = make NativeLiteralRanges(0u64, make NativeLiteralRange { first <- 0u64; past <- 0u64; }) in G;
     val compiled <- compile_graph(input, diagnostic, purpose, builtin_spellings, builtins, visits, keys,
                                   used, key_used, next_revision, exports, interfaces, spellings, commands, units, literals,
-                                  export_used, interface_used, spelling_used, command_used, unit_used, literal_used, function_used);
+                                  export_used, interface_used, spelling_used, command_used,
+                                      unit_used,
+                                  literal_used, function_used, package_ready, package_rows,
+                                      package_bytes);
     if (compiled != Complete) return compiled;
     return finish(commands, units, literals, spellings, keys, visits, interfaces, command_used, unit_used, literal_used,
                   spelling_used, key_used, function_used, used, interface_used);
@@ -162,7 +185,9 @@ proc check_graph(handle input:Path in A, handle diagnostic:DiagnosticDestination
     return traverse_graph(input, diagnostic, Declarations, builtin_spellings, builtins,
                           keys, graph.used, graph.key_used, graph.next_revision,
                           graph.export_used, graph.interface_used, graph.spelling_used,
-                          graph.command_used, graph.unit_used, graph.literal_used, graph.function_used)
+                          graph.command_used, graph.unit_used, graph.literal_used,
+                              graph.function_used,
+                          graph.package_ready, graph.package_rows, graph.package_bytes)
         (commands, units, literals, spellings, names, visits, interfaces, command_count, unit_count, literal_count,
          spelling_size, name_size, functions, visit_count, interface_count) => { continue Complete; };
 }
@@ -191,7 +216,9 @@ export proc compile_object(handle input:Path in A, output:const String in A,
         return traverse_graph(input, diagnostic, NativeObject, builtin_spellings, builtins,
                               keys, graph.used, graph.key_used, graph.next_revision,
                               graph.export_used, graph.interface_used, graph.spelling_used,
-                              graph.command_used, graph.unit_used, graph.literal_used, graph.function_used)
+                              graph.command_used, graph.unit_used, graph.literal_used,
+                                  graph.function_used,
+                              graph.package_ready, graph.package_rows, graph.package_bytes)
             (commands, units, literals, spellings, names, visits, interfaces, command_count, unit_count, literal_count,
              spelling_size, name_size, functions, visit_count, interface_count) => {
                 continue write_object(commands, units, literals, spellings, names, command_count, unit_count, literal_count,
@@ -215,7 +242,9 @@ export proc compile_providers(handle input:Path in A, handle directory:Path in P
         return traverse_graph(input, diagnostic, Declarations, builtin_spellings, builtins,
                               keys, graph.used, graph.key_used, graph.next_revision,
                               graph.export_used, graph.interface_used, graph.spelling_used,
-                              graph.command_used, graph.unit_used, graph.literal_used, graph.function_used)
+                              graph.command_used, graph.unit_used, graph.literal_used,
+                                  graph.function_used,
+                              graph.package_ready, graph.package_rows, graph.package_bytes)
             (commands, units, literals, spellings, names, visits, interfaces, command_count, unit_count, literal_count,
              spelling_size, name_size, functions, visit_count, interface_count) => {
                 continue write_providers(visits, names, spellings, interfaces, visit_count, name_size, spelling_size,

@@ -1,10 +1,12 @@
-using "SourceStorage.cod" SourceBytes;
-using "ParserStorage.cod" { Tokens, ExprNodes, parse_report_code, syntax_first, syntax_past, no_node };
-using "TokenBuffer.cod" { ScanResult, scan_tokens };
-using "Lexer.cod" lexical_error;
-using "ParserInput.cod" { ParseResult, reset_parse_result };
-using "ExpressionParser.cod" { parse_expression, unexpected_token };
-using "ModuleParser.cod" parse_module;
+using "./SourceStorage.cod" SourceBytes;
+using "./ParserStorage.cod" {
+    Tokens, ExprNodes, parse_report_code, syntax_first, syntax_past, no_node
+};
+using "./TokenBuffer.cod" { ScanResult, scan_tokens };
+using "./Lexer.cod" lexical_error;
+using "./ParserInput.cod" { ParseResult, reset_parse_result };
+using "./ExpressionParser.cod" { parse_expression, unexpected_token };
+using "./ModuleParser.cod" parse_module;
 
 export data FrontendResult {
     scan:ScanResult;

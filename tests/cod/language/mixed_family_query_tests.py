@@ -49,14 +49,14 @@ runner.CASES = {
     'covered_checked_contract': (query('inspect(target,1u64)','7u64',NPE+'func target(input:u64)->u64 throws NullPointerException;func target(input:u8)->u64{return 7u64;}func inspect(callback:func(T)->const T throws NullPointerException,input:T)->const T where T;'),0,'7\n',''),
     'checked_contract_not_hidden': (query('inspect(target,1u64)','7u64',NPE+'func target(input:u64)->u64 throws NullPointerException;func target(input:u8)->u64{return 7u64;}'+INSPECT),2,'','required checked exception'),
     'retained_context': (IO+DECL+METHOD+'func outer(input:T)->const T where T{func inner(item:T)->const T{val result<-make local typeof(target(item)){item};return result;};return inner(input);}behave @print(outer(8));behave @print(outer(true));',0,'8\ntrue\n',''),
-    'imported_contract': ({'main.cod':query(prefix='using "base.cod" target;'), 'base.cod':BASE},0,'7\n',''),
-    'imported_helper': ({'main.cod':IO+'using "base.cod" query;func target(input:i64)->bool;behave @print(query(9));', 'base.cod':BASE},0,'9\n',''),
-    'receiver_context': ({'base.cod':BASE,'extension.cod':'import "base.cod" target;func target(input:u64)->u64{return input;}export import "base.cod" query;using "base.cod" query as frozen;export frozen;',
-        'main.cod':IO+'using "extension.cod" query;using "extension.cod" frozen;behave @print(query(10u64));behave @print(frozen(11u64));'},0,'10\n11\n',''),
-    'receiver_declaration_conflict': ({'base.cod':BASE,'extension.cod':'import "base.cod" target;func target(input:i64)->bool;export import "base.cod" query;',
-        'main.cod':IO+'using "extension.cod" query;behave @print(query(7));'},2,'','declarations do not establish one inspected result contract'),
-    'source_context_isolated': ({'base.cod':BASE,'extension.cod':'import "base.cod" target;func target(input:i64)->bool;using "base.cod" query;export query;',
-        'main.cod':IO+'using "extension.cod" query;behave @print(query(12));'},0,'12\n',''),
+    'imported_contract': ({'main.cod':query(prefix='using "./base.cod" target;'), 'base.cod':BASE},0,'7\n',''),
+    'imported_helper': ({'main.cod':IO+'using "./base.cod" query;func target(input:i64)->bool;behave @print(query(9));', 'base.cod':BASE},0,'9\n',''),
+    'receiver_context': ({'base.cod':BASE,'extension.cod':'import "./base.cod" target;func target(input:u64)->u64{return input;}export import "./base.cod" query;using "./base.cod" query as frozen;export frozen;',
+        'main.cod':IO+'using "./extension.cod" query;using "./extension.cod" frozen;behave @print(query(10u64));behave @print(frozen(11u64));'},0,'10\n11\n',''),
+    'receiver_declaration_conflict': ({'base.cod':BASE,'extension.cod':'import "./base.cod" target;func target(input:i64)->bool;export import "./base.cod" query;',
+        'main.cod':IO+'using "./extension.cod" query;behave @print(query(7));'},2,'','declarations do not establish one inspected result contract'),
+    'source_context_isolated': ({'base.cod':BASE,'extension.cod':'import "./base.cod" target;func target(input:i64)->bool;using "./base.cod" query;export query;',
+        'main.cod':IO+'using "./extension.cod" query;behave @print(query(12));'},0,'12\n',''),
 }
 AMBIGUOUS = 'func target(a:u64,b:u64)->u64;func target(a:u64,b:T)->u64 where T{return a;}func target(a:T,b:u64)->u64 where T{return b;}'
 runner.CASES['method_ambiguity_not_hidden'] = (query('target(1u64,2u64)','7u64',AMBIGUOUS),2,'','ambiguous methods')
@@ -64,10 +64,10 @@ runner.CASES['family_ambiguity_not_hidden'] = (query('inspect(target)','7u64',AM
 runner.CASES['readonly_family_declaration_coverage'] = (query('inspect(target,held)',prefix='func target(ref input:const i64 in O)->i64 where {owner O};func target(ref input:i64 in O)->i64 where {owner O}{return input;}func model(ref input:const i64 in P)->i64 where {owner P}{return input;}func held=model;func inspect(callback:F,model:F)->i64 where F;'),0,'7\n','')
 runner.CASES['unknown_family_owner_not_hidden'] = (query('inspect(target,held)',prefix='func target(ref a:i64 in A,ref b:i64 in B)->i64 where {owner A,owner B};func target(ref a:i64 in O,ref b:i64 in O)->i64 where {owner O}{return a;}func model(ref a:i64 in A,ref b:i64 in B)->i64 where {owner A,owner B}{return a;}func held=model;func inspect(callback:F,model:F)->i64 where F;'),2,'','method selection requires an unproved owner equality')
 CALLBACK_BASE = DECL+METHOD+INSPECT+'func query(input:T)->const T where T{val result<-make local typeof(inspect(target,input)){input};return result;}export target;export query;'
-runner.CASES['receiver_callable_declaration_conflict'] = ({'base.cod':CALLBACK_BASE,'extension.cod':'import "base.cod" target;func target(input:i64)->bool;export import "base.cod" query;',
-    'main.cod':IO+'using "extension.cod" query;behave @print(query(7));'},2,'','declarations do not establish one inspected result contract')
-runner.CASES['source_callable_context_isolated'] = ({'base.cod':CALLBACK_BASE,'extension.cod':'import "base.cod" target;func target(input:i64)->bool;using "base.cod" query;export query;',
-    'main.cod':IO+'using "extension.cod" query;behave @print(query(13));'},0,'13\n','')
+runner.CASES['receiver_callable_declaration_conflict'] = ({'base.cod':CALLBACK_BASE,'extension.cod':'import "./base.cod" target;func target(input:i64)->bool;export import "./base.cod" query;',
+    'main.cod':IO+'using "./extension.cod" query;behave @print(query(7));'},2,'','declarations do not establish one inspected result contract')
+runner.CASES['source_callable_context_isolated'] = ({'base.cod':CALLBACK_BASE,'extension.cod':'import "./base.cod" target;func target(input:i64)->bool;using "./base.cod" query;export query;',
+    'main.cod':IO+'using "./extension.cod" query;behave @print(query(13));'},0,'13\n','')
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {}
 runner.EXTRA_SOURCES = [Path(__file__)]

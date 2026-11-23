@@ -19,7 +19,7 @@ export unused;
 symbol @bias:i64;
 effect @bias <- 1;
 proc scored(x:Metric in O1) -> i64 where {owner O1} { return private_bridge(x) + @bias }
-export @bias;
+export var @bias;
 export scored;
 
 function private_bridge(x:Metric in O1) -> i64 where {owner O1} { return score(x) }

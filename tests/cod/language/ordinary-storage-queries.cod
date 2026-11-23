@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-using "ordinary-storage-query-library.cod" len;
+using "./ordinary-storage-query-library.cod" len;
 
 func used_bytes(value:u64) -> u64 { return value + 3u64; }
 func capacity_bytes(value:u64) -> u64 { return used_bytes(value) * 2u64; }

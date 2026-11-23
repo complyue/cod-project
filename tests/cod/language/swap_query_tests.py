@@ -57,9 +57,9 @@ runner.CASES.update({
 })
 for name, operation, definitions in [('reference','<=>',REF),('bits','<->',BITS)]:
     runner.CASES['imported_'+name] = ({'ops.cod':definitions+'export ('+operation+');',
-        'main.cod':IO+'using "ops.cod" ('+operation+') as exchange;'+BASE+QUERY('exchange(p,q)')+OUT('x')+OUT('y')},0,'1\n7\n','')
+        'main.cod':IO+'using "./ops.cod" ('+operation+') as exchange;'+BASE+QUERY('exchange(p,q)')+OUT('x')+OUT('y')},0,'1\n7\n','')
 runner.CASES['selected_operation_identity'] = ({'ops.cod':REF+'export (<=>);',
-    'main.cod':IO+'using "ops.cod" (<=>) as (<->);'+BASE+QUERY('p<->q')+OUT('(p is x)')},0,'true\n','')
+    'main.cod':IO+'using "./ops.cod" (<=>) as (<->);'+BASE+QUERY('p<->q')+OUT('(p is x)')},0,'true\n','')
 READONLY_METHOD='func (<=>)(ptr lhs_view:const T in O,ptr rhs_view:const T in O)->void where {T,owner O}{lhs_view<-true;}'
 ALIASES=BASE+'ptr var ro:const->p;ptr var other:const->q;'
 for name,operation in [('infix','ro<=>other'),('explicit','(<=>)(ro,other)'),('selected','{if(true){ro}else{other}}<=>other')]:
@@ -72,7 +72,7 @@ runner.CASES['readonly_alias_intrinsic_contract']=(READONLY_METHOD+ALIASES+QUERY
 runner.CASES['readonly_alias_declaration_has_no_method']=(READONLY_METHOD.replace('{lhs_view<-true;}',';')+ALIASES+QUERY('ro<=>other'),2,'','readonly source')
 runner.CASES['readonly_alias_fixed_slot']=(READONLY_METHOD+ALIASES.replace('ptr var ro','const ptr var ro')+QUERY('ro<=>other'),2,'','const reference binding')
 runner.CASES['readonly_alias_owner_mismatch']=(READONLY_METHOD+'val x<-1;ptr p:const i64=x;ptr var ro:const->p;{{val y<-7;ptr q:const i64=y;ptr var other:const->q;'+QUERY('ro<=>other')+'}};',2,'','initializer-fixed owner')
-runner.CASES['readonly_alias_selected_family']=({'ops.cod':READONLY_METHOD+'export (<=>);','main.cod':IO+'using "ops.cod" (<=>) as exchange;'+ALIASES+QUERY('exchange(ro,other)')+OUT('result')},0,'9\n','')
+runner.CASES['readonly_alias_selected_family']=({'ops.cod':READONLY_METHOD+'export (<=>);','main.cod':IO+'using "./ops.cod" (<=>) as exchange;'+ALIASES+QUERY('exchange(ro,other)')+OUT('result')},0,'9\n','')
 
 runner.CASES['readonly_method_query_has_no_write']=(READONLY_METHOD+ALIASES.replace('x<-1','x<-make local i64')+QUERY('ro<=>other')+'x;',2,'','before definite initialization')
 runner.CASES['query_does_not_supply_ref_preservation']=(READONLY_METHOD.replace('lhs_view<-true;','lhs_view=rhs_view:void;')+BASE.replace('ptr p=x,q=y;','ref p=x,q=y;')+'ref var ro:const->p;ref var other:const->q;'+QUERY('ro<=>other')+'ro<=>other;',0,'','')

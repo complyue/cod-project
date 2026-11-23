@@ -1,12 +1,12 @@
 using symbol "std:io" @print;
-symbol from "vocabulary.cod" @x;
-symbol from "vocabulary.cod" @p;
+symbol from "./vocabulary.cod" @x;
+symbol from "./vocabulary.cod" @p;
 function helper() -> i64 { return 4 }
 effect @x <- 1;
 procedure @p -> i64 { return helper() * 100 + @x }
 behave @print(1001);
 
-export @p;
-export @print;
-export @x;
+export proc @p;
+export proc @print;
+export var @x;
 export helper;

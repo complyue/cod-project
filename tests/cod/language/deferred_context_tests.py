@@ -28,7 +28,7 @@ INVALID = {
     'new_scope_own_drain': 'defer { {{ defer { defer work(); }; }}; };',
     'helper_own_drain': 'proc helper()->void { defer { defer work(); }; } defer helper();',
     'eager_preparation_inside_delayed': 'defer { consume({ defer work(); 1u64 }); };',
-    'imported_unused': 'import "invalid.cod" unused;',
+    'imported_unused': 'import "./invalid.cod" unused;',
 }
 VALID = {
     'ordinary': 'defer work(); defer work();',

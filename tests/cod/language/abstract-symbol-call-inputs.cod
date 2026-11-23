@@ -1,7 +1,7 @@
 using symbol "std:io" @print;
-using "../../../cod/library/string.cod" { StringBuilder, Utf8StreamOut, Utf8WriteError, emit as original_emit };
-using symbol "../../../cod/library/string.cod" @sout;
-import "../../../cod/library/string.cod" { writeUtf8, emit as adapted_emit };
+using "string.cod" { StringBuilder, Utf8StreamOut, Utf8WriteError, emit as original_emit };
+using symbol "string.cod" @sout;
+import "string.cod" { writeUtf8, emit as adapted_emit };
 
 data Output <: Utf8StreamOut { count:u64; }
 data UnusedOutput <: Utf8StreamOut { marker:u64; }

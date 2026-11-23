@@ -83,8 +83,8 @@ runner.CASES = {
     'no_open_signature_guess': (query('inspect(declared)',prefix=ID+'func inspect(callback:F)->i64 where F;'),2,'','known declaration or operand type'),
     'nearest_binding_preserved': (query(prefix=ID+APPLY+'val declared<-true;'),2,'','no applicable declared signature'),
     'retained_context': (IO+ID+APPLY+'func outer(input:T)->const T where T{func inner(item:T)->const T{val result<-make local typeof(inspect(declared,item)){item};return result;};return inner(input);}behave @print(outer(8));behave @print(outer(true));',0,'8\ntrue\n',''),
-    'imported_signature': ({'main.cod':query(prefix='using "contract.cod" published as declared;'+APPLY), 'contract.cod':ID.replace('declared','published')+'export published;'},0,'7\n',''),
-    'imported_private_signature': ({'main.cod':IO+'using "contract.cod" outer;func declared(input:bool)->bool;behave @print(outer(9));',
+    'imported_signature': ({'main.cod':query(prefix='using "./contract.cod" published as declared;'+APPLY), 'contract.cod':ID.replace('declared','published')+'export published;'},0,'7\n',''),
+    'imported_private_signature': ({'main.cod':IO+'using "./contract.cod" outer;func declared(input:bool)->bool;behave @print(outer(9));',
         'contract.cod':ID+APPLY+'func outer(input:T)->const T where T{val result<-make local typeof(inspect(declared,input)){input};return result;}export outer;'},0,'9\n',''),
     'raw_construction_boundary': (IO+'func declared(input:u64)->u64;func increment(input:u64)->u64{return input+1u64;}func selected=make local typeof(declared){increment};behave @print(selected(7u64));',2,'','raw callable storage construction'),
 }

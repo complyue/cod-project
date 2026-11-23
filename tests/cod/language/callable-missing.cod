@@ -1,2 +1,2 @@
-using "callable-contract-api.cod" unavailable;
+using "./callable-contract-api.cod" unavailable;
 unavailable(1);

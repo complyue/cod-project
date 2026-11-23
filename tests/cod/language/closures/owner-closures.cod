@@ -1,10 +1,10 @@
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
-using "structural-api.cod" Node;
-using "structural-api.cod" Counter;
-using "owner-closure-library.cod" reader;
-using "owner-closure-library.cod" current_reader;
-using "owner-closure-library.cod" apply;
+using "./structural-api.cod" Node;
+using "./structural-api.cod" Counter;
+using "./owner-closure-library.cod" reader;
+using "./owner-closure-library.cod" current_reader;
+using "./owner-closure-library.cod" apply;
 region State { val ticks:u64; ptr current:Node; }
 own region state:State <- make State(capacity = 512u64) { ticks <- 3u64; current = null };
 func read = reader(state);
@@ -30,7 +30,7 @@ try {
   state.current = second;
   behave @print(target());
 } catch (e:const NullPointerException) { behave @print(-1); };
-using "owner-closure-library.cod" wrap;
+using "./owner-closure-library.cod" wrap;
 func wrapped = wrap(read);
 behave @print(wrapped());
 region symbol @resource:State;

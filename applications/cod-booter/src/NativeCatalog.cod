@@ -1,6 +1,6 @@
-using "SourceStorage.cod" SourceBytes;
-using "ModuleExportStorage.cod" ModuleExports;
-using "CompilerStatus.cod" CompilerStatus;
+using "./SourceStorage.cod" SourceBytes;
+using "./ModuleExportStorage.cod" ModuleExports;
+using "./CompilerStatus.cod" CompilerStatus;
 
 export handle type IntrinsicCatalog;
 proc "C" IntrinsicCatalog();

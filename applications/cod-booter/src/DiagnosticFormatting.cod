@@ -1,6 +1,6 @@
-export import "../../../cod/library/string.cod" { str, repr, emitStr, emitRepr };
-import "../../../cod/library/string.cod" emit;
-using "SourceStorage.cod" SourcePosition;
+export import "string.cod" { str, repr, emitStr, emitRepr };
+import "string.cod" emit;
+using "./SourceStorage.cod" SourcePosition;
 
 proc emitStr(position:const SourcePosition in P) -> void
     where {const owner P} {

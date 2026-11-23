@@ -59,8 +59,8 @@ runner.CASES = {
     'unused_body_is_checked': ('func select(x:u64)->u64{return 1u64;}func select(x:T)->u64 where T{return true;}' + VIEW, 2, '', 'return type'),
     'source_and_imported_interpretations': ({
         'base.cod': 'func choose(x:u64)->u64{return helper(x);}func choose(x:T)->u64 where T{return helper(x);}func helper(x:T)->u64 where T{return 1u64;}export choose;export helper;',
-        'extended.cod': 'import "base.cod" choose;import "base.cod" helper;func helper(x:u8)->u64{return 7u64;}export choose;',
-        'main.cod': IO + 'using "base.cod" choose as original;using "extended.cod" choose as extended;func a:func(u64)->u64=original;'
+        'extended.cod': 'import "./base.cod" choose;import "./base.cod" helper;func helper(x:u8)->u64{return 7u64;}export choose;',
+        'main.cod': IO + 'using "./base.cod" choose as original;using "./extended.cod" choose as extended;func a:func(u64)->u64=original;'
             'func b:func(u64)->u64=extended;behave @print(a(1u8));behave @print(b(1u8));behave @print(b(1u64));behave @print(a(1u8));',
     }, 0, '1\n7\n1\n1\n', ''),
 }

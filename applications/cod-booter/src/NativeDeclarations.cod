@@ -1,6 +1,6 @@
-using "SourceStorage.cod" SourceBytes;
-using "SourceAccess.cod" same_bytes;
-using "ParserStorage.cod" {
+using "./SourceStorage.cod" SourceBytes;
+using "./SourceAccess.cod" same_bytes;
+using "./ParserStorage.cod" {
     ExprNodes, no_node,
     HereSites, inspect_here_invocation, DirectCallSites, direct_invocation,
     SequenceEntry, inspect_sequence_entry, first_sequence_entry, is_scope_block, completion_syntax, completion_operand,
@@ -9,11 +9,13 @@ using "ParserStorage.cod" {
     is_function,
     local_resource_name,
 };
-using "ParserStorage.cod" HereSyntax { HereReady, InvalidHere };
-using "ParserStorage.cod" DirectInvocationSyntax { DirectInvocationReady, InvalidInvocation };
-using "ParserStorage.cod" SequenceSyntax { ArgumentSequence, HereReceiverSequence };
-using "ParserStorage.cod" CompletionSyntax { ReturnCompletion, ContinueCompletion, BreakCompletion };
-using "ParserStorage.cod" {
+using "./ParserStorage.cod" HereSyntax { HereReady, InvalidHere };
+using "./ParserStorage.cod" DirectInvocationSyntax { DirectInvocationReady, InvalidInvocation };
+using "./ParserStorage.cod" SequenceSyntax { ArgumentSequence, HereReceiverSequence };
+using "./ParserStorage.cod" CompletionSyntax {
+    ReturnCompletion, ContinueCompletion, BreakCompletion
+};
+using "./ParserStorage.cod" {
     DeclarationSites, inspect_declaration, name_syntax, BoundHandleSites, inspect_handle_binding,
     HandleConstructionSites, inspect_handle_construction, LocalBindingSites, inspect_local_binding,
     published_syntax_id, inspect_type_annotation, syntax_first, syntax_past, module_item_publication,
@@ -21,34 +23,42 @@ using "ParserStorage.cod" {
     FormalMode, FormalSites, inspect_formal, formal_binding_is_fixed, BindingSites, inspect_binding,
     SignatureSites, inspect_signature, find_signature_clause, CallableSites, inspect_callable, owner_constraint_syntax,
 };
-using "ParserStorage.cod" DeclarationSyntax {
+using "./ParserStorage.cod" DeclarationSyntax {
     InvalidDeclaration, NominalRecord, NativeRecord, HandleTypeDeclaration, ArrayTypeDeclaration,
     AbstractTypeDeclaration, NativeSymbolDeclaration, ReferenceSymbolDeclaration, LocalPublication, EnumTypeDeclaration, NominalSum,
 };
-using "ParserStorage.cod" FormalMode {
+using "./ParserStorage.cod" FormalMode {
     ValueFormal, ExplicitValueFormal, ReferenceFormal, ReferenceSlotFormal, PointerFormal, HandleFormal, RetainedHandleFormal,
 };
-using "ParserStorage.cod" FormalSyntax { OrdinaryFormal, HereFormalSyntax };
-using "ParserStorage.cod" BindingSyntax { TypedBinding };
-using "ParserStorage.cod" SequenceSyntax { FormalSequence, ModuleSequence };
-using "ParserStorage.cod" CallableSyntax { ModuleCallable, LexicalCallable, CProvider, CEntry, InvalidCallable };
-using "ParserStorage.cod" SignatureSyntax {
+using "./ParserStorage.cod" FormalSyntax { OrdinaryFormal, HereFormalSyntax };
+using "./ParserStorage.cod" BindingSyntax { TypedBinding };
+using "./ParserStorage.cod" SequenceSyntax { FormalSequence, ModuleSequence };
+using "./ParserStorage.cod" CallableSyntax {
+    ModuleCallable, LexicalCallable, CProvider, CEntry, InvalidCallable
+};
+using "./ParserStorage.cod" SignatureSyntax {
     SignatureHead, ValueResultClause, BorrowedResultClause, OwningRegionResultClause, ThrowsSignatureClause,
     OwnerSignatureClause, InvalidSignature, OtherSignatureSyntax,
 };
-using "ParserStorage.cod" OwnerConstraintSyntax { ReadonlyOwnerConstraint };
-using "ParserStorage.cod" AstSlot { Vacant, Occupied };
-using "ParserStorage.cod" ExprPayload { IntegerLiteral, BooleanLiteral, BindSymbolEffect, InstallSymbolEffect, ArrayDefinition };
-using "ParserStorage.cod" NameSyntax { OrdinaryName, SymbolicName };
-using "ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource, ReexportResource };
-using "ParserStorage.cod" SelectionSyntax { SelectionReady };
-using "ParserStorage.cod" TextLiteralSyntax { NulFreeLiteral, InteriorNulLiteral };
-using "ParserStorage.cod" text_literal_syntax;
-using "ParserStorage.cod" BindingSyntax { BareBinding };
-using "ParserStorage.cod" HandleBindingSyntax { OwnHandleBinding, BorrowHandleBinding, InvalidHandleBinding };
-using "ParserStorage.cod" HandleConstructionSyntax { OwnHandleMake, BorrowHandleMake, InvalidHandleConstruction };
-using "ParserStorage.cod" LocalMode { ValueLocal };
-using "NameResolution.cod" {
+using "./ParserStorage.cod" OwnerConstraintSyntax { ReadonlyOwnerConstraint };
+using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
+using "./ParserStorage.cod" ExprPayload {
+    IntegerLiteral, BooleanLiteral, BindSymbolEffect, InstallSymbolEffect, ArrayDefinition
+};
+using "./ParserStorage.cod" NameSyntax { OrdinaryName, SymbolicName };
+using "./ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource, ReexportResource };
+using "./ParserStorage.cod" SelectionSyntax { SelectionReady };
+using "./ParserStorage.cod" TextLiteralSyntax { NulFreeLiteral, InteriorNulLiteral };
+using "./ParserStorage.cod" text_literal_syntax;
+using "./ParserStorage.cod" BindingSyntax { BareBinding };
+using "./ParserStorage.cod" HandleBindingSyntax {
+    OwnHandleBinding, BorrowHandleBinding, InvalidHandleBinding
+};
+using "./ParserStorage.cod" HandleConstructionSyntax {
+    OwnHandleMake, BorrowHandleMake, InvalidHandleConstruction
+};
+using "./ParserStorage.cod" LocalMode { ValueLocal };
+using "./NameResolution.cod" {
     NameBindings, NameWork,
     c_handle_type, handle_binding, formal_binding, local_binding, loop_index, enclosing_callable,
     record_type, array_type, c_constructor, c_operation, c_entry, callable_binding, owner_binding,
@@ -56,20 +66,22 @@ using "NameResolution.cod" {
     has_exception_parent, lexical_builder_record, is_lexical_builder, definition_name, native_scalar, builtin_bool,
     builtin_u8, builtin_u32, builtin_u64, builtin_i64, builtin_void, builtin_string, builtin_c_string, text_type,
 };
-using "ModuleExports.cod" {
+using "./ModuleExports.cod" {
     SelectedExports, ModuleExports, exception_type_export, exception_root_identity, error_root_identity,
     native_handle_export, record_export, array_export, nominal_exception_export, callable_export, enum_export, sum_export, ordinary_callable_shape,
     symbol_export, abstract_type_export, lexical_builder_export, aggregate_export_shape, numeric_record_shape,
 };
-using "ModuleExportStorage.cod" {
+using "./ModuleExportStorage.cod" {
     ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header, enum_type, sum_type,
     SumInterfacePayload { NoSumInterface },
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, CLayoutBitsRecord, NonBitsAggregate },
 };
-using "DeclarationTypes.cod" { type_module, type_identity, interior_nul_in_c_string };
-using "ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind, CheckedFunction,
+using "./DeclarationTypes.cod" { type_module, type_identity, interior_nul_in_c_string };
+using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind, CheckedFunction,
     CheckedProcedure };
-using "AggregateSchemas.cod" { AggregateFacts, SchemaCheck, check_aggregate_schemas, array_element_storage };
+using "./AggregateSchemas.cod" {
+    AggregateFacts, SchemaCheck, check_aggregate_schemas, array_element_storage
+};
 
 export data NativeDeclarationResult {
     diagnostic:u8;

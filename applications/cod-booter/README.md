@@ -72,12 +72,12 @@ Apply the [name rules](../../design/SymbolicDynamicScope.md#clause-words-and-lex
 
 ## Build and run on Linux
 
-The standalone build uses GNU Make 4.3 or newer and an existing CoD seed and compatible LLVM SDK with shared libraries. From the repository root, build the booter and run the deferred-release workload.
+The standalone build uses GNU Make 4.3 or newer, a prepared CoD seed and its language library, and a compatible LLVM SDK with shared libraries. The seed prefix provides `bin/cod` and `lib/cod/string.cod`. Use the following commands from the repository root with your ready seed prefix and the existing LLVM SDK in `build`.
 
 ```sh
 make -C cod/runtime
 make -C cod/native/llvm
-make -C applications/cod-booter
+make -C applications/cod-booter COD_SEED=/path/to/ready-seed/bin/cod
 ./build-cod-booter/cod-booter applications/cod-booter/workloads/deferred-release.cod \
     build-cod-booter/deferred-release.o
 ./build/bin/clang build-cod-booter/deferred-release.o -o build-cod-booter/deferred-release
@@ -86,7 +86,7 @@ make -C applications/cod-booter
 
 The program prints `1` on three lines. Use `TOOLCHAIN` for a ready toolchain prefix. The runtime and LLVM service builds accept `CLANG` and `LLVM_AR`, and the LLVM service also accepts `LLVM_CONFIG`. The booter accepts `COD_SEED`, `CLANG`, `LLVM_CONFIG`, `COD_RUNTIME_ARCHIVE` and `COD_LLVM_ARCHIVE`. Use a separate `OUT` for each build you run concurrently or want to retain, such as `OUT=../../build-cod-booter-shared COD_SEED_FLAGS=--no-specialize`. Make interprets relative paths from the selected build directory. Use paths without whitespace.
 
-The seed checks the booter sources and emits the provider header and stubs and LLVM IR into `OUT`. Clang compiles those outputs and the handwritten C adapters, then links the CoD archives and the shared libraries reported by `llvm-config`. The SDK library directory is recorded for the loader. The seed and LLVM build tree supplies read-only inputs.
+The seed checks the booter sources and emits the provider header, C stubs and LLVM IR into `OUT`. The grouped build tracks the library selected by the resolved seed executable. A seed in its CoD CMake development tree can use that checkout's `cod/library` when the installed library directory is absent. When an active project can supply a package override, the standalone build rechecks the source graph before reuse. Clang compiles the generated files and handwritten C adapters, then links the CoD archives and the shared libraries reported by `llvm-config`. The SDK library directory is recorded for the loader. The prepared inputs are read-only. When the resulting booter requests project package inputs, it uses the `codp` executable beside itself.
 
 After building the runtime, the development seed uses it for `./build/bin/cod --run FILE`. An installed toolchain can provide `lib/libcod-runtime.a` under its prefix. Set the `COD_RUNTIME_ARCHIVE` environment variable to select a different compatible archive. Link seed-emitted objects or bitcode with the same archive when building an executable outside the seed.
 

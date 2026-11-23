@@ -1,6 +1,6 @@
-using units "units-library.cod" {m as metres, cm, mm};
-using "units-library.cod" cm_to_m as to_metres;
-using "units-library.cod" cm_to_m as centimetres_to_metres;
+using units "./units-library.cod" {m as metres, cm, mm};
+using "./units-library.cod" cm_to_m as to_metres;
+using "./units-library.cod" cm_to_m as centimetres_to_metres;
 
 export cm;
 export metres;

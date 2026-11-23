@@ -6,7 +6,7 @@ effect @arena <- region(4096u64);
 effect @values = alloc @arena Values(1u64, 7);
 procedure @read() -> i64 { return @values[0u32] }
 
-export @arena;
-export @read;
-export @values;
+export var @arena;
+export proc @read;
+export var @values;
 export Values;

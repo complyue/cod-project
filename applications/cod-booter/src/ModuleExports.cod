@@ -1,17 +1,17 @@
-using "SourceStorage.cod" SourceBytes;
-using "SourceAccess.cod" same_bytes;
-using "ParserStorage.cod" {
+using "./SourceStorage.cod" SourceBytes;
+using "./SourceAccess.cod" same_bytes;
+using "./ParserStorage.cod" {
     ExprNodes, len as syntax_len, no_node, selected_resource_name,
     ModuleSelectionSites, inspect_module_selection, first_module_item, syntax_first, syntax_past,
     NameSyntax, name_syntax, SequenceEntry, inspect_sequence_entry, inspect_member_selector,
 };
-using "ParserStorage.cod" NameSyntax { NotAName, SymbolicName };
-using "ParserStorage.cod" SequenceSyntax { MemberSequence };
-using "ParserStorage.cod" MemberSelectionSyntax { InvalidMemberSelector, AllSelectedMembers };
-using "ParserStorage.cod" SelectionSyntax { SelectionReady, InvalidSelection };
-using "ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource };
-using "ParserInput.cod" ParseResult;
-using "ModuleExportStorage.cod" {
+using "./ParserStorage.cod" NameSyntax { NotAName, SymbolicName };
+using "./ParserStorage.cod" SequenceSyntax { MemberSequence };
+using "./ParserStorage.cod" MemberSelectionSyntax { InvalidMemberSelector, AllSelectedMembers };
+using "./ParserStorage.cod" SelectionSyntax { SelectionReady, InvalidSelection };
+using "./ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource };
+using "./ParserInput.cod" ParseResult;
+using "./ModuleExportStorage.cod" {
     ModuleExport, ModuleExports, ModuleInterfaces, find_interface, enum_type, sum_type, checked_sum_constructor,
     checked_aggregate_storage, AggregateStorage { CLayoutBitsRecord, CoDBitsAggregate, NonBitsAggregate },
 };

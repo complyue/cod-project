@@ -14,7 +14,7 @@ proc recursive_value(n:u64)->const u64 {
   return if (n == 0u64) { score(n) }
   else { behave @recursive(n - 1u64) + score(n) }
 }
-export @recursive;
+export proc @recursive;
 export recursive_value;
 
 function generic_twice(x:T)->const u64 where T { return score(x) + score(x) }

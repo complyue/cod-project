@@ -450,11 +450,11 @@ runner.CASES.update({
 
 PROCEDURE_LIBRARY = (IO+'proc helper(label:u64)->void{behave @print(label);return;}'
                      'proc report(label:u64)->void{helper(label);return;}export helper;export report;')
-PROCEDURE_ADAPTER = ('import "library.cod" helper;proc @external(flag:bool)->void{return;};'
+PROCEDURE_ADAPTER = ('import "./library.cod" helper;proc @external(flag:bool)->void{return;};'
                      'proc helper(flag:bool)->void{behave @external(flag);return;}'
-                     'export import "library.cod" report;using "library.cod" report as frozen;export frozen;')
-FROZEN_IMPORT = 'using "adapter.cod" frozen;'
-ADAPTED_IMPORT = 'using "adapter.cod" report;'
+                     'export import "./library.cod" report;using "./library.cod" report as frozen;export frozen;')
+FROZEN_IMPORT = 'using "./adapter.cod" frozen;'
+ADAPTED_IMPORT = 'using "./adapter.cod" report;'
 FROZEN_INSPECTOR = deferred_call_inspector('inspect', 'frozen(4u64)')
 ADAPTED_INSPECTOR = deferred_call_inspector('inspect_adapted', 'report(4u64)')
 runner.CASES['deferred_query_keeps_frozen_procedure_dependencies'] = (

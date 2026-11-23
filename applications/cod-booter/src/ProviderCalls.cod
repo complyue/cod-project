@@ -1,18 +1,18 @@
-using "../../../cod/library/string.cod" { StringBuilder, emit, emitStr };
-using symbol "../../../cod/library/string.cod" @sout;
-using "SourceStorage.cod" SourceBytes;
-using "ModuleIndex.cod" Visits;
-using "ModuleExportStorage.cod" { ModuleInterfaces, enum_type, find_interface };
-using "NameResolution.cod" {
+using "string.cod" { StringBuilder, emit, emitStr };
+using symbol "string.cod" @sout;
+using "./SourceStorage.cod" SourceBytes;
+using "./ModuleIndex.cod" Visits;
+using "./ModuleExportStorage.cod" { ModuleInterfaces, enum_type, find_interface };
+using "./NameResolution.cod" {
     c_entry, c_operation, c_handle_type, array_type, record_type, builtin_void, builtin_bool, builtin_string,
     builtin_c_string, text_type,
 };
-using "ProviderTypeNames.cod" {
+using "./ProviderTypeNames.cod" {
     ProviderPrefixes, find_provider_handle, emit_provider_handle_type,
     emit_provider_bits_type, first_prior_handle_with_role,
 };
-using "ProviderViews.cod" { ABIPrimitiveLayouts, write_provider_view, emit_provider_scalar_type };
-using "ParserStorage.cod" no_node;
+using "./ProviderViews.cod" { ABIPrimitiveLayouts, write_provider_view, emit_provider_scalar_type };
+using "./ParserStorage.cod" no_node;
 
 enum ArgumentABI:u8 { CallInput; ImplementationInput; EntryInput; }
 

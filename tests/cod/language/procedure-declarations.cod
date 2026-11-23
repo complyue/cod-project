@@ -1,8 +1,8 @@
 using symbol "std:io" @print;
-symbol from "procedure-vocabulary.cod" @bias;
-symbol from "procedure-vocabulary.cod" @dispatch as @selected;
-using "procedure-library.cod" read as local_read;
-using symbol "procedure-library.cod" @automatic as @remote;
+symbol from "./procedure-vocabulary.cod" @bias;
+symbol from "./procedure-vocabulary.cod" @dispatch as @selected;
+using "./procedure-library.cod" read as local_read;
+using symbol "./procedure-library.cod" @automatic as @remote;
 effect @bias <- 20;
 effect @selected = local_read;
 behave @print(local_read(1));

@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
-using "structural-api.cod" Counter;
-using "owner-closure-library.cod" reader;
+using "./structural-api.cod" Counter;
+using "./owner-closure-library.cod" reader;
 region Extended { extra:u8; ticks:u64; }
 function relay(action:(func()->const u64 with {region source}))
   -> (func()->const u64 with {region source}) where {region source:Counter} { return action }

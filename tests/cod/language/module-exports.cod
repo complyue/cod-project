@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
-using "module-export-adapter.cod" Payload;
-using "module-export-adapter.cod" public_read;
+using "./module-export-adapter.cod" Payload;
+using "./module-export-adapter.cod" public_read;
 region symbol @arena;
 effect @arena <- region(4096u64);
 {

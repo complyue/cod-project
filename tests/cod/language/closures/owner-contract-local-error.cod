@@ -1,5 +1,5 @@
-using "structural-api.cod" Counter;
-using "owner-closure-library.cod" reader;
+using "./structural-api.cod" Counter;
+using "./owner-closure-library.cod" reader;
 own region first:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
 own region second:Counter <- make Counter(capacity = 128u64) { ticks <- 7u64 };
 func wrong:(func()->const u64 with {region first}) = reader(second);

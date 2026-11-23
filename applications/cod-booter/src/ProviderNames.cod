@@ -1,6 +1,6 @@
-using "../../../cod/library/string.cod" { emit, emitStr };
+using "string.cod" { emit, emitStr };
 using "std:text-storage" { utf8_slice, utf8_size, utf8_byte };
-using "SourceStorage.cod" SourceBytes;
+using "./SourceStorage.cod" SourceBytes;
 
 func ascii_letter(byte:u8) -> bool {
     return (byte >= 65u8 && byte <= 90u8) || (byte >= 97u8 && byte <= 122u8);

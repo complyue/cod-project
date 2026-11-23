@@ -30,15 +30,31 @@ public:
   explicit Compiler(WarningOptions warnings = {}, bool specialize = true, bool bounds_checks = true)
       : warnings_(std::move(warnings)), specialize_(specialize), bounds_checks_(bounds_checks) {}
 
-  Compilation compile(const std::filesystem::path &entry, bool emit_text, bool emit_bitcode, bool emit_providers = false) {
-    const auto source = ModuleLoader{}.load(entry);
-    auto checked = ScalarChecker{}.check(source);
+  Compilation compile(const std::filesystem::path &entry, ModuleSearchInputs inputs,
+                      bool emit_text, bool emit_bitcode, bool emit_providers = false) {
+    std::vector<WarningDiagnostic> load_warnings;
+    SourceProgram source;
+    const auto checked = [&] {
+      try {
+        source = ModuleLoader(std::move(inputs), load_warnings).load(entry);
+        return ScalarChecker{}.check(source);
+      } catch (const std::runtime_error &failure) {
+        if (load_warnings.empty()) throw;
+        std::string diagnostic;
+        for (const auto &warning : load_warnings) diagnostic += warning.text() + '\n';
+        throw std::runtime_error(diagnostic + failure.what());
+      }
+    }();
     std::vector<std::string> warnings;
-    for (const auto &warning : checked.warnings) {
-      if (warnings_.as_errors || warnings_.errors.contains(warning.kind))
-        throw std::runtime_error(warning.text() + " (treated as error)");
-      warnings.push_back(warning.text());
-    }
+    const auto append_warnings = [&](const auto &diagnostics) {
+      for (const auto &warning : diagnostics) {
+        if (warnings_.as_errors || warnings_.errors.contains(warning.kind))
+          throw std::runtime_error(warning.text() + " (treated as error)");
+        warnings.push_back(warning.text());
+      }
+    };
+    append_warnings(load_warnings);
+    append_warnings(checked.warnings);
     LLVMEmission emission;
     auto [text, bitcode] = emission.emit(checked, emit_text, emit_bitcode, specialize_, bounds_checks_);
     Compilation result;

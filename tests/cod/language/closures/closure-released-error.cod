@@ -1,5 +1,5 @@
-using "structural-api.cod" Counter;
-using "owner-closure-library.cod" reader;
+using "./structural-api.cod" Counter;
+using "./owner-closure-library.cod" reader;
 function discard(own region state:Counter) -> void {}
 own region state:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
 func callback = reader(state);

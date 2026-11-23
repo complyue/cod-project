@@ -1,9 +1,9 @@
 using "std:exceptions" NullPointerException;
-using units "reusable-pool.cod" {Slot};
-using "reusable-pool.cod" Payloads;
-using "reusable-pool.cod" Links;
-using "pool-adapter.cod" Pool;
-using "pool-adapter.cod" locate;
+using units "./reusable-pool.cod" {Slot};
+using "./reusable-pool.cod" Payloads;
+using "./reusable-pool.cod" Links;
+using "./pool-adapter.cod" Pool;
+using "./pool-adapter.cod" locate;
 region symbol @arena;
 try {{
   ref escaped = {{

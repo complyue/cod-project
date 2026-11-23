@@ -1,11 +1,11 @@
 using symbol "std:io" @assert;
 using symbol "std:io" @print;
-using "ptr-assignment-methods.cod" (=);
-using "ptr-assignment-methods.cod" Node;
-using "ptr-assignment-methods.cod" Choice;
-using "ptr-assignment-methods.cod" access;
-using "ptr-assignment-methods.cod" readonly_choice;
-symbol from "ptr-assignment-methods.cod" @replacement;
+using "./ptr-assignment-methods.cod" (=);
+using "./ptr-assignment-methods.cod" Node;
+using "./ptr-assignment-methods.cod" Choice;
+using "./ptr-assignment-methods.cod" access;
+using "./ptr-assignment-methods.cod" readonly_choice;
+symbol from "./ptr-assignment-methods.cod" @replacement;
 region symbol @arena;
 effect @arena <- region(4096u64);
 {

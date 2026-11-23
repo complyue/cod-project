@@ -1,9 +1,9 @@
-using "../../../cod/library/string.cod" { StringBuilder, emit, emitStr };
-using symbol "../../../cod/library/string.cod" @sout;
-using "SourceStorage.cod" SourceBytes;
-using "ModuleExportStorage.cod" { ModuleInterfaces, enum_type };
-using "NameResolution.cod" { builtin_u8, builtin_u32, builtin_u64, builtin_i64 };
-using "ProviderNames.cod" { emit_provider_identifier, emit_provider_enum_name };
+using "string.cod" { StringBuilder, emit, emitStr };
+using symbol "string.cod" @sout;
+using "./SourceStorage.cod" SourceBytes;
+using "./ModuleExportStorage.cod" { ModuleInterfaces, enum_type };
+using "./NameResolution.cod" { builtin_u8, builtin_u32, builtin_u64, builtin_i64 };
+using "./ProviderNames.cod" { emit_provider_identifier, emit_provider_enum_name };
 
 proc emit_backing(kind:u8) -> void {
     if (kind == builtin_u8()) { emit("uint8_t"); return; };

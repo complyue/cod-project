@@ -1,5 +1,5 @@
-using "structural-api.cod" Counter;
-using "structural-api.cod" Cursor;
+using "./structural-api.cod" Counter;
+using "./structural-api.cod" Cursor;
 using "std:exceptions" NullPointerException;
 function reader(region state:Counter) -> (func()->const u64 with {region state}) {
   val var ticks -> state.ticks;

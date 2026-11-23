@@ -6,7 +6,7 @@ import captured_callable_runtime_tests as fixture
 FIXTURE = fixture.FIXTURE.updated(sources=[Path(__file__)])
 FIXTURE = FIXTURE.updated(source_files={'ops.cod': 'func (+)(a:bool,b:bool)->bool{return a||b;}export (+);'
     'func (/)(a:bool,b:bool)->bool{}export (/);'})
-FIXTURE = FIXTURE.updated(source='using "ops.cod" (+) as add;using "ops.cod" (/) as divide;' + FIXTURE.source)
+FIXTURE = FIXTURE.updated(source='using "./ops.cod" (+) as add;using "./ops.cod" (/) as divide;' + FIXTURE.source)
 FIXTURE = FIXTURE.updated(source=FIXTURE.source + '''
 {{
  func kept=wrap(base);

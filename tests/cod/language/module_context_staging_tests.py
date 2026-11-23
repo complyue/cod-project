@@ -16,17 +16,17 @@ BASE = IO + '''
 symbol @score:proc(u64)->u64;
 proc @score(n:u64)->u64{return 1u64;}
 proc @score(n:T)->u64 where T{return 7u64;}
-export @score;
+export proc @score;
 behave @print(100u64);
 '''
-ADAPTER = 'using symbol "base.cod" @score as @selected;export @selected;'
-OTHER = 'proc @score(n:T)->u64 where T{return 9u64;}export @score;'
+ADAPTER = 'using symbol "./base.cod" @score as @selected;export proc @selected;'
+OTHER = 'proc @score(n:T)->u64 where T{return 9u64;}export proc @score;'
 # A generic symbolic definition needs its independently established slot contract.
 OTHER = 'symbol @score:proc(u64)->u64;' + OTHER
 ENTRY = IO + '''
-using symbol "base.cod" @score as @first;
-using symbol "adapter.cod" @selected as @second;
-using symbol "other.cod" @score as @third;
+using symbol "./base.cod" @score as @first;
+using symbol "./adapter.cod" @selected as @second;
+using symbol "./other.cod" @score as @third;
 effect @first;effect @third;
 behave @print(behave @first(1u8));
 behave @print(behave @second(1u64));

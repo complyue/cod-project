@@ -1,9 +1,9 @@
 using symbol "std:io" @assert;
-using "world-integration.cod" score as joined;
-using "world-integration.cod" zipped;
-using "world-integration.cod" relay;
-using "world-first.cod" first;
-using "world-second.cod" second;
+using "./world-integration.cod" score as joined;
+using "./world-integration.cod" zipped;
+using "./world-integration.cod" relay;
+using "./world-first.cod" first;
+using "./world-second.cod" second;
 region symbol @arena;
 effect @arena <- region(4096u64);
 {

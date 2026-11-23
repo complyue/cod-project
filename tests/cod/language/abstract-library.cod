@@ -1,4 +1,4 @@
-using units "units-library.cod" {m, cm, mm};
+using units "./units-library.cod" {m, cm, mm};
 type Entity;
 type Weighted <: Entity;
 type Alternate <: Entity;

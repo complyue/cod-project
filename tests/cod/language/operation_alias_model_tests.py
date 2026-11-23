@@ -40,7 +40,7 @@ for number, (kind, deferred, same_slot, alternate) in enumerate(product(
             body += 'behave @print('+slot+' is '+target+');'
             expected += str(targets[slot] == target).lower()+'\n'
     runner.CASES['state_'+str(number)] = ({'ops.cod':method+'export '+definition+';',
-        'main.cod':IO+'using "ops.cod" '+definition+' as exchange;'+body},0,expected,'')
+        'main.cod':IO+'using "./ops.cod" '+definition+' as exchange;'+body},0,expected,'')
 
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {}

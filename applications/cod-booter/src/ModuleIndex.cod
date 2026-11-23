@@ -1,6 +1,6 @@
-using "SourceStorage.cod" SourceBytes;
-using "NativeSource.cod" { PathOwner, PathNotReadyException, path_key };
-using "CompilerStatus.cod" CompilerStatus { Complete, ScratchFailed };
+using "./SourceStorage.cod" SourceBytes;
+using "./NativeSource.cod" { PathOwner, PathNotReadyException, path_key };
+using "./CompilerStatus.cod" CompilerStatus { Complete, ScratchFailed };
 
 export data VisitSlot =
     Vacant {} |

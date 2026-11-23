@@ -1,9 +1,9 @@
-symbol from "diamond-vocab.cod" @gain;
-symbol from "diamond-vocab.cod" @read;
+symbol from "./diamond-vocab.cod" @gain;
+symbol from "./diamond-vocab.cod" @read;
 using symbol "std:io" @print;
 behave @print(101);
 procedure @read() -> i64 { return @gain }
 
-export @gain;
-export @print;
-export @read;
+export var @gain;
+export proc @print;
+export proc @read;

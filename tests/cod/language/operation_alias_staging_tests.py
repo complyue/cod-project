@@ -13,9 +13,9 @@ from callable_value_staging_tests import inventory
 OPS = 'func (<=>)(ref a:T in O,ref b:T in O)->void where {T,owner O}{intrinsic (<=>)(a,b);}export (<=>);'
 SOURCE = '''
 using symbol "std:io" @print;
-using "ops.cod" (<=>);
-using "ops.cod" (<=>) as exchange;
-using "ops.cod" (<=>) as (<->);
+using "./ops.cod" (<=>);
+using "./ops.cod" (<=>) as exchange;
+using "./ops.cod" (<=>) as (<->);
 func step(value:T,next:T,n:u64)->const T where T{
  if(n==0u64){
   val a<-value,b<-next;ptr p=a,q=b;WRITE;return p;

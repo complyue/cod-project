@@ -30,8 +30,8 @@ runner.CASES = {
  'lexical_capture_free': (source('func f=func[](x:i64)->i64{return calculate(x,1);};'+OUT('f(2)')),0,'3\n',''),
  'lexical_shadow': (source('proc run()->void{func calculate(a:i64,b:i64)->i64{return a;};'+OUT('calculate(1,7)')+'return;}run();'),0,'1\n','[-Wshadow]'),
  'noncallable_shadow': (source('proc run(calculate:i64)->void{calculate(1,2);}run(3);'),2,'',"nearest binding 'calculate' is not callable"),
- 'no_implicit_fallback': ({'ops.cod':'func helper(a:bool,b:bool)->bool{return a;}export helper;', 'main.cod':'using "ops.cod" helper as (+);1+2;'},2,'','no applicable'),
- 'ordinary_family_at_operator': ({'ops.cod':'func helper(a:i64,b:i64)->i64{return a;}export helper;', 'main.cod':IO+'using "ops.cod" helper as (+);'+OUT('1+7')},0,'1\n',''),
+ 'no_implicit_fallback': ({'ops.cod':'func helper(a:bool,b:bool)->bool{return a;}export helper;', 'main.cod':'using "./ops.cod" helper as (+);1+2;'},2,'','no applicable'),
+ 'ordinary_family_at_operator': ({'ops.cod':'func helper(a:i64,b:i64)->i64{return a;}export helper;', 'main.cod':IO+'using "./ops.cod" helper as (+);'+OUT('1+7')},0,'1\n',''),
  'renamed_operator': (source(OUT('8+3')+OUT('(+)(3)'),NEG+'func (-)(a:bool,b:bool)->bool{return a;}', '-', '(+)'),0,'5\n-3\n',''),
  'eager_at_swap_spelling': (source('val x<-1,y<-7;'+OUT('x<=>y')+'val result<-make local typeof(x<=>y){9};'+OUT('result'),ADD,'+','(<=>)'),0,'8\n9\n',''),
  'intrinsic_uses_spelling': (source(OUT('intrinsic (+)(8,3)'),NEG,'-','(+)'),0,'11\n',''),
@@ -60,8 +60,8 @@ runner.CASES['declared_builtin_failure']=(source('calculate(1,2);','func (+)(a:i
 runner.CASES['declared_builtin_caught']=(source('try{'+OUT('calculate(1,2)')+'}catch(e:const NullPointerException){};','func (+)(a:i64,b:i64)->i64 throws NullPointerException;'),0,'3\n','')
 runner.CASES['declaration_result_preserved']=(source('calculate(1,2);','func (+)(a:i64,b:i64)->bool;'),2,'','result')
 runner.CASES['reexport_extension'] = ({'ops.cod':ADD+'export (+);',
- 'middle.cod':'import "ops.cod" (+) as combine;func combine(a:i64,b:i64)->i64{return intrinsic (+)(a,b)*2;}export combine;',
- 'main.cod':IO+'using "middle.cod" combine as calculate;'+OUT('calculate(1,2)')+OUT('calculate(1u64,2u64)')+OUT('calculate(false,true)')},0,'6\n3\ntrue\n','')
+ 'middle.cod':'import "./ops.cod" (+) as combine;func combine(a:i64,b:i64)->i64{return intrinsic (+)(a,b)*2;}export combine;',
+ 'main.cod':IO+'using "./middle.cod" combine as calculate;'+OUT('calculate(1,2)')+OUT('calculate(1u64,2u64)')+OUT('calculate(false,true)')},0,'6\n3\ntrue\n','')
 for order in ('builtin_first','method_first'):
     calls='run(1,2);run(false,true);' if order=='builtin_first' else 'run(false,true);run(1,2);'
     body='proc run(a:T,b:T)->void where T{ {{defer calculate(a,b);}};return;}'+calls

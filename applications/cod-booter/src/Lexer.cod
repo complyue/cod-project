@@ -1,5 +1,5 @@
-using "SourceStorage.cod" { SourceBytes, Token };
-using "SourceAccess.cod" len;
+using "./SourceStorage.cod" { SourceBytes, Token };
+using "./SourceAccess.cod" len;
 
 export func end_of_source() -> u8 { return 0u8; }
 export func identifier() -> u8 { return 1u8; }

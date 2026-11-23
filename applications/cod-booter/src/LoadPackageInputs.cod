@@ -1,0 +1,51 @@
+using "./SourceStorage.cod" SourceBytes;
+using "./NativeSource.cod" Path;
+using "./CompilerStatus.cod" CompilerStatus { Complete, Rejected, OpenFailed };
+using "./NativeModuleInputs.cod" {
+    PackageInputCapture, PackageCaptureException, package_capture_status, use_package_capture,
+};
+using "./PackageInputs.cod" {
+    PackageInputPlan, PackageSourceRoot, PackageSourceRoots,
+    plan_package_inputs, decode_package_inputs,
+};
+
+proc with_package_frame(
+    here work(source:const SourceBytes in C, diagnostics:const SourceBytes in C) -> CompilerStatus,
+    handle capture:PackageInputCapture in C) -> CompilerStatus where {const owner C} {
+    return use_package_capture(capture) (source, diagnostics) => {
+        continue work(source, diagnostics)
+    }
+}
+
+export proc load_package_inputs(
+    handle entry:Path in A, ref var roots:PackageSourceRoots in G,
+    ref var bytes:SourceBytes in G, published_rows:u64 in G, published_bytes:u64 in G,
+    process_status:u64 in P)
+    -> CompilerStatus throws PackageCaptureException where {const owner A, owner G, owner P} {
+    own handle capture:PackageInputCapture <- make own handle PackageInputCapture(entry);
+    process_status <- package_capture_status(capture);
+    if (process_status != 0u64) return OpenFailed;
+
+    ref plan = make PackageInputPlan { rows <- 0u64; bytes <- 0u64; };
+    val measured <- with_package_frame(capture) (source, diagnostics) => {
+        continue if (plan_package_inputs(source, plan)) { Complete } else { Rejected }
+    };
+    if (measured != Complete) return measured;
+
+    ref next_roots = make PackageSourceRoots(plan.rows, make PackageSourceRoot {
+        uuid_first <- 0u64; path_first <- 0u64; path_past <- 0u64;
+    }) in G;
+    ref next_bytes = make SourceBytes(plan.bytes, 0u8) in G;
+    ref decoded = make PackageInputPlan { rows <- 0u64; bytes <- 0u64; };
+    val copied <- with_package_frame(capture) (source, diagnostics) => {
+        continue if (decode_package_inputs(source, next_roots, next_bytes, decoded)) {
+            Complete
+        } else { Rejected }
+    };
+    if (copied != Complete) return copied;
+    roots = next_roots;
+    bytes = next_bytes;
+    published_rows <- decoded.rows;
+    published_bytes <- decoded.bytes;
+    return Complete
+}

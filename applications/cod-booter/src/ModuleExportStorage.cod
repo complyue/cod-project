@@ -1,4 +1,4 @@
-using "ParserStorage.cod" { no_node, FormalMode { ValueFormal } };
+using "./ParserStorage.cod" { no_node, FormalMode { ValueFormal } };
 
 # The name span and any builtin path span belong to the catalog's spelling
 # bytes. A source export names its publishing module independently of origin.

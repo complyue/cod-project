@@ -20,12 +20,12 @@ for number, (token, operation) in enumerate(OPERATIONS.items()):
         # A different operator spelling must not change the selected implementation.
         alias = '(*)' if token != '*' else '(+)'
         source = {'ops.cod':'func ('+token+')(a:bool,b:bool)->bool{return a;}export ('+token+');',
-                  'main.cod':IO+'using "ops.cod" ('+token+') as '+alias+';'
+                  'main.cod':IO+'using "./ops.cod" ('+token+') as '+alias+';'
                   'behave @print('+alias+'(7'+suffix+',2'+suffix+')=='+literal+');'}
         runner.CASES['operation_'+str(number)+'_'+kind] = (source,0,'true\n','')
 for left,right,result in (('1u8','2u64','3u64'),('1u32','2f32','3f64'),('1f32','2f64','3f64')):
     runner.CASES['widen_'+left] = ({'ops.cod':'func (+)(a:bool,b:bool)->bool{return a;}export (+);',
-        'main.cod':IO+'using "ops.cod" (+) as add;behave @print(add('+left+','+right+')=='+result+');'},0,'true\n','')
+        'main.cod':IO+'using "./ops.cod" (+) as add;behave @print(add('+left+','+right+')=='+result+');'},0,'true\n','')
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {}
 runner.EXTRA_SOURCES = [Path(__file__)]

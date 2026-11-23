@@ -5,8 +5,8 @@ symbol @left:ContextNode in r, @right:ContextNode in r where {region r:ContextPo
 symbol @gain:i64, @selected:proc() -> i64;
 export ContextPool;
 export ContextNode;
-export @arena;
-export @left;
-export @right;
-export @gain;
-export @selected;
+export var @arena;
+export var @left;
+export var @right;
+export var @gain;
+export proc @selected;

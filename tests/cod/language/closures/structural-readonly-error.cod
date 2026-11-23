@@ -1,5 +1,5 @@
-using "structural-api.cod" advance;
-using "structural-api.cod" Counter;
+using "./structural-api.cod" advance;
+using "./structural-api.cod" Counter;
 function wrong(region r:const Counter) -> const u64 { return advance(r) }
 own region state:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
 wrong(state);

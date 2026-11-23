@@ -1,14 +1,16 @@
 using symbol "std:io" @print;
 using symbol "std:io" @assert;
-using units "pool-units.cod" {ClassId, ClassSetId, GlobalSetId, LocalSlot, GlobalSlot, SetCount, SlotCount, SlotsPerSet};
-using "pool-layout.cod" Layout;
-using "pool-layout.cod" sets;
-using "pool-layout.cod" capacity;
-using "pool-layout.cod" class_set_begin;
-using "pool-layout.cod" class_slot_begin;
-using "pool-index.cod" locate;
-using "pool-index.cod" global_slot;
-using "pool-index.cod" SetLocation;
+using units "./pool-units.cod" {
+    ClassId, ClassSetId, GlobalSetId, LocalSlot, GlobalSlot, SetCount, SlotCount, SlotsPerSet
+};
+using "./pool-layout.cod" Layout;
+using "./pool-layout.cod" sets;
+using "./pool-layout.cod" capacity;
+using "./pool-layout.cod" class_set_begin;
+using "./pool-layout.cod" class_slot_begin;
+using "./pool-index.cod" locate;
+using "./pool-index.cod" global_slot;
+using "./pool-index.cod" SetLocation;
 region symbol @arena;
 symbol @layout:Layout;
 symbol @location:SetLocation;

@@ -1,6 +1,6 @@
-using "callable-contract-api.cod" Metric;
-import "callable-contract-api.cod" score;
-import "callable-contract-api.cod" collect;
+using "./callable-contract-api.cod" Metric;
+import "./callable-contract-api.cod" score;
+import "./callable-contract-api.cod" collect;
 data Sample <: Metric { amount:i64 }
 function score(x:Sample in O1) -> i64 where {owner O1} { return x.amount }
 function collect(head:T, rest:T...) -> T where T {

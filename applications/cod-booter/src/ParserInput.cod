@@ -1,15 +1,21 @@
-using "Lexer.cod" {
+using "./Lexer.cod" {
     const_word, exception_word, identifier, in_word, lexical_error, not_word, own_word, punctuation,
     reserved_lexical_binder, reserved_module_name,
 };
-using "ParserStorage.cod" {
+using "./ParserStorage.cod" {
     ExprNodes, ExprNode, ExprPayload, SourceSpan, NodeId, Tokens, len, no_node, syntax_first, syntax_past, parse_report_code,
 };
-using "ParserStorage.cod" NodeLink { NoLink, LinkTo };
-using "ParserStorage.cod" ExprPayload { NameReference, ModuleSyntax, ModuleItem, BlockSyntax, ScopeSyntax, BlockItem, AnnotatedBinding, OwnerQualifiedType };
-using "ParserStorage.cod" AstSlot { Occupied };
-using "ParserStorage.cod" { SyntaxRole { InitializerRole, ExpressionRole, BlockItemRole, BindingNameRole, TypeAnnotationRole }, ExprPayload { ParseReport, ErrorReport } };
-using "SourceStorage.cod" { SourceBytes, DelimiterLink { MatchedDelimiter } };
+using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
+using "./ParserStorage.cod" ExprPayload {
+    NameReference, ModuleSyntax, ModuleItem, BlockSyntax, ScopeSyntax, BlockItem, AnnotatedBinding,
+        OwnerQualifiedType
+};
+using "./ParserStorage.cod" AstSlot { Occupied };
+using "./ParserStorage.cod" {
+    SyntaxRole { InitializerRole, ExpressionRole, BlockItemRole, BindingNameRole,
+        TypeAnnotationRole }, ExprPayload { ParseReport, ErrorReport }
+};
+using "./SourceStorage.cod" { SourceBytes, DelimiterLink { MatchedDelimiter } };
 
 export data ParseResult {
     revision:u64;

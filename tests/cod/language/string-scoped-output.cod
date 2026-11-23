@@ -1,8 +1,8 @@
 using symbol "std:io" @print;
 using "std:text-storage" { utf8_size, utf8_byte };
-using symbol "../../../cod/library/string.cod" @sout;
-using "../../../cod/library/string.cod" { Utf8WriteError, StringBuilder };
-import "../../../cod/library/string.cod" { emit, repr, emitRepr as render };
+using symbol "string.cod" @sout;
+using "string.cod" { Utf8WriteError, StringBuilder };
+import "string.cod" { emit, repr, emitRepr as render };
 using "std:exceptions" Error as OutputError;
 
 data Note { id:u64; }

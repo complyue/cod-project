@@ -17,6 +17,8 @@ enum {
     module_graph_storage_failed = 8,
     module_depth_unproved = 9,
     module_dependency_unsupported = 16,
+    module_package_diagnostic = 19,
+    module_package_delivery_failed = 20,
 };
 
 typedef struct {
@@ -33,12 +35,38 @@ typedef struct {
     uint64_t os_error;
 } cod_booter_diagnostic;
 
+enum {
+    package_shadow = 1,
+    package_ambiguity,
+    package_missing,
+    package_lookup_failure,
+    package_input_failure,
+    invalid_module_path,
+    package_process_failure,
+};
+
+typedef struct cod_booter_package_diagnostic {
+    struct cod_booter_package_diagnostic *next;
+    uint8_t kind;
+    uint64_t os_error;
+    cod_booter_position first;
+    cod_booter_position past;
+    size_t importer_size;
+    size_t spelling_size;
+    size_t candidate_size;
+    size_t other_size;
+    unsigned char bytes[];
+} cod_booter_package_diagnostic;
+
 typedef struct {
     cod_booter_diagnostic *reports;
     char *path;
     size_t count;
     bool snapshot_failed;
     cod_booter_diagnostic primary;
+    cod_booter_package_diagnostic *package_reports;
+    cod_booter_package_diagnostic *last_package_report;
+    bool package_delivery_failed;
 } cod_booter_diagnostic_sink;
 
 #endif

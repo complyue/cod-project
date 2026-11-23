@@ -1,0 +1,33 @@
+using "./SourceStorage.cod" SourceBytes;
+
+export enum ModulePathKind:u8 { InvalidPath; SourceRelative; PackagePath; }
+
+func invalid_segment(path:const SourceBytes in P, first:u64, past:u64) -> bool
+    where {const owner P} {
+    if (first == past) return true;
+    if (past - first > 2u64 || path[first] != 46u8) return false;
+    return past - first == 1u64 || path[first + 1u64] == 46u8
+}
+
+export func classify_module_path(path:const SourceBytes in P, first:u64, past:u64)
+    -> ModulePathKind where {const owner P} {
+    if (first >= past || past > intrinsic (len)(path)) return InvalidPath:ModulePathKind;
+    if (past - first >= 2u64 && path[first] == 46u8 && path[first + 1u64] == 47u8) {
+        if (past - first == 2u64) return InvalidPath:ModulePathKind;
+        for (at in first + 2u64 .. past) {
+            if (path[at] == 0u8) return InvalidPath:ModulePathKind
+        };
+        return SourceRelative:ModulePathKind
+    };
+    val segment <- first;
+    for (at in first .. past) {
+        if (path[at] == 0u8 || path[at] == 58u8 || path[at] == 92u8)
+            return InvalidPath:ModulePathKind;
+        if (path[at] == 47u8) {
+            if (invalid_segment(path, segment, at)) return InvalidPath:ModulePathKind;
+            segment <- at + 1u64;
+        };
+    };
+    if (invalid_segment(path, segment, past)) return InvalidPath:ModulePathKind;
+    return PackagePath:ModulePathKind
+}

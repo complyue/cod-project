@@ -1,8 +1,8 @@
-symbol from "vocabulary.cod" @x as @a;
-symbol from "vocabulary.cod" @x as @b;
+symbol from "./vocabulary.cod" @x as @a;
+symbol from "./vocabulary.cod" @x as @b;
 symbol @p : proc() -> i64;
 procedure @p -> i64 { return @a + @b }
 
-export @a;
-export @b;
-export @p;
+export var @a;
+export var @b;
+export proc @p;

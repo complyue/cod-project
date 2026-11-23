@@ -1,28 +1,36 @@
-using "ParserStorage.cod" DeclarationSyntax { NominalRecord, NativeRecord, EnumTypeDeclaration, NominalSum };
-using "ParserStorage.cod" FormalMode { ValueFormal, PlaceFormal, InitializingPlaceFormal };
-using "ParserStorage.cod" FormalSyntax { OrdinaryFormal };
-using "ParserStorage.cod" BindingSyntax { TypedBinding };
-using "ParserStorage.cod" LocalMode { ValueLocal, ExceptionLocal };
-using "ParserStorage.cod" SignatureSyntax { OwnerSignatureClause };
-using "ParserStorage.cod" CasePatternSyntax { TrueCaseTarget, FalseCaseTarget, NullCaseTarget, NamedCaseMember };
-using "ParserStorage.cod" TextLiteralSyntax { InteriorNulLiteral };
-using "ParserStorage.cod" BinarySyntax { ComparisonBinary };
-using "ParserStorage.cod" ArithmeticOperation { Addition };
-using "ParserStorage.cod" ComparisonRelation { Equal };
-using "ParserStorage.cod" AstSlot { Vacant, Occupied };
-using "ParserStorage.cod" ExprPayload { IntegerLiteral, BooleanLiteral, TextLiteral };
-using "ParserStorage.cod" NameSyntax { OrdinaryName };
-using "ParserStorage.cod" LogicalSyntax { LogicalNot, LogicalAnd, LogicalOr };
-using "ParserStorage.cod" RhsEvaluation { ConditionalRhs };
-using "ParserStorage.cod" DirectInvocationSyntax { DirectInvocationReady };
-using "ParserStorage.cod" HereSyntax { HereReady };
-using "ParserStorage.cod" GroupSyntax { InvalidGroup, ParenthesizedExpression };
-using "ParserStorage.cod" SequenceSyntax { ArgumentSequence, BlockSequence, FormalSequence, EnumSequence, SumSequence };
-using "ParserStorage.cod" ConstructionSyntax { PositionalConstruction, BracedConstruction, StorageReservation };
-using "ParserStorage.cod" AssignmentSyntax { PlaceRebind };
-using "SourceStorage.cod" SourceBytes;
-using "SourceAccess.cod" same_bytes;
-using "ParserStorage.cod" {
+using "./ParserStorage.cod" DeclarationSyntax {
+    NominalRecord, NativeRecord, EnumTypeDeclaration, NominalSum
+};
+using "./ParserStorage.cod" FormalMode { ValueFormal, PlaceFormal, InitializingPlaceFormal };
+using "./ParserStorage.cod" FormalSyntax { OrdinaryFormal };
+using "./ParserStorage.cod" BindingSyntax { TypedBinding };
+using "./ParserStorage.cod" LocalMode { ValueLocal, ExceptionLocal };
+using "./ParserStorage.cod" SignatureSyntax { OwnerSignatureClause };
+using "./ParserStorage.cod" CasePatternSyntax {
+    TrueCaseTarget, FalseCaseTarget, NullCaseTarget, NamedCaseMember
+};
+using "./ParserStorage.cod" TextLiteralSyntax { InteriorNulLiteral };
+using "./ParserStorage.cod" BinarySyntax { ComparisonBinary };
+using "./ParserStorage.cod" ArithmeticOperation { Addition };
+using "./ParserStorage.cod" ComparisonRelation { Equal };
+using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
+using "./ParserStorage.cod" ExprPayload { IntegerLiteral, BooleanLiteral, TextLiteral };
+using "./ParserStorage.cod" NameSyntax { OrdinaryName };
+using "./ParserStorage.cod" LogicalSyntax { LogicalNot, LogicalAnd, LogicalOr };
+using "./ParserStorage.cod" RhsEvaluation { ConditionalRhs };
+using "./ParserStorage.cod" DirectInvocationSyntax { DirectInvocationReady };
+using "./ParserStorage.cod" HereSyntax { HereReady };
+using "./ParserStorage.cod" GroupSyntax { InvalidGroup, ParenthesizedExpression };
+using "./ParserStorage.cod" SequenceSyntax {
+    ArgumentSequence, BlockSequence, FormalSequence, EnumSequence, SumSequence
+};
+using "./ParserStorage.cod" ConstructionSyntax {
+    PositionalConstruction, BracedConstruction, StorageReservation
+};
+using "./ParserStorage.cod" AssignmentSyntax { PlaceRebind };
+using "./SourceStorage.cod" SourceBytes;
+using "./SourceAccess.cod" same_bytes;
+using "./ParserStorage.cod" {
     ExprNodes, no_node, ungrouped, name_syntax,
     inspect_logical, LogicalSites, is_scope_block,
     inspect_group, direct_invocation, DirectCallSites, inspect_here_invocation, HereSites, block_tail, SequenceEntry,
@@ -33,19 +41,21 @@ using "ParserStorage.cod" {
     CaseSites, inspect_case, CaseArmSites, inspect_case_arm, case_pattern, text_literal_syntax, BinarySites, inspect_binary,
     EnumMemberSites, inspect_enum_member, SumArmSites, inspect_sum_arm,
 };
-using "NameResolution.cod" {
+using "./NameResolution.cod" {
     NameBindings, NameWork, find_record_field, formal_binding, local_binding,
     ordinary_selection, record_type, native_scalar, enum_value, find_enum_member,
     is_lexical_builder, lexical_builder_record, lexical_builder_type,
     builtin_u64, builtin_u32, builtin_u8, builtin_bool, builtin_string, builtin_c_string, text_type, owner_binding,
 };
-using "ModuleExports.cod" { SelectedExports, record_export, enum_export, enum_spelling, sum_export };
-using "ModuleExportStorage.cod" {
+using "./ModuleExports.cod" {
+    SelectedExports, record_export, enum_export, enum_spelling, sum_export
+};
+using "./ModuleExportStorage.cod" {
     ModuleInterfaces, find_interface, write_interface_header, write_sum_row, enum_type, sum_type, constructor_type, checked_sum_constructor,
     SumInterfacePayload { SumInterface, ConstructorReference, ConstructorInterface, ConstructorField },
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, NonBitsAggregate },
 };
-using "AggregateSchemas.cod" AggregateFacts;
+using "./AggregateSchemas.cod" AggregateFacts;
 
 export func type_module(names:const NameBindings in B, selected:const SelectedExports in E,
                         marker:u64, current_module:u64) -> u64 where {const owner B, const owner E} {

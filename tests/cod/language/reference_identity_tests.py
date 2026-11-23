@@ -61,9 +61,9 @@ runner.CASES.update({
  'local_explicit_identity': (IO+'func test(ptr input:i64 in O)->bool where {owner O}{func nested(ptr value:i64 in P)->bool where {owner P}{return (is)(value,null);};return nested(input);}ptr p:i64=null in here;'+OUT('test(p)'),0,'true\n',''),
  'captured_holder_identity': (IO+'func base()->i64{return 1;}func f=func[base]()->i64{return base();};func g=f;ptr p=f;'+OUT('p is f')+OUT('f is g'),0,'true\nfalse\n',''),
  'unary_duplicate_spelling': ('func (!)(input:i64)->i64{return input;}func (not)(input:i64)->i64{return input;}(!)(1);',2,'','duplicate method signature'),
- 'imported_identity_rejected': ({'ops.cod':'func same(lhs:i64,rhs:i64)->bool{return true;}export same;','main.cod':'using "ops.cod" same as (is);val x<-1;x is x;'},2,'','cannot be an imported user operation'),
+ 'imported_identity_rejected': ({'ops.cod':'func same(lhs:i64,rhs:i64)->bool{return true;}export same;','main.cod':'using "./ops.cod" same as (is);val x<-1;x is x;'},2,'','cannot be an imported user operation'),
  'quoted_operator_rejected': ('func ("!")(input:bool)->bool{return input;}',2,'','operator or intrinsic name'),
- 'unary_import_alias': ({'ops.cod':'func (not)(input:i64)->i64{return input+1;}export (not);','main.cod':IO+'using "ops.cod" (!) as (not);'+OUT('not 3')+OUT('!3')},0,'4\n4\n',''),
+ 'unary_import_alias': ({'ops.cod':'func (not)(input:i64)->i64{return input+1;}export (not);','main.cod':IO+'using "./ops.cod" (!) as (not);'+OUT('not 3')+OUT('!3')},0,'4\n4\n',''),
 })
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {'call_selected_targets': ['x','y'], 'borrowed_result': ['x'], 'null_refinement': ['p']}

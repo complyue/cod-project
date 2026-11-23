@@ -1,12 +1,12 @@
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
-using "stream-monitor.cod" Stream;
-using "stream-monitor.cod" Packet;
-using "stream-monitor.cod" reader;
-using "stream-monitor.cod" mean_size;
-using "stream-monitor.cod" selected_size;
-using "stream-monitor.cod" pinned_size;
-using "stream-monitor.cod" record;
+using "./stream-monitor.cod" Stream;
+using "./stream-monitor.cod" Packet;
+using "./stream-monitor.cod" reader;
+using "./stream-monitor.cod" mean_size;
+using "./stream-monitor.cod" selected_size;
+using "./stream-monitor.cod" pinned_size;
+using "./stream-monitor.cod" record;
 
 # Concrete storage can carry fields beyond either helper's requirement.
 region Receiver { tag:u8; ticks:u64; ptr current:Packet; bytes:u64; }

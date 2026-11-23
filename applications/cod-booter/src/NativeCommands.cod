@@ -1,4 +1,4 @@
-using "ParserStorage.cod" no_node;
+using "./ParserStorage.cod" no_node;
 
 # Compiler-private commands for constructing LLVM functions and basic blocks.
 # Each declaration has one activation body. Declarations let later-built

@@ -55,13 +55,13 @@ runner.CASES.update({
 ERRORS = NPE+'using "std:exceptions" MissingReturnError;using "std:exceptions" Exception;func missing()->const i64{}func error()->const MissingReturnError{try{missing():void;}catch(e:const MissingReturnError){return e;};}func absent()->const NullPointerException{ptr p:i64=null in here;try{p;{}}catch(e:const NullPointerException){return e;};}'
 runner.CASES['exception_targets'] = (IO+ERRORS+'func (<=>)(ref a:Exception in O,ref b:Exception in O)->void where {owner O}{intrinsic (<=>)(a,b);}val x:Exception<-error(),y:Exception<-absent();ptr p=x,q=y;p<=>q;'+OUT('p.category==y.category')+OUT('q.category==x.category'),0,'true\ntrue\n','[-Wmissing-return]')
 runner.CASES.update({
- 'inferred_method_value_unproved': ({'ops.cod':PTR+'export (<=>);','main.cod':'using "ops.cod" (<=>) as swap;func f=swap;'},2,'','unproved callable slot contract'),
- 'contextual_method_value_unproved': ({'ops.cod':PTR+'export (<=>);','main.cod':'using "ops.cod" (<=>) as swap;func helper(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{}func f=helper;f<-swap;'},2,'','unproved callable slot contract'),
- 'imported_named_alias': ({'ops.cod':PTR+'export (<=>);','main.cod':IO+'using "ops.cod" (<=>) as swap;'+BASE+'swap(p,q);'+OUT('p')+OUT('q')},0,'7\n1\n',''),
- 'imported_operation_slots': ({'ops.cod':REF+'export (<=>);','main.cod':IO+'using "ops.cod" (<=>);'+BASE+'p<=>q;'+OUT('p')+OUT('q')},0,'7\n1\n',''),
+ 'inferred_method_value_unproved': ({'ops.cod':PTR+'export (<=>);','main.cod':'using "./ops.cod" (<=>) as swap;func f=swap;'},2,'','unproved callable slot contract'),
+ 'contextual_method_value_unproved': ({'ops.cod':PTR+'export (<=>);','main.cod':'using "./ops.cod" (<=>) as swap;func helper(ptr a:i64 in O,ptr b:i64 in O)->void where {owner O}{}func f=helper;f<-swap;'},2,'','unproved callable slot contract'),
+ 'imported_named_alias': ({'ops.cod':PTR+'export (<=>);','main.cod':IO+'using "./ops.cod" (<=>) as swap;'+BASE+'swap(p,q);'+OUT('p')+OUT('q')},0,'7\n1\n',''),
+ 'imported_operation_slots': ({'ops.cod':REF+'export (<=>);','main.cod':IO+'using "./ops.cod" (<=>);'+BASE+'p<=>q;'+OUT('p')+OUT('q')},0,'7\n1\n',''),
 })
-runner.CASES['ordinary_family_as_slot_operation'] = ({'ops.cod':'func swap(ref a:i64 in O,ref b:i64 in O)->void where {owner O}{intrinsic (<=>)(a,b);}export swap;','main.cod':IO+'using "ops.cod" swap as (<=>);'+BASE+'p<=>q;'+OUT('p')+OUT('q')},0,'1\n7\n','')
-runner.CASES['bits_family_as_slot_operation'] = ({'ops.cod':'func (<->)(ref a:i64 in O,ref b:i64 in O)->void where {owner O}{intrinsic (<->)(a,b);}export (<->);','main.cod':IO+'using "ops.cod" (<->) as (<=>);'+BASE+'p<=>q;'+OUT('x')+OUT('y')+OUT('(p is x)')},0,'7\n1\ntrue\n','')
+runner.CASES['ordinary_family_as_slot_operation'] = ({'ops.cod':'func swap(ref a:i64 in O,ref b:i64 in O)->void where {owner O}{intrinsic (<=>)(a,b);}export swap;','main.cod':IO+'using "./ops.cod" swap as (<=>);'+BASE+'p<=>q;'+OUT('p')+OUT('q')},0,'1\n7\n','')
+runner.CASES['bits_family_as_slot_operation'] = ({'ops.cod':'func (<->)(ref a:i64 in O,ref b:i64 in O)->void where {owner O}{intrinsic (<->)(a,b);}export (<->);','main.cod':IO+'using "./ops.cod" (<->) as (<=>);'+BASE+'p<=>q;'+OUT('x')+OUT('y')+OUT('(p is x)')},0,'7\n1\ntrue\n','')
 for suffix, body, result, output, diagnostic in (
     ('write_then_rebind', 'a<-3;a=b;', 'p;{}', '', 'before definite initialization'),
     ('write_entry_target', 'a<-3;a=b;', OUT('x'), '3\n', ''),

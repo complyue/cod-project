@@ -1,6 +1,6 @@
-export import "abstract-adapter.cod" Sample;
-using "abstract-library.cod" Separate;
-using "abstract-library.cod" Alternate;
+export import "./abstract-adapter.cod" Sample;
+using "./abstract-library.cod" Separate;
+using "./abstract-library.cod" Alternate;
 data Sample <: Separate;
 data Sample <: Alternate;
 function make_extended_reference(region arena, value:i64) -> Sample { return alloc arena Sample(value) }

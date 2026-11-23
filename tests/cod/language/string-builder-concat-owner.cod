@@ -1,4 +1,4 @@
-using "../../../cod/library/string.cod" { (++), StringBuilder };
+using "string.cod" { (++), StringBuilder };
 
 proc escape(anchor:u64 in D) -> ref StringBuilder in D where {owner D} {
     return "a" ++ "b";

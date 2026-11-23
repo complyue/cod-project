@@ -20,14 +20,14 @@ export score;export twice;export relay;
 behave @print(100u64);
 '''
 EXT = '''
-import "base.cod" score;func score(x:u64)->u64{return 7u64;}export score;
-using "base.cod" twice as frozen;export frozen;
-export import "base.cod" twice as adapted;
-export import "base.cod" relay;
+import "./base.cod" score;func score(x:u64)->u64{return 7u64;}export score;
+using "./base.cod" twice as frozen;export frozen;
+export import "./base.cod" twice as adapted;
+export import "./base.cod" relay;
 '''
 ENTRY = IO + '''
-using "base.cod" score as base;using "ext.cod" score as extended;
-using "ext.cod" frozen;using "ext.cod" adapted;import "ext.cod" relay;
+using "./base.cod" score as base;using "./ext.cod" score as extended;
+using "./ext.cod" frozen;using "./ext.cod" adapted;import "./ext.cod" relay;
 behave @print(base(1u64));behave @print(extended(1u64));behave @print(base(1u64));
 behave @print(frozen(1u64));behave @print(adapted(1u64));behave @print(relay(10u64));
 '''
