@@ -157,6 +157,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: checking conformance to a callable promise is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 132)
         fputs(": error: a callable promise supplies no implementation on this path\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 133)
+        fputs(": error: rebinding a native handle is outside the checked compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 49)
         fputs(": error: a declaration in a loop body or else requires an explicit {{ ... }} scope\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 50)
