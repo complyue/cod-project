@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review local and imported variadic family registration
+
+<a id="k-variadic-family-registration-20261123"></a>
+**K-VARIADIC-FAMILY-REGISTRATION-20261123.** D-ARCH-REVIEW r66→67 and D-20-MODULE-GRAPH r57→58, P-680–P-683 continue the delegated [frontend review](design/ImplementationArchitecture.md#registering-a-variadic-method-family) for D-10’s single-method rule. At `84d5f51203dd1cb1832c5424bc088a53c58bcbda:cod/lang_checked.hh` the seed's executable-profile check precedes registration. The review separates unused family conflicts, original method identity and bodyless promises from executable coverage. Pack execution has a separate acceptance boundary.
+
 ## 2026-11-23 — Several arrays can supply one variadic tail in written order
 
 <a id="h-ordered-pack-expansions-20261123"></a>

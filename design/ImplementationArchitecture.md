@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 66. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 67. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+
+The [r67 pre-code review](../CHANGELOG.md#k-variadic-family-registration-20261123) clears [family registration](#registering-a-variadic-method-family) under D-10-VARARGS and P-682/P-683. Acceptance distinguishes a conflict in an unused family from a valid singleton whose body lacks executable support.
 
 The [r66 review](../CHANGELOG.md#k-booter-source-handle-helper-20261123) clears [checking an imported ordinary helper with a handle loan](../applications/cod-booter/docs/ModuleGraph.md#checking-an-imported-helper-that-borrows-a-handle) under P-682/P-683. The CoD frontend publishes the checked source interface and checks its use from the live handler. Existing executable and provider boundaries apply.
 
@@ -89,6 +91,16 @@ The [checked call interface review](../CHANGELOG.md#k-booter-imported-checked-ca
 The [caught field review](../CHANGELOG.md#k-booter-caught-field-source-check-20261123) covers a shared CoD nominal schema reader and the lexical evidence for a direct scalar payload read in a handler.
 
 The [production cutover review](../CHANGELOG.md#k-booter-production-cutover-checks-20261122) clears [standalone membership](../applications/cod-booter/docs/ModuleGraph.md#standalone-build-cutover), the graph’s fixed reference formals and [frontend construction and completion checks](../applications/cod-booter/docs/ModuleGraph.md#checking-a-constructing-throw-in-the-path-wrapper). The [owned throw lowering review](../CHANGELOG.md#k-booter-owned-throw-lowering-20261122) covers the [CoD nominal tags, private LLVM outcome and runtime cleanup](../applications/cod-booter/docs/ModuleGraph.md#lowering-an-owning-exception-through-cleanup) for the real path wrapper, plus the [shared call check for forwarded feedback](../applications/cod-booter/docs/ModuleGraph.md#checking-the-forwarded-path-callback).
+
+### Registering a variadic method family
+
+Apply D-10's [standalone-method rule](SymbolicDynamicScope.md#runtime-array-expansion-and-one-variadic-parameter) to each actual family as it forms. In the seed, reuse local method registration and the composed receiver view. In the CoD booter, parse the exact final ordinary-formal suffix `...` with its span, retain that fact in the typed formal, and use it in local registration and checked module selection. Verify that `.`, `..` and other operator tokens retain their respective boundaries.
+
+Track bodyless promises separately. Count distinct defining methods in the selected interpretation. Preserve existing conflicts between incompatible interpretations of one definition. Independent source-preserving views remain separate. A previously proved source interface can carry the defining module, method identity, implementation presence and variadic fact through re-export. Validate identities and graph row bounds before using them. A native body ordinal is unnecessary to check family membership.
+
+Report an unused local conflict at the declaration and an imported conflict at the combining directive. Preserve structural evidence from dependencies long enough to check the receiving composition. A valid standalone method can still encounter a located execution-profile stop. Do not publish executable coverage from structural evidence. Existing syntax, body checks, callable promises and fixed-only overload checks apply in their respective phases.
+
+Verify both registration orders, disjoint domains, differing prefixes, same-method diamonds, independent source views and authorized imported extensions in both frontends. Check the fixed implementation under a bodyless variadic promise and preserve its cleanup. Compare the normal compiler commands, earlier artifacts after rejection, and the supported command baseline. This clearance covers registration and checked interfaces. Execution of one or several expansions needs its own implementation review.
 
 ## Design review and delivery responsibilities
 
