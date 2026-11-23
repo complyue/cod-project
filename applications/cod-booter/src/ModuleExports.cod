@@ -42,20 +42,24 @@ export data ExportResolutionResult {
 
 export func exception_type_export() -> u8 { return 1u8; }
 export func symbol_export() -> u8 { return 2u8; }
-export func native_handle_export() -> u8 { return 3u8; }
-export func record_export() -> u8 { return 4u8; }
-export func array_export() -> u8 { return 5u8; }
-export func nominal_exception_export() -> u8 { return 6u8; }
-export func callable_export() -> u8 { return 7u8; }
-export func enum_export() -> u8 { return 8u8; }
-export func enum_member_export() -> u8 { return 9u8; }
-export func abstract_type_export() -> u8 { return 10u8; }
 export func builder_storage_export() -> u8 { return 11u8; }
-export func lexical_builder_export() -> u8 { return 13u8; }
 export func lexical_result_export() -> u8 { return 14u8; }
 export func text_size_export() -> u8 { return 15u8; }
 export func text_byte_export() -> u8 { return 16u8; }
-export func sum_export() -> u8 { return 18u8; }
+
+# The canonical catalog occupies the lower half, including builtin meanings
+# carried by a re-export. The remaining meanings belong only to source rows.
+func first_source_export_kind() -> u8 { return 128u8; }
+export func sum_export() -> u8 { return first_source_export_kind(); }
+export func native_handle_export() -> u8 { return 129u8; }
+export func record_export() -> u8 { return 130u8; }
+export func array_export() -> u8 { return 131u8; }
+export func nominal_exception_export() -> u8 { return 132u8; }
+export func callable_export() -> u8 { return 133u8; }
+export func enum_export() -> u8 { return 134u8; }
+export func enum_member_export() -> u8 { return 135u8; }
+export func abstract_type_export() -> u8 { return 136u8; }
+export func lexical_builder_export() -> u8 { return 137u8; }
 export func ordinary_callable_shape() -> u8 { return 1u8; }
 export func print_export_identity() -> u64 { return 0u64; }
 export func exception_root_identity() -> u64 { return 0u64; }
@@ -211,6 +215,12 @@ export func resolve_module_exports(source:const SourceBytes in S, nodes:const Ex
         report.diagnostic <- export_storage_exhausted();
         return false;
     } else {};
+    for (at in 0u64 .. intrinsic (len)(builtins)) {
+        if (builtins[at].kind == 0u8 || builtins[at].kind >= first_source_export_kind()) {
+            report.diagnostic <- unproved_module_exports();
+            return false;
+        };
+    };
     ref syntax = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
         symbolic <- false; mode <- UseResource;
