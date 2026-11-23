@@ -1,6 +1,6 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 232 · Recorded: 2026-11-21 · Phase: language/application co-design.
+Design revision: 233 · Recorded: 2026-11-22 · Phase: language/application co-design.
 
 ## Design authority
 
@@ -46,7 +46,7 @@ Design revision: 232 · Recorded: 2026-11-21 · Phase: language/application co-d
 
 - **Full-scope dependency continuity:** [K-FULL-SCOPE-IMPLEMENTATION-20261118](../CHANGELOG.md#k-full-scope-implementation-20261118) updates only the referenced r92 qualification. This document’s semantic revision, own qualification, acceptance and exclusions are unchanged.
 
-- **Semicolon omission and syntax UX:** [H-SEMICOLON-UX-20261117](../CHANGELOG.md#h-semicolon-ux-20261117)/[K-SEMICOLON-UX-20261117](../CHANGELOG.md#k-semicolon-ux-20261117), [D-10-SEMICOLON-UX](DesignAuthorityRegistry.md#d-10-semicolon-ux)/P-570–P-572, covers r201→202's general source/diagnostic principle below. The human selects permissive omission where practical and warnings with clearer alternatives for misleading valid spellings; corner cases are ongoing UX work. Candidate C-06 → charter §§8.1–8.3/9/12 supports readable source and actionable diagnostics without guessing intent. Preserve deterministic syntax, source meaning, owners/effects and D-16; exact newline/insertion grammar, warning heuristics and complete implementation/value-path qualification remain pending. Existing examples with explicit separators are not a universal mandatory-semicolon policy.
+- **Semicolon omission and syntax UX.** [D-10-SEMICOLON-UX](DesignAuthorityRegistry.md#d-10-semicolon-ux) at r233 records the [authoring and grammar principles](../CHANGELOG.md#h-idiomatic-semicolons-20261122) alongside the [original omission and warning decision](../CHANGELOG.md#h-semicolon-ux-20261117). P-570–P-572 connect readable source to C-06. The [examples](#semicolon-omission-and-syntax-ux) cover an ordinary tail and a separator that changes callback attachment. Specific newline rules, warning heuristics and frontend support retain their own scope.
 
 - **Trailing here arguments.** [H-CALLABLE-MODEL-20261118](../CHANGELOG.md#h-callable-model-20261118), D-10-TRAILING-CALLBACK/P-567–P-569, continues first-slot insertion and default evaluation order. D-18 r127 governs live lexical access, nonescape and the control destination selected by the braces.
 
@@ -983,20 +983,28 @@ An omitted alternative completes normally with no payload. A context that requir
 
 ### Semicolon omission and syntax UX
 
-[H-SEMICOLON-UX-20261117](../CHANGELOG.md#h-semicolon-ux-20261117) establishes the general principle: **allow semicolon omission wherever practical, and warn when a valid spelling is easy to write with an unintended meaning.** Such a warning should explain the selected interpretation and suggest a concrete, less error-prone spelling. Fine-grained omission and diagnostic cases are ongoing language UX work; this principle does not require an exhaustive automatic-semicolon-insertion system before useful cases can be supported.
+**In idiomatic CoD, omit semicolons by default.** Write one when the intended parse requires it or when it makes a boundary substantially easier for a reader to see. For example, the final expression in this function is already delimited by the closing brace.
 
-Keep explicit semicolons available to make boundaries clear. Routine omission is not itself a reason to warn. A real syntax ambiguity or invalid program still needs an ordinary error; a warning cannot grant a missing type, owner, lifetime or effect permission. Parser interpretation is deterministic and does not retry a different statement split based on overload success, runtime behavior or a guess about the author's intention. Diagnostics do not change that interpretation. Existing opt-in warning-as-error policy remains applicable; no new mandatory diagnostic switch is selected.
+```cod
+func increment(n:u64) -> u64 {
+    n + 1u64
+}
+```
+
+**Design the grammar to minimize mandatory semicolons.** Prefer existing delimiters or a deterministic expression boundary when they distinguish the intended forms. When reviewing a proposed mandatory separator, identify the two readings it separates and whether the surrounding syntax already decides between them. Particular productions, including receiving lists and bodyless declarations, keep their specified grammar until their omission cases are settled. A semicolon delimits an expression. Result consumption and explicit discard follow the ordinary typing rules. [Callable results](CallableResultInference.md#results-of-proc-func-and-here-bodies)
+
+The parser uses one interpretation independent of overload resolution or runtime results. A valid but misleading spelling can warrant a warning that explains the chosen parse and suggests a clearer spelling. Routine omission needs no warning. Detailed warning analysis follows the [compiler-stage policy](../applications/cod-booter/README.md#diagnostics-by-compiler-stage).
 
 A current review case is the distinction between a trailing callback and a separate immediate full scope:
 
 ```cod
 # Assume run has a defaulted niladic callback, so either intent is expressible.
 run()
-{{ work(); }}
+{{ work() }}
 
-# Explicit boundary when two successive operations are intended:
+# The semicolon ends the call. The next block executes independently.
 run();
-{{ work(); }}
+{{ work() }}
 ```
 
 Where the grammar attaches the first block as a callback, a suspicious presentation can warrant a warning that the block is passed to run and is invoked only under run's behavior; inserting `;` states the independent-scope intent. An intentionally formatted multiline callback must not warn merely because a newline precedes its block. Exact warning triggers and safe formatter output need focused examples and incremental refinement; indentation is not proof of intent.

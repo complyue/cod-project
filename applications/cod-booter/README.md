@@ -1,8 +1,10 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 25 · Recorded: 2026-11-22 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 26 · Recorded: 2026-11-22 · Phase: initial seed delivery through alternating booter and seed development.
 
 ## Design authority
+
+- [D-20-DIAGNOSTIC-NAMES](../../design/DesignAuthorityRegistry.md#d-20-diagnostic-names), P-684/P-685, at r26 records the [two-name diagnostic principle](../../CHANGELOG.md#h-diagnostic-names-20261122). A reader can connect the spelling at a use site to its defining identity under charter §§8–9. Apply it at all stages within P-627/P-628. Acceptance covers renamed use sites, defining-module qualification and runtime construction provenance.
 
 - [D-20-MODULE-GRAPH](../../design/DesignAuthorityRegistry.md#d-20-module-graph), roadmap r25, covers [module traversal, frames and scoped reentry](docs/ModuleGraph.md) under the [user-directed layer review](../../CHANGELOG.md#h-compiler-layers-20261122). P-680/P-681 connect compiler-language ownership to inspectable end-to-end behavior. Verify the actual graph, nested restoration, typed AST, provider files and object workloads. The separate pipeline/cache proposal retains its own scope.
 
@@ -119,6 +121,14 @@ Specify and check the initial region and LLVM operations alongside the booter in
 The C++ seed and the CoD-written booter in `e-wrks/cod-seed` share one diagnostic policy across parsing, name resolution, type checking, ownership, control flow and code generation. Both enforce the checks needed for correct compilation. Report failed checks directly, using the reason and source location when available. Unsupported programs receive a direct diagnostic. Accepted programs retain required runtime checks. The booter’s added responsibility here is exception handling. Its delivery requires no extra analysis or diagnostic output beyond the seed policy.
 
 The future compiler in `e-wrks/cod` owns full diagnostics, including extra passes, cross-path reasoning, counterexamples, explanatory notes and suggested fixes. For a lifetime error, the seed and booter can report the failed check. Reconstructing other paths to explain the error belongs in `e-wrks/cod`. The same boundary applies to optional coverage warnings, overload explanations, receiving-overlap warnings and implicit-import suggestions.
+
+#### Names in diagnostics
+
+When a diagnostic names something through a **name/identity alias**, show both the spelling used at the reported site and the **canonical fully qualified name** of the resolved declaration. For example, if a module imports `Report` from `storage/errors.cod` as `WriteFailure`, the diagnostic can say **`WriteFailure` (canonical `storage/errors.cod::Report`)**. The qualification is display notation. Use the defining module’s canonical identity, enclosing type for a member, and package or version context as needed to distinguish declarations. A renamed re-export leads back to the original declaration. An enum member’s alternate spelling leads to its canonical member. When lookup is ambiguous, show the relevant candidates with their own canonical names. When lookup fails to find a declaration, report the unresolved spelling.
+
+Apply this to errors, warnings and notes, including runtime diagnostics attributed to a named source occurrence. Use the spelling from that occurrence. Two sites can use different names for the same identity. An enum value alone, for example, carries no history of the source spelling. A diagnostic about the value alone can use the canonical name. Keep a reported source location distinct from the defining identity. For a declared place alias, identify the binding and selected place when known. Runtime target sharing alone supplies no alternate declaration name. [Name and place terminology](../../design/CallableViewsAndCaptures.md#alias-terminology)
+
+When the seed or booter reports such a use, it shows both names using the evidence from name resolution and the source occurrence. The production compiler owns additional diagnostic-only analyses under the stage policy above. For a source-attributed runtime diagnostic that names a resolved exception, preserve the pair when lowering that named use. [Exception identity in the object](docs/ModuleGraph.md#exception-identity-layout-and-names-in-the-object)
 
 ## Document map
 

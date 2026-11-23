@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 201
+Discussion revision: 202
 
-Recorded: 2026-11-21
+Recorded: 2026-11-22
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+The [diagnostic name decision](../CHANGELOG.md#h-diagnostic-names-20261122) applies D-20-DIAGNOSTICS to the H-214 module selection display at r202. Lookup and source syntax retain their existing contracts.
 
 [D-07-ENUM](DesignAuthorityRegistry.md#d-07-enum), P-658/P-659, applies [the typed-enum decision](../CHANGELOG.md#h-typed-enum-20261121) at r201. A closed set of named bits values keeps application outcomes explicit across source modules and cases. Check declaration identity, lexical shadowing and complete coverage over distinct values. The scoped [enum contract](TypedEnums.md) records acceptance and the C boundary.
 
@@ -588,7 +590,7 @@ Compiler operation/intrinsic overloads retain lexical views in this increment, p
 
 Julia permits unqualified extension after import, and also permits extension through qualified function names. CoD adopts the using/import extension distinction but H-214 excludes module-qualified callable names: there is no corresponding qualified-name bypass. Automatic type-associated method selection is a separate CoD contract. [Julia modules](https://docs.julialang.org/en/v1/manual/modules/#using-and-import-with-specific-identifiers,-and-adding-methods)
 
-H-214 keeps modules out of the receiving local namespace. A source path belongs in a selection declaration; selected definitions are reached through local aliases, not Module.f or Module.@p expressions. This retains package/version identity without introducing module-valued namespace objects. Compiler diagnostics and IDE navigation may display the full origin without making it a callable expression. A dot on an object may still denote its field; that does not establish module-qualified lookup.
+H-214 keeps modules out of the receiving local namespace. A source path belongs in a selection declaration. The local name or a name/identity alias gives access to the selected definition. This retains package/version identity without introducing module-valued namespace objects. A diagnostic about a name selected under a name/identity alias shows the local spelling together with its canonical fully qualified name. IDE navigation can use the same identity. Object fields retain their usual dot syntax. Diagnostic qualification is display notation and grants no `Module.f` or `Module.@p` expression form. [Names in diagnostics](../applications/cod-booter/README.md#names-in-diagnostics)
 
 H-215 proposes a separate explicit `import "source" method as local_alias;` declaration for local method renaming. It retains the source body and grants import's extension permission; H-232 also supplies receiving implementation-context adaptation. It does not perform mixin redefinition. A selector containing only a callable name naturally selects its source-visible overload family; H-490 excludes selecting a particular method signature as a using/import unit. Compile-time aliases and explicit TLS installation are separate: installing a compatible source-family view may deliberately target another identity without changing either method world. The prototype’s implicit symbolic-selection installation path requires migration under H-372/H-373.
 
