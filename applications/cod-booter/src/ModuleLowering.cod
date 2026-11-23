@@ -7,7 +7,8 @@ using "ParserStorage.cod" ExprPayload {
 };
 using "ParserStorage.cod" {
     ExprNodes, len as syntax_len, published_syntax_id, no_node,
-    inspect_assignment, AssignmentSites, inspect_construction, ConstructionSites,
+    inspect_assignment, AssignmentSites, inspect_augmented_transfer, AugmentedTransferSites,
+    inspect_construction, ConstructionSites,
     syntax_first, SequenceEntry, inspect_sequence_entry, first_sequence_entry, block_tail,
     DirectCallSites, inspect_invocation, DeferSites, inspect_defer, first_module_item, SequenceSyntax,
     inspect_callable, CallableSites, find_signature_clause,
@@ -40,7 +41,9 @@ using "ParserStorage.cod" CallableSyntax { ModuleCallable };
 using "ParserStorage.cod" SignatureSyntax { SignatureHead };
 using "ParserStorage.cod" FormalSyntax { OrdinaryFormal };
 using "ParserStorage.cod" FormalMode { ValueFormal, InitializingPlaceFormal };
-using "ParserStorage.cod" AssignmentSyntax { PlaceTransfer, PlaceRebind, FieldTransfer, InvalidAssignment };
+using "ParserStorage.cod" AssignmentSyntax {
+    PlaceTransfer, PlaceRebind, FieldTransfer, InvalidAssignment, AugmentedPlaceTransfer,
+};
 using "ParserStorage.cod" LiteralRange { EmptyLiteralRange, NonemptyLiteralRange, InvalidRange };
 using "ParserInput.cod" ParseResult;
 using "NameResolution.cod" { NameBindings, NameWork, exception_binding };
@@ -518,6 +521,49 @@ func native_relation(relation:ComparisonRelation) -> u64 {
     };
 }
 
+func lower_arithmetic(code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R,
+                      output:u64, left:u64, right:u64, operation:ArithmeticOperation,
+                      operator_at:u64)
+    -> void where {owner C, owner P, owner R} {
+    command(code, plan, native_arithmetic(operation), output, left, right, arithmetic_fault());
+    val ready <- new_block(plan);
+    val failed <- new_block(plan);
+    command(code, plan, branch_equal(), arithmetic_fault(), 0u64, ready, failed);
+    position(code, plan, state, failed);
+    command(code, plan, copy_completion(), pending_category(), arithmetic_fault(), 1u64, 0u64);
+    emit(code, plan, source_site(), pending_site(), operator_at);
+    finish_block(code, plan, state, state.exception_target);
+    position(code, plan, state, ready);
+    return
+}
+
+func lower_augmented_transfer(
+    nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+    facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
+    plan:NativePlan in P, state:LoweringState in R, at:u64,
+    transfer:const AugmentedTransferSites in U)
+    -> void where {const owner N, const owner B, const owner L, const owner F, const owner S,
+                   owner C, owner P, owner R, const owner U} {
+    val destination <- transfer.destination;
+    val input <- transfer.input;
+    lower_node(nodes, names, links, facts, sites, code, plan, state, destination);
+    if (!state.live || plan.diagnostic != 0u8) return;
+    require_target(nodes, facts, sites, code, plan, state, destination);
+    if (!state.live) return;
+    val left <- new_slot(plan);
+    val place <- slot(destination);
+    val reserved <- facts[destination].reservation;
+    storage_operation(code, plan, load_target(), left, place, reserved, destination);
+    lower_bits(nodes, names, links, facts, sites, code, plan, state, input);
+    if (!state.live || plan.diagnostic != 0u8) return;
+    val output <- slot(at);
+    lower_arithmetic(code, plan, state, output, left, slot(input),
+                     transfer.operation, transfer.operator_at);
+    storage_operation(code, plan, store_target(), place, output, reserved, destination);
+    emit(code, plan, copy_word(), output, place);
+    return
+}
+
 func lower_binary(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                   facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
                   plan:NativePlan in P, state:LoweringState in R, at:u64, operands:const BinarySites in I, compare:bool) -> void
@@ -532,16 +578,9 @@ func lower_binary(nodes:const ExprNodes in N, names:const NameBindings in B, lin
         command(code, plan, compare_words(), slot(at), slot(left), slot(right), native_relation(operands.relation));
         return;
     } else {};
-    val opcode <- native_arithmetic(operands.arithmetic);
-    command(code, plan, opcode, slot(at), slot(left), slot(right), arithmetic_fault());
-    val ready <- new_block(plan);
-    val failed <- new_block(plan);
-    command(code, plan, branch_equal(), arithmetic_fault(), 0u64, ready, failed);
-    position(code, plan, state, failed);
-    command(code, plan, copy_completion(), pending_category(), arithmetic_fault(), 1u64, 0u64);
-    emit(code, plan, source_site(), pending_site(), operands.operator_at);
-    finish_block(code, plan, state, state.exception_target);
-    position(code, plan, state, ready);
+    lower_arithmetic(code, plan, state, slot(at), slot(left), slot(right),
+                     operands.arithmetic, operands.operator_at);
+    return
 }
 
 func lower_logical(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
@@ -1491,6 +1530,19 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
     ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- 0u64; };
     val mode <- inspect_assignment(nodes, state.syntax_revision, state.syntax_used, at, assignment);
     if (mode == InvalidAssignment) { plan.diagnostic <- invalid_native_module(); return; };
+    if (mode == AugmentedPlaceTransfer) {
+        ref transfer = make AugmentedTransferSites {
+            destination <- no_node(); input <- no_node(); operator_at <- 0u64; operation <- Addition
+        };
+        if (!inspect_augmented_transfer(nodes, state.syntax_revision, state.syntax_used,
+                                        at, transfer)) {
+            plan.diagnostic <- invalid_native_module();
+            return
+        };
+        lower_augmented_transfer(nodes, names, links, facts, sites, code, plan, state,
+                                 at, transfer);
+        return
+    };
     if (mode == PlaceTransfer || mode == PlaceRebind || mode == FieldTransfer) {
         lower_assignment(nodes, names, links, facts, sites, code, plan, state, at,
                          assignment.destination, assignment.input, mode == PlaceRebind);
@@ -1621,11 +1673,11 @@ func receive_formals(nodes:const ExprNodes in N, links:const NameWork in L, fact
         if (sites.mode == InitializingPlaceFormal) {
             storage_operation(code, plan, unbind_local(), 0u64, 0u64, formal, formal);
         };
-        index <- index + 1u64;
+        index <-:+ 1u64;
         chain <- formal_owner_word(facts, formal);
         if (chain != no_node()) {
             emit(code, plan, receive_parameter(), slot(chain), index);
-            (index <- index + 1u64):void;
+            (index <-:+ 1u64):void;
         };
         formal <- links[formal].next;
     };

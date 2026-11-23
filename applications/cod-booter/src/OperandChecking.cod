@@ -56,7 +56,10 @@ using "ParserStorage.cod" BooleanSyntax { LiteralTrue, LiteralFalse };
 using "ParserStorage.cod" ConstructionSyntax { StorageReservation, PositionalConstruction, BracedConstruction, InvalidConstruction };
 using "ParserStorage.cod" SequenceSyntax { ArgumentSequence, BlockSequence, FormalSequence };
 using "ParserStorage.cod" GroupSyntax { ParenthesizedExpression };
-using "ParserStorage.cod" AssignmentSyntax { PlaceTransfer, PlaceRebind, FieldTransfer, FieldRebind, InvalidAssignment };
+using "ParserStorage.cod" AssignmentSyntax {
+    PlaceTransfer, PlaceRebind, FieldTransfer, FieldRebind, InvalidAssignment,
+    AugmentedPlaceTransfer,
+};
 using "ParserStorage.cod" NameSyntax { OrdinaryName };
 using "ParserStorage.cod" name_syntax;
 using "ParserStorage.cod" LiteralRange { EmptyLiteralRange, NonemptyLiteralRange, InvalidRange };
@@ -985,22 +988,53 @@ func check_text_installation(nodes:const ExprNodes in N, facts:OperandFacts in F
     return 0u8;
 }
 
-func check_transfer(nodes:const ExprNodes in N, facts:OperandFacts in F,
-                    at:u64, destination:u64, supplied:u64) -> u8 where {const owner N, owner F} {
+func check_transfer_destination(
+    nodes:const ExprNodes in N, facts:OperandFacts in F, destination:u64)
+    -> u8 where {const owner N, owner F} {
     val reception <- facts[destination].reception;
     val kind <- facts[destination].kind;
     if (!scalar_kind(kind)) return unproved_operand();
     if (facts[destination].target_readonly != 0u8 ||
         (reception != local_place() && reception != borrowed_ref() && reception != nullable_ptr()))
         return expected_writable_place();
-    val diagnostic <- require_typed_bits(nodes, facts, destination, kind);
+    return require_typed_bits(nodes, facts, destination, kind)
+}
+
+func remember_transfer(facts:OperandFacts in F, at:u64, destination:u64) -> void where {owner F} {
+    set_fact(facts, at, facts[destination].kind, borrowed_ref(),
+             facts[destination].owner, facts[destination].identity, 0u8);
+    facts[at].target_readonly <- 1u8;
+    facts[at].reservation <- facts[destination].reservation;
+    return
+}
+
+func check_transfer(nodes:const ExprNodes in N, facts:OperandFacts in F,
+                    at:u64, destination:u64, supplied:u64) -> u8 where {const owner N, owner F} {
+    val diagnostic <- check_transfer_destination(nodes, facts, destination);
     if (diagnostic != 0u8) return diagnostic;
     diagnostic <- require_matching_bits(nodes, facts, supplied, destination);
     if (diagnostic != 0u8) return diagnostic;
-    set_fact(facts, at, kind, borrowed_ref(), facts[destination].owner, facts[destination].identity, 0u8);
-    facts[at].target_readonly <- 1u8;
-    facts[at].reservation <- facts[destination].reservation;
+    remember_transfer(facts, at, destination);
     return 0u8;
+}
+
+func check_augmented_transfer(nodes:const ExprNodes in N, facts:OperandFacts in F,
+                              at:u64, destination:u64, input:u64, used:u64, revision:u64)
+    -> u8 where {const owner N, owner F} {
+    val selected <- ungrouped(nodes, revision, used, destination);
+    if (name_syntax(nodes, used, selected) != OrdinaryName) return unsupported_transfer_signature();
+    val diagnostic <- check_transfer_destination(nodes, facts, destination);
+    if (diagnostic != 0u8) return diagnostic;
+    diagnostic <- require_bits(nodes, facts, destination);
+    if (diagnostic != 0u8) return diagnostic;
+    if (facts[input].kind == never_result()) {
+        set_result(facts, at, never_result());
+        return 0u8
+    };
+    diagnostic <- require_bits(nodes, facts, input);
+    if (diagnostic != 0u8) return diagnostic;
+    remember_transfer(facts, at, destination);
+    return 0u8
 }
 
 func ordinary_argument_value(nodes:const ExprNodes in N, used:u64, revision:u64, argument:u64) -> u64
@@ -2375,6 +2409,9 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     if (mode == InvalidAssignment) return invalid_operand_tree();
     if (mode == FieldRebind ||
         (mode == FieldTransfer && names[assignment.destination].kind == record_initializer_label())) return 0u8;
+    if (mode == AugmentedPlaceTransfer)
+        return check_augmented_transfer(nodes, facts, at, assignment.destination, assignment.input,
+                                       used, revision);
     if ((mode == PlaceRebind || mode == PlaceTransfer || mode == FieldTransfer) && names[at].scope == no_node()) return 0u8;
     if (mode == PlaceRebind)
         return check_text_installation(nodes, facts, at, assignment.destination, assignment.input);

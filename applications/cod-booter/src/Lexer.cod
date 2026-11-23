@@ -722,39 +722,19 @@ func quoted_text_end(source:const SourceBytes in S, first:u64, past:u64,
     return
 }
 
-func punctuation_width(first:u8, second:u8, third:u8) -> u64 {
-    val less <- 60u8;
-    val greater <- 62u8;
-    val equals <- 61u8;
-    val minus <- 45u8;
-    val plus <- 43u8;
-    val dot <- 46u8;
-    val pipe <- 124u8;
-    val ampersand <- 38u8;
-    val bang <- 33u8;
-    val dollar <- 36u8;
-    val colon <- 58u8;
+func symbolic_source_byte(byte:u8) -> bool {
+    # ! $ % & * + - . / : < = > |
+    return byte == 33u8 || (byte >= 36u8 && byte <= 38u8) || byte == 42u8 ||
+        byte == 43u8 || (byte >= 45u8 && byte <= 47u8) || byte == 58u8 ||
+        (byte >= 60u8 && byte <= 62u8) || byte == 124u8
+}
 
-    # ...  <=>  <->
-    if ((first == dot && second == dot && third == dot) ||
-        (first == less && (second == equals || second == minus) && third == greater))
-        return 3u64;
-    # -> == != <= >= && || <- <: .. => |> <| !> <! $> <$ ++
-    if ((second == greater && (first == minus || first == equals || first == pipe ||
-                               first == bang || first == dollar)) ||
-        (second == equals && (first == equals || first == bang || first == less || first == greater)) ||
-        (first == second && (first == dot || first == ampersand || first == pipe || first == plus)) ||
-        (first == less && (second == minus || second == colon || second == pipe ||
-                           second == bang || second == dollar)))
-        return 2u64;
-    # () {} [] ; , : . + - * / % < > = ! |
-    if (first == 40u8 || first == 41u8 || first == 123u8 || first == 125u8 ||
-        first == 91u8 || first == 93u8 || first == 59u8 || first == 44u8 ||
-        first == colon || first == dot || first == 43u8 || first == minus ||
-        first == 42u8 || first == 47u8 || first == 37u8 ||
-        first == less || first == greater || first == equals || first == bang || first == pipe)
-        return 1u64;
-    return 0u64;
+func operator_past(source:const SourceBytes in S, first:u64, past:u64) -> u64
+    where {const owner S} {
+    for (at in first + 1u64 .. past) {
+        if (!symbolic_source_byte(source[at])) return at
+    };
+    return past
 }
 
 # The source is a stable bounded byte view. The caller owns its lifetime.
@@ -793,22 +773,21 @@ export func scan_token(source:const SourceBytes in S, first:u64,
         quoted_text_end(source, start, past, token);
         return;
     } else {};
-    val second_at <- start + 1u64;
-    val second <- lookahead(source, second_at, past);
-    if (byte == 47u8 && second == 47u8) { # '//'
-        token.kind <- reserved_fraction_operator();
-        token.past <- start + 2u64;
+    if (symbolic_source_byte(byte)) {
+        val end <- operator_past(source, start, past);
+        token.past <- end;
+        token.kind <- punctuation();
+        if (end - start == 2u64 && source[start + 1u64] == byte) {
+            if (byte == 47u8) { (token.kind <- reserved_fraction_operator()):void };
+            if (byte == 58u8) { (token.kind <- legacy_type_separator()):void };
+        };
         return;
-    } else {};
-    if (byte == 58u8 && second == 58u8) { # '::'
-        token.kind <- legacy_type_separator();
-        token.past <- start + 2u64;
-        return;
-    } else {};
-    val third <- if (second_at < past) { lookahead(source, second_at + 1u64, past) } else { 0u8 };
-    val width <- punctuation_width(byte, second, third);
-    token.kind <- if (width == 0u64) { unsupported_byte() } else { punctuation() };
-    token.past <- start + (if (width == 0u64) { 1u64 } else { width });
+    };
+    token.kind <- if (byte == 40u8 || byte == 41u8 || byte == 91u8 || byte == 93u8 ||
+        byte == 123u8 || byte == 125u8 || byte == 44u8 || byte == 59u8) {
+        punctuation()
+    } else { unsupported_byte() };
+    token.past <- start + 1u64;
     return;
 }
 

@@ -68,6 +68,7 @@ export data ExprPayload =
     | EnumMember { previous:NodeLink; name:NodeId; initializer:NodeLink; }
     | EnumDefinition { name:NodeId; backing:NodeId; member_tail:NodeId; }
     | Transfer { operands:AssignmentOperands; }
+    | AugmentedTransfer { operands:AssignmentOperands; operation:ArithmeticOperation; }
     | Rebind { operands:AssignmentOperands; }
     | InitializerTransfer { operands:AssignmentOperands; }
     | InitializerRebind { operands:AssignmentOperands; }
@@ -884,8 +885,39 @@ export enum AssignmentSyntax:u8 {
     PlaceRebind;
     FieldTransfer;
     FieldRebind;
+    AugmentedPlaceTransfer;
 }
 export data AssignmentSites { destination:u64; input:u64; operator_at:u64; }
+
+export data AugmentedTransferSites {
+    destination:u64;
+    input:u64;
+    operator_at:u64;
+    operation:ArithmeticOperation;
+}
+
+export func inspect_augmented_transfer(
+    nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, sites:AugmentedTransferSites in R)
+    -> bool where {const owner N, owner R} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        (Occupied { val expression <- node; }) -> {
+            case expression.payload of {
+                (AugmentedTransfer { val operands <-; val arithmetic <- operation; }) -> {
+                    if (!published_syntax_id(nodes, revision, at, operands.destination) ||
+                        !published_syntax_id(nodes, revision, at, operands.input)) return false;
+                    sites.destination <- operands.destination.index;
+                    sites.input <- operands.input.index;
+                    sites.operator_at <- operands.operator_at;
+                    sites.operation <- arithmetic;
+                    true
+                };
+                _ -> false
+            }
+        };
+        _ -> false
+    }
+}
 
 func checked_assignment_sites(nodes:const ExprNodes in N, revision:u64, at:u64,
                               operands:const AssignmentOperands in A, sites:AssignmentSites in R,
@@ -907,6 +939,10 @@ export func inspect_assignment(nodes:const ExprNodes in N, revision:u64, used:u6
             case syntax.payload of {
                 (Transfer { val operands <- operands; }) -> {
                     checked_assignment_sites(nodes, revision, at, operands, sites, PlaceTransfer:AssignmentSyntax)
+                };
+                (AugmentedTransfer { val operands <-; }) -> {
+                    checked_assignment_sites(nodes, revision, at, operands, sites,
+                                             AugmentedPlaceTransfer:AssignmentSyntax)
                 };
                 (Rebind { val operands <- operands; }) -> {
                     checked_assignment_sites(nodes, revision, at, operands, sites, PlaceRebind:AssignmentSyntax)

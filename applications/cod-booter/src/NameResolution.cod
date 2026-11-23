@@ -40,7 +40,10 @@ using "ParserStorage.cod" SelectionSyntax { InvalidSelection, SelectionReady };
 using "ParserStorage.cod" LogicalSyntax { LogicalNot, LogicalAnd, LogicalOr };
 using "ParserStorage.cod" RhsEvaluation { ConditionalRhs };
 using "ParserStorage.cod" ConstructionSyntax { PositionalConstruction, BracedConstruction, StorageReservation };
-using "ParserStorage.cod" AssignmentSyntax { PlaceTransfer, PlaceRebind, FieldTransfer, FieldRebind };
+using "ParserStorage.cod" AssignmentSyntax {
+    PlaceTransfer, PlaceRebind, FieldTransfer, FieldRebind, AugmentedPlaceTransfer,
+};
+using "ParserStorage.cod" ExprPayload { AugmentedTransfer };
 using "ParserStorage.cod" HereSyntax { HereReady };
 using "ParserStorage.cod" NameSyntax { OrdinaryName, SymbolicName };
 using "ParserStorage.cod" {
@@ -1228,7 +1231,8 @@ func resolve_assignment(source:const SourceBytes in S, nodes:const ExprNodes in 
     where {const owner S, const owner N, owner B, owner W, owner R} {
     ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- 0u64; };
     val mode <- inspect_assignment(nodes, state.syntax_revision, state.syntax_used, at, assignment);
-    if (mode != PlaceTransfer && mode != PlaceRebind && mode != FieldTransfer) {
+    if (mode != PlaceTransfer && mode != PlaceRebind && mode != FieldTransfer &&
+        mode != AugmentedPlaceTransfer) {
         reject_name(state, at, invalid_module_tree());
         return;
     };
@@ -1350,6 +1354,10 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                     return;
                 };
                 (Transfer) -> {
+                    resolve_assignment(source, nodes, bindings, work, state, at, true);
+                    return;
+                };
+                (AugmentedTransfer) -> {
                     resolve_assignment(source, nodes, bindings, work, state, at, true);
                     return;
                 };

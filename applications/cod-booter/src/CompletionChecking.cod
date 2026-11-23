@@ -28,7 +28,9 @@ using "ParserStorage.cod" SignatureSyntax { ThrowsSignatureClause };
 using "ParserStorage.cod" LogicalSyntax { LogicalNot, LogicalAnd, LogicalOr, InvalidLogical };
 using "ParserStorage.cod" RhsEvaluation { ConditionalRhs, SkipsRhs, TakesRhs };
 using "ParserStorage.cod" ConstructionSyntax { StorageReservation, PositionalConstruction, BracedConstruction };
-using "ParserStorage.cod" AssignmentSyntax { PlaceTransfer, PlaceRebind, FieldTransfer, FieldRebind };
+using "ParserStorage.cod" AssignmentSyntax {
+    PlaceTransfer, PlaceRebind, FieldTransfer, FieldRebind, AugmentedPlaceTransfer,
+};
 using "ParserStorage.cod" GroupSyntax { ParenthesizedExpression };
 using "ParserStorage.cod" LiteralRange { EmptyLiteralRange, NonemptyLiteralRange };
 using "ParserInput.cod" ParseResult;
@@ -161,9 +163,14 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
     };
     ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- 0u64; };
     val mode <- inspect_assignment(nodes, revision, used, at, assignment);
-    if (mode == PlaceTransfer || mode == PlaceRebind || mode == FieldTransfer || mode == FieldRebind) {
+    if (mode == PlaceTransfer || mode == PlaceRebind || mode == FieldTransfer ||
+        mode == FieldRebind || mode == AugmentedPlaceTransfer) {
         inherit_context(sites, at, assignment.destination, guard, incoming, replacing);
         inherit_context(sites, at, assignment.input, guard, incoming, replacing);
+        if (mode == AugmentedPlaceTransfer &&
+            facts[assignment.destination].kind == never_result()) {
+            (sites[assignment.input].event <- skipped_operand()):void
+        };
         return;
     };
     ref inner = make u64 { no_node() };
@@ -448,7 +455,8 @@ func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSit
     };
     ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- 0u64; };
     val mode <- inspect_assignment(nodes, revision, used, at, assignment);
-    if (mode == PlaceTransfer || mode == PlaceRebind || mode == FieldTransfer || mode == FieldRebind)
+    if (mode == PlaceTransfer || mode == PlaceRebind || mode == FieldTransfer ||
+        mode == FieldRebind || mode == AugmentedPlaceTransfer)
         return can_continue(sites, assignment.destination) && can_continue(sites, assignment.input);
     ref inner = make u64 { no_node() };
     if (inspect_group(nodes, revision, used, at, inner) == ParenthesizedExpression) return can_continue(sites, inner);

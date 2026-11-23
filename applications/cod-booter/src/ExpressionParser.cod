@@ -23,7 +23,8 @@ using "ParserStorage.cod" ExprPayload {
     ContinueValue, ContinueVoid, BreakValue, BreakVoid,
     CallableDefinition, ScopedProcedureDefinition, CProviderDeclaration, CEntryDefinition,
     ArgumentItem, NamedArgument, SymbolReference, SymbolicInvocation, HereInvocation, HereSupply, HereReceiver,
-    RangeHeader, RangeLoop, Parenthesized, Transfer, Rebind, InitializerTransfer, InitializerRebind,
+    RangeHeader, RangeLoop, Parenthesized, Transfer, AugmentedTransfer, Rebind,
+    InitializerTransfer, InitializerRebind,
     NamedConstruction, ExceptionConstruction, ReserveStorage, PositionalInitializer, BracedInitializer,
     ExceptionFields, CapacityPlacement, CausePlacement, ConstructionTypeQuery, NamedThrow,
     BooleanLiteral, Negation, Conjunction, Disjunction,
@@ -51,7 +52,7 @@ using "Lexer.cod" {
     catch_word, finally_word, try_word, const_word, behave_word, throw_word, symbol_name, in_word,
     ptr_word, val_word, null_word, return_word, void_word, if_word, for_word, continue_word,
     break_word, else_word, true_word, false_word, c_linkage, not_word, case_word, of_word, fallthrough_word, effect_word,
-    quoted_text, multiline_text,
+    quoted_text, multiline_text, punctuation,
 };
 using "ParserStorage.cod" SyntaxRole { InitializerRole, BlockItemRole, ExpressionRole };
 using "SourceStorage.cod" { SourceBytes, Token };
@@ -2228,6 +2229,25 @@ func parse_prefix(source:const SourceBytes in S, tokens:const Tokens in T,
     };
 }
 
+func augmented_operation(source:const SourceBytes in S, tokens:const Tokens in T,
+                         at:u64, past:u64, arithmetic:ArithmeticOperation in A)
+    -> bool where {const owner S, const owner T, owner A} {
+    if (at >= past || at >= intrinsic (len)(tokens) || tokens[at].kind != punctuation())
+        return false;
+    val first <- tokens[at].first;
+    val end <- tokens[at].past;
+    if (first >= end || end - first != 4u64 || end > intrinsic (len)(source) ||
+        source[first] != 60u8 || source[first + 1u64] != 45u8 || source[first + 2u64] != 58u8)
+        return false;
+    val op <- source[first + 3u64];
+    if (op == 43u8) { arithmetic <- Addition; return true };
+    if (op == 45u8) { arithmetic <- Subtraction; return true };
+    if (op == 42u8) { arithmetic <- Multiplication; return true };
+    if (op == 47u8) { arithmetic <- Division; return true };
+    if (op == 37u8) { arithmetic <- Remainder; return true };
+    return false
+}
+
 func parse_expression_operand(source:const SourceBytes in S, tokens:const Tokens in T,
                               nodes:ExprNodes in A, result:ParseResult in R,
                               past:u64, minimum:u8) -> void
@@ -2238,7 +2258,11 @@ func parse_expression_operand(source:const SourceBytes in S, tokens:const Tokens
     if (result.diagnostic != 0u8 || minimum != 1u8) return;
     val assignment <- result.next;
     val rebind <- punct_at(source, tokens, assignment, past) == 61u8;
-    if (!rebind && !punct_pair_at(source, tokens, assignment, past, 60u8, 45u8)) return; # '<-'
+    val transfer <- punct_pair_at(source, tokens, assignment, past, 60u8, 45u8);
+    val arithmetic <- Addition:ArithmeticOperation;
+    val augmented <- !rebind && !transfer &&
+        augmented_operation(source, tokens, assignment, past, arithmetic);
+    if (!rebind && !transfer && !augmented) return;
     val destination <- result.root;
     result.next <- assignment + 1u64;
     parse_expression_operand(source, tokens, nodes, result, past, 1u8);
@@ -2251,11 +2275,17 @@ func parse_expression_operand(source:const SourceBytes in S, tokens:const Tokens
     };
     val first <- syntax_first(nodes, result.used, destination);
     val end <- syntax_past(nodes, result.used, source_node);
+    if (augmented) {
+        append_syntax_node(nodes, result, first, end, make AugmentedTransfer {
+            operands <- operands; operation <- arithmetic
+        });
+        return
+    };
     if (rebind) {
         append_syntax_node(nodes, result, first, end, make Rebind { operands <- operands; });
     } else {
         append_syntax_node(nodes, result, first, end, make Transfer { operands <- operands; });
-    };
+    }
 }
 
 func parse_expression_at(source:const SourceBytes in S, tokens:const Tokens in T,
