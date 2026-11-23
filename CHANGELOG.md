@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Resolve package modules and select a library's default exports
+
+<a id="h-module-paths-and-default-exports-20261123"></a>
+**H-MODULE-PATHS-AND-DEFAULT-EXPORTS-20261123.** In the [CoD design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-23 (America/Los_Angeles), the project user specified “不是 "./" 开头的目标模块路径，一律按 project deps pkgs 路径解析，即使同pkg的模块代码，也需要完整namespace路径； 以 compiler builtin libs 兜底，用户pkg允许shadow builtin libs，诊断信息报警告；注意明确不引入类似Java classpath那种机制。” They confirmed the other module declaration proposals, including default and complete public selections, and deferred overload `default` to the backlog. D-15r62 qualifies D-15-MODULE-PATH and D-15-DEFAULT-EXPORTS, P-690–P-693. D-07-STRING-BUILD r7 applies the rule to the bundled library and D-20-MODULE-GRAPH r40 separates source selection from native path resolution. Prior contracts are at `339621421b053239bde0e951e20c02495d9b378e:design/ModuleWorlds.md`, “Public definitions and grouped selections”, and the same commit’s `design/StringBuilding.md`. Compiler and package installation changes require their own implementation evidence.
+
 ## 2026-11-23 — Check scalar payload reads on a caught exception
 
 <a id="k-booter-caught-field-source-check-20261123"></a>
