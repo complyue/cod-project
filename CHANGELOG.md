@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Preserve the procedure destination check in the selector migration
+
+<a id="k-qualified-procedure-using-20261123"></a>
+**K-QUALIFIED-PROCEDURE-USING-20261123.** D-20-MODULE-GRAPH r52→53 clarifies [bootstrap checking of a qualified procedure selector](applications/cod-booter/docs/ModuleGraph.md#checking-a-symbolic-procedure-selector) under P-680/P-681. H-116–H-121 distinguish destination selection from combined identity introduction. H-372 separates selection from installation. H-MODULE-DEFAULT-SELECTOR-SUBSTITUTION-20261123 applies the same entry check to written and expanded lists. The missing-destination stop is a bootstrap scope limit. The migration case is `94ccc5f01b125f9dcc7bacac988c679222a10c34:tests/cod/language/module_context_tests.py`, `symbol_destination_boundary`.
+
 ## 2026-11-23 — Separate strict path cutover from bundled default selection
 
 <a id="k-package-and-default-cutovers-20261123"></a>
