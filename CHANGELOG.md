@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review private preparation and cleanup of seed value packs
+
+<a id="k-seed-value-pack-20261123"></a>
+**K-SEED-VALUE-PACK-20261123.** [D-ARCH-REVIEW r71](design/ImplementationArchitecture.md#preparing-a-by-value-variadic-call-in-the-seed), P-682/P-683, clears direct concrete `u64` value packs under the [ordered expansion](#h-ordered-pack-expansions-20261123) and [ordinary forwarding](#k-value-pack-forwarding-20261123) rules. The seed gate at `933241fbffe9653c4947d0aad157e8d457cf3935:cod/lang_checked.hh` rejects both opening-bid workloads. The scope covers one checked operand plan, call-duration private storage and validation of three independent values and exact cleanup. CoD-written booter execution, general pack storage and C ABI retain separate scope.
+
 ## 2026-11-23 — Clarify the named signature prerequisite
 
 <a id="k-parameterized-named-signature-examples-20261123"></a>
