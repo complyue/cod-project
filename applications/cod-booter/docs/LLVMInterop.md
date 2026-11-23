@@ -1,8 +1,10 @@
 # Native C providers, LLVM bindings and scoped cleanup
 
-Revision 25 · 2026-11-23 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
+Revision 26 · 2026-11-23 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
 
 ## Design authority
+
+The [symbol selector decision](../../../CHANGELOG.md#h-module-default-selector-substitution-20261123) at r26 applies to the LLVM session example. Verify that a caller can name the typed identity before acquiring the handle. Handle ownership, provider calls and cleanup keep their existing scope.
 
 At r25 [D-20-PARSE-RECOVERY](../../../design/DesignAuthorityRegistry.md#d-20-parse-recovery) extends [launcher rejection reporting](#builtin-catalog-and-rejection-reporting) to all recovered parser diagnostics under [the whole-file decision](../../../CHANGELOG.md#h-whole-file-parser-recovery-20261123). Source positions and storage ownership follow the existing synchronous boundary.
 
@@ -150,8 +152,8 @@ Declare a symbol with an ownable nominal handle type. The following uses the boo
 export symbol @llvmSession :own handle LLVMSession;
 
 # ObjectCompiler.cod
-using symbol "NativeLLVM.cod" @llvmSession;
-using "NativeLLVM.cod" { LLVMSession, LLVMOpenException, llvm_verify };
+symbol from "./NativeLLVM.cod" @llvmSession
+using "./NativeLLVM.cod" { LLVMSession, LLVMOpenException, llvm_verify };
 
 proc verify_active() -> u8 {
     return llvm_verify(@llvmSession);
@@ -162,7 +164,7 @@ proc verify_new_session() -> u8 throws LLVMOpenException {
 }
 ```
 
-The exported declaration publishes one typed identity. A separate `symbol @llvmSession :own handle LLVMSession;` followed by `export @llvmSession;` has the same effect on the module interface. Selecting the identity with `using symbol` requires no live session. Direct procedure calls can use the current installation across any number of calls. Every reachable use must have a live binding under the ordinary symbolic call-path rules. A func cannot read the symbol. Declaring an owning symbol of a borrow-only type rejects.
+The exported declaration publishes one typed identity. A separate `symbol @llvmSession :own handle LLVMSession;` followed by `export var @llvmSession` publishes the same typed variable resource. Selecting its identity with `symbol from` requires no live session. Direct procedure calls can use the current installation across any number of calls. Every reachable use must have a live binding under the ordinary symbolic call-path rules. A func cannot read the symbol. Declaring an owning symbol of a borrow-only type rejects.
 
 Evaluate the constructor against the preceding bindings. A successful installation transfers its one release obligation to the installing effect scope. The effect expression has type `void`. If acquisition fails, C cleans its acquired prefix before the declared exception propagates. This installs nothing, schedules no destructor for the failed acquisition and leaves any preceding session available. A native handle argument such as `llvm_verify(@llvmSession)` borrows the selected instance with its existing access and actual-owner word. Reading, selecting, forwarding or replaying a binding confers no ownership. In particular, `effect @other <- @llvmSession;` cannot extract the session.
 
