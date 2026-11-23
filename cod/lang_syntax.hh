@@ -569,7 +569,7 @@ inline constexpr int endpoint_precedence = 1;
 inline constexpr int composition_precedence = 2;
 inline constexpr int unary_precedence = 9;
 
-inline int binary_precedence(const std::string &op) {
+inline int binary_precedence(std::string_view op) {
   if (op == "||") return 3;
   if (op == "&&") return 4;
   if (op == "==" || op == "!=" || identity_operation(op)) return 5;
@@ -577,6 +577,16 @@ inline int binary_precedence(const std::string &op) {
   if (op == "+" || op == "-" || op == "++") return 7;
   if (op == "*" || op == "/" || op == "%") return 8;
   return -1;
+}
+
+inline std::string_view infix_spelling(const Token &token) {
+  if (token.kind == TokenKind::punctuation ||
+      (token.kind == TokenKind::identifier && token.text == "is"))
+    return token.text;
+  if (token.kind != TokenKind::identifier) return {};
+  if (token.text == "and") return "&&";
+  if (token.text == "or") return "||";
+  return {};
 }
 
 inline bool intrinsic_name(std::string_view name) {
@@ -2208,12 +2218,16 @@ class Parser {
         left = finish(std::move(index));
       } else break;
     }
-    while ((peek().kind == TokenKind::punctuation || is("is")) && binary_precedence(peek().text) >= minimum) {
+    while (true) {
+      const auto spelling = infix_spelling(peek());
+      const auto precedence = binary_precedence(spelling);
+      if (precedence < minimum) break;
       auto op = tokens_[cursor_++];
+      op.text = spelling;
       if (op.text == "is" && take("not")) op.text = "is not";
       auto binary = make(Expression::Kind::binary, op);
       binary->children.push_back(std::move(left));
-      binary->children.push_back(expression(binary_precedence(op.text) + 1, attachment, owner_projection));
+      binary->children.push_back(expression(precedence + 1, attachment, owner_projection));
       left = finish(std::move(binary));
     }
     if (minimum <= composition_precedence) {
