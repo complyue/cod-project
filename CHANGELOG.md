@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Clarify the named signature prerequisite
+
+<a id="k-parameterized-named-signature-examples-20261123"></a>
+**K-PARAMETERIZED-NAMED-SIGNATURE-EXAMPLES-20261123.** The project user identified `Producer<A>`, `Consumer<B>` and `Transformer<A, B>` as examples of the [named signatures prerequisite](#h-named-signatures-before-pipeline-protocols-20261123). [DesignTopics](docs/DesignTopics.md#named-signatures-and-pipelines) clarifies that use of type parameters in the deferred topic recorded at `f0ae9a40fafd9d9f9f5d91d9ae2e3fb393bddac4:docs/DesignTopics.md`. Declaration syntax and type rules remain open. [Design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50)
+
 ## 2026-11-23 — Revisit pipeline protocols after named type signatures
 
 <a id="h-named-signatures-before-pipeline-protocols-20261123"></a>

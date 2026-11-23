@@ -45,7 +45,9 @@
 
 ## 2. 命名的类型签名与 producer、consumer、transformer
 
-先在 CoD 语言层面支持命名的类型签名。该特性本身的声明写法与类型规则留待设计。等程序作者可以声明并引用这样的签名后，再讨论 producer、consumer、transformer 的通用接口、绑定与组合。
+先在 CoD 语言层面支持**可带类型参数的命名签名**。设想库作者可以定义一次 `Producer<A>`，使用者在另一处写 `Producer<Invoice>` 来引用提供 `Invoice` 的签名。同类例子有 `Consumer<B>` 和 `Transformer<A, B>`。这里的尖括号只作示意，声明写法和类型规则留待设计。
+
+已有的 `proc emit(x:T) yields T -> bool where {T}` 给操作 `emit` 命名。这里需要的是给签名本身命名，使多种实现和调用者可以引用它。等语言支持这种声明和引用后，再讨论 producer、consumer、transformer 的通用接口、绑定与组合。[现有 generator 签名](../design/RangedForAndGenerators.md#independent-protocol-establishment)
 
 ### 已敲定的范围
 
