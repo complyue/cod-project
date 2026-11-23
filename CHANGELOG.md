@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review checked selection records in booter name resolution
+
+<a id="k-booter-checked-selection-integration-20261123"></a>
+**K-BOOTER-CHECKED-SELECTION-INTEGRATION-20261123.** D-ARCH-REVIEW r56→57 and D-20-MODULE-GRAPH r48→49 continue K-MODULE-INPUTS-AND-DEFAULT-TABLES-20261123 and H-MODULE-DEFAULT-SELECTOR-SUBSTITUTION-20261123. The [review](applications/cod-booter/docs/ModuleGraph.md#checked-selections-in-name-resolution) covers the consuming boundary at `5a30c19e330e78387f5d037607a4c187aa1a64fa:applications/cod-booter/src/NameResolution.cod`, `same_selection` and `register_selection`. Frame entries preserve independent syntax and selection identities and source, graph and catalog spelling provenance. Mainline owns implementation and compatibility.
+
 ## 2026-11-23 — Define augmented transfer through one declared place
 
 <a id="h-augmented-transfer-place-20261123"></a>

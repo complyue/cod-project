@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 56. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 57. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+
+The [r57 selection review](../CHANGELOG.md#k-booter-checked-selection-integration-20261123) clears the booter’s [checked importer entries](../applications/cod-booter/docs/ModuleGraph.md#checked-selections-in-name-resolution) from module publication through registration and downstream lookup. P-682/P-683 apply to source, graph and builtin spelling owners and the established three-command acceptance.
 
 The [r56 Boolean spelling review](../CHANGELOG.md#h-boolean-word-operators-20261123) clears the [infix readers](#short-circuit-word-operators) in both bootstrap compilers under D-10. Both reach the existing Boolean control-flow and branch-proof paths.
 
