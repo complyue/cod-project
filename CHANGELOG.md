@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Check scalar payload reads on a caught exception
+
+<a id="k-booter-caught-field-source-check-20261123"></a>
+**K-BOOTER-CAUGHT-FIELD-SOURCE-CHECK-20261123.** Delegated review continues D-20-MODULE-GRAPH r38 to r39 and D-ARCH-REVIEW r44 to r45 from `5e26bb6a727da0892a60fba2fc2cdaaa4e36f1dd:applications/cod-booter/docs/ModuleGraph.md`, “Checking an imported call without object code”. Construction and direct catch-field projection use the same nominal schema. The caller retains distinct field-access and failure-coverage proofs. Executable nominal projection retains its existing acceptance.
+
 ## 2026-11-23 — Carry a declared checked failure through module publication
 
 <a id="k-booter-imported-checked-call-20261123"></a>
