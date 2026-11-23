@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Separate strict path cutover from bundled default selection
+
+<a id="k-package-and-default-cutovers-20261123"></a>
+**K-PACKAGE-AND-DEFAULT-CUTOVERS-20261123.** D-20-MODULE-GRAPH r51→52 clarifies the [two delivery checks](applications/cod-booter/docs/ModuleGraph.md#package-and-default-selection-delivery) under H-MODULE-PATHS-AND-DEFAULT-EXPORTS-20261123 and K-MODULE-INPUTS-AND-DEFAULT-TABLES-20261123. The explicit public interface at `da08a24e4a840ab184fe70117afafa171de82160:cod/library/string.cod` permits a compatible path cutover with migrated consumers. The bundled default list retains its own two-frontend external-use acceptance. P-690–P-693 and the language contracts are unchanged.
+
 ## 2026-11-23 — Review lookup of names introduced by module selections
 
 <a id="k-booter-imported-name-lookup-20261123"></a>
