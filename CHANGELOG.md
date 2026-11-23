@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-23 — Definition doclets and whole-file syntax recovery
+
+<a id="h-definition-doclets-20261123"></a>
+**H-DEFINITION-DOCLETS-20261123.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on Nov 23 (America/Los_Angeles), the project user requested that `""" ... """` also associate documentation with a nearby definition, specifying “这在 seed/booter 都无须处理，未来的 LSP 分析和 IDE 集成等组件要映射为 ref-site tooltip ，且支持 doclet 内部放导航链接等能力。” D-07-DOCLETS/P-686–P-687 qualifies this tooling scope under charter §§8–9, extending the literal at `bf994e54449f7d4834555cfb5632eae3017a128d:design/Utf8Strings.md`. Language r204 specifies leading attachment and definition-context links; UTF-8 r6 distinguishes declaration and expression positions.
+
+<a id="h-whole-file-parser-recovery-20261123"></a>
+**H-WHOLE-FILE-PARSER-RECOVERY-20261123.** In the same discussion, the project user directed “所有 parser 都不要遇到第一个错误即停止，而是容忍错误确保全文件覆盖，把后续错误都能报出来” and proposed AST “错误报告” nodes that can occupy different syntactic roles. D-20-PARSE-RECOVERY/P-688–P-689 qualifies full-file recovery and later error delivery for all parsers. Roadmap r27 extends the stage policy at `0290f99e8588acfb0842314b58ac701c9169c7d3:applications/cod-booter/README.md`; interop r25 extends its private single-report boundary at the same commit in `applications/cod-booter/docs/LLVMInterop.md`. A recovered tree can be used by tooling. Source acceptance, ownership checks and artifact publication retain their requirements.
+
 ## 2026-11-23 — Identify the written type in an uncovered checked throw
 
 <a id="k-seed-checked-throw-names-20261123"></a>

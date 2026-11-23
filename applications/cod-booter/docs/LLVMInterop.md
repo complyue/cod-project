@@ -1,8 +1,10 @@
 # Native C providers, LLVM bindings and scoped cleanup
 
-Revision 24 · 2026-11-22 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
+Revision 25 · 2026-11-23 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
 
 ## Design authority
+
+At r25 [D-20-PARSE-RECOVERY](../../../design/DesignAuthorityRegistry.md#d-20-parse-recovery) extends [launcher rejection reporting](#builtin-catalog-and-rejection-reporting) to all recovered parser diagnostics under [the whole-file decision](../../../CHANGELOG.md#h-whole-file-parser-recovery-20261123). Source positions and storage ownership follow the existing synchronous boundary.
 
 [D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph) at interop r24 assigns the graph workspace and traversal to CoD and covers the [dependency path loan](ModuleGraph.md#first-dependency-edge) under the [prerequisite review](../../../CHANGELOG.md#k-booter-graph-edge-prerequisites-20261122). The [delegated architecture review](../../../CHANGELOG.md#h-compiler-layers-20261122), P-680/P-681, distinguishes the production graph from the native loan fixtures below. Check source-loan closure before dependency reentry and final LLVM input under the graph owner. The [ordinary-result review](../../../CHANGELOG.md#k-booter-native-u64-result-20261122) covers exact-width output for native path preparation. Scoped provider lifetime and ABI checks still apply.
 
@@ -281,9 +283,9 @@ proc "C" catalog_use(
 ) -> u8 where {const owner B};
 ```
 
-For each invocation, the launcher supplies storage for one initially empty, fixed-size bits record under its own live owner. A checked synchronous write fills it on rejection. Take offsets from scratch-backed nodes while those nodes are live. Resolve the half-open source span and any available related location through the live revision’s line index. Write the existing stage, diagnostic code and available numeric positions into the record. A failure before a revision is available has no source position. In particular, the OS error of a failed open remains available through the ordinary typed acquisition path.
+The existing launcher supplies one initially empty, fixed-size bits record under its own live owner. It suffices for one rejection. Whole-file recovery requires every recovered diagnostic to reach the normal caller. Keep the primary report available and deliver the ordered sequence using caller-owned storage or synchronous delivery. Repeatedly overwriting the primary record loses earlier diagnostics. Take offsets from scratch-backed nodes while those nodes are live. Resolve the half-open source span and any available related location through the live revision’s line index. Write the existing stage, diagnostic code and available numeric positions into the record. A failure before a revision is available has no source position. In particular, the OS error of a failed open remains available through the ordinary typed acquisition path.
 
-The launcher reads and formats the record after the compiler returns and the source loan closes. A sink handle can name the caller’s record, or a checked writable view can supply its storage directly. The write only stores bits. The launcher needs neither source bytes nor scratch references to format them. The booter retains its ordinary compilation status and exception handling. The names and record layout are private to the first launcher.
+The launcher can read and format retained records after the compiler returns and the source loan closes. Each report must still identify the affected source revision or file when formatting occurs. A sink handle can name the caller’s record, or a checked writable view can supply its storage directly. The write only stores bits. The launcher needs neither source bytes nor scratch references to format them. The booter retains its ordinary compilation status and exception handling. The names and record layout are private to the first launcher.
 
 ### Acceptance
 
