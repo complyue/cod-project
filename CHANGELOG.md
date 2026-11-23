@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Revisit pipeline protocols after named type signatures
+
+<a id="h-named-signatures-before-pipeline-protocols-20261123"></a>
+**H-NAMED-SIGNATURES-BEFORE-PIPELINE-PROTOCOLS-20261123.** On 2026-11-23 (America/Los_Angeles) the project user deferred general producer, consumer and transformer design until CoD has named type signatures, directing “放到 DesignTopics去推后讨论”. [D-31r12](design/ProducersAndTransformers.md#design-authority) records the discussion order and leaves the general signatures and nested call semantics open in [DesignTopics](docs/DesignTopics.md#named-signatures-and-pipelines). The explicit composite workload retains its [r11 qualification](#h-pipeline-composite-contract-20261119) at `852c0f8622dce07b3b84e49ba5fc22c77f2f6913:design/ProducersAndTransformers.md`. [Design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50)
+
 ## 2026-11-23 — Clarify disposal in the first native provider profile
 
 <a id="k-booter-disposal-profile-20261123"></a>

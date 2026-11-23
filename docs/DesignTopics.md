@@ -41,9 +41,11 @@
 - [设计依据与已确认范围](../design/CollectionsAndBuiltinContainers.md#design-authority)
 - [候选集合操作](../design/CollectionsAndBuiltinContainers.md#proposed-common-operations)
 
-## 2. Pipeline 的一般绑定与可变 here 绑定
+<a id="named-signatures-and-pipelines"></a>
 
-状态：远期后备；以下两个子问题可以分别处理
+## 2. 命名的类型签名与 producer、consumer、transformer
+
+先在 CoD 语言层面支持命名的类型签名。该特性本身的声明写法与类型规则留待设计。等程序作者可以声明并引用这样的签名后，再讨论 producer、consumer、transformer 的通用接口、绑定与组合。
 
 ### 已敲定的范围
 
@@ -52,15 +54,13 @@
 
 这些既定形式可以直接作为惯用法依据，不应整体重新置为待定。
 
-### 待决策问题 A：一般 producer 绑定
+### 命名的类型签名就绪后再讨论
 
-1. 在已经确认的 pipe 上下文之外，普通嵌套表达式何时表示尚未执行的 producer，
-   何时表示普通调用？
-2. 例如 `budget(half_price(src))`，是否允许表达组合？若允许，依据什么明确规则？
-3. named/defaulted arguments 与 overload 如何参与判断？
-   必须拒绝哪些歧义？
+1. 用命名签名分别表达 producer 提供的数据、consumer 的反馈，以及 transformer 的上下游要求。用带借用的输入检验签名如何表达实际 owner 和访问权限。
+2. 比较 `invoice_ids(select_day()) !> cap` 与候选写法 `cap(invoice_ids(select_day()))`。当处理器 `cap` 配置为取零项时，显式管道只求值一次 `select_day()`，不会打开游标。普通调用能否根据参数签名获得同样的行为，届时再定。
+3. 检查命名实参、默认参数和 overload 对绑定的影响，以及何时需要调用者显式消歧义。
 
-### 待决策问题 B：可变 here 绑定
+### 相关的独立问题：可变 here 绑定
 
 1. 是否允许替换已有 `here` 绑定？若允许，源代码形式是什么？
 2. 分支产生不同候选绑定时，如何保留各自的 owner 与生命周期要求？
