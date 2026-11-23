@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 19. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 20. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
 
 [K-BOOTER-AST-TABLE-20261122](../../../CHANGELOG.md#k-booter-ast-table-20261122) continues that architecture for the [first indexed AST path](#first-indexed-ast-path). Its private representation uses the existing named-array constructor, valid bits transfer and constructor-pattern checks. Acceptance includes the parser, checker, lowering and emitted object.
 
@@ -23,6 +23,8 @@ The [provider publication review](../../../CHANGELOG.md#k-booter-provider-public
 The [sum parser and graph output review](../../../CHANGELOG.md#k-booter-sum-parser-graph-output-20261122) covers nominal sum declarations in the typed syntax table and calls that consume the completed graph while G is live.
 
 The [region syntax and terminal input review](../../../CHANGELOG.md#k-booter-region-parser-terminal-inputs-20261122) covers the graph driver’s source forms and the entry-owned graph used by its synchronous terminal.
+
+The [constructor identity review](../../../CHANGELOG.md#k-booter-sum-interfaces-20261122) covers checked publication and typed selection of nominal sum constructors.
 
 ## Layer responsibilities
 
@@ -89,7 +91,7 @@ export data NodeLink = NoLink {} | LinkTo { node:NodeId; };
 
 Store a typed sum declaration and an ordered sequence of typed alternatives in the frame’s syntax table. Preserve the heading, including any parsed parent, and the ordinary module-item export marker. Each alternative retains its name, its span through the closing brace and its own fields. Reuse the product-field reader for their shared grammar, preserving order, type, binding mode and target access. Start a fresh field list for each alternative. The reader returns an absent last field for both a valid empty list and a parse failure. Check the diagnostic before accepting a fieldless alternative. Use the frame’s revision-bound links and checked lookup for all children.
 
-In both seed-built modes inspect the actual `NodeLink`, `ExprPayload`, `AstSlot` and `VisitSlot` declarations. The two occurrences of `Vacant` must remain accessible under their own declarations and source revisions. Accept a single alternative. Reject a missing alternative, a trailing separator, `||` between alternatives, a malformed field and a C-layout sum. Preserve the existing product and C-record paths. On the full sources, distinguish passing the original declaration site from checking the whole module. Until a semantic consumer supports the declaration, issue a located rejection before publishing an interface or emitting output. Binding constructor identities, selecting them across modules, checking payload patterns and lowering uses have separate review scopes. [Named sum constructors](../../../design/DomainLanguageDesign.md#named-sum-constructors)
+In both seed-built modes inspect the actual `NodeLink`, `ExprPayload`, `AstSlot` and `VisitSlot` declarations. The two occurrences of `Vacant` must remain accessible under their own declarations and source revisions. Accept a single alternative. Reject a missing alternative, a trailing separator, `||` between alternatives, a malformed field and a C-layout sum. Preserve the existing product and C-record paths. On the full sources, distinguish passing the original declaration site from checking the whole module. Until a semantic consumer supports the declaration, issue a located rejection before publishing an interface or emitting output. The [checked interface](#publishing-nominal-sum-interfaces) supplies constructor binding and module selection. Payload pattern checking, construction and lowering have separate review scopes. [Named sum constructors](../../../design/DomainLanguageDesign.md#named-sum-constructors)
 
 ### Parsing the graph region
 
@@ -215,6 +217,26 @@ After all child visits succeed, the parent uses the next artifact function base 
 `ModuleGraph` stages and bounds-checks the interfaces, spellings, commands and other unit material before committing. Grow graph tables from their published prefixes and complete all fallible work before exposing the new counts and `Checked` row. Execute the final updates with no intervening callback or fallible step. A failed visit leaves earlier publications intact and the failed module unavailable. G releases any private storage it acquired. On root success the dispatcher reaches the [LLVM construction operation](#constructing-a-linked-object-from-completed-units) after all visit frames and source acquisitions have ended.
 
 Exercise builtin and file imports in the same root, same-spelled functions from distinct files under local names, and two paths to one canonical child. Check a missing or wrong-kind selection, an empty interface prefix, an incomplete header, and a plausible row beyond the published boundary. Fail publication in a second child and verify the first child’s published data, the second import’s span and the previous output. Use the real parser, checker, lowering and dispatcher in both seed modes for the [linked object acceptance](#constructing-a-linked-object-from-completed-units).
+
+### Publishing nominal sum interfaces
+
+The declaration pass binds the sum name and each data constructor in the defining module. Each constructor is a method of its parent type’s constructor family. Register the local identities before resolving field types under the defining module’s ordinary lookup rules. Validate duplicate constructor bindings, duplicate fields within one alternative, field modes, access and type references. Separate alternatives may use the same field name. Preserve every alternative, including fieldless ones. An unsupported field, parent contract or initializer overload must reach its own check before consumers rely on the affected interface. A partially understood family cannot be published as having zero overloads. [Constructor publication](../../../design/DomainLanguageDesign.md#publishing-and-selecting-data-constructors)
+
+Use the existing graph interface directory and its published row and spelling prefixes. A sum header lists its constructors in declaration order. Each constructor entry identifies a distinct constructor header. That header identifies its parent sum and gives the ordered field names, resolved types, binding modes and target access. Use typed CoD alternatives for distinct payloads. Share prefix traversal and field validation where their contracts agree. Enum codes, product schemas and native-call headers have their own interpretation. A constructor’s ordinal within its parent can express order. Looking up its identity also requires the defining sum and module.
+
+Resolve syntax under the live defining frame and revision. Publish graph-owned identities and checked schema facts that consumers can read after the frame and source close. Scope a declaration ordinal to its defining module and checked revision in this compilation. A renamed publication changes the visible name and publishing module while retaining the definition and constructor’s parent. Inspect headers and entries only within checked bounds. Verify each constructor’s backlink and field extent, including a valid zero count, before making the module visible. A failed resolution or reservation leaves the previous published counts and modules intact.
+
+```cod
+# In a parser consumer:
+using "ParserStorage.cod" AstSlot { Vacant, Occupied };
+
+# In a separate graph consumer:
+using "ModuleIndex.cod" VisitSlot { Vacant };
+```
+
+Resolve the selector against the selected parent. These two consumers get different constructors for `Vacant`. Selecting just one alternative keeps the complete parent schema. `{..}` selects every constructor explicitly. Preserve the ordinary source-world meaning of `using`, the extension permission of `import`, and the existing lower-priority fallback for an unlisted name. Duplicate paths to the same identity and interpretation agree. Explicit selections introducing different identities under the same local name conflict at the selection. Each selected constructor carries its visible initializer overloads as a unit. The admission of a constructor or its recursively bits payload in CoD confers no C-record field mapping. [Module-world composition](../../../design/ModuleWorlds.md#merging-type-owned-method-families)
+
+In both seed-built modes check the actual `AstSlot` and `VisitSlot` through separate consumers and a renamed re-export, a wrong-parent selector, and conflicting explicit bindings in one consumer. Exercise truncated field and alternative ranges, a wrong-parent link to an otherwise valid header, a stale same-index syntax reference, and a failed second publication. Require the accepted consumer to resolve the field types after the defining visit closes. Keep native C-record field rejection and existing enum selection intact. Construction, executable matching and backend layout have their own implementation reviews. The real provider-generation workload still requires all demanded body checks.
 
 ## Reentry and completion
 
