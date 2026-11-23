@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-23 — Published bootstrap compiler milestones
+
+<a id="k-bootstrap-delivery-20261123"></a>
+**K-BOOTSTRAP-DELIVERY-20261123.** Mainline verified the following changes in both bootstrap modes.
+
+- **Booter source migration.** The booter adopted grouped selections, exported definitions, single-return guards, loop-tail discard and owner-qualified reference formals across 31 CoD files. Both seed-built modes preserved all 280 previously emitted object byte sequences. [Migrated compiler source](https://github.com/complyue/cod-project/blob/5cfb8b408715cf2465232cb84c30e491dd03749b/applications/cod-booter/src/Compiler.cod)
+- **Provider compatibility after the typed graph cutover.** Separating source-only sum kinds from builtin catalog kinds restored selection of `prepare_display_operands`. In both modes, all 37 previously accepted modules plus direct `string.cod` matched the prior declaration results and both generated provider files. [Published export-kind fix](https://github.com/complyue/cod-project/blob/a0689d8fc9c91b44a6a6182191cc19e0208d7ca4/applications/cod-booter/src/ModuleExports.cod)
+- **Parser recovery through the launcher.** The check, object and provider commands reported two missing operands in source order, retained the primary diagnostic on incomplete recovery, and preserved existing artifacts. Recovery also retained later declarations after a damaged binding name or annotation. [Launcher reporting](https://github.com/complyue/cod-project/blob/8426bf9c091559320ff8d8d1b4c55a1f315bd60e/applications/cod-booter/native/launcher.c) · [Binding recovery](https://github.com/complyue/cod-project/blob/3ea609b17586b25d19e26dacf06994d7168b5aef/applications/cod-booter/src/ParserStorage.cod)
+
 ## 2026-11-23 — Review writable product access in the package loader
 
 <a id="k-booter-package-loader-here-place-20261123"></a>
