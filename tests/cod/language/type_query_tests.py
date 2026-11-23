@@ -350,7 +350,7 @@ runner.CASES={
  'arithmetic_without_division':(storage('3/0+4','9'),0,'9\n',''),
  'numeric_widening':(storage('3u8+4u64','9u64'),0,'9\n',''),
  'intrinsic_selected':(storage('intrinsic (+)(3u64,4u64)','9u64'),0,'9\n',''),
- 'logical':(storage('true&&!false','true'),0,'true\n',''),
+ 'logical':(storage('true && !false','true'),0,'true\n',''),
  'conditional':(storage('if(true){1}else{2}','9'),0,'9\n',''),
  'uninitialized_operands':(storage('a+b','10','val a<-make local i64,b<-make local i64;'),0,'10\n',''),
  'null_operand':(storage('p+1','11','ptr p:i64=null in here;'),0,'11\n',''),

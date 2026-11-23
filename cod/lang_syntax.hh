@@ -74,6 +74,15 @@ inline std::optional<PipelineOperator> pipeline_operator(std::string_view spelli
   return {};
 }
 
+inline bool augmented_transfer_token(std::string_view spelling) {
+  return spelling.size() == 4 && spelling.starts_with("<-:") &&
+      std::string_view("+-*/%").find(spelling.back()) != std::string_view::npos;
+}
+
+inline bool symbolic_source_character(char value) {
+  return std::string_view("!$%&*+-./:<=>|").find(value) != std::string_view::npos;
+}
+
 inline std::vector<Token> tokenize(const std::shared_ptr<const IndexedSource> &revision,
                                   std::vector<SyntaxDiagnostic> &reports) {
   const auto source = revision->bytes();
@@ -100,16 +109,6 @@ inline std::vector<Token> tokenize(const std::shared_ptr<const IndexedSource> &r
       continue;
     }
     const auto offset = cursor;
-    if (source.compare(cursor, 2, "//") == 0) {
-      cursor += 2;
-      emit_error(offset, "'//' is reserved for fraction construction; use '#' for line comments");
-      continue;
-    }
-    if (source.compare(cursor, 2, "::") == 0) {
-      cursor += 2;
-      emit_error(offset, "use a single colon for type annotations, or -> for callable results");
-      continue;
-    }
     if (c == '@' || std::isalpha(static_cast<unsigned char>(c)) || c == '_') {
       const bool symbol = c == '@';
       if (symbol) {
@@ -186,27 +185,20 @@ inline std::vector<Token> tokenize(const std::shared_ptr<const IndexedSource> &r
       emit(multiline ? TokenKind::multiline_string : TokenKind::string, std::string(raw), offset);
       continue;
     }
-    std::string punctuation(1, c);
-    if (source.compare(cursor, 3, "...") == 0 || source.compare(cursor, 3, "<=>") == 0 ||
-        source.compare(cursor, 3, "<->") == 0) {
-      const auto triple = source.substr(cursor, 3);
-      cursor += 3;
-      emit(TokenKind::punctuation, std::string(triple), offset);
+    if (symbolic_source_character(c)) {
+      do { ++cursor; } while (cursor < source.size() && symbolic_source_character(source[cursor]));
+      const auto spelling = source.substr(offset, cursor - offset);
+      if (spelling == "//")
+        emit_error(offset, "'//' is reserved for fraction construction; use '#' for line comments");
+      else if (spelling == "::")
+        emit_error(offset, "use a single colon for type annotations, or -> for callable results");
+      else emit(TokenKind::punctuation, std::string(spelling), offset);
       continue;
     }
-    if (cursor + 1 < source.size()) {
-      const auto pair = source.substr(cursor, 2);
-      if (pair == "->" || pair == "==" || pair == "!=" || pair == "<=" || pair == ">=" ||
-          pair == "&&" || pair == "||" || pair == "<-" || pair == "<:" || pair == ".." || pair == "=>" || pair == "++" ||
-          pipeline_operator(pair)) {
-        punctuation = pair;
-        ++cursor;
-      }
-    }
     ++cursor;
-    if (std::string("(){}[];,:.+-*/%<>=!|").find(c) == std::string::npos && punctuation.size() != 2)
+    if (std::string_view("(){}[];,").find(c) == std::string_view::npos)
       emit_error(offset, "unsupported character in CoD source");
-    else emit(TokenKind::punctuation, std::move(punctuation), offset);
+    else emit(TokenKind::punctuation, std::string(1, c), offset);
   }
   emit(TokenKind::end, "", cursor);
   return tokens;
@@ -358,7 +350,8 @@ struct PipelineEndpoints {
 struct Expression {
   enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, value_call, perform, behave, effect,
                     block, grouped, conditional, return_test, field, range_for, index, null_ref,
-                    try_scope, handler, raise, return_value, deferred, make_region, touch, effect_group, transfer, procedure_effect,
+                    try_scope, handler, raise, return_value, deferred, make_region, touch, effect_group, transfer,
+                    augmented_transfer, procedure_effect,
                     pointer_group, pointer, rebind, region_binding, callable, alias, capture_owner,
                     here_body, named_argument, break_value, continue_value, typed_expression, return_tail,
                     processor_composition, pipeline, here_binding, make_object, native_handle_binding, make_owned_handle, make_borrowed_handle,
@@ -2248,6 +2241,12 @@ class Parser {
       if (swap_operation(peek().text)) fail(peek().at, "swap operators cannot be chained");
       return swap;
     }
+    if (minimum == 0 && peek().kind == TokenKind::punctuation && augmented_transfer_token(peek().text)) {
+      auto transfer = make(Expression::Kind::augmented_transfer, tokens_[cursor_++]);
+      transfer->children.push_back(std::move(left));
+      transfer->children.push_back(expression(0, attachment, owner_projection, false));
+      return transfer;
+    }
     if (minimum == 0 && left->kind == Expression::Kind::index && (is("=") || is("<-"))) {
       auto assignment = make(Expression::Kind::call, tokens_[cursor_++]);
       assignment->text = "[]" + assignment->text;
@@ -2310,6 +2309,31 @@ class Parser {
     return result;
   }
 
+  static void expand_augmented_transfer(Expression &expr) {
+    using K = Expression::Kind;
+    const auto name = "$augmented.place." + std::to_string(expr.at.span.first);
+    const auto node = [&](K kind, std::string text) {
+      auto result = std::make_unique<Expression>();
+      result->kind = kind;
+      result->text = std::move(text);
+      result->at = expr.at;
+      result->span = expr.span;
+      return result;
+    };
+    auto selected = node(K::alias, name);
+    selected->children.push_back(std::move(expr.children.front()));
+    auto arithmetic = node(K::binary, std::string(1, expr.text.back()));
+    arithmetic->children.push_back(node(K::name, name));
+    arithmetic->children.push_back(std::move(expr.children.back()));
+    auto transfer = node(K::transfer, "<-");
+    transfer->children.push_back(node(K::name, name));
+    transfer->children.push_back(std::move(arithmetic));
+    expr.kind = K::block;
+    expr.children.clear();
+    expr.children.push_back(std::move(selected));
+    expr.children.push_back(std::move(transfer));
+  }
+
   static void normalize_assignment_calls(Expression &expr) {
     using K = Expression::Kind;
     if (expr.kind == K::call && !expr.has_here_body() && (expr.text == "=" || expr.text == "<-")) {
@@ -2318,6 +2342,7 @@ class Parser {
     }
     for (const auto &child : expr.children) normalize_assignment_calls(*child);
     if (expr.definition && expr.definition->body) normalize_assignment_calls(*expr.definition->body);
+    if (expr.kind == K::augmented_transfer) expand_augmented_transfer(expr);
   }
   static void normalize_return_tail(Form &form) {
     using K = Expression::Kind;

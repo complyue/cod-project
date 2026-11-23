@@ -2,7 +2,7 @@ using symbol "std:io" @print;
 using units "units-representations-library.cod" {m as metres, cm, mm};
 function number(x:f64(metres)) -> f64 { return scalar(x) }
 function distance(x:f64(metres*)) -> f64 { return scalar(x) }
-function declared(x:f64(metres*<-cm<-mm)) -> f64 { return scalar(x) }
+function declared(x:f64(metres* <- cm <- mm)) -> f64 { return scalar(x) }
 function identity(x:T(metres)) -> const T(metres) where T { return x }
 function kind(x:u32(metres)) -> i64 { return 32 }
 function kind(x:f64(metres)) -> i64 { return 64 }

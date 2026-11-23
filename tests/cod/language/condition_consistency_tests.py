@@ -59,7 +59,7 @@ case('copied_preparation_snapshot', OUTPUT+'{{defer set(output,flag);defer set(o
 case('failed_registration', OUTPUT+'try{ {{defer set(output,flag);defer set(output,!flag);}}; }catch(e:const Exception){};'+PRINT,
      'using "std:exceptions" Exception;'+GUARDED_SET, reject=True)
 case('changed_call_input', LOCAL+'try{set(target,flag);flag<-true;set(target,!flag);'+PRINT+'}catch(e:const NullPointerException){};', NULL+SET, reject=True)
-case('ref_entry_promise', LOCAL+'skip(target,flag);', 'proc skip(ref value:u64 in O,condition:bool)->void where {owner O}{if(condition&&!condition){behave @print(value);}else{};}', reject=True)
+case('ref_entry_promise', LOCAL+'skip(target,flag);', 'proc skip(ref value:u64 in O,condition:bool)->void where {owner O}{if(condition && !condition){behave @print(value);}else{};}', reject=True)
 case('borrowed_alias_mutation', LOCAL+'val control<-flag;try{mutate(control,control,target);'+PRINT+'}catch(e:const NullPointerException){};', NULL+
      'proc mutate(ref first:bool in B,ref second:bool in B,ptr output:u64 in O)->void throws NullPointerException where {owner B,owner O}{if(first){output<-7u64;{}}else{};second<-true;if(!first){output<-8u64;{}}else{};}', reject=True)
 
@@ -69,9 +69,9 @@ guards = {
     'a': ('a', lambda a,b: a),
     'not_a': ('!a', lambda a,b: not a),
     'and': ('a&&b', lambda a,b: a and b),
-    'not_and': ('!a||!b', lambda a,b: not a or not b),
+    'not_and': ('!a || !b', lambda a,b: not a or not b),
     'or': ('a||b', lambda a,b: a or b),
-    'neither': ('!a&&!b', lambda a,b: not a and not b),
+    'neither': ('!a && !b', lambda a,b: not a and not b),
 }
 for left, right in [('a','not_a'), ('and','not_and'), ('or','neither'), ('and','not_a'),
                     ('or','not_a'), ('a','neither'), ('and','or'), ('not_and','or')]:

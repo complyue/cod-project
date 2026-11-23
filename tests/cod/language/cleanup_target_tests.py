@@ -55,7 +55,7 @@ runner.CASES = {
     'failed_corrective_registration_keeps_null_failure': bad('p=null;{{defer{p=z;};defer{p<-1;};defer{p=z;};}};behave @print(z);', "checked exception 'NullPointerException'"),
     'conditional_cleanup_retains_null_obligation': bad('z<-1;{{defer{p=if(flag){z}else{null};};}};behave @print(p);', "checked exception 'NullPointerException'"),
     'cleanup_target_drives_null_branch': good('z<-1;{{defer{p=null;};}};if((p is null)){p=z;}else{p=y;};behave @print(p);'),
-    'null_guard_does_not_discharge_other_condition': (NPE + run('ptr p=if(flag){z}else{null};{{defer{if(!(p is null)&&!flag){p<-1;{}}else{};};}};try{behave @print(p);}catch(e:const NullPointerException){};', selection=''), 2, '', 'before definite initialization'),
+    'null_guard_does_not_discharge_other_condition': (NPE + run('ptr p=if(flag){z}else{null};{{defer{if(!(p is null)&& !flag){p<-1;{}}else{};};}};try{behave @print(p);}catch(e:const NullPointerException){};', selection=''), 2, '', 'before definite initialization'),
     'guard_after_physical_read_cannot_initialize_it': (NPE + run('ptr p=if(flag){z}else{null};defer{behave @print(z);if((p is null)){}else{p<-1;{}};};', selection=''), 2, '', 'cannot prove initialization'),
     'nullable_argument_does_not_waive_declared_failure': (DECLARED + 'proc caller(e:StaticallyUnknownTypeException)->void{val x<-make local i64;ptr p=x;p=null;try{declared(e,p);}catch(e:const NullPointerException){};}', 2, '', "declared checked exception 'Exception'"),
     'deferred_nullable_argument_keeps_declaration': (DECLARED + 'proc caller(e:StaticallyUnknownTypeException)->void{val x<-make local i64;ptr p=x;p=null;try{ {{defer{declared(e,p);};}};}catch(e:const NullPointerException){};}', 2, '', "declared checked exception 'Exception'"),

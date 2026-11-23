@@ -4579,7 +4579,8 @@ class LLVMEmission {
       const auto &declaration = bindings[i];
       if (!binding.reference_slot && !declaration.value_binding && !declaration.embedded_slot && !declaration.alias && declaration.selection.empty())
         binding.reference_slot = slot(b_.getPtrTy(), "reference.target");
-      binding.selected_place = declaration.selection.empty() ? nullptr : slot(b_.getPtrTy(), "alias.selection");
+      if (!declaration.selection.empty() || declaration.indexed_element_owner)
+        binding.selected_place = slot(b_.getPtrTy(), "alias.selection");
     }
     for (size_t i = 0; i < arguments_.size(); ++i) {
       const auto &input = frame.inputs[i];

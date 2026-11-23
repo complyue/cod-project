@@ -28,7 +28,7 @@ safe('generic', definitions=CHECK.replace('a:i64','a:T').replace('where {owner O
 safe('readonly', definitions=CHECK.replace('a:i64','a:const i64'))
 safe('false_result', definitions=SIGNATURE+'{return a is null;}', yes='0', no='p')
 safe('negated_result', condition='!has(p)', yes='0', no='p')
-safe('double_negation', condition='!!has(p)')
+safe('double_negation', condition='! !has(p)')
 safe('stored', setup='val ok<-has(p);', condition='ok')
 safe('copied_boolean', setup='val ok<-has(p);val saved<-ok;ok<-false;', condition='saved')
 safe('overwritten_boolean', setup='val ok<-true;ok<-has(p);', condition='ok')

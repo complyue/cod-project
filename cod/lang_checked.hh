@@ -12199,9 +12199,15 @@ class ScalarChecker {
       return completes ? Type{Type::void_type} : Type{Type::never};
     }
     case K::alias: {
-      const auto type = child(0, false, true, EvidenceRead::target);
+      const bool element = expr.children.front()->kind == K::index;
+      const auto type = child(0, false, true, element ? EvidenceRead::projection : EvidenceRead::target);
       if (type == Type::never) return Type::never;
       auto selected = state.value;
+      if (element && type && scalar_type(*type) && selected.owner) {
+        selected.value_binding = true;
+        selected.storage_kind = PlaceKind::value;
+        selected.place_owners = {*selected.owner};
+      }
       if (state.required) {
         if (selected.view == false || type == Type::null_ref) fail(expr.at, "alias requires an existing storage place");
         if (!selected.value_binding || selected.mixed_view) implementation_gap(expr.at, "alias of a non-binding storage place");
@@ -14745,7 +14751,7 @@ class ScalarChecker {
     const auto &source = bindings_->at(*binding);
     if (source.type.kind == Type::native_handle)
       implementation_gap(at, "capture of an opaque C handle by a callable value");
-    if (source.alias || !source.selection.empty())
+    if (source.alias || !source.selection.empty() || source.indexed_element_owner)
       implementation_gap(at, "capture of a declared place alias requires selected-place lifetime and transport proof");
     if (!source.value_binding && !source.callable_value && !source.definition)
       implementation_gap(at, "capture of a lexical reference requires selected-target lifetime and transport proof");
@@ -15398,7 +15404,7 @@ class ScalarChecker {
           (type.kind != Type::array && type.kind != Type::native_handle &&
            (!scalar_type(type) || (!source.read_only && !fixed_scalar_input))))
         implementation_gap(capture.at, "scoped handler capture requires an initialized array, readonly scalar, fixed scalar ref formal or native handle");
-      if (!source.selection.empty() || source.alias)
+      if (!source.selection.empty() || source.alias || source.indexed_element_owner)
         implementation_gap(capture.at, "scoped handler capture through an unproved lexical slot");
       inputs.named->bindings.insert(name);
       append_scope_input(call, capture, scope_operand(base, capture, &expr), slot, instance, operations, operation, true);
@@ -15930,7 +15936,8 @@ class ScalarChecker {
           source.kind() == PlaceKind::reference && !source.read_only && program_.bits_payload(source.type);
       const bool scalar = numeric(source.type) || source.type.kind == Type::enumeration;
       const bool admitted_writable_view = writable_array || writable_product || handle;
-      if (source.alias || !source.selection.empty() || (!scalar && !readonly_view && !admitted_writable_view) ||
+      if (source.alias || !source.selection.empty() || source.indexed_element_owner ||
+          (!scalar && !readonly_view && !admitted_writable_view) ||
           (!source.value_binding && (source.nullable || (!source.read_only && !admitted_writable_view))))
         implementation_gap(capture.at, "here access requires stable numeric or enum storage, an admitted array or bits product view, readonly text, or a borrowed handle");
       const auto &operand = scope_operand(base, capture);
@@ -17685,6 +17692,19 @@ class ScalarChecker {
     if (slot.pipeline) fail(expr.at, "a bounded here binding requires a pipeline connection or consumer");
     if (slot.type.kind == Type::native_handle && use != BindingUse::native_loan)
       implementation_gap(expr.at, "an opaque C handle used outside a checked native operation");
+    if (slot.indexed_element_owner) {
+      const auto owner = *slot.indexed_element_owner;
+      if (lexical_.live && !owner_alive(owner))
+        fail(expr.at, "declared indexed place refers to array storage whose lexical owner has ended");
+      operation.type = slot.type;
+      operation.binding = *binding;
+      operation.owners = {owner};
+      operation.read_only = slot.read_only;
+      operation.fixed_binding = slot.fixed;
+      operation.view = operation.indexed_target = true;
+      operation.initialization.emplace();
+      return operation;
+    }
     const auto selected = slot.alias.value_or(*binding);
     require_slots_live({selected}, expr.at, "aliased binding's lexical scope has ended");
     if (lexical_.live && lexical_.expired_bindings.contains(selected))
@@ -18115,6 +18135,34 @@ class ScalarChecker {
     operation.view = true;
     select_targets(operation, {place});
     operation.owners = {storage(place).scope};
+    return operation;
+  }
+  CheckedOperation bind_indexed_element_place(const Expression &expr, const CheckedOperation &source,
+                                              const Type *declared, std::optional<size_t> owner) {
+    const auto source_owner = one_owner(source);
+    // A live lexical scope is the backing owner of its named arrays. A
+    // region, a native handle and an incoming loan have separate owner IDs.
+    const bool lexical_backing = source_owner && !region_owners_.contains(*source_owner) &&
+        !native_owner_scopes_.contains(*source_owner) &&
+        std::ranges::any_of(lexical_.scopes, [&](const auto &scope) { return scope.id == *source_owner; });
+    if (!source.indexed_target || !scalar_type(source.type) || !lexical_backing ||
+        !source.initialized_target())
+      implementation_gap(expr.at, "declared indexed place requires initialized scalar storage in a live lexical array");
+    if (!expr.declaration_kind.empty() && expr.declaration_kind != "val")
+      fail(expr.at, "declared place kind must match the selected val storage");
+    if (owner && compare_owners(*owner, *source_owner) != OwnerMatch::satisfied)
+      fail(expr.at, "declared place owner must match the selected array backing");
+    if (declared && *declared != source.type)
+      fail(expr.at, "declared place annotation requires the exact selected type");
+    if (declared && !expr.read_only && source.read_only)
+      fail(expr.at, "readonly source cannot supply a writable declared place");
+    const auto binding = bind(expr.text, source.type, {}, source.read_only || expr.read_only || expr.fixed_binding,
+                              true, expr.fixed_binding, expr.at);
+    bindings_->at(binding).indexed_element_owner = source_owner;
+    bindings_->at(binding).place_owners = {*source_owner};
+    CheckedOperation operation;
+    operation.type = Type::void_type;
+    operation.binding = binding;
     return operation;
   }
   CheckedOperation check_scalar_construction(const Expression &expr, const Type &type, CheckedInstance *instance,
@@ -19793,7 +19841,10 @@ class ScalarChecker {
     case K::alias: {
       const auto owner = expr.owner_name.empty() ? std::optional<size_t>{} :
           std::optional<size_t>{expr.owner_name == "here" ? cleanup_scope_ : named_owner(expr.owner_name, expr.at)};
-      const auto type = child(0, false);
+      const auto &destination = *expr.children.front();
+      const bool indexed = destination.kind == K::index;
+      const auto type = indexed ? check(destination, instance, operations, false, false, nullptr,
+          ExpectedTypeUse::materialization, false, IndexedUse::immediate_target) : child(0, false);
       const auto declared = expr.annotation ? std::optional{resolve_local_type(*expr.annotation, instance, expr.at)} : std::nullopt;
       if (type == Type::never) {
         declaration_scope(expr.text, expr.at);
@@ -19801,6 +19852,10 @@ class ScalarChecker {
         break;
       }
       auto source = operations.at(expr.children.front().get());
+      if (indexed) {
+        operation = bind_indexed_element_place(expr, source, declared ? &*declared : nullptr, owner);
+        break;
+      }
       if (!source.view || type == Type::null_ref) fail(expr.at, "alias requires an existing storage place");
       if (source.slots.empty() || source.mixed_view) implementation_gap(expr.at, "alias of a non-binding storage place");
       source = selection_state(std::move(source), expr.at);

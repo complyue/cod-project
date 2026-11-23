@@ -18,7 +18,7 @@ procedure @read() -> i64 { return @value }
   behave @print(i);
   behave @print(values);
   val flag <- true;
-  behave @print(true && {{ val flag <- !flag; !!flag }});
+  behave @print(true && {{ val flag <- !flag; ! !flag }});
   behave @print(flag);
 }};
 behave @print(@value);

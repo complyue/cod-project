@@ -40,7 +40,7 @@ runner.CASES = {
     'and_short_circuit': (IO + 'proc f(flag:bool)->void{val a<-8;ptr p=if(flag){a}else{null};behave @print(!(p is null)&&p==8);return;}f(true);f(false);', 0, 'true\nfalse\n', ''),
     'or_short_circuit': (IO + 'proc f(flag:bool)->void{val a<-8;ptr p=if(flag){a}else{null};behave @print((p is null)||p==8);return;}f(true);f(false);', 0, 'true\ntrue\n', ''),
     'and_condition_refinement': (IO + 'proc f(flag:bool)->void{val a<-9;ptr p=if(flag){a}else{null};if(!(p is null)&&flag){behave @print(p);}else{};return;}f(true);f(false);', 0, '9\n', ''),
-    'or_condition_refinement': (IO + 'proc f(flag:bool)->void{val a<-10;ptr p=if(flag){a}else{null};if((p is null)||!flag){}else{behave @print(p);};return;}f(true);f(false);', 0, '10\n', ''),
+    'or_condition_refinement': (IO + 'proc f(flag:bool)->void{val a<-10;ptr p=if(flag){a}else{null};if((p is null)|| !flag){}else{behave @print(p);};return;}f(true);f(false);', 0, '10\n', ''),
     'mutation_invalidates_test': (IO + 'val a<-1;ptr p=a;if(!(p is null)){p=null;behave @print(p);}else{};', 2, '', 'requires a covering catch or throws'),
     'test_selection_before_cleanup': (PRE+'val a<-1;ptr p=a;if('+SELECTED_BEFORE_CLEANUP+'){'
         'try{behave @print(p);}catch(e:const NullPointerException){behave @print(4);};}else{};',0,'4\n',''),

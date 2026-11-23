@@ -398,6 +398,8 @@ struct CheckedBinding {
   std::optional<size_t> alias = {};
   // A selected alias keeps one physical slot from this finite set for its whole lifetime.
   std::set<size_t> selection = {};
+  // A scalar element selected from stable lexical array backing.
+  std::optional<size_t> indexed_element_owner = {};
   // Caller-slot inputs can denote the same binding in an activation.
   std::set<size_t> overlaps = {};
   bool nullable = false;

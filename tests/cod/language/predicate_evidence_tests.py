@@ -20,7 +20,7 @@ runner.CASES = {
     'full_scope': (source('{{p is not null}}', 'p'), 0, '7\n0\n7\n0\n', ''),
     'negated_disjunction': (source('!((p is null)||(q is null))'), 0, '18\n0\n0\n0\n', ''),
     'negated_conjunction_false_path': (source('!((p is not null)&&(q is not null))', '0', 'p+q'), 0, '18\n0\n0\n0\n', ''),
-    'double_negation': (source('!!((p is not null)&&(q is not null))'), 0, '18\n0\n0\n0\n', ''),
+    'double_negation': (source('! !((p is not null)&&(q is not null))'), 0, '18\n0\n0\n0\n', ''),
     'nested_blocks': (source('!{{{(p is null)||{{q is null}}}}}'), 0, '18\n0\n0\n0\n', ''),
     'short_circuit_guarded_read': (source('!((p is null)||(q is null)) && {p+q>0}'), 0, '18\n0\n0\n0\n', ''),
     'same_predicate_alternatives': (source('if(q is null){p is not null}else{!(p is null)}', 'p'), 0, '7\n0\n7\n0\n', ''),
