@@ -8,6 +8,7 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <llvm-c/Target.h>
@@ -364,41 +365,62 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
 
 typedef cod_enum_CompilerStatusx2ecod_14_CompilerStatus compiler_status;
 
-static cod_native_status check_declarations(const char *source, cod_booter_diagnostic *diagnostic,
+static cod_native_DiagnosticDestination_borrow diagnostic_record(cod_booter_diagnostic_sink *diagnostic,
+                                                                 cod_native_loan *destination) {
+    *diagnostic = (cod_booter_diagnostic_sink){0};
+    *destination = (cod_native_loan){diagnostic, (uint64_t)(uintptr_t)diagnostic};
+    return (cod_native_DiagnosticDestination_borrow){
+        (uint64_t)(uintptr_t)&diagnostic->primary, destination->owner,
+    };
+}
+
+static int finish_command(const char *input, cod_native_status result, compiler_status status,
+                          cod_booter_diagnostic_sink *diagnostic) {
+    if (result != COD_NATIVE_OK) {
+        fputs("cod-booter: invalid native entry\n", stderr);
+    } else if (status != cod_enum_CompilerStatusx2ecod_14_CompilerStatus_member_Complete) {
+        for (size_t i = 0; i < diagnostic->count; ++i)
+            report(diagnostic->path, status, &diagnostic->reports[i]);
+        if (!diagnostic->count || diagnostic->primary.stage != diagnostic->reports[0].stage)
+            report(input, status, &diagnostic->primary);
+    }
+    free(diagnostic->reports);
+    free(diagnostic->path);
+    return result == COD_NATIVE_OK ? status : 70;
+}
+
+static cod_native_status check_declarations(const char *source, cod_booter_diagnostic_sink *diagnostic,
                                             compiler_status *status) {
-    *diagnostic = (cod_booter_diagnostic){0};
     const cod_booter_path_owner root = {source, strlen(source), COD_BOOTER_PATH_LAUNCHER};
     const cod_native_loan argument_owner = {&root, (uint64_t)(uintptr_t)&root};
-    const cod_native_loan destination = {diagnostic, (uint64_t)(uintptr_t)diagnostic};
+    cod_native_loan destination;
     const cod_native_Path_borrow input = {(uint64_t)(uintptr_t)source, argument_owner.owner};
-    const cod_native_DiagnosticDestination_borrow record = {destination.owner, destination.owner};
+    const cod_native_DiagnosticDestination_borrow record = diagnostic_record(diagnostic, &destination);
     return cod_native_check_cli_entry(&input, &record, &argument_owner, &destination, status);
 }
 
-static cod_native_status generate_providers(const char *source, const char *directory, cod_booter_diagnostic *diagnostic,
+static cod_native_status generate_providers(const char *source, const char *directory, cod_booter_diagnostic_sink *diagnostic,
                                            compiler_status *status) {
-    *diagnostic = (cod_booter_diagnostic){0};
     const cod_booter_path_owner root = {source, strlen(source), COD_BOOTER_PATH_LAUNCHER};
     const cod_booter_path_owner output = {directory, strlen(directory), COD_BOOTER_PATH_LAUNCHER};
     const cod_native_loan input_owner = {&root, (uint64_t)(uintptr_t)&root};
     const cod_native_loan output_owner = {&output, (uint64_t)(uintptr_t)&output};
-    const cod_native_loan destination = {diagnostic, (uint64_t)(uintptr_t)diagnostic};
+    cod_native_loan destination;
     const cod_native_Path_borrow input = {(uint64_t)(uintptr_t)source, input_owner.owner};
     const cod_native_Path_borrow target = {(uint64_t)(uintptr_t)directory, output_owner.owner};
-    const cod_native_DiagnosticDestination_borrow record = {destination.owner, destination.owner};
+    const cod_native_DiagnosticDestination_borrow record = diagnostic_record(diagnostic, &destination);
     return cod_native_providers_cli_entry(&input, &target, &record, &input_owner, &output_owner, &destination, status);
 }
 
-static cod_native_status compile(const char *source, const char *object, cod_booter_diagnostic *diagnostic,
+static cod_native_status compile(const char *source, const char *object, cod_booter_diagnostic_sink *diagnostic,
                                  compiler_status *status) {
-    *diagnostic = (cod_booter_diagnostic){0};
     const cod_booter_path_owner root = {source, strlen(source), COD_BOOTER_PATH_LAUNCHER};
     const cod_native_loan argument_owner = {&root, (uint64_t)(uintptr_t)&root};
-    const cod_native_loan destination = {diagnostic, (uint64_t)(uintptr_t)diagnostic};
+    cod_native_loan destination;
     const cod_native_Path_borrow input = {(uint64_t)(uintptr_t)source, argument_owner.owner};
     const size_t output_size = strlen(object);
     const cod_native_text output = {(const uint8_t *)object, output_size, output_size + 1};
-    const cod_native_DiagnosticDestination_borrow record = {destination.owner, destination.owner};
+    const cod_native_DiagnosticDestination_borrow record = diagnostic_record(diagnostic, &destination);
     return cod_native_compile_cli_entry(&input, &output, &record, &argument_owner, &destination, status);
 }
 
@@ -414,39 +436,24 @@ int main(int argc, char **argv) {
             fputs("cod-booter: native LLVM target unavailable\n", stderr);
             return 70;
         }
-        cod_booter_diagnostic diagnostic;
-        compiler_status status;
-        if (generate_providers(argv[2], argv[3], &diagnostic, &status) != COD_NATIVE_OK) {
-            fputs("cod-booter: invalid native entry\n", stderr);
-            return 70;
-        }
-        if (status != cod_enum_CompilerStatusx2ecod_14_CompilerStatus_member_Complete)
-            report(argv[2], status, &diagnostic);
-        return status;
+        cod_booter_diagnostic_sink diagnostic;
+        compiler_status status = 0;
+        const cod_native_status result = generate_providers(argv[2], argv[3], &diagnostic, &status);
+        return finish_command(argv[2], result, status, &diagnostic);
     }
     if (strcmp(argv[1], "--check-declarations") == 0) {
-        cod_booter_diagnostic diagnostic;
-        compiler_status status;
-        if (check_declarations(argv[2], &diagnostic, &status) != COD_NATIVE_OK) {
-            fputs("cod-booter: invalid native entry\n", stderr);
-            return 70;
-        }
-        if (status != cod_enum_CompilerStatusx2ecod_14_CompilerStatus_member_Complete)
-            report(argv[2], status, &diagnostic);
-        return status;
+        cod_booter_diagnostic_sink diagnostic;
+        compiler_status status = 0;
+        const cod_native_status result = check_declarations(argv[2], &diagnostic, &status);
+        return finish_command(argv[2], result, status, &diagnostic);
     }
     if (LLVMInitializeNativeTarget() || LLVMInitializeNativeAsmPrinter()) {
         fputs("cod-booter: native LLVM target unavailable\n", stderr);
         return 70;
     }
 
-    cod_booter_diagnostic diagnostic;
-    compiler_status status;
-    if (compile(argv[1], argv[2], &diagnostic, &status) != COD_NATIVE_OK) {
-        fputs("cod-booter: invalid native entry\n", stderr);
-        return 70;
-    }
-    if (status != cod_enum_CompilerStatusx2ecod_14_CompilerStatus_member_Complete)
-        report(argv[1], status, &diagnostic);
-    return status;
+    cod_booter_diagnostic_sink diagnostic;
+    compiler_status status = 0;
+    const cod_native_status result = compile(argv[1], argv[2], &diagnostic, &status);
+    return finish_command(argv[1], result, status, &diagnostic);
 }

@@ -1,19 +1,17 @@
 using "SourceStorage.cod" { SourceBytes, Token };
 using "SourceAccess.cod" len;
-using "Lexer.cod" { scan_token, end_of_source, lexical_error };
+using "Lexer.cod" { scan_token, end_of_source };
 using "ParserStorage.cod" { Tokens, ExprNodes, no_node, syntax_first, syntax_past };
 using "Frontend.cod" { FrontendResult, read_expression };
 using "Lowering.cod" { lower_expression, ArithmeticOperands, arithmetic_operands };
-using "CompilerStatus.cod" CompilerStatus { Complete, Rejected, FormUnsupported, OpenFailed, LoweringFailed, FinishFailed };
+using "CompilerStatus.cod" CompilerStatus { Complete, Rejected, FormUnsupported, OpenFailed, LoweringFailed, FinishFailed, ScratchFailed };
 
 export from "CompilerStatus.cod" CompilerStatus;
 
 export data ExpressionScratchPlan {
     token_count:u64;
     node_capacity:u64;
-    diagnostic:u8;
-    diagnostic_first:u64;
-    diagnostic_past:u64;
+    syntax_capacity:u64;
 }
 
 export data NativeExpressionResult {
@@ -30,7 +28,7 @@ func count_tokens(source:const SourceBytes in S, token:Token in T) -> u64
     # Each non-EOF token advances by at least one byte.
     for (index in 0u64 .. bytes) {
         scan_token(source, next, token);
-        if (token.kind == end_of_source() || lexical_error(token.kind)) return index;
+        if (token.kind == end_of_source()) return index;
         next <- token.past;
     };
     return bytes;
@@ -43,19 +41,13 @@ export func plan_expression_scratch(source:const SourceBytes in S, scratch:Expre
     where {const owner S, owner R} {
     scratch.token_count <- 0u64;
     scratch.node_capacity <- 0u64;
-    scratch.diagnostic <- 0u8;
-    scratch.diagnostic_first <- 0u64;
-    scratch.diagnostic_past <- 0u64;
+    scratch.syntax_capacity <- 0u64;
     ref token = make Token { kind <- end_of_source(); first <- 0u64; past <- 0u64; };
     val count <- count_tokens(source, token);
-    if (lexical_error(token.kind)) {
-        scratch.diagnostic <- token.kind;
-        scratch.diagnostic_first <- token.first;
-        scratch.diagnostic_past <- token.past;
-        return false;
-    } else {};
+    if (count > (no_node() - 1u64) / 3u64) return false;
     scratch.token_count <- count + 1u64;
     scratch.node_capacity <- count;
+    scratch.syntax_capacity <- 3u64 * count;
     return true;
 }
 
@@ -135,7 +127,7 @@ export proc compile_with_scratch(here work(token_count:u64, node_capacity:u64) -
                                  here release() -> void,
                                  source:const SourceBytes in S, plan:ExpressionScratchPlan in P) -> CompilerStatus
     where {const owner S, owner P} {
-    if (!plan_expression_scratch(source, plan)) return Rejected;
+    if (!plan_expression_scratch(source, plan)) return ScratchFailed;
     defer { release(); };
-    return work(plan.token_count, plan.node_capacity);
+    return work(plan.token_count, plan.syntax_capacity);
 }

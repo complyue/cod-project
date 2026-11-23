@@ -1,5 +1,8 @@
 using "SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
 using "SourceAccess.cod" locate_source_position;
+using "ParserStorage.cod" { ExprNodes, parse_report_code, syntax_first, syntax_past, no_node };
+using "Frontend.cod" FrontendResult;
+using "std:exceptions" OutOfMemoryError;
 
 handle type LauncherDiagnostics;
 export handle type DiagnosticDestination in LauncherDiagnostics;
@@ -7,9 +10,116 @@ proc "C" write_diagnostic(handle destination:DiagnosticDestination in D, stage:u
                           first_line:u64, first_column:u64, past_line:u64, past_column:u64,
                           related_line:u64, related_column:u64, os_error:u64) -> u8 where {owner D};
 
-export proc report_rejection(source:const SourceBytes in S, lines:const SourceLines in S,
-                             handle diagnostic:DiagnosticDestination in D,
-                             stage:u8, code:u8, first:u64, past:u64, related:u64) -> void
+data "C" ParseDiagnosticRow {
+    code:u8;
+    first_line:u64;
+    first_column:u64;
+    past_line:u64;
+    past_column:u64;
+}
+array ParseDiagnosticRows[u64]:ParseDiagnosticRow;
+array ReportIndices[u64]:u64;
+
+proc "C" write_parse_reports(handle diagnostic:DiagnosticDestination in D, rows:const ParseDiagnosticRows in R, used:u64,
+                             keys:const SourceBytes in K, first:u64, past:u64, stage:u8) -> u8
+    where {owner D, const owner R, const owner K};
+
+func report_after(nodes:const ExprNodes in N, used:u64, left:u64, right:u64) -> bool where {const owner N} {
+    val left_at <- syntax_first(nodes, used, left);
+    val right_at <- syntax_first(nodes, used, right);
+    return left_at > right_at || (left_at == right_at && left > right)
+}
+
+func restore_report_heap(nodes:const ExprNodes in N, used:u64, order:ReportIndices in O, start:u64, size:u64) -> void
+    where {const owner N, owner O} {
+    val parent <- start;
+    val selected <- 0u64;
+    val previous <- 0u64;
+    for (step in 0u64 .. size) {
+        if (parent >= size / 2u64) return;
+        selected <- 2u64 * parent + 1u64;
+        if (selected + 1u64 < size && report_after(nodes, used, order[selected + 1u64], order[selected])) {
+            (selected <- selected + 1u64):void
+        };
+        if (!report_after(nodes, used, order[selected], order[parent])) return;
+        previous <- order[parent];
+        order[parent] <- order[selected];
+        order[selected] <- previous;
+        parent <- selected
+    }
+}
+
+func sort_report_indices(nodes:const ExprNodes in N, used:u64, order:ReportIndices in O, count:u64) -> void
+    where {const owner N, owner O} {
+    val root <- count / 2u64;
+    for (step in 0u64 .. root) {
+        root <- root - 1u64;
+        restore_report_heap(nodes, used, order, root, count)
+    };
+    val end <- count;
+    val previous <- 0u64;
+    for (step in 1u64 .. count) {
+        end <- end - 1u64;
+        previous <- order[0u64];
+        order[0u64] <- order[end];
+        order[end] <- previous;
+        restore_report_heap(nodes, used, order, 0u64, end)
+    }
+}
+
+proc write_ordered_reports(source:const SourceBytes in S, lines:const SourceLines in S,
+                           handle diagnostic:DiagnosticDestination in D, nodes:const ExprNodes in N,
+                           keys:const SourceBytes in K, key_first:u64, key_past:u64, stage:u8,
+                           used:u64, count:u64) -> bool
+    where {const owner S, owner D, const owner N, const owner K} {
+    try {
+        ref order = make ReportIndices(count, 0u64);
+        val written <- 0u64;
+        for (at in 0u64 .. used) {
+            if (parse_report_code(nodes, used, at) != 0u8) {
+                if (written >= count) return false;
+                order[written] <- at;
+                (written <- written + 1u64):void
+            }
+        };
+        if (written != count) return false;
+        sort_report_indices(nodes, used, order, count);
+        ref rows = make ParseDiagnosticRows(count, make ParseDiagnosticRow {
+            code <- 0u8; first_line <- 0u64; first_column <- 0u64; past_line <- 0u64; past_column <- 0u64;
+        });
+        ref position = make SourcePosition { line <- 0u64; column <- 0u64; };
+        val at <- no_node();
+        for (index in 0u64 .. count) {
+            at <- order[index];
+            locate_source_position(source, lines, syntax_first(nodes, used, at), position);
+            rows[index].first_line <- position.line;
+            rows[index].first_column <- position.column;
+            locate_source_position(source, lines, syntax_past(nodes, used, at), position);
+            rows[index].past_line <- position.line;
+            rows[index].past_column <- position.column;
+            rows[index].code <- parse_report_code(nodes, used, at)
+        };
+        return write_parse_reports(diagnostic, rows, count, keys, key_first, key_past, stage) == 0u8
+    } catch (error:const OutOfMemoryError) {
+        return false
+    }
+}
+
+export proc report_parse_rejection(source:const SourceBytes in S, lines:const SourceLines in S,
+                                   handle diagnostic:DiagnosticDestination in D, nodes:const ExprNodes in N,
+                                   result:const FrontendResult in F, keys:const SourceBytes in K,
+                                   key_first:u64, key_past:u64, stage:u8, entry:bool) -> bool
+    where {const owner S, owner D, const owner N, const owner F, const owner K} {
+    if (!write_located_diagnostic(source, lines, diagnostic, stage, result.tree.diagnostic,
+                                  result.diagnostic_first, result.diagnostic_past, no_node())) return false;
+    if (result.tree.reports == 0u64 || (entry && result.tree.reports == 1u64)) return true;
+    return write_ordered_reports(source, lines, diagnostic, nodes, keys, key_first, key_past,
+                                 stage, result.tree.used, result.tree.reports)
+}
+
+proc write_located_diagnostic(source:const SourceBytes in S, lines:const SourceLines in S,
+                               handle diagnostic:DiagnosticDestination in D,
+                               stage:u8, code:u8, first:u64, past:u64, related:u64) -> bool
     where {const owner S, owner D} {
     ref start = make SourcePosition { line <- 0u64; column <- 0u64; };
     ref end = make SourcePosition { line <- 0u64; column <- 0u64; };
@@ -17,9 +127,16 @@ export proc report_rejection(source:const SourceBytes in S, lines:const SourceLi
     locate_source_position(source, lines, first, start);
     locate_source_position(source, lines, past, end);
     locate_source_position(source, lines, related, previous);
-    (write_diagnostic(diagnostic, stage, code, start.line, start.column, end.line, end.column,
-                       previous.line, previous.column, 0u64)):void;
-    return;
+    return write_diagnostic(diagnostic, stage, code, start.line, start.column, end.line, end.column,
+                            previous.line, previous.column, 0u64) == 0u8
+}
+
+export proc report_rejection(source:const SourceBytes in S, lines:const SourceLines in S,
+                             handle diagnostic:DiagnosticDestination in D,
+                             stage:u8, code:u8, first:u64, past:u64, related:u64) -> void
+    where {const owner S, owner D} {
+    (write_located_diagnostic(source, lines, diagnostic, stage, code, first, past, related)):void;
+    return
 }
 
 export proc report_source_open_error(handle diagnostic:DiagnosticDestination in D, os_error:u64) -> void where {owner D} {

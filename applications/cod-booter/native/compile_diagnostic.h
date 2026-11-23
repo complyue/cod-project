@@ -1,6 +1,7 @@
 #ifndef COD_BOOTER_COMPILE_DIAGNOSTIC_H
 #define COD_BOOTER_COMPILE_DIAGNOSTIC_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 enum {
@@ -30,5 +31,12 @@ typedef struct {
     cod_booter_position related;
     uint64_t os_error;
 } cod_booter_diagnostic;
+
+typedef struct {
+    cod_booter_diagnostic *reports;
+    char *path;
+    size_t count;
+    cod_booter_diagnostic primary;
+} cod_booter_diagnostic_sink;
 
 #endif
