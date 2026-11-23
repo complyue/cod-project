@@ -25,6 +25,7 @@ using "Frontend.cod" { FrontendResult, read_module };
 using "ModuleExportStorage.cod" { ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces };
 using "ParserStorage.cod" FormalMode { ValueFormal };
 using "ModuleExportStorage.cod" { SumInterfacePayload { NoSumInterface }, AggregateStorage { UnprovedAggregate } };
+using "ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
 using "AggregateSchemas.cod" AggregateFacts;
 using "ModuleExports.cod" {
     SelectedExport, SelectedExports, next_module_dependency, prepare_module_dependencies, ExportResolutionResult,
@@ -155,7 +156,8 @@ proc reserve_interfaces(ref var rows:ModuleInterfaces in G, used:u64, required:u
         type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
         target_readonly <- 0u8; owner_readonly <- 0u8; has_here <- 0u8; failure_checked <- 0u8;
         failure_module <- 0u64; failure_identity <- 0u64; name_first <- 0u64; name_past <- 0u64;
-        enum_code <- 0u64; native_function <- no_node(); native_procedure <- 0u8; native_reception <- 0u8;
+        enum_code <- 0u64; native_function <- no_node(); callable_kind <- NoCallableKind;
+        native_reception <- 0u8;
         native_passes_owner <- 0u8;
         sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal;
     }) in G;
@@ -725,7 +727,8 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         ref work = make NameWork(capacity, make NameWorkSlot {
             active <- no_node(); next <- no_node(); next_method <- no_node();
             imported_function <- no_node(); imported_owner_argument <- no_node(); imported_failure <- 0u64;
-            imported_kind <- 0u8; imported_procedure <- 0u8; imported_reception <- 0u8;
+            imported_kind <- 0u8; imported_callable_kind <- NoCallableKind;
+            imported_reception <- 0u8;
             imported_target_readonly <- 0u8; imported_owner_readonly <- 0u8;
             imported_passes_owner <- 0u8; imported_failure_checked <- 0u8;
             enum_code <- 0u64; value_module <- 0u64; value_identity <- 0u64; value_kind <- 0u8; expects_here <- 0u8;
@@ -779,7 +782,8 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
             target_readonly <- 0u8; owner_readonly <- 0u8; has_here <- 0u8; failure_checked <- 0u8;
             failure_module <- 0u64; failure_identity <- 0u64; name_first <- 0u64; name_past <- 0u64;
-            enum_code <- 0u64; native_function <- no_node(); native_procedure <- 0u8; native_reception <- 0u8;
+            enum_code <- 0u64; native_function <- no_node(); callable_kind <- NoCallableKind;
+            native_reception <- 0u8;
             native_passes_owner <- 0u8;
             sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal;
         });

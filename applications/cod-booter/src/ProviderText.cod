@@ -1,6 +1,7 @@
 using "../../../cod/library/string.cod" { StringBuilder, append };
 using "ModuleExportStorage.cod" ModuleInterfaces;
-using "NameResolution.cod" { builtin_c_string, builtin_string, c_operation, c_entry, text_type };
+using "NameResolution.cod" { builtin_bool, builtin_c_string, builtin_string, c_operation, c_entry,
+    text_type };
 
 export proc begin_provider_pair(header:StringBuilder in H, stubs:StringBuilder in S) -> void
     where {owner H, owner S} {
@@ -18,6 +19,7 @@ export proc finish_provider_header(header:StringBuilder in H) -> void where {own
 }
 
 export data ProviderPreamble {
+    boolean_results:bool;
     here_steps:bool;
     incoming_loans:bool;
     incoming_text:bool;
@@ -27,6 +29,7 @@ export data ProviderPreamble {
 
 export func prepare_provider_preamble(interfaces:const ModuleInterfaces in G, used:u64,
                                       features:ProviderPreamble in F) -> bool where {const owner G, owner F} {
+    features.boolean_results <- false;
     features.here_steps <- false;
     features.incoming_loans <- false;
     features.incoming_text <- false;
@@ -42,6 +45,10 @@ export func prepare_provider_preamble(interfaces:const ModuleInterfaces in G, us
         count <- interfaces[head].entry_count;
         if (interfaces[head].value_kind != 0u8 || count >= used - head) return false;
         kind <- interfaces[head].interface_kind;
+        if ((kind == c_operation() || kind == c_entry()) && interfaces[head].result_kind ==
+            builtin_bool()) {
+            (features.boolean_results <- true):void
+        };
         if (kind == c_operation() && interfaces[head].has_here != 0u8) {
             (features.here_steps <- true):void;
         };
@@ -63,6 +70,9 @@ export proc write_provider_preamble(header:StringBuilder in H, stubs:StringBuild
                                     features:const ProviderPreamble in F) -> void
     where {owner H, owner S, const owner F} {
     begin_provider_pair(header, stubs);
+    if (features.boolean_results) {
+        append(header, "typedef uint8_t COD_BOOL;\n\n")
+    };
     if (features.here_steps) {
         append(header, "typedef uint32_t cod_native_here_step;\nenum {\n    COD_NATIVE_HERE_VALUE = 0,\n    COD_NATIVE_HERE_PROTECTED = 1,\n    COD_NATIVE_HERE_INVALID = 2\n};\n\n");
     };

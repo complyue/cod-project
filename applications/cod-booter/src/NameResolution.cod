@@ -67,6 +67,7 @@ using "ModuleExports.cod" {
     builder_storage_export, lexical_builder_export, lexical_result_export, callable_export, ordinary_callable_shape,
 };
 using "ModuleExportStorage.cod" { enum_type, sum_type, constructor_type };
+using "ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
 
 export data NameBinding {
     kind:u8;
@@ -92,7 +93,7 @@ export data NameWorkSlot {
     imported_owner_argument:u64;
     imported_failure:u64;
     imported_kind:u8;
-    imported_procedure:u8;
+    imported_callable_kind:InterfaceCallableKind;
     imported_reception:u8;
     imported_target_readonly:u8;
     imported_owner_readonly:u8;
@@ -201,7 +202,6 @@ func unsupported_initializer_rebind() -> u8 { return 46u8; }
 func unsupported_repeated_defer() -> u8 { return 47u8; }
 func unsupported_repeated_construction() -> u8 { return 48u8; }
 func declaration_in_loop_arm() -> u8 { return 49u8; }
-func native_acquisition_in_function() -> u8 { return 50u8; }
 func repeated_handle_acquisition() -> u8 { return 51u8; }
 func declaration_in_here_group() -> u8 { return 61u8; }
 func missing_here_control() -> u8 { return 62u8; }
@@ -482,7 +482,7 @@ func link_entries(nodes:const ExprNodes in N, work:NameWork in W, revision:u64, 
         work[at].imported_owner_argument <- no_node();
         work[at].imported_failure <- no_node();
         work[at].imported_kind <- 0u8;
-        work[at].imported_procedure <- 0u8;
+        work[at].imported_callable_kind <- NoCallableKind;
         work[at].imported_reception <- 0u8;
         work[at].imported_target_readonly <- 0u8;
         work[at].imported_owner_readonly <- 0u8;
@@ -810,10 +810,6 @@ func resolve_handle_construction(source:const SourceBytes in S, nodes:const Expr
     } else {};
     if (state.repeated && !installs_effect) { reject_name(state, at, repeated_handle_acquisition()); return; } else {};
     if (state.here_group) { reject_name(state, at, unsupported_here_group_storage()); return; } else {};
-    if (is_function(nodes, enclosing_callable(nodes, bindings, state.scope_node))) {
-        reject_name(state, at, native_acquisition_in_function());
-        return;
-    } else {};
     ref constructor = make HandleConstructionSites { marker <- no_node(); arguments <- no_node(); actual_owner <- no_node(); };
     val mode <- inspect_handle_construction(nodes, state.syntax_revision, state.syntax_used, at, constructor);
     if (mode != OwnHandleMake && mode != BorrowHandleMake) {
@@ -1785,7 +1781,8 @@ func register_callables(source:const SourceBytes in S, nodes:const ExprNodes in 
     };
 }
 
-func register_c_procedure(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+func register_c_callable(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    bindings:NameBindings in B,
                           work:NameWork in W, state:NameState in R, form:u64, signature:u64, provider:bool) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val name <- signature_name(nodes, state.syntax_revision, state.syntax_used, signature);
@@ -1809,7 +1806,8 @@ func register_c_procedure(source:const SourceBytes in S, nodes:const ExprNodes i
     remember(bindings, form, form, kind);
 }
 
-func register_native_procedures(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+func register_native_callables(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    bindings:NameBindings in B,
                                 work:NameWork in W, state:NameState in R, first:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
@@ -1827,7 +1825,8 @@ func register_native_procedures(source:const SourceBytes in S, nodes:const ExprN
         shape <- inspect_callable(nodes, state.syntax_revision, state.syntax_used, form, sites);
         if (shape == InvalidCallable) { reject_name(state, form, invalid_module_tree()); return; };
         if (shape == CProvider || shape == CEntry) {
-            register_c_procedure(source, nodes, bindings, work, state, form, sites.signature, shape == CProvider);
+            register_c_callable(source, nodes, bindings, work, state, form, sites.signature,
+                shape == CProvider);
             if (state.diagnostic != 0u8) return;
         } else {};
         item <- work[item].next;
@@ -2446,7 +2445,8 @@ export func resolve_module_names(source:const SourceBytes in S, nodes:const Expr
 
     register_module(source, nodes, bindings, selected, work, state, first);
     if (state.diagnostic == 0u8) { register_callables(source, nodes, bindings, selected, work, state, first, declarations_only); };
-    if (state.diagnostic == 0u8) { register_native_procedures(source, nodes, bindings, work, state, first); } else {};
+    if (state.diagnostic == 0u8) { register_native_callables(source, nodes, bindings, work, state,
+        first); } else {};
     if (state.diagnostic == 0u8) {
         for (slot in 0u64 .. state.used) {
             if (selected[work[slot].active].kind == enum_member_export()) {

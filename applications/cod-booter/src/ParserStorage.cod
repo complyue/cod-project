@@ -142,8 +142,8 @@ export data ExprPayload =
     | OwningRegionResult { previous:NodeId; schema:NodeLink; readonly:bool; }
     | ThrowsClause { previous:NodeId; exception_type:NodeId; }
     | CallableDefinition { header:NodeId; body:NodeId; function_form:bool; lexical:bool; }
-    | CProviderDeclaration { header:NodeId; }
-    | CEntryDefinition { header:NodeId; body:NodeId; }
+    | CProviderDeclaration { header:NodeId; function_form:bool; }
+    | CEntryDefinition { header:NodeId; body:NodeId; function_form:bool; }
     | ArgumentItem { previous:NodeLink; operand:NodeId; checked_ref:bool; selection_at:u64; }
     | NamedArgument { operand:NodeLink; label:NodeId; arrow:u64; }
     | SymbolReference {}
@@ -1306,6 +1306,15 @@ export func inspect_scoped_procedure(nodes:const ExprNodes in N, revision:u64, u
 export enum CallableSyntax:u8 { OtherCallableSyntax; InvalidCallable; ModuleCallable; LexicalCallable; CProvider; CEntry; }
 export data CallableSites { signature:u64; body:u64; function_form:bool; }
 
+func callable_function_form(payload:const ExprPayload in P) -> bool where {const owner P} {
+    return case payload of {
+        (CallableDefinition { val function_form <-; }) -> { function_form };
+        (CEntryDefinition { val function_form <-; }) -> { function_form };
+        (CProviderDeclaration { val function_form <-; }) -> { function_form };
+        _ -> false
+    }
+}
+
 func read_callable_definition(nodes:const ExprNodes in N, revision:u64, at:u64,
                               signature:const NodeId in I, body:const NodeId in B, function_form:bool,
                               sites:CallableSites in S, mode:CallableSyntax) -> CallableSyntax
@@ -1325,18 +1334,21 @@ export func inspect_callable(nodes:const ExprNodes in N, revision:u64, used:u64,
         (Vacant) -> { InvalidCallable:CallableSyntax };
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of {
-                (CallableDefinition { val head <- header; val body <- body; val function_form <- function_form; val lexical <- lexical; }) -> {
-                    read_callable_definition(nodes, revision, at, head, body, function_form, sites,
+                (CallableDefinition { val head <- header; val body <- body; val lexical <- lexical;
+                }) -> {
+                    read_callable_definition(nodes, revision, at, head, body,
+                        callable_function_form(syntax.payload), sites,
                                              if (lexical) { LexicalCallable:CallableSyntax } else { ModuleCallable:CallableSyntax })
                 };
                 (CEntryDefinition { val head <- header; val body <- body; }) -> {
-                    read_callable_definition(nodes, revision, at, head, body, false, sites, CEntry:CallableSyntax)
+                    read_callable_definition(nodes, revision, at, head, body,
+                        callable_function_form(syntax.payload), sites, CEntry:CallableSyntax)
                 };
                 (CProviderDeclaration { val head <- header; }) -> {
                     if (!published_syntax_id(nodes, revision, at, head)) return InvalidCallable:CallableSyntax;
                     sites.signature <- head.index;
                     sites.body <- no_node();
-                    sites.function_form <- false;
+                    sites.function_form <- callable_function_form(syntax.payload);
                     CProvider:CallableSyntax
                 };
                 (_) -> { OtherCallableSyntax:CallableSyntax };
@@ -2443,14 +2455,9 @@ export func is_invocation(nodes:const ExprNodes in N, used:u64, at:u64) -> bool 
 export func is_function(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
     if (at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
-        (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
-            case syntax.payload of {
-                (CallableDefinition { val function_form <- function_form; }) -> { function_form };
-                (_) -> { false };
-            }
-        };
-    };
+        Vacant -> false;
+        (Occupied { val syntax <- node; }) -> { callable_function_form(syntax.payload) }
+    }
 }
 
 export func is_scope_block(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {

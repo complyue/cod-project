@@ -1355,7 +1355,7 @@ export func parse_callable(source:const SourceBytes in S, tokens:const Tokens in
     result.next <- result.next + 1u64;
     val native <- result.next < past && tokens[result.next].kind == quoted_text();
     if (native) {
-        if (lexical || function_form || !c_linkage(source, tokens[result.next])) {
+        if (lexical || !c_linkage(source, tokens[result.next])) {
             result.diagnostic <- expected_c_linkage();
             return;
         } else {};
@@ -1367,6 +1367,7 @@ export func parse_callable(source:const SourceBytes in S, tokens:const Tokens in
     if (native && punct_at(source, tokens, result.next, past) == 59u8) {
         append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, header), make CProviderDeclaration {
             header <- make NodeId { revision <- result.revision; index <- header; };
+            function_form <- function_form
         });
         return;
     } else {};
@@ -1377,7 +1378,11 @@ export func parse_callable(source:const SourceBytes in S, tokens:const Tokens in
     ref signature = make NodeId { revision <- result.revision; index <- header; };
     ref implementation = make NodeId { revision <- result.revision; index <- body; };
     if (native) {
-        append_syntax_node(nodes, result, first, end, make CEntryDefinition { header <- signature; body <- implementation; });
+        append_syntax_node(nodes, result, first, end, make CEntryDefinition {
+            header <- signature;
+            body <- implementation;
+            function_form <- function_form
+        })
     } else {
         append_syntax_node(nodes, result, first, end, make CallableDefinition {
             header <- signature; body <- implementation; function_form <- function_form; lexical <- lexical;

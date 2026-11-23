@@ -183,7 +183,7 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
     else if (diagnostic->stage == 3 && diagnostic->code == 69)
         fputs(": error: the selected C provider requires a trailing here body\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 70)
-        fputs(": error: a function cannot call a C provider\n", stderr);
+        fputs(": error: a function cannot invoke a procedure\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 72)
         fputs(": error: const owner requires an input under that owner\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 73)

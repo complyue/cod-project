@@ -73,6 +73,10 @@ proc emit_argument(name:const String in N, visits:const Visits in G, keys:const 
 export proc emit_provider_result_type(visits:const Visits in G, keys:const SourceBytes in G, spellings:const SourceBytes in G,
                  rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R, head:u64)
     -> bool where {const owner G, const owner R} {
+    if (rows[head].result_kind == builtin_bool()) {
+        emit("COD_BOOL");
+        return true
+    };
     return emit_provider_bits_type(visits, keys, spellings, rows, prefix, rows[head].result_kind,
                                    rows[head].type_module, rows[head].type_identity);
 }
@@ -105,7 +109,10 @@ proc emit_signature(name:const String in N, visits:const Visits in G, keys:const
     if (has_result) {
         if (count != 0u64 || owners != 0u64) { emit(", "); };
         if (!emit_provider_result_type(visits, keys, spellings, rows, prefix, head)) return false;
-        if (entry) { emit(" * value"); } else { emit(" *value"); };
+        if (entry) { emit(" * value") } else {
+            if (implementation && rows[head].result_kind == builtin_bool()) {
+                emit(" *result") } else { emit(" *value") }
+        }
     } else {
         if (count == 0u64 && owners == 0u64) { emit("void"); };
     };
@@ -328,6 +335,9 @@ proc emit_stub(name:const String in N, visits:const Visits in G, keys:const Sour
     };
     emit_implementation_call(name, rows, head, entry, has_result, enum_result);
     if (!entry) { emit("    if (status != COD_NATIVE_OK) return COD_NATIVE_BOUNDARY_ERROR;\n"); };
+    if (!entry && result == builtin_bool()) {
+        emit("    if (result > 1) return COD_NATIVE_BOUNDARY_ERROR;\n")
+    };
     if (enum_result) {
         emit("    if (!");
         if (!emit_provider_result_type(visits, keys, spellings, rows, prefix, head)) return false;

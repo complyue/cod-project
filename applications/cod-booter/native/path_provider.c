@@ -93,7 +93,7 @@ cod_native_status cod_native_prepare_child_impl(cod_native_PathOwner_borrow loan
     return COD_NATIVE_OK;
 }
 
-cod_native_status cod_native_path_ready_impl(cod_native_PathOwner_borrow loan, uint8_t *result) {
+cod_native_status cod_native_path_ready_impl(cod_native_PathOwner_borrow loan, COD_BOOL *result) {
     if (!path_owner(loan)) return COD_NATIVE_BOUNDARY_ERROR;
     *result = canonical_path(loan) != NULL;
     return COD_NATIVE_OK;

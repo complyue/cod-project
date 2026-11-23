@@ -73,6 +73,8 @@ using "ModuleExports.cod" {
     exception_root_identity, text_size_export, text_byte_export, callable_export, ordinary_callable_shape,
 };
 using "ModuleExportStorage.cod" { enum_type, ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header };
+using "ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind, CheckedFunction,
+    CheckedProcedure };
 
 # An owner is a lexical scope or an owner parameter's declaration. Exception
 # type identity alone does not establish the incoming object's owner.
@@ -1132,8 +1134,11 @@ func check_direct_call(nodes:const ExprNodes in N, names:const NameBindings in B
 func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                          facts:OperandFacts in F, at:u64, arguments:u64, used:u64, revision:u64) -> u8
     where {const owner N, const owner B, const owner L, owner F} {
-    if (links[at].imported_function == no_node()) return unsupported_imported_call();
-    if (links[at].imported_procedure != 0u8 && is_function(nodes, enclosing_callable(nodes, names, names[at].scope)))
+    if (links[at].imported_function == no_node() || links[at].imported_callable_kind ==
+        NoCallableKind)
+        return unsupported_imported_call();
+    if (links[at].imported_callable_kind == CheckedProcedure && is_function(nodes,
+        enclosing_callable(nodes, names, names[at].scope)))
         return procedure_call_in_function();
     val result_owner <- links[at].imported_owner_argument;
     val returned_kind <- links[at].imported_kind;
@@ -1204,7 +1209,7 @@ func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contrac
     if (argument != no_node()) return false;
     links[at].imported_function <- contracts[header].native_function;
     links[at].imported_kind <- contracts[header].result_kind;
-    links[at].imported_procedure <- contracts[header].native_procedure;
+    links[at].imported_callable_kind <- contracts[header].callable_kind;
     links[at].imported_target_readonly <- contracts[header].target_readonly;
     links[at].imported_owner_argument <- argument_at_position(links, first, contracts[header].owner_role);
     links[at].imported_failure <- contracts[header].failure_identity;
@@ -1311,7 +1316,9 @@ export func publish_native_interfaces(nodes:const ExprNodes in N, names:const Na
                 if (arity + 1u64 > intrinsic (len)(contracts) - count) return no_node();
                 write_interface_header(contracts[count], module_id, at, callable_binding(), facts[at].kind, arity);
                 contracts[count].native_function <- base + at;
-                contracts[count].native_procedure <- if (is_function(nodes, at)) { 0u8 } else { 1u8 };
+                contracts[count].callable_kind <- if (callable.function_form) {
+                    CheckedFunction:InterfaceCallableKind
+                } else { CheckedProcedure:InterfaceCallableKind };
                 if (!find_signature_clause(nodes, revision, used, callable.signature, ThrowsSignatureClause, failure)) return no_node();
                 # The root Exception has an identity of its own. Use an absent
                 # node for an ordinary callable with no declared failure.
