@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 33. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 34. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
 
 [K-BOOTER-AST-TABLE-20261122](../CHANGELOG.md#k-booter-ast-table-20261122) records the delegated review of the indexed AST workload and its seed prerequisites under the [work-method decision](../CHANGELOG.md#h-booter-work-method-20261122).
 
@@ -40,7 +40,7 @@ The [graph formal syntax review](../CHANGELOG.md#k-booter-slot-formal-syntax-202
 
 The [symbolic procedure syntax review](../CHANGELOG.md#k-booter-symbolic-procedure-syntax-20261122) clears the [declaration, scoped definition and corresponding profile checks](../applications/cod-booter/docs/ModuleGraph.md#parsing-the-dependency-procedure) for the dependency visit.
 
-The [production cutover review](../CHANGELOG.md#k-booter-production-cutover-checks-20261122) clears [standalone membership](../applications/cod-booter/docs/ModuleGraph.md#standalone-build-cutover), the graph’s fixed reference formals and [frontend construction and completion checks](../applications/cod-booter/docs/ModuleGraph.md#checking-a-constructing-throw-in-the-path-wrapper). Transport of the owned exception through generated code awaits a concrete backend review.
+The [production cutover review](../CHANGELOG.md#k-booter-production-cutover-checks-20261122) clears [standalone membership](../applications/cod-booter/docs/ModuleGraph.md#standalone-build-cutover), the graph’s fixed reference formals and [frontend construction and completion checks](../applications/cod-booter/docs/ModuleGraph.md#checking-a-constructing-throw-in-the-path-wrapper). The [owned throw lowering review](../CHANGELOG.md#k-booter-owned-throw-lowering-20261122) covers the [CoD nominal tags, private LLVM outcome and runtime cleanup](../applications/cod-booter/docs/ModuleGraph.md#lowering-an-owning-exception-through-cleanup) for the real path wrapper, plus the [shared call check for forwarded feedback](../applications/cod-booter/docs/ModuleGraph.md#checking-the-forwarded-path-callback).
 
 ## Before coding
 

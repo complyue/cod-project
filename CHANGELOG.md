@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Review the path wrapper’s owned throw and forwarded callback
+
+<a id="k-booter-owned-throw-lowering-20261122"></a>
+**K-BOOTER-OWNED-THROW-LOWERING-20261122.** Delegated pre-code review under H-PROJECT-ARCHITECTURE-REVIEW-20261122 continues the checked source contract at `11c3b203d43c482553e8316f151c4c2ee10e6af2:applications/cod-booter/docs/ModuleGraph.md`, “Checking a constructing throw in the path wrapper”. D-17-RETHROW, D-17-EXCEPTION-OWNER and H-CATCH-HOLDER-ONLY-20261121 govern construction, custody and handler release. Clearance covers private artifact tags, LLVM completion transport, the shared runtime operations and execution acceptance for the cause-less path workload. D-18-HERE-STORAGE and D-20-C-PROVIDERS govern checking the ready path’s bound here call and its nominal enum feedback. D-20-MODULE-GRAPH r29 to r30, D-ARCH-REVIEW r33 to r34, P-680–P-683, registry r1082.
+
 ## 2026-11-22 — Move booter production membership to the CoD driver
 
 <a id="k-booter-production-cutover-checks-20261122"></a>
