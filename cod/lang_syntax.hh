@@ -2561,6 +2561,7 @@ public:
 private:
   void synchronize_module(size_t first) {
     cursor_ = first;
+    if (is("effect") && is("proc", 1) && tokens_[first + 2].kind == TokenKind::symbol) cursor_ += 2;
     while (peek().kind != TokenKind::end) {
       if (cursor_ != first && (module_doclet_target(0) || is("export") || is("using") ||
           is("import") || is("mixin"))) return;
