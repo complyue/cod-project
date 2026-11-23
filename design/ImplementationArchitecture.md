@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 26. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 27. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
 
 [K-BOOTER-AST-TABLE-20261122](../CHANGELOG.md#k-booter-ast-table-20261122) records the delegated review of the indexed AST workload and its seed prerequisites under the [work-method decision](../CHANGELOG.md#h-booter-work-method-20261122).
 
@@ -27,6 +27,8 @@ The [graph terminal allocator review](../CHANGELOG.md#k-booter-terminal-array-al
 The [graph budget parser review](../CHANGELOG.md#k-booter-const-val-parser-20261122) clears the expression parser, typed local binding and checker safeguard for the [readonly capacity declaration](../applications/cod-booter/docs/ModuleGraph.md#parsing-the-graph-budget-declaration).
 
 The [fresh graph result review](../CHANGELOG.md#k-booter-fresh-graph-result-20261122) clears the [named factory, seed result checking and private LLVM handoff](../applications/cod-booter/docs/ModuleGraph.md#returning-the-freshly-constructed-graph) for the command entries.
+
+The [booter result syntax review](../CHANGELOG.md#k-booter-own-region-result-syntax-20261122) clears [owning region result parsing and signature inspection](../applications/cod-booter/docs/ModuleGraph.md#reading-an-owning-region-result-in-the-booter) for the graph factory.
 
 ## Before coding
 

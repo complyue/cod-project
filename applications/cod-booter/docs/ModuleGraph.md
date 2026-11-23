@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 22. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 23. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
 
 [K-BOOTER-AST-TABLE-20261122](../../../CHANGELOG.md#k-booter-ast-table-20261122) continues that architecture for the [first indexed AST path](#first-indexed-ast-path). Its private representation uses the existing named-array constructor, valid bits transfer and constructor-pattern checks. Acceptance includes the parser, checker, lowering and emitted object.
 
@@ -29,6 +29,8 @@ The [constructor identity review](../../../CHANGELOG.md#k-booter-sum-interfaces-
 The [readonly budget declaration review](../../../CHANGELOG.md#k-booter-const-val-parser-20261122) covers the typed local syntax and its checking boundary.
 
 The [fresh graph result review](../../../CHANGELOG.md#k-booter-fresh-graph-result-20261122) covers construction rollback, a direct owning result and cleanup at the receiving entry.
+
+The [owning result syntax review](../../../CHANGELOG.md#k-booter-own-region-result-syntax-20261122) covers the CoD booter’s signature reader and its publication boundary.
 
 ## Layer responsibilities
 
@@ -346,6 +348,18 @@ own region graph:GraphRoot <- fresh_graph();
 Use the ordinary internal named-call transport in both seed modes and the existing C region operations. Check all executable uses of the result. Discard, forwarding, indirect calls and other destinations outside this first slice must stop at checking if their ownership cleanup is unavailable. Reject incompatible root contracts. A sound subset can require the same resolved concrete schema and report other structurally compatible layouts as unsupported. The runtime control pointer grants no source-level bits-transfer or regional-field storage permission.
 
 **Acceptance.** Exercise all three typed command entries against the one ten-root factory. In both seed modes verify two simultaneously live calls with distinct root contents, caller success and caller throw with one release per instance, capacity failure before acquisition, and a later root initializer that throws after acquisition. Trace rollback before the outer handler and preserve existing output on failure. Include a mismatched schema, attempted borrow or bits reception of the fresh ownership, a discarded result, and factory exits through a throwing `finally` or replacing `defer` that the scoped proof must reject. A caller with ordinary cleanup must still receive the region. The seed probes and the linked CLI object, check-only and provider workloads supply separate evidence.
+
+### Reading an owning region result in the booter
+
+In `CallableSyntax`, recognize the two consecutive tokens `own region` after a result arrow with bounded lookahead. The graph factory writes `-> own region :GraphRoot`. Read the schema spelling with the existing name reader. Resolution of that name to a region schema belongs to checking. A result type named `own`, an exception result and a following `throws` or `where` clause retain their ordinary grammar. [Region result declarations](../../../design/RegionalOwnership.md#region-as-a-declaration-keyword-throughout-the-language)
+
+The colon introduces a root annotation. `-> own region` at the end of a result clause is a syntactically complete unannotated region result. Preserve the optional annotation and any explicit `const` following the colon. A name supplied as the annotation requires the colon, and a consumed colon requires a type. The seed execution scope above requires the concrete graph schema.
+
+Store an `OwningRegionResult` node with the preceding signature link, optional schema-name link and annotation access. Its half-open span starts at the arrow and ends after the schema name, or after `region` when unannotated. Expose its own `SignatureSyntax` alternative through the existing signature inspector and chain walker. Validate published links against the frame’s revision and bounds, require a name node for a present named annotation, and preserve the callable head and subsequent clauses. The parser does not create an owner or a result binding.
+
+Clear the CoD parser, typed syntax and those signature-reader safeguards needed for this form. Syntax inspection may succeed. A checking or publication path that cannot preserve the owning result must stop at the clause before publishing an interface, emitting an object or generating a C provider. In particular, the native reader’s no-result default denotes `void` only when a result was actually omitted. The same distinction applies to a nested `here` signature wherever the shared parser reads its result. This scope adds no native result transport. [C provider boundary](LLVMInterop.md)
+
+In both seed-built booter modes inspect the unedited factory’s result, the fresh construction with all ten root initializers and the separate holder initialized by `fresh_graph()`. Verify the span, links, optional annotation, a following clause, an ordinary type named `own` and existing C marker forms. Reject a schema name without a colon, a colon with a missing type, and corrupt or cross-revision links during inspection. Check unsupported owning signatures through declarations, object and native-provider routes, including a native declaration with no other unsupported constructs. Preserve existing artifacts on rejection.
 
 ### Generating and publishing the provider pair
 
