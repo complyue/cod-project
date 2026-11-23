@@ -1,3 +1,4 @@
+using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 using "std:exceptions" { OutOfMemoryError, RegionCapacityExceededError };
 using "./NativeSource.cod" {
     Path, PathOwner, PathNotReadyException, PathStorageException, SourceRevision, SourceOpenException, prepare_root, prepare_child,
@@ -98,6 +99,7 @@ export func collect_dependency_edges(source:const SourceBytes in S, nodes:const 
     ref selection = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
         symbolic <- false; mode <- UseResource;
+        nature <- OrdinaryResource;
     };
     for (scan in 0u64 .. used) {
         if (site == no_node()) return count;
@@ -447,6 +449,7 @@ func library_declaration(nodes:const ExprNodes in N, tree:const ParseResult in T
     ref selection = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
         symbolic <- false; mode <- UseResource;
+        nature <- OrdinaryResource;
     };
     if (inspect_module_selection(nodes, tree.revision, tree.used, at, selection) == SelectionReady) return true;
     ref callable_site = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };

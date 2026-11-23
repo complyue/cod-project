@@ -1,3 +1,4 @@
+using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 using "./SourceStorage.cod" SourceBytes;
 using "./SourceAccess.cod" same_bytes;
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
@@ -1614,10 +1615,12 @@ func same_selection(nodes:const ExprNodes in N, selected:const SelectedExports i
         ref left_selection = make ModuleSelectionSites {
             path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
             symbolic <- false; mode <- UseResource;
+            nature <- OrdinaryResource;
         };
         ref right_selection = make ModuleSelectionSites {
             path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
             symbolic <- false; mode <- UseResource;
+            nature <- OrdinaryResource;
         };
         if (inspect_module_selection(nodes, revision, used, left, left_selection) != SelectionReady ||
             inspect_module_selection(nodes, revision, used, right, right_selection) != SelectionReady ||
@@ -1679,6 +1682,7 @@ func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, 
     ref selection = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
         symbolic <- false; mode <- UseResource;
+        nature <- OrdinaryResource;
     };
     val item <- first;
     val form <- no_node();
@@ -1734,6 +1738,7 @@ func extensible_selection(nodes:const ExprNodes in N, selected:const SelectedExp
     ref selection = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
         symbolic <- false; mode <- UseResource;
+        nature <- OrdinaryResource;
     };
     return inspect_module_selection(nodes, revision, used, site, selection) == SelectionReady &&
         selection.mode == ImportResource;
@@ -2357,6 +2362,7 @@ func resolve_module_form(source:const SourceBytes in S, nodes:const ExprNodes in
         ref selection = make ModuleSelectionSites {
             path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
             symbolic <- false; mode <- UseResource;
+            nature <- OrdinaryResource;
         };
         if (mode == OtherCallableSyntax && shape == OtherDeclaration &&
             inspect_module_selection(nodes, state.syntax_revision, state.syntax_used, form, selection) != SelectionReady) {
@@ -2431,6 +2437,7 @@ export func resolve_module_names(source:const SourceBytes in S, nodes:const Expr
     ref selection = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
         symbolic <- false; mode <- UseResource;
+        nature <- OrdinaryResource;
     };
     for (at in 0u64 .. tree.used) {
         if (selected[at].kind == enum_member_export()) {

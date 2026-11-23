@@ -1,3 +1,4 @@
+using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 using "./SourceStorage.cod" SourceBytes;
 using "./SourceAccess.cod" same_bytes;
 using "./ParserStorage.cod" {
@@ -122,6 +123,7 @@ export func next_module_dependency(source:const SourceBytes in S, nodes:const Ex
     ref selection = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
         symbolic <- false; mode <- UseResource;
+        nature <- OrdinaryResource;
     };
     for (at in start .. used) {
         if (inspect_module_selection(nodes, revision, used, at, selection) == SelectionReady &&
@@ -234,6 +236,7 @@ export func resolve_module_exports(source:const SourceBytes in S, nodes:const Ex
     ref syntax = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
         symbolic <- false; mode <- UseResource;
+        nature <- OrdinaryResource;
     };
     val shape <- InvalidSelection;
     for (at in 0u64 .. tree.used) {
@@ -274,6 +277,7 @@ func exposes_spelling(source:const SourceBytes in S, nodes:const ExprNodes in N,
     ref selection = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
         symbolic <- false; mode <- UseResource;
+        nature <- OrdinaryResource;
     };
     if (inspect_module_selection(nodes, revision, used, site, selection) != SelectionReady ||
         selection.members == no_node()) return false;
@@ -380,6 +384,7 @@ export func resolve_enum_selections(source:const SourceBytes in S, nodes:const E
     ref selection = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
         symbolic <- false; mode <- UseResource;
+        nature <- OrdinaryResource;
     };
     for (site in 0u64 .. used) {
         if (selected[site].kind == enum_export() &&
@@ -533,6 +538,7 @@ export func resolve_sum_selections(source:const SourceBytes in S, nodes:const Ex
     ref selection = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
         symbolic <- false; mode <- UseResource;
+        nature <- OrdinaryResource;
     };
     for (site in 0u64 .. used) {
         if (selected[site].kind == sum_export() &&

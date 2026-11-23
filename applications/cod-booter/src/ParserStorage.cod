@@ -7,7 +7,10 @@ export data NodeId { revision:u64; index:u64; }
 export data SyntaxRevisions { last:u64; }
 export data NodeLink = NoLink {} | LinkTo { node:NodeId; };
 export data AssignmentOperands { destination:NodeId; input:NodeId; operator_at:u64; }
-export enum ModuleSelectionMode:u8 { UseResource; ImportResource; ReexportResource; }
+export enum ModuleSelectionMode:u8 { UseResource; ImportResource; ReexportResource; MixinResource;
+    IdentityResource; }
+export enum ResourceNature:u8 { OrdinaryResource; VariableResource; ProcedureResource; }
+export enum PublicView:u8 { DefaultPublic; CompletePublic; }
 
 export enum FormalMode:u8 {
     ValueFormal;
@@ -62,7 +65,7 @@ export data ExprPayload =
     | AbstractType { heading:NodeId; }
     | HandleSymbol { name:NodeId; marker:NodeId; }
     | ReferenceSymbol { name:NodeId; target:NodeId; owner_name:NodeId; readonly:bool; nullable:bool; }
-    | Publication { name:NodeId; }
+    | Publication { name:NodeId; nature:ResourceNature; }
     | ArrayDefinition { name:NodeId; index_type:NodeId; element_type:NodeId; dimension_at:u64; }
     | EnumInteger { magnitude:u64; negative:bool; width:u64; }
     | EnumMember { previous:NodeLink; name:NodeId; initializer:NodeLink; }
@@ -125,7 +128,7 @@ export data ExprPayload =
     | CaseFailure {}
     | CaseFallthrough {}
     | ModuleSyntax { items:NodeLink; }
-    | ModuleItem { previous:NodeLink; form:NodeId; published:bool; }
+    | ModuleItem { previous:NodeLink; form:NodeId; published:bool; defaulted:bool; }
     | BlockSyntax { items:NodeLink; }
     | ScopeSyntax { items:NodeLink; }
     | BlockItem { previous:NodeLink; expression:NodeId; }
@@ -153,7 +156,11 @@ export data ExprPayload =
     | HereSupply { receivers:NodeLink; body:NodeId; }
     | HereReceiver { previous:NodeLink; binding:NodeId; explicit_ref:bool; }
     | ModulePathSyntax {}
-    | ModuleSelection { path:NodeId; resource:NodeId; renamed:NodeLink; members:NodeLink; mode:ModuleSelectionMode; }
+    | ModuleSelection { path:NodeId; resource:NodeId; renamed:NodeLink; members:NodeLink;
+        mode:ModuleSelectionMode; nature:ResourceNature; }
+    | BulkModuleSelection { path:NodeId; mode:ModuleSelectionMode; view:PublicView; }
+    | DefaultPublicSet { marks:NodeLink; }
+    | DefaultMark { previous:NodeLink; name:NodeId; nature:ResourceNature; }
     | AllMembers { opening:u64; }
     | ChosenMembers { items:NodeId; opening:u64; }
     | ChosenMember { previous:NodeLink; member:NodeId; }
@@ -647,6 +654,19 @@ export data ModuleSelectionSites {
     members:u64;
     symbolic:bool;
     mode:ModuleSelectionMode;
+    nature:ResourceNature;
+}
+
+export data BulkSelectionSites {
+    path:u64;
+    mode:ModuleSelectionMode;
+    view:PublicView;
+}
+
+export data DefaultMarkSites {
+    previous:u64;
+    name:u64;
+    nature:ResourceNature;
 }
 
 export func name_syntax(nodes:const ExprNodes in N, used:u64, at:u64) -> NameSyntax where {const owner N} {
@@ -759,11 +779,17 @@ export func inspect_module_selection(nodes:const ExprNodes in N, revision:u64, u
         (Vacant) -> { InvalidSelection:SelectionSyntax };
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of {
-                (ModuleSelection { val path <- path; val resource <- resource; val renamed <- renamed;
-                                   val members <- members; val mode <- mode; }) -> {
-                    return if (prepare_selection_sites(nodes, revision, at, path, resource, renamed, members, mode, sites)) {
-                        SelectionReady:SelectionSyntax
-                    } else { InvalidSelection:SelectionSyntax };
+                (ModuleSelection {
+                    val path <-; val resource <-; val renamed <-; val members <-;
+                    val mode <-; val nature <-;
+                }) -> {
+                    if (!prepare_selection_sites(
+                        nodes, revision, at, path, resource, renamed, members, mode, sites))
+                        return InvalidSelection:SelectionSyntax;
+                    if (nature != (OrdinaryResource:ResourceNature) && !sites.symbolic)
+                        return InvalidSelection:SelectionSyntax;
+                    sites.nature <- nature;
+                    SelectionReady:SelectionSyntax
                 };
                 (_) -> { OtherSelectionSyntax:SelectionSyntax };
             }
@@ -771,11 +797,114 @@ export func inspect_module_selection(nodes:const ExprNodes in N, revision:u64, u
     };
 }
 
+export func inspect_bulk_selection(
+    nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, sites:BulkSelectionSites in S)
+    -> SelectionSyntax where {const owner N, owner S} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return InvalidSelection:SelectionSyntax;
+    return case nodes[at] of {
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (BulkModuleSelection { val path <-; val mode <-; val view <-; }) -> {
+                    if (!module_path_syntax(nodes, revision, at, path) ||
+                        mode == (IdentityResource:ModuleSelectionMode))
+                        return InvalidSelection:SelectionSyntax;
+                    sites.path <- path.index;
+                    sites.mode <- mode;
+                    sites.view <- view;
+                    SelectionReady:SelectionSyntax
+                };
+                _ -> OtherSelectionSyntax:SelectionSyntax
+            }
+        };
+        _ -> InvalidSelection:SelectionSyntax
+    }
+}
+
+func default_mark_link(nodes:const ExprNodes in N, revision:u64, at:u64, link:const NodeLink in L,
+                       selected:u64 in S) -> bool
+    where {const owner N, const owner L, owner S} {
+    return case link of {
+        NoLink -> { selected <- no_node(); true };
+        (LinkTo { val target <- node; }) -> {
+            if (!published_syntax_id(nodes, revision, at, target)) return false;
+            case nodes[target.index] of {
+                (Occupied { val syntax <- node; }) -> {
+                    case syntax.payload of {
+                        DefaultMark -> { selected <- target.index; true };
+                        _ -> false
+                    }
+                };
+                _ -> false
+            }
+        }
+    }
+}
+
+export func inspect_default_set(
+    nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, tail:u64 in T) -> SelectionSyntax
+    where {const owner N, owner T} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return InvalidSelection:SelectionSyntax;
+    return case nodes[at] of {
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (DefaultPublicSet { val marks <-; }) -> {
+                    if (!default_mark_link(nodes, revision, at, marks, tail))
+                        return InvalidSelection:SelectionSyntax;
+                    SelectionReady:SelectionSyntax
+                };
+                _ -> OtherSelectionSyntax:SelectionSyntax
+            }
+        };
+        _ -> InvalidSelection:SelectionSyntax
+    }
+}
+
+export func inspect_default_mark(
+    nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, sites:DefaultMarkSites in S)
+    -> bool where {const owner N, owner S} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (DefaultMark { val previous <-; val name <-; val nature <-; }) -> {
+                    if (!published_syntax_id(nodes, revision, at, name) ||
+                        !default_mark_link(nodes, revision, at, previous, sites.previous))
+                        return false;
+                    if (name_syntax(nodes, at, name.index) != (if (
+                        nature == (OrdinaryResource:ResourceNature)) {
+                        OrdinaryName:NameSyntax
+                    } else { SymbolicName:NameSyntax })) return false;
+                    sites.name <- name.index;
+                    sites.nature <- nature;
+                    true
+                };
+                _ -> false
+            }
+        };
+        _ -> false
+    }
+}
+
+export func module_item_defaulted(nodes:const ExprNodes in N, used:u64, at:u64) -> bool
+    where {const owner N} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (ModuleItem { val published <-; val defaulted <-; }) -> { published && defaulted };
+                _ -> false
+            }
+        };
+        _ -> false
+    }
+}
+
 export func selected_resource_name(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64) -> u64
     where {const owner N} {
     ref selection = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
         symbolic <- false; mode <- (UseResource:ModuleSelectionMode);
+        nature <- (OrdinaryResource:ResourceNature);
     };
     if (inspect_module_selection(nodes, revision, used, at, selection) != (SelectionReady:SelectionSyntax))
         return no_node();
@@ -787,6 +916,7 @@ export func local_resource_name(nodes:const ExprNodes in N, revision:u64, used:u
     ref selection = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
         symbolic <- false; mode <- (UseResource:ModuleSelectionMode);
+        nature <- (OrdinaryResource:ResourceNature);
     };
     if (inspect_module_selection(nodes, revision, used, at, selection) != (SelectionReady:SelectionSyntax))
         return no_node();

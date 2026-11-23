@@ -120,7 +120,8 @@ export func append_block(nodes:ExprNodes in A, result:ParseResult in R, first:u6
 }
 
 export func append_module_item(nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64,
-                               preceding:u64, form:u64, published:bool) -> void where {owner A, owner R} {
+                               preceding:u64, form:u64, published:bool,
+                                   defaulted:bool) -> void where {owner A, owner R} {
     ref previous = make NoLink {};
     if (preceding != no_node()) {
         previous = make LinkTo { node <- make NodeId { revision <- result.revision; index <- preceding; }; };
@@ -129,7 +130,7 @@ export func append_module_item(nodes:ExprNodes in A, result:ParseResult in R, fi
     append_syntax_node(nodes, result, first, past, make ModuleItem {
         previous <- previous;
         form <- make NodeId { revision <- result.revision; index <- form; };
-        published <- published;
+        published <- published; defaulted <- defaulted;
     });
 }
 

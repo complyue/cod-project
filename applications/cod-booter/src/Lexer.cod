@@ -230,7 +230,7 @@ export func import_word(source:const SourceBytes in S, token:const Token in T) -
         source[first + 3u64] == 111u8 && source[first + 4u64] == 114u8 && source[first + 5u64] == 116u8; # import
 }
 
-func mixin_word(source:const SourceBytes in S, token:const Token in T) -> bool
+export func mixin_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
     return identifier_width(token, 5u64) &&
@@ -360,6 +360,16 @@ export func export_word(source:const SourceBytes in S, token:const Token in T) -
     return identifier_width(token, 6u64) && source[first] == 101u8 && source[first + 1u64] == 120u8 &&
         source[first + 2u64] == 112u8 && source[first + 3u64] == 111u8 &&
         source[first + 4u64] == 114u8 && source[first + 5u64] == 116u8; # e x p o r t
+}
+
+export func default_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    val first <- token.first;
+    return identifier_width(token, 7u64) && source[first] == 100u8 && source[first + 1u64] == 101u8
+        &&
+        source[first + 2u64] == 102u8 && source[first + 3u64] == 97u8 &&
+            source[first + 4u64] == 117u8 &&
+        source[first + 5u64] == 108u8 && source[first + 6u64] == 116u8
 }
 
 export func enum_word(source:const SourceBytes in S, token:const Token in T) -> bool

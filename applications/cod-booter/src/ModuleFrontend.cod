@@ -5,6 +5,7 @@ using "./ParserStorage.cod" ExprPayload {
     RethrowWithCause, NamedArgument, OwningHandleBinding, BorrowedHandleBinding, OwnHandleConstruction,
     BorrowHandleConstruction, HereInvocation, RegionDefinition, OwningRegionBinding, RegionConstruction, OwningRegionResult,
     ConstructorCasePattern, ProcedureSymbol, ScopedProcedureDefinition,
+    BulkModuleSelection, DefaultPublicSet, ModuleItem, ModuleSelection, Publication,
 };
 using "./ParserStorage.cod" ConstructionSyntax {
     OtherConstruction, InvalidConstruction, ExceptionConstructionSyntax, PositionalConstruction,
@@ -16,7 +17,10 @@ using "./ParserStorage.cod" CallableSyntax { ModuleCallable, CProvider, CEntry }
 using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
 using "./ParserStorage.cod" SignatureSyntax { BorrowedResultClause };
 using "./ParserStorage.cod" SequenceSyntax { ModuleSequence };
-using "./ParserStorage.cod" ModuleSelectionMode { UseResource, ReexportResource };
+using "./ParserStorage.cod" ModuleSelectionMode {
+    UseResource, ReexportResource, MixinResource, IdentityResource
+};
+using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 using "./ParserStorage.cod" SelectionSyntax { SelectionReady };
 using "./ParserStorage.cod" LocalMode { ExceptionLocal };
 using "./ParserStorage.cod" FormalMode {
@@ -132,7 +136,9 @@ func extended_declaration(nodes:const ExprNodes in N, revision:u64, used:u64, it
     };
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
     ref selected = make ModuleSelectionSites {
-        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node(); mode <- UseResource; symbolic <- false;
+        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
+        mode <- UseResource; symbolic <- false;
+        nature <- OrdinaryResource;
     };
     val shape <- inspect_declaration(nodes, revision, used, form, declaration);
     if (shape == EnumTypeDeclaration) return false;
@@ -204,6 +210,21 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64,
         (Vacant) -> { unsupported_module_declaration() };
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of {
+                (BulkModuleSelection) -> { unsupported_module_declaration() };
+                (DefaultPublicSet) -> { unsupported_module_declaration() };
+                (ModuleSelection { val mode <- mode; val nature <- nature; }) -> {
+                    if (mode == MixinResource || mode == IdentityResource ||
+                        nature != OrdinaryResource) {
+                        unsupported_module_declaration()
+                    } else { 0u8 }
+                };
+                (Publication { val nature <- nature; }) -> {
+                    if (nature != OrdinaryResource) { unsupported_module_declaration() }
+                        else { 0u8 }
+                };
+                (ModuleItem { val defaulted <- defaulted; }) -> {
+                    if (defaulted) { unsupported_module_declaration() } else { 0u8 }
+                };
                 (LocalBinding { val mode <- mode; val declaration_const <- declaration_const; }) -> {
                     if (declaration_const) return unsupported_const_local();
                     if (mode == ExceptionLocal) return 28u8;
