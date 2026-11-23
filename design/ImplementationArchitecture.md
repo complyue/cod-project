@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 23. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 24. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
 
 [K-BOOTER-AST-TABLE-20261122](../CHANGELOG.md#k-booter-ast-table-20261122) records the delegated review of the indexed AST workload and its seed prerequisites under the [work-method decision](../CHANGELOG.md#h-booter-work-method-20261122).
 
@@ -21,6 +21,8 @@ The [sum parser and graph output review](../CHANGELOG.md#k-booter-sum-parser-gra
 The [region parser and terminal input review](../CHANGELOG.md#k-booter-region-parser-terminal-inputs-20261122) covers named region syntax and the owner and destination supplied by each CLI entry.
 
 The [sum interface review](../CHANGELOG.md#k-booter-sum-interfaces-20261122) covers the declaration binder, checked graph publication and module selector.
+
+The [graph terminal allocator review](../CHANGELOG.md#k-booter-terminal-array-allocator-20261122) covers the seed checker and private call layout for the named traversal receiver and its direct root-count argument.
 
 ## Before coding
 
@@ -111,7 +113,30 @@ The declaration entry uses the common graph pass. A separate CoD renderer consum
 
 ### Reading the finished graph
 
-Each typed CLI entry retains its destination and owns its graph through completion. The shared CoD procedure receives an ordinary table under G, traverses the graph and supplies its published ranges to a synchronous terminal under that same G. The terminal can call the named reader with its entry’s genuine arguments. Shared construction and traversal stay in CoD. Scope includes the entry adapters, common graph and terminal wiring and their real CLI checks. Additional seed support for owning results or allocator forwarding needs a concrete implementation review. [Inputs, completion and acceptance](../applications/cod-booter/docs/ModuleGraph.md#supplying-the-output-destination)
+Each typed CLI entry retains its destination and owns its graph through completion. The shared CoD procedure receives an ordinary table under G, traverses the graph and supplies its published ranges to a synchronous terminal under that same G. The terminal can call the named reader with its entry’s genuine arguments. Shared construction and traversal stay in CoD. Scope includes the entry adapters, common graph and terminal wiring and their real CLI checks. The receiver’s array allocator forwarding is covered below. Owning-region result support requires its own implementation review. [Inputs, completion and acceptance](../applications/cod-booter/docs/ModuleGraph.md#supplying-the-output-destination)
+
+### Forwarding the graph allocator through a named here receiver
+
+The entry owns G. The named CoD receiver borrows an initialized table and a writable count in G, creates its own lexical holder and calls the growing helper. The terminal receives the current table and count after that helper returns.
+
+```cod
+proc complete_graph(here finish(keys:const Keys in G, size:u64) -> u64,
+                    keys:Keys in G, used:u64 in G) -> u64 where {owner G} {
+    ref current = keys;
+    grow(current, used);
+    return finish(current, used);
+}
+```
+
+Clear the seed checker, existing checked call and effect records, private LLVM call lowering and focused regressions for this synchronous, nonforeign named receiver with an independent result. The growing helper takes `ref var` on **current**. Replacing its binding leaves the entry’s original table selected by `rows`. Both tables belong to G. The ordinary `used` formal selects the entry’s actual root field. The terminal receives that count as bits. [Graph terminal contract](../applications/cod-booter/docs/ModuleGraph.md#supplying-the-output-destination)
+
+Propagate the helper’s array allocation requirement to the receiver’s ordinary G input and discharge it at each call site. Reuse the checked role-to-allocator mapping and per-completion effects of named calls. Establish owner equality for the table and count, live writable allocation permission and the corresponding lexical extent list or region control. Keep that selection valid through later operand preparation and reentry. The callback’s own borrowed inputs supply no allocator for the receiver. Access to writable foreign bytes alone cannot satisfy the requirement. Keep the existing lexical-only allocation check for operations requiring lexical storage. [Array transport](../applications/cod-booter/docs/ModuleGraph.md#named-array-transport-for-the-first-edge)
+
+Lower the checked evidence in the receiver’s existing allocator argument positions alongside the ordinary owner and here arguments. In both specialized and shared code, every reachable receiver profile that can allocate must receive the capability for the selected actual owner. An unused position in a shared layout grants no authority. If alternate control profiles need different evidence, select the matching evidence or diagnose the unsupported combination before emission. The supplied body’s activation and protected completion keep their existing representation. This scope covers the call to the named growing helper. Allocation through the supplied callback, `ref var` on the receiver’s own parameter, owned-region results and foreign transport retain separate scopes.
+
+The call `complete_graph(rows, graph.used) ...` also needs the existing [direct root-field loan](#lending-a-graph-count-to-a-named-helper) during written operand preparation. Carry the checked root identity, field place, access and actual owner into the ordinary named-call retention checks. Prove the region stays live and the root loan remains confined on every exit. An independent result alone does not prove confinement. Preserve the restrictions on retained fields and general indexed element loans.
+
+In both seed modes, start with `rows[0] == 0` and count zero. After successful growth, the terminal must observe 42 and count one, while the original table still reads zero. A failed allocation before rebinding leaves the old table and count intact and skips the terminal on that path. A later throw preserves already completed writes. Check reentry with a second graph of the same schema, protected exit from the terminal, correct release on each exit, and rejection for conflicting actual owners, a const owner or a writable foreign loan lacking allocation evidence. Exercise lexical and regional allocation through the same named route. Delivery uses the typed CLI graph traversal and its actual output.
 
 ### Target ABI facts for provider generation
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Forward the graph allocator through the named terminal receiver
+
+<a id="k-booter-terminal-array-allocator-20261122"></a>
+**K-BOOTER-TERMINAL-ARRAY-ALLOCATOR-20261122.** Delegated pre-code review under H-PROJECT-ARCHITECTURE-REVIEW-20261122 clears the seed’s ordinary-input allocator evidence and fixed root-count preparation for the receiver at `acc562e6f2d2740b0828133d56f67a7896bd0475:applications/cod-booter/docs/ModuleGraph.md`, “Supplying the output destination”. K-BOOTER-ARRAY-TRANSPORT-20261122 and K-BOOTER-ROOT-FIELD-LOAN-20261122 supply the existing contracts. D-ARCH-REVIEW r23 to r24, P-682/P-683, registry r1072.
+
 ## 2026-11-22 — Publish and select the booter’s nominal sum constructors
 
 <a id="k-booter-sum-interfaces-20261122"></a>
