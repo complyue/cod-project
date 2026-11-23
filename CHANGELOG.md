@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Carry the defining exception name and field layout across object units
+
+<a id="k-booter-exception-artifact-20261122"></a>
+**K-BOOTER-EXCEPTION-ARTIFACT-20261122.** Delegated pre-code review under H-PROJECT-ARCHITECTURE-REVIEW-20261122 continues the owned outcome at `55c0b35ab938a295bac448286ac3ee3d2a03c799:applications/cod-booter/docs/ModuleGraph.md`, “Lowering an owning exception through cleanup”. The scope covers a private tag derived from the defining interface header, target-based field projection and retained identifier bytes for the real path wrapper, including a types-only defining dependency. D-20-MODULE-GRAPH r32 to r33, D-ARCH-REVIEW r36 to r37, P-680–P-683, registry r1086.
+
 ## 2026-11-22 — Assign design review and production cutover to their respective owners
 
 <a id="h-design-review-delivery-roles-20261122"></a>
