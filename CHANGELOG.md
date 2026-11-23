@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Check exception obligations under the declaration command’s source contracts
+
+<a id="k-booter-declaration-proof-scope-20261123"></a>
+**K-BOOTER-DECLARATION-PROOF-SCOPE-20261123.** Delegated pre-code review continues D-20-MODULE-GRAPH r44 to r45 and D-ARCH-REVIEW r50 to r51, P-680–P-683. The [declaration proof scope](applications/cod-booter/docs/ModuleGraph.md#selecting-checked-exception-evidence-for-declaration-commands) applies the checked-call, caught-field and callback contracts at `cb80d92ea54158fee37857b9b34f7f0a1aa95732:applications/cod-booter/docs/ModuleGraph.md` to bound per-revision checking. The review verified the two callback edges in the frozen graph input and the three declaration regressions. Both-mode compatibility and same-candidate wrapper acceptance remain mainline delivery obligations.
+
 ## 2026-11-23 — Return a Boolean from a native predicate
 
 <a id="h-native-boolean-result-20261123"></a>

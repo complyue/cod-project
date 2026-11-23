@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 50. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 51. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+
+The [declaration checking review](../CHANGELOG.md#k-booter-declaration-proof-scope-20261123) clears the [revision-local selection of checked source evidence](../applications/cod-booter/docs/ModuleGraph.md#selecting-checked-exception-evidence-for-declaration-commands). ModuleGraph owns the declaration command and publication gate. The bound visit frame supplies typed facts to the existing operand and completion passes, including the shared lexical here-formal contract.
 
 The [native predicate decision](../CHANGELOG.md#h-native-boolean-result-20261123) extends the callable clearance to the Boolean result of the real path provider and the existing ordinary result adapters.
 
