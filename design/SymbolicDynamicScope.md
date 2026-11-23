@@ -1,12 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 249 · Recorded: 2026-11-23 · Phase: language/application co-design.
+Design revision: 250 · Recorded: 2026-11-23 · Phase: language/application co-design.
 
 ## Design authority
 
-[D-10-VARARGS](DesignAuthorityRegistry.md#d-10-varargs) r249 continues H-272, H-449 and P-403/P-404 for [forwarding local by-value elements](#indexed-by-value-elements). Check the value received by the second call, both callers' values after it returns, and ordinary name lookup for a length query. [Continuity](../CHANGELOG.md#k-value-pack-forwarding-20261123)
-
-At r248 [D-10-VARARGS](DesignAuthorityRegistry.md#d-10-varargs) applies ordinary callee-local value storage (H-272) and ordinary qualifiers (H-366–H-369) to [indexed by-value elements](#indexed-by-value-elements). P-403/P-404 preserve one typed tail with independently prepared values. Check a local write, an unchanged caller element and a rejected write through readonly access. [Scope and user clarification](../CHANGELOG.md#k-variadic-local-values-20261123)
+[D-10-VARARGS](DesignAuthorityRegistry.md#d-10-varargs) r250 applies H-272, H-449, the [ordered expansion decision](../CHANGELOG.md#h-ordered-pack-expansions-20261123) and P-403/P-404 to indexed elements. The selected formal determines which writes the caller observes. Check independent [value slots](#indexed-by-value-elements), [borrowed targets](#indexed-borrowed-elements), repeated targets, rebinding and forwarding. Whole-pack storage and native representation have separate scope. [Continuity](../CHANGELOG.md#k-variadic-element-selection-20261123)
 
 At r247 [D-10-ARGUMENTS](DesignAuthorityRegistry.md#d-10-arguments) covers [inferred function values with different defaults](#inferred-function-values-with-different-defaults). The [project user’s decision](../CHANGELOG.md#h-inferred-function-defaults-20261123) applies P-405/P-406 and the common-result rule of D-22-CONDITIONAL. A single static signature makes an explicit call readable and checkable before the branch is known. Verify both selected implementations, missing arguments and named-origin controls. General callable conversion and representation retain their own scope.
 
@@ -892,7 +890,7 @@ No public pack type, heap allocation, permanent ABI or native specialization per
 
 **Acceptance.** Reject uncalled fixed-plus-variadic and variadic-plus-variadic families at formation, locally and at the first receiving module that combines the methods. Check both declaration orders, disjoint types and differing prefixes. Accept fixed-only overloads, a standalone variadic method, a matching declaration and definition, and two import paths that select one defining method. For a valid variadic method check empty, singleton and longer array expansion, implicit trailing arguments, contextual `[]...`, and element-type, owner, access and initialization failures. Exercise multiple expansions with empty and nonempty arrays, a later operand mutating the first array, and an earlier failure that skips the later operand and the callee. Preserve independent value elements, borrowed target identities and the bounds policy whenever indexing is supported.
 
-Remaining operational questions cover borrowed-element indexing, pack storage and escape, and callable-view contracts. A proposed `len(rest)` uses ordinary lookup of the visible `len` family under [the ordinary-name rule](#ordinary-names-for-traversal-and-storage). Its standard pack overload and physical pack transport have separate implementation and library scopes.
+The call contract covers indexing and forwarding. Exposing the whole pack as a storable or escaping value, or introducing a callable conversion beyond the existing declaration/implementation matching rule, would require a separate contract. A proposed `len(rest)` uses ordinary lookup of the visible `len` family under [the ordinary-name rule](#ordinary-names-for-traversal-and-storage). Its standard pack overload and physical pack transport have separate implementation and library scopes.
 
 H-448 separately settles the builtin bounds policy through [D-17](ExceptionControl.md#unchecked-bounds-exceptions-and-optional-checks): out-of-range indexing raises unchecked IndexOutOfBoundsError under default runtime checks, with an explicit compiler opt-out at the programmer's risk. No throws annotation is required for this exception. It does not qualify broader pack operations or change argument evaluation, owners, initialization or the selected user-defined indexing method's contract.
 
@@ -922,6 +920,32 @@ and the first callee wrote 10, the second receives 10. If it writes 12, the firs
 reads 10 after the call and the original caller still reads 7. This follows the ordinary
 parameter rule at each call. A reference to a callee-local element has that invocation's
 lexical lifetime.
+
+#### Indexed borrowed elements
+
+Each call prepares its own ordered sequence. For a borrowed formal, `items[i]` selects the target
+prepared for that position, with its actual owner and access. Rebinding the caller's source slot
+after preparation leaves the earlier selection intact. A write through any permitted reference
+to the selected target is observable through every pack position that selected it.
+
+```cod
+func update_both(items:u64 in O...) -> u64 where {owner O} {
+    items[0u64] <- 12u64;
+    items[1u64]
+}
+```
+
+Given a writable `bid` initially holding 7, `update_both(bid, bid)` returns 12 and the caller
+reads 12. Changing just the formal to `items:u64...` gives two independent value slots. With
+the same starting inputs the call returns 7 and the caller reads 7. With a readonly borrowed
+target the write rejects. A nullable borrowed element retains its prepared presence or absence
+and follows ordinary pointer checks.
+
+Forwarding to another borrowed tail selects those same targets. Forwarding to a by-value tail
+prepares the current values under the usual read and initialization checks. Returning a borrowed
+target requires an admitted result tied to a live input owner. A callee-local value slot or
+temporary pack backing has that call's lexical lifetime. The existing bounds rule applies to
+either element mode.
 
 ### Expression type conversion and assertion
 

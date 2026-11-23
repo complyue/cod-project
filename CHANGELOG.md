@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Apply ordinary target selection to variadic elements
+
+<a id="k-variadic-element-selection-20261123"></a>
+**K-VARIADIC-ELEMENT-SELECTION-20261123.** [D-10-VARARGS r249→r250](design/SymbolicDynamicScope.md#indexed-borrowed-elements), P-403/P-404, applies H-272/H-449 and [ordered expansion](#h-ordered-pack-expansions-20261123) to repeated targets, source rebinding, indexing and forwarding. The previous open indexing label is at `03e596004dc7e8179e8aba30b35530b024b3b3db:design/SymbolicDynamicScope.md`. [DesignTopics](docs/DesignTopics.md) narrows the ownership and construction questions to reflect the existing same-owner handoff and active-variant rules. The three deferred language topics keep their existing scope.
+
 ## 2026-11-23 — Review private preparation and cleanup of seed value packs
 
 <a id="k-seed-value-pack-20261123"></a>
