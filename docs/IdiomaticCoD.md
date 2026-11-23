@@ -2,6 +2,25 @@
 
 **Discussion draft.** These excerpts show the intended style, including confirmed forms whose frontend support is being rolled out.
 
+## Semicolons
+
+Omit a semicolon when the intended boundary is clear. Write it when the grammar needs it to distinguish two readings or when the reader would otherwise have to stop and reconstruct the grouping.
+
+```cod
+func increment(n:u64) -> u64 {
+    n + 1u64
+}
+```
+
+For a call that accepts a trailing block, these two independent operations need a separator:
+
+```cod
+run();
+{{ work() }}
+```
+
+Without the semicolon, the block attaches to `run()` as its callback. A semicolon also leaves a function tail's result intact. In grammar design, minimize the forms that need explicit separators. [Semicolon omission and syntax UX](../design/SymbolicDynamicScope.md#semicolon-omission-and-syntax-ux)
+
 ## Modules
 
 ### Do put publication at the definition and group related selections
@@ -70,13 +89,13 @@ Use a normal indentation level. Keep the span bounds together so a reader can se
 
 ```cod
 func increment(cursor:u64 in O) -> void where {const owner O} {
-    cursor <- cursor + 1u64;
+    cursor <- cursor + 1u64
 }
 
 symbol @budget:u64;
 
 proc current_budget() -> u64 {
-    return @budget;
+    return @budget
 }
 ```
 
@@ -86,7 +105,7 @@ A `func` can read and write explicitly supplied storage and use intrinsics whose
 
 ```cod
 func within_budget(cost:u64) -> bool {
-    return cost <= current_budget();
+    return cost <= current_budget()
 }
 ```
 
@@ -95,15 +114,15 @@ func within_budget(cost:u64) -> bool {
 ### Do distinguish a direct call, symbolic dispatch, and installation
 
 ```cod
-check_revision(source, lines);
+check_revision(source, lines)
 
 symbol @rate:u64;
 symbol @quote:proc()->u64;
-effect @rate <- 10u64;
-effect @quote() -> u64 { return @rate; };
-effect @rate <- 20u64;
-val current <- behave @quote();    # 20
-val captured <- perform @quote();  # 10
+effect @rate <- 10u64
+effect @quote() -> u64 { return @rate }
+effect @rate <- 20u64
+val current <- behave @quote()    # 20
+val captured <- perform @quote()  # 10
 ```
 
 A direct call resolves a lexical name. An `effect` installs a binding in the current dynamic scope. Both symbolic call forms select the procedure through its active symbol binding. `behave` uses the current dynamic bindings. `perform` temporarily installs the selected procedure’s captured dynamic values. [Functions and procedures](../design/SymbolicDynamicScope.md#functions-and-procedures)
@@ -115,14 +134,14 @@ A direct call resolves a lexical name. An `effect` installs a binding in the cur
 ```cod
 func next_byte(source:const SourceBytes in S, cursor:u64 in O) -> u8
     where {const owner S, const owner O} {
-    val byte <- source[cursor];
-    cursor <- cursor + 1u64;
-    return byte;
+    val byte <- source[cursor]
+    cursor <- cursor + 1u64
+    return byte
 }
 
-val checkpoint <- cursor;
-ref active = cursor;
-active <- checkpoint;
+val checkpoint <- cursor
+ref active = cursor
+active <- checkpoint
 ```
 
 `const T` grants readonly access through that parameter. `const owner O` withholds allocation authority through that owner parameter, and the writable borrow still permits the cursor update. Use `val` for independent bits. In `ref active = cursor`, `=` binds the reference. `active <- checkpoint` writes the selected target.
@@ -131,7 +150,7 @@ active <- checkpoint;
 
 ```cod
 func source_size(source:SourceBytes in S) -> u64 where {owner S} {
-    return len(source);
+    return len(source)
 }
 
 func compare_sources(left:const SourceBytes in S, right:const SourceBytes in S)
@@ -148,14 +167,14 @@ A length query needs readonly access. Give independent source inputs separate ow
 
 ```cod
 proc update_count(count:u64 in O) -> void where {const owner O} {
-    count <- count + 1u64;
-    return;
+    count <- count + 1u64
+    return
 }
 
 proc update_if_present(ptr pending_count:u64 in O) -> bool where {const owner O} {
-    if (pending_count is null) return false;
-    update_count(pending_count);
-    return true;
+    if (pending_count is null) return false
+    update_count(pending_count)
+    return true
 }
 ```
 
@@ -166,8 +185,8 @@ Absence returns an ordinary result. On the remaining path the branch proves that
 ```cod
 proc update_without_proof(ptr pending_count:u64 in O) -> void
     where {const owner O} {
-    update_count(pending_count);
-    return;
+    update_count(pending_count)
+    return
 }
 ```
 
@@ -180,8 +199,8 @@ using "std:exceptions" NullPointerException;
 
 proc visit_next(ptr next_token:const Token in O) -> void
     throws NullPointerException where {const owner O} {
-    visit_token(not null next_token);
-    return;
+    visit_token(not null next_token)
+    return
 }
 ```
 
@@ -193,9 +212,9 @@ When an absent next token means the input ended, take the end-of-input branch. R
 
 ```cod
 for (index in 0u64 .. used) {{
-    val first <- nodes[index].first;
-    check_offset(first);
-}};
+    val first <- nodes[index].first
+    check_offset(first)
+}}
 ```
 
 Use `{{ ... }}` when an iteration needs local declarations or a separate cleanup boundary.
@@ -204,8 +223,8 @@ Use `{{ ... }}` when an iteration needs local declarations or a separate cleanup
 
 ```cod
 for (index in 0u64 .. used) {{
-    check_node(nodes[index]);
-}};
+    check_node(nodes[index])
+}}
 ```
 
 Use ordinary braces for a body that needs no local scope. A full scope has its own lifetime, cleanup and return destination. [Full scopes in a loop body](../design/RangedForAndGenerators.md#full-scopes-inside-a-loop-body)
