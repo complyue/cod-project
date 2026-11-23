@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 76. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 77. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+
+The [r77 review](../CHANGELOG.md#k-booter-two-handle-source-call-20261123) covers [checking both native handle operands in the imported object-writer call](../applications/cod-booter/docs/ModuleGraph.md#checking-an-imported-native-operation-with-two-handle-loans). P-682/P-683 govern the selected interface, each actual-owner proof and publication of a completed call.
 
 The [r76 review](../CHANGELOG.md#k-booter-identity-reader-20261123) covers the [booter reader for reference identity](#reading-reference-identity-in-the-booter) under D-28-IDENTITY and P-682/P-683. The ref group uses it to name each reciprocal edge in source.
 

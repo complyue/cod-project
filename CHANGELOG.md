@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review source checking of two native handle loans
+
+<a id="k-booter-two-handle-source-call-20261123"></a>
+**K-BOOTER-TWO-HANDLE-SOURCE-CALL-20261123.** [D-20-MODULE-GRAPH r60→r61](applications/cod-booter/docs/ModuleGraph.md#checking-an-imported-native-operation-with-two-handle-loans) and D-ARCH-REVIEW r76→r77 continue P-680–P-683 under the [native loan](#h-booter-c-handles-20261120) and [owning effect](#h-native-handle-effect-20261121) contracts. This extends the source checker reviewed at `baf4af88b5f33e2776d7faceda90b768d86c7143:applications/cod-booter/docs/ModuleGraph.md` to the imported graph/session operation. Published-interface bounds, both actual-owner substitutions, caught `u32` field evidence and existing provider outputs are acceptance gates.
+
 ## 2026-11-23 — Review the booter reader for reference identity
 
 <a id="k-booter-identity-reader-20261123"></a>
