@@ -1,12 +1,12 @@
 # Native C providers, LLVM bindings and scoped cleanup
 
-Revision 30 · 2026-11-23 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
+Revision 31 · 2026-11-23 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
 
 ## Design authority
 
 At r30 the [user’s same-owner rebinding decision](../../../CHANGELOG.md#h-native-handle-local-rebinding-20261123) qualifies [borrowed handle locals](#borrowed-handle-locals-and-results) under [D-20-C-HANDLES](../../../design/DesignAuthorityRegistry.md#d-20-c-handles), P-646/P-647. A writable lexical binding can select another borrow under its original live owner. Verify independent selections and provider cleanup under that owner.
 
-[Interop r29](../../../CHANGELOG.md#k-native-callable-seed-status-20261123) updates the [bootstrap implementation status](#native-callable-kind-and-c-linkage) for D-20-C-DECLARATIONS under the r27 callable-kind and r28 Boolean result contracts.
+[Interop r31](../../../CHANGELOG.md#k-native-callable-booter-status-20261123) records [bootstrap implementation coverage](#native-callable-kind-and-c-linkage) for D-20-C-DECLARATIONS. The r27 callable-kind and r28 Boolean result contracts govern both frontends.
 
 [D-20-C-DECLARATIONS](../../../design/DesignAuthorityRegistry.md#d-20-c-declarations) at r28 covers [ordinary Boolean results](#ordinary-native-boolean-results) under the [native predicate decision](../../../CHANGELOG.md#h-native-boolean-result-20261123). P-644/P-645 connect the typed CoD predicate to its checked provider output. Exercise both possible readiness states, an invalid foreign byte, and transport failure before delivery. Callback feedback and record layout keep their own contracts.
 
@@ -51,7 +51,7 @@ The first-host C interface exposes generated entries, arguments and synchronous 
 
 Check both frontends and generators on a CoD function constructing and inspecting a view under one of two live sessions. The provider must observe the selected owner. Compare with a CoD procedure selecting the session through its symbol. Reject that lookup in a function and reject a call from a function to a named procedure across C linkage. Preserve the declared kind through module selection, the generated loan representation, callback completion, constructor rollback and disposal. A concrete production migration case is [`path_ready`](../native/path_provider.c), which tests the explicitly supplied path owner.
 
-**Implementation status.** The published C++ seed supports `func "C"` and `proc "C"` and generates the checked adapter for an ordinary `bool` result. Both seed modes exercised the real C path predicate with a Boolean declaration. The published CoD booter still restricts C linkage to procedures, and its bundled `path_ready` declaration still returns `u8`. The booter’s checker, generator and source migration await their own linked verification.
+**Implementation status.** Both the C++ seed and the CoD-written booter check `func "C"` and `proc "C"` declarations and generate adapters for ordinary `bool` results. The bundled [`path_ready` declaration](../src/NativeSource.cod) returns `bool` and its caller uses it directly as a predicate. Linked C witnesses exercised both readiness states and invalid result bytes through the booter-generated adapters in both bootstrap modes. The booter verifies a procedure-supplied synchronous callback with supported feedback. Its source checker still rejects feedback obtained from a borrowed array element in the `NativeViews.cod` workload.
 
 ### Ordinary native Boolean results
 

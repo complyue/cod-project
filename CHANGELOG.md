@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Record booter support for native function declarations and Boolean results
+
+<a id="k-native-callable-booter-status-20261123"></a>
+**K-NATIVE-CALLABLE-BOOTER-STATUS-20261123.** D-20-C-DECLARATIONS interop r31 updates the implementation evidence from K-NATIVE-CALLABLE-SEED-STATUS-20261123 under the same r27/r28 contracts. The ordinary Boolean predicate is at `0ce3403e7ba2f56cfcc09d3b4634042c54a667e0:applications/cod-booter/src/NativeSource.cod`, with booter provider-output handling in `ProviderCalls.cod` in the same directory. [Current coverage and remaining feedback limit](applications/cod-booter/docs/LLVMInterop.md#native-callable-kind-and-c-linkage)
+
 ## 2026-11-23 — Read maximal symbolic operator runs and assign future infix parsing
 
 <a id="h-maximal-operator-runs-20261123"></a>
