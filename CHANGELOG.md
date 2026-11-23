@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — LLVM construction from published graph units
+
+<a id="k-booter-llvm-unit-projection-20261122"></a>
+**K-BOOTER-LLVM-UNIT-PROJECTION-20261122.** Under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122, delegated pre-code review cleared one synchronous projection of CoD-published units into the existing LLVM service. Each unit retains its source name for runtime location reporting and its literal spellings after the visit closes. The baseline service contract is at `a325ce42eee71546842f9ed6b554913824b2fa4b:cod/lang_llvm_commands_c.h`, “cod_llvm_command_unit”. D-20-MODULE-GRAPH r13 to r14, D-ARCH-REVIEW r15 to r16, P-680–P-683, registry r1064.
+
 ## 2026-11-22 — Synchronous graph root-field loans
 
 <a id="k-booter-root-field-loan-20261122"></a>
