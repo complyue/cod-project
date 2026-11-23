@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Publish and select the booter’s nominal sum constructors
+
+<a id="k-booter-sum-interfaces-20261122"></a>
+**K-BOOTER-SUM-INTERFACES-20261122.** Delegated pre-code review under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122 cleared the booter declaration binder, graph-owned sum and constructor interfaces, and type-directed module selection under H-DCTOR-SOURCE-20261118 and H-DCTOR-FAMILY-MERGE-20261119. The syntax and previous checking boundary are at `1723c2ff78dadaa26ffaf56713a5186d3d0b881f:applications/cod-booter/docs/ModuleGraph.md`, “Parsing nominal sum declarations”. D-20-MODULE-GRAPH r19 to r20, D-ARCH-REVIEW r22 to r23, P-680–P-683, registry r1071.
+
 ## 2026-11-22 — Parse the graph region and bind CLI destinations at their entries
 
 <a id="k-booter-region-parser-terminal-inputs-20261122"></a>
