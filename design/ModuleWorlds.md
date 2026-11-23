@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 68 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 69 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+The [symbolic family reuse guideline](../CHANGELOG.md#h-symbolic-family-reuse-idiom-20261123) applies to D-15-DEFAULT-EXPORTS and D-DOC-IDIOMATICS. Selector permissions and initialization continue to follow the written verb.
 
 [Review backlog and status reconciliation](../CHANGELOG.md#h-review-backlog-duty-20261123) reconciles the scoped confirmations below with their registry records.
 
@@ -364,6 +366,8 @@ default { var @sout, proc @flush }
 For each of `using`, `import` and `mixin`, writing only `"./hooks.cod"` has exactly the meaning of writing `"./hooks.cod" { var @sout, proc @flush }` after that verb. Substitution is a source-level equivalence. The compiler can retain checked selectors with their published spellings, kinds, origins and order. Apply ordinary privacy, renaming, destination, access, extension and body-availability rules at the receiving directive. If the explicitly written list would fail for one item, the omitted form fails there too. Items are never silently dropped to make a verb applicable. This also governs generated entries from the complete public table where module `{..}` is admitted. The public table excludes private entries and implicit fallback names. Type-associated methods and nested type-member selectors retain their existing rules.
 
 Use `var @name` for a symbolic variable resource and `proc @name` for a symbolic procedure resource in export, using, import and mixin selectors. The prefix states what is requested of the source. Match it to the published declaration and reject a missing or wrong kind. `var` in a selector declares no local place or writable access. It preserves the published storage and access contract, including a reference symbol’s owner role. `proc` selects the procedure family under the receiving verb. For `using`, a free receiving name introduces the published identity and its source-preserving family. Reusing the same nominal identity succeeds. A different identity at that name rejects. `import` and `mixin` keep their own destination and body requirements. It does not extract a first-class procedure or perform a call. Bare `@name` remains the operand of the separate identity operation `symbol from "./hooks.cod" @name`. That operation can establish the typed identity before an `effect` installs anything. For a published variable, `using var` also selects that typed identity. For a published procedure, the `using proc` selector itself suffices.
+
+Prefer explicit identity selection for dynamic consumers and ordinary named callables for fixed behavior. Keep `using proc` for intentional reuse of a published implementation family and `import proc` for a module that needs to extend that operation under the established grants. [Integration examples](../docs/IdiomaticCoD.md#keep-symbolic-procedure-families-at-integration-boundaries)
 
 For `var` under `using`, apply the [same identity selection as `symbol from`](#selecting-a-symbolic-variable). A missing dynamic installation cannot make either declaration fail.
 

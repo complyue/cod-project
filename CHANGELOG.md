@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Prefer ordinary calls and identity-only use in application code
+
+<a id="h-symbolic-family-reuse-idiom-20261123"></a>
+**H-SYMBOLIC-FAMILY-REUSE-IDIOM-20261123.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-23 (America/Los_Angeles), the project user stated “using/import symbolic proc families 行为应该被积极劝退” and requested discussion of reasonable exceptions. D-15r69 and Idiomatic CoD guide r5 apply the preference under P-692/P-693/P-694/P-695. The tariff installation and extension are illustrative integration cases. Source permissions remain as recorded at `82603c380eb813497f21ba20f43b656f62f7d867:design/ModuleWorlds.md`. No compiler warning is specified.
+
 ## 2026-11-23 — Track outstanding source choices and apply existing extension permission
 
 <a id="h-review-backlog-duty-20261123"></a>

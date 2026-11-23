@@ -12,7 +12,7 @@ dependencies are identified where needed.
 
 ## Design authority
 
-Guide revision 4 applies the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
+Guide revision 5 applies the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
 [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics), P-694/P-695, and the
 [canonical source style](IdiomaticsGuideline.md#canonical-code-style). The
 [guide baseline](../CHANGELOG.md#k-idiomatic-cod-rewrite-20261123),
@@ -21,6 +21,8 @@ Guide revision 4 applies the confirmed [writing and review guideline](Idiomatics
 [operator-token decision](../CHANGELOG.md#h-maximal-operator-runs-20261123) covers spacing between symbolic operators.
 The design sections linked throughout own the language rules, including identity, permissions,
 owners, effects, control and cleanup. This guide explains their use without extending those rules.
+The [symbolic family selection guideline](../CHANGELOG.md#h-symbolic-family-reuse-idiom-20261123)
+covers the distinction between consuming a symbol, installing a family and extending it.
 Acceptance applies the guideline's semantic, example, coverage and mandatory style checks.
 [Long-term design topics](DesignTopics.md) retain their separate scope.
 
@@ -439,6 +441,36 @@ rate retained as a symbolic value is consequently different from freezing an ent
 See [call forms](../design/SymbolicDynamicScope.md#functions-and-procedures),
 [capture and restoration](../design/SymbolicDynamicScope.md#captured-values-and-call-behavior) and
 [symbolic snapshots](../design/CallableViewsAndCaptures.md#symbolic-snapshots-at-definition-activation).
+
+### Keep symbolic procedure families at integration boundaries
+
+Prefer an ordinary named function or procedure when the program wants one implementation. A caller
+that should obey the active policy can select the vocabulary identity with `symbol from` and call
+`behave` or `perform`. Ordinary callers rarely need `using proc` or `import proc`. A direct call to
+a lexically selected family would bypass an active replacement for that operation.
+
+One reason to select the family is to install a complete policy for downstream code. Suppose a
+rating engine calls `behave @quote(shipment)`. The carrier package supplies methods for several
+shipment types under that same published symbol. The application entry can run a batch with all
+of the carrier's methods:
+
+```cod
+using "./carrier-tariff.cod" proc @quote
+using "./billing.cod" rate_pending_shipments
+
+proc run_carrier_batch() -> void {
+    effect proc @quote;
+    rate_pending_shipments()
+    return
+}
+```
+
+Use `import proc` only when a module needs to **contribute a method to that same operation**. For
+example, an integration package may add a rate for its own refrigerated shipment type and publish
+the extended family for the entry to install. It must establish the destination symbol and meet
+ordinary extension, compatibility and conflict checks. Downstream billing code can keep using the
+vocabulary identity. When one call simply needs a different calculation, give that calculation an
+ordinary name. [Module selection](../design/ModuleWorlds.md#default-and-complete-public-selections)
 
 ## Treat absence as part of the interface
 
