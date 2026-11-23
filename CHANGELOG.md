@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review the Boolean assertion in the regional constructor
+
+<a id="k-constructor-assert-review-20261123"></a>
+**K-CONSTRUCTOR-ASSERT-REVIEW-20261123.** [D-ARCH-REVIEW r74→r75](design/ImplementationArchitecture.md#checking-a-constructor-predicate-assertion), P-682/P-683. The [confirmed ref group](#h-placement-init-20261123) exercises the predicate syntax, static resolution and unchecked failure named in [H-469](#h-469), [H-470](#h-470) and [H-472](#h-472). Both source readers retain the predicate and optional literal. Linked acceptance preserves ordinary operand effects and constructor cleanup. The broader D-10-ASSERT qualification at `635847177549436aecd7196b5c2b1b8964cdc1ad:design/DesignAuthorityRegistry.md` stays pending.
+
 ## 2026-11-23 — Audit registry navigation and historical evidence
 
 <a id="h-hygiene-coordination-20261123"></a>
