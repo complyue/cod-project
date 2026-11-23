@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Carry a declared checked failure through module publication
+
+<a id="k-booter-imported-checked-call-20261123"></a>
+**K-BOOTER-IMPORTED-CHECKED-CALL-20261123.** Delegated review continues D-20-MODULE-GRAPH r37 to r38 and D-ARCH-REVIEW r43 to r44 from `d902a970f3a460613a1609da7183378c7fbe1120:applications/cod-booter/docs/ModuleGraph.md`, “Publishing a checked nominal exception”. The callable’s published source signature carries its declared failure through re-export and forwarding even when the caller constructs no exception and the declaration has no native ordinal. H-524/H-525 govern the caller obligation. The clearance covers the CoD graph and source checks before declaration and provider publication.
+
 ## 2026-11-23 — Check the forwarded path callback and exception re-exports
 
 <a id="k-booter-here-and-exception-selection-20261123"></a>
