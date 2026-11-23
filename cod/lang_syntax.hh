@@ -380,7 +380,7 @@ using Expr = std::unique_ptr<Expression>;
 
 struct HereSignature;
 struct Parameter {
-  enum class CallerPlace { none, writable, initializing };
+  enum class CallerPlace { none, writable, initializing, reference_slot };
   std::string name;
   Type type;
   Location at;
@@ -394,6 +394,7 @@ struct Parameter {
   std::shared_ptr<HereSignature> here = {};
   CallerPlace caller_place = CallerPlace::none;
   bool selects_caller_place() const { return caller_place != CallerPlace::none; }
+  bool selects_caller_ref_slot() const { return caller_place == CallerPlace::reference_slot; }
   bool initializes_caller_place() const { return caller_place == CallerPlace::initializing; }
 };
 struct HereSignature {
@@ -1032,7 +1033,7 @@ class Parser {
     std::string mode;
     if (!regional && !exception && (is("ptr") || is("ref") || is("val") || (native_handles && is("handle") && !is(":", 1))))
       mode = tokens_[cursor_++].text;
-    const bool place = caller_places && mode == "val" && is("var") && !is(":", 1);
+    const bool place = caller_places && (mode == "val" || mode == "ref") && is("var") && !is(":", 1);
     if (place) expect("var");
     auto param = value_name();
     Parameter parameter{param.text, Type::void_type, param.at, false, {}};
@@ -1045,7 +1046,8 @@ class Parser {
       parameter.type = exception ? exception_holder(std::move(object)) : std::move(object);
     }
     parameter.declaration_kind = mode;
-    if (place) parameter.caller_place = initializes ? Parameter::CallerPlace::initializing : Parameter::CallerPlace::writable;
+    if (place) parameter.caller_place = mode == "ref" ? Parameter::CallerPlace::reference_slot
+        : initializes ? Parameter::CallerPlace::initializing : Parameter::CallerPlace::writable;
     if (take("in")) parameter.owner = ordinary_name().text;
     if (exception && !parameter.owner.empty()) fail(param.at, "an exception holder establishes its own owner");
     if (mode == "val" && !place && !parameter.owner.empty()) fail(param.at, "a val parameter has callee-local bits storage, not an external owner");

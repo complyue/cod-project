@@ -60,6 +60,8 @@ class LLVMEmission {
       llvm::StructType::create(context_, {array_header_, b_.getPtrTy()}, "cod.array.borrowed");
   llvm::StructType *native_array_view_ =
       llvm::StructType::create(context_, {b_.getPtrTy(), b_.getInt64Ty()}, "cod.native.array.view");
+  llvm::StructType *array_capability_ =
+      llvm::StructType::create(context_, {b_.getInt1Ty(), b_.getPtrTy()}, "cod.array.allocation");
   llvm::StructType *text_view_ = llvm::StructType::create(context_, {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()}, "cod.text.view");
   llvm::StructType *outcome_ = llvm::StructType::create(context_,
       {scalar_, b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty(), b_.getInt64Ty()}, "cod.outcome");
@@ -80,7 +82,9 @@ class LLVMEmission {
     size_t here_formals = 0;
     bool here_group = false;
     size_t lexical_here = 0;
-    size_t captures_index() const { return operands + owners; }
+    std::vector<size_t> array_owners{};
+    size_t array_owners_begin() const { return operands + owners; }
+    size_t captures_index() const { return array_owners_begin() + array_owners.size(); }
     size_t retained_begin() const { return captures_index() + (captures != 0); }
     size_t query_index() const { return retained_begin() + retained; }
     size_t result_index() const { return query_index() + declaration_context; }
@@ -135,6 +139,7 @@ class LLVMEmission {
   };
   std::vector<EmissionBinding> bindings_;
   std::map<size_t, llvm::Value *> owner_identities_;
+  std::map<size_t, llvm::Value *> array_capabilities_;
   llvm::AllocaInst *lexical_allocations_ = nullptr;
   bool owns_lexical_allocations_ = false;
   std::map<size_t, llvm::AllocaInst *> caught_owners_;
@@ -517,27 +522,66 @@ class LLVMEmission {
     b_.CreateStore(array_length(array), b_.CreateStructGEP(native_array_view_, loan, 1));
     return loan;
   }
+  llvm::Value *array_capability(const CheckedOperation::ArrayAllocator &allocator) {
+    using Allocation = CheckedOperation::ArrayAllocator;
+    if (allocator.kind == Allocation::input) return array_capabilities_.at(allocator.place);
+    const bool region = allocator.kind == Allocation::region;
+    auto *backing = region ? load(storage_.at(allocator.place)) : lexical_allocation_owner();
+    auto *capability = b_.CreateInsertValue(llvm::PoisonValue::get(array_capability_), b_.getInt1(region), 0);
+    return b_.CreateInsertValue(capability, backing, 1);
+  }
+  llvm::Value *allocate_array(llvm::Value *capability, llvm::Value *bytes, std::uint64_t alignment, const Location &at) {
+    auto *regional = b_.CreateExtractValue(capability, 0);
+    auto *backing = b_.CreateExtractValue(capability, 1);
+    auto *region = block("array.region"), *lexical = block("array.lexical"), *ready = block("array.allocation.ready");
+    b_.CreateCondBr(regional, region, lexical);
+    b_.SetInsertPoint(region);
+    auto reserve = runtime("cod_lang_region_reserve", b_.getInt64Ty(),
+        {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
+    auto *offset = b_.CreateCall(reserve, {backing, bytes, integer(alignment)});
+    auto *reserved = block("array.region.reserved"), *full = block("array.region.full");
+    b_.CreateCondBr(b_.CreateICmpNE(offset, integer(UINT64_MAX)), reserved, full);
+    b_.SetInsertPoint(full);
+    auto remaining = runtime("cod_lang_region_remaining", b_.getInt64Ty(), {b_.getPtrTy()});
+    auto *available = b_.CreateCall(remaining, {backing});
+    save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::region_capacity_exceeded)),
+                        integer(site(at)), null_pointer(), bytes, available));
+    b_.CreateBr(control_->exit);
+    b_.SetInsertPoint(reserved);
+    auto *regional_storage = region_address(backing, offset, bytes);
+    b_.CreateBr(ready);
+
+    b_.SetInsertPoint(lexical);
+    auto allocate = runtime("cod_lang_lexical_extent_allocate", b_.getPtrTy(),
+        {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
+    auto *lexical_storage = b_.CreateCall(allocate, {backing, bytes, integer(alignment)});
+    auto *unavailable = block("array.lexical.unavailable");
+    b_.CreateCondBr(b_.CreateIsNotNull(lexical_storage), ready, unavailable);
+    b_.SetInsertPoint(unavailable);
+    fail_path(ExceptionCategory::out_of_memory, at);
+    b_.SetInsertPoint(ready);
+    auto *array = b_.CreatePHI(b_.getPtrTy(), 2);
+    array->addIncoming(regional_storage, reserved);
+    array->addIncoming(lexical_storage, lexical);
+    return array;
+  }
   llvm::Value *emit_array_construction(const Expression &expr, bool discard) {
     const auto &length = *expr.children.front();
     const auto &fill = *expr.children.back();
     auto *count_value = emit_expression(length);
     if (!reachable()) return nullptr;
 
-    using Allocation = CheckedOperation::LexicalAllocation;
-    using Plan = std::tuple<std::optional<size_t>, size_t, size_t, StorageFormat, StorageFormat>;
+    using Plan = std::tuple<CheckedOperation::ArrayAllocator, size_t, StorageFormat, StorageFormat>;
     std::map<Plan, std::vector<size_t>> alternatives;
     for (size_t i = 0; i < contexts_.size(); ++i) {
       const auto &context = contexts_[i];
       const auto &fact = context.at(&expr);
       if (context.at(&length).type == Type::never) continue;
-      const auto owner = fact.region_holder ? size_t{} : fact.lexical_allocation.value().owner;
-      if (!fact.region_holder && fact.lexical_allocation->kind != Allocation::array)
-        throw std::logic_error("inconsistent checked array constructor");
-      alternatives[{fact.region_holder, owner, fact.operand_type.identity, StorageFormat{context.at(&length).type},
+      alternatives[{*fact.array_allocator, fact.operand_type.identity, StorageFormat{context.at(&length).type},
                     StorageFormat{context.at(&fill).type}}].push_back(i);
     }
     auto *view = contextual_value(expr, alternatives, "array.construct", [&](const auto &selection) -> llvm::Value * {
-      const auto &[region, owner, schema, length_format, fill_format] = selection;
+      const auto &[allocator, schema, length_format, fill_format] = selection;
       const auto &array = program_->arrays.at(schema);
       const bool aggregate = inline_aggregate_type(array.element);
       auto *fill_value = emit_expression(fill, aggregate ? Projection::target : Projection::value);
@@ -554,38 +598,20 @@ class LLVMEmission {
         implementation_gap(expr.at, "target layout for array backing");
 
       auto *count = convert(count_value, length_format.type(), Type::uint64);
+      auto *capability = array_capability(allocator);
       auto *fits = block("array.size.valid"), *overflow = block("array.size.overflow");
       b_.CreateCondBr(b_.CreateICmpULE(count, integer((limit - prefix) / stride)), fits, overflow);
       b_.SetInsertPoint(overflow);
-      fail_path(region ? ExceptionCategory::invalid_capacity : ExceptionCategory::out_of_memory, expr.at);
+      auto *invalid = block("array.region.unrepresentable"), *unavailable = block("array.lexical.unrepresentable");
+      b_.CreateCondBr(b_.CreateExtractValue(capability, 0), invalid, unavailable);
+      b_.SetInsertPoint(invalid);
+      fail_path(ExceptionCategory::invalid_capacity, expr.at);
+      b_.SetInsertPoint(unavailable);
+      fail_path(ExceptionCategory::out_of_memory, expr.at);
       b_.SetInsertPoint(fits);
       auto *bytes = b_.CreateAdd(integer(prefix), b_.CreateMul(count, integer(stride)));
-      auto *ready = block("array.allocation.ready"), *failed = block("array.allocation.failed");
-      llvm::Value *storage;
-      if (region) {
-        auto *actual = load(storage_.at(*region));
-        auto reserve = runtime("cod_lang_region_reserve", b_.getInt64Ty(),
-            {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
-        auto *offset = b_.CreateCall(reserve, {actual, bytes, integer(alignment.value())});
-        b_.CreateCondBr(b_.CreateICmpNE(offset, integer(UINT64_MAX)), ready, failed);
-        b_.SetInsertPoint(failed);
-        auto remaining = runtime("cod_lang_region_remaining", b_.getInt64Ty(), {b_.getPtrTy()});
-        auto *available = b_.CreateCall(remaining, {actual});
-        save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::region_capacity_exceeded)),
-                            integer(site(expr.at)), null_pointer(), bytes, available));
-        b_.CreateBr(control_->exit);
-        b_.SetInsertPoint(ready);
-        storage = region_address(actual, offset, bytes);
-      } else {
-        auto allocate = runtime("cod_lang_lexical_extent_allocate", b_.getPtrTy(),
-            {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
-        storage = b_.CreateCall(allocate, {owner_identity(owner, expr.at), bytes, integer(alignment.value())});
-        b_.CreateCondBr(b_.CreateIsNotNull(storage), ready, failed);
-        b_.SetInsertPoint(failed);
-        fail_path(ExceptionCategory::out_of_memory, expr.at);
-        b_.SetInsertPoint(ready);
-      }
-
+      auto *storage = allocate_array(capability, bytes, alignment.value(), expr.at);
+      auto *ready = b_.GetInsertBlock();
       auto *data = b_.CreateGEP(b_.getInt8Ty(), storage, integer(prefix));
       auto *value = aggregate ? fill_value : fill_format.kind == Type::enumeration ? unpack(fill_value, array.element)
           : convert(fill_value, fill_format.type(), array.element);
@@ -1329,6 +1355,24 @@ class LLVMEmission {
         const auto &operand = invocation.argument(expr, index);
         prepared.push_back(nominal ? selected_owner(operand) : selected_owner(operand, &expr, method, callable_view, index));
       }
+    }
+    for (const auto role : layout.array_owners) {
+      using Allocator = CheckedOperation::ArrayAllocator;
+      std::map<std::optional<Allocator>, std::vector<size_t>> alternatives;
+      for (size_t i = 0; i < contexts_.size(); ++i) {
+        const auto &call = contexts_[i].at(&expr);
+        if (!call.callee || program_->instances[*call.callee].method != method) continue;
+        std::optional<Allocator> selected;
+        if (call.array_allocator_arguments) {
+          const auto found = call.array_allocator_arguments->find(role);
+          if (found != call.array_allocator_arguments->end()) selected = found->second;
+        }
+        alternatives[selected].push_back(i);
+      }
+      prepared.push_back(contextual_value(expr, alternatives, "array.owner",
+          [&](const auto &selected) -> llvm::Value * {
+            return selected ? array_capability(*selected) : llvm::Constant::getNullValue(array_capability_);
+          }, array_capability_));
     }
     if (captured.size() != layout.captures) throw std::logic_error("native call lacks its lexical captures");
     if (!captured.empty()) {
@@ -4097,8 +4141,7 @@ class LLVMEmission {
     case K::make_borrowed_handle:
       return emit_attached_native_handle(expr);
     case K::make_object: {
-      if (fact.region_holder || (fact.lexical_allocation && fact.lexical_allocation->kind == CheckedOperation::LexicalAllocation::array))
-        return emit_array_construction(expr, discard);
+      if (fact.array_allocator) return emit_array_construction(expr, discard);
       if (fact.sum_constructor) {
         const auto constructor = *fact.sum_constructor;
         auto *address = storage_.at(*fact.place);
@@ -4273,6 +4316,7 @@ class LLVMEmission {
   llvm::Function *declare(const std::string &name, const CallLayout &layout) {
     std::vector<llvm::Type *> parameters(layout.operands, scalar_);
     parameters.insert(parameters.end(), layout.owners, b_.getPtrTy());
+    parameters.insert(parameters.end(), layout.array_owners.size(), array_capability_);
     if (layout.captures) parameters.push_back(b_.getPtrTy());
     parameters.insert(parameters.end(), layout.retained + layout.declaration_context, b_.getInt32Ty());
     if (layout.callable_destination) parameters.push_back(b_.getPtrTy());
@@ -4384,6 +4428,7 @@ class LLVMEmission {
     for (size_t i = 0; i < frame.inputs.size(); ++i) arguments_.push_back(function->getArg(i));
     b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr; control_ = nullptr;
     owner_identities_.clear();
+    array_capabilities_.clear();
     lexical_allocations_ = nullptr;
     size_t owner_index = frame.inputs.size();
     for (const auto &[owner, input] : frame.owners) owner_identities_[owner] = function->getArg(owner_index++);
@@ -4457,6 +4502,8 @@ class LLVMEmission {
     const auto &call = call_layouts_.at(layout.method);
     if (function->arg_size() != call.parameter_count()) throw std::logic_error("native body disagrees with its parameter roles");
     begin(function, prepared.storage, layout.bindings, frame, prepared.storage_types);
+    for (size_t i = 0; i < call.array_owners.size(); ++i)
+      array_capabilities_[call.array_owners[i]] = function->getArg(call.array_owners_begin() + i);
     case_scan_request_ = method.source->case_scan_scope ? slot(b_.getInt1Ty(), "case.scan.requested") : nullptr;
     if (case_scan_request_) b_.CreateStore(b_.getFalse(), case_scan_request_);
     for (size_t i = 0; i < call.here_count(); ++i) here_arguments_.push_back(function->getArg(call.here_index() + i));
@@ -4827,11 +4874,15 @@ public:
           method.retained_types.size(), method.declaration_context(), false, false, method.here.size(), method.here_group.has_value(),
           method.here_inputs() - method.here.size()};
       auto &call = call_layouts_[i];
+      std::set<size_t> array_owners;
       for (const auto id : method.instances) {
         const auto &result = program.instances[id].result;
+        const auto &required = program.instances[id].effects.array_allocations;
+        array_owners.insert(required.begin(), required.end());
         call.callable_destination |= !result.borrowed() && result.type->kind == Type::procedure;
         call.native_borrow_destination |= result.native_borrow();
       }
+      call.array_owners.assign(array_owners.begin(), array_owners.end());
     }
     general_.resize(program.methods.size()); specialized_.resize(program.instances.size());
     for (size_t i = 0; i < program.methods.size(); ++i) {

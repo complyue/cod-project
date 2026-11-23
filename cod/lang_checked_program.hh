@@ -57,6 +57,7 @@ struct CheckedArgument {
   bool operator==(const CheckedArgument &) const = default;
 };
 inline ArgumentMode argument_mode(const Parameter &parameter) {
+  if (parameter.selects_caller_ref_slot()) return ArgumentMode::borrowed_ref;
   if (parameter.selects_caller_place()) return ArgumentMode::borrowed_ptr;
   if (parameter.owner.empty()) return ArgumentMode::value;
   if (parameter.declaration_kind == "handle") return ArgumentMode::borrowed_handle;
@@ -163,11 +164,18 @@ struct CheckedOperation {
   bool check_c_string = false;
   struct LexicalAllocation {
     size_t owner;
-    enum Kind { text, builder_snapshot, builder, text_slice, array } kind;
+    enum Kind { text, builder_snapshot, builder, text_slice } kind;
     unsigned builder_inputs = 0;
     auto operator<=>(const LexicalAllocation &) const = default;
   };
   std::optional<LexicalAllocation> lexical_allocation;
+  struct ArrayAllocator {
+    enum Kind { lexical, region, input } kind;
+    size_t place = 0;
+    auto operator<=>(const ArrayAllocator &) const = default;
+  };
+  std::optional<ArrayAllocator> array_allocator;
+  std::shared_ptr<const std::map<size_t, ArrayAllocator>> array_allocator_arguments;
   std::optional<size_t> lexical_result_owner;
   std::optional<SumConstructor> sum_constructor;
   std::vector<size_t> sum_initializers;
@@ -449,6 +457,7 @@ struct CallEffects {
   std::set<size_t> symbols; // Required current symbol identities, not operand positions.
   // Declared owner indices, translated to the actual owners at each call.
   std::set<size_t> lexical_allocations;
+  std::set<size_t> array_allocations;
   // Possible failures on completed paths, including conservative bounds for unresolved calls.
   std::set<size_t> escaping_failures;
   // Checked obligations of an immediate scope after local completion. Zero
@@ -983,7 +992,16 @@ inline CheckedBody checked_body(const CheckedProgram &program, const CheckedMeth
     };
     const auto lower = [&](auto &&self, CheckedOperation &operation) -> void {
       optional(operation.place); optional(operation.callable_place); optional(operation.captured_place);
-      optional(operation.exception_owner);
+      optional(operation.exception_owner); optional(operation.region_holder);
+      const auto remap_allocator = [&](CheckedOperation::ArrayAllocator &allocator) {
+        if (allocator.kind == CheckedOperation::ArrayAllocator::region) allocator.place = remap(allocator.place);
+      };
+      if (operation.array_allocator) remap_allocator(*operation.array_allocator);
+      if (operation.array_allocator_arguments) {
+        auto arguments = std::make_shared<std::map<size_t, CheckedOperation::ArrayAllocator>>(*operation.array_allocator_arguments);
+        for (auto &[role, allocator] : *arguments) remap_allocator(allocator);
+        operation.array_allocator_arguments = std::move(arguments);
+      }
       set(operation.targets); set(operation.callable_targets); set(operation.captures);
       for (auto &capture : operation.callable_captures) self(self, capture);
     };
