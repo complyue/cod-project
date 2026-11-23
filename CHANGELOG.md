@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Distinguish published seed support from booter verification
+
+<a id="k-native-callable-seed-status-20261123"></a>
+**K-NATIVE-CALLABLE-SEED-STATUS-20261123.** D-20-C-DECLARATIONS interop r28 to r29 updates implementation status under H-NATIVE-CALLABLE-KIND-20261123 and H-NATIVE-BOOLEAN-RESULT-20261123. The published seed admits function linkage at `4540a4bdadf93bc2f81705e06d43a076fd1c4855:cod/lang_syntax.hh` and validates ordinary Boolean provider results at that commit’s `cod/native/provider_call.h`. The booter’s own checker, generators and bundled predicate have a separate delivery checkpoint. P-644/P-645 and the source contract retain their scope.
+
 ## 2026-11-23 — Check exception obligations under the declaration command’s source contracts
 
 <a id="k-booter-declaration-proof-scope-20261123"></a>
