@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Drain one member at each handoff and release on overwrite
+
+<a id="h-drain-handoff-20261123"></a>
+**H-DRAIN-HANDOFF-20261123.** On 2026-11-23 (America/Los_Angeles), the project user confirmed that a consuming traversal leaves the unvisited suffix in the collection on early exit. For an owning loop control the user specified “下一个迭代覆盖赋值时释放旧 own 对象” and release at whole-loop exit. [D-30r6](design/CollectionsAndBuiltinContainers.md#removal-order-and-failure) and [D-29-HEADERS r23](design/RangedForAndGenerators.md#owning-loop-controls) record that scope under P-589/P-590 and P-540–P-542. The broader interface and owning-yield signatures remain open. Prior draft at `8e7f7af37dcee53c3b9bc0730796321fe6533f70:design/CollectionsAndBuiltinContainers.md`, “Removal, order and failure”. [Design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50)
+
 ## 2026-11-23 — Check the diagnostic helper's independent u32 inputs
 
 <a id="k-booter-checked-u32-helper-20261123"></a>

@@ -1,8 +1,10 @@
 # Ranged for-loops and synchronous generators
 
-Design revision: 22 · Recorded: 2026-11-21 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
+Design revision: 23 · Recorded: 2026-11-23 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
 
 ## Design authority
+
+[H-DRAIN-HANDOFF-20261123](../CHANGELOG.md#h-drain-handoff-20261123) confirms [owning loop controls](#owning-loop-controls) under [D-29-HEADERS](DesignAuthorityRegistry.md#d-29-headers), P-540–P-542. Giving each successful overwrite and loop exit a defined cleanup point makes the lifetime observable across a producer handoff. Check a resumed producer, a failed next handoff and a control whose ownership has already transferred. General owning-yield signatures and transport remain open.
 
 [H-GUARDS-AND-LOOP-DISCARD-20261121](../CHANGELOG.md#h-guards-and-loop-discard-20261121) confirms [loop bodies with no result receiver](#loop-bodies-with-no-result-receiver) at r22 under [D-29-LOOP-DISCARD](DesignAuthorityRegistry.md#d-29-loop-discard). P-666/P-667 apply C-96/C-41/C-65 to range traversal and the existing void-feedback contract. Check a loop-tail update, independent terminal alternatives, an invalid consumed operand, checked failure and owning cleanup. Non-void feedback and ordinary callable results retain their contracts.
 
@@ -291,6 +293,14 @@ The distinction between declarations and existing destinations is syntactic. Ptr
 New header names are loop controls, not bindings published after the loop. Each actual handoff initializes fresh logical control bindings before entering that body invocation. A const control may therefore initialize at every handoff while retaining its ordinary restrictions within the body; later handoffs are not user rebinding of the previous const slot. Ordinary body mutation permissions remain unchanged. With zero yields there is no control initialization/materialization, and pre-existing receivers retain their values unless ordinary generator effects changed them. The control names are unavailable after the loop or in a zero-iteration else.
 
 Distinguish control-binding lifetime from its selected referent. D-17's restrictions on delayed captures/borrows of loop-control storage still apply. A ref control bound to an already existing target retains that target's actual owner/lifetime; its own short-lived binding does not shorten or extend the referent's lifetime. For an independent scalar yield, a new ref declaration instead performs D-23's ordinary fresh materialization, described below. This distinction grants no implicit closure cell or retention of the loop-control slot.
+
+### Owning loop controls
+
+When a loop header declares an owning control, the loop keeps responsibility for the object that control holds. The first handoff initializes the control. Each subsequent handoff releases the previous object **as it overwrites the control** with the incoming one, provided the control still owns the previous object. Each body still sees a freshly initialized logical binding with its declared access. Even a const control can receive the next object this way.
+
+After body fallthrough or `continue`, the producer can run between handoffs while the previous object is still held. If the producer exhausts or throws while preparing the next value, no overwrite occurs. On normal or abrupt loop exit, including `break`, outward `return` and `throw`, loop cleanup releases the object the control still owns before execution continues outside the loop. An empty loop has nothing to release. If the body transferred the object, for example by throwing its owning exception, the recipient holds the obligation and the loop has nothing further to release for it.
+
+The control name remains available only in its body. Iteration-local effect restoration and explicitly nested full-scope cleanup keep their own boundaries. A borrowed header keeps its actual owner's lifetime. The equivalent single-brace here call follows the same rule when it selects the same producer and owning reception. [Loop scoping rules](ExceptionControl.md#loop-scoping-rules) · [Consuming traversal](CollectionsAndBuiltinContainers.md#removal-order-and-failure)
 
 ### Repeated destination selection
 
