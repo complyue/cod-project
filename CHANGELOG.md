@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Synchronous graph root-field loans
+
+<a id="k-booter-root-field-loan-20261122"></a>
+**K-BOOTER-ROOT-FIELD-LOAN-20261122.** Delegated pre-code review under H-PROJECT-ARCHITECTURE-REVIEW-20261122 clears the seed’s checked direct scalar root place and its ordinary nonretaining named-call use beside a writable table holder. The module index workload is at `64550e74030b72efe0b11433f153a2c7c5ea6b01:applications/cod-booter/docs/ModuleGraph.md`. D-13-ROOT-ACCESS and D-14-REF-ARGUMENT supply the field and loan rules. D-ARCH-REVIEW r14 to r15, P-682/P-683, registry r1063.
+
 ## 2026-11-22 — Checked table-holder updates through a local dependency call
 
 <a id="k-booter-handler-holder-20261122"></a>
