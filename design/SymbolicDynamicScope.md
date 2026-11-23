@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 236 · Recorded: 2026-11-23 · Phase: language/application co-design.
+Design revision: 237 · Recorded: 2026-11-23 · Phase: language/application co-design.
 
 ## Design authority
+
+[D-10](DesignAuthorityRegistry.md#d-10) r237 applies H-257/P-229 and [D-18-FUNC-VALUES](DesignAuthorityRegistry.md#d-18-func-values) to [lexical calls and shadowing](#lexical-calls-and-shadowing). The example distinguishes the module function, a nearer function parameter and a non-callable shadow. [Continuity and related documents](../CHANGELOG.md#k-lexical-callee-examples-20261123)
 
 The [variable identity decision](../CHANGELOG.md#h-using-symbolic-variable-identity-20261123) at r236 places a symbolic variable read at the operation that uses the dynamic binding. Its two [declaration spellings](ModuleWorlds.md#selecting-a-symbolic-variable) supply identical static identity and owner-role evidence.
 
@@ -139,7 +141,7 @@ Dynamic symbolic variables have their own storage and rebinding contract (H-277�
 | Explicit `ref/ptr symbol @x:T in S where {owner S}` | A borrowed target whose one actual owner is established from the RHS; lexical and ordinary regional owners are admitted under H-561 without installing a region symbol. |
 | Region symbol | It provides the whole-region resource under the existing ownership contract. Shadowing preserves hidden owners; extraction remains forbidden. |
 | `symbol @s :own handle S` | `effect @s <- make own handle S(...)` installs one scoped owner. A handle argument borrows the active instance. Shadowing preserves the hidden instance, and leaving the installing scope restores the preceding binding. The [native effect contract](../applications/cod-booter/docs/LLVMInterop.md#owning-native-handle-effects) specifies cleanup and call-path acceptance. |
-| Procedure-valued symbol | It selects/replays lexical callable-view values under the separate scoped capture contract. H-563 forbids regional view storage; TLS binding bookkeeping cannot retain an expired lexical/captured owner or authorize a regional carrier. |
+| Symbolic procedure | A definition installs a scoped handler. `perform` replays its required symbolic bindings and `behave` uses current bindings. Each selected owner must remain live through use and restoration. |
 
 Symbolic binding writes require `effect`: `effect @x = rhs` performs rebinding, while `effect @x <- rhs` performs ownership/bits transfer (H-280). Bare `@x = rhs` and bare `@x <- rhs` cannot write a symbolic binding. The proposed object-content transfer form is distinguished below. Both forms have scoped validity: an effect saves the preceding binding and restores it when its scope ends. For bits, the saved state is the preceding bits value; for an object reference, it is the preceding reference and its provenance. Edits to referenced regional contents are not undone by restoration. Every effect expression has type `void` (H-288). A following explicit symbolic read obtains the current binding; an effect cannot supply a value argument or form an assignment chain.
 
@@ -236,19 +238,19 @@ The required invariants are the existing ones, applied to the selected actual ow
 - Type-only inspection may use the declared reference/owner contract without reading a TLS binding; declaration alone supplies no installed actual owner. An owner binder does not grant owning access, a region root or lifetime extension. Ordinary owner-parameter permission inference still applies when a selected reference is passed to another callable. Functions remain unable to access dynamic bindings.
 - RHS preparation, failure, publication and restoration follow H-482. Saved owner information is restored on every completion path, before its own dependencies end; proof cannot repair an invalid program by reordering observable user cleanup. Target mutations and allocations performed by an RHS are not rolled back.
 
-For example, nested full scopes may temporarily bind @current to their own local m, then restore an outer n binding before m's owner ends. The same procedure body can serve either binding without making their owners identical. In contrast, returning a callable view that retains the current invocation's local target must reject:
+Nested full scopes may bind `@current` to their own writable locals. The same named procedure reads the active target in either scope. Restoration reinstates the preceding target and its actual owner.
 
 ```cod
-proc read_current() -> u64 { return @current; }
+proc read_current() -> u64 { return @current }
 
-proc leak() -> proc()->u64 {
-    val n <- 0u64;
-    effect @current = n;
-    return read_current;  # Reject: this fresh view retains a borrow of n.
+proc read_local() -> u64 {
+    val n <- 7u64
+    effect @current = n
+    return read_current()
 }
 ```
 
-A helper returning a view that borrows its caller's still-live owner is not intrinsically an escape error. Acceptance depends on the actual owner's lifetime and all transitive uses, as in D-18; an implementation may conservatively reject an unproved case. A result contract that cannot express/preserve the borrowed owner cannot erase it into an unconstrained reference result.
+A helper returning a reference to its caller’s target must preserve that target’s actual owner and access in its result contract. Returning the procedure name itself rejects under the [callable value rules](CallableStorageAndHereAccess.md#callable-value-kinds).
 
 #### Cost comparison and source evidence
 
@@ -429,7 +431,7 @@ H-236 requires architecture before local lookup fixes. H-247/H-248 makes that ar
 | Vocabulary module | Define typed symbols, primarily abstract types with some supporting ADTs, and their method collections; document their meaning and publish intended shared identities explicitly. A symbol declaration does not supply a default TLS binding. |
 | `using` an external procedure | Select source family information and interpretation without extension permission or implicit TLS installation. |
 | `import` an external definition | Select an exported source definition with extension permission. An imported helper uses the receiving module's callable implementation context under H-232; source body/non-callable lexical bindings remain. |
-| `mixin` an external procedure body | Construct a receiving-context definition with its symbol mapping; runtime capture requires value materialization. |
+| `mixin` an external procedure body | Construct a receiving-context definition with its symbol mapping; the handler snapshots its required symbolic bindings at definition activation. |
 | `@var_name` | Read the value under the declared symbol identity; WPO requires a supplied dynamic binding. |
 | `effect @s <- value` | Scoped ownership/bits transfer; bits symbols require this form. Restore the preceding binding on scope exit; result is void. |
 | `effect @s = value` | Scoped non-consuming reference rebinding under the symbol's declared owner constraint; H-561 admits lexical and ordinary regional owners for the owner-parameter form. Rejected for plain bits-valued symbols; explicit ref/ptr symbols may have bits targets. |
@@ -443,9 +445,9 @@ H-236 requires architecture before local lookup fixes. H-247/H-248 makes that ar
 | Required bindings | Checked on the effective caller paths during on-demand whole-program compilation; absence is a compilation error. |
 | Expression / `void` | Evaluation yields a result; `void` explicitly indicates no meaningful returned value. The language direction uses expressions without a separate statement category. |
 
-Static registration publishes a procedure declaration before its definition activation executes. For an installed handler, activation establishes the required symbolic snapshot. Compiling or importing a definition does not read the current bindings. Named procedure declaration forms are described below; additional procedure-value expression syntax remains open.
+Static registration publishes a procedure declaration before its definition activation executes. For an installed handler, activation establishes the required symbolic snapshot. Compiling or importing a definition does not read the current bindings. Ordinary named procedures support direct calls. Symbolic procedures support definition installation and invocation through `perform` or `behave`.
 
-The supplied `effect` spelling operates within the enclosing scope. It need not introduce a separate brace construct. Repeated/nested bindings restore in the corresponding unwind order. The procedure value used by a call is resolved in the caller's current context **before** its captures are installed; otherwise changing the dispatch symbol could change which procedure is being called.
+The supplied `effect` spelling operates within the enclosing scope. It need not introduce a separate brace construct. Repeated/nested bindings restore in the corresponding unwind order. A symbolic call selects its handler in the caller’s current context **before** installing its saved bindings; otherwise changing the dispatch symbol could change which procedure is being called.
 
 ## Typed symbol definitions
 
@@ -525,7 +527,7 @@ Using/import/mixin composes module information according to existing permissions
 
 The prototype’s `using symbol` and `... @source as @destination` paths combine selection with installation. Their old implicit-installation behavior requires coordinated grammar/example migration under H-372/H-373. For distinct identities, source selection alone cannot install the procedure of one identity under the other. Preserve name/identity aliasing and interpretation under the source-selection contract. A same-spelled distinct identity must not be silently merged; an installation destination is not a compile-time alias. Namespace collisions, shadowing and the final selection grammar remain scoped design work, not an assumed independent `@` lookup escape.
 
-A vocabulary supplies identities without a default binding. In the selected model an integration selects those identities and source semantics, then explicitly installs the intended compatible view. This separation preserves H-109/H-140 once-only incorporation and H-166 resource lifetime while making the receiver’s runtime mutation visible.
+A vocabulary supplies identities without a default binding. In the selected model an integration selects those identities and source semantics, then activates the intended handler definition. This separation preserves H-109/H-140 once-only incorporation and H-166 resource lifetime while making the receiver’s runtime mutation visible.
 
 <a id="import-time-alias-translation"></a>
 ### Mixin-time alias translation
@@ -588,28 +590,13 @@ A private helper remains a source lexical definition even when its enclosing imp
 
 ### Captured callees and selected implementations
 
-A symbolic call uses the selected procedure value in its dynamic binding. Importing the containing helper does not rewrite that stored value into a different implementation. `perform` restores the helper’s captured values; `behave` uses the current bindings. An explicit effect installation can supply an imported procedure whose own ordinary callable dependencies use an adapted implementation context. These are separate selections, with no recapture or runtime method dictionary.
+A symbolic call uses the active handler definition. Selecting a helper with `using` preserves its source interpretation. An `import` can adapt the helper’s ordinary method calls under the receiving interpretation. Neither operation installs a handler.
 
-Consider a source inner procedure computing score(x) + @bias. The source score returns 1, the adapter score returns 7, the definition-time bias is 1 and the current bias is 5. A routing procedure invokes procedure-valued @task, which the caller binds to the adapter-selected inner procedure.
-
-| Call | Native result |
-| --- | --- |
-| Direct source-preserved helper | 6 |
-| Direct import-adapted helper | 12 |
-| Perform the source-preserved or import-adapted router | 2 for each; both restore the original captured @task value. |
-| Behave through either router after explicit @task rebinding | 12 for each; both use the selected current procedure value. |
-| Perform the explicitly adapted inner procedure | 8; adapted score7 with its retained captured bias1. |
-| Read caller @bias after the calls | 5; temporary captures did not replace its binding. |
-
-The complete generated sources and output are preserved in the record. This checks composition of the existing capture/context contracts; it does not select a policy for competing dependency views or establish lexical-call acceptance; H-257 and K-400 supply that separate contract and evidence.
+For example, take a helper computing `score(x) + @bias`. A source `score` returning 1 and an adapter returning 7 give direct results of 6 and 12 when the current bias is 5. If a handler definition calls the adapted helper and activates with bias 1, `perform` yields 8 and restores the caller’s 5. Calling the same handler with `behave` yields 12. A router can invoke another installed handler through its symbol under the same replay and restoration rules.
 
 ### Callee selection and argument rebinding
 
-Call preparation selects the procedure value, evaluates arguments in the caller environment, then invokes that selected value. Perform uses its stored captures; behave uses the environment after argument evaluation. Argument effects belong to the enclosing scope; restoring the procedure body does not undo them.
-
-The example selects an exported read procedure with captured bias10 and defines an alternate with captured bias20. Passing an argument that binds bias31 gives41 under perform and leaves caller bias31; binding32 gives64 under behave and leaves32. Rebinding the callee symbol to the alternate inside an argument does not change the in-flight selected read: it returns43 under perform or68 under behave. Subsequent calls use the alternate, producing3301/3401 with current bindings or2001 with its capture.
-
-This is actual prototype behavior, not a newly confirmed language-wide call-order rule. H-148 fixes each argument's conversion before the next argument; it does not expressly place symbolic callee resolution relative to effectful arguments. That timing distinction can be reviewed with the local value/call namespace question. The probe adds no callback-call syntax, runtime dispatch or changed capture mechanism.
+Symbolic invocation uses the selected handler activation. Argument effects execute in the caller’s environment. `perform` temporarily establishes the selected handler’s snapshot and `behave` uses the effective bindings at invocation. Restoring the handler’s scope preserves changes already made by argument evaluation. H-148 covers written-order argument preparation and conversion. A general ordering guarantee between callee selection and effectful argument evaluation requires its own qualification.
 
 ### Explicit conformance: declaration permission and consumer visibility
 
@@ -748,19 +735,19 @@ H-230’s base/extended/indirect `1,7,1` and H-232’s using/import interpretati
 
 ## Functions and procedures
 
-H-197/H-198 establishes functions as lexical callables that may operate on explicit memory and explicit-argument system intrinsics without reading or writing dynamic bindings. Procedures may additionally use dynamic context. The ordinary function contract is mutable; a future const-function form would be a separate design.
+H-197/H-198 establishes functions as lexical callables that may operate on explicit memory and explicit-argument system intrinsics without reading or writing dynamic bindings. Procedures may additionally use dynamic context. An ordinary function may write through explicit writable inputs. The [pure contract](ConstFunctionsAndTailCalls.md#boundary-of-a-const-function) has additional restrictions.
 
-A function definition binds a lexical name and cannot access dynamic effect variables. A procedure may have an ordinary lexical name or belong to a symbol-identified module family. Explicit effects install family views into dynamic scope. Both procedure forms may use effects; lexical naming does not make a procedure a function. A function cannot call either procedure form, directly or indirectly. Under [H-603's generator boundary](RangedForAndGenerators.md#callable-kind-and-supplied-body-effects), yield transfers control to the caller's lexical loop body; that body is not an ordinary call made by the generator. A procedure caller may therefore use procedure operations in the body of a for invoking a func generator. The generator's own statements, ordinary callees, yield operands and cleanup retain the function restriction.
+A function definition binds a lexical name and cannot access dynamic effect variables. A procedure may have an ordinary lexical name or belong to a symbol-identified module family. A reached effect definition installs a scoped handler for its family. Both procedure forms may use effects; lexical naming does not make a procedure a function. A function cannot call either procedure form, directly or indirectly. Under [H-603's generator boundary](RangedForAndGenerators.md#callable-kind-and-supplied-body-effects), yield transfers control to the caller's lexical loop body; that body is not an ordinary call made by the generator. A procedure caller may therefore use procedure operations in the body of a for invoking a func generator. The generator's own statements, ordinary callees, yield operands and cleanup retain the function restriction.
 
 A lexical procedure keeps its definition context. A helper that reaches perform/behave can be invoked [by its definition](#definition-installed-effectful-procedures); invoking it through an ordinary callable value rejects. Assignment of a lexical procedure to an effect slot rejects. Procedure mixin redefines a source body in the receiving context.
 
-H-185 specifies the call forms: `p(...)` resolves a lexical procedure; `perform @p(...)` and `behave @p(...)` resolve a procedure through its symbolic binding. H-189 makes direct lexical calls use the caller's current dynamic bindings. `perform` temporarily installs the selected value’s captured values; `behave` uses current values. `perform p(...)`, `behave p(...)` and direct `@p(...)` calls are invalid. Pure functions cannot invoke procedures through any form.
+H-185 specifies the call forms: `p(...)` resolves a lexical procedure; `perform @p(...)` and `behave @p(...)` resolve a procedure through its symbolic binding. H-189 makes direct lexical calls use the caller's current dynamic bindings. `perform` temporarily installs the selected handler’s saved bindings; `behave` uses current values. `perform p(...)`, `behave p(...)` and direct `@p(...)` calls are invalid. Pure functions cannot invoke procedures through any form.
 
 | Call form | Callee lookup | Established invocation rule |
 | --- | --- | --- |
-| `p(...)` | Ordinary lexical procedure name | Use current dynamic bindings; no symbolic callee selection. |
-| `perform @p(...)` | Procedure value currently bound to the symbol | Temporarily install that procedure’s captured dynamic values. |
-| `behave @p(...)` | Procedure value currently bound to the symbol | Use current dynamic values. |
+| `p(...)` | Nearest lexical binding | Check the selected callee. A direct named procedure uses current dynamic bindings. |
+| `perform @p(...)` | Active handler definition for the symbol | Temporarily install that handler’s saved bindings. |
+| `behave @p(...)` | Active handler definition for the symbol | Use current dynamic values. |
 
 ### Lexical calls and shadowing
 
@@ -768,16 +755,19 @@ H-382 includes inferred owner names: `where {owner o}` introduces a const lexica
 
 H-381 also applies nearest-binding lookup to symbolic access. If a parameter/local p shadows the module symbol object p, @p rejects because that nearest binding is not a symbol. Reads, effect destinations, touch, perform/behave, deferred uses and typeof inspection follow the same rule. Cached identities and capture pruning cannot bypass it. A separately defined callable still uses its own lexical context, not its caller's local p. Same-scope module-category collisions and general symbol-value storage remain outside this bounded rule.
 
-H-257 requires ordinary call syntax to respect the nearest lexical value binding. A procedure parameter or local procedure value supplies the callee; a same-spelled module callable does not bypass it. A non-callable local value makes the call ill-typed. Direct calls retain H-189's current dynamic bindings. Symbol-only `perform`/`behave` and the function/procedure effect boundary are unchanged.
+Ordinary call syntax resolves the nearest lexical binding (H-257). In `apply`, the parameter named `callback` shadows the module function. The argument supplies a capture-free function value with a statically known signature.
 
-```text
-proc selected(x:i64) -> i64 { return x + 20 }
-proc callback(x:i64) -> i64 { return x + 1 }
-proc apply(callback:proc(i64) -> i64, x:i64) -> i64 { return callback(x) }
-# apply(selected, 3) must yield 23.
+```cod
+func callback(x:u64) -> u64 { x + 1u64 }
+func selected(x:u64) -> u64 { x + 20u64 }
+func apply(callback:func(u64)->u64, x:u64) -> u64 { callback(x) }
 ```
 
-A parameter or local declaration that shadows an outer local, module callable or module value/type binding emits `[-Wshadow]`. `-Werror=shadow` or the general warnings-as-errors option makes it an error. Same-scope duplicate declarations remain errors. No user-visible call protocol, escaping callable-view representation, general function-value type or runtime callable dispatch is introduced.
+At module scope `callback(3u64)` returns 4. The call `apply(selected, 3u64)` returns 23 because the parameter supplies `selected`.
+
+With a scalar parameter `callback:u64`, the same `callback(x)` expression rejects at the call site. Lookup has already selected the scalar. A synchronous `here` parameter also supports ordinary call syntax within its permitted lifetime. A named procedure can be called directly in a procedure context. Its name cannot initialize an ordinary callable variable, parameter or result. [Callable value kinds](CallableStorageAndHereAccess.md#callable-value-kinds)
+
+A parameter or local declaration that shadows an outer local, module callable or module value/type binding emits `[-Wshadow]`. `-Werror=shadow` or the general warnings-as-errors option makes it an error. Same-scope duplicate declarations remain errors.
 
 ### Callable declarations and methods
 
@@ -1322,7 +1312,7 @@ The method declaration defines or extends the symbol’s module-world family wit
 
 Bare p names the registered symbol. The combined definition activates and installs a handler. Separate name-only activation of registered definitions is [under review](#definition-installed-effectful-procedures). Neither form supplies a first-class handler or grants functions dynamic access.
 
-The existing `proc(T1, T2) -> RT` view contract remains typed. Several methods do not make a callable value ambiguous: invocation dispatches by actual types within its selected interpretation. The compiler’s present one-method construction guard is an implementation gap, not a restriction of this contract. General view compatibility, concrete-type evidence and grammar migration are tracked in [D-21](AheadOfTimeExecutionPreparation.md).
+A symbolic declaration’s `proc(T1, T2) -> RT` signature constrains handler invocation. Dispatch selects among the family’s methods by actual argument types in its module interpretation. [AOT execution preparation](AheadOfTimeExecutionPreparation.md) covers the required dispatch evidence.
 
 ### Callable context and memory access
 
@@ -1334,7 +1324,7 @@ Procedure signatures may have explicit arguments and results as well as effect r
 
 The checker should retain each procedure's required symbol identities and read/write/binding use through calls. This is a proposed implementation of the user's distinction, not a commitment to a general row-polymorphic effect calculus. A small finite requirement set is sufficient for the first examples. Foreign calls need a trusted declaration of their effects; an opaque native call is not presumed pure.
 
-Constructing a description and executing its requested operation remain distinct. A function may construct/edit regional data through explicit resources once the source allocation contract exists. Looking up @region, or creating a procedure that captures current effects, accesses dynamic context and therefore cannot occur inside a function. Context exclusion applies transitively through helpers and foreign intrinsics. The generator yield handoff retains separate lexical caller eligibility, rather than admitting a procedure-valued ordinary callback. Symbolic values still follow active dynamic bindings; yield supplies no implicit capture or TLS snapshot/replay. Nested forwarding and native outlining must preserve the distinct source sites.
+Constructing a description and executing its requested operation remain distinct. A function may construct/edit regional data through explicit resources once the source allocation contract exists. Looking up @region, or activating a handler definition that snapshots current effects, accesses dynamic context and therefore cannot occur inside a function. Context exclusion applies transitively through helpers and foreign intrinsics. The generator yield handoff retains separate lexical caller eligibility, rather than admitting a procedure-valued ordinary callback. Symbolic values still follow active dynamic bindings; yield supplies no implicit capture or TLS snapshot/replay. Nested forwarding and native outlining must preserve the distinct source sites.
 
 The SNN support layer may use functions for numerical work and explicit array edits, with procedures supplying ambient target/frame resources. This callable boundary selects no neural transition or learning algorithm. H-200/H-201's borrowing, local-bits and const-value contract needs its own source implementation; K-311 validates the existing explicit-reference memory subset only.
 
@@ -1357,7 +1347,7 @@ behave @p:
     evaluate that method under L and the current dynamic bindings
 ```
 
-Only the captured identities are temporarily installed. `behave` does not erase lexical captures or turn lexical names into dynamic names. The callee can establish further `effect` bindings normally in either call mode.
+Only the captured identities are temporarily installed. `behave` preserves the handler’s direct access to its defining lexical slots. The callee can establish further `effect` bindings normally in either call mode.
 
 For a scalar example, evaluate `effect @x <- 1`, activate a handler definition under `@p` whose selected method reads `@x`, then evaluate `effect @x <- 2` in the caller scope:
 
@@ -1373,9 +1363,9 @@ Scope exit includes the selected language's structured returns and failure/unwin
 
 ### Regional resource capture preserves owners
 
-Three different facts must remain distinct: the symbol identity used for lookup, the value captured at callable materialization, and the region’s ownership/lifetime. A procedure captures the then-current value of each required dynamic variable under its resolved identity. It does not reread an old variable’s later value as a substitute for that snapshot. For a region-backed resource, the captured value identifies the existing resource; it is not a copy of the object graph or a new independent owner.
+Three different facts must remain distinct: the symbol identity used for lookup, the binding saved at handler activation, and the region’s ownership/lifetime. An activating handler saves the then-current value of each required dynamic variable under its resolved identity. It does not reread an old variable’s later value as a substitute for that snapshot. For a region-backed resource, the captured value identifies the existing resource; it is not a copy of the object graph or a new independent owner.
 
-Suppose `@work` denotes R1 when the value installed under `@p` is materialized. The caller subsequently shadows `@work` with R2 while both owning scopes remain alive:
+Suppose `@work` denotes R1 when the handler definition for `@p` activates. The caller subsequently shadows `@work` with R2 while both owning scopes remain alive:
 
 | Point | Region reached through `@work` | Ownership and lifetime |
 | --- | --- | --- |
@@ -1388,13 +1378,13 @@ A previous reference or another valid binding to R2 is not invalidated merely be
 
 Captured/current symbolic lookup must preserve the selected reference value’s established interface facts. Rebinding cannot accumulate the previous value’s guarantees. Evidence propagation adds no runtime tag, reference permission, graph snapshot or lifetime extension.
 
-Captured resources must be valid for their uses. H-180 supplies owner preservation during temporary shadowing; it does not choose a reference-counting system, an implicit lifetime extension for an escaped procedure, or a region-copying snapshot. Materialization-time capture, temporary replay and explicit ownership transfer must have different checking/lowering paths. H-181’s restriction on moving a resource out of a dynamic owner must not reject legitimate captured replay.
+Captured resources must be valid for their uses. H-180 supplies owner preservation during temporary shadowing; it does not choose a reference-counting system, an implicit lifetime extension for a captured target, or a region-copying snapshot. Definition-time snapshots, temporary replay and explicit ownership transfer must have different checking/lowering paths. H-181’s restriction on moving a resource out of a dynamic owner must not reject legitimate captured replay.
 
 ### What “uses” includes
 
 Capturing only the symbol spellings appearing directly in a body is insufficient. If `p` executes `behave @q` and `q` reads `@gain`, then `@gain` can be a dynamic dependency of `p` even when the name never appears in `p`'s source. Conversely, a `perform` call can supply a callee's dependencies from that callee's own captures.
 
-The required-symbol analysis must account for dispatch, transitive calls, higher-order arguments, reads/writes and bindings that already supply a value inside the procedure. Native regional snapshot demand follows those same checked uses through copies and recursive results; an unused definition-time binding alone does not force a distinct native context. Final sharing retains every discovered read/touch dependency, including uses propagated through a reused native body. A current-context helper called under perform receives the active captured overlay and its actual invocation bases; equivalence must preserve owner aliases and the effective shared-region groups. Replayed procedure values follow the same native-input proof as callable arguments, including complete image schemas, retained owners and returned-image independence. Captures are taken before later control-flow branches are known; a conditional read is still a potential use unless checking proves it unreachable. A procedure that provides its own binding before every access need not capture an irrelevant outer value.
+The required-symbol analysis must account for dispatch, transitive calls, higher-order arguments, reads/writes and bindings that already supply a value inside the procedure. Native regional snapshot demand follows those same checked uses through copies and recursive results; an unused definition-time binding alone does not force a distinct native context. Final sharing retains every discovered read/touch dependency, including uses propagated through a reused native body. A current-context helper called under perform receives the active captured overlay and its actual invocation bases; equivalence must preserve owner aliases and the effective shared-region groups. Replayed handler dependencies require proof of the relevant image schemas, retained owners and returned-image independence. Captures are taken before later control-flow branches are known; a conditional read is still a potential use unless checking proves it unreachable. A procedure that provides its own binding before every access need not capture an irrelevant outer value.
 
 CoD checks the demanded whole-program execution with its caller paths available, rather than compiling a module against an unknowable future caller. A finite summary or fixed-point analysis is a candidate way to handle recursion and branches; the semantic requirement is not to enumerate an unbounded runtime stack. Missing requirements cannot be hidden behind an empty summary or deferred to an ordinary runtime lookup failure.
 
@@ -1428,7 +1418,7 @@ Any admitted cross-module reference triggers H-109 incorporation, including voca
 
 An exported symbolic procedure preserves its original capture through aliases and diamond-shaped module incorporation. Each shared initializer runs once; checking emits no user-program effects. Local declaration order does not alter encounter availability when selected type/conformance visibility is unchanged.
 
-“Compile execution semantics” means constructing the resulting program, not running user initialization effects in the compiler. Capture values follow runtime callable materialization in that program’s execution; they are not snapshots of the scanner's state. Required bindings are still checked at compile time over the resulting caller/initialization paths. Declaration availability therefore does not prove that a required dynamic value is available.
+“Compile execution semantics” means constructing the resulting program, not running user initialization effects in the compiler. Symbolic snapshots belong to runtime handler activation in that program; they are not snapshots of the scanner's state. Required bindings are still checked at compile time over the resulting caller/initialization paths. Declaration availability therefore does not prove that a required dynamic value is available.
 
 The entry module and every incorporated dependency retain their top-level scopes until process exit under H-166. Finishing a dependency’s initialization body does not end that scope or release its still-held regions. Ordinary nested procedure/block scopes keep their own exit boundaries. A region explicitly transferred out of a top-level holder need not remain allocated until process exit.
 
@@ -1502,7 +1492,7 @@ H-148 specifies callable argument order: evaluate an argument exactly once and f
 
 H-149 permits a nested lexical scope to shadow an outer local value, while duplicate declarations within one scope are compilation errors. The initializer is evaluated before the new binding becomes visible. Under H-271, a `ptr` declaration fixes its own target owner at initialization; rebinding that variable cannot select another owner. A nested declaration introduces a distinct binding, so this owner restriction is not a prohibition on shadowing. Leaving the scope restores lexical lookup of the outer name. Local names remain distinct from symbol variables written through `effect`. Ref/ptr/val declarations require initializer-before-binding lookup and fixed-owner checks.
 
-Function parameters belong to the callable's inherent scope. Ordinary braces and conditional grouping do not create lexical scopes; explicit `{{ ... }}` does through its ordinary implicit callable invocation. Its returns and value captures follow D-17; it does not share an enclosing variable slot implicitly. A range index belongs to the loop. A library fold owns its accumulator and supplies the step parameters at each invocation. Body and zero-iteration else declarations require a nested explicit scope, while iteration effects and enclosing-scope deferred work follow [D-17's loop scoping rules](ExceptionControl.md#loop-scoping-rules). Scope-local name tracking is compiler metadata; no runtime lexical binding table or new regional representation is implied.
+Function parameters belong to the callable's inherent scope. Ordinary braces and conditional grouping do not create lexical scopes; explicit `{{ ... }}` does through its ordinary implicit callable invocation. Its returns are local to that invocation. It accesses enclosing lexical slots directly under D-18. A range index belongs to the loop. A library fold owns its accumulator and supplies the step parameters at each invocation. Body and zero-iteration else declarations require a nested explicit scope, while iteration effects and enclosing-scope deferred work follow [D-17's loop scoping rules](ExceptionControl.md#loop-scoping-rules). Scope-local name tracking is compiler metadata; no runtime lexical binding table or new regional representation is implied.
 
 Acceptance covers an initializer reading the outer value, restoration after explicit scopes and loop iterations, parameter and loop binding uniqueness, and rejection of repeated declarations in one scope before program output. H-149 resolves K-253's naming alternatives; global declaration, function/type namespaces, dynamic symbols and broader scope-result rules retain their existing boundaries.
 
@@ -1661,13 +1651,13 @@ The value rationale is readable operation syntax with inspectable type, effect a
 
 ### Storage carriers, capture types and lifetime
 
-[Callable captures](CallableViewsAndCaptures.md#value-snapshots-and-invocation-local-captures) distinguish ordinary scalar/complete-callable snapshots, selected ref/ptr values and explicit var place aliases. Ordinary reference copies do not retain the source binding slot; an explicit alias retains its selected place and observes permitted later writes/rebinding. Borrowing lexical storage is admitted only with proof that every use stays within its actual owner lifetime. No hidden closure cell or owner extension is permitted. The table below describes **dynamic** capture at runtime view materialization, separate from module method registration. It does not turn perform into a graph snapshot or change effect restoration.
+A `func` value has no lexical captures. A synchronous `here` body can access the defining activation’s live slots directly. An ordinary reference binding selects a target, while declared place aliasing retains the selected slot and observes permitted rebinding. Each use requires a live actual owner. The table describes the symbolic bindings saved at handler definition activation. [Callable storage and direct access](CallableStorageAndHereAccess.md#callable-value-kinds)
 
 Ordinary user-program storage has lexical and regional carriers; symbolic bits payloads use the dedicated TLS storage specified above. H-177 permits ordinary variables to own region handles; H-179 permits consuming installation into a dynamic resource owner. Neither copies a regional object onto the stack. Host-native heap allocation belongs to system code such as compiler/runtime infrastructure. It cannot serve as a hidden way to extend the lifetime of a source variable, captured object or borrowed owner. No user `malloc`/`free` lifetime, automatic heap box, user GC object or reference-counted heap capture is introduced.
 
 | Captured value | Meaning and current boundary |
 | --- | --- |
-| Bits | Preserve the value at runtime view materialization. Later scalar bindings do not change it. |
+| Bits | Preserve the value at handler definition activation. Later scalar bindings do not change it. |
 | Whole-region effect resource | Preserve the selected resource value and its owner/lifetime dependency. Replay does not move ownership, copy the graph or freeze its contents. |
 | Borrowed target reference | H-482 retains installation-selected regional owners; H-561 admits lexical and ordinary regional owners through an owner parameter. Captures preserve the selected target/actual-owner dependency; the compiler proves validity without extending the owner lifetime. |
 
@@ -1675,7 +1665,7 @@ Reinterpreting an address as an integer must not bypass carrier/lifetime checks.
 
 Mutation through a valid resource reference changes its referent. Restoring a symbol binding does not undo that mutation. A read-only view prevents mutation through that view but still requires valid lifetime. Capturing a regional object by C++ copy/move is forbidden.
 
-An initial SNN step can use non-escaping stack values and region-backed effect resources. Captured whole-resource values and region-backed interior references retain their respective ownership and lifetime dependencies. A regional pointer's owning-region association must remain valid; a saved offset cannot silently be interpreted relative to the caller's different `@region`. A procedure retained across frame reuse, region release or remapping needs a justified lifetime. No lexical variable or invocation frame is automatically promoted to a longer-lived native heap allocation. The concrete procedure descriptor and compiler-generated stack temporaries remain representation questions. H-193 makes user-defined data objects regional. Scalar UoM identities retain scalar bits representations; they do not provide arbitrary record storage on the stack.
+An initial SNN step can use non-escaping stack values and region-backed effect resources. Captured whole-resource values and region-backed interior references retain their respective ownership and lifetime dependencies. A regional pointer's owning-region association must remain valid; a saved offset cannot silently be interpreted relative to the caller's different `@region`. A retained handler dependency must remain live through frame reuse, region release or remapping. No lexical variable or invocation frame is automatically promoted to a longer-lived native heap allocation. The concrete procedure descriptor and compiler-generated stack temporaries remain representation questions. H-193 makes user-defined data objects regional. Scalar UoM identities retain scalar bits representations; they do not provide arbitrary record storage on the stack.
 
 TLS directly stores symbolic bits payloads under H-277; it is not an allocation arena for non-bits user objects. Symbolic object references and captures must respect their region-symbol resource lifetime. Saved values and environment storage cannot extend that lifetime. `@region` allocation is available to procedures, while functions use their declared inputs/outputs and legal stack temporaries.
 

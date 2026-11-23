@@ -2,9 +2,11 @@
 
 *显式组合，动态上下文 · Explicit composition and dynamic context*
 
-Design revision 34 · 2026-11-18
+Design revision 35 · 2026-11-23
 
 ## Design authority
+
+[Editorial continuity](../CHANGELOG.md#k-lexical-callee-examples-20261123) aligns lexical calls and symbolic procedure installation with [D-18 callable value kinds](CallableStorageAndHereAccess.md#callable-value-kinds) and [D-10 handler installation](SymbolicDynamicScope.md#definition-installed-effectful-procedures). Existing qualification boundaries apply.
 
 - **Direct lexical access.** [H-CALLABLE-MODEL-20261118](../CHANGELOG.md#h-callable-model-20261118), D-12-LIFETIME/P-491–P-493 and D-18-HERE. The explicit lifetime principle applies to recursive and forwarded here bodies. Accept updates within the supplying activation and reject escape. Native layout belongs to the compiler.
 
@@ -64,24 +66,25 @@ For example, worlds A and B may each supply a value whose type has identity T. A
 
 The module world is closer to Julia's semantic runtime environment than to a declaration index alone. The essential CoD distinction is independent module world copies. Julia's documented global method/binding state and task-local world-age visibility do not provide that same architecture, and its world-age mechanism is not CoD's TLS pointer set. [Julia world-age model](https://docs.julialang.org/en/v1/manual/worldage/) · [Detailed CoD inventory](ModuleWorlds.md)
 
-Module integration and dynamic rebinding have different combination laws. Integration composes selected semantic information by identity and explicit export. Effects change the current bits payload or reference under a symbol and restore preceding bindings as scopes end. Captured procedure values and referenced regional payloads keep their own semantics; TLS is not another type/method catalog or a copy of every payload it reaches.
+Module integration and dynamic rebinding have different combination laws. Integration composes selected semantic information by identity and explicit export. Effects change the current bits payload or reference under a symbol and restore preceding bindings as scopes end. Scoped handler snapshots and referenced regional payloads keep their own semantics; TLS is not another type/method catalog or a copy of every payload it reaches.
 
-A module constructs only its own module world. Cross-module world editing is impossible at compile time and runtime: source exports are read to construct receiver-local information, without rewriting the source. Compilation determines the flattened TLS shape and declared type constraints. Runtime effects change and restore the typed bindings within that shape, using `<-` for bits/ownership transfer and `=` for object-reference or procedure rebinding. Binding a value from another module-world copy does not permit editing that world (H-245).
+A module constructs only its own module world. Cross-module world editing is impossible at compile time and runtime: source exports are read to construct receiver-local information, without rewriting the source. Compilation determines the flattened TLS shape and declared type constraints. Runtime effects change and restore the typed bindings within that shape, using `<-` for bits/ownership transfer and `=` for object-reference rebinding. A reached handler definition installs a symbolic procedure. Binding a value from another module-world copy does not permit editing that world (H-245).
 
 H-236 requires the architecture before local lookup repairs. Receiver-owned construction, identity-based composition and runtime binding must remain coherent. No cross-module world editor or TLS editor-target protocol belongs to this vision; ordinary CoD calls do not expose internal construction or invocation machinery.
 
 ## Definitions, values and execution
 
-A symbol object carries identity and meaning in the selected module world. For a callable, that meaning includes its contracts and methods. Defining or extending those methods is semantic construction; it does not capture current execution state or install a TLS binding. Explicit effects install compatible callable views. A view retains the source family and interpretation even when installed under a different destination symbol.
+A symbol object carries identity and meaning in the selected module world. For a callable, that meaning includes its contracts and methods. Defining or extending those methods is semantic construction; it does not capture current execution state or install a TLS binding. A reached handler definition takes a snapshot of its required symbolic bindings and installs the handler for its scope.
 
-```text
-proc @reader() -> const u64 { return @gain; }  # Register a method.
-effect @reader;                               # Construct/install the family view.
+```cod
+symbol @reader:proc()->u64
+effect @reader() -> u64 { return @gain }
+val result <- perform @reader()
 ```
 
-These examples state the selected language contract; the compiler’s older implicit installation paths still require migration. `effect @target = reader` constructs a view from the symbol’s module semantics, while `effect @target = @reader` installs an existing TLS value with its captures. `effect @reader(...) { ... }` combines definition/extension with installation and preserves the separate stages. Using/import/mixin supplies semantic selection or redefinition, not an implicit receiver installation.
+Module selection establishes which family a definition uses. Ordinary lexical procedures can be called by name. A symbolic procedure can be invoked through its installed binding. [Definition-installed effectful procedures](SymbolicDynamicScope.md#definition-installed-effectful-procedures)
 
-Callable views preserve families and use actual argument types to select methods, including through abstract interfaces. Whole-program compilation prepares the admitted alternatives before execution; direct method selection is an optimization. This lets business code retain abstraction and module interpretation without depending on whether the compiler can specialize a particular call. [Canonical world model](ModuleWorlds.md) · [AOT execution preparation](AheadOfTimeExecutionPreparation.md)
+Installed handlers preserve families and use actual argument types to select methods, including through abstract interfaces. Whole-program compilation prepares the admitted alternatives before execution; direct method selection is an optimization. This lets business code retain abstraction and module interpretation without depending on whether the compiler can specialize a particular call. [Canonical world model](ModuleWorlds.md) · [AOT execution preparation](AheadOfTimeExecutionPreparation.md)
 
 An entry module that extends a dependency callable must explicitly install its chosen family. The accepted entry installation cancels dependency installations, allowing LLVM to exclude otherwise unused world code. This is a composition rule, not automatic mutation of source methods. [D-21](AheadOfTimeExecutionPreparation.md#entry-installation-and-unused-dependency-code) records the required compiler error, final-image acceptance and preserved operand effects; cancellation applies only to dependency initialization.
 
@@ -97,7 +100,7 @@ Vocabularies follow explicit export and re-export rules. Declaring a typed symbo
 
 The TLS side of the vision supplies dynamically scoped execution context. At the language level, a symbol such as `@gain` works like a named register. Its identity is fixed, and its value comes from the active execution context. `effect @gain <- value` transfers bits into its TLS payload, installs a scoped binding and yields void. Object-reference symbols use `effect @target = object` and may select different live targets under their declared owner constraints; H-561's owner-parameter form also admits lexical and ordinary regional owners. Leaving that scope restores the prior binding; an established dynamic region resource cannot be consumed or emptied by extracting its ownership. Procedures can use these registers across calls, while functions use explicit inputs and lexical constants and may edit reachable memory without accessing those registers. [Symbol identity and bindings](SymbolicDynamicScope.md#symbol-identity-variable-identity-and-compiled-location) · [Callable kinds](SymbolicDynamicScope.md#functions-and-procedures)
 
-`perform` uses the selected procedure’s captured bindings. `behave` runs it with the current bindings. If a reader value is materialized with `@gain` equal to 1 and the caller later binds it to 7, `perform` reads `1` and `behave` reads `7`. Both leave the caller’s binding at `7`. A regional reference capture preserves the reference value and its owner association; it neither freezes the referent nor extends the region’s lifetime. Later reads see the referent’s current contents, and writes through it survive binding restoration. [Capture semantics](SymbolicDynamicScope.md#captured-values-and-call-behavior) · [Regional lifetimes](SymbolicDynamicScope.md#storage-carriers-capture-types-and-lifetime)
+`perform` uses the selected procedure’s captured bindings. `behave` runs it with the current bindings. If the reader definition activates with `@gain` equal to 1 and the caller later binds it to 7, `perform` reads `1` and `behave` reads `7`. Both leave the caller’s binding at `7`. A regional reference capture preserves the reference value and its owner association; it neither freezes the referent nor extends the region’s lifetime. Later reads see the referent’s current contents, and writes through it survive binding restoration. [Capture semantics](SymbolicDynamicScope.md#captured-values-and-call-behavior) · [Regional lifetimes](SymbolicDynamicScope.md#storage-carriers-capture-types-and-lifetime)
 
 For a captured whole-region resource, temporary visibility does not transfer ownership. If the caller has R2 under an identity and `perform` exposes captured R1 under it, R2 keeps its owner throughout. Removing the shadow exposes R2 again and does not release R1. Destruction belongs to actual owning-scope exit. [Resource shadowing](SymbolicDynamicScope.md#regional-resource-capture-preserves-owners)
 
@@ -141,7 +144,7 @@ The synchronous implementation provides regional allocation, nominal payload typ
 
 The smallest useful candidate is two logical Actors in one native process, driven by one worker, with queued delivery and handlers that run to completion. This exercises asynchronous delivery without requiring mid-handler suspension, worker migration or a general asynchronous callable-view transport. A language process is not thereby defined to be an OS process or a permanently assigned native thread.
 
-Use one declared regional work-package protocol, with receiver handlers known to WPO. The mailbox carries the graph and its typed entry reference; the receiving handler supplies the dynamic bindings. Merely placing a sender procedure value in a queue cannot transfer the compiler’s captured environment or its region lifetimes. A runtime envelope can hold system bookkeeping separately from the regional payload; this is not permission to add physical cross-region pointers to user records. Concrete syntax and envelope layout remain open.
+Use one declared regional work-package protocol, with receiver handlers known to WPO. The mailbox carries the graph and its typed entry reference; the receiving handler supplies the dynamic bindings. A queued message cannot contain a procedure value. Its receiver invokes its own handler under the required live owners. A runtime envelope can hold system bookkeeping separately from the regional payload; this is not permission to add physical cross-region pointers to user records. Concrete syntax and envelope layout remain open.
 
 Exclusive whole-region handoff to the mailbox runtime is the recommended first transport candidate because it preserves internal graph sharing without concurrent mutation by a sender. It can reuse the existing offset encoding and allocator pairing. In one address space, moving a system owner need not move any payload bytes. Wire transport remains a separate packet/ABI task; zero pointer repair does not mean zero transport cost. The [holding analysis](GraphGrainedMemoryManagement.md#actor-holding-and-transfer-review) defines the candidate’s lifecycle and alternatives.
 

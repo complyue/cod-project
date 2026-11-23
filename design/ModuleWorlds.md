@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 65 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 66 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+[Editorial continuity](../CHANGELOG.md#k-lexical-callee-examples-20261123) aligns lexical calls and symbolic procedure installation with [D-18 callable value kinds](CallableStorageAndHereAccess.md#callable-value-kinds) and [D-10 handler installation](SymbolicDynamicScope.md#definition-installed-effectful-procedures). Existing qualification boundaries apply.
 
 [D-15-DEFAULT-EXPORTS](DesignAuthorityRegistry.md#d-15-default-exports) and [D-15-PUBLIC-SOURCE](DesignAuthorityRegistry.md#d-15-public-source) at r65 apply the [declaration equivalence](../CHANGELOG.md#h-using-symbolic-variable-identity-20261123) to a [published symbolic variable](#selecting-a-symbolic-variable). P-692/P-693 retain the declared identity, source interpretation and permissions. Check both spellings before installation and compare actual reads across shadowing and cleanup. The rules for procedure-family selection remain with the receiving verb.
 
@@ -79,7 +81,7 @@ Design revision: 65 · Recorded: 2026-11-23 · Status: module-world contract; im
 
 A module world is a module's own semantic runtime environment, containing registered symbol objects, types, callable contracts, methods and related semantic information. Runtime values and module initialization state have their own construction events. It is more than a source-name or declaration index. Different modules have independent world copies and explicitly select what to publish and integrate.
 
-A TLS world is the thread's **flattened set of typed symbolic bindings**. Each symbol has its own identity and required type identity. Independent bits payloads are stored directly in TLS; H-482 separately admits explicit ref/ptr symbols borrowing scalar targets from region-symbol-backed storage. H-561's explicit owner-parameter references also borrow lexical or ordinary regional targets without installing an owner symbol. Other region-selector/group forms keep their resource constraints. Scoped rebinding may select another valid target/owner; all forms retain actual-owner lifetime checks. Values may originate from different module-world copies without importing those worlds into TLS. Region-resource and procedure-valued bindings retain their distinct ownership/capture contracts.
+A TLS world is the thread's **flattened set of typed symbolic bindings**. Each symbol has its own identity and required type identity. Independent bits payloads are stored directly in TLS; H-482 separately admits explicit ref/ptr symbols borrowing scalar targets from region-symbol-backed storage. H-561's explicit owner-parameter references also borrow lexical or ordinary regional targets without installing an owner symbol. Other region-selector/group forms keep their resource constraints. Scoped rebinding may select another valid target/owner; all forms retain actual-owner lifetime checks. Values may originate from different module-world copies without importing those worlds into TLS. Region resources retain their ownership contracts. A handler activation retains its required symbolic bindings.
 
 These worlds do not model the same set of entities. The relevant connection is **typed reference to a value**, not a pair of matching world records representing that value.
 
@@ -98,7 +100,7 @@ These worlds do not model the same set of entities. The relevant connection is *
 
 Types, functions/procedures and their methods are the core entities in H-234. The additional rows locate existing language facilities; they do not add new categories of heap object or public syntax.
 
-A symbolic procedure definition registers or extends module-world method information during compilation; it does not install TLS or capture runtime bindings. A lexical callable-value construction still creates a runtime value. Explicit installation from a symbol object materializes its compatible family view; installation of an existing value retains that value’s environment. The combined effect form requests both semantic registration and runtime materialization/installation without merging those responsibilities.
+A symbolic procedure definition registers or extends module-world method information during compilation; it does not install TLS or capture runtime bindings. Reaching the combined effect definition activates and installs its scoped handler. The installation retains the selected interpretation and required symbolic bindings.
 
 Each receiver integrates exported information for identical identities in its own module world. The operation does not silently mutate the source worlds. Physical copying, sharing of immutable definitions and regional representation must preserve that independence; this inventory does not choose their implementation.
 
@@ -527,7 +529,7 @@ For example, a vocabulary may define an abstract interface I, a small Request AD
 
 The ordinary export boundary still applies: a vocabulary explicitly publishes the definitions consumers may select. A receiver chooses its own onward exports. Vocabulary modules need no special module kind or new import syntax merely to fulfill this idiom.
 
-A vocabulary can publish a callable with typed signature declarations and no implementations. H-257/H-258 separates its identity, declared contracts and executable methods. Each receiving world merges those distinct information sets by identity. Missing implementations matter when calls are demanded; importing the vocabulary does not fabricate a body or install a dynamic procedure value. [D-10](SymbolicDynamicScope.md#callable-declarations-and-methods) specifies generic/variadic signatures and the bounded calling rules.
+A vocabulary can publish a callable with typed signature declarations and no implementations. H-257/H-258 separates its identity, declared contracts and executable methods. Each receiving world merges those distinct information sets by identity. Missing implementations matter when calls are demanded; importing the vocabulary does not fabricate a body or install a handler. [D-10](SymbolicDynamicScope.md#callable-declarations-and-methods) specifies generic/variadic signatures and the bounded calling rules.
 
 ## TLS-world inventory
 
@@ -550,7 +552,7 @@ This is explanatory notation, not a public struct, boxed-value ABI or requiremen
 
 The [symbolic contract](SymbolicDynamicScope.md#symbolic-storage-and-regional-provenance) distinguishes inline bits, regional object references, whole-region resources and procedure bindings. Independent bits bindings require `effect @x <- rhs`; regional reference bindings, including explicit scalar ref/ptr symbols under H-482/H-561, use `effect @x = rhs`. These storage categories do not put type definitions, method sets or region contents into TLS. No raw symbolic assignment is permitted.
 
-H-563 confines complete callable-view/environment storage to lexical scopes. Procedure-valued symbolic bindings retain their existing selection/capture/replay behavior; a binding record is not permission to put a callable view in a region or keep its borrowed owner alive.
+H-563 confines complete callable-view/environment storage to lexical scopes. Definition-installed handlers retain their family, interpretation and replay behavior; a binding record is not permission to put a callable view in a region or keep its borrowed owner alive.
 
 The flat collection describes active entries. Saved values/pointers needed for scope restoration and procedure captures are supporting execution semantics, not a second catalog of module definitions. This does not prescribe a heap-allocated scope frame or runtime closure.
 
@@ -599,17 +601,16 @@ This module-world independence belongs to the [Global Variables Done Right visio
 
 ## Callable families and explicit installation
 
-Bare `other` denotes a symbol object carrying identity and semantics; `@other` reads its current typed TLS binding. H-381 requires nearest-binding lookup: a non-symbol local shadowing other makes @other ill-typed. Reads, effects, calls, touch and type inspection use that same rule. Same-scope module-category collisions and staging still need their complete contract. No general runtime Symbol ABI or implicit conversion in every value context is selected.
+A declared symbol carries its identity and signature in the module world. H-381 applies nearest-binding lookup to symbolic syntax. A non-symbol local named `other` makes `@other` ill-typed. For a procedure symbol, `perform` and `behave` select the installed handler. Reading the handler as an ordinary value rejects.
 
 | Operation | Compilation/integration | Runtime |
 | --- | --- | --- |
-| Symbolic callable definition without effect | Define or extend the receiver’s family under existing permissions. | No implicit installation or capture. |
-| `effect @sym(...) { ... }` | Define or extend and check the compatible family view. | Materialize/install that view when reached. |
-| `effect @sym;` | Select the current composed family; add no method. | Materialize/install its compatible view. |
-| `effect @sym = other;` | Resolve the source symbol’s selected family and destination contract. | Materialize that source view and install it under the destination. |
-| `effect @sym = @other;` | Check the destination against the source TLS value’s contract. | Install the existing value, preserving its captures. |
+| Declare or extend a symbolic procedure | Register the method under existing module permissions. | Registration alone installs nothing. |
+| `effect @sym(...) { ... }` | Check the definition in its selected family and interpretation. | Activate the definition, snapshot required bindings and install the scoped handler. |
+| `effect @sym;` | [Name-only activation remains under review](SymbolicDynamicScope.md#definition-installed-effectful-procedures). | |
+| `effect @sym = other` or `effect @sym = @other` for procedure symbols | Reject assignment installation. | |
 
-The installed view preserves family/context and environment. A different destination identity does not redirect dispatch, merge identities or edit either world. A family with several methods can be a value. Export, using/import/mixin and extension remain module construction; none implicitly installs a receiver TLS value. Dependency initialization still follows its once-only incorporation contract and can execute its own explicit effects.
+The installed handler retains its family and module interpretation. Several applicable methods participate in ordinary dispatch. Export, using/import/mixin and extension remain module construction; none implicitly installs a receiver TLS value. Dependency initialization still follows its once-only incorporation contract and can execute its own explicit effects.
 
 Skipped runtime paths do not install; repeated runtime execution does not repeat method registration. Existing scope/declaration rules constrain where combined forms may occur. Whole-program compilation prepares admissible actual-type combinations and dispatch. Independent module interpretations remain fixed for that composition and can coexist; a new explicit integration stage is separate from invocation.
 
@@ -750,7 +751,7 @@ A proposed dependency is an obligation that must be established before an operat
 | Pass/store a reference identity, or test identity/nullness | The identity/binding must be available; do not invent a payload-read requirement where ordinary init/reference rules permit identity-only use. |
 | Invoke a callable | Include its checked transitive requirements and normal-completion writes in the selected context, not just argument spellings. |
 | Materialize a callable value | Include its actual capture and lifetime requirements at materialization; declaration availability does not supply captured runtime bindings. |
-| Perform a stored procedure value | Preserve its captured bindings and owners; do not substitute the requirements of a direct/current-binding call. |
+| Invoke an installed handler with `perform` | Preserve its captured bindings and owners; do not substitute the requirements of a direct/current-binding call. |
 
 For example, a fragment calling `proc read_b() -> u64 { return @b; }` depends on the supplying initialization even when its own body never spells @b. Conversely, inspecting an independently declared return type does not invoke read_b. Used default expressions follow their selected origin/context and ordinary preparation phase; unused defaults and unselected methods are not execution dependencies.
 
@@ -824,7 +825,7 @@ Whole-block scheduling is not a transaction. Ordinary calls and effects inside t
 
 Reuse checked entry requirements and normal-completion summaries by module interpretation/context and binding/target identity. Every read must have valid initialization and owner/access evidence along the chosen static schedule; hidden calls, aliases and cleanup completed inside a block contribute their actual effects. Process-exit defers do not supply startup readiness. Unknown indirect effects may conservatively reject, and D-10's conditional-effect restrictions remain. Summaries describe successive block states rather than imposing a last-write dependency on every external read.
 
-Complete captured values remain independent: if A1 constructs a stored procedure capturing x=1, then A2 installs x=2, selecting that stored procedure does not recapture it; perform still replays 1. Mutable referents and actual owners retain their ordinary semantics, and declaration/type-only queries add no runtime-value edge. Acceptance distinguishes same-block writes from separate-block interleaving, preserved source order, source versus retained receiver/capture values, dependency-forced positions, hidden/aliased writes and block-completion cleanup. The visibility rule is settled; general proof coverage and source implementation remain work.
+Complete captured values remain independent: if A1 activates a handler with x=1 and A2 later installs x=2, invoking that handler with `perform` still replays 1. Mutable referents and actual owners retain their ordinary semantics, and declaration/type-only queries add no runtime-value edge. Acceptance distinguishes same-block writes from separate-block interleaving, preserved source order, source versus retained receiver/capture values, dependency-forced positions, hidden/aliased writes and block-completion cleanup. The visibility rule is settled; general proof coverage and source implementation remain work.
 
 ### Cross-module shutdown order
 

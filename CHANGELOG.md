@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Align lexical call examples and record deferred discussion topics
+
+<a id="k-lexical-callee-examples-20261123"></a>
+**K-LEXICAL-CALLEE-EXAMPLES-20261123.** Editorial continuity from `32a2278768b6460bc68c705c53ea4bbbf7830d4e:design/SymbolicDynamicScope.md#lexical-calls-and-shadowing`. H-257/P-229 and H-CALLABLE-MODEL-20261118 govern the nearest binding and the two callable value kinds. D-10 r236→237, D-07 r204→205, D-12 r34→35 and D-15 r65→66 align examples and references with definition-installed symbolic handlers. Existing qualification boundaries and open choices remain. At the project user’s request, [DesignTopics.md](docs/DesignTopics.md) records the longer-term discussion reserve. Mainline delivery and newly discovered blockers take priority.
+
 ## 2026-11-23 — Review the standalone booter’s prepared package inputs
 
 <a id="k-booter-prepared-package-crossing-20261123"></a>
