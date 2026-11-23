@@ -28,6 +28,7 @@
 #include <memory>
 #include <new>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace cod::language {
@@ -166,7 +167,16 @@ class LLVMEmission {
     }
   };
   CompletionState<llvm::AllocaInst *> completion_;
-  std::vector<Location> sites_;
+  struct NamedExceptionSite {
+    size_t category;
+    std::string_view spelling;
+  };
+  struct FailureSite {
+    Location location;
+    std::optional<NamedExceptionSite> nominal;
+  };
+  std::vector<FailureSite> sites_;
+  llvm::Function *named_exception_site_ = nullptr;
   enum class Projection { value, target, slot, receiver };
   static bool carries_value(Projection projection) { return projection == Projection::value || projection == Projection::receiver; }
   struct DeferredInputs {
@@ -724,7 +734,10 @@ class LLVMEmission {
   llvm::FunctionCallee runtime(const std::string &name, llvm::Type *result, std::vector<llvm::Type *> arguments) {
     return module_.getOrInsertFunction(name, llvm::FunctionType::get(result, arguments, false));
   }
-  std::uint64_t site(const Location &at) { sites_.push_back(at); return sites_.size(); }
+  std::uint64_t site(const Location &at, std::optional<NamedExceptionSite> nominal = {}) {
+    sites_.push_back({at, nominal});
+    return sites_.size();
+  }
   llvm::Value *take_failure_owner(llvm::IRBuilder<> &builder, llvm::Value *place) {
     auto *owner = builder.CreateLoad(builder.getPtrTy(), place);
     builder.CreateStore(null_pointer(), place);
@@ -859,7 +872,8 @@ class LLVMEmission {
     b_.CreateBr(control_->exit);
   }
   template <typename Initialize>
-  void raise_constructed_exception(const Location &at, size_t category, const Initialize &emit_fields) {
+  void raise_constructed_exception(const Location &at, size_t category, const Initialize &emit_fields,
+                                   std::string_view spelling = {}) {
     auto *layout = product_layout(*program_->exception_types.at(category).schema);
     auto *capacity = integer(COD_LANG_EXCEPTION_REGION_DEFAULT);
     auto *size = llvm::ConstantExpr::getSizeOf(layout);
@@ -883,7 +897,8 @@ class LLVMEmission {
     emit_fields(layout, exception_payload(owner));
     control_ = construction.parent;
     if (reachable()) {
-      save_abrupt(outcome(empty_scalar(), integer(category), integer(site(at)), null_pointer(),
+      const auto origin = spelling.empty() ? site(at) : site(at, NamedExceptionSite{category, spelling});
+      save_abrupt(outcome(empty_scalar(), integer(category), integer(origin), null_pointer(),
                           nullptr, nullptr, nullptr, nullptr, owner));
       b_.CreateBr(control_->exit);
     }
@@ -901,7 +916,7 @@ class LLVMEmission {
         assign_place(b_.CreateStructGEP(layout, payload, index), convert_result(*initializer, input, value),
                      *initializer, &CheckedOperation::operand_type);
       }
-    });
+    }, expr.annotation->name);
     return nullptr;
   }
   void require(llvm::Value *condition, const Location &at, const std::string &message) {
@@ -4740,9 +4755,32 @@ class LLVMEmission {
     auto *select = b_.CreateSwitch(function_->getArg(0), unknown, sites_.size());
     for (size_t i = 0; i < sites_.size(); ++i) {
       auto *known = block("site"); select->addCase(integer(i + 1), known); b_.SetInsertPoint(known);
-      b_.CreateRet(b_.CreateGlobalString(location_text(sites_[i])));
+      b_.CreateRet(b_.CreateGlobalString(location_text(sites_[i].location)));
     }
     b_.SetInsertPoint(unknown); b_.CreateRet(null_pointer());
+
+    if (!named_exception_site_) return;
+    function_ = named_exception_site_;
+    b_.SetInsertPoint(block("entry"));
+    auto *unnamed = block("unnamed");
+    auto *selected_site = b_.CreateSwitch(function_->getArg(1), unnamed);
+    for (size_t i = 0; i < sites_.size(); ++i) {
+      const auto &nominal = sites_[i].nominal;
+      if (!nominal) continue;
+      auto *named = block("named");
+      selected_site->addCase(integer(i + 1), named);
+      b_.SetInsertPoint(named);
+      auto *matches = b_.CreateICmpEQ(function_->getArg(0), integer(nominal->category));
+      auto *display = b_.CreateGlobalString(std::string(nominal->spelling) + " (canonical " +
+                                            qualified_exception_name(nominal->category) + ")");
+      b_.CreateRet(b_.CreateSelect(matches, display, null_pointer()));
+    }
+    b_.SetInsertPoint(unnamed); b_.CreateRet(null_pointer());
+  }
+  std::string qualified_exception_name(size_t category) const {
+    const auto &type = program_->exception_types.at(category);
+    const auto &definition = *program_->schemas.at(*type.schema).source;
+    return definition.at.filename() + "::" + std::string(type.name);
   }
   void emit_uncaught_failure() {
     auto *category = load(completion_.category);
@@ -4753,11 +4791,19 @@ class LLVMEmission {
       const auto first_nominal = exception_categories.size();
       auto *select = b_.CreateSwitch(category, intrinsic, program_->exception_types.size() - first_nominal);
       auto report = runtime("cod_lang_uncaught_nominal", b_.getVoidTy(), {b_.getPtrTy(), b_.getInt64Ty()});
+      if (!named_exception_site_ && first_nominal < program_->exception_types.size()) {
+        auto *type = llvm::FunctionType::get(b_.getPtrTy(), {b_.getInt64Ty(), b_.getInt64Ty()}, false);
+        named_exception_site_ = llvm::Function::Create(type, llvm::GlobalValue::InternalLinkage,
+                                                       "cod.exception.named_site", module_);
+      }
       for (size_t i = first_nominal; i < program_->exception_types.size(); ++i) {
         auto *nominal = block("uncaught.nominal");
         select->addCase(integer(i), nominal);
         b_.SetInsertPoint(nominal);
-        b_.CreateCall(report, {b_.CreateGlobalString(program_->exception_types[i].name), where});
+        auto *used_name = b_.CreateCall(named_exception_site_, {category, where});
+        auto *canonical = b_.CreateGlobalString(qualified_exception_name(i));
+        auto *name = b_.CreateSelect(b_.CreateIsNotNull(used_name), used_name, canonical);
+        b_.CreateCall(report, {name, where});
         b_.CreateUnreachable();
       }
       b_.SetInsertPoint(intrinsic);
