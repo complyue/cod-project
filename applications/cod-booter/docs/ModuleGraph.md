@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 58. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 59. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+
+The [r59 dependency visit review](../../../CHANGELOG.md#k-booter-variadic-dependency-visit-20261123) qualifies the [structural membership and terminal check](#variadic-membership-during-a-dependency-visit) under P-680/P-681 and D-10-VARARGS. Verify the importer’s conflict location and the child’s saved location on the three normal commands.
 
 The [r58 registration review](../../../CHANGELOG.md#k-variadic-family-registration-20261123) covers the booter’s typed variadic formal and the checked module rows used to [validate a composed family](../../../design/ImplementationArchitecture.md#registering-a-variadic-method-family). P-680/P-681 preserve defining identities and the separation between checked interfaces and executable availability.
 
@@ -245,6 +247,36 @@ The seed can call the producer directly. The booter launcher can invoke a privat
 **Resolution and warning delivery.** Classify the decoded source operand before a host path join. Probe only the exact namespace path in the verified package roots. Distinguish absence, ambiguity and lookup failure. Validate a logical namespace operand before a join can reinterpret it as a host path. For a unique package claim, check for the bundled namesake and deliver the warning with the requested name and both origins, including on a successful compile. Retain source-independent diagnostic bytes, protect the primary failure and preserve previous output on incomplete delivery. Interpreting the root rows in another order or running from another working directory must give the same selection. [Source path rules](../../../design/ModuleWorlds.md#resolving-source-module-paths)
 
 **Parser and publication.** The [selector decision](../../../CHANGELOG.md#h-module-default-selector-substitution-20261123) requires the same kind-qualified items for written and omitted lists. Retain the resource kind in checked defaults and complete public entries. For `using var`, verify the published variable kind, then use the same checked identity selection as grouped or singleton `symbol from`. Both source forms retain their own diagnostic spans. Check actual-owner and installation evidence when a reached operation uses the binding. [Variable selector contract](../../../design/ModuleWorlds.md#selecting-a-symbolic-variable) Expand before checking the receiving verb, including `mixin`. An inadmissible item rejects the directive rather than being filtered. Verify the same accepted bindings and rejecting item for each equivalent spelling. The two source frontends may implement named, default and complete selection independently of package lookup, using explicit relative fixtures. Retain the directive’s source site. Resolve default marks against the module’s completed public table, including names published later in the module and re-exports under their public spelling. Store stable references to the actual public entries. Validate owner module, row kind and published bounds at use. Publish defaults and exports together. In the seed, apply named and expanded selections through its existing single-entry selection operation. In the booter, one checked visit-local buffer carries the selected entries for all three forms. A selection index is distinct from an AST node ID and from the defining module’s export row. Keep the directive-to-entry relationship for diagnostics and apply each entry’s usual permissions. Keep native catalog representations intact. Cover the case where a single directive selects more entries than the entire importing syntax tree has nodes.
+
+### Variadic membership during a dependency visit
+
+A child can provide a checked method list even when the booter cannot execute its variadic
+body. Give that completed visit a distinct alternative in the graph's visit type. During the
+source and frame loan, validate the family, defining identities, interpretation and membership
+ranges. Distinguish a promise with zero methods, a nonempty fixed-only family and the defining
+identity of a sole variadic method. Keep the canonical key and original diagnostic coordinates
+in graph-owned storage. Commit the complete checked ranges and pending profile diagnostic
+together. This visit contributes no executable ordinal or unit.
+
+A repeated dependency may reuse its structural facts through the existing canonical lookup.
+An active visit still takes the cycle path. A facade may forward proved membership to the
+actual receiving family. Count a repeated defining method once in the same interpretation.
+The ordinary visibility, extension and interpretation checks still apply. Continue only past
+the specific variadic-body execution limit. Handle malformed input, invalid signatures,
+conflicts and resource failures on their ordinary paths.
+
+If composition introduces a conflicting method, report the declaration or directive that
+formed the family. Otherwise, after normal graph traversal, check for a pending profile stop
+before invoking `finish` in `traverse_graph`. Report the first encountered pending stop in
+deterministic traversal order using its original source attribution. Table growth, re-export
+and repeated visits must preserve that order. The declaration, provider and object commands
+share this gate. It precedes successful completion, provider publication and LLVM output.
+
+In both modes, exercise an uncalled receiver conflict through a facade, a diamond through the
+same method, independent frozen views and two unsupported dependencies whose discovery and
+completion orders differ. Check clean failure with the original child span after source
+release, preserved artifacts, zero terminal calls and ordinary graph cleanup. This is a
+bootstrap implementation boundary for the [family rule](../../../design/SymbolicDynamicScope.md#runtime-array-expansion-and-one-variadic-parameter).
 
 ### Checking a symbolic procedure selector
 

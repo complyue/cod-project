@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Preserve checked family membership through booter dependency visits
+
+<a id="k-booter-variadic-dependency-visit-20261123"></a>
+**K-BOOTER-VARIADIC-DEPENDENCY-VISIT-20261123.** D-20-MODULE-GRAPH r58→59 and D-ARCH-REVIEW r67→68, P-680–P-683 continue the delegated [family-registration review](applications/cod-booter/docs/ModuleGraph.md#variadic-membership-during-a-dependency-visit). At `eb425957cc4c0498c1bdfa0b305b03068a16113a:applications/cod-booter/src/ModuleGraph.cod`, the child failure prevents receiver validation. The clearance covers a bounded structural visit and one gate before `traverse_graph` calls its terminal. The D-10 family contract and runtime pack scope retain independent authority.
+
 ## 2026-11-23 — Review local and imported variadic family registration
 
 <a id="k-variadic-family-registration-20261123"></a>

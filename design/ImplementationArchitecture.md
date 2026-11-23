@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 67. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 68. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+
+The [r68 review](../CHANGELOG.md#k-booter-variadic-dependency-visit-20261123) clears a [structural dependency visit](../applications/cod-booter/docs/ModuleGraph.md#variadic-membership-during-a-dependency-visit) for a checked variadic family with an unsupported executable body. P-682/P-683 govern local checking, graph-owned evidence and the common gate before any terminal is invoked.
 
 The [r67 pre-code review](../CHANGELOG.md#k-variadic-family-registration-20261123) clears [family registration](#registering-a-variadic-method-family) under D-10-VARARGS and P-682/P-683. Acceptance distinguishes a conflict in an unused family from a valid singleton whose body lacks executable support.
 
