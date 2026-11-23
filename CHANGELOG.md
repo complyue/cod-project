@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review lookup of names introduced by module selections
+
+<a id="k-booter-imported-name-lookup-20261123"></a>
+**K-BOOTER-IMPORTED-NAME-LOOKUP-20261123.** D-ARCH-REVIEW r61→62 and D-20-MODULE-GRAPH r50→51 continue K-BOOTER-CHECKED-SELECTION-INTEGRATION-20261123 under P-680–P-683. The [review](applications/cod-booter/docs/ModuleGraph.md#lookup-of-imported-names) separates complete module registration from per-occurrence lookup at `40ad5848d314284d7782c503a5c5f39f8241ef27:applications/cod-booter/src/NameResolution.cod`. H-381 and H-MODULE-DEFAULT-SELECTOR-SUBSTITUTION-20261123 retain nearest-binding and receiving-verb semantics.
+
 ## 2026-11-23 — Define the Actor and typed chan boundary
 
 <a id="h-actor-chan-boundary-20261123"></a>
