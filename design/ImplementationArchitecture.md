@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 46. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 47. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
 
 The [role clarification](../CHANGELOG.md#h-design-review-delivery-roles-20261122) defines the design discussion’s authority through review and assigns delivery to development mainline. [Design review and delivery responsibilities](#design-review-and-delivery-responsibilities)
 
@@ -112,6 +112,10 @@ The [recovery review](../CHANGELOG.md#k-parser-recovery-architecture-20261123) c
 ### Package inputs and default export tables
 
 The [review record](../CHANGELOG.md#k-module-inputs-and-default-tables-20261123) clears three coordinated batches under D-15-MODULE-PATH and D-15-DEFAULT-EXPORTS. Codp supplies the checked package roots, the C++ or CoD graph resolves each edge, and each module-world implementation applies selections to its existing public entries. A pinned prepared snapshot must establish the exact source tree available to the invocation. Mainline owns the two-frontend source migration and compatibility cutover. [Interfaces, staged boundaries and acceptance](../applications/cod-booter/docs/ModuleGraph.md#prepared-package-inputs-and-public-selections)
+
+### A checked nominal throw in an ordinary object
+
+The [scoped integration review](../CHANGELOG.md#k-bulk-symbol-selection-and-checked-object-20261123) clears frame-owned semantic facts, staged header identity and target layout for the normal multi-unit object route, including units whose only exception operation is to consume an imported failure. Mainline verifies ownership transfer and cleanup with an actual emitted program. The same review distinguishes symbol-identity selection from an explicit callable-family grant in the already cleared bulk-selection implementation. [Checked object path](../applications/cod-booter/docs/ModuleGraph.md#passing-checked-construction-to-object-lowering) · [Bulk symbol selection](ModuleWorlds.md#default-and-complete-public-selections)
 
 ### Whole-file recovery in the bootstrap compilers
 
