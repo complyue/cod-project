@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 35. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 36. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+
+The [role clarification](../CHANGELOG.md#h-design-review-delivery-roles-20261122) defines the design discussion’s authority through review and assigns delivery to development mainline. [Design review and delivery responsibilities](#design-review-and-delivery-responsibilities)
 
 [K-BOOTER-AST-TABLE-20261122](../CHANGELOG.md#k-booter-ast-table-20261122) records the delegated review of the indexed AST workload and its seed prerequisites under the [work-method decision](../CHANGELOG.md#h-booter-work-method-20261122).
 
@@ -43,6 +45,14 @@ The [symbolic procedure syntax review](../CHANGELOG.md#k-booter-symbolic-procedu
 The [export kind review](../CHANGELOG.md#k-booter-export-kinds-20261122) clears the private row encoding and [catalog validation](../applications/cod-booter/docs/ModuleGraph.md#builtin-and-source-export-kinds) for both standalone modes.
 
 The [production cutover review](../CHANGELOG.md#k-booter-production-cutover-checks-20261122) clears [standalone membership](../applications/cod-booter/docs/ModuleGraph.md#standalone-build-cutover), the graph’s fixed reference formals and [frontend construction and completion checks](../applications/cod-booter/docs/ModuleGraph.md#checking-a-constructing-throw-in-the-path-wrapper). The [owned throw lowering review](../CHANGELOG.md#k-booter-owned-throw-lowering-20261122) covers the [CoD nominal tags, private LLVM outcome and runtime cleanup](../applications/cod-booter/docs/ModuleGraph.md#lowering-an-owning-exception-through-cleanup) for the real path wrapper, plus the [shared call check for forwarded feedback](../applications/cod-booter/docs/ModuleGraph.md#checking-the-forwarded-path-callback).
+
+## Design review and delivery responsibilities
+
+The design discussion interprets confirmed semantics, reviews the structure of each proposed code batch, and publishes the scoped design decision and acceptance criteria. It can examine source, diffs and existing verification records to assess a claim. When a change would weaken a confirmed guarantee or requires a material choice outside its delegated scope, it takes that choice to the project user.
+
+Development mainline owns the implementation from correction through production cutover. It identifies the affected commands, establishes what the previous version accepted, runs the compatibility checks against the exact candidate, fixes regressions and publishes the first checkpoint that preserves the required behavior. Mainline makes that delivery decision within the cleared scope. Fresh design review applies when the proposed architecture or contract changes.
+
+For example, if the user asks whether a redesigned AST is in production, the design discussion can inspect the public commit and ask what the production driver still needs. If the supplied results cover object emission but omit provider generation, the reviewer identifies the missing comparison and asks mainline for its result. Mainline owns the comparison, repair and implementation push. The reviewer reports the outcome or the outstanding blocker to the user.
 
 ## Before coding
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Assign design review and production cutover to their respective owners
+
+<a id="h-design-review-delivery-roles-20261122"></a>
+**H-DESIGN-REVIEW-DELIVERY-ROLES-20261122.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-22 (America/Los_Angeles), the project user directed “积极改正切换的工作责任在开发主线，你代劳属于越界了” and requested “你自己的职责也清晰落repo，避免以后再越界”. This clarifies H-PROJECT-ARCHITECTURE-REVIEW-20261122 at `82ca90766d28b8a91f63d8cd53c6ac184eae3d39:design/ImplementationArchitecture.md`. Design owns the contract, architectural review and follow-up on missing evidence. Mainline owns implementation, compatibility verification, correction, cutover and publication of the implementation. D-ARCH-REVIEW r35 to r36, P-682/P-683, registry r1085.
+
 ## 2026-11-22 — Separate builtin and source-only export kind codes
 
 <a id="k-booter-export-kinds-20261122"></a>
