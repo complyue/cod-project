@@ -17,6 +17,11 @@ export func newline_in_module_path() -> u8 { return 11u8; }
 export func invalid_module_path_escape() -> u8 { return 12u8; }
 export func reserved_fraction_operator() -> u8 { return 13u8; }
 export func legacy_type_separator() -> u8 { return 14u8; }
+export func multiline_text() -> u8 { return 15u8 }
+
+export func lexical_error(kind:u8) -> bool {
+    return kind >= unsupported_byte() && kind != multiline_text()
+}
 
 func identifier_width(token:const Token in T, width:u64) -> bool where {const owner T} {
     return token.kind == identifier() && token.past - token.first == width;
@@ -674,31 +679,34 @@ func numeral_end(source:const SourceBytes in S, first:u64, past:u64,
     return;
 }
 
+func triple_quote(source:const SourceBytes in S, at:u64, past:u64) -> bool where {const owner S} {
+    return at <= past && past - at >= 3u64 &&
+        source[at] == 34u8 && source[at + 1u64] == 34u8 && source[at + 2u64] == 34u8
+}
+
 func quoted_text_end(source:const SourceBytes in S, first:u64, past:u64,
                       token:Token in T) -> void where {const owner S, owner T} {
+    val multiline <- triple_quote(source, first, past);
+    val width <- if (multiline) { 3u64 } else { 1u64 };
     val escaped <- false;
     val byte <- 0u8;
-    for (at in first + 1u64 .. past) {
+    for (at in first + width .. past) {
         byte <- source[at];
-        if (byte == 10u8) {
+        if (!multiline && byte == 10u8) {
             token.kind <- newline_in_module_path();
             token.past <- at;
-            return;
-        } else {};
-        if (escaped) {
-            escaped <- false;
-        } else {
-            if (byte == 34u8) {
-                token.kind <- quoted_text();
-                token.past <- at + 1u64;
-                return;
-            } else {};
-            escaped <- byte == 92u8;
+            return
         };
+        if (!escaped && byte == 34u8 && (!multiline || triple_quote(source, at, past))) {
+            token.kind <- if (multiline) { multiline_text() } else { quoted_text() };
+            token.past <- at + width;
+            return
+        };
+        escaped <- !escaped && byte == 92u8
     };
     token.kind <- unterminated_module_path();
     token.past <- past;
-    return;
+    return
 }
 
 func punctuation_width(first:u8, second:u8, third:u8) -> u64 {

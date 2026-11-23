@@ -1,6 +1,6 @@
 using "SourceStorage.cod" { SourceBytes, Token };
 using "SourceAccess.cod" len;
-using "Lexer.cod" { scan_token, end_of_source, unsupported_byte };
+using "Lexer.cod" { scan_token, end_of_source, lexical_error };
 using "ParserStorage.cod" { Tokens, ExprNodes, no_node, syntax_first, syntax_past };
 using "Frontend.cod" { FrontendResult, read_expression };
 using "Lowering.cod" { lower_expression, ArithmeticOperands, arithmetic_operands };
@@ -30,7 +30,7 @@ func count_tokens(source:const SourceBytes in S, token:Token in T) -> u64
     # Each non-EOF token advances by at least one byte.
     for (index in 0u64 .. bytes) {
         scan_token(source, next, token);
-        if (token.kind == end_of_source() || token.kind >= unsupported_byte()) return index;
+        if (token.kind == end_of_source() || lexical_error(token.kind)) return index;
         next <- token.past;
     };
     return bytes;
@@ -48,7 +48,7 @@ export func plan_expression_scratch(source:const SourceBytes in S, scratch:Expre
     scratch.diagnostic_past <- 0u64;
     ref token = make Token { kind <- end_of_source(); first <- 0u64; past <- 0u64; };
     val count <- count_tokens(source, token);
-    if (token.kind >= unsupported_byte()) {
+    if (lexical_error(token.kind)) {
         scratch.diagnostic <- token.kind;
         scratch.diagnostic_first <- token.first;
         scratch.diagnostic_past <- token.past;

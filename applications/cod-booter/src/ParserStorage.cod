@@ -169,9 +169,9 @@ export func published_syntax_id(nodes:const ExprNodes in N, revision:u64, used:u
                                 id:const NodeId in I) -> bool where {const owner N, const owner I} {
     if (id.revision != revision || id.index >= used || id.index >= intrinsic (len)(nodes)) return false;
     return case nodes[id.index] of {
-        (Vacant) -> { false };
-        (Occupied) -> { true };
-    };
+        Vacant -> false;
+        Occupied -> true
+    }
 }
 
 func syntax_boundary(nodes:const ExprNodes in N, used:u64, at:u64, begin:bool) -> u64
