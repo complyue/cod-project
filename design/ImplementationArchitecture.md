@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 29. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 30. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
 
 [K-BOOTER-AST-TABLE-20261122](../CHANGELOG.md#k-booter-ast-table-20261122) records the delegated review of the indexed AST workload and its seed prerequisites under the [work-method decision](../CHANGELOG.md#h-booter-work-method-20261122).
 
@@ -33,6 +33,8 @@ The [booter result syntax review](../CHANGELOG.md#k-booter-own-region-result-syn
 The [provider name review](../CHANGELOG.md#k-booter-provider-member-names-20261122) clears the shared data file, its C inclusion, the checked-in CoD projection and the [provider field validation and parity checks](../applications/cod-booter/docs/ModuleGraph.md#reserved-member-names-in-generated-c).
 
 The [constructor case syntax review](../CHANGELOG.md#k-booter-constructor-case-syntax-20261122) clears the [direct-arm parser, typed inspectors and source-profile check](../applications/cod-booter/docs/ModuleGraph.md#reading-constructor-fields-in-a-case-arm) for value reception.
+
+The [aggregate schema review](../CHANGELOG.md#k-booter-aggregate-schemas-20261122) clears the [CoD declaration traversal and publication of storage facts](../applications/cod-booter/docs/ModuleGraph.md#checking-aggregate-fields-before-publication) used by the typed AST.
 
 ## Before coding
 
