@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Writable root field in a scoped dependency handler
+
+<a id="k-booter-handler-scalar-loan-20261122"></a>
+**K-BOOTER-HANDLER-SCALAR-LOAN-20261122.** Delegated pre-code review under H-PROJECT-ARCHITECTURE-REVIEW-20261122 cleared the seed’s scoped use of an initialized writable scalar ref formal with a fixed target, including payload-write effects across normal and exceptional exits. This continues the direct root loan and visit activation at `3d004418c5b002c8600ade4e1f30774f9e5ce36a:design/ImplementationArchitecture.md`, “Lending a graph count to a named helper” and “Scoped activation of the dependency handler”. D-ARCH-REVIEW r17 to r18, P-682/P-683, registry r1066.
+
 ## 2026-11-22 — CoD visit publication through the object compiler
 
 <a id="k-booter-visit-publication-20261122"></a>
