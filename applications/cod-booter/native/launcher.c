@@ -263,6 +263,14 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: owning region result checking is outside the current compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 120)
         fputs(": error: constructor case reception checking is outside the current compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 121)
+        fputs(": error: reference-slot formal checking is outside the current compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 122)
+        fputs(": error: fixed formal binding checking is outside the current compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 123)
+        fputs(": error: symbolic procedure declaration checking is outside the current compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 124)
+        fputs(": error: scoped symbolic procedure checking is outside the current compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 20)
         fputs(": error: narrow integer execution is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 21)

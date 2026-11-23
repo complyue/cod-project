@@ -13,6 +13,7 @@ using "ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource };
 using "ParserInput.cod" ParseResult;
 using "ModuleExportStorage.cod" {
     ModuleExport, ModuleExports, ModuleInterfaces, find_interface, enum_type, sum_type, checked_sum_constructor,
+    checked_aggregate_storage, AggregateStorage { CLayoutBitsRecord, CoDBitsAggregate, NonBitsAggregate },
 };
 
 export data SelectedExport {
@@ -61,6 +62,15 @@ export func enum_member_export() -> u8 { return 135u8; }
 export func abstract_type_export() -> u8 { return 136u8; }
 export func lexical_builder_export() -> u8 { return 137u8; }
 export func ordinary_callable_shape() -> u8 { return 1u8; }
+export func numeric_record_shape() -> u8 { return 2u8; }
+
+export func aggregate_export_shape(storage:AggregateStorage, numeric:bool) -> u8 {
+    if (storage == CLayoutBitsRecord) return if (numeric) { numeric_record_shape() } else { 1u8 };
+    if (storage == NonBitsAggregate) return 3u8;
+    if (storage == CoDBitsAggregate) return 4u8;
+    return 0u8;
+}
+
 export func print_export_identity() -> u64 { return 0u64; }
 export func exception_root_identity() -> u64 { return 0u64; }
 export func error_root_identity() -> u64 { return 11u64; }
@@ -557,6 +567,35 @@ export func resolve_sum_selections(source:const SourceBytes in S, nodes:const Ex
             if (site != no_node()) {
                 selected[at].constructor_selection <- site;
                 (selected[at].constructor_row <- constructor):void;
+            };
+        };
+    };
+    return true;
+}
+
+export func verify_aggregate_selections(nodes:const ExprNodes in N, used:u64, revision:u64,
+                                        interfaces:const ModuleInterfaces in I, published:u64,
+                                        selected:const SelectedExports in E, record_interface_kind:u8,
+                                        report:ExportResolutionResult in R)
+    -> bool where {const owner N, const owner I, const owner E, owner R} {
+    if (used > intrinsic (len)(selected)) return false;
+    val kind <- 0u8;
+    val expected <- 0u8;
+    val storage <- CLayoutBitsRecord;
+    val shape <- 0u8;
+    val derived <- 0u8;
+    for (site in 0u64 .. used) {
+        kind <- selected[site].kind;
+        if (kind == record_export() || kind == sum_export()) {
+            expected <- if (kind == record_export()) { record_interface_kind } else { sum_type() };
+            storage <- checked_aggregate_storage(interfaces, published, selected[site].origin_module,
+                                                  selected[site].identity, expected);
+            shape <- selected[site].shape;
+            derived <- aggregate_export_shape(storage, shape == numeric_record_shape());
+            if (derived == 0u8 || shape != derived) {
+                report.node <- selected_resource_name(nodes, revision, used, site);
+                report.diagnostic <- unproved_module_exports();
+                return false;
             };
         };
     };

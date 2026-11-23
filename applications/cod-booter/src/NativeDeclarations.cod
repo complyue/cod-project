@@ -18,7 +18,7 @@ using "ParserStorage.cod" {
     HandleConstructionSites, inspect_handle_construction, LocalBindingSites, inspect_local_binding,
     published_syntax_id, inspect_type_annotation, syntax_first, syntax_past, module_item_publication,
     ModuleSelectionSites, inspect_module_selection,
-    FormalMode, FormalSites, inspect_formal, BindingSites, inspect_binding,
+    FormalMode, FormalSites, inspect_formal, formal_binding_is_fixed, BindingSites, inspect_binding,
     SignatureSites, inspect_signature, find_signature_clause, CallableSites, inspect_callable, owner_constraint_syntax,
 };
 using "ParserStorage.cod" DeclarationSyntax {
@@ -26,7 +26,7 @@ using "ParserStorage.cod" DeclarationSyntax {
     AbstractTypeDeclaration, NativeSymbolDeclaration, ReferenceSymbolDeclaration, LocalPublication, EnumTypeDeclaration, NominalSum,
 };
 using "ParserStorage.cod" FormalMode {
-    ValueFormal, ExplicitValueFormal, ReferenceFormal, PointerFormal, HandleFormal, RetainedHandleFormal,
+    ValueFormal, ExplicitValueFormal, ReferenceFormal, ReferenceSlotFormal, PointerFormal, HandleFormal, RetainedHandleFormal,
 };
 using "ParserStorage.cod" FormalSyntax { OrdinaryFormal, HereFormalSyntax };
 using "ParserStorage.cod" BindingSyntax { TypedBinding };
@@ -59,13 +59,15 @@ using "NameResolution.cod" {
 using "ModuleExports.cod" {
     SelectedExports, ModuleExports, exception_type_export, exception_root_identity, error_root_identity,
     native_handle_export, record_export, array_export, nominal_exception_export, callable_export, enum_export, sum_export, ordinary_callable_shape,
-    symbol_export, abstract_type_export, lexical_builder_export,
+    symbol_export, abstract_type_export, lexical_builder_export, aggregate_export_shape, numeric_record_shape,
 };
 using "ModuleExportStorage.cod" {
     ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header, enum_type, sum_type,
     SumInterfacePayload { NoSumInterface },
+    AggregateStorage { UnprovedAggregate, CoDBitsAggregate, CLayoutBitsRecord, NonBitsAggregate },
 };
 using "DeclarationTypes.cod" { type_module, type_identity, interior_nul_in_c_string };
+using "AggregateSchemas.cod" { AggregateFacts, SchemaCheck, check_aggregate_schemas, array_element_storage };
 
 export data NativeDeclarationResult {
     diagnostic:u8;
@@ -73,8 +75,6 @@ export data NativeDeclarationResult {
 }
 
 func invalid_native_owner_type() -> u8 { return 16u8; }
-func invalid_record_field() -> u8 { return 17u8; }
-func recursive_record_layout() -> u8 { return 18u8; }
 func invalid_native_failure() -> u8 { return 19u8; }
 func native_owner_required() -> u8 { return 20u8; }
 func mixed_native_owner_types() -> u8 { return 21u8; }
@@ -138,6 +138,7 @@ func typed_formal(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
                   formal:FormalSites in F, binding:BindingSites in B) -> bool
     where {const owner N, owner F, owner B} {
     return inspect_formal(nodes, revision, used, at, formal) == OrdinaryFormal &&
+        formal.mode != ReferenceSlotFormal && !formal_binding_is_fixed(nodes, revision, used, at) &&
         inspect_binding(nodes, revision, used, formal.binding, binding) == TypedBinding;
 }
 
@@ -159,10 +160,6 @@ func reference_symbol_shape(nullable:bool, readonly:bool) -> u8 {
     if (nullable) return if (readonly) { 6u8 } else { 5u8 };
     return if (readonly) { 4u8 } else { 3u8 };
 }
-func bits_record() -> u8 { return 1u8; }
-func numeric_record() -> u8 { return 2u8; }
-func non_bits_record() -> u8 { return 3u8; }
-func cod_bits_record() -> u8 { return 4u8; }
 func readonly_numeric_array() -> u8 { return 1u8; }
 func numeric_record_array() -> u8 { return 2u8; }
 func scalar_exception() -> u8 { return 1u8; }
@@ -256,130 +253,6 @@ func scalar_failure(nodes:const ExprNodes in N, names:const NameBindings in B, s
     return imported_kind(names, selected, at) == nominal_exception_export() && selected[target].shape == scalar_exception();
 }
 
-# A record form has a layout fact distinct from the binding on its name.
-# The parent and field cursor use that form's workspace slot during the walk.
-func visiting_bits() -> u8 { return 23u8; }
-func visiting_non_bits() -> u8 { return 24u8; }
-func finite_bits() -> u8 { return 25u8; }
-func finite_non_bits() -> u8 { return 26u8; }
-func visiting_cod_bits() -> u8 { return 34u8; }
-func finite_cod_bits() -> u8 { return 35u8; }
-
-func visit_record(nodes:const ExprNodes in N, names:NameBindings in B, work:NameWork in W,
-                  record:u64, parent:u64, used:u64, revision:u64) -> bool
-    where {const owner N, owner B, owner W} {
-    ref declaration = make DeclarationSites {
-        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
-        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
-    };
-    val shape <- inspect_declaration(nodes, revision, used, record, declaration);
-    if (shape != NominalRecord && shape != NativeRecord) return false;
-    ref first = make u64 { no_node() };
-    if (!first_sequence_entry(nodes, revision, used, declaration.entries, FormalSequence, first)) return false;
-    names[record].kind <- visiting_bits();
-    work[record].active <- parent;
-    work[record].next <- first;
-    return true;
-}
-
-func check_record(nodes:const ExprNodes in N, names:NameBindings in B, work:NameWork in W, selected:const SelectedExports in E,
-                  start:u64, used:u64, revision:u64, report:NativeDeclarationResult in R) -> void
-    where {const owner N, owner B, owner W, const owner E, owner R} {
-    if (names[start].kind != 0u8 || lexical_builder_record(nodes, names, start, revision, used)) return;
-    if (!visit_record(nodes, names, work, start, no_node(), used, revision)) {
-        reject_declaration(report, start, invalid_record_field());
-        return;
-    };
-    val record <- start;
-    val field <- no_node();
-    val declared_type <- no_node();
-    val target <- no_node();
-    val kind <- 0u8;
-    val imported_record <- false;
-    val text_field <- false;
-    val non_bits <- false;
-    val c_layout <- true;
-    val imported <- 0u8;
-    val enum_field <- false;
-    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
-    ref binding = make BindingSites {
-        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
-    };
-    ref declaration = make DeclarationSites {
-        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
-        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
-    };
-    # A field can be visited twice, once before and once after its dependency.
-    for (unused in 0u64 .. used * 2u64) {
-        if (record == no_node()) return;
-        field <- work[record].next;
-        if (field == no_node()) {
-            names[record].kind <- if (names[record].kind == visiting_bits()) { finite_bits() }
-                else { if (names[record].kind == visiting_cod_bits()) { finite_cod_bits() } else { finite_non_bits() } };
-            (record <- work[record].active):void;
-        } else {
-            if (!typed_formal(nodes, revision, used, field, formal, binding)) {
-                reject_declaration(report, field, invalid_record_field());
-                return;
-            };
-            declared_type <- binding.target_type;
-            kind <- names[declared_type].kind;
-            imported <- imported_kind(names, selected, declared_type);
-            imported_record <- imported == record_export();
-            enum_field <- kind == enum_type() || imported == enum_export();
-            text_field <- kind == builtin_string() &&
-                (formal.mode == ValueFormal || formal.mode == ExplicitValueFormal) &&
-                !has_exception_parent(nodes, names, record, revision, used);
-            # Direct String holds a selection of immutable text and is non-bits.
-            non_bits <- text_field || passed_by_reference(formal.mode);
-            c_layout <- !non_bits && !enum_field;
-            if (!native_scalar(kind) && kind != record_type() && !imported_record && !text_field && !enum_field) {
-                reject_declaration(report, declared_type, invalid_record_field());
-                return;
-            } else {};
-            target <- names[declared_type].declaration;
-            if (kind == record_type() &&
-                (has_exception_parent(nodes, names, target, revision, used) || lexical_builder_record(nodes, names, target, revision, used))) {
-                reject_declaration(report, declared_type, invalid_record_field());
-                return;
-            } else {};
-            if (kind == record_type() && !non_bits && names[target].kind == 0u8) {
-                if (!visit_record(nodes, names, work, target, record, used, revision)) {
-                    reject_declaration(report, declared_type, invalid_record_field());
-                    return;
-                };
-                (record <- target):void;
-            } else {
-                if (kind == record_type() && !non_bits) {
-                    if (names[target].kind == visiting_bits() || names[target].kind == visiting_non_bits() ||
-                        names[target].kind == visiting_cod_bits()) {
-                        reject_declaration(report, declared_type, recursive_record_layout());
-                        return;
-                    } else {};
-                    non_bits <- names[target].kind == finite_non_bits();
-                    (c_layout <- names[target].kind == finite_bits()):void;
-                };
-                if (imported_record) {
-                    non_bits <- non_bits || selected[target].shape == non_bits_record();
-                    (c_layout <- c_layout && !non_bits && selected[target].shape != cod_bits_record()):void;
-                };
-                # Closed enum payloads are bits in CoD. A C layout also needs
-                # a checked transport for every element of that record.
-                if (!c_layout && inspect_declaration(nodes, revision, used, record, declaration) == NativeRecord) {
-                    reject_declaration(report, field, invalid_record_field());
-                    return;
-                } else {};
-                if (non_bits) { (names[record].kind <- visiting_non_bits()):void; };
-                if (!c_layout && names[record].kind == visiting_bits()) {
-                    (names[record].kind <- visiting_cod_bits()):void;
-                };
-                (work[record].next <- work[field].next):void;
-            };
-        };
-    };
-    reject_declaration(report, start, recursive_record_layout());
-}
-
 func check_nominal_parent(nodes:const ExprNodes in N, names:const NameBindings in B,
                           selected:const SelectedExports in E, form:u64, used:u64, revision:u64,
                           report:NativeDeclarationResult in R) -> void
@@ -419,9 +292,10 @@ func check_nominal_parent(nodes:const ExprNodes in N, names:const NameBindings i
 }
 
 func check_type_declaration(nodes:const ExprNodes in N, names:const NameBindings in B,
-                            selected:const SelectedExports in E, form:u64, used:u64, revision:u64,
+                            selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I,
+                            interface_used:u64, facts:const AggregateFacts in F, form:u64, used:u64, revision:u64,
                             report:NativeDeclarationResult in R) -> void
-    where {const owner N, const owner B, const owner E, owner R} {
+    where {const owner N, const owner B, const owner E, const owner I, const owner F, owner R} {
     ref declaration = make DeclarationSites {
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
         index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
@@ -444,10 +318,12 @@ func check_type_declaration(nodes:const ExprNodes in N, names:const NameBindings
         val element <- declaration.value_type;
         val element_kind <- names[element].kind;
         val integral <- index == builtin_u8() || index == builtin_u32() || index == builtin_u64() || index == builtin_i64();
-        val product <- (element_kind == record_type() &&
-            !has_exception_parent(nodes, names, names[element].declaration, revision, used)) ||
-            imported_kind(names, selected, element) == record_export();
-        if (!integral || is_lexical_builder(nodes, names, element, revision, used) || (!native_scalar(element_kind) && !product)) {
+        val imported <- imported_kind(names, selected, element);
+        val storage <- array_element_storage(names, selected, interfaces, interface_used, facts, element);
+        val product <- element_kind == record_type() || imported == record_export();
+        val exception <- element_kind == record_type() &&
+            has_exception_parent(nodes, names, names[element].declaration, revision, used);
+        if (!integral || exception || storage == UnprovedAggregate || (storage == NonBitsAggregate && !product)) {
             reject_declaration(report, form, invalid_array_shape());
         } else {};
         return;
@@ -474,7 +350,7 @@ func array_shape(nodes:const ExprNodes in N, names:const NameBindings in B, sele
             uses_direct_scalars(nodes, names, declaration.entries, true, used, revision)) return numeric_record_array();
     };
     if (imported_kind(names, selected, element) == record_export() &&
-        selected[record].shape == numeric_record()) return numeric_record_array();
+        selected[record].shape == numeric_record_shape()) return numeric_record_array();
     return 0u8;
 }
 
@@ -1087,7 +963,7 @@ func check_constructor_arguments(nodes:const ExprNodes in N, names:const NameBin
         has_here <- 0u8; failure_module <- 0u64; failure_identity <- 0u64; failure_checked <- 0u8;
         name_first <- 0u64; name_past <- 0u64; enum_code <- 0u64;
         native_function <- no_node(); native_procedure <- 0u8; native_reception <- 0u8; native_passes_owner <- 0u8;
-        sum_payload <- make NoSumInterface {};
+        sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal;
     };
     val operand <- no_node();
     val owner <- no_node();
@@ -1465,7 +1341,7 @@ func check_local_here(nodes:const ExprNodes in N, names:const NameBindings in B,
         has_here <- 0u8; failure_module <- 0u64; failure_identity <- 0u64; failure_checked <- 0u8;
         name_first <- 0u64; name_past <- 0u64; enum_code <- 0u64;
         native_function <- no_node(); native_procedure <- 0u8; native_reception <- 0u8; native_passes_owner <- 0u8;
-        sum_payload <- make NoSumInterface {};
+        sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal;
     };
     if (!describe_parameter(nodes, names, selected, work[callback].next, 0u64, true, parameter, used, revision)) {
         reject_declaration(report, callback, invalid_native_callback());
@@ -1802,8 +1678,10 @@ export func check_module_interfaces(nodes:const ExprNodes in N, names:const Name
 # Name binding supplies declaration identities and finishes using the active
 # name table before these checks reuse its workspace.
 export func check_native_declarations(nodes:const ExprNodes in N, names:NameBindings in B, work:NameWork in W,
-                                      selected:const SelectedExports in E, used:u64, revision:u64, emit_object:bool, report:NativeDeclarationResult in R) -> bool
-    where {const owner N, owner B, owner W, const owner E, owner R} {
+                                      selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, interface_used:u64,
+                                      facts:AggregateFacts in F, used:u64, revision:u64, emit_object:bool,
+                                      report:NativeDeclarationResult in R) -> bool
+    where {const owner N, owner B, owner W, const owner E, const owner I, owner F, owner R} {
     report.diagnostic <- 0u8;
     report.node <- no_node();
     ref clause = make SignatureSites {
@@ -1820,21 +1698,14 @@ export func check_native_declarations(nodes:const ExprNodes in N, names:NameBind
         work[at].value_identity <- 0u64;
         work[at].expects_here <- 0u8;
     };
+    ref schemas = make SchemaCheck { diagnostic <- 0u8; node <- no_node(); };
+    if (!check_aggregate_schemas(nodes, names, work, selected, interfaces, interface_used, facts, used, revision, schemas)) {
+        reject_declaration(report, schemas.node, schemas.diagnostic);
+        return false;
+    };
     for (at in 0u64 .. used) {
-        check_type_declaration(nodes, names, selected, at, used, revision, report);
+        check_type_declaration(nodes, names, selected, interfaces, interface_used, facts, at, used, revision, report);
         if (report.diagnostic != 0u8) return false;
-    };
-    ref declaration = make DeclarationSites {
-        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
-        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
-    };
-    val shape <- InvalidDeclaration;
-    for (at in 0u64 .. used) {
-        shape <- inspect_declaration(nodes, revision, used, at, declaration);
-        if (shape == NominalRecord || shape == NativeRecord) {
-            check_record(nodes, names, work, selected, at, used, revision, report);
-            if (report.diagnostic != 0u8) return false;
-        } else {};
     };
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
     val form <- InvalidCallable;
@@ -2001,13 +1872,18 @@ func stage_array_interface(names:const NameBindings in B, selected:const Selecte
     where {const owner B, const owner E, owner R} {
     write_interface_header(row, defining_module, declaration, array_type(), 0u8, 0u64);
     val kind <- names[element].kind;
-    if (kind == record_type() || imported_kind(names, selected, element) == record_export()) {
-        row.element_kind <- record_type();
+    if (kind == ordinary_selection()) {
+        val selection <- imported_kind(names, selected, element);
+        if (selection == record_export()) { (kind <- record_type()):void; };
+        if (selection == sum_export()) { (kind <- sum_type()):void; };
+        if (selection == enum_export()) { (kind <- enum_type()):void; };
+    };
+    row.element_kind <- kind;
+    if (kind == record_type() || kind == sum_type() || kind == enum_type()) {
         row.type_module <- type_module(names, selected, element, defining_module);
         (row.type_identity <- type_identity(names, selected, element)):void;
-    } else {
-        (row.element_kind <- kind):void;
     };
+    return;
 }
 
 # The checked declarations retain their identity even when their names are
@@ -2068,8 +1944,9 @@ func publish_selection(selected:const SelectedExports in E, site:u64,
 }
 
 func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
+                         facts:const AggregateFacts in F,
                          publication:const ModulePublication in P, name:u64, exports:ModuleExports in X, at:u64, used:u64, revision:u64) -> bool
-    where {const owner N, const owner B, const owner E, const owner P, owner X} {
+    where {const owner N, const owner B, const owner E, const owner F, const owner P, owner X} {
     val target <- names[name].declaration;
     val kind <- names[name].kind;
     exports[at].origin_module <- publication.module_identity;
@@ -2096,6 +1973,9 @@ func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in
     } else {};
     if (kind == sum_type()) {
         if (shape != NominalSum) return false;
+        val sum_storage <- facts[target];
+        if (sum_storage != CoDBitsAggregate && sum_storage != NonBitsAggregate) return false;
+        exports[at].shape <- aggregate_export_shape(sum_storage, false);
         exports[at].kind <- sum_export();
         return true;
     };
@@ -2138,15 +2018,10 @@ func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in
             if (scalar_failure(nodes, names, selected, name, used, revision)) { (exports[at].shape <- scalar_exception()):void; } else {};
         } else {
             exports[at].kind <- record_export();
-            if (names[target].kind == finite_non_bits()) { (exports[at].shape <- non_bits_record()):void; }
-            else {
-                if (names[target].kind == finite_cod_bits()) { (exports[at].shape <- cod_bits_record()):void; }
-                else {
-                    exports[at].shape <- if (declaration.entries != no_node() &&
-                        uses_direct_scalars(nodes, names, declaration.entries, true, used, revision)) { numeric_record() } else { bits_record() };
-                    {};
-                };
-            };
+            val record_storage <- facts[target];
+            if (record_storage == UnprovedAggregate) return false;
+            (exports[at].shape <- aggregate_export_shape(record_storage, record_storage == CLayoutBitsRecord &&
+                declaration.entries != no_node() && uses_direct_scalars(nodes, names, declaration.entries, true, used, revision))):void;
         };
         return true;
     } else {};
@@ -2178,13 +2053,15 @@ func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in
 # A re-export changes spelling and preserves the original definition.
 export func publish_module_exports(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                    names:const NameBindings in B, selected:const SelectedExports in E,
+                                   facts:const AggregateFacts in F,
                                    publication:const ModulePublication in P, used:u64, revision:u64, exports:ModuleExports in X,
                                    count:u64 in C, conflict:u64 in C) -> bool
-    where {const owner S, const owner N, const owner B, const owner E, const owner P, owner X, owner C} {
+    where {const owner S, const owner N, const owner B, const owner E, const owner F, const owner P, owner X, owner C} {
     conflict <- no_node();
     if (publication.module_identity == 0u64 || publication.module_identity == no_node() ||
         used > intrinsic (len)(nodes) ||
-        used > intrinsic (len)(names) || used > intrinsic (len)(selected) || count > intrinsic (len)(exports))
+        used > intrinsic (len)(names) || used > intrinsic (len)(selected) || used > intrinsic (len)(facts) ||
+        count > intrinsic (len)(exports))
         return false;
     val next <- count;
     val name <- no_node();
@@ -2225,7 +2102,7 @@ export func publish_module_exports(source:const SourceBytes in S, nodes:const Ex
             if (selection) {
                 if (!publish_selection(selected, at, exports, next)) return false;
             } else {
-                if (!publish_declaration(nodes, names, selected, publication, name, exports, next, used, revision)) return false;
+                if (!publish_declaration(nodes, names, selected, facts, publication, name, exports, next, used, revision)) return false;
             };
             first <- syntax_first(nodes, used, name) + if (name_syntax(nodes, used, name) == SymbolicName) { 1u64 } else { 0u64 };
             prior <- previous_public_name(source, publication, exports, count, next, first, past);

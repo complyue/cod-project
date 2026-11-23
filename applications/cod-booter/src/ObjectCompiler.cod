@@ -3,9 +3,9 @@ using "../../../cod/library/string.cod" StringBuilder;
 using "NativeSource.cod" Path;
 using "NativeDiagnostics.cod" { DiagnosticDestination, report_backend_error, report_scratch_error, report_provider_error };
 using "SourceStorage.cod" SourceBytes;
-using "ParserStorage.cod" no_node;
+using "ParserStorage.cod" { no_node, FormalMode { ValueFormal } };
 using "ModuleExportStorage.cod" { ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces };
-using "ModuleExportStorage.cod" SumInterfacePayload { NoSumInterface };
+using "ModuleExportStorage.cod" { SumInterfacePayload { NoSumInterface }, AggregateStorage { UnprovedAggregate } };
 using "ModuleIndex.cod" Visits;
 using "ModuleIndex.cod" VisitSlot { Vacant };
 using "NativeCommands.cod" {
@@ -135,7 +135,7 @@ proc traverse_graph(here finish(commands:const NativeCommands in G, units:const 
         failure_module <- 0u64; failure_identity <- 0u64; name_first <- 0u64; name_past <- 0u64;
         enum_code <- 0u64; native_function <- no_node(); native_procedure <- 0u8; native_reception <- 0u8;
         native_passes_owner <- 0u8;
-        sum_payload <- make NoSumInterface {};
+        sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal;
     }) in G;
     ref commands = make NativeCommands(0u64,
         make NativeCommand { opcode <- 0u8; a <- 0u64; b <- 0u64; c <- 0u64; d <- 0u64; }) in G;

@@ -1,4 +1,4 @@
-using "ParserStorage.cod" { no_node, FormalMode };
+using "ParserStorage.cod" { no_node, FormalMode { ValueFormal } };
 
 # The name span and any builtin path span belong to the catalog's spelling
 # bytes. A source export names its publishing module independently of origin.
@@ -20,6 +20,8 @@ export array ModuleExports[u64]:ModuleExport;
 export func enum_type() -> u8 { return 26u8; }
 export func sum_type() -> u8 { return 39u8; }
 export func constructor_type() -> u8 { return 40u8; }
+
+export enum AggregateStorage:u8 { UnprovedAggregate; CoDBitsAggregate; CLayoutBitsRecord; NonBitsAggregate; }
 
 export data SumInterfacePayload =
     NoSumInterface {} |
@@ -57,6 +59,8 @@ export data ModuleInterfaceRow {
     native_reception:u8;
     native_passes_owner:u8;
     sum_payload:SumInterfacePayload;
+    aggregate_storage:AggregateStorage;
+    field_mode:FormalMode;
 }
 export array ModuleInterfaces[u64]:ModuleInterfaceRow;
 
@@ -86,6 +90,8 @@ export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:
     row.native_procedure <- 0u8;
     row.native_reception <- 0u8;
     row.native_passes_owner <- 0u8;
+    row.aggregate_storage <- (UnprovedAggregate:AggregateStorage);
+    row.field_mode <- ValueFormal;
     return;
 }
 
@@ -101,6 +107,7 @@ export func write_sum_row(interfaces:ModuleInterfaces in I, row:u64, module:u64,
         failure_module <- 0u64; failure_identity <- 0u64; name_first <- first; name_past <- past;
         enum_code <- 0u64; native_function <- no_node(); native_procedure <- 0u8; native_reception <- 0u8;
         native_passes_owner <- 0u8; sum_payload <- payload;
+        aggregate_storage <- (UnprovedAggregate:AggregateStorage); field_mode <- ValueFormal;
     };
     return;
 }
@@ -163,4 +170,25 @@ export func checked_sum_constructor(interfaces:const ModuleInterfaces in I, publ
         if (!sum_field_row(interfaces[field])) return no_node();
     };
     return constructor;
+}
+
+export func checked_aggregate_storage(interfaces:const ModuleInterfaces in I, published:u64, module:u64,
+                                      declaration:u64, kind:u8) -> AggregateStorage where {const owner I} {
+    val head <- find_interface(interfaces, published, module, declaration);
+    if (head == no_node() || interfaces[head].interface_kind != kind) return (UnprovedAggregate:AggregateStorage);
+    val storage <- interfaces[head].aggregate_storage;
+    if (kind != sum_type()) {
+        for (field in head + 1u64 .. head + 1u64 + interfaces[head].entry_count) {
+            if (interfaces[field].interface_kind != 0u8 || interfaces[field].value_kind == 0u8 ||
+                interfaces[field].entry_count != 0u64) return (UnprovedAggregate:AggregateStorage);
+        };
+        return storage;
+    };
+    if (storage == (CLayoutBitsRecord:AggregateStorage) || interfaces[head].entry_count == 0u64)
+        return (UnprovedAggregate:AggregateStorage);
+    for (entry in head + 1u64 .. head + 1u64 + interfaces[head].entry_count) {
+        if (checked_sum_constructor(interfaces, published, head, entry) == no_node())
+            return (UnprovedAggregate:AggregateStorage);
+    };
+    return storage;
 }
