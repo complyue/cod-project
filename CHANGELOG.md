@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — CoD module index for the first linked dependency edge
+
+<a id="k-booter-module-index-20261122"></a>
+**K-BOOTER-MODULE-INDEX-20261122.** Delegated review under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122 clears the CoD index and visit-policy split, with exact lookup before reserving space and success-only publication. The first-edge workload is at `8b73882345bc3b9f4203fb5c5f221b5888528908:applications/cod-booter/docs/ModuleGraph.md`. D-20-MODULE-GRAPH r11 to r12, D-ARCH-REVIEW r12 to r13, P-680–P-683, registry r1061.
+
 ## 2026-11-22 — Live activation for the dependency handler
 
 <a id="k-booter-visit-activation-20261122"></a>
