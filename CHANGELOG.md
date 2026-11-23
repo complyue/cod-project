@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Drop branch-specific defaults from an inferred function signature
+
+<a id="h-inferred-function-defaults-20261123"></a>
+**H-INFERRED-FUNCTION-DEFAULTS-20261123.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-23 (America/Los_Angeles), the project user selected “把默认值清除， `delay(...)` 只留共同的签名内容” for the inferred conditional between urgent and normal delays. [D-10-ARGUMENTS r247](design/SymbolicDynamicScope.md#inferred-function-values-with-different-defaults), P-405/P-406, applies the common-result principle to two compatible function entries with different default origins. H-459–H-461 at `f7bcceab6bc78733665e31ca939a3fb353ced497:design/SymbolicDynamicScope.md` still governs explicit origin-bearing contracts. General overload intersection and physical callable representation were outside the question.
+
 ## 2026-11-23 — Preserve checked family membership through booter dependency visits
 
 <a id="k-booter-variadic-dependency-visit-20261123"></a>

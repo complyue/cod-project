@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 246 · Recorded: 2026-11-23 · Phase: language/application co-design.
+Design revision: 247 · Recorded: 2026-11-23 · Phase: language/application co-design.
 
 ## Design authority
+
+At r247 [D-10-ARGUMENTS](DesignAuthorityRegistry.md#d-10-arguments) covers [inferred function values with different defaults](#inferred-function-values-with-different-defaults). The [project user’s decision](../CHANGELOG.md#h-inferred-function-defaults-20261123) applies P-405/P-406 and the common-result rule of D-22-CONDITIONAL. A single static signature makes an explicit call readable and checkable before the branch is known. Verify both selected implementations, missing arguments and named-origin controls. General callable conversion and representation retain their own scope.
 
 [Review backlog and status reconciliation](../CHANGELOG.md#h-review-backlog-duty-20261123) reconciles the scoped confirmations below with their registry records.
 
@@ -1275,7 +1277,7 @@ proc invalid(f:func(value:u64 { 9u64 })->u64) -> u64 { return f(); }
 
 The named declaration remains the origin of the default expression and its definition-bound identities through typeof, imports and identity-preserving aliases. `{ ... }` keeps that original definition environment; the type annotation's lexical site does not replace it. `{{ ... }}` still evaluates in the caller context of the actual omitted-argument invocation, with H-456's symbolic identities resolved at the original named declaration. For `f()` inside run, run is that immediate caller; the outer call passing f is not the default's call site. The original default's capture/owner/access/effect requirements must remain satisfiable; typeof cannot manufacture a runtime environment or extend its lifetime.
 
-A plain structural type such as `func(u64)->u64` supplies no default contract, so an omitted argument through that view rejects. The optimizer knowing a particular target does not restore erased defaults or names. Whether parameter names without default expressions may be written in an inline callable type is a separate surface question; H-459 restricts default authorship. Preserving or erasing the inherited contract during further type conversions remains under review. H-462 retains a multi-method named origin as a complete callable contract rather than requiring typeof to select one overload. H-460's compatible-target direction and H-461's type-bound default-expression rule are stated below. A borrowed default from a different owner's environment cannot be made valid merely by matching the underlying parameter types.
+A plain structural type such as `func(u64)->u64` supplies no default contract, so an omitted argument through that view rejects. The optimizer knowing a particular target does not restore erased defaults or names. Whether parameter names without default expressions may be written in an inline callable type is a separate surface question; H-459 restricts default authorship. The inferred conditional below settles erasure for compatible function values with different default origins. Other conversions retain their own review. H-462 retains a multi-method named origin as a complete callable contract rather than requiring typeof to select one overload. H-460's compatible-target direction and H-461's type-bound default-expression rule are stated below. A borrowed default from a different owner's environment cannot be made valid merely by matching the underlying parameter types.
 
 **Compatible target identities.** H-460 permits the ordinary case where a different callable satisfies the inherited contract and the default's required environment is established. `typeof original` does not require that every target be original itself. The view retains original's public parameter names and defaults, while the supplied target provides the body. Map corresponding parameters by their declaration slots; a target's local names do not rename the view's inputs. Its own defaults are not used when the inherited contract supplies that argument. Do not invoke the original callable's body merely to obtain a default.
 
@@ -1313,6 +1315,39 @@ A target may contain additional methods, but they do not widen the calls admitte
 The caller may define a local named callable to adapt available operations explicitly and pass that family. It can forward each required signature, perform already permitted conversions, or implement an appropriate generic method. Its bodies must satisfy the same owner, capture, effect and cleanup rules; an adapter does not waive incompatibilities. Local multi-method declaration grouping/spelling is implementation and grammar work: the example denotes one callable binding with several methods, not repeated ordinary local-variable bindings or authorization for arbitrary same-scope duplicates. Source/target default expressions stay in their declared type contracts; adaptation does not duplicate them as value captures.
 
 This whole-family compatibility obligation is distinct from [D-21's semantic-method/native-implementation hierarchy](AheadOfTimeExecutionPreparation.md#callable-method-and-native-implementation-hierarchy). It does not demand one native body per origin signature, forbid code sharing or require emitting dead code. Code elimination cannot weaken source compatibility. Defaults and named arguments still need an applicable unambiguous origin signature at each call. Apply H-474's default-count rule to that origin contract; whole-family completeness supplies no extra ambiguity tie-break. The target's own unused defaults cannot change the origin-view choice. The selected family/world defines the contract, without promising coverage of future unrelated extensions or interpretations.
+
+<a id="inferred-function-values-with-different-defaults"></a>
+
+**Inferred function values with different defaults.**
+
+When an inferred conditional selects functions with different named default origins, expose the
+call signature both branches satisfy with explicit arguments. Drop the branch-specific defaults
+from the inferred contract.
+
+```cod
+func urgent_delay(seconds:u64 { 2u64 }) -> u64 { seconds }
+func normal_delay(seconds:u64 { 30u64 }) -> u64 { seconds + 1u64 }
+
+func delay = if (urgent) { urgent_delay } else { normal_delay }
+delay(5u64)  # 5 when urgent, 6 otherwise
+delay()      # Reject: seconds is required through delay.
+```
+
+The condition selects the implementation once. Both branches must support every call admitted
+through the inferred signature, including input and result modes, actual owner relationships,
+access and checked failures. A default on only one branch is erased too. Even if two independent
+declarations both spell the default as `{ 2u64 }`, the compiler need not compare expressions,
+evaluate either default or retain its definition environment. Knowing the condition during
+optimization cannot make omission legal. An explicit default request also requires a default in
+the common contract.
+
+Direct calls to either named declaration retain its defaults. A caller can choose a named
+contract explicitly, for example `func scheduled:typeof urgent_delay = normal_delay`.
+Under the existing compatibility and lifetime rules, `scheduled()` supplies 2 from
+`urgent_delay` and executes `normal_delay`, producing 3. Selecting an implementation needs
+no runtime choice of a default provider. This inference rule specifies the common single
+signature in the example. General overload-family intersections and inline callable label syntax
+remain separately scoped.
 
 **Type-bound default expressions.** H-461 places the expression that evaluates a default in its originating definition context in the callable type contract. `typeof origin` retains that expression, its resolved declaration identities and its context/dependency association. It does not evaluate fallback early or turn its current bits into a saved default value. The supplied callable value still supplies its selected implementation; adapting it to the contract does not independently capture fallback into that value.
 
