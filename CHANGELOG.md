@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Preserve the source name at each constructing throw
+
+<a id="k-booter-throw-site-names-20261122"></a>
+**K-BOOTER-THROW-SITE-NAMES-20261122.** The delegated architecture review continues H-DIAGNOSTIC-NAMES-20261122 at `1d5d7f42fc88351c76c86ae9a78384015e6b3c1f:applications/cod-booter/docs/ModuleGraph.md`, “Exception identity, layout and names in the object”. D-20-MODULE-GRAPH r34 to r35 and D-ARCH-REVIEW r37 to r38 clear checked raw name retention and private lookup by tag and original artifact site. Acceptance covers distinct spellings at equal offsets in different units, deferred forwarding and preservation of prior output on invalid metadata. P-680–P-685 retain their scope.
+
 ## 2026-11-22 — Show resolved diagnostic names and prefer semicolon omission
 
 <a id="h-diagnostic-names-20261122"></a>
