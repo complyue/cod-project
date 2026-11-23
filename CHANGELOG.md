@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review bootstrap package inputs and default selection tables
+
+<a id="k-module-inputs-and-default-tables-20261123"></a>
+**K-MODULE-INPUTS-AND-DEFAULT-TABLES-20261123.** Delegated structural review of H-MODULE-PATHS-AND-DEFAULT-EXPORTS-20261123 continues D-ARCH-REVIEW r45 to r46 and D-20-MODULE-GRAPH r40 to r41 from `72aa6a24473c0d1dd168d800c8a2e157d64c23d2:design/ModuleWorlds.md`, “Resolving source module paths” and “Default and complete public selections”. It clears the typed codp input producer, compiler-owned lookup, checked selection storage and source cutover. A prepared remote requires verified Git source content for the selected pin. The project and local-override increment can proceed separately. Dependency acquisition and floating lock policy remain outside this review.
+
 ## 2026-11-23 — Resolve package modules and select a library's default exports
 
 <a id="h-module-paths-and-default-exports-20261123"></a>
