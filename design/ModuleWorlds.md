@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 67 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 68 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+[Review backlog and status reconciliation](../CHANGELOG.md#h-review-backlog-duty-20261123) reconciles the scoped confirmations below with their registry records.
 
 [Confirmed symbolic procedure forms](../CHANGELOG.md#h-lexical-symbolic-proc-20261123) qualifies D-15-DEFAULT-EXPORTS for a kind-qualified procedure `using`. P-692/P-693 preserve explicit origins, receiver permissions and equivalent written and expanded selectors. Check a free spelling, identical prior selection and a conflicting origin. [Lexical and dynamic calls](SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
 
@@ -311,7 +313,7 @@ The following consequences preserve deterministic lookup without a richer arbitr
 - **Diamond paths:** repeated paths to the same selected identity and equivalent interpretation do not duplicate a candidate or initialize a module again. Same definition with observably different using/import contexts is not equivalent merely because the source body is shared. Preserve the selected context sequence; unresolved equivalence or competing contexts reject.
 - **Definitions keep their context:** app-level shadowing controls app's mention. It does not re-resolve a helper body's lexical names at app or turn an independent family into an imported helper dependency. Existing explicit adaptation and H-253 conflict checks continue.
 - **Checking order cannot change names:** implicit lookup results may be cached, and selected information may merge by identity, but neither operation declares a private alias. A source body mentioning a fallback name does not newly block downstream access to it. Visibility comes from declarations/publication and the lookup graph, not which body was checked first.
-- **Graph traversal does not activate modules:** retain existing once-only initialization and owner/capture rules. H-492 separately admits declaration-only module cycles; lookup traversal must terminate and retain public/private/identity distinctions. This does not itself authorize cyclic runtime initialization; the postpon proposal below remains under review. All private barriers and ambiguous winners remain compile-time diagnostics.
+- **Graph traversal does not activate modules:** retain existing once-only initialization and owner/capture rules. H-492 separately admits declaration-only module cycles; lookup traversal must terminate and retain public/private/identity distinctions. This does not itself authorize cyclic runtime initialization; the [ordered postponed initialization](#ordered-top-level-postpon-suffixes) contract requires statically proved readiness and defines its execution order. All private barriers and ambiguous winners remain compile-time diagnostics.
 
 This permits an intermediate dependency change or a new nearer binding to change a downstream implicit resolution. That is a consequence of implicit lookup; H-485's future use-site information can expose the path, and explicit source selection can state the intended dependency. No stability against arbitrary dependency edits is promised. Acceptance includes all four facade cases (absent, private without publication, local public, upstream public alongside local private), private aliases of the same original identity, peer barriers, diamond contexts, declaration-kind shadows, check-order independence and explicit-export/implicit-reachability distinction. Full graph representation, general distance proofs and source implementation remain separate; these rules add no runtime pointer or method-table protocol.
 

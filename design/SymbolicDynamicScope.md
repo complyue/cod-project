@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 243 · Recorded: 2026-11-23 · Phase: language/application co-design.
+Design revision: 244 · Recorded: 2026-11-23 · Phase: language/application co-design.
 
 ## Design authority
+
+[Review backlog and status reconciliation](../CHANGELOG.md#h-review-backlog-duty-20261123) reconciles the scoped confirmations below with their registry records.
 
 [Confirmed symbolic procedure forms](../CHANGELOG.md#h-lexical-symbolic-proc-20261123) covers [selection, installation and invocation](#lexical-selection-installation-and-invocation) under D-10-HANDLER-INSTALL, D-15-DEFAULT-EXPORTS and P-161/P-613/P-614. Separate family selection from activation so an application can call a known definition and explicitly choose its dynamic override. Check distinct lexical and installed families, current and replayed effects, scoped restoration and an occupied identity.
 
@@ -410,7 +412,7 @@ A standalone `{{ ... }}` is an immediate call to its own definition. A generator
 
 ### Lexical selection, installation and invocation
 
-`using "./base.cod" proc @score` brings the exported symbol identity and its source-preserving procedure family into a free receiving name. A prior selection of the same identity is compatible. A different identity with that spelling conflicts, even with identical signatures. Looking up a shadowing non-symbol fails at the use site. Selecting a family grants its published use permissions. [Module selectors](ModuleWorlds.md#default-and-complete-public-selections)
+`using "./base.cod" proc @score` brings the exported symbol identity and its source-preserving procedure family into a free receiving name. A prior selection of the same identity is compatible. A different identity with that spelling conflicts, even with identical signatures. Looking up a shadowing non-symbol fails at the use site. A procedure family selected by `using` grants no extension permission. A consumer’s inline `effect @score(x:u64) -> u64 { ... }` declares a method and therefore rejects under `using` alone, even in a nested full scope. Check that permission before duplicate-signature analysis. The installation `effect proc @score;` adds no method. [Module selectors](ModuleWorlds.md#default-and-complete-public-selections)
 
 | Expression in a procedure context | Family and dynamic bindings |
 | --- | --- |

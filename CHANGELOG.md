@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Track outstanding source choices and apply existing extension permission
+
+<a id="h-review-backlog-duty-20261123"></a>
+**H-REVIEW-BACKLOG-DUTY-20261123.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-23 (America/Los_Angeles), the project user required open design choices to be maintained in the backlog and brought forward for timely discussion. AGENTS.md assigns that duty to the design discussion. The user also reiterated “using 不授权 extension” for a nested same-signature handler body. At D-10r244 the existing permission check settles the example before overload comparison. D-07r210 and D-15r68 reconcile stale review labels for callback owner counts and ordered postponed initialization against D-18-HERE-PARAM and D-15-POSTPON. Baseline: `8715f6d5:design/DesignAuthorityRegistry.md`, D-10-HANDLER-INSTALL, D-07-CALLBACK-BOUND and D-15-POSTPON. Wider proofs and representation retain their own status.
+
 ## 2026-11-23 — Select, call and install a lexical symbolic procedure family
 
 <a id="h-lexical-symbolic-proc-20261123"></a>

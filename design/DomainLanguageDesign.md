@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 209
+Discussion revision: 210
 
 Recorded: 2026-11-23
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+[Review backlog and status reconciliation](../CHANGELOG.md#h-review-backlog-duty-20261123) reconciles the scoped confirmations below with their registry records.
 
 [Confirmed symbolic procedure forms](../CHANGELOG.md#h-lexical-symbolic-proc-20261123) applies the D-10 symbolic call and D-15 module selection contracts to DL-14 and DL-15. [Lexical and dynamic calls](SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
 
@@ -38,7 +40,7 @@ The [diagnostic name decision](../CHANGELOG.md#h-diagnostic-names-20261122) appl
 
 - **Callable model.** D-18-HERE permits synchronous execution and forwarding of caller-supplied work. Ordinary storable functions are capture-free under H-CALLABLE-MODEL-20261118.
 
-- **Callback parameters with call-bounded use.** [D-07-CALLBACK-BOUND](DesignAuthorityRegistry.md#d-07-callback-bound), r175 DL-01, is [under review](../CHANGELOG.md#k-callback-owner-arity-20261118). C-65/C-73 and charter §4.3 motivate accepting ordinary domain callbacks while keeping each borrow valid. H-555 covers bounded lexical borrows. A parameter that hides the number of owners is a new contract. Acceptance compares two call sites, forwarding, escape and owner replacement in the [worked example](#one-callback-parameter-for-different-owner-counts). The spelling and implementation are open.
+- **Callback parameters with call-bounded use.** [D-07-CALLBACK-BOUND](DesignAuthorityRegistry.md#d-07-callback-bound) uses [D-18-HERE-PARAM](DesignAuthorityRegistry.md#d-18-here-param) for different numbers of actual owners. Each supplier proves its own live bindings through synchronous calls and forwarding. [Worked example](#one-callback-parameter-for-different-owner-counts)
 
 - **Functor receivers.** D-07-FUNCTORS relates C-10/C-65/C-73 to explicit operation and receiver lifetime under charter §§3.3/4.3. Respect the target access required by the selected call operator and reject unproved owner lifetimes. P-605/P-606 cover the review of preparation and overload selection.
 
