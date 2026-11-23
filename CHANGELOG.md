@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Parse named constructor fields in booter case arms
+
+<a id="k-booter-constructor-case-syntax-20261122"></a>
+**K-BOOTER-CONSTRUCTOR-CASE-SYNTAX-20261122.** Delegated pre-code review under H-PROJECT-ARCHITECTURE-REVIEW-20261122 clears the CoD parser and typed syntax readers for branch-local value reception. H-CASE-CONTRACT-20261119 and D-22-RECEIVE-SCOPE supply the arm and receiving rules. The prior declaration and interface scope is at `65345a32e08874d65ffdecde0fa8a143e4152467:applications/cod-booter/docs/ModuleGraph.md`, “Publishing nominal sum interfaces”. D-20-MODULE-GRAPH r24 to r25, D-ARCH-REVIEW r28 to r29, P-680–P-683, registry r1077.
+
 ## 2026-11-22 — Share the provider’s reserved member spellings
 
 <a id="k-booter-provider-member-names-20261122"></a>
