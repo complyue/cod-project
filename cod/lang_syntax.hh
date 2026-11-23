@@ -2223,6 +2223,7 @@ class Parser {
         return result;
       }
       const auto first = cursor_;
+      const auto reports_before_item = reports_.size();
       const auto saved = controls_;
       try {
         auto label = initializer && starts_field_initializer() ? construction_label() : Expr{};
@@ -2235,8 +2236,14 @@ class Parser {
         record_fault({peek().at, "unterminated scope"});
         return result;
       }
-      if (!is("}")) expect(";");
-      else take(";");
+      if (take(";") || is("}")) continue;
+      if (reports_.size() == reports_before_item || reports_.back().at.span.first != peek().at.span.first)
+        record_fault({peek().at, "expected ';'"});
+      if (is("return") || is("val") || is("ref") || is("ptr") || is("const") ||
+          is("if") || is("try") || is("throw") || is("defer") || is("for") || is("effect"))
+        continue;
+      synchronize_operand(cursor_, SyntaxRole::block_item);
+      take(";");
     }
     if (result->scoped) expect("}");
     return result;
