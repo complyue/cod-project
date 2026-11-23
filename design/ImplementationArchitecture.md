@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 79. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 80. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+
+The [r80 review](../CHANGELOG.md#k-booter-direct-region-check-20261123) clears [the booter’s direct named-region source checker](../applications/cod-booter/docs/ModuleGraph.md#checking-a-direct-named-region-acquisition) under P-682/P-683. Its first workloads are the local `Graph` acquisition and the production graph factory’s root initializers.
 
 The [r79 review](../CHANGELOG.md#k-booter-object-writer-helper-and-text-20261123) covers the [local diagnostic helper](../applications/cod-booter/docs/ModuleGraph.md#checking-the-object-writers-lexical-helper) and [native filename preparation](../applications/cod-booter/docs/ModuleGraph.md#checking-the-object-filename-argument) under P-682/P-683. Check the helper in its defining activation and the text assertion at its argument site.
 

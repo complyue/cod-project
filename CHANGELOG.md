@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review direct named-region checking in the CoD booter
+
+<a id="k-booter-direct-region-check-20261123"></a>
+**K-BOOTER-DIRECT-REGION-CHECK-20261123.** [D-20-MODULE-GRAPH r63→r64](applications/cod-booter/docs/ModuleGraph.md#checking-a-direct-named-region-acquisition) and D-ARCH-REVIEW r79→r80 continue P-680–P-683 for the [confirmed ref group](#h-placement-init-20261123) under [H-596–H-599](#h-596). F keeps schema, fresh owner and successful holder evidence distinct. The existing ordered root contract at `faf9d572cfa826a1cf7e470f56afbf7e682ebd3d:design/ConstructionAndAcquisition.md` permits repeated ordinary writes. The current factory supplies thirteen roots as the second source-checking workload.
+
 ## 2026-11-23 — Review the object writer’s lexical helper and filename argument
 
 <a id="k-booter-object-writer-helper-and-text-20261123"></a>
