@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 64 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 65 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+[D-15-DEFAULT-EXPORTS](DesignAuthorityRegistry.md#d-15-default-exports) and [D-15-PUBLIC-SOURCE](DesignAuthorityRegistry.md#d-15-public-source) at r65 apply the [declaration equivalence](../CHANGELOG.md#h-using-symbolic-variable-identity-20261123) to a [published symbolic variable](#selecting-a-symbolic-variable). P-692/P-693 retain the declared identity, source interpretation and permissions. Check both spellings before installation and compare actual reads across shadowing and cleanup. The rules for procedure-family selection remain with the receiving verb.
 
 [D-15-MODULE-PATH](DesignAuthorityRegistry.md#d-15-module-path) and [D-15-DEFAULT-EXPORTS](DesignAuthorityRegistry.md#d-15-default-exports) at r62 cover [module path resolution](#resolving-source-module-paths) and [the default public selection](#default-and-complete-public-selections). The project user [confirmed the lookup order, precedence warning and module declarations](../CHANGELOG.md#h-module-paths-and-default-exports-20261123). P-690–P-693 connect reproducible dependencies and library-author intent to explicit module identity and readable source. Verify distinct sibling, package and bundled modules and actual string-library selection in both bootstrap compilers. Runtime effect installation, package acquisition, toolchain layout and overload dispatch retain their separate contracts.
 
@@ -355,15 +357,33 @@ default { var @sout, proc @flush }
 
 For each of `using`, `import` and `mixin`, writing only `"./hooks.cod"` has exactly the meaning of writing `"./hooks.cod" { var @sout, proc @flush }` after that verb. Substitution is a source-level equivalence. The compiler can retain checked selectors with their published spellings, kinds, origins and order. Apply ordinary privacy, renaming, destination, access, extension and body-availability rules at the receiving directive. If the explicitly written list would fail for one item, the omitted form fails there too. Items are never silently dropped to make a verb applicable. This also governs generated entries from the complete public table where module `{..}` is admitted. The public table excludes private entries and implicit fallback names. Type-associated methods and nested type-member selectors retain their existing rules.
 
-Use `var @name` for a symbolic variable resource and `proc @name` for a symbolic procedure resource in export, using, import and mixin selectors. The prefix states what is requested of the source. Match it to the published declaration and reject a missing or wrong kind. `var` in a selector declares no local place or writable access. It preserves the published storage and access contract, including a reference symbol’s owner role. `proc` selects the procedure family subject to the verb’s destination or body requirements. It does not extract a first-class procedure or perform a call. Bare `@name` remains the operand of the separate identity operation `symbol from "./hooks.cod" @name`. That operation can establish the typed identity before an `effect` installs anything. Keep an identity-only dependency explicit.
+Use `var @name` for a symbolic variable resource and `proc @name` for a symbolic procedure resource in export, using, import and mixin selectors. The prefix states what is requested of the source. Match it to the published declaration and reject a missing or wrong kind. `var` in a selector declares no local place or writable access. It preserves the published storage and access contract, including a reference symbol’s owner role. `proc` selects the procedure family subject to the verb’s destination or body requirements. It does not extract a first-class procedure or perform a call. Bare `@name` remains the operand of the separate identity operation `symbol from "./hooks.cod" @name`. That operation can establish the typed identity before an `effect` installs anything. For a published variable, `using var` also selects that typed identity.
 
-**Open variable selection case.** A library may publish `var @sout` before any stream is installed. Naming it with `symbol from` for a later installer is already covered. For `using "./sinks.cod" { var @sout }`, the timing of the source-binding requirement is under review: selecting an active source resource would require it at selection, while selecting its variable declaration would require an installation at the first value use. The omitted form must produce the same outcome. Compiler acceptance of this particular case awaits that decision.
+For `var` under `using`, apply the [same identity selection as `symbol from`](#selecting-a-symbolic-variable). A missing dynamic installation cannot make either declaration fail.
 
 A complete definition with an attached `export` already states the kind. For example, `export ref symbol @sout:Utf8StreamOut in O where {owner O}` publishes the same variable resource as the corresponding declaration followed by `export var @sout`. Likewise an already declared procedure symbol can be published by `export proc @flush`. A default mark on a definition contributes the same kind-qualified selector. Publication alone reads no active binding. Preserve explicit symbol identity selection for a caller that only wants to install a writer. Verify that the same unsupported resource, missing destination or symbol conflict rejects with omitted and explicit lists and that a wrong kind rejects even when the spelling matches. A complete or default selection grants exactly what its expanded entries under that verb would grant.
 
 A newline between a module path and an explicit selection is ordinary whitespace. Recognize a path-only directive at an unambiguous grammar boundary, with an explicit semicolon available for disambiguation. Preserve multiline named selectors and an ordinary identifier named `default` wherever the contextual declaration does not apply.
 
 For acceptance, compile an external source containing `using "string.cod"` with a relocated toolchain. Exercise the default `str`, `repr` and `(++)` families, a public entry outside the default set, and independent access to a public symbol identity before installation. Check a namespaced same-package module, explicit sibling, package shadow and warning, ambiguous package claim, broken selected package module and absent fallback. Verify both compilers agree across working directories and reuse cached dependencies correctly after adding a shadowing module or changing a default. Migrate actual booter sibling imports and the repository-relative string-library imports alongside the resolver. Preserve intentional named selection, receiver-world extensions and re-exports in the formatter.
+
+### Selecting a symbolic variable
+
+These two alternative declarations have exactly the same meaning when the module exports `@sout` as a symbolic variable:
+
+```cod
+using "string.cod" { var @sout }
+```
+
+```cod
+symbol from "string.cod" { @sout }
+```
+
+The singleton `symbol from "string.cod" @sout` has the same meaning. Braces group identity selections. The `var` spelling checks the published kind. Both select the same identity, declared type, owner role and access contract. The ordinary rules for visibility, local naming and conflicts, source-context fallback, and module dependency and initialization apply equally. Both declarations are valid before any stream is installed. Neither acquires the owner's release responsibility, captures a target, requires an incoming effect or adds an extension grant.
+
+A use such as `writeUtf8(@sout, piece)` inside a procedure reads the currently installed target and its actual owner at argument evaluation. The checker must prove an installation with the required access and lifetime on each path reaching that read. A procedure can carry that requirement to its caller. A nested installation selects the inner writer until scope cleanup restores its predecessor. Existing operations that explicitly prepare an operand or capture an installed value keep their established evaluation points. Ordinary module initialization still runs under its own dependency and effect rules.
+
+Verify an external module can select an uninstalled variable using either spelling, including a renamed local name. Install an outer writer, call a helper using the other spelling, shadow it in a nested scope and call the helper again after cleanup. Verify the outer, inner and restored targets on normal and caught-failure paths. A reachable read with no supplying installation must reject in either program. If a module's default list contains `var @sout`, the same checks follow by substituting the list under `using`. A wrong `var` kind, private source symbol or incompatible local name retains its ordinary declaration diagnostic.
 
 ### Public definitions and grouped selections
 
@@ -796,7 +816,7 @@ symbol @seen:u64;
 postpon { effect @seen <- @x; }
 ```
 
-If B's corresponding resource selection/read occurs between A1 and A2, it may observe 1; if it occurs after A2, the source binding supplies 2. Include B's implicit prefix and any executable resource-selection requirements in the actual schedule. A previously selected/copied value is not retroactively refreshed by a later source write. The general rule is to use the binding in the selected context at the operation's ordinary evaluation point, preserving existing selection/capture timing.
+The selection of `var @x` in B names the identity and creates no scheduling requirement for a value. The read is the right-hand `@x` in B’s `postpon` block. If its execution context has the installation established by A1, it can observe 1 before A2 and 2 after A2 replaces it. The schedule and context must prove which binding actually reaches the read. Sharing a declaration across modules cannot establish that the binding reaches B. A value already read retains the ordinary rules for that value.
 
 Source order A1 → A2 remains mandatory. Other established dependencies can force the consumer before or after A2; when both schedules are valid, the compiler may choose a reproducible permitted order under the ready-node rule above. This decision selects neither an earliest-reader nor a latest-writer priority. No special ambiguity rejection or separately named intermediate symbol is required merely because the writes occupy different blocks. Splitting a block deliberately permits additional interleaving; joining blocks removes those scheduling boundaries.
 
