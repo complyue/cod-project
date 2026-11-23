@@ -1,5 +1,5 @@
 using "Lexer.cod" {
-    own_word, quoted_text, identifier, using_word, as_word, symbol_word, symbol_name,
+    own_word, quoted_text, multiline_text, identifier, using_word, as_word, symbol_word, symbol_name,
     from_word, proc_word, func_word, ref_word, ptr_word, where_word, const_word, in_word,
     data_word, array_word, export_word, handle_word, c_linkage, enum_word, integer_literal,
     import_word, type_word, region_word, valid_module_path, invalid_module_path_escape,
@@ -204,6 +204,13 @@ func parse_selection_items(source:const SourceBytes in S, tokens:const Tokens in
     return false;
 }
 
+func skip_member_doclet(tokens:const Tokens in T, result:ParseResult in R, past:u64) -> void
+    where {const owner T, owner R} {
+    if (result.next < past && tokens[result.next].kind == multiline_text()) {
+        (result.next <- result.next + 1u64):void
+    };
+}
+
 # A record links its fields in source order through the preceding field.
 func parse_record_fields(source:const SourceBytes in S, tokens:const Tokens in T,
                          nodes:ExprNodes in A, result:ParseResult in R,
@@ -229,6 +236,7 @@ func parse_record_fields(source:const SourceBytes in S, tokens:const Tokens in T
             result.next <- result.next + 1u64;
             return last;
         } else {};
+        skip_member_doclet(tokens, result, past);
         if (!parse_parameter(source, tokens, nodes, result, past, last, true)) return no_node();
         last <- result.root;
         if (inspect_formal(nodes, result.revision, result.used, last, formal) != OrdinaryFormal ||
@@ -249,6 +257,7 @@ func parse_record_fields(source:const SourceBytes in S, tokens:const Tokens in T
 func parse_sum_arm(source:const SourceBytes in S, tokens:const Tokens in T,
                    nodes:ExprNodes in A, result:ParseResult in R, past:u64, previous:u64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
+    skip_member_doclet(tokens, result, past);
     if (!parse_module_name(source, tokens, nodes, result, past)) return false;
     val name <- result.root;
     val first <- syntax_first(nodes, result.used, name);
@@ -559,6 +568,7 @@ func parse_enum_initializer(source:const SourceBytes in S, tokens:const Tokens i
 func parse_enum_member(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
                        result:ParseResult in R, past:u64, previous:u64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
+    skip_member_doclet(tokens, result, past);
     if (!parse_module_name(source, tokens, nodes, result, past)) return false;
     val name <- result.root;
     val initializer <- no_node();
@@ -693,6 +703,15 @@ func named_definition_head(source:const SourceBytes in S, tokens:const Tokens in
         ((type_word(source, tokens[at]) || array_word(source, tokens[at]) || enum_word(source, tokens[at])) && next_kind == identifier());
 }
 
+func module_doclet_target(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> bool
+    where {const owner S, const owner T} {
+    if (at >= past) return false;
+    if (export_word(source, tokens[at])) return named_definition_head(source, tokens, at + 1u64, past);
+    return named_definition_head(source, tokens, at, past) ||
+        (at + 1u64 < past && region_word(source, tokens[at]) && tokens[at + 1u64].kind == identifier() &&
+         punct_at(source, tokens, at + 2u64, past) == 123u8)
+}
+
 func braced_callable_definition(nodes:const ExprNodes in N, used:u64, at:u64) -> bool where {const owner N} {
     if (at >= used) return false;
     return case nodes[at] of {
@@ -711,6 +730,9 @@ func parse_module_item(source:const SourceBytes in S, tokens:const Tokens in T,
                        nodes:ExprNodes in A, result:ParseResult in R,
                        past:u64, previous:u64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
+    if (tokens[result.next].kind == multiline_text() && module_doclet_target(source, tokens, result.next + 1u64, past)) {
+        (result.next <- result.next + 1u64):void
+    };
     val at <- result.next;
     if (using_word(source, tokens[at]))
         return parse_selection_items(source, tokens, nodes, result, past, previous, UseResource, false);

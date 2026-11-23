@@ -1,6 +1,6 @@
 using "SourceStorage.cod" SourceBytes;
 using "ParserStorage.cod" { Tokens, len };
-using "Lexer.cod" { scan_token, end_of_source, unsupported_byte };
+using "Lexer.cod" { scan_token, end_of_source, lexical_error };
 
 export data ScanResult {
     used:u64;
@@ -25,7 +25,7 @@ export func scan_tokens(source:const SourceBytes in S, tokens:Tokens in T,
             result.complete <- true;
             return;
         } else {};
-        if (tokens[index].kind >= unsupported_byte()) {
+        if (lexical_error(tokens[index].kind)) {
             result.invalid_source <- true;
             return;
         } else {};
