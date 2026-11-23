@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 61 · Recorded: 2026-11-21 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 62 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+[D-15-MODULE-PATH](DesignAuthorityRegistry.md#d-15-module-path) and [D-15-DEFAULT-EXPORTS](DesignAuthorityRegistry.md#d-15-default-exports) at r62 cover [module path resolution](#resolving-source-module-paths) and [the default public selection](#default-and-complete-public-selections). The project user [confirmed the lookup order, precedence warning and module declarations](../CHANGELOG.md#h-module-paths-and-default-exports-20261123). P-690–P-693 connect reproducible dependencies and library-author intent to explicit module identity and readable source. Verify distinct sibling, package and bundled modules and actual string-library selection in both bootstrap compilers. Runtime effect installation, package acquisition, toolchain layout and overload dispatch retain their separate contracts.
 
 [D-15-PUBLIC-SOURCE](DesignAuthorityRegistry.md#d-15-public-source) at r61 applies its single-identity publication rule to [a named owning handle symbol](../applications/cod-booter/docs/LLVMInterop.md#owning-native-handle-effects) under [H-NATIVE-HANDLE-EFFECT-20261121](../CHANGELOG.md#h-native-handle-effect-20261121). P-662/P-663 preserve vocabulary identity and separate publication from runtime installation. Check an exported symbol selected before any acquisition.
 
@@ -134,7 +136,7 @@ A direct local definition at the same spelling shadows the implicitly brought na
 
 ```cod
 # model.cod exports Node and score; score(Node in O) returns 1.
-import "model.cod" Node;              # score is available implicitly.
+import "./model.cod" Node;              # score is available implicitly.
 func score(x:Node in O) -> u64 where {owner O} {
     return 7u64;                     # Local family shadows implicit score.
 }
@@ -161,22 +163,22 @@ data Threshold { minimum:u64; }
 export Threshold;
 
 # checks.cod
-import "model.cod" Threshold;
+import "./model.cod" Threshold;
 func (())(self:const Threshold in O, n:u64) -> bool where {const owner O} {
     n >= self.minimum
 }
 export Threshold;
 
 # limits.cod
-import "model.cod" Threshold;
+import "./model.cod" Threshold;
 func (())(self:const Threshold in O) -> u64 where {const owner O} {
     self.minimum
 }
 export Threshold;
 
 # app.cod
-using  "checks.cod" Threshold;
-import "limits.cod" Threshold;
+using  "./checks.cod" Threshold;
+import "./limits.cod" Threshold;
 func at_limit(t:const Threshold in O) -> bool where {const owner O} {
     t(t())
 }
@@ -184,7 +186,7 @@ func at_limit(t:const Threshold in O) -> bool where {const owner O} {
 
 The inner `t()` reads the minimum through the method from limits. The outer call uses the predicate from checks and returns true. If limits also independently defines the same `(Threshold, u64)` method as checks, app rejects the two definitions when it combines the views. If limits instead re-exports the checks definition, both paths lead to a single method. Within a valid combined family, ordinary method dispatch selects the unique best applicable overload for each call.
 
-For `using "model.cod" Receipt {Accepted};`, the constructor list explicitly selects the Accepted dctor with all its initializer overloads. Selecting Receipt itself carries the whole visible call-operator family. The [`with methods` clause](#explicit-associated-callables-with-with-methods) governs separately named associated callables such as `score`.
+For `using "./model.cod" Receipt {Accepted};`, the constructor list explicitly selects the Accepted dctor with all its initializer overloads. Selecting Receipt itself carries the whole visible call-operator family. The [`with methods` clause](#explicit-associated-callables-with-with-methods) governs separately named associated callables such as `score`.
 
 ### Types carried by symbol selection
 
@@ -192,7 +194,7 @@ Selecting a symbol with `symbol from` retains its declared type information and 
 
 ```cod
 # vocabulary.cod exports ticket, its declared type Ticket and Ticket's id method.
-symbol from "vocabulary.cod" @ticket;
+symbol from "./vocabulary.cod" @ticket;
 # Ticket and id are implicitly available; no TLS value was installed.
 data Ticket { code:u64; };
 # This local Ticket shadows the implicit type name.
@@ -212,21 +214,21 @@ The initial policy uses a conservative priority relation:
 
 Lookup edges retain their selection context and publication/shadowing evidence. Using preserves source interpretation; import retains its established receiving interpretation; symbol from preserves the selected identity/source context. Discoverability does not grant extension permission for every name in the source: explicitly importing the callable, by name or through with methods, selects the family to extend. A local shadow does not substitute itself into a source helper merely by spelling.
 
-A source's own fallback relationships can be followed recursively when it has no own binding for the demanded spelling. Only a public terminal binding may be used downstream. H-487 makes an intermediate unexported binding a barrier when no public alias at that spelling is provided. H-488 permits an explicit re-export to supply that public alias with a different upstream identity, leaving the local binding private; this is an explicit publication decision, not a skipped private shadow. Following a dependency path does not put that dependency's aliases into the intermediate module's explicit export map. Thus implicit lookup can reach core's public helper through facade, while `using "facade.cod" helper` still requires facade to explicitly export helper. Source worlds remain read-only.
+A source's own fallback relationships can be followed recursively when it has no own binding for the demanded spelling. Only a public terminal binding may be used downstream. H-487 makes an intermediate unexported binding a barrier when no public alias at that spelling is provided. H-488 permits an explicit re-export to supply that public alias with a different upstream identity, leaving the local binding private; this is an explicit publication decision, not a skipped private shadow. Following a dependency path does not put that dependency's aliases into the intermediate module's explicit export map. Thus implicit lookup can reach core's public helper through facade, while `using "./facade.cod" helper` still requires facade to explicitly export helper. Source worlds remain read-only.
 
 Ordinary export publishes its resolved identity; export import retains its existing explicit selected/associated publication contract rather than becoming a wildcard export of every reachable namespace. A cached implicit resolution or receiver identity record is not an own declaration/alias and cannot create a new private shadowing barrier.
 
 ```cod
 # vocabulary.cod exports packet, Packet, Detail and detail_code.
-symbol from "vocabulary.cod" @packet;
+symbol from "./vocabulary.cod" @packet;
 # Packet, Detail and detail_code can be found in the source's public view,
 # without traversing Packet's fields. No TLS value is installed.
 
 # a.cod and b.cod each export their selected type and a distinct render.
-using "a.cod" Node;
-using "b.cod" Packet;
+using "./a.cod" Node;
+using "./b.cod" Packet;
 # A demanded render(...) is ambiguous: these source views are peers.
-using "a.cod" render as render;
+using "./a.cod" render as render;
 # render now resolves explicitly; dispatch then uses that selected family.
 ```
 
@@ -251,8 +253,8 @@ func twice(x:Node in O) -> u64 where {owner O} {
 }
 
 # receiver.cod
-import "base.cod" Node;
-import "base.cod" twice;
+import "./base.cod" Node;
+import "./base.cod" twice;
 func score(x:Node in O) -> u64 where {owner O} { return 7u64; }
 # For a Node n: local score(n) is 7; imported twice(n) is 2.
 # The local family has no source-identity connection merely from its spelling.
@@ -279,20 +281,20 @@ export answer;
 # Core is also exported.
 
 # facade.cod
-using "core.cod" Core;
+using "./core.cod" Core;
 func answer() -> u64 { return 2u64; }  # Private; shadows core's answer.
 # Facade is exported, but answer is not.
 
 # app.cod
-using "facade.cod" Facade;
+using "./facade.cod" Facade;
 val n:u64 <- answer();
 # Error: facade's private answer blocks implicit lookup.
 # facade may add export answer; to publish its local answer (result 2),
-# or export from "core.cod" answer; to publish core's answer (result 1).
+# or export from "./core.cod" answer; to publish core's answer (result 1).
 # Without an explicit public choice, this call must fail.
 ```
 
-If facade has no own answer binding, app can find core's public answer and the result is 1. If facade explicitly selects `using "core.cod" answer;` without exporting it, that private alias is also an own binding and blocks downstream implicit lookup unless an explicit public alias resolves the name, even though it identifies the same underlying definition. The rule concerns the selected name's publication, not merely the original object's export status. A local declaration of another kind also blocks the name; wrong kind or an inapplicable overload cannot restart fallback. Explicit names in app retain their higher priority and can choose a public resource directly.
+If facade has no own answer binding, app can find core's public answer and the result is 1. If facade explicitly selects `using "./core.cod" answer;` without exporting it, that private alias is also an own binding and blocks downstream implicit lookup unless an explicit public alias resolves the name, even though it identifies the same underlying definition. The rule concerns the selected name's publication, not merely the original object's export status. A local declaration of another kind also blocks the name; wrong kind or an inapplicable overload cannot restart fallback. Explicit names in app retain their higher priority and can choose a public resource directly.
 
 The following consequences preserve deterministic lookup without a richer arbitration mechanism:
 
@@ -304,6 +306,47 @@ The following consequences preserve deterministic lookup without a richer arbitr
 - **Graph traversal does not activate modules:** retain existing once-only initialization and owner/capture rules. H-492 separately admits declaration-only module cycles; lookup traversal must terminate and retain public/private/identity distinctions. This does not itself authorize cyclic runtime initialization; the postpon proposal below remains under review. All private barriers and ambiguous winners remain compile-time diagnostics.
 
 This permits an intermediate dependency change or a new nearer binding to change a downstream implicit resolution. That is a consequence of implicit lookup; H-485's future use-site information can expose the path, and explicit source selection can state the intended dependency. No stability against arbitrary dependency edits is promised. Acceptance includes all four facade cases (absent, private without publication, local public, upstream public alongside local private), private aliases of the same original identity, peer barriers, diamond contexts, declaration-kind shadows, check-order independence and explicit-export/implicit-reachability distinction. Full graph representation, general distance proofs and source implementation remain separate; these rules add no runtime pointer or method-table protocol.
+
+### Resolving source module paths
+
+Classify the decoded path by its spelling **before** filesystem normalization. A leading `./` requests a file relative to the directory of the source module containing the selection. Only this form gets that interpretation. A relative miss is an error at that dependency site. Other source module paths are logical namespace paths in the project's resolved package set, including the project's own package. Specify the complete namespace path even when both modules are in the same package. A bare filename requests that exact root namespace entry. A leading `../` or an absolute filesystem spelling cannot turn into an implicit relative or host-file import. This rule governs dependency edges. The launcher may still accept a filesystem path to an entry source.
+
+| Source operand | Lookup |
+| --- | --- |
+| `"./string.cod"` | The sibling of this particular importing source. |
+| `"billing/text/format.cod"` | The exact module path in the project package namespace, then the bundled library namespace on a miss. |
+| `"string.cod"` | A project package's root entry of this name, otherwise the bundled module under the active compiler's toolchain root. |
+
+Package lookup uses the project's resolved dependencies and applicable local overrides. Distinct eligible package modules claiming the same logical path are ambiguous. Filesystem enumeration, manifest iteration order, working directory and user-supplied directory lists cannot serve as priority rules. CoD has no Java-style classpath. A failed read or check of a selected module reports that module's error. Only an absent package module selects the bundled fallback. The active compiler supplies its bundled library location from its toolchain root. The physical installation layout and the development-tree mapping are implementation concerns. Existing intrinsic resources with catalog identities such as `std:exceptions` retain their checked identity. A matching source spelling cannot grant an intrinsic capability.
+
+When the package selection shadows a bundled module at the same logical path, use the package module and **warn** at lookup. Identify the requested path, selected package module and shadowed bundled module. An explicit `./` request only selects its local file. The warning follows directly from these resolver inputs in the seed and booter. Reaching the same module under two valid spellings preserves its identity and executes its initialization once under the existing module rules. Record the resolved dependency for reuse. A change in the selected package set or a new package module shadowing a previously used builtin must invalidate a stale selection.
+
+### Default and complete public selections
+
+A library author can mark existing public names as the default selection and can also mark a name at its definition:
+
+```cod
+# Public names already declared in string.cod
+default { str, repr, (++) }
+
+# In a different library
+default export func version() -> u64 { 1u64 }
+```
+
+`default { ... }` names public entries under the module's exported spellings, including public re-exports. An unknown or private entry rejects. `default export` publishes a named definition under the ordinary export rules and adds that public entry to the same set. Marking one method selects its whole published overload family. Repeated marks for the same entry are idempotent. `default` is contextual in these module declarations.
+
+| Consumer spelling | Explicit selection |
+| --- | --- |
+| `using "string.cod"` or `import "string.cod"` | The publisher's default entries, with the ordinary meaning of the written verb. A module with no defaults requires explicit selection and the diagnostic may suggest `{..}`. |
+| `import "string.cod" {..}` or `using "string.cod" {..}` | All explicitly published entries of the selected module, including named re-exports. |
+| `import "string.cod" { emitStr, emitRepr }` | The written entries, with ordinary binding, naming and extension rules. |
+| `using "./palette.cod" Color {..}` | The members of the selected type under its existing rules. |
+
+Default and complete selection operate on the checked publication table. Neither enumerates private names or flattens names reachable through lookup in other modules. A selected type still carries its usual family and fallback relationships. A selected public symbol such as `@sout` introduces its existing symbol identity under the ordinary symbol-selection permissions. Selecting a symbol does not install a stream or grant a new extension permission. Ordinary callable entries retain the distinction between source-preserving `using` and receiver-world `import`. A name conflict follows the same rule as explicitly selecting those entries. Use an explicit group with `as` to resolve it. Each consumer depends on the selected public or default table as well as the module identity.
+
+A newline between a module path and an explicit selection is ordinary whitespace. Recognize a path-only directive at an unambiguous grammar boundary, with an explicit semicolon available for disambiguation. Preserve multiline named selectors and an ordinary identifier named `default` wherever the contextual declaration does not apply.
+
+For acceptance, compile an external source containing `using "string.cod"` with a relocated toolchain. Exercise the default `str`, `repr` and `(++)` families, a public entry outside the default set, and a public symbol whose selection leaves its dynamic binding alone. Check a namespaced same-package module, explicit sibling, package shadow and warning, ambiguous package claim, broken selected package module and absent fallback. Verify both compilers agree across working directories and reuse cached dependencies correctly after adding a shadowing module or changing a default. Migrate actual booter sibling imports and the repository-relative string-library imports alongside the resolver. Preserve intentional named selection, receiver-world extensions and re-exports in the formatter.
 
 ### Public definitions and grouped selections
 
@@ -317,7 +360,7 @@ export data SourcePosition {
     column:u64;
 }
 
-using "SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
+using "./SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
 ```
 
 The prefix publishes the same local identity that a separate `export name;` would publish after the declaration. This includes named `data`, `array`, `func`, `proc`, `enum` and `handle type` declarations. It applies to a foreign-marked declaration with a separately publishable identity under its existing rules, including a local `data "C"` or `proc "C"` declaration. Marking one method publishes its complete locally resolved callable family. Likewise a public type carries its existing constructors, methods or member table according to that type's contract. A private definition sharing only a foreign object's spelling cannot publish that foreign object by accident. Use the [publication-only re-export](#publication-only-re-export) when the public identity comes from upstream.
@@ -327,7 +370,7 @@ The prefix applies to a declaration that has a single publishable name, includin
 For several selections with one source and operation, place a comma-separated list **after the quoted module path**. Each item obeys the same source-name, destination-name and suffix grammar as a singleton of that operation. For example:
 
 ```cod
-using "SourceStorage.cod" { SourceBytes, SourcePosition as Position };
+using "./SourceStorage.cod" { SourceBytes, SourcePosition as Position };
 using "./Compiler.cod" { NativeError { Rejected, OpenFailed }, ExpressionScratchPlan };
 ```
 
@@ -344,11 +387,11 @@ H-491 selects:
 ```cod
 # facade.cod; core.cod publicly exports answer.
 func answer() -> u64 { return 2u64; }  # Private local object.
-export from "core.cod" answer;
+export from "./core.cod" answer;
 # Local answer() still returns 2.
 # Downstream answer resolves to core's exported object.
 
-export from "core.cod" answer as original_answer;
+export from "./core.cod" answer as original_answer;
 # A second public alias for that same upstream object.
 ```
 
@@ -363,9 +406,9 @@ Acceptance distinguishes local answer=2 from downstream answer=1, verifies both 
 H-489/H-490 makes with methods an optional suffix on using/import/symbol-from selections of a type or a symbol with an associated value type:
 
 ```cod
-using "model.cod" Node with methods;
-import "model.cod" Node with methods;
-symbol from "vocabulary.cod" @node with methods;
+using "./model.cod" Node with methods;
+import "./model.cod" Node with methods;
+symbol from "./vocabulary.cod" @node with methods;
 ```
 
 These are separate selection examples. The clause explicitly brings in every associated **callable**, including its complete public method family. Signature association under H-225 identifies related callables; it never creates a callable containing only the matching methods. H-490 makes the selection unit general: using/import selects callables, not individual methods, whether the callable is named directly or selected through this clause. There is no source signature-selector or alias-specific method subset.
@@ -378,7 +421,7 @@ func score(x:Node in O) -> u64 where {owner O} { return 1u64; }
 func score(x:u64) -> u64 { return 2u64; }
 
 # consumer.cod
-using "model.cod" Node with methods;
+using "./model.cod" Node with methods;
 val n:u64 <- score(7u64);  # 2: the whole score callable was selected.
 ```
 
@@ -604,7 +647,7 @@ H-492 allows a cycle whose participating modules contain declarations, with no e
 
 ```cod
 # even.cod
-using "odd.cod" odd;
+using "./odd.cod" odd;
 func even(n:u64) -> bool {
     if n == 0u64 { return true; }
     return odd(n - 1u64);
@@ -612,7 +655,7 @@ func even(n:u64) -> bool {
 export even;
 
 # odd.cod
-using "even.cod" even;
+using "./even.cod" even;
 func odd(n:u64) -> bool {
     if n == 0u64 { return false; }
     return even(n - 1u64);
@@ -731,7 +774,7 @@ postpon { effect @x <- 1u64; }  # A1
 postpon { effect @x <- 2u64; }  # A2
 
 # b.cod
-using "a.cod" @x;
+using "./a.cod" @x;
 symbol @seen:u64;
 postpon { effect @seen <- @x; }
 ```
