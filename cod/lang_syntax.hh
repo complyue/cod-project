@@ -356,7 +356,7 @@ struct Expression {
                     here_body, named_argument, break_value, continue_value, typed_expression, return_tail,
                     processor_composition, pipeline, here_binding, make_object, native_handle_binding, make_owned_handle, make_borrowed_handle,
                     exception_binding, make_exception, rethrow_from, case_expression, case_arm, string_literal,
-                    case_break, case_fallthrough, case_failure, syntax_error };
+                    case_break, case_fallthrough, case_failure, empty_pack, syntax_error };
   enum class ExceptionPlacement { default_region, capacity, cause };
   Kind kind;
   Location at;
@@ -412,6 +412,12 @@ struct Expression {
   }
   // A supplied body is stored after the written operands. It binds slot one.
   bool has_here_body() const { return !children.empty() && children.back()->kind == Kind::here_body; }
+  bool ordinary_braced_if() const {
+    return kind == Kind::conditional && children.front()->kind != Kind::return_test && children[1]->kind == Kind::block;
+  }
+  bool braced_if_with_empty_alternative() const {
+    return ordinary_braced_if() && !children[2]->scoped && children[2]->children.empty();
+  }
   bool deferred_catch() const {
     return kind == Kind::deferred && binding == "fallback" && children.at(1)->kind == Kind::handler;
   }
@@ -1132,7 +1138,12 @@ class Parser {
     if (!take(")")) {
       do {
         Expr argument;
-        if (!named || !is("->")) {
+        if (accepts_ref_argument && is("[") && is("]", 1) && is("...", 2)) {
+          argument = make(Expression::Kind::empty_pack, expect("["));
+          expect("]");
+          argument->span.past = expect("...").at.span.past;
+          argument->spread = true;
+        } else if (!named || !is("->")) {
           std::optional<Location> checked_ref;
           if (accepts_ref_argument && starts_checked_ref_argument()) {
             checked_ref = expect("not").at;
@@ -2311,6 +2322,17 @@ class Parser {
     const ParseEntry entry(recursion_, peek().at, "a block");
     return finish(block_impl(initializer));
   }
+  bool starts_block_item() const {
+    switch (peek().kind) {
+    case TokenKind::identifier: case TokenKind::symbol: case TokenKind::integer: case TokenKind::real:
+    case TokenKind::string:
+      return true;
+    case TokenKind::punctuation:
+      return is("{") || is("(") || is("-") || is("!");
+    default:
+      return false;
+    }
+  }
   Expr block_impl(bool initializer) {
     auto result = make(Expression::Kind::block, expect("{"));
     result->scoped = is("{") && peek().at.span.first == result->at.span.past;
@@ -2336,6 +2358,7 @@ class Parser {
         return result;
       }
       if (take(";") || is("}")) continue;
+      if (!initializer && result->children.back()->ordinary_braced_if() && starts_block_item()) continue;
       if (reports_.size() == reports_before_item || reports_.back().at.span.first != peek().at.span.first)
         record_fault({peek().at, "expected ';'"});
       if (is("return") || is("val") || is("ref") || is("ptr") || is("const") ||

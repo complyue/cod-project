@@ -54,6 +54,8 @@ class LLVMEmission {
   // scope-owned images; they are not regional-storable bits.
   llvm::StructType *exception_ = llvm::StructType::get(context_, std::vector<llvm::Type *>(5, b_.getInt64Ty()));
   llvm::StructType *scalar_ = llvm::StructType::create(context_, {b_.getInt64Ty(), b_.getInt32Ty()}, "cod.scalar");
+  llvm::StructType *value_pack_segment_ = llvm::StructType::get(context_, {b_.getPtrTy(), b_.getInt64Ty()});
+  llvm::StructType *value_pack_ = llvm::StructType::get(context_, {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
   enum class ArrayBacking { inline_elements, foreign_loan };
   llvm::StructType *array_header_ =
       llvm::StructType::create(context_, {b_.getInt64Ty(), b_.getInt8Ty()}, "cod.array.header");
@@ -3364,10 +3366,10 @@ class LLVMEmission {
   }
   llvm::Value *emit_expression(const Expression &expr, Projection projection = Projection::value, bool discard = false) {
     if (discard && projection == Projection::value &&
-        std::ranges::any_of(contexts_, [&](const auto &context) { return context.at(&expr).discarded_loop_view; })) {
+        std::ranges::any_of(contexts_, [&](const auto &context) { return context.at(&expr).discarded_view; })) {
       std::map<bool, std::vector<size_t>> alternatives;
       for (size_t i = 0; i < contexts_.size(); ++i)
-        alternatives[contexts_[i].at(&expr).discarded_loop_view].push_back(i);
+        alternatives[contexts_[i].at(&expr).discarded_view].push_back(i);
       return contextual_value(expr, alternatives, "discard.view", [&](bool view_only) -> llvm::Value * {
         emit_expression(expr, view_only ? Projection::target : Projection::value, true);
         return reachable() ? empty_scalar() : nullptr;
@@ -3640,6 +3642,217 @@ class LLVMEmission {
     auto *address = view_address(result);
     return projection == Projection::target ? address : load_place(checked_address(address, expr, expr.at), expr);
   }
+  void check_index_bounds(llvm::Value *index, llvm::Value *length, bool signed_index, const Location &at) {
+    if (!bounds_checks_) return;
+    auto *in_range = b_.CreateICmpULT(index, length);
+    if (signed_index) in_range = b_.CreateAnd(in_range, b_.CreateICmpSGE(index, integer(0)));
+    auto *valid = block("bounds.valid"), *invalid = block("bounds.failure");
+    b_.CreateCondBr(in_range, valid, invalid);
+    b_.SetInsertPoint(invalid);
+    save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::index_out_of_bounds)),
+                        integer(site(at)), null_pointer(), index, length));
+    b_.CreateBr(control_->exit);
+    b_.SetInsertPoint(valid);
+  }
+  llvm::Value *pack_total(llvm::Value *descriptor) {
+    return b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(value_pack_, descriptor, 2));
+  }
+  llvm::Value *pack_segment(llvm::Value *segments, llvm::Value *number) {
+    return b_.CreateGEP(value_pack_segment_, segments, number);
+  }
+  void copy_pack_values(llvm::Value *source, llvm::Value *destination, llvm::Value *length) {
+    auto *start = b_.GetInsertBlock();
+    auto *loop = block("pack.copy.next"), *element = block("pack.copy.element"), *done = block("pack.copy.done");
+    b_.CreateBr(loop);
+    b_.SetInsertPoint(loop);
+    auto *index = b_.CreatePHI(b_.getInt64Ty(), 2);
+    index->addIncoming(integer(0), start);
+    b_.CreateCondBr(b_.CreateICmpULT(index, length), element, done);
+    b_.SetInsertPoint(element);
+    auto *type = b_.getInt64Ty();
+    auto *value = b_.CreateLoad(type, b_.CreateGEP(type, source, index));
+    b_.CreateStore(value, b_.CreateGEP(type, destination, index));
+    index->addIncoming(b_.CreateAdd(index, integer(1)), element);
+    b_.CreateBr(loop);
+    b_.SetInsertPoint(done);
+  }
+  void snapshot_forwarded_pack(llvm::Value *source, llvm::Value *destination) {
+    auto *segments = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(value_pack_, source, 0));
+    auto *count = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(value_pack_, source, 1));
+    auto *start = b_.GetInsertBlock();
+    auto *loop = block("pack.forward.next"), *element = block("pack.forward.segment"), *done = block("pack.forward.done");
+    b_.CreateBr(loop);
+    b_.SetInsertPoint(loop);
+    auto *number = b_.CreatePHI(b_.getInt64Ty(), 2);
+    auto *offset = b_.CreatePHI(b_.getInt64Ty(), 2);
+    number->addIncoming(integer(0), start);
+    offset->addIncoming(integer(0), start);
+    b_.CreateCondBr(b_.CreateICmpULT(number, count), element, done);
+    b_.SetInsertPoint(element);
+    auto *segment = pack_segment(segments, number);
+    auto *data = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(value_pack_segment_, segment, 0));
+    auto *length = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(value_pack_segment_, segment, 1));
+    copy_pack_values(data, b_.CreateGEP(b_.getInt64Ty(), destination, offset), length);
+    auto *next = b_.GetInsertBlock();
+    number->addIncoming(b_.CreateAdd(number, integer(1)), next);
+    offset->addIncoming(b_.CreateAdd(offset, length), next);
+    b_.CreateBr(loop);
+    b_.SetInsertPoint(done);
+  }
+  void check_pack_capacity(llvm::Value *valid, const Location &at) {
+    auto *ready = block("pack.capacity.valid"), *invalid = block("pack.capacity.invalid");
+    b_.CreateCondBr(valid, ready, invalid);
+    b_.SetInsertPoint(invalid);
+    fail_path(ExceptionCategory::invalid_capacity, at);
+    b_.SetInsertPoint(ready);
+  }
+  llvm::Value *pack_count_after(llvm::Value *total, llvm::Value *length, const Location &at) {
+    auto *next = b_.CreateAdd(total, length);
+    check_pack_capacity(b_.CreateICmpUGE(next, total), at);
+    return next;
+  }
+  llvm::Value *snapshot_pack_operand(const Expression &operand, llvm::Value *source, bool forwarded,
+      llvm::Value *length, llvm::AllocaInst *head) {
+    const auto &layout = module_.getDataLayout();
+    auto *element = b_.getInt64Ty();
+    const auto stride = layout.getTypeAllocSize(element).getFixedValue();
+    const auto address_bits = std::min(64u, layout.getPointerSizeInBits());
+    const auto byte_limit = UINT64_MAX >> (64 - address_bits);
+    check_pack_capacity(b_.CreateICmpULE(length, integer(byte_limit / stride)), operand.at);
+    auto *start = b_.GetInsertBlock();
+    auto *copy = block("pack.snapshot"), *ready = block("pack.snapshot.ready");
+    b_.CreateCondBr(b_.CreateICmpNE(length, integer(0)), copy, ready);
+    b_.SetInsertPoint(copy);
+    auto allocate = runtime("cod_lang_lexical_extent_allocate", b_.getPtrTy(),
+        {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
+    auto *storage = b_.CreateCall(allocate, {head, b_.CreateMul(length, integer(stride)),
+                                            integer(layout.getABITypeAlign(element).value())});
+    auto *allocated = block("pack.extent.allocated"), *oom = block("pack.extent.oom");
+    b_.CreateCondBr(b_.CreateIsNotNull(storage), allocated, oom);
+    b_.SetInsertPoint(oom);
+    fail_path(ExceptionCategory::out_of_memory, operand.at);
+    b_.SetInsertPoint(allocated);
+    if (forwarded) snapshot_forwarded_pack(source, storage);
+    else copy_pack_values(array_data(source, element), storage, length);
+    auto *copied = b_.GetInsertBlock();
+    b_.CreateBr(ready);
+    b_.SetInsertPoint(ready);
+    auto *result = b_.CreatePHI(b_.getPtrTy(), 2);
+    result->addIncoming(null_pointer(), start);
+    result->addIncoming(storage, copied);
+    return result;
+  }
+  llvm::Value *emit_value_pack_call(const Expression &expr, size_t callee, const CheckedOperation::ValuePack &plan) {
+    const auto &instance = program_->instances[callee];
+    auto *head = slot(b_.getPtrTy(), "pack.extents");
+    auto *descriptor = slot(value_pack_, "pack.descriptor");
+    const auto segment_count = plan.operands.size() - plan.fixed_count;
+    auto *segments = slot(llvm::ArrayType::get(value_pack_segment_, std::max(size_t{1}, segment_count)), "pack.segments");
+    auto *result = slot(scalar_, "pack.result");
+    Control preparation{control_, block("pack.release")};
+    control_ = &preparation;
+    b_.CreateStore(null_pointer(), head);
+    llvm::Value *total = integer(0);
+    std::vector<llvm::Value *> arguments;
+    using Operand = CheckedOperation::ValuePack::Operand;
+    for (size_t i = 0; i < plan.operands.size(); ++i) {
+      const auto mode = plan.operands[i];
+      const auto &operand = *expr.children[i];
+      if (mode == Operand::fixed) {
+        arguments.push_back(prepare_argument(expr, i, false));
+        if (!reachable()) break;
+        continue;
+      }
+      llvm::Value *length = integer(0), *storage = null_pointer();
+      if (mode == Operand::value) {
+        auto *value = emit_expression(operand);
+        if (!reachable()) break;
+        value = choose(operand, {value}, choices(operand, {&operand}), b_.getInt64Ty(), [&](const Choice &choice) {
+          return convert(value, choice.inputs.front(), Type::uint64);
+        });
+        length = integer(1);
+        total = pack_count_after(total, length, operand.at);
+        storage = slot(b_.getInt64Ty(), "pack.scalar");
+        b_.CreateStore(value, storage);
+      } else if (mode == Operand::spread) {
+        auto *source = emit_expression(operand, Projection::target);
+        if (!reachable()) break;
+        source = checked_address(source, operand, operand.at);
+        std::map<bool, std::vector<size_t>> shapes;
+        for (size_t context = 0; context < contexts_.size(); ++context) {
+          const auto type = contexts_[context].at(&operand).type.kind;
+          if (type != Type::never) shapes[type == Type::arguments].push_back(context);
+        }
+        auto *extent = contextual_value(operand, shapes, "pack.spread", [&](bool forwarded) -> llvm::Value * {
+          auto *selected = forwarded ? view_address(b_.CreateLoad(scalar_, source)) : source;
+          auto *count = forwarded ? pack_total(selected) : array_length(selected);
+          auto *next = pack_count_after(total, count, operand.at);
+          auto *backing = snapshot_pack_operand(operand, selected, forwarded, count, head);
+          auto *segment = b_.CreateStructGEP(value_pack_, descriptor, 2);
+          b_.CreateStore(next, segment);
+          auto *selection = b_.CreateInsertValue(llvm::PoisonValue::get(value_pack_segment_), backing, 0);
+          return b_.CreateInsertValue(selection, count, 1);
+        }, value_pack_segment_);
+        total = pack_total(descriptor);
+        storage = b_.CreateExtractValue(extent, 0);
+        length = b_.CreateExtractValue(extent, 1);
+      }
+      auto *entry = pack_segment(segments, integer(i - plan.fixed_count));
+      b_.CreateStore(storage, b_.CreateStructGEP(value_pack_segment_, entry, 0));
+      b_.CreateStore(length, b_.CreateStructGEP(value_pack_segment_, entry, 1));
+    }
+    if (reachable()) {
+      b_.CreateStore(segments, b_.CreateStructGEP(value_pack_, descriptor, 0));
+      b_.CreateStore(integer(segment_count), b_.CreateStructGEP(value_pack_, descriptor, 1));
+      b_.CreateStore(total, b_.CreateStructGEP(value_pack_, descriptor, 2));
+      arguments.push_back(pack(b_.CreatePtrToInt(descriptor, b_.getInt64Ty()), Type::uint64));
+      auto *target = specialize_ ? specialized_[callee] : general_[instance.method];
+      auto *value = propagate(native_call(expr, target, instance.method, std::move(arguments), {}, callee));
+      if (reachable()) b_.CreateStore(value, result);
+    }
+    const bool completed = reachable();
+    if (completed) b_.CreateBr(preparation.exit);
+    b_.SetInsertPoint(preparation.exit);
+    auto release = runtime("cod_lang_lexical_allocations_release", b_.getVoidTy(), {b_.getPtrTy()});
+    b_.CreateCall(release, {load(head)});
+    control_ = preparation.parent;
+    if (!completed) {
+      b_.CreateBr(control_->exit);
+      return nullptr;
+    }
+    auto *done = block("pack.completed");
+    b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0)), done, control_->exit);
+    b_.SetInsertPoint(done);
+    return load(result);
+  }
+  llvm::Value *pack_element_address(llvm::Value *descriptor, llvm::Value *index, const Location &at) {
+    if (bounds_checks_) check_index_bounds(index, pack_total(descriptor), false, at);
+    auto *segments = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(value_pack_, descriptor, 0));
+    auto *count = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(value_pack_, descriptor, 1));
+    auto *start = b_.GetInsertBlock();
+    auto *search = block("pack.index.search"), *candidate = block("pack.index.segment");
+    auto *next = block("pack.index.next"), *found = block("pack.index.found"), *invalid = block("pack.index.invalid");
+    b_.CreateBr(search);
+    b_.SetInsertPoint(search);
+    auto *number = b_.CreatePHI(b_.getInt64Ty(), 2);
+    auto *remaining = b_.CreatePHI(b_.getInt64Ty(), 2);
+    number->addIncoming(integer(0), start);
+    remaining->addIncoming(index, start);
+    b_.CreateCondBr(b_.CreateICmpULT(number, count), candidate, invalid);
+    b_.SetInsertPoint(candidate);
+    auto *segment = pack_segment(segments, number);
+    auto *length = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(value_pack_segment_, segment, 1));
+    b_.CreateCondBr(b_.CreateICmpULT(remaining, length), found, next);
+    b_.SetInsertPoint(next);
+    number->addIncoming(b_.CreateAdd(number, integer(1)), next);
+    remaining->addIncoming(b_.CreateSub(remaining, length), next);
+    b_.CreateBr(search);
+    b_.SetInsertPoint(invalid);
+    b_.CreateUnreachable();
+    b_.SetInsertPoint(found);
+    auto *data = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(value_pack_segment_, segment, 0));
+    return b_.CreateGEP(b_.getInt64Ty(), data, remaining);
+  }
   llvm::Value *emit_indexed_address(const Expression &expr) {
     const auto &array = *expr.children[0];
     auto *view = emit_expression(array, Projection::target);
@@ -3648,29 +3861,23 @@ class LLVMEmission {
     const auto &index_expr = *expr.children[1];
     auto *index_value = emit_expression(index_expr);
     if (!reachable()) return nullptr;
-    std::map<std::pair<size_t, Type::Kind>, std::vector<size_t>> alternatives;
+    std::map<std::pair<std::optional<size_t>, Type::Kind>, std::vector<size_t>> alternatives;
     for (size_t i = 0; i < contexts_.size(); ++i) {
       const auto &type = contexts_[i].at(&array).type;
       const auto index = contexts_[i].at(&index_expr).type.kind;
-      if (type.kind == Type::array && index != Type::never) alternatives[{type.identity, index}].push_back(i);
+      if (index == Type::never) continue;
+      if (type.kind == Type::array) alternatives[{type.identity, index}].push_back(i);
+      else if (type.kind == Type::arguments) alternatives[{std::nullopt, index}].push_back(i);
     }
     return contextual_value(expr, alternatives, "array.element", [&](const auto &selection) -> llvm::Value * {
       const auto &[schema, index_kind] = selection;
-      const auto &shape = program_->arrays.at(schema);
-      auto *index = b_.CreateZExtOrTrunc(convert(index_value, Type{index_kind}, shape.index), b_.getInt64Ty());
-      if (bounds_checks_) {
-        auto *length = array_length(view);
-        auto *in_range = b_.CreateICmpULT(index, length);
-        if (shape.index == Type::integer)
-          in_range = b_.CreateAnd(in_range, b_.CreateICmpSGE(index, integer(0)));
-        auto *valid = block("bounds.valid"), *invalid = block("bounds.failure");
-        b_.CreateCondBr(in_range, valid, invalid);
-        b_.SetInsertPoint(invalid);
-        save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::index_out_of_bounds)),
-                           integer(site(expr.at)), null_pointer(), index, length));
-        b_.CreateBr(control_->exit);
-        b_.SetInsertPoint(valid);
+      if (!schema) {
+        auto *descriptor = view_address(b_.CreateLoad(scalar_, view));
+        return pack_element_address(descriptor, convert(index_value, Type{index_kind}, Type::uint64), expr.at);
       }
+      const auto &shape = program_->arrays.at(*schema);
+      auto *index = b_.CreateZExtOrTrunc(convert(index_value, Type{index_kind}, shape.index), b_.getInt64Ty());
+      if (bounds_checks_) check_index_bounds(index, array_length(view), shape.index == Type::integer, expr.at);
       auto *element = inline_layout(shape.element);
       return b_.CreateGEP(element, array_data(view, element), index);
     }, b_.getPtrTy());
@@ -3956,6 +4163,17 @@ class LLVMEmission {
         if (discard) return empty_scalar();
         auto *length = array_length(address);
         return pack(length, Type::uint64);
+      }
+      if (fact.value_pack) {
+        using Invocation = std::pair<size_t, CheckedOperation::ValuePack>;
+        std::map<Invocation, std::vector<size_t>> calls;
+        for (size_t i = 0; i < contexts_.size(); ++i) {
+          const auto &call = contexts_[i].at(&expr);
+          if (call.value_pack && call.callee) calls[{*call.callee, *call.value_pack}].push_back(i);
+        }
+        return contextual_value(expr, calls, "pack.call", [&](const Invocation &call) {
+          return emit_value_pack_call(expr, call.first, call.second);
+        });
       }
       return temporary_scope(expr.at, !fact.borrowed_result || read ? scalar_ : static_cast<llvm::Type *>(b_.getPtrTy()), [&]() -> llvm::Value * {
         // An entry-time supplied body leaves its slot empty during preparation.

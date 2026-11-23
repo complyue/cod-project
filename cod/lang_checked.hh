@@ -504,10 +504,13 @@ class ScalarChecker {
   using Access = std::vector<std::optional<bool>>;
   // Only a known argument or return contract can supply an implicit callable's result.
   enum class ExpectedTypeUse { materialization, callable_result };
-  enum class EvidenceRead { payload, target, projection, binding_slot, transfer_destination, discarded, loop_discard, native_loan };
+  enum class EvidenceRead { payload, target, projection, binding_slot, transfer_destination, discarded,
+                            loop_discard, guard_statement, guard_arm, native_loan };
+  enum class DiscardUse { ordinary, loop_result, guard_statement, guard_arm };
   enum class BindingUse { ordinary, exception_field, native_loan };
   enum class NativeLoanContext { none, borrow, discard_result };
   enum class IndexedUse { value_only, immediate_target, transfer_destination, region_root_loan };
+  enum class PackUse { none, index, spread };
   static ExpectedTypeUse expected_type_use(ArgumentMode mode) {
     return mode == ArgumentMode::value ? ExpectedTypeUse::callable_result : ExpectedTypeUse::materialization;
   }
@@ -2157,6 +2160,43 @@ class ScalarChecker {
   }
   static bool variadic(const CheckedMethod &method) {
     return !method.input_parameters().empty() && method.input_parameters().back().variadic;
+  }
+  bool supports_value_pack(const CheckedMethod &method) const {
+    return variadic(method) && method.parameters.back() == Type::uint64 && method.type_parameters.empty() &&
+        method.here.empty() && !method.source->c_linkage && !method.result.borrowed() &&
+        (!method.result.type || scalar_type(*method.result.type) || method.result.type == Type::void_type) &&
+        !lexical_methods_.contains(method.source) && (!method.family || !program_.families[*method.family].symbol) &&
+        std::ranges::all_of(method.parameters, scalar_type) &&
+        std::ranges::all_of(method.input_parameters(), [](const Parameter &parameter) {
+          return argument_mode(parameter) == ArgumentMode::value && !parameter.automatic_conversion;
+        });
+  }
+  std::optional<size_t> value_pack_method(std::span<const size_t> methods) const {
+    if (methods.size() != 1 || !variadic(program_.methods[methods.front()])) return {};
+    return methods.front();
+  }
+  CheckedOperation::ValuePack value_pack_plan(const Expression &expr, const CheckedMethod &method) const {
+    if (!supports_value_pack(method) || expr.lexical_symbol_call || expr.has_here_body())
+      implementation_gap(expr.at, "this variadic call profile");
+    const auto fixed = method.parameters.size() - 1;
+    if (expr.children.size() < fixed) fail(expr.at, "variadic call is missing a fixed argument");
+    using Operand = CheckedOperation::ValuePack::Operand;
+    CheckedOperation::ValuePack plan{fixed, {}};
+    for (size_t i = 0; i < expr.children.size(); ++i) {
+      const auto &operand = *expr.children[i];
+      if (operand.kind == Expression::Kind::named_argument)
+        implementation_gap(operand.at, "named argument preparation for a value-pack call");
+      if (i < fixed && operand.spread) fail(operand.at, "a spread cannot supply a fixed argument");
+      plan.operands.push_back(i < fixed ? Operand::fixed : operand.kind == Expression::Kind::empty_pack
+          ? Operand::empty : operand.spread ? Operand::spread : Operand::value);
+    }
+    return plan;
+  }
+  void check_value_pack_spread(const Type &type, bool view, const Location &at) const {
+    if (view && (type.kind == Type::arguments || (type.kind == Type::array &&
+          program_.arrays.at(type.identity).index == Type::uint64 &&
+          program_.arrays.at(type.identity).element == Type::uint64))) return;
+    fail(at, "a value-pack spread requires a readable u64 array or value pack");
   }
   void check_variadic_family_member(std::span<const size_t> members, const CheckedMethod &addition,
                                     const Location &at) const {
@@ -7601,7 +7641,8 @@ class ScalarChecker {
       const bool place = parameter.selects_caller_place() && !parameter.selects_caller_ref_slot();
       const bool local_value = parameter.declaration_kind == "val" && !place;
       const bool independent = local_value || (value && arguments[i].kind == Type::procedure);
-      state.bindings[parameter.name] = text_type(method.parameters[i]) ? method.parameters[i] : arguments[i];
+      state.bindings[parameter.name] = parameter.variadic ? Type{Type::arguments}
+          : text_type(method.parameters[i]) ? method.parameters[i] : arguments[i];
       state.definitions.erase(parameter.name);
       state.views[parameter.name] = {place || parameter.read_only || (local_value && parameter.fixed_binding), true,
                                     live_value || local_value,
@@ -7925,6 +7966,10 @@ class ScalarChecker {
       implementation_gap(at, "indexed access requires a borrowed array of initialized bits elements");
     return array;
   }
+  static const CheckedArray &value_pack_index() {
+    static const CheckedArray shape{nullptr, Type::uint64, Type::uint64};
+    return shape;
+  }
   const CheckedArray &array_construction(const Type &type, const Expression &expr) const {
     const auto &array = program_.arrays.at(type.identity);
     if (array.index != Type::uint64 || !program_.bits_payload(array.element))
@@ -7935,7 +7980,8 @@ class ScalarChecker {
   }
   static void check_array_index(const CheckedArray &array, const Type &index, const Location &at) {
     if (!transfers_value(index, array.index))
-      fail(at, "index for array '" + array.source->name + "' requires '" + type_name(array.index) +
+      fail(at, "index for " + (array.source ? "array '" + array.source->name + "'" : std::string{"a value pack"}) +
+               " requires '" + type_name(array.index) +
                "', found '" + type_name(index) + "'");
   }
   const CheckedSchema &product_schema(const Type &type, const Location &at) const {
@@ -9209,7 +9255,7 @@ class ScalarChecker {
                                     const Type *expected = nullptr, std::vector<Type> *alternatives = nullptr,
                                     ExpectedTypeUse expected_use = ExpectedTypeUse::materialization, bool reached = true,
                                     EvidenceRead read = EvidenceRead::payload, bool joining = false,
-                                    CaseScopeEvidence *case_scope = nullptr) const {
+                                    CaseScopeEvidence *case_scope = nullptr, PackUse pack_use = PackUse::none) const {
     using K = Expression::Kind;
     const ModuleLookup lookup(module_, state.method ? program_.methods[*state.method].module : module_);
     const ModuleLookup context(interpretation_, state.method ? program_.methods[*state.method].interpretation : interpretation_);
@@ -9225,8 +9271,12 @@ class ScalarChecker {
       state.deferred = nullptr;
       state.initialization = TypeEvidenceState::InitializationCheck::suppressed;
     }
-    const auto type = query_evidence(expr, state, view, target, contextual, expected,
-                                     alternatives ? &independent : nullptr, expected_use, read, joining, case_scope);
+    auto type = query_evidence(expr, state, view, target, contextual, expected,
+                               alternatives ? &independent : nullptr, expected_use, read, joining, case_scope, pack_use);
+    if (type && type->kind == Type::arguments && pack_use == PackUse::none) {
+      if (state.required) implementation_gap(expr.at, "a whole value pack outside indexing or spreading");
+      type.reset();
+    }
     if (state.checks_initialization() && !target.places.empty() && !target.initialized) {
       const auto reaching = state.selections.outcome(state.selections.selection_outcomes(target), true);
       target.initialized = state.selections.selection_initialized(target) ||
@@ -11568,7 +11618,8 @@ class ScalarChecker {
     const auto *previous_abstract = abstract_operand_;
     if (mode == ArgumentMode::borrowed_ref) abstract_operand_ = &ungrouped_expression(operand);
     const auto type = check(operand, instance, operations, mode == ArgumentMode::value, false, expected,
-                            expected_type_use(mode), false, indexed_use, NativeLoanContext::none, {}, nullptr, false, true);
+                            expected_type_use(mode), false, indexed_use, NativeLoanContext::none, {}, nullptr,
+                            DiscardUse::ordinary, true);
     abstract_operand_ = previous_abstract;
     auto &actual = operations.at(&operand);
     if (!operand.checked_ref_argument || type == Type::never) return actual;
@@ -11585,6 +11636,50 @@ class ScalarChecker {
     prepared.nullable_view = false;
     prepared.null_sources.clear();
     return prepared;
+  }
+  void check_value_pack_call(const Expression &expr, const NamedFamily &family, size_t method,
+      CheckedInstance *instance, std::map<const Expression *, CheckedOperation> &operations,
+      CheckedOperation &operation, bool read, bool discard) {
+    if (&expr == prepared_call_)
+      implementation_gap(expr.at, "a prepared deferred value-pack call");
+    const auto plan = value_pack_plan(expr, program_.methods[method]);
+    const auto parameters = program_.methods[method].parameters;
+    using Operand = CheckedOperation::ValuePack::Operand;
+    std::vector<CheckedOperation> views(parameters.size());
+    bool completes = true, dynamic_count = false;
+    for (size_t i = 0; i < plan.operands.size(); ++i) {
+      const auto mode = plan.operands[i];
+      if (mode == Operand::empty) continue;
+      const auto &operand = *expr.children[i];
+      if (mode == Operand::spread) {
+        const auto type = check_pack_source(operand, instance, operations, PackUse::spread);
+        completes = completes && type != Type::never;
+        if (type == Type::never) continue;
+        const auto &view = operations.at(&operand);
+        check_value_pack_spread(type, view.view && !view.mixed_view, operand.at);
+        require_live_view(view, operand.at);
+        read_view(view, operand.at, "value-pack spread");
+        note_abrupt(operand.at, {exception_id(ExceptionCategory::invalid_capacity),
+                                exception_id(ExceptionCategory::out_of_memory)});
+        dynamic_count = true;
+      } else {
+        const auto &expected = mode == Operand::fixed ? parameters[i] : parameters.back();
+        auto value = check_argument_expression(operand, ArgumentMode::value, instance, operations, &expected);
+        completes = completes && value.type != Type::never;
+        if (value.type != Type::never) transfer_type(value.type, expected, operand.at);
+        if (mode == Operand::fixed) views[i] = std::move(value);
+        else if (dynamic_count) note_abrupt(operand.at, {exception_id(ExceptionCategory::invalid_capacity)});
+      }
+    }
+    views.back().type = Type::uint64;
+    for (const auto &parameter : parameters) operation.arguments.push_back({ArgumentMode::value, parameter});
+    operation.value_pack = plan;
+    const auto selected = select_method(family.methods, parameters, expr.at, expr.text, family.retained_types());
+    const auto callee = demand_named(expr, family, selected, parameters);
+    const auto &result = program_.instances[callee].result;
+    if (!result.type || result.borrowed() || (!scalar_type(*result.type) && result.type != Type::void_type))
+      implementation_gap(expr.at, "a value-pack call without a proved independent scalar or void result");
+    finish_named_call(expr, parameters, views, operation, read, discard, completes, callee);
   }
   static bool prepared_argument_completes(const CheckedOperation &operand) {
     return operand.type != Type::never && operand.checked_ref_presence != CheckedOperation::CheckedRefPresence::definite_absence;
@@ -11798,9 +11893,58 @@ class ScalarChecker {
     }
     return completes;
   }
+  std::optional<Type> query_value_pack_call(const Expression &expr, const NamedFamily &family,
+      size_t method, TypeEvidenceState &state) const {
+    if (state.preparing(expr)) implementation_gap(expr.at, "a prepared deferred value-pack call");
+    if (!state.required && !supports_value_pack(program_.methods[method])) return {};
+    const auto plan = value_pack_plan(expr, program_.methods[method]);
+    const auto parameters = program_.methods[method].parameters;
+    using Operand = CheckedOperation::ValuePack::Operand;
+    bool completes = true, known = true, dynamic_count = false;
+    for (size_t i = 0; i < plan.operands.size(); ++i) {
+      const auto mode = plan.operands[i];
+      if (mode == Operand::empty) continue;
+      const auto &operand = *expr.children[i];
+      const auto &expected = mode == Operand::fixed ? parameters[i] : parameters.back();
+      const bool spread = mode == Operand::spread;
+      const auto type = type_evidence(operand, state, false, spread ? nullptr : &expected, nullptr,
+          ExpectedTypeUse::materialization, completes, spread ? EvidenceRead::target : EvidenceRead::payload,
+          false, nullptr, spread ? PackUse::spread : PackUse::none);
+      known = known && type.has_value();
+      completes = completes && type != Type::never;
+      if (!type || type == Type::never) continue;
+      if (spread) {
+        if (state.required) {
+          check_value_pack_spread(*type, state.value.view == true && !state.value.mixed_view, operand.at);
+          require_type_initialized(state, state.target, "value-pack spread", operand.at);
+        }
+        if (completes) {
+          note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::invalid_capacity)));
+          note_type_allocation(state);
+        }
+        dynamic_count = true;
+      } else if (state.required) {
+        check_ref_selection_mode(operand, ArgumentMode::value);
+        transfer_type(*type, expected, operand.at);
+        if (completes && mode == Operand::value && dynamic_count)
+          note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::invalid_capacity)));
+      }
+    }
+    if (!completes) return Type::never;
+    if (!known) return {};
+    const auto &selected = program_.methods[method];
+    const auto result = infer_result(method, parameters, family.retained_types(),
+                                     family.declaration ? family.declaration : &state).contract;
+    if (!result) return {};
+    if (state.exits) for (const auto &obligation : declaration_obligations(selected, parameters, {}, {}, &state))
+      note_type_failures(state, obligation.declaration->throws_types);
+    record_type_call(expr, state, selected, true);
+    return result->type;
+  }
   std::optional<Type> query_evidence(const Expression &expr, TypeEvidenceState &state, ViewEvidence &view, TargetEvidence &target_facts,
                                      bool contextual, const Type *expected, std::vector<Type> *alternatives,
-                                     ExpectedTypeUse expected_use, EvidenceRead read, bool joining, CaseScopeEvidence *case_scope) const {
+                                     ExpectedTypeUse expected_use, EvidenceRead read, bool joining, CaseScopeEvidence *case_scope,
+                                     PackUse pack_use) const {
     using K = Expression::Kind;
     if (state.method && program_.methods[*state.method].lexical_result &&
         program_.methods[*state.method].lexical_result->marks(expr)) {
@@ -11972,7 +12116,7 @@ class ScalarChecker {
       return left == Type::never || right == Type::never ? Type{Type::never} : Type{Type::boolean};
     }
     if (state.required) {
-      if (expr.spread) implementation_gap(expr.at, "spread operands in typeof");
+      if (expr.spread && pack_use != PackUse::spread) implementation_gap(expr.at, "spread operands in typeof");
       if (signed_minimum(expr, &state)) {
         builtin_declarations(expr, {Type::integer}, Type::integer);
         return Type::integer;
@@ -12201,8 +12345,11 @@ class ScalarChecker {
       bool exits = false;
       for (size_t i = 0; i < expr.children.size(); ++i) {
         const bool last = i + 1 == expr.children.size();
-        result = type_evidence(*expr.children[i], state, contextual && last, last ? expected : nullptr,
-                               last ? alternatives : nullptr, expected_use, !exits, last ? read : EvidenceRead::discarded, joining);
+        const auto &item = *expr.children[i];
+        const auto use = last ? read : item.braced_if_with_empty_alternative() ? EvidenceRead::guard_statement
+                                                                             : EvidenceRead::discarded;
+        result = type_evidence(item, state, contextual && last, last ? expected : nullptr,
+                               last ? alternatives : nullptr, expected_use, !exits, use, joining);
         exits = exits || result == Type::never;
         if (state.returns && exits) break;
       }
@@ -12707,7 +12854,8 @@ class ScalarChecker {
       return Type::never;
     case K::conditional: {
       const bool observes_return = expr.children[0]->kind == K::return_test;
-      const bool discarded_arms = read == EvidenceRead::loop_discard && !observes_return;
+      const bool guard_statement = read == EvidenceRead::guard_statement;
+      const bool discarded_arms = guard_statement || (read == EvidenceRead::loop_discard && !observes_return);
       const auto condition = child(0);
       if (state.returns && condition == Type::never) return Type::never;
       if (state.required && condition != Type::boolean && condition != Type::never) fail(expr.at, "condition requires bool");
@@ -12716,7 +12864,8 @@ class ScalarChecker {
       const bool reaches_yes = state.selections.reachable(condition_proof, true);
       const bool reaches_no = state.selections.reachable(condition_proof, false);
       if (condition != Type::never && reaches_yes && reaches_no) capture_preparation_targets(expr, state);
-      const auto arm_read = observes_return && read == EvidenceRead::loop_discard ? EvidenceRead::discarded : read;
+      const auto arm_read = guard_statement ? EvidenceRead::guard_arm :
+          observes_return && read == EvidenceRead::loop_discard ? EvidenceRead::discarded : read;
       auto arms = conditional_arms(expr, state, contextual, expected, alternatives, expected_use, condition != Type::never, arm_read);
       auto &[yes, no, yes_state, no_state] = arms;
       if (!discarded_arms)
@@ -13094,16 +13243,23 @@ class ScalarChecker {
     case K::unary: case K::call: case K::value_call: case K::behave: case K::perform: {
       if (expr.lexical_symbol_call && !state.complete) return {};
       const bool lexical_print = expr.lexical_symbol_call && lexical_procedure_symbol(expr, &state).intrinsic_print;
+      if (expr.kind == K::call && !expr.intrinsic && !expr.lexical_symbol_call) {
+        const auto family = named_family(expr, &state);
+        if (const auto method = value_pack_method(family.methods))
+          return query_value_pack_call(expr, family, *method, state);
+      }
       if (expr.kind == K::call && builtin_indexed_transfer(expr, operation_name(expr, &state), &state)) {
         if (expr.children.size() != 3) fail(expr.at, "builtin indexed transfer requires an array, index and source");
         if (state.required && state.preparing(expr))
           implementation_gap(expr.at, "a prepared deferred builtin indexed transfer");
-        const auto type = child(0, false, true, EvidenceRead::target);
+        const auto type = type_evidence(*expr.children.front(), state, false, nullptr, nullptr,
+            ExpectedTypeUse::materialization, true, EvidenceRead::target, false, nullptr, PackUse::index);
         const auto array = state.value;
         if (!type || *type == Type::never) return type;
-        if (type->kind != Type::array && !state.required) return {};
-        const auto &shape = state.required ? indexed_array(*type, array.view == true && !array.mixed_view, expr.at)
-                                           : program_.arrays.at(type->identity);
+        if (type->kind != Type::array && type->kind != Type::arguments && !state.required) return {};
+        const auto &shape = type->kind == Type::arguments ? value_pack_index()
+            : state.required ? indexed_array(*type, array.view == true && !array.mixed_view, expr.at)
+                             : program_.arrays.at(type->identity);
         require_type_initialized(state, state.target, "array operand", expr.at);
         read_type_target(state, array, state.target);
         const auto index = child(1);
@@ -13704,16 +13860,19 @@ class ScalarChecker {
       return result;
     }
     case K::index: {
-      const auto source = child(0, false, true, EvidenceRead::target);
+      const auto source = type_evidence(*expr.children.front(), state, false, nullptr, nullptr,
+          ExpectedTypeUse::materialization, true, EvidenceRead::target, false, nullptr, PackUse::index);
       const CheckedArray *shape = nullptr;
       const auto array = state.value;
       if (source && source != Type::never) {
         if (state.required) {
-          if (!state.validating_body && read != EvidenceRead::payload && read != EvidenceRead::discarded && read != EvidenceRead::loop_discard &&
-              read != EvidenceRead::projection)
+          if (!state.validating_body && read != EvidenceRead::payload && read != EvidenceRead::discarded &&
+              read != EvidenceRead::loop_discard && read != EvidenceRead::guard_arm && read != EvidenceRead::projection)
             implementation_gap(expr.at, "borrowing an indexed array element");
-          shape = &indexed_array(*source, array.view == true && !array.mixed_view, expr.at);
+          shape = source->kind == Type::arguments ? &value_pack_index()
+              : &indexed_array(*source, array.view == true && !array.mixed_view, expr.at);
         } else if (source->kind == Type::array) shape = &program_.arrays.at(source->identity);
+        else if (source->kind == Type::arguments) shape = &value_pack_index();
         if (shape) {
           require_type_initialized(state, state.target, "array operand", expr.at);
           read_type_target(state, state.value, state.target);
@@ -17446,7 +17605,7 @@ class ScalarChecker {
     const bool discarded_arms = loop_discard && expr.kind == Expression::Kind::try_scope;
     const auto check_arm = [&](const Expression &arm) {
       return check(arm, instance, operations, read, discard, expected, expected_use, false, IndexedUse::value_only,
-                   NativeLoanContext::none, {}, nullptr, discarded_arms);
+                   NativeLoanContext::none, {}, nullptr, discarded_arms ? DiscardUse::loop_result : DiscardUse::ordinary);
     };
     const auto before = lexical_;
     auto *outer = abrupt_;
@@ -18875,17 +19034,27 @@ class ScalarChecker {
       fail(at, "case scalar value requires a proven non-null target");
     read_view(source, at, "case scalar result");
   }
+  Type check_pack_source(const Expression &source, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations, PackUse use) {
+    return check(source, instance, operations, false, false, nullptr, ExpectedTypeUse::materialization,
+        false, IndexedUse::value_only, NativeLoanContext::none, {}, nullptr, DiscardUse::ordinary, false, use);
+  }
 
   Type check(const Expression &expr, CheckedInstance *instance,
              std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false,
              const Type *expected = nullptr, ExpectedTypeUse expected_use = ExpectedTypeUse::materialization,
              bool write_slot = false, IndexedUse indexed_use = IndexedUse::value_only,
              NativeLoanContext native_loan = NativeLoanContext::none, std::optional<size_t> construction_owner = {},
-             const Expression *reservation_receiver = nullptr, bool loop_discard = false, bool preparing_argument = false) {
+             const Expression *reservation_receiver = nullptr, DiscardUse discard_use = DiscardUse::ordinary,
+             bool preparing_argument = false,
+             PackUse pack_use = PackUse::none) {
     using K = Expression::Kind;
     if (expr.checked_ref_argument && !preparing_argument)
       implementation_gap(*expr.checked_ref_argument, "checked ref selection for this invocation");
-    const bool discard_view = loop_discard && (expr.kind == K::name || expr.kind == K::field);
+    const bool loop_discard = discard_use == DiscardUse::loop_result;
+    const bool guard_arm = discard_use == DiscardUse::guard_arm;
+    const bool discard_view = ((loop_discard || guard_arm) && (expr.kind == K::name || expr.kind == K::field)) ||
+        (guard_arm && expr.kind == K::index);
     if (discard_view) read = false;
     CheckedOperation operation;
     if (checking_method_ && checking_method_->here_group &&
@@ -18893,7 +19062,7 @@ class ScalarChecker {
          expr.kind == K::native_handle_binding || expr.kind == K::make_owned_handle || expr.kind == K::make_borrowed_handle ||
          (expr.kind != K::return_test && expr.owner_name == "here")))
       implementation_gap(expr.at, "supplier-owned allocation, owner selection or defer from a here group");
-    if (expr.spread) implementation_gap(expr.at, "spread arguments");
+    if (expr.spread && pack_use != PackUse::spread) implementation_gap(expr.at, "spread arguments");
     if (expr.lexical_symbol_call && lexical_procedure_symbol(expr).intrinsic_print) {
       print_result(expr);
       const auto argument = check(*expr.children.front(), instance, operations);
@@ -19147,10 +19316,11 @@ class ScalarChecker {
         if (&expr == prepared_call_) implementation_gap(expr.at, "a prepared deferred builtin indexed transfer");
         operation.builtin = BuiltinOperation::array_transfer;
         operation.type = Type::never;
-        const auto type = child(0, false);
+        const auto type = check_pack_source(*expr.children.front(), instance, operations, PackUse::index);
         if (type == Type::never) break;
         const auto &array = operations.at(expr.children.front().get());
-        const auto &shape = indexed_array(type, array.view && !array.mixed_view, expr.at);
+        const auto &shape = type.kind == Type::arguments ? value_pack_index()
+            : indexed_array(type, array.view && !array.mixed_view, expr.at);
         require_live_view(array, expr.at);
         read_view(array, expr.at, "array operand");
         const auto index = child(1);
@@ -19348,6 +19518,13 @@ class ScalarChecker {
       }
       if (expr.intrinsic && !eager)
         implementation_gap(expr.at, "explicit intrinsic has no implemented builtin '" + expr.text + "'");
+      const auto family = named_family(expr);
+      if (expr.kind == K::call && !expr.intrinsic && !expr.lexical_symbol_call) {
+        if (const auto pack_method = value_pack_method(family.methods)) {
+          check_value_pack_call(expr, family, *pack_method, instance, operations, operation, read, discard);
+          break;
+        }
+      }
       if (expr.kind == K::call && !expr.intrinsic && std::ranges::any_of(expr.children,
           [](const auto &operand) { return operand->kind == K::named_argument; })) {
         check_complete_named_call(expr, instance, operations, operation, read, discard);
@@ -19356,10 +19533,9 @@ class ScalarChecker {
       std::vector<Type> arguments;
       std::vector<CheckedOperation> views;
       bool completes = true;
-      const bool declared_builtin = eager && !expr.intrinsic && named_family(expr).methods.empty() && has_declarations(expr.text);
+      const bool declared_builtin = eager && !expr.intrinsic && family.methods.empty() && has_declarations(expr.text);
       const bool builtin_signature = eager && (expr.intrinsic ||
-          (named_family(expr).methods.empty() && !has_declarations(expr.text)));
-      const auto family = named_family(expr);
+          (family.methods.empty() && !has_declarations(expr.text)));
       if (expr.kind == K::binary && expr.text == "++" && family.methods.empty())
         fail(expr.at, "no selected method family for operator '++'");
       if (!family.methods.empty() && (family.context || family.definition) && !has_lexical_places(family)) {
@@ -19550,7 +19726,7 @@ class ScalarChecker {
       operation.type = check(operand, instance, operations, false, discard, expected, expected_use,
           false, IndexedUse::immediate_target, native_loan,
           construction_owner && constructs_lexical_text(operand, nullptr, instance) ? construction_owner : std::nullopt,
-          nullptr, loop_discard);
+          nullptr, loop_discard ? discard_use : DiscardUse::ordinary);
       if (operation.type == Type::never) break;
       const auto &source = operations.at(&operand);
       if ((native_loan != NativeLoanContext::none || discard) && operation.type.kind == Type::native_handle) {
@@ -19601,7 +19777,8 @@ class ScalarChecker {
           break;
         }
         const auto type = check(operand, instance, operations, read, discard, nullptr, expected_use,
-                                write_slot, indexed_use, native_loan, construction_owner, reservation_receiver, loop_discard);
+                                write_slot, indexed_use, native_loan, construction_owner, reservation_receiver,
+                                loop_discard ? discard_use : DiscardUse::ordinary);
         if (type != Type::never && type != annotation)
           fail(expr.at, "type assertion cannot match enum '" + annotation.name + "'");
         operation = operations.at(&operand);
@@ -19646,7 +19823,10 @@ class ScalarChecker {
     case K::conditional: {
       const auto &test = *expr.children.front();
       const bool return_test = test.kind == K::return_test;
-      const bool discarded_arms = loop_discard && !return_test;
+      const bool guard_statement = discard_use == DiscardUse::guard_statement;
+      const bool discarded_arms = guard_statement || (loop_discard && !return_test);
+      const auto arm_use = guard_statement || guard_arm ? DiscardUse::guard_arm :
+          discarded_arms ? DiscardUse::loop_result : DiscardUse::ordinary;
       // When the joined scalar result needs a value, read a selected
       // reference after that arm's cleanup has finished.
       const bool value_join = read && !discard && [&] {
@@ -19715,13 +19895,13 @@ class ScalarChecker {
         lexical_.scopes.back().declarations = false;
       }
       const auto checked_yes = check(*expr.children[1], instance, operations, read && !value_join, discard, expected, expected_use,
-          false, IndexedUse::value_only, native_loan, {}, nullptr, discarded_arms);
+          false, IndexedUse::value_only, native_loan, {}, nullptr, arm_use);
       const auto yes = return_test && !operations.at(&test).return_filter.can_match ? Type{Type::never} : checked_yes;
       auto yes_state = lexical_;
       lexical_ = before;
       refine(test, false, operations);
       const auto no = check(*expr.children[2], instance, operations, read && !value_join, discard, expected, expected_use,
-          false, IndexedUse::value_only, native_loan, {}, nullptr, discarded_arms);
+          false, IndexedUse::value_only, native_loan, {}, nullptr, arm_use);
       auto no_state = lexical_;
       auto &yes_fact = operations.at(expr.children[1].get()), &no_fact = operations.at(expr.children[2].get());
       const bool independent = !discarded_arms && condition != Type::never && yes == no && independent_scalar_conditional(yes, yes_fact.view, no_fact.view,
@@ -19733,7 +19913,7 @@ class ScalarChecker {
           if (!fact.view || !state.live) return;
           if (proving_ && validating_ && fact.targets.contains(null_target))
             fail(arm.at, "conditional scalar value requires a proven non-null target");
-          const bool needs_read = !read || discard || value_join;
+          const bool needs_read = !guard_arm && (!read || discard || value_join);
           if (!needs_read && fact.type != Type::boolean) return;
           lexical_ = std::move(state);
           if (needs_read) read_view(fact, arm.at, "conditional scalar result");
@@ -19817,9 +19997,12 @@ class ScalarChecker {
       bool exits = false;
       for (size_t i = 0; i < expr.children.size(); ++i) {
         const bool last = i + 1 == expr.children.size();
-        operation.type = check(*expr.children[i], instance, operations, last ? read : true, last ? discard : true,
+        const auto &item = *expr.children[i];
+        const auto use = last ? discard_use : item.braced_if_with_empty_alternative() ? DiscardUse::guard_statement
+                                                                                   : DiscardUse::ordinary;
+        operation.type = check(item, instance, operations, last ? read : true, last ? discard : true,
                                last ? expected : nullptr, expected_use, false, IndexedUse::value_only,
-                               last ? native_loan : NativeLoanContext::none, {}, nullptr, last && loop_discard);
+                               last ? native_loan : NativeLoanContext::none, {}, nullptr, use);
         exits = exits || operation.type == Type::never;
         if (exits) lexical_.live = false;
       }
@@ -20391,11 +20574,12 @@ class ScalarChecker {
       break;
     }
     case K::index: {
-      const auto source = child(0, false);
+      const auto source = check_pack_source(*expr.children.front(), instance, operations, PackUse::index);
       const CheckedArray *shape = nullptr;
       if (source != Type::never) {
         const auto &array = operations.at(expr.children.front().get());
-        shape = &indexed_array(source, array.view && !array.mixed_view, expr.at);
+        shape = source.kind == Type::arguments ? &value_pack_index()
+            : &indexed_array(source, array.view && !array.mixed_view, expr.at);
         operation.operand_type = source;
         require_live_view(array, expr.at);
         read_view(array, expr.at, "array operand");
@@ -20789,9 +20973,11 @@ class ScalarChecker {
       implementation_gap(expr.at, "borrowing an indexed array element outside a direct projection, transfer or call");
     if (operation.type.kind == Type::native_handle && native_loan == NativeLoanContext::none && !discard)
       implementation_gap(expr.at, "using a borrowed handle result outside a checked native loan");
+    if (operation.type.kind == Type::arguments && pack_use == PackUse::none)
+      implementation_gap(expr.at, "a whole value pack outside indexing or spreading");
     if (operation.type == Type::never) lexical_.live = false;
     if (operation.view && !operation.selection_identity) operation.selection_identity = new_selection_identity();
-    operation.discarded_loop_view = discard_view && operation.view;
+    operation.discarded_view = discard_view && operation.view;
     operations[&expr] = operation;
     return operation.type;
   }
@@ -20799,7 +20985,7 @@ class ScalarChecker {
   Type check_loop_body(const Expression &body, CheckedInstance *instance,
                        std::map<const Expression *, CheckedOperation> &operations) {
     return check(body, instance, operations, true, true, nullptr, ExpectedTypeUse::materialization, false,
-                 IndexedUse::value_only, NativeLoanContext::none, {}, nullptr, true);
+                 IndexedUse::value_only, NativeLoanContext::none, {}, nullptr, DiscardUse::loop_result);
   }
 
   CallableChoices reaching_callables() const {
@@ -21298,7 +21484,8 @@ class ScalarChecker {
         const bool live_binding = checking_method_->scope_inputs && checking_method_->scope_inputs->live_bindings.contains(p);
         const auto mode = argument_mode(parameter);
         const auto &declared = checking_method_->parameters[p];
-        const auto &type = text_type(declared) ? declared : instance.arguments[p];
+        const auto type = parameter.variadic ? Type{Type::arguments}
+            : text_type(declared) ? declared : instance.arguments[p];
         const auto id = declare(parameter.name, type, place || parameter.read_only || (value && parameter.fixed_binding),
                                 value || live_value, parameter.at, !checking_method_->scope_inputs, &entry, place);
         const auto binding = storage_->at(id).binding;
@@ -23039,8 +23226,18 @@ class ScalarChecker {
         check_declared_results(method, method.result, declared_results(method, method.parameters));
     if (unsupported_here) implementation_gap(*unsupported_here, "this receiving pattern for a here body");
     prepare_interpretations();
-    for (const auto &method : program_.methods)
-      if (variadic(method)) implementation_gap(method.input_parameters().back().at, "variadic method bodies");
+    for (const auto &method : program_.methods) {
+      if (!variadic(method)) continue;
+      if (!supports_value_pack(method))
+        implementation_gap(method.input_parameters().back().at, "variadic method bodies");
+      if (!method.family) continue;
+      // The one-tail signature used for checking does not enumerate the
+      // arities or type substitutions of a broader declaration.
+      for (const auto &declaration : program_.families[*method.family].declarations)
+        if (!variadic(declaration) || !declaration.type_parameters.empty() ||
+            declaration.parameters != method.parameters)
+          implementation_gap(declaration.source->at, "variadic execution with a differently shaped callable declaration");
+    }
     find_abstract_effect_inputs();
     std::vector<WarningDiagnostic> definition_warnings;
     if (!definition_pass_ && !abstract_effect_inputs_.empty())

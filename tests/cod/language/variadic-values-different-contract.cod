@@ -1,0 +1,4 @@
+func first(a:u64, b:u64) -> bool;
+func first(items:u64...) -> u64 { items[0u64] }
+
+first(7u64, 4u64);

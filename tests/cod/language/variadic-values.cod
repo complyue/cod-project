@@ -1,0 +1,28 @@
+using symbol "std:io" @print;
+
+array SubmittedBids[u64]:u64;
+
+func opening_bid(reserve:u64, bids:u64...) -> u64 {
+    if (bids[0u64] < reserve) { bids[0u64] <- reserve }
+    bids[0u64]
+}
+
+proc receive(bids:u64...) -> void {
+    behave @print(bids[0u64]);
+    bids[0u64] <- 12u64;
+    behave @print(bids[0u64]);
+    return;
+}
+
+proc forward(bids:u64...) -> void {
+    if (bids[0u64] < 10u64) { bids[0u64] <- 10u64 } else {}
+    receive(bids...);
+    behave @print(bids[0u64]);
+    return;
+}
+
+ref submitted = make SubmittedBids(1u64, 7u64);
+behave @print(opening_bid(10u64, submitted...));
+behave @print(opening_bid(3u64, submitted...));
+forward(submitted...);
+behave @print(submitted[0u64]);
