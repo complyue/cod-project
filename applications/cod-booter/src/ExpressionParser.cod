@@ -4,6 +4,7 @@ using "ParserInput.cod" {
     parse_identifier, punct_at, punct_pair_at, reset_parse_result, expected_c_linkage, closing_token, recover_syntax, recover_block_separator, seed_lexical_reports,
 };
 using "CallableSyntax.cod" { parse_callable_signature, parse_scoped_procedure_signature };
+using "Lexer.cod" { and_word, or_word };
 using "ParserStorage.cod" {
     AssignmentOperands, ungrouped, is_invocation, name_syntax,
     function_definition,
@@ -895,8 +896,15 @@ func parse_array_length(source:const SourceBytes in S, tokens:const Tokens in T,
 
 func starts_short_case_arm(source:const SourceBytes in S, tokens:const Tokens in T, first:u64, past:u64) -> bool
     where {const owner S, const owner T} {
-    return first < past && tokens[first].kind == identifier() &&
-        punct_pair_at(source, tokens, first + 1u64, past, 45u8, 62u8)
+    if (first >= past || tokens[first].kind != identifier()) return false;
+    val next <- first + 1u64;
+    if (punct_at(source, tokens, next, past) == 124u8 ||
+        punct_pair_at(source, tokens, next, past, 45u8, 62u8)) return true;
+    if (punct_at(source, tokens, next, past) != 123u8) return false;
+    val close <- closing_token(tokens, next, past);
+    if (close == no_node()) return false;
+    return punct_at(source, tokens, close + 1u64, past) == 124u8 ||
+        punct_pair_at(source, tokens, close + 1u64, past, 45u8, 62u8)
 }
 
 # Grouped expressions and labelled arguments keep their usual grammar.
@@ -1044,50 +1052,41 @@ func parse_case_arm(source:const SourceBytes in S, tokens:const Tokens in T, nod
     val short <- starts_short_case_arm(source, tokens, head, past);
     val pattern <- no_node();
     val guard <- no_node();
-    if (short) {
-        if (reserved_module_name(source, tokens[head])) {
-            result.diagnostic <- unsupported_case_pattern();
+    val at <- if (short) { head } else { head + 1u64 };
+    result.next <- at;
+    if (punct_at(source, tokens, at + 1u64, past) == 123u8) {
+        if (!parse_constructor_case(source, tokens, nodes, result, past)) return;
+        (pattern <- result.root):void;
+    } else {
+        if (short || punct_at(source, tokens, at, past) != 41u8) {
+            if (at >= past || tokens[at].kind != identifier() ||
+                (short && reserved_module_name(source, tokens[at])) ||
+                (!short && punct_at(source, tokens, at + 1u64, past) != 41u8)) {
+                result.diagnostic <- unsupported_case_pattern();
+                return
+            };
+            if (tokens[at].past - tokens[at].first != 1u64 || source[tokens[at].first] != 95u8) {
+                append_case_pattern(source, tokens[at], nodes, result);
+                if (result.diagnostic != 0u8) return;
+                (pattern <- result.root):void
+            };
+            (result.next <- at + 1u64):void
+        }
+    };
+    if (!short) {
+        if (punct_at(source, tokens, result.next, past) != 41u8) {
+            result.diagnostic <- expected_close();
             return
         };
-        if (tokens[head].past - first != 1u64 || source[first] != 95u8) {
-            append_case_pattern(source, tokens[head], nodes, result);
-            if (result.diagnostic != 0u8) return;
-            (pattern <- result.root):void
-        };
-        (result.next <- head + 1u64):void
-    } else {
-        val at <- head + 1u64;
-        result.next <- at;
-        if (punct_at(source, tokens, at + 1u64, past) == 123u8) {
-            if (!parse_constructor_case(source, tokens, nodes, result, past)) return;
-            pattern <- result.root;
-            if (punct_at(source, tokens, result.next, past) != 41u8) {
-                result.diagnostic <- expected_close();
-                return;
-            };
-        } else {
-            if (punct_at(source, tokens, at, past) != 41u8) {
-                if (at >= past || tokens[at].kind != identifier() || punct_at(source, tokens, at + 1u64, past) != 41u8) {
-                    result.diagnostic <- unsupported_case_pattern();
-                    return;
-                };
-                if (tokens[at].past - tokens[at].first != 1u64 || source[tokens[at].first] != 95u8) { # '_'
-                    append_case_pattern(source, tokens[at], nodes, result);
-                    if (result.diagnostic != 0u8) return;
-                    (pattern <- result.root):void;
-                };
-                (result.next <- at + 1u64):void;
-            };
-        };
+        (result.next <- result.next + 1u64):void
+    };
+    if (punct_at(source, tokens, result.next, past) == 124u8) {
         result.next <- result.next + 1u64;
-        if (punct_at(source, tokens, result.next, past) == 124u8) {
-            result.next <- result.next + 1u64;
-            if (!punct_pair_at(source, tokens, result.next, past, 45u8, 62u8)) {
-                parse_expression_at(source, tokens, nodes, result, past, 1u8);
-                if (result.diagnostic != 0u8) return;
-                (guard <- result.root):void;
-            } else {};
-        } else {};
+        if (!punct_pair_at(source, tokens, result.next, past, 45u8, 62u8)) {
+            parse_expression_at(source, tokens, nodes, result, past, 1u8);
+            if (result.diagnostic != 0u8) return;
+            (guard <- result.root):void
+        }
     };
     val arrow <- result.next;
     if (!punct_pair_at(source, tokens, arrow, past, 45u8, 62u8)) {
@@ -2342,11 +2341,13 @@ func parse_infix(source:const SourceBytes in S, tokens:const Tokens in T,
     val predicate <- comparison(source, tokens, result.next, past);
     val kind <- compare_node();
     val binding <- 0u8;
-    if (punct_pair_at(source, tokens, result.next, past, 124u8, 124u8)) {
+    if (result.next < past && (or_word(source, tokens[result.next]) ||
+        punct_pair_at(source, tokens, result.next, past, 124u8, 124u8))) {
         kind <- logical_or_node();
         (binding <- 1u8):void;
     } else {};
-    if (punct_pair_at(source, tokens, result.next, past, 38u8, 38u8)) {
+    if (result.next < past && (and_word(source, tokens[result.next]) ||
+        punct_pair_at(source, tokens, result.next, past, 38u8, 38u8))) {
         kind <- logical_and_node();
         (binding <- 2u8):void;
     } else {};

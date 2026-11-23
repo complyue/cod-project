@@ -51,10 +51,7 @@ export func punct_pair_at(source:const SourceBytes in S, tokens:const Tokens in 
 export func closing_token(tokens:const Tokens in T, opening:u64, past:u64) -> u64 where {const owner T} {
     if (opening >= past || past >= len(tokens)) return no_node();
     return case tokens[opening].delimiter of {
-        (MatchedDelimiter { val close <- closing; }) -> {
-            if (close <= opening || close >= past) return no_node();
-            close
-        };
+        MatchedDelimiter { val close <- closing; } | close > opening && close < past -> (close);
         _ -> no_node()
     }
 }

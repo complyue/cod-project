@@ -173,7 +173,8 @@ export func issue_syntax_revision(sequence:SyntaxRevisions in G, revision:u64 in
 
 export func published_syntax_id(nodes:const ExprNodes in N, revision:u64, used:u64,
                                 id:const NodeId in I) -> bool where {const owner N, const owner I} {
-    if (id.revision != revision || id.index >= used || id.index >= intrinsic (len)(nodes)) return false;
+    if (id.revision != revision or id.index >= used or id.index >= intrinsic (len)(nodes))
+        return false;
     return case nodes[id.index] of {
         Vacant -> false;
         Occupied -> true
