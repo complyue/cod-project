@@ -1,5 +1,5 @@
 using "std:exceptions" Exception;
-using "NativeCommands.cod" NativeCommands;
+using "NativeCommands.cod" { NativeCommands, NativeUnitRows, NativeLiteralRanges };
 using "SourceStorage.cod" SourceBytes;
 
 export handle type LLVMSession;
@@ -10,6 +10,12 @@ proc "C" LLVMSession() throws LLVMOpenException;
 export proc "C" llvm_construct(handle session:LLVMSession in L, ref rows:const NativeCommands in W,
                                ref source:const SourceBytes in S, used:u64, functions:u64, labels:u64, slots:u64) -> u8
     where {owner L, const owner W, const owner S};
+export proc "C" llvm_construct_units(handle session:LLVMSession in L,
+                                     commands:const NativeCommands in G, units:const NativeUnitRows in G,
+                                     literals:const NativeLiteralRanges in G, spellings:const SourceBytes in G,
+                                     names:const SourceBytes in G, command_count:u64, unit_count:u64,
+                                     literal_count:u64, spelling_size:u64, name_size:u64, functions:u64) -> u8
+    where {owner L, const owner G};
 export proc "C" llvm_verify(handle session:LLVMSession in L) -> u8 where {const owner L};
 export proc "C" llvm_emit_object(handle session:LLVMSession in L, output:const CString in A) -> u8
     where {owner L, const owner A};

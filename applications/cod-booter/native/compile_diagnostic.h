@@ -8,6 +8,15 @@ enum {
     llvm_emission_failed, llvm_publication_failed
 };
 
+/* Private diagnostic codes for the CoD module-selection stage. */
+enum {
+    module_cycle_unproved = 6,
+    module_dependency_rejected = 7,
+    module_graph_storage_failed = 8,
+    module_depth_unproved = 9,
+    module_dependency_unsupported = 16,
+};
+
 typedef struct {
     uint64_t line;
     uint64_t column;

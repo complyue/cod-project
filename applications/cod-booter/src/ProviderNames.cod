@@ -94,6 +94,13 @@ export func valid_provider_member(spellings:const SourceBytes in S, used:u64, fi
         valid_identifier(spellings, first, past) && !reserved_member(spellings, first, past);
 }
 
+export func provider_member_error(spellings:const SourceBytes in S, used:u64, first:u64, past:u64)
+    -> u32 where {const owner S} {
+    if (used > intrinsic (len)(spellings) || past > used || !valid_identifier(spellings, first, past)) return 2u32;
+    if (reserved_member(spellings, first, past)) return 5u32;
+    return 0u32;
+}
+
 export proc emit_provider_member(spellings:const SourceBytes in S, used:u64, first:u64, past:u64)
     -> bool where {const owner S} {
     if (!valid_provider_member(spellings, used, first, past)) return false;

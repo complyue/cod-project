@@ -1,0 +1,184 @@
+using "../../../cod/library/string.cod" { StringBuilder, emit, emitStr };
+using symbol "../../../cod/library/string.cod" @sout;
+using "SourceStorage.cod" SourceBytes;
+using "ModuleIndex.cod" Visits;
+using "ModuleExportStorage.cod" { ModuleInterfaces, enum_type };
+using "NameResolution.cod" { c_operation, c_handle_type, array_type, builtin_u8 };
+using "ProviderTypeNames.cod" { ProviderPrefixes, find_provider_handle, emit_provider_handle_type };
+using "ProviderCalls.cod" { emit_indexed_name, native_argument_array, emit_invalid_view, emit_provider_result_type };
+using "ProviderViews.cod" { ABIPrimitiveLayouts, write_provider_view };
+using "ParserStorage.cod" no_node;
+
+proc emit_here_name(name:const String in N, ending:const String in E) -> void where {const owner N, const owner E} {
+    emit("cod_native_");
+    emit(name);
+    emit(ending);
+    return;
+}
+
+proc emit_call_signature(name:const String in N, handle_type:const String in H, feedback:const String in V)
+    -> void where {const owner N, const owner H, const owner V} {
+    emit("cod_native_status ");
+    emit_here_name(name, "_call(const ");
+    emit(handle_type);
+    emit(" *handle, ");
+    emit_here_name(name, "_callback body, void *context, cod_native_here_step *completion, ");
+    emit(feedback);
+    emit(" *value)");
+    return;
+}
+
+proc emit_here_declarations(name:const String in N, handle_type:const String in H, feedback:const String in V, count:u64)
+    -> void where {const owner N, const owner H, const owner V} {
+    emit("typedef struct ");
+    emit_here_name(name, "_arrays {\n");
+    for (index in 0u64 .. count) {
+        emit("    ");
+        emit_indexed_name(name, "_view", index);
+        emit(" array");
+        emitStr(index);
+        emit(";\n");
+    };
+    emit("} ");
+    emit_here_name(name, "_arrays;\n");
+    emit("typedef cod_native_here_step (*");
+    emit_here_name(name, "_callback)(void *context, const ");
+    emit_here_name(name, "_arrays *views, ");
+    emit(feedback);
+    emit(" *feedback);\n");
+    emit_call_signature(name, handle_type, feedback);
+    emit(";\ncod_native_status ");
+    emit_here_name(name, "_impl(");
+    emit(handle_type);
+    emit(" handle, ");
+    emit_here_name(name, "_callback run, void *loan, ");
+    emit(feedback);
+    emit(" *value);\nint ");
+    emit_here_name(name, "_validate_impl(");
+    emit(handle_type);
+    emit(" handle, const ");
+    emit_here_name(name, "_arrays *views);\n\n");
+    return;
+}
+
+proc emit_here_runner(name:const String in N, handle_type:const String in H, feedback:const String in V,
+                      rows:const ModuleInterfaces in G, used:u64, head:u64, checked_feedback:bool)
+    -> bool where {const owner N, const owner H, const owner V, const owner G} {
+    val count <- rows[head].entry_count - 1u64;
+    for (index in 0u64 .. count) {
+        emit("_Static_assert(offsetof(");
+        emit_here_name(name, "_arrays, array");
+        emitStr(index);
+        emit(") == ");
+        emitStr(index);
+        emit(" * 2 * sizeof(uint64_t), \"unexpected native array offset\");\n");
+    };
+    emit("typedef struct ");
+    emit_here_name(name, "_state {\n    ");
+    emit(handle_type);
+    emit(" handle;\n    ");
+    emit_here_name(name, "_callback body;\n    void *context;\n    cod_native_here_step completion;\n} ");
+    emit_here_name(name, "_state;\n\nstatic cod_native_here_step ");
+    emit_here_name(name, "_run(void *context, const ");
+    emit_here_name(name, "_arrays *views, ");
+    emit(feedback);
+    emit(" *feedback) {\n    ");
+    emit_here_name(name, "_state *state = context;\n");
+    emit("    if (state->completion != COD_NATIVE_HERE_VALUE) return state->completion;\n");
+    emit("    if (!views || !feedback) return state->completion = COD_NATIVE_HERE_INVALID;\n");
+    val array_head <- no_node();
+    for (index in 0u64 .. count) {
+        array_head <- native_argument_array(rows, used, head + 2u64 + index);
+        if (array_head == no_node()) return false;
+        emit("    if (");
+        if (!emit_invalid_view(name, index, rows[array_head].element_kind, true)) return false;
+        emit(") return state->completion = COD_NATIVE_HERE_INVALID;\n");
+    };
+    emit("    if (!");
+    emit_here_name(name, "_validate_impl(state->handle, views)) return state->completion = COD_NATIVE_HERE_INVALID;\n");
+    if (checked_feedback) {
+        emit("    ");
+        emit(feedback);
+        emit(" normal = 0;\n    state->completion = state->body(state->context, views, &normal);\n");
+        emit("    if (state->completion != COD_NATIVE_HERE_VALUE) return state->completion;\n    if (!");
+        emit(feedback);
+        emit("_valid(normal)) return state->completion = COD_NATIVE_HERE_INVALID;\n");
+        emit("    *feedback = normal;\n    return COD_NATIVE_HERE_VALUE;\n}\n\n");
+    } else {
+        emit("    return state->completion = state->body(state->context, views, feedback);\n}\n\n");
+    };
+    return true;
+}
+
+proc emit_here_call(name:const String in N, handle_type:const String in H, feedback:const String in V,
+                    checked_feedback:bool) -> void where {const owner N, const owner H, const owner V} {
+    emit_call_signature(name, handle_type, feedback);
+    emit(" {\n    if (!handle || !body || !context || !completion || !value)\n");
+    emit("        return COD_NATIVE_BOUNDARY_ERROR;\n    ");
+    emit_here_name(name, "_state state = {*handle, body, context, COD_NATIVE_HERE_VALUE};\n    ");
+    emit(feedback);
+    emit(" result = 0;\n    const cod_native_status status = ");
+    emit_here_name(name, "_impl(*handle, ");
+    emit_here_name(name, "_run, &state, &result);\n");
+    if (checked_feedback) {
+        emit("    if (state.completion == COD_NATIVE_HERE_VALUE && status == COD_NATIVE_OK && !");
+        emit(feedback);
+        emit("_valid(result))\n        state.completion = COD_NATIVE_HERE_INVALID;\n");
+    };
+    emit("    *completion = state.completion;\n");
+    emit("    if (state.completion == COD_NATIVE_HERE_VALUE && status == COD_NATIVE_OK) *value = result;\n");
+    emit("    return state.completion == COD_NATIVE_HERE_INVALID ? COD_NATIVE_BOUNDARY_ERROR : status;\n}\n\n");
+    return;
+}
+
+export proc write_provider_here(header:StringBuilder in H, stubs:StringBuilder in S,
+                                primitives:const ABIPrimitiveLayouts in L, record_alignment:u64,
+                                name:const String in N, visits:const Visits in G, keys:const SourceBytes in G,
+                                spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
+                                prefix:const ProviderPrefixes in R, head:u64)
+    -> bool where {owner H, owner S, const owner L, const owner N, const owner G, const owner R} {
+    if (prefix.interfaces > intrinsic (len)(rows) || head >= prefix.interfaces ||
+        rows[head].interface_kind != c_operation() || rows[head].has_here == 0u8 ||
+        rows[head].value_kind != 0u8 || rows[head].entry_count < 2u64 ||
+        rows[head].entry_count >= prefix.interfaces - head) return false;
+    val supplier <- head + 1u64;
+    if (rows[supplier].value_kind != c_handle_type()) return false;
+    val borrowed <- find_provider_handle(rows, prefix.interfaces, rows[supplier].type_module, rows[supplier].type_identity);
+    if (borrowed == no_node()) return false;
+    val result <- rows[head].result_kind;
+    if (result != builtin_u8() && result != enum_type()) return false;
+    val checked_feedback <- result == enum_type();
+    ref supplier_name = make StringBuilder();
+    ref feedback_name = make StringBuilder();
+    val ready <- false;
+    {{
+        effect @sout = supplier_name;
+        (ready <- emit_provider_handle_type(spellings, prefix.spellings, rows, borrowed)):void;
+    }};
+    if (!ready) return false;
+    {{
+        effect @sout = feedback_name;
+        (ready <- emit_provider_result_type(visits, keys, spellings, rows, prefix, head)):void;
+    }};
+    if (!ready) return false;
+    ref handle_type = make String(supplier_name);
+    ref feedback = make String(feedback_name);
+    val input <- 0u64;
+    val array_head <- no_node();
+    val count <- rows[head].entry_count - 1u64;
+    for (index in 0u64 .. count) {
+        input <- head + 2u64 + index;
+        if (rows[input].value_kind != array_type()) return false;
+        array_head <- native_argument_array(rows, prefix.interfaces, input);
+        if (array_head == no_node() ||
+            !write_provider_view(header, stubs, primitives, record_alignment, name, index, rows[input].target_readonly != 0u8,
+                                 rows, prefix.interfaces, array_head, spellings, prefix.spellings)) return false;
+    };
+    {{ effect @sout = header; emit_here_declarations(name, handle_type, feedback, count); }};
+    {{
+        effect @sout = stubs;
+        (ready <- emit_here_runner(name, handle_type, feedback, rows, prefix.interfaces, head, checked_feedback)):void;
+        if (ready) { emit_here_call(name, handle_type, feedback, checked_feedback); };
+    }};
+    return ready;
+}

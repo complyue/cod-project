@@ -1,18 +1,43 @@
+using "std:exceptions" { OutOfMemoryError, RegionCapacityExceededError };
+using "../../../cod/library/string.cod" StringBuilder;
 using "NativeSource.cod" Path;
-using "NativeScratch.cod" ScratchOpenException;
-using symbol "NativeLLVM.cod" @llvmSession;
-using "NativeLLVM.cod" { LLVMSession, LLVMOpenException, llvm_verify, llvm_emit_object };
-using "NativeDiagnostics.cod" { DiagnosticDestination, report_backend_error, report_scratch_error };
+using "NativeDiagnostics.cod" { DiagnosticDestination, report_backend_error, report_scratch_error, report_provider_error };
 using "SourceStorage.cod" SourceBytes;
-using "ModuleExports.cod" ModuleExports;
-using "ModuleGraph.cod" { NativeGraph, collect_native_graph, construct_native_graph };
-using "CompilerStatus.cod" CompilerStatus { Complete, OpenFailed, LoweringFailed, FinishFailed, ScratchFailed };
+using "ParserStorage.cod" no_node;
+using "ModuleExportStorage.cod" { ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces };
+using "ModuleExportStorage.cod" SumInterfacePayload { NoSumInterface };
+using "ModuleIndex.cod" Visits;
+using "ModuleIndex.cod" VisitSlot { Vacant };
+using "NativeCommands.cod" {
+    NativeCommand, NativeCommands, NativeUnitRow, NativeUnitRows, NativeLiteralRange, NativeLiteralRanges,
+};
+using "ModuleGraph.cod" { compile_graph, GraphPurpose { Declarations, NativeObject } };
+using symbol "NativeLLVM.cod" @llvmSession;
+using "NativeLLVM.cod" { LLVMSession, LLVMOpenException, llvm_construct_units, llvm_verify, llvm_emit_object };
+using "NativeProviderLayout.cod" { ProviderLayout, ProviderLayoutException };
+using "NativeProviderOutput.cod" publish_provider_pair;
+using "ProviderViews.cod" { ABIPrimitiveLayouts, ABIPrimitiveLayout, measure_provider_primitives };
+using "ProviderTypeNames.cod" ProviderPrefixes;
+using "ProviderRenderer.cod" { provider_record_layout_needed, provider_boundary_error, render_provider_pair };
+using "CompilerStatus.cod" CompilerStatus { Complete, Rejected, OpenFailed, LoweringFailed, FinishFailed, ScratchFailed };
 
-proc verify_active_session() -> u8 {
-    return llvm_verify(@llvmSession);
+region GraphRoot {
+    used:u64;
+    key_used:u64;
+    next_revision:u64;
+    export_used:u64;
+    interface_used:u64;
+    spelling_used:u64;
+    command_used:u64;
+    unit_used:u64;
+    literal_used:u64;
+    function_used:u64;
 }
 
-proc write_object(handle graph:NativeGraph in G, output:const String in A,
+proc write_object(commands:const NativeCommands in G, units:const NativeUnitRows in G,
+                  literals:const NativeLiteralRanges in G, spellings:const SourceBytes in G,
+                  names:const SourceBytes in G, command_count:u64, unit_count:u64, literal_count:u64,
+                  spelling_size:u64, name_size:u64, functions:u64, output:const String in A,
                   handle diagnostic:DiagnosticDestination in D) -> CompilerStatus
     where {const owner G, const owner A, owner D} {
     proc report_failure(code:u8, status:CompilerStatus) -> CompilerStatus {
@@ -22,9 +47,10 @@ proc write_object(handle graph:NativeGraph in G, output:const String in A,
 
     try {
         effect @llvmSession <- make own handle LLVMSession();
-        val constructed <- construct_native_graph(graph, @llvmSession);
+        val constructed <- llvm_construct_units(@llvmSession, commands, units, literals, spellings, names,
+                                                 command_count, unit_count, literal_count, spelling_size, name_size, functions);
         if (constructed != 0u8) return report_failure(constructed, LoweringFailed);
-        val verified <- verify_active_session();
+        val verified <- llvm_verify(@llvmSession);
         if (verified != 0u8) return report_failure(verified, FinishFailed);
         val emitted <- llvm_emit_object(@llvmSession, output:CString);
         if (emitted != 0u8) return report_failure(emitted, FinishFailed);
@@ -34,17 +60,170 @@ proc write_object(handle graph:NativeGraph in G, output:const String in A,
     }
 }
 
+proc measure_primitives(primitives:ABIPrimitiveLayouts in L) -> u64 throws ProviderLayoutException where {owner L} {
+    own handle target:ProviderLayout <- make own handle ProviderLayout();
+    return measure_provider_primitives(target, primitives);
+}
+
+proc write_providers(visits:const Visits in G, keys:const SourceBytes in G, spellings:const SourceBytes in G,
+                     interfaces:const ModuleInterfaces in G, visits_used:u64, keys_used:u64,
+                     spellings_used:u64, interfaces_used:u64, handle directory:Path in P,
+                     handle diagnostic:DiagnosticDestination in D)
+    -> CompilerStatus where {const owner G, const owner P, owner D} {
+    try {
+        ref prefix = make ProviderPrefixes {
+            modules <- visits_used; keys <- keys_used; spellings <- spellings_used; interfaces <- interfaces_used;
+        };
+        val malformed <- provider_boundary_error(interfaces, spellings, prefix);
+        if (malformed != 0u32) { report_provider_error(diagnostic, malformed); return Rejected; };
+        ref primitives = make ABIPrimitiveLayouts(5u64, make ABIPrimitiveLayout { size <- 0u64; alignment <- 0u64; });
+        val alignment <- if (provider_record_layout_needed(interfaces, interfaces_used)) {
+            measure_primitives(primitives)
+        } else { 0u64 };
+        ref header = make StringBuilder();
+        ref stubs = make StringBuilder();
+        if (!render_provider_pair(header, stubs, primitives, alignment, visits, keys, spellings, interfaces, prefix)) {
+            report_provider_error(diagnostic, 2u32);
+            return Rejected;
+        };
+        val published <- publish_provider_pair(directory, make String(header), make String(stubs));
+        if (published == 0u64) return Complete;
+        report_provider_error(diagnostic, if (published == 4u64) { 4u32 } else { 3u32 });
+        return Rejected;
+    } catch (error:const ProviderLayoutException) {
+        report_provider_error(diagnostic, if (error.status == 4u8) { 4u32 } else { 2u32 });
+        return Rejected;
+    } catch (error:const OutOfMemoryError) {
+        report_provider_error(diagnostic, 4u32);
+        return Rejected;
+    }
+}
+
+func fresh_graph() -> own region :GraphRoot {
+    const val graph_budget <- 64u64 * 1024u64 * 1024u64;
+    return make region GraphRoot(graph_budget -> capacity) {
+        used <- 0u64; key_used <- 0u64; next_revision <- 1u64;
+        export_used <- 0u64; interface_used <- 0u64; spelling_used <- 0u64;
+        command_used <- 0u64; unit_used <- 0u64; literal_used <- 0u64; function_used <- 0u64;
+    };
+}
+
+proc traverse_graph(here finish(commands:const NativeCommands in G, units:const NativeUnitRows in G,
+                                literals:const NativeLiteralRanges in G, spellings:const SourceBytes in G,
+                                names:const SourceBytes in G, visits:const Visits in G, interfaces:const ModuleInterfaces in G,
+                                command_count:u64, unit_count:u64, literal_count:u64, spelling_size:u64, name_size:u64,
+                                functions:u64, visit_count:u64, interface_count:u64) -> CompilerStatus,
+                    handle input:Path in A, handle diagnostic:DiagnosticDestination in D, purpose:GraphPurpose,
+                    builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B,
+                    initial_keys:SourceBytes in G, used:u64 in G, key_used:u64 in G, next_revision:u64 in G,
+                    export_used:u64 in G, interface_used:u64 in G, spelling_used:u64 in G,
+                    command_used:u64 in G, unit_used:u64 in G, literal_used:u64 in G, function_used:u64 in G)
+    -> CompilerStatus where {const owner A, owner D, const owner B, owner G} {
+    ref visits = make Visits(0u64, make Vacant {}) in G;
+    ref keys = initial_keys;
+    ref spellings = make SourceBytes(0u64, 0u8) in G;
+    ref exports = make ModuleExports(0u64, make ModuleExport {
+        module_first <- 0u64; module_past <- 0u64; name_first <- 0u64; name_past <- 0u64;
+        identity <- 0u64; kind <- 0u8; checked <- 0u8; publishing_module <- 0u64; origin_module <- 0u64;
+        owner_module <- 0u64; owner_identity <- 0u64; shape <- 0u8;
+    }) in G;
+    ref interfaces = make ModuleInterfaces(0u64, make ModuleInterfaceRow {
+        defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
+        interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
+        type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
+        target_readonly <- 0u8; owner_readonly <- 0u8; has_here <- 0u8; failure_checked <- 0u8;
+        failure_module <- 0u64; failure_identity <- 0u64; name_first <- 0u64; name_past <- 0u64;
+        enum_code <- 0u64; native_function <- no_node(); native_procedure <- 0u8; native_reception <- 0u8;
+        native_passes_owner <- 0u8;
+        sum_payload <- make NoSumInterface {};
+    }) in G;
+    ref commands = make NativeCommands(0u64,
+        make NativeCommand { opcode <- 0u8; a <- 0u64; b <- 0u64; c <- 0u64; d <- 0u64; }) in G;
+    ref units = make NativeUnitRows(0u64, make NativeUnitRow {
+        command_first <- 0u64; command_past <- 0u64; literal_first <- 0u64; literal_past <- 0u64;
+        name_first <- 0u64; name_past <- 0u64; source_size <- 0u64; labels <- 0u64; slots <- 0u64;
+    }) in G;
+    ref literals = make NativeLiteralRanges(0u64, make NativeLiteralRange { first <- 0u64; past <- 0u64; }) in G;
+    val compiled <- compile_graph(input, diagnostic, purpose, builtin_spellings, builtins, visits, keys,
+                                  used, key_used, next_revision, exports, interfaces, spellings, commands, units, literals,
+                                  export_used, interface_used, spelling_used, command_used, unit_used, literal_used, function_used);
+    if (compiled != Complete) return compiled;
+    return finish(commands, units, literals, spellings, keys, visits, interfaces, command_used, unit_used, literal_used,
+                  spelling_used, key_used, function_used, used, interface_used);
+}
+
+proc check_graph(handle input:Path in A, handle diagnostic:DiagnosticDestination in D,
+                 builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B) -> CompilerStatus
+    where {const owner A, const owner B, owner D} {
+    own region graph:GraphRoot <- fresh_graph();
+    ref keys = make SourceBytes(0u64, 0u8) in graph;
+    return traverse_graph(input, diagnostic, Declarations, builtin_spellings, builtins,
+                          keys, graph.used, graph.key_used, graph.next_revision,
+                          graph.export_used, graph.interface_used, graph.spelling_used,
+                          graph.command_used, graph.unit_used, graph.literal_used, graph.function_used)
+        (commands, units, literals, spellings, names, visits, interfaces, command_count, unit_count, literal_count,
+         spelling_size, name_size, functions, visit_count, interface_count) => { continue Complete; };
+}
+
+export proc check_declarations(handle input:Path in A, handle diagnostic:DiagnosticDestination in D,
+                                builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B)
+    -> CompilerStatus where {const owner A, const owner B, owner D} {
+    try {
+        return check_graph(input, diagnostic, builtin_spellings, builtins);
+    } catch (error:const RegionCapacityExceededError) {
+        report_scratch_error(diagnostic, 3u32);
+        return ScratchFailed;
+    } catch (error:const OutOfMemoryError) {
+        report_scratch_error(diagnostic, 3u32);
+        return ScratchFailed;
+    }
+}
+
 export proc compile_object(handle input:Path in A, output:const String in A,
                            handle diagnostic:DiagnosticDestination in D,
-                           spellings:const SourceBytes in B, exports:const ModuleExports in B) -> CompilerStatus
+                           builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B) -> CompilerStatus
     where {const owner A, const owner B, owner D} {
     try {
-        own handle graph:NativeGraph <- make own handle NativeGraph();
-        val checked <- collect_native_graph(graph, input, diagnostic, spellings, exports);
-        if (checked != Complete) return checked;
-        return write_object(graph, output, diagnostic);
-    } catch (error:ScratchOpenException) {
-        report_scratch_error(diagnostic, error.status);
+        own region graph:GraphRoot <- fresh_graph();
+        ref keys = make SourceBytes(0u64, 0u8) in graph;
+        return traverse_graph(input, diagnostic, NativeObject, builtin_spellings, builtins,
+                              keys, graph.used, graph.key_used, graph.next_revision,
+                              graph.export_used, graph.interface_used, graph.spelling_used,
+                              graph.command_used, graph.unit_used, graph.literal_used, graph.function_used)
+            (commands, units, literals, spellings, names, visits, interfaces, command_count, unit_count, literal_count,
+             spelling_size, name_size, functions, visit_count, interface_count) => {
+                continue write_object(commands, units, literals, spellings, names, command_count, unit_count, literal_count,
+                                      spelling_size, name_size, functions, output, diagnostic);
+            };
+    } catch (error:const RegionCapacityExceededError) {
+        report_scratch_error(diagnostic, 3u32);
+        return ScratchFailed;
+    } catch (error:const OutOfMemoryError) {
+        report_scratch_error(diagnostic, 3u32);
+        return ScratchFailed;
+    }
+}
+
+export proc compile_providers(handle input:Path in A, handle directory:Path in P, handle diagnostic:DiagnosticDestination in D,
+                              builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B)
+    -> CompilerStatus where {const owner A, const owner P, const owner B, owner D} {
+    try {
+        own region graph:GraphRoot <- fresh_graph();
+        ref keys = make SourceBytes(0u64, 0u8) in graph;
+        return traverse_graph(input, diagnostic, Declarations, builtin_spellings, builtins,
+                              keys, graph.used, graph.key_used, graph.next_revision,
+                              graph.export_used, graph.interface_used, graph.spelling_used,
+                              graph.command_used, graph.unit_used, graph.literal_used, graph.function_used)
+            (commands, units, literals, spellings, names, visits, interfaces, command_count, unit_count, literal_count,
+             spelling_size, name_size, functions, visit_count, interface_count) => {
+                continue write_providers(visits, names, spellings, interfaces, visit_count, name_size, spelling_size,
+                                         interface_count, directory, diagnostic);
+            };
+    } catch (error:const RegionCapacityExceededError) {
+        report_scratch_error(diagnostic, 3u32);
+        return ScratchFailed;
+    } catch (error:const OutOfMemoryError) {
+        report_scratch_error(diagnostic, 3u32);
         return ScratchFailed;
     }
 }

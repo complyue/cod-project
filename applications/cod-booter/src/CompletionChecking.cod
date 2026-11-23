@@ -1,19 +1,39 @@
+using "ParserStorage.cod" AstSlot { Vacant, Occupied };
+using "ParserStorage.cod" ExprPayload { DiscardedExpression, CheckedTypeAssertion, RaisePending, RaiseValue, CaseFallthrough, CaseFailure };
+using "ParserStorage.cod" BinarySyntax { ArithmeticBinary, ComparisonBinary };
+using "ParserStorage.cod" ArithmeticOperation { Addition };
+using "ParserStorage.cod" ComparisonRelation { Equal };
+using "ParserStorage.cod" InvocationSyntax { OrdinaryInvocation, EffectfulInvocation };
+using "ParserStorage.cod" DeferSyntax { DeferCall, DeferBody };
+using "ParserStorage.cod" LocalMode { ValueLocal, ReferenceLocal, ExceptionLocal };
+using "ParserStorage.cod" NameSyntax { OrdinaryName };
+using "ParserStorage.cod" CompletionSyntax { ReturnCompletion, BreakCompletion };
 using "ParserStorage.cod" {
-    ExprNodes, len as syntax_len, no_node, module_node, module_item_node, callable_node,
-    is_function, throws_clause_node, block_node, full_scope_node,
-    block_item_node, argument_node, checked_ref_argument, try_node, catch_clause_node,
-    catch_handler_node, finally_clause_node, deferred_call_node, deferred_block_node, discard_node,
-    compare_node, conditional_node, range_node, range_header_node, literal_range,
-    nonempty_literal_range, bool_node, logical_not_node, logical_binary, skips_right, return_node,
-    throw_node, group_node, call_node, behave_node, is_transfer, make_named_node, construction_body,
-    field_access_node, positional_construction, rebind_node,
-    integer_arithmetic, name_node, ref_local_node,
-    local_storage_binding, case_node, case_arm_node, case_fallthrough_node, case_failure_node, break_node,
-    type_assertion_node,
+    ExprNodes, len as syntax_len, no_node,
+    is_function,
+    checked_ref_argument,
+    RangeSites, RangeBounds, inspect_range_loop, inspect_range_header, classify_literal_range, LogicalSites, inspect_logical,
+    inspect_assignment, AssignmentSites, inspect_group, ConstructionSites, inspect_construction,
+    inspect_protected, ProtectedSites, inspect_guard_clause, GuardClauseSites, inspect_handler, HandlerSites,
+    first_sequence_entry, inspect_sequence_entry, SequenceEntry, inspect_case, inspect_case_arm, CaseSites, CaseArmSites,
+    inspect_callable, CallableSites, find_signature_clause, module_tail, block_tail, is_scope_block,
+    inspect_conditional, ConditionalSites, inspect_defer, DeferSites, inspect_binary, BinarySites,
+    inspect_local_binding, LocalBindingSites, inspect_invocation, DirectCallSites, inspect_field_selection, FieldSelectionSites,
+    published_syntax_id, completion_syntax, completion_operand, name_syntax, ungrouped,
 };
+using "ParserStorage.cod" GuardClauseSyntax { HandlerClause, CleanupClause };
+using "ParserStorage.cod" SequenceSyntax { ClauseSequence, BlockSequence, ModuleSequence, ArgumentSequence };
+using "ParserStorage.cod" CallableSyntax { ModuleCallable };
+using "ParserStorage.cod" SignatureSyntax { ThrowsSignatureClause };
+using "ParserStorage.cod" LogicalSyntax { LogicalNot, LogicalAnd, LogicalOr, InvalidLogical };
+using "ParserStorage.cod" RhsEvaluation { ConditionalRhs, SkipsRhs, TakesRhs };
+using "ParserStorage.cod" ConstructionSyntax { StorageReservation, PositionalConstruction, BracedConstruction };
+using "ParserStorage.cod" AssignmentSyntax { PlaceTransfer, PlaceRebind, FieldTransfer, FieldRebind };
+using "ParserStorage.cod" GroupSyntax { ParenthesizedExpression };
+using "ParserStorage.cod" LiteralRange { EmptyLiteralRange, NonemptyLiteralRange };
 using "ParserInput.cod" ParseResult;
 using "NameResolution.cod" {
-    NameBindings, NameWork, first_item, signature_clause, enclosing_callable, exception_binding,
+    NameBindings, NameWork, enclosing_callable, exception_binding,
 };
 using "OperandChecking.cod" {
     OperandFacts, nullable_ptr, borrowed_ref, never_result, void_result, has_value_tail,
@@ -112,159 +132,234 @@ func inherit_context(sites:CompletionSites in X, parent:u64, child:u64, guarded_
     return;
 }
 
-func binary_context(kind:u8) -> bool {
-    return kind == module_item_node() || kind == block_item_node() || kind == argument_node() ||
-        kind == catch_clause_node() || kind == call_node() || kind == behave_node() ||
-        integer_arithmetic(kind) || kind == compare_node();
-}
-
 func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
-                     sites:CompletionSites in X, at:u64) -> void
+                     sites:CompletionSites in X, at:u64, used:u64, revision:u64) -> void
     where {const owner N, const owner F, owner X} {
-    val kind <- nodes[at].kind;
     val guard <- sites[at].guarded_by;
     val incoming <- sites[at].incoming_handler;
     val replacing <- sites[at].replacing_try;
-    val left <- nodes[at].left;
-    val right <- nodes[at].right;
-    if (kind == deferred_block_node()) {
-        val body <- nodes[at].left;
-        inherit_context(sites, at, body, no_node(), no_node(), no_node());
-        sites[body].in_delayed_body <- 1u8;
+    ref loop = make RangeSites { header <- no_node(); body <- no_node(); empty <- no_node(); };
+    ref bounds = make RangeBounds { index_binding <- no_node(); lower <- no_node(); upper <- no_node(); separator <- 0u64; };
+    if (inspect_range_loop(nodes, revision, used, at, loop) &&
+        inspect_range_header(nodes, revision, used, loop.header, bounds)) {
+        inherit_context(sites, at, loop.header, guard, incoming, replacing);
+        inherit_context(sites, at, loop.body, guard, incoming, replacing);
+        inherit_context(sites, at, loop.empty, guard, incoming, replacing);
+        val bounds_stop <- facts[bounds.lower].kind == never_result() || facts[bounds.upper].kind == never_result();
+        val shape <- classify_literal_range(nodes, revision, used, loop.header);
+        if (bounds_stop || shape == EmptyLiteralRange) { (sites[loop.body].event <- skipped_operand()):void; };
+        if (loop.empty != no_node() && (bounds_stop || shape == NonemptyLiteralRange)) {
+            (sites[loop.empty].event <- skipped_operand()):void;
+        };
         return;
-    } else {};
-    if (kind == finally_clause_node()) {
-        inherit_context(sites, at, nodes[at].left, guard, incoming, replacing);
-        if (replacing != no_node() && nodes[replacing].right == at) {
-            (replacing <- sites[replacing].replacing_try):void;
-        } else {};
-        inherit_context(sites, at, nodes[at].right, guard, incoming, replacing);
+    };
+    if (inspect_range_header(nodes, revision, used, at, bounds)) {
+        inherit_context(sites, at, bounds.lower, guard, incoming, replacing);
+        inherit_context(sites, at, bounds.upper, guard, incoming, replacing);
+        if (facts[bounds.lower].kind == never_result()) { (sites[bounds.upper].event <- skipped_operand()):void; };
         return;
-    } else {};
-    if (kind == try_node()) {
-        val last <- nodes[at].right;
-        if (nodes[last].kind == finally_clause_node() && facts[nodes[last].right].kind == never_result()) {
-            (replacing <- at):void;
-        } else {};
-        inherit_context(sites, at, nodes[at].left, at, incoming, replacing);
-        inherit_context(sites, at, last, guard, incoming, replacing);
+    };
+    ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- 0u64; };
+    val mode <- inspect_assignment(nodes, revision, used, at, assignment);
+    if (mode == PlaceTransfer || mode == PlaceRebind || mode == FieldTransfer || mode == FieldRebind) {
+        inherit_context(sites, at, assignment.destination, guard, incoming, replacing);
+        inherit_context(sites, at, assignment.input, guard, incoming, replacing);
         return;
-    } else {};
-    if (kind == callable_node()) {
-        inherit_context(sites, at, nodes[at].right, no_node(), no_node(), no_node());
+    };
+    ref inner = make u64 { no_node() };
+    if (inspect_group(nodes, revision, used, at, inner) == ParenthesizedExpression) {
+        inherit_context(sites, at, inner, guard, incoming, replacing);
         return;
-    } else {};
-    if (kind == catch_handler_node()) {
-        inherit_context(sites, at, nodes[at].right, guard, at, replacing);
+    };
+    ref construction = make ConstructionSites {
+        requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
+        initializer <- no_node(); contents <- no_node();
+    };
+    val construction_form <- inspect_construction(nodes, revision, used, at, construction);
+    if (construction_form == StorageReservation || construction_form == PositionalConstruction || construction_form == BracedConstruction) {
+        inherit_context(sites, at, construction.contents, guard, incoming, replacing);
         return;
-    } else {};
-    if (kind == deferred_call_node()) {
-        sites[nodes[at].right].registration <- at;
-        inherit_context(sites, at, nodes[at].left, guard, incoming, replacing);
+    };
+    ref logical = make LogicalSites {
+        left_operand <- no_node(); right_operand <- no_node(); right_evaluation <- ConditionalRhs;
+    };
+    val operation <- inspect_logical(nodes, revision, used, at, logical);
+    if (operation == LogicalNot || operation == LogicalAnd || operation == LogicalOr) {
+        inherit_context(sites, at, logical.left_operand, guard, incoming, replacing);
+        if (operation != LogicalNot) {
+            inherit_context(sites, at, logical.right_operand, guard, incoming, replacing);
+            if (facts[logical.left_operand].kind == never_result() || logical.right_evaluation == SkipsRhs) {
+                (sites[logical.right_operand].event <- skipped_operand()):void;
+            };
+        };
         return;
-    } else {};
-    if (kind == conditional_node()) {
-        inherit_context(sites, at, nodes[at].left, guard, incoming, replacing);
-        inherit_context(sites, at, nodes[at].right, guard, incoming, replacing);
-        inherit_context(sites, at, nodes[at].number, guard, incoming, replacing);
+    };
+    ref deferred = make DeferSites { operand <- no_node(); invocation <- no_node(); clauses <- no_node(); };
+    val defer_shape <- inspect_defer(nodes, revision, used, at, deferred);
+    if (defer_shape == DeferBody) {
+        inherit_context(sites, at, deferred.operand, no_node(), no_node(), no_node());
+        (sites[deferred.operand].in_delayed_body <- 1u8):void;
         return;
-    } else {};
-    if (kind == case_node()) {
-        inherit_context(sites, at, left, guard, incoming, replacing);
-        inherit_context(sites, at, right, guard, incoming, replacing);
+    };
+    if (defer_shape == DeferCall) {
+        sites[deferred.invocation].registration <- at;
+        inherit_context(sites, at, deferred.operand, guard, incoming, replacing);
         return;
-    } else {};
-    if (kind == case_arm_node()) {
-        val condition <- nodes[at].number;
-        inherit_context(sites, at, condition, guard, incoming, replacing);
-        inherit_context(sites, at, right, guard, incoming, replacing);
-        if (condition != no_node() && facts[at].case_match == misses_case_arm()) {
-            (sites[condition].event <- skipped_operand()):void;
-        } else {};
-        if (facts[at].case_body == 0u8) { (sites[right].event <- skipped_operand()):void; } else {};
+    };
+    ref protected = make ProtectedSites { body <- no_node(); clauses <- no_node(); discarded <- false; };
+    ref clause = make GuardClauseSites { target <- no_node(); previous <- no_node(); };
+    if (inspect_protected(nodes, revision, used, at, protected)) {
+        if (inspect_guard_clause(nodes, revision, used, protected.clauses, clause) == CleanupClause &&
+            facts[clause.target].kind == never_result()) { (replacing <- at):void; };
+        inherit_context(sites, at, protected.body, at, incoming, replacing);
+        inherit_context(sites, at, protected.clauses, guard, incoming, replacing);
         return;
-    } else {};
-    if (kind == block_item_node()) {
-        inherit_context(sites, at, left, guard, incoming, replacing);
-        inherit_context(sites, at, right, guard, incoming, replacing);
-        if (facts[at].case_item == unreachable_case_item()) { (sites[right].event <- skipped_operand()):void; } else {};
+    };
+    if (inspect_guard_clause(nodes, revision, used, at, clause) == CleanupClause) {
+        inherit_context(sites, at, clause.previous, guard, incoming, replacing);
+        if (replacing != no_node() && inspect_protected(nodes, revision, used, replacing, protected) &&
+            protected.clauses == at) { (replacing <- sites[replacing].replacing_try):void; };
+        inherit_context(sites, at, clause.target, guard, incoming, replacing);
         return;
-    } else {};
-    if (kind == range_node()) {
-        val empty <- nodes[at].number;
-        inherit_context(sites, at, left, guard, incoming, replacing);
-        inherit_context(sites, at, right, guard, incoming, replacing);
-        inherit_context(sites, at, empty, guard, incoming, replacing);
-        val bounds_stop <- facts[nodes[left].left].kind == never_result() || facts[nodes[left].right].kind == never_result();
-        val literal <- literal_range(nodes, left);
-        val nonempty <- literal && nonempty_literal_range(nodes, left);
-        if (bounds_stop || (literal && !nonempty)) { (sites[right].event <- skipped_operand()):void; } else {};
-        if (empty != no_node() && (bounds_stop || nonempty)) { (sites[empty].event <- skipped_operand()):void; } else {};
+    };
+    ref caught = make HandlerSites { binding <- no_node(); body <- no_node(); };
+    if (inspect_handler(nodes, revision, used, at, caught)) {
+        inherit_context(sites, at, caught.body, guard, at, replacing);
         return;
-    } else {};
-    if (kind == range_header_node()) {
-        inherit_context(sites, at, left, guard, incoming, replacing);
-        inherit_context(sites, at, right, guard, incoming, replacing);
-        if (facts[left].kind == never_result()) { (sites[right].event <- skipped_operand()):void; } else {};
+    };
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
+    if (inspect_callable(nodes, revision, used, at, callable) == ModuleCallable) {
+        inherit_context(sites, at, callable.body, no_node(), no_node(), no_node());
         return;
-    } else {};
-    if (logical_binary(kind)) {
-        inherit_context(sites, at, left, guard, incoming, replacing);
-        inherit_context(sites, at, right, guard, incoming, replacing);
-        if (facts[left].kind == never_result() || skips_right(nodes, at)) {
-            (sites[right].event <- skipped_operand()):void;
-        } else {};
+    };
+    ref branch = make ConditionalSites { test <- no_node(); consequent <- no_node(); alternative <- no_node(); };
+    if (inspect_conditional(nodes, revision, used, at, branch)) {
+        inherit_context(sites, at, branch.test, guard, incoming, replacing);
+        inherit_context(sites, at, branch.consequent, guard, incoming, replacing);
+        inherit_context(sites, at, branch.alternative, guard, incoming, replacing);
         return;
-    } else {};
-    if (binary_context(kind) || is_transfer(nodes, at) || kind == rebind_node()) {
-        inherit_context(sites, at, left, guard, incoming, replacing);
-        inherit_context(sites, at, right, guard, incoming, replacing);
-        if (integer_arithmetic(kind) && facts[left].kind == never_result()) {
-            (sites[right].event <- skipped_operand()):void;
-        } else {};
+    };
+    ref choice = make CaseSites { subject <- no_node(); items <- no_node(); };
+    if (inspect_case(nodes, revision, used, at, choice)) {
+        inherit_context(sites, at, choice.subject, guard, incoming, replacing);
+        inherit_context(sites, at, choice.items, guard, incoming, replacing);
         return;
-    } else {};
-    if (local_storage_binding(kind)) {
-        inherit_context(sites, at, nodes[at].right, guard, incoming, replacing);
+    };
+    ref arm = make CaseArmSites { pattern <- no_node(); guard <- no_node(); body <- no_node(); arrow <- 0u64; };
+    if (inspect_case_arm(nodes, revision, used, at, arm)) {
+        inherit_context(sites, at, arm.guard, guard, incoming, replacing);
+        inherit_context(sites, at, arm.body, guard, incoming, replacing);
+        if (arm.guard != no_node() && facts[at].case_match == misses_case_arm()) {
+            (sites[arm.guard].event <- skipped_operand()):void;
+        };
+        if (facts[at].case_body == 0u8) { (sites[arm.body].event <- skipped_operand()):void; };
         return;
-    } else {};
-    if (kind == make_named_node()) {
-        val input <- if (positional_construction(nodes, at)) { (nodes[right].left) } else { construction_body(nodes, at) };
-        inherit_context(sites, at, input, guard, incoming, replacing);
+    };
+    ref sequence = make SequenceEntry { previous <- no_node(); item <- no_node(); };
+    val role <- inspect_sequence_entry(nodes, revision, used, at, sequence);
+    if (role == ModuleSequence || role == BlockSequence || role == ArgumentSequence || role == ClauseSequence) {
+        inherit_context(sites, at, sequence.previous, guard, incoming, replacing);
+        inherit_context(sites, at, sequence.item, guard, incoming, replacing);
+        if (role == BlockSequence && facts[at].case_item == unreachable_case_item()) {
+            (sites[sequence.item].event <- skipped_operand()):void;
+        };
         return;
-    } else {};
-    if (kind == type_assertion_node() && facts[at].enum_constant == 0u8) {
-        inherit_context(sites, at, left, guard, incoming, replacing);
+    };
+    ref binary = make BinarySites {
+        left_operand <- no_node(); right_operand <- no_node(); operator_at <- 0u64; arithmetic <- Addition; relation <- Equal;
+    };
+    val binary_shape <- inspect_binary(nodes, revision, used, at, binary);
+    if (binary_shape == ArithmeticBinary || binary_shape == ComparisonBinary) {
+        inherit_context(sites, at, binary.left_operand, guard, incoming, replacing);
+        inherit_context(sites, at, binary.right_operand, guard, incoming, replacing);
+        if (binary_shape == ArithmeticBinary && facts[binary.left_operand].kind == never_result()) {
+            (sites[binary.right_operand].event <- skipped_operand()):void;
+        };
         return;
-    } else {};
-    if (kind == module_node() || kind == block_node() || kind == full_scope_node() ||
-        kind == group_node() || kind == discard_node() || kind == return_node() || kind == throw_node() || kind == break_node() ||
-        kind == logical_not_node() || kind == field_access_node()) {
-        inherit_context(sites, at, nodes[at].left, guard, incoming, replacing);
-    } else {};
+    };
+    ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
+    val invocation <- inspect_invocation(nodes, revision, used, at, call);
+    if (invocation == OrdinaryInvocation || invocation == EffectfulInvocation) {
+        inherit_context(sites, at, call.callee, guard, incoming, replacing);
+        inherit_context(sites, at, call.arguments, guard, incoming, replacing);
+        return;
+    };
+    ref binding = make LocalBindingSites { binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false; };
+    if (inspect_local_binding(nodes, revision, used, at, binding) && binding.mode != ExceptionLocal) {
+        inherit_context(sites, at, binding.initializer, guard, incoming, replacing);
+        return;
+    };
+    ref child = make u64 { no_node() };
+    if (module_tail(nodes, revision, used, at, child) || block_tail(nodes, revision, used, at, child) ||
+        completion_operand(nodes, revision, used, at, child) ||
+        direct_operand(nodes, revision, used, at, facts[at].enum_constant == 0u8, child)) {
+        inherit_context(sites, at, child, guard, incoming, replacing);
+    };
+}
+
+func direct_operand(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, runtime_assertion:bool,
+                    child:u64 in R) -> bool where {const owner N, owner R} {
+    if (at >= used || at >= syntax_len(nodes)) return false;
+    ref field = make FieldSelectionSites { receiver <- no_node(); field <- no_node(); };
+    if (inspect_field_selection(nodes, revision, used, at, field)) {
+        child <- field.receiver;
+        return true;
+    };
+    return case nodes[at] of {
+        (Vacant) -> { false };
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (DiscardedExpression { val operand <- operand; }) -> {
+                    if (!published_syntax_id(nodes, revision, at, operand)) return false;
+                    child <- operand.index;
+                    true
+                };
+                (CheckedTypeAssertion { val operand <- operand; }) -> {
+                    if (!runtime_assertion || !published_syntax_id(nodes, revision, at, operand)) return false;
+                    child <- operand.index;
+                    true
+                };
+                (RaiseValue { val operand <- exception_value; }) -> {
+                    if (!published_syntax_id(nodes, revision, at, operand)) return false;
+                    child <- operand.index;
+                    true
+                };
+                (RaisePending) -> { child <- no_node(); true };
+                (_) -> { false };
+            }
+        };
+    };
 }
 
 func covers(caught:u64, category:u64) -> bool {
     return caught == no_node() || caught == exception_root_identity() || caught == category;
 }
 
+func first_guard_clause(nodes:const ExprNodes in N, revision:u64, used:u64,
+                         guard:u64, clause:u64 in R) -> bool where {const owner N, owner R} {
+    ref protected = make ProtectedSites { body <- no_node(); clauses <- no_node(); discarded <- false; };
+    return inspect_protected(nodes, revision, used, guard, protected) &&
+        first_sequence_entry(nodes, revision, used, protected.clauses, ClauseSequence, clause);
+}
+
 func matching_handler(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                      sites:const CompletionSites in X, at:u64, category:u64, used:u64) -> u64
+                      sites:const CompletionSites in X, at:u64, category:u64, used:u64, revision:u64) -> u64
     where {const owner N, const owner L, const owner F, const owner X} {
     val guard <- sites[at].guarded_by;
     val replacing <- sites[at].replacing_try;
-    val clause <- no_node();
-    val handler <- no_node();
+    ref clause = make u64 { no_node() };
+    ref selected = make GuardClauseSites { target <- no_node(); previous <- no_node(); };
+    ref handler = make HandlerSites { binding <- no_node(); body <- no_node(); };
     for (unused in 0u64 .. used) {
         # An enclosing guard follows the intervening finalizer's try in postorder.
         if (guard == no_node() || guard > replacing) return no_node();
-        if (clause == no_node()) { (clause <- first_item(nodes, nodes[guard].right)):void; } else {};
-        if (clause != no_node() && nodes[clause].kind == catch_clause_node()) {
-            handler <- nodes[clause].right;
-            if (covers(facts[nodes[handler].left].identity, category)) return handler;
+        if (clause == no_node() && !first_guard_clause(nodes, revision, used, guard, clause)) return no_node();
+        if (inspect_guard_clause(nodes, revision, used, clause, selected) == HandlerClause) {
+            if (!inspect_handler(nodes, revision, used, selected.target, handler)) return no_node();
+            if (covers(facts[handler.binding].identity, category)) return selected.target;
             (clause <- links[clause].next):void;
         } else { (clause <- no_node()):void; };
-        if (clause == no_node()) { (guard <- sites[guard].guarded_by):void; } else {};
+        if (clause == no_node()) { (guard <- sites[guard].guarded_by):void; };
     };
     return no_node();
 }
@@ -282,18 +377,22 @@ func record_exit(sites:CompletionSites in X, at:u64, event:u8, category:u64, des
 # Concrete failures can use this destination directly. A root contract
 # still dispatches by runtime type from guarded_by, preserving catch order.
 func route_failure(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-                   facts:const OperandFacts in F, sites:CompletionSites in X, at:u64, used:u64,
+                   facts:const OperandFacts in F, sites:CompletionSites in X, at:u64, used:u64, revision:u64,
                    category:u64, checked:u8, event:u8) -> u8
     where {const owner N, const owner B, const owner L, const owner F, owner X} {
     val scope <- names[at].scope;
-    val handler <- matching_handler(nodes, links, facts, sites, at, category, used);
+    val handler <- matching_handler(nodes, links, facts, sites, at, category, used, revision);
     if (handler != no_node()) {
-        record_exit(sites, at, event, category, handler, scope, names[nodes[handler].right].scope);
+        ref catch_site = make HandlerSites { binding <- no_node(); body <- no_node(); };
+        if (!inspect_handler(nodes, revision, used, handler, catch_site)) return invalid_completion_tree();
+        record_exit(sites, at, event, category, handler, scope, names[catch_site.body].scope);
         return 0u8;
     } else {};
     val replacing <- sites[at].replacing_try;
     if (replacing != no_node()) {
-        record_exit(sites, at, event, category, nodes[replacing].right, scope, names[replacing].scope);
+        ref protected = make ProtectedSites { body <- no_node(); clauses <- no_node(); discarded <- false; };
+        if (!inspect_protected(nodes, revision, used, replacing, protected)) return invalid_completion_tree();
+        record_exit(sites, at, event, category, protected.clauses, scope, names[replacing].scope);
         return 0u8;
     } else {};
     if (sites[at].in_delayed_body != 0u8)
@@ -323,55 +422,86 @@ export func can_continue(sites:const CompletionSites in X, child:u64) -> bool wh
 }
 
 export func can_miss_return(nodes:const ExprNodes in N, facts:const OperandFacts in F,
-                            sites:const CompletionSites in X, definition:u64) -> bool
+                            sites:const CompletionSites in X, definition:u64, revision:u64, used:u64) -> bool
     where {const owner N, const owner F, const owner X} {
-    if (nodes[definition].kind != callable_node() || !can_continue(sites, nodes[definition].right)) return false;
-    if (!is_function(nodes, definition)) return true;
-    return facts[definition].kind != void_result() && !has_value_tail(nodes, facts, definition);
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
+    if (inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable ||
+        !can_continue(sites, callable.body)) return false;
+    if (!callable.function_form) return true;
+    return facts[definition].kind != void_result() && !has_value_tail(facts, callable.body, callable.function_form);
 }
 
-func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSites in X, at:u64) -> bool
+func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSites in X, at:u64, used:u64, revision:u64) -> bool
     where {const owner N, const owner X} {
-    val kind <- nodes[at].kind;
-    if (kind == block_item_node() || kind == argument_node() || integer_arithmetic(kind) ||
-        kind == compare_node() || is_transfer(nodes, at) || kind == rebind_node() ||
-        kind == call_node() || kind == behave_node())
-        return can_continue(sites, nodes[at].left) && can_continue(sites, nodes[at].right);
-    if (kind == conditional_node())
-        return can_continue(sites, nodes[at].left) &&
-            (can_continue(sites, nodes[at].right) || can_continue(sites, nodes[at].number));
-    if (kind == range_node()) {
-        val header <- nodes[at].left;
-        if (!can_continue(sites, nodes[header].left) || !can_continue(sites, nodes[header].right)) return false;
-        val body_continues <- can_continue(sites, nodes[at].right);
-        val empty_continues <- can_continue(sites, nodes[at].number);
-        if (literal_range(nodes, header))
-            return if (nonempty_literal_range(nodes, header)) { body_continues } else { empty_continues };
-        return body_continues || empty_continues;
-    } else {};
-    if (logical_binary(kind)) {
-        val left <- nodes[at].left;
-        if (!can_continue(sites, left)) return false;
-        return nodes[left].kind != bool_node() || skips_right(nodes, at) || can_continue(sites, nodes[at].right);
-    } else {};
-    if (kind == full_scope_node())
-        return sites[at].local_return != 0u8 || can_continue(sites, nodes[at].left);
-    if (kind == group_node() || kind == type_assertion_node() || kind == discard_node() || kind == block_node() ||
-        kind == throw_node() || kind == return_node() || kind == break_node() || kind == deferred_call_node() ||
-        kind == logical_not_node() || kind == field_access_node())
-        return can_continue(sites, nodes[at].left);
-    if (local_storage_binding(kind))
-        return can_continue(sites, nodes[at].right);
-    if (kind == make_named_node()) {
-        if (positional_construction(nodes, at)) return can_continue(sites, nodes[nodes[at].right].left);
-        return can_continue(sites, construction_body(nodes, at));
+    ref loop = make RangeSites { header <- no_node(); body <- no_node(); empty <- no_node(); };
+    if (inspect_range_loop(nodes, revision, used, at, loop)) {
+        ref bounds = make RangeBounds { index_binding <- no_node(); lower <- no_node(); upper <- no_node(); separator <- 0u64; };
+        if (!inspect_range_header(nodes, revision, used, loop.header, bounds) ||
+            !can_continue(sites, bounds.lower) || !can_continue(sites, bounds.upper)) return false;
+        val body_continues <- can_continue(sites, loop.body);
+        val empty_continues <- can_continue(sites, loop.empty);
+        return case classify_literal_range(nodes, revision, used, loop.header) of {
+            (NonemptyLiteralRange) -> { body_continues };
+            (EmptyLiteralRange) -> { empty_continues };
+            (_) -> { body_continues || empty_continues };
+        };
     };
+    ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- 0u64; };
+    val mode <- inspect_assignment(nodes, revision, used, at, assignment);
+    if (mode == PlaceTransfer || mode == PlaceRebind || mode == FieldTransfer || mode == FieldRebind)
+        return can_continue(sites, assignment.destination) && can_continue(sites, assignment.input);
+    ref inner = make u64 { no_node() };
+    if (inspect_group(nodes, revision, used, at, inner) == ParenthesizedExpression) return can_continue(sites, inner);
+    ref construction = make ConstructionSites {
+        requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
+        initializer <- no_node(); contents <- no_node();
+    };
+    val shape <- inspect_construction(nodes, revision, used, at, construction);
+    if (shape == StorageReservation || shape == PositionalConstruction || shape == BracedConstruction)
+        return can_continue(sites, construction.contents);
+    ref logical = make LogicalSites {
+        left_operand <- no_node(); right_operand <- no_node(); right_evaluation <- ConditionalRhs;
+    };
+    val operation <- inspect_logical(nodes, revision, used, at, logical);
+    if (operation == InvalidLogical) return false;
+    if (operation == LogicalNot) return can_continue(sites, logical.left_operand);
+    if (operation == LogicalAnd || operation == LogicalOr)
+        return can_continue(sites, logical.left_operand) &&
+            (logical.right_evaluation != TakesRhs || can_continue(sites, logical.right_operand));
+    ref sequence = make SequenceEntry { previous <- no_node(); item <- no_node(); };
+    val role <- inspect_sequence_entry(nodes, revision, used, at, sequence);
+    if (role == BlockSequence || role == ArgumentSequence)
+        return can_continue(sites, sequence.previous) && can_continue(sites, sequence.item);
+    ref binary = make BinarySites {
+        left_operand <- no_node(); right_operand <- no_node(); operator_at <- 0u64; arithmetic <- Addition; relation <- Equal;
+    };
+    val binary_shape <- inspect_binary(nodes, revision, used, at, binary);
+    if (binary_shape == ArithmeticBinary || binary_shape == ComparisonBinary)
+        return can_continue(sites, binary.left_operand) && can_continue(sites, binary.right_operand);
+    ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
+    val invocation <- inspect_invocation(nodes, revision, used, at, call);
+    if (invocation == OrdinaryInvocation || invocation == EffectfulInvocation)
+        return can_continue(sites, call.callee) && can_continue(sites, call.arguments);
+    ref branch = make ConditionalSites { test <- no_node(); consequent <- no_node(); alternative <- no_node(); };
+    if (inspect_conditional(nodes, revision, used, at, branch))
+        return can_continue(sites, branch.test) &&
+            (can_continue(sites, branch.consequent) || can_continue(sites, branch.alternative));
+    ref defer_sites = make DeferSites { operand <- no_node(); invocation <- no_node(); clauses <- no_node(); };
+    if (inspect_defer(nodes, revision, used, at, defer_sites) == DeferCall) return can_continue(sites, defer_sites.operand);
+    ref child = make u64 { no_node() };
+    if (block_tail(nodes, revision, used, at, child))
+        return (is_scope_block(nodes, at) && sites[at].local_return != 0u8) || can_continue(sites, child);
+    if (completion_operand(nodes, revision, used, at, child) || direct_operand(nodes, revision, used, at, true, child))
+        return can_continue(sites, child);
+    ref binding = make LocalBindingSites { binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false; };
+    if (inspect_local_binding(nodes, revision, used, at, binding) && binding.mode != ExceptionLocal)
+        return can_continue(sites, binding.initializer);
     return true;
 }
 
 func check_call_completion(nodes:const ExprNodes in N, names:const NameBindings in B,
                            links:const NameWork in L, facts:const OperandFacts in F,
-                           sites:CompletionSites in X, at:u64, category:u64, checked:u8, used:u64) -> u8
+                           sites:CompletionSites in X, at:u64, category:u64, checked:u8, used:u64, revision:u64) -> u8
     where {const owner N, const owner B, const owner L, const owner F, owner X} {
     if (category == no_node()) return 0u8;
     if (sites[at].registration != no_node()) {
@@ -379,37 +509,33 @@ func check_call_completion(nodes:const ExprNodes in N, names:const NameBindings 
         # Unchecked deferred failures need the separate residual-error pass.
         return unproved_deferred_error();
     } else {};
-    return route_failure(nodes, names, links, facts, sites, at, used, category, checked, possible_failure());
+    return route_failure(nodes, names, links, facts, sites, at, used, revision, category, checked, possible_failure());
 }
 
-func caught_operand(nodes:const ExprNodes in N, names:const NameBindings in B, at:u64, binding:u64) -> u64
-    where {const owner N, const owner B} {
-    val operand <- at;
-    for (unused in 0u64 .. at + 1u64) {
-        if (nodes[operand].kind != group_node()) {
-            if (nodes[operand].kind == name_node() && names[operand].kind == exception_binding() &&
-                names[operand].declaration == binding) return operand;
-            return no_node();
-        } else {};
-        operand <- nodes[operand].left;
-    };
+func caught_operand(nodes:const ExprNodes in N, names:const NameBindings in B,
+                    at:u64, binding:u64, revision:u64, used:u64) -> u64 where {const owner N, const owner B} {
+    val operand <- ungrouped(nodes, revision, used, at);
+    if (name_syntax(nodes, used, operand) == OrdinaryName && names[operand].kind == exception_binding() &&
+        names[operand].declaration == binding) return operand;
     return no_node();
 }
 
 func handoff_leaves_handler(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                            sites:const CompletionSites in X, at:u64, handler:u64, category:u64, used:u64) -> bool
+                            sites:const CompletionSites in X, at:u64, handler:u64, category:u64, used:u64, revision:u64) -> bool
     where {const owner N, const owner L, const owner F, const owner X} {
     val guard <- sites[at].guarded_by;
-    val clause <- no_node();
+    ref clause = make u64 { no_node() };
+    ref selected = make GuardClauseSites { target <- no_node(); previous <- no_node(); };
+    ref nested = make HandlerSites { binding <- no_node(); body <- no_node(); };
     # A guard contained in the handler precedes it in postorder. Declared
     # root evidence may reach any local catch. A local finally can replace
     # the outgoing failure or use the holder while propagation owns it.
     for (unused in 0u64 .. used) {
         if (guard >= handler) return true;
-        if (clause == no_node()) { (clause <- first_item(nodes, nodes[guard].right)):void; } else {};
-        if (nodes[clause].kind == finally_clause_node() || category == no_node() ||
-            category == exception_root_identity()) return false;
-        if (covers(facts[nodes[nodes[clause].right].left].identity, category)) return false;
+        if (clause == no_node() && !first_guard_clause(nodes, revision, used, guard, clause)) return false;
+        if (inspect_guard_clause(nodes, revision, used, clause, selected) != HandlerClause || category == no_node() ||
+            category == exception_root_identity() || !inspect_handler(nodes, revision, used, selected.target, nested)) return false;
+        if (covers(facts[nested.binding].identity, category)) return false;
         clause <- links[clause].next;
         if (clause == no_node()) { (guard <- sites[guard].guarded_by):void; } else {};
     };
@@ -418,65 +544,73 @@ func handoff_leaves_handler(nodes:const ExprNodes in N, links:const NameWork in 
 
 func check_throw_completion(nodes:const ExprNodes in N, names:const NameBindings in B,
                             links:const NameWork in L, facts:const OperandFacts in F,
-                            sites:CompletionSites in X, at:u64, used:u64) -> u8
+                            sites:CompletionSites in X, at:u64, used:u64, revision:u64) -> u8
     where {const owner N, const owner B, const owner L, const owner F, owner X} {
-    val operand <- nodes[at].left;
+    ref operand = make u64 { no_node() };
+    if (!direct_operand(nodes, revision, used, at, false, operand)) return invalid_completion_tree();
     val incoming <- sites[at].incoming_handler;
     if (incoming == no_node())
         return if (operand == no_node()) { missing_rethrow_context() } else { unproved_throw_operand() };
-    val binding <- nodes[incoming].left;
-    if (operand == no_node() && names[nodes[incoming].right].scope != names[at].scope)
+    ref caught = make HandlerSites { binding <- no_node(); body <- no_node(); };
+    if (!inspect_handler(nodes, revision, used, incoming, caught)) return invalid_completion_tree();
+    val binding <- caught.binding;
+    if (operand == no_node() && names[caught.body].scope != names[at].scope)
         return unproved_rethrow_capture();
-    val name <- if (operand == no_node()) { no_node() } else { caught_operand(nodes, names, operand, binding) };
+    val name <- if (operand == no_node()) { no_node() } else { caught_operand(nodes, names, operand, binding, revision, used) };
     if (operand != no_node() && name == no_node()) return unproved_throw_operand();
     val category <- facts[binding].identity;
-    if (!handoff_leaves_handler(nodes, links, facts, sites, at, incoming, category, used))
+    if (!handoff_leaves_handler(nodes, links, facts, sites, at, incoming, category, used, revision))
         return unproved_caught_handoff();
     sites[incoming].retains_caught <- 1u8;
     if (name != no_node()) { sites[name].forwarded_operand <- 1u8; {}; } else {};
     if (category != no_node())
-        return route_failure(nodes, names, links, facts, sites, at, used, category,
+        return route_failure(nodes, names, links, facts, sites, at, used, revision, category,
                              facts[binding].checked_exception, definite_failure());
     # A catch without a type annotation can have narrower incoming failures.
     # Accept a route covering the root, or report the missing incoming proof.
-    val diagnostic <- route_failure(nodes, names, links, facts, sites, at, used,
+    val diagnostic <- route_failure(nodes, names, links, facts, sites, at, used, revision,
                                     exception_root_identity(), 1u8, definite_failure());
     if (diagnostic == uncovered_checked_failure()) return unproved_incoming_exception();
     return diagnostic;
 }
 
 func case_can_complete(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                       sites:const CompletionSites in X, at:u64) -> bool
-    where {const owner N, const owner L, const owner F, const owner X} {
-    if (!can_continue(sites, nodes[at].left)) return false;
+                       sites:const CompletionSites in X, at:u64, used:u64, revision:u64,
+                       choice:const CaseSites in I) -> bool
+    where {const owner N, const owner L, const owner F, const owner X, const owner I} {
+    if (!can_continue(sites, choice.subject)) return false;
     if (facts[at].case_end != 0u8 || sites[at].case_break != 0u8) return true;
-    val item <- first_item(nodes, nodes[at].right);
-    val arm <- no_node();
-    for (unused in 0u64 .. intrinsic (len)(nodes)) {
+    ref item = make u64 { no_node() };
+    if (!first_sequence_entry(nodes, revision, used, choice.items, BlockSequence, item)) return false;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
+    ref arm = make CaseArmSites { pattern <- no_node(); guard <- no_node(); body <- no_node(); arrow <- 0u64; };
+    for (unused in 0u64 .. used) {
         if (item == no_node()) return false;
-        arm <- nodes[item].right;
-        if (nodes[arm].kind == case_arm_node() && facts[arm].case_body != 0u8 &&
-            can_continue(sites, nodes[arm].number) && can_continue(sites, nodes[arm].right)) return true;
+        if (inspect_sequence_entry(nodes, revision, used, item, entry) != BlockSequence) return false;
+        if (inspect_case_arm(nodes, revision, used, entry.item, arm) && facts[entry.item].case_body != 0u8 &&
+            can_continue(sites, arm.guard) && can_continue(sites, arm.body)) return true;
         item <- links[item].next;
     };
     return false;
 }
 
 func check_case_transfer(nodes:const ExprNodes in N, names:const NameBindings in B, facts:const OperandFacts in F,
-                         sites:CompletionSites in X, at:u64) -> u8
+                         sites:CompletionSites in X, at:u64, used:u64, revision:u64, breaking:bool) -> u8
     where {const owner N, const owner B, const owner F, owner X} {
     val target <- names[at].declaration;
-    val breaking <- nodes[at].kind == break_node();
     val scope <- names[at].scope;
     val stop <- names[target].scope;
     if (scope != stop) {
-        if (nodes[at].kind != case_fallthrough_node() || nodes[target].right != scope ||
-            nodes[scope].kind != full_scope_node()) return unsupported_case_transfer();
+        ref arm = make CaseArmSites { pattern <- no_node(); guard <- no_node(); body <- no_node(); arrow <- 0u64; };
+        if (breaking || !inspect_case_arm(nodes, revision, used, target, arm) ||
+            arm.body != scope || !is_scope_block(nodes, scope)) return unsupported_case_transfer();
         record_exit(sites, at, case_scan_resume(), no_node(), target, scope, stop);
     } else {};
     sites[at].can_continue <- 0u8;
     val cleanup <- names[at].finalizer;
     val boundary <- names[target].finalizer;
+    ref protected = make ProtectedSites { body <- no_node(); clauses <- no_node(); discarded <- false; };
+    ref clause = make GuardClauseSites { target <- no_node(); previous <- no_node(); };
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (cleanup == boundary) {
             if (breaking) { (sites[target].case_break <- 1u8):void; } else {};
@@ -485,28 +619,31 @@ func check_case_transfer(nodes:const ExprNodes in N, names:const NameBindings in
         if (cleanup == no_node()) return invalid_completion_tree();
         if (breaking) { (sites[cleanup].case_break <- 1u8):void; }
         else { (sites[cleanup].case_scan <- 1u8):void; };
-        if (facts[nodes[nodes[cleanup].right].right].kind == never_result()) return 0u8;
+        if (!inspect_protected(nodes, revision, used, cleanup, protected) ||
+            inspect_guard_clause(nodes, revision, used, protected.clauses, clause) != CleanupClause)
+            return invalid_completion_tree();
+        if (facts[clause.target].kind == never_result()) return 0u8;
         cleanup <- names[cleanup].finalizer;
     };
     return invalid_completion_tree();
 }
 
 func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-                 facts:const OperandFacts in F, sites:CompletionSites in X, at:u64, used:u64) -> u8
+                 facts:const OperandFacts in F, sites:CompletionSites in X, at:u64, used:u64, revision:u64) -> u8
     where {const owner N, const owner B, const owner L, const owner F, owner X} {
     if (sites[at].event == skipped_operand()) {
         sites[at].can_continue <- 0u8;
         return 0u8;
     } else {};
     sites[at].presence <- selected_target_presence(facts, at);
-    if (!operands_can_complete(nodes, sites, at)) {
+    if (!operands_can_complete(nodes, sites, at, used, revision)) {
         sites[at].can_continue <- 0u8;
         return 0u8;
     } else {};
-    val kind <- nodes[at].kind;
     val target <- if (facts[at].needs_target != 0u8) { at } else { no_node() };
-    if (kind == argument_node() && facts[at].reception == borrowed_ref()) {
-        val actual <- nodes[at].right;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
+    if (inspect_sequence_entry(nodes, revision, used, at, entry) == ArgumentSequence && facts[at].reception == borrowed_ref()) {
+        val actual <- entry.item;
         if (facts[actual].reception == nullable_ptr() && sites[actual].presence != present_target()) {
             if (!checked_ref_argument(nodes, at)) return unproved_nonnull_argument();
             (target <- actual):void;
@@ -518,18 +655,21 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
             sites[at].can_continue <- 0u8;
             {};
         } else {};
-        return route_failure(nodes, names, links, facts, sites, at, used, null_pointer_identity(), 1u8, event);
+        return route_failure(nodes, names, links, facts, sites, at, used, revision, null_pointer_identity(), 1u8, event);
     } else {};
-    if (kind == ref_local_node() && facts[nodes[at].right].reception == nullable_ptr() &&
-        sites[nodes[at].right].presence != present_target()) return unproved_nonnull_binding();
-    if (kind == type_assertion_node() && facts[at].text_assertion != 0u8)
-        return route_failure(nodes, names, links, facts, sites, at, used, type_assertion_failed_identity(), 0u8, possible_failure());
-    if (kind == make_named_node() && facts[at].allocation_owner != no_node())
-        return route_failure(nodes, names, links, facts, sites, at, used, out_of_memory_identity(), 0u8, possible_failure());
-    if (kind == call_node()) {
+    ref binding = make LocalBindingSites { binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false; };
+    if (inspect_local_binding(nodes, revision, used, at, binding) && binding.mode == ReferenceLocal &&
+        facts[binding.initializer].reception == nullable_ptr() &&
+        sites[binding.initializer].presence != present_target()) return unproved_nonnull_binding();
+    if (facts[at].text_assertion != 0u8)
+        return route_failure(nodes, names, links, facts, sites, at, used, revision, type_assertion_failed_identity(), 0u8, possible_failure());
+    if (facts[at].allocation_owner != no_node())
+        return route_failure(nodes, names, links, facts, sites, at, used, revision, out_of_memory_identity(), 0u8, possible_failure());
+    ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
+    if (inspect_invocation(nodes, revision, used, at, call) == OrdinaryInvocation) {
         if (links[at].imported_function != no_node()) {
             val diagnostic <- check_call_completion(nodes, names, links, facts, sites, at, links[at].imported_failure,
-                                                    links[at].imported_failure_checked, used);
+                                                    links[at].imported_failure_checked, used, revision);
             if (diagnostic != 0u8) return diagnostic;
             # The declaration alone cannot prove coverage of residual
             # failures raised while draining an imported deferred call.
@@ -537,39 +677,58 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
             return 0u8;
         };
         if (facts[at].text_intrinsic == text_byte_export())
-            return route_failure(nodes, names, links, facts, sites, at, used, index_out_of_bounds_identity(), 0u8, possible_failure());
+            return route_failure(nodes, names, links, facts, sites, at, used, revision, index_out_of_bounds_identity(), 0u8, possible_failure());
         if (facts[at].text_intrinsic != 0u8) return 0u8;
     };
     if (facts[at].call_definition != no_node()) {
         val declaration <- sites[facts[at].call_definition].throws_clause;
         if (declaration == no_node()) return 0u8;
         return check_call_completion(nodes, names, links, facts, sites, at, facts[declaration].identity,
-                                     facts[declaration].checked_exception, used);
+                                     facts[declaration].checked_exception, used, revision);
     };
-    if (kind == deferred_call_node() || kind == deferred_block_node()) {
+    ref deferred = make DeferSites { operand <- no_node(); invocation <- no_node(); clauses <- no_node(); };
+    val defer_shape <- inspect_defer(nodes, revision, used, at, deferred);
+    if (defer_shape == DeferCall || defer_shape == DeferBody) {
         record_registration(names, sites, at);
         return 0u8;
-    } else {};
-    if (kind == case_node()) {
-        sites[at].can_continue <- if (case_can_complete(nodes, links, facts, sites, at)) { 1u8 } else { 0u8 };
+    };
+    ref choice = make CaseSites { subject <- no_node(); items <- no_node(); };
+    if (inspect_case(nodes, revision, used, at, choice)) {
+        sites[at].can_continue <- if (case_can_complete(nodes, links, facts, sites, at, used, revision, choice)) {
+            1u8
+        } else { 0u8 };
         return 0u8;
-    } else {};
-    if (kind == break_node() || kind == case_fallthrough_node()) return check_case_transfer(nodes, names, facts, sites, at);
-    if (kind == case_failure_node()) {
-        sites[at].can_continue <- 0u8;
-        return route_failure(nodes, names, links, facts, sites, at, used,
-                             unexpected_case_identity(), 0u8, definite_failure());
-    } else {};
-    if (kind == throw_node()) {
-        sites[at].can_continue <- 0u8;
-        return check_throw_completion(nodes, names, links, facts, sites, at, used);
-    } else {};
-    if (kind == return_node()) {
+    };
+    val completion <- completion_syntax(nodes, at);
+    if (completion == BreakCompletion) return check_case_transfer(nodes, names, facts, sites, at, used, revision, true);
+    case nodes[at] of {
+        (Vacant) -> { return invalid_completion_tree(); };
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (CaseFallthrough) -> { return check_case_transfer(nodes, names, facts, sites, at, used, revision, false); };
+                (CaseFailure) -> {
+                    sites[at].can_continue <- 0u8;
+                    return route_failure(nodes, names, links, facts, sites, at, used, revision,
+                                         unexpected_case_identity(), 0u8, definite_failure());
+                };
+                (RaisePending) -> {
+                    sites[at].can_continue <- 0u8;
+                    return check_throw_completion(nodes, names, links, facts, sites, at, used, revision);
+                };
+                (RaiseValue) -> {
+                    sites[at].can_continue <- 0u8;
+                    return check_throw_completion(nodes, names, links, facts, sites, at, used, revision);
+                };
+                (_) -> {};
+            };
+        };
+    };
+    if (completion == ReturnCompletion) {
         sites[at].can_continue <- 0u8;
         val scope <- names[at].scope;
         sites[scope].local_return <- 1u8;
         record_exit(sites, at, callable_return(), no_node(), scope, scope, no_node());
-    } else {};
+    };
     if (facts[at].kind == never_result()) { sites[at].can_continue <- 0u8; {}; } else {};
     return 0u8;
 }
@@ -579,9 +738,25 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
 # replaces fallthrough. Any escaping language failure from it is checked
 # separately against the drain's own coverage.
 func has_terminal_defer(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                        body:u64) -> bool
+                        body:u64, revision:u64, used:u64) -> bool
     where {const owner N, const owner L, const owner F} {
-    return nodes[body].kind == block_node() && has_terminal_defer_before(nodes, links, facts, nodes[body].left, no_node());
+    ref tail = make u64 { no_node() };
+    return !is_scope_block(nodes, body) && block_tail(nodes, revision, used, body, tail) &&
+        has_terminal_defer_before(nodes, links, facts, tail, no_node(), revision, used);
+}
+
+func is_failure_statement(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+    return case nodes[at] of {
+        (Vacant) -> { false };
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (CaseFailure) -> { true };
+                (RaisePending) -> { true };
+                (RaiseValue) -> { true };
+                (_) -> { false };
+            };
+        };
+    };
 }
 
 func enqueue_failure(sites:CompletionSites in X, definition:u64, count:u64) -> u64 where {owner X} {
@@ -592,11 +767,12 @@ func enqueue_failure(sites:CompletionSites in X, definition:u64, count:u64) -> u
 }
 
 func propagate_failure(nodes:const ExprNodes in N, names:const NameBindings in B, sites:CompletionSites in X,
-                               report:CompletionCheckResult in R, definition:u64, queued:u64, used:u64) -> u64
+                               report:CompletionCheckResult in R, definition:u64, queued:u64, used:u64, revision:u64) -> u64
     where {const owner N, const owner B, owner X, owner R} {
     val count <- queued;
     val use <- sites[definition].failure_user;
     val caller <- no_node();
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
     for (unused in 0u64 .. used) {
         if (use == no_node()) return count;
         if (sites[use].registration != no_node() || sites[use].in_delayed_body != 0u8) {
@@ -605,7 +781,7 @@ func propagate_failure(nodes:const ExprNodes in N, names:const NameBindings in B
             return no_node();
         } else {};
         caller <- enclosing_callable(nodes, names, names[use].scope);
-        if (nodes[caller].kind == callable_node()) { (count <- enqueue_failure(sites, caller, count)):void; } else {};
+        if (inspect_callable(nodes, revision, used, caller, callable) == ModuleCallable) { (count <- enqueue_failure(sites, caller, count)):void; } else {};
         use <- sites[use].failure_user;
     };
     return count;
@@ -615,30 +791,33 @@ func propagate_failure(nodes:const ExprNodes in N, names:const NameBindings in B
 # escape. A deferred invocation cannot use an enclosing catch as evidence.
 func check_escaping_failure_paths(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                                 facts:const OperandFacts in F, sites:CompletionSites in X,
-                                report:CompletionCheckResult in R, used:u64, category:u64) -> bool
+                                report:CompletionCheckResult in R, used:u64, revision:u64, category:u64) -> bool
     where {const owner N, const owner B, const owner L, const owner F, owner X, owner R} {
     val count <- 0u64;
     val definition <- no_node();
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
     for (at in 0u64 .. used) {
         sites[at].escaping_failure <- 0u8;
         sites[at].failure_user <- no_node();
         (sites[at].failure_work <- no_node()):void;
     };
     for (at in 0u64 .. used) {
-        if (category == missing_return_identity() && can_miss_return(nodes, facts, sites, at) &&
-            !has_terminal_defer(nodes, links, facts, nodes[at].right)) {
+        if (category == missing_return_identity() &&
+            inspect_callable(nodes, revision, used, at, callable) == ModuleCallable &&
+            can_miss_return(nodes, facts, sites, at, revision, used) &&
+            !has_terminal_defer(nodes, links, facts, callable.body, revision, used)) {
             (count <- enqueue_failure(sites, at, count)):void;
         } else {};
-        if ((nodes[at].kind == throw_node() || nodes[at].kind == case_failure_node()) && sites[at].category == category) {
+        if (is_failure_statement(nodes, at) && sites[at].category == category) {
             definition <- enclosing_callable(nodes, names, names[at].scope);
-            if (sites[at].destination == definition && nodes[definition].kind == callable_node()) {
+            if (sites[at].destination == definition && inspect_callable(nodes, revision, used, definition, callable) == ModuleCallable) {
                 (count <- enqueue_failure(sites, definition, count)):void;
             } else {};
         } else {};
         if (links[at].imported_function != no_node() && can_continue(sites, at) &&
-            sites[at].replacing_try == no_node() && matching_handler(nodes, links, facts, sites, at, category, used) == no_node()) {
+            sites[at].replacing_try == no_node() && matching_handler(nodes, links, facts, sites, at, category, used, revision) == no_node()) {
             definition <- enclosing_callable(nodes, names, names[at].scope);
-            if (nodes[definition].kind == callable_node()) {
+            if (inspect_callable(nodes, revision, used, definition, callable) == ModuleCallable) {
                 (count <- enqueue_failure(sites, definition, count)):void;
             };
         };
@@ -647,7 +826,7 @@ func check_escaping_failure_paths(nodes:const ExprNodes in N, names:const NameBi
     for (at in 0u64 .. used) {
         if (facts[at].call_definition != no_node() && can_continue(sites, at) &&
             (sites[at].registration != no_node() || (sites[at].replacing_try == no_node() &&
-             matching_handler(nodes, links, facts, sites, at, category, used) == no_node()))) {
+             matching_handler(nodes, links, facts, sites, at, category, used, revision) == no_node()))) {
             definition <- facts[at].call_definition;
             sites[at].failure_user <- sites[definition].failure_user;
             sites[definition].failure_user <- at;
@@ -656,7 +835,7 @@ func check_escaping_failure_paths(nodes:const ExprNodes in N, names:const NameBi
     };
     for (item in 0u64 .. used) {
         if (item == count) return true;
-        count <- propagate_failure(nodes, names, sites, report, sites[item].failure_work, count, used);
+        count <- propagate_failure(nodes, names, sites, report, sites[item].failure_work, count, used, revision);
         if (count == no_node()) return false;
     };
     return true;
@@ -671,31 +850,37 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
     where {const owner N, const owner T, const owner B, const owner L, const owner F, owner X, owner R} {
     report.node <- no_node();
     report.diagnostic <- invalid_completion_tree();
-    if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) ||
-        tree.root != tree.used - 1u64 || nodes[tree.root].kind != module_node()) return false;
+    ref tail = make u64 { no_node() };
+    if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) || tree.root != tree.used - 1u64 ||
+        !module_tail(nodes, tree.revision, tree.used, tree.root, tail)) return false;
     if (intrinsic (len)(names) < tree.used || intrinsic (len)(links) < tree.used ||
         intrinsic (len)(facts) < tree.used || intrinsic (len)(sites) < tree.used) {
         report.diagnostic <- completion_storage_exhausted();
         return false;
     } else {};
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
+    ref failure = make u64 { no_node() };
     for (at in 0u64 .. tree.used) {
         initialize_site(sites, at);
-        if (nodes[at].kind == callable_node()) {
-            sites[at].throws_clause <- signature_clause(nodes, nodes[at].left, throws_clause_node());
-            {};
-        } else {};
+        if (inspect_callable(nodes, tree.revision, tree.used, at, callable) == ModuleCallable) {
+            if (!find_signature_clause(nodes, tree.revision, tree.used, callable.signature, ThrowsSignatureClause, failure)) {
+                report.node <- at;
+                return false;
+            };
+            (sites[at].throws_clause <- failure):void;
+        };
     };
     val site <- tree.root;
     # Syntax is postorder, so a reverse visit supplies each child's context
     # before the child is visited. Ordinary brace groups keep that context.
     for (offset in 0u64 .. tree.used) {
         site <- tree.root - offset;
-        prepare_context(nodes, facts, sites, site);
+        prepare_context(nodes, facts, sites, site, tree.used, tree.revision);
     };
     for (at in 0u64 .. tree.used) {
-        report.diagnostic <- check_event(nodes, names, links, facts, sites, at, tree.used);
+        report.diagnostic <- check_event(nodes, names, links, facts, sites, at, tree.used, tree.revision);
         if (report.diagnostic != 0u8) { report.node <- at; return false; } else {};
     };
-    return check_escaping_failure_paths(nodes, names, links, facts, sites, report, tree.used, missing_return_identity()) &&
-        check_escaping_failure_paths(nodes, names, links, facts, sites, report, tree.used, unexpected_case_identity());
+    return check_escaping_failure_paths(nodes, names, links, facts, sites, report, tree.used, tree.revision, missing_return_identity()) &&
+        check_escaping_failure_paths(nodes, names, links, facts, sites, report, tree.used, tree.revision, unexpected_case_identity());
 }

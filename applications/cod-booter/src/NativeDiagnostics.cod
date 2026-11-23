@@ -41,3 +41,8 @@ export proc report_scratch_error(handle diagnostic:DiagnosticDestination in D, c
     report_native_error(diagnostic, 7u8, code);
     return;
 }
+
+export proc report_provider_error(handle diagnostic:DiagnosticDestination in D, code:u32) -> void where {owner D} {
+    report_native_error(diagnostic, 8u8, code);
+    return;
+}

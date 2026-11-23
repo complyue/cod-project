@@ -1,182 +1,438 @@
-using "NativeSource.cod" { Path, SourceRevision, SourceOpenException };
+using "std:exceptions" { OutOfMemoryError, RegionCapacityExceededError };
+using "NativeSource.cod" {
+    Path, PathOwner, PathNotReadyException, PathStorageException, SourceRevision, SourceOpenException, prepare_root, prepare_child,
+};
 using "NativeSourceUse.cod" source_use;
 using "NativeDiagnostics.cod" {
     DiagnosticDestination, report_rejection, report_source_open_error, report_scratch_error,
 };
-using "SourceStorage.cod" { SourceBytes, SourceLines };
+using "SourceStorage.cod" { SourceBytes, SourceLines, Token };
 using "ParserStorage.cod" {
-    Tokens, ExprNodes, no_node, callable_node, data_record_node, enum_declaration_node,
-    export_node, export_from_node, local_module_selection,
+    Tokens, ExprNodes, no_node, syntax_first, syntax_past, ModuleSelectionSites, inspect_module_selection,
+    first_module_item, SequenceEntry, inspect_sequence_entry, CallableSites, inspect_callable,
+    DeclarationSites, inspect_declaration,
 };
+using "ParserStorage.cod" ModuleSelectionMode { UseResource };
+using "ParserStorage.cod" SelectionSyntax { SelectionReady };
+using "ParserStorage.cod" SequenceSyntax { ModuleSequence };
+using "ParserStorage.cod" CallableSyntax { ModuleCallable };
+using "ParserStorage.cod" DeclarationSyntax { NominalRecord, EnumTypeDeclaration, LocalPublication };
+using "ParserStorage.cod" AstSlot { Vacant };
 using "TokenBuffer.cod" ScanResult;
 using "ParserInput.cod" ParseResult;
 using "Frontend.cod" { FrontendResult, read_module };
-using "ModuleExportStorage.cod" { ModuleExports, ModuleInterfaces };
+using "ModuleExportStorage.cod" { ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces };
+using "ModuleExportStorage.cod" SumInterfacePayload { NoSumInterface };
 using "ModuleExports.cod" {
-    SelectedExports, next_module_dependency, prepare_module_dependencies, ExportResolutionResult, resolve_enum_selections,
+    SelectedExport, SelectedExports, next_module_dependency, prepare_module_dependencies, ExportResolutionResult,
+    resolve_enum_selections, resolve_sum_selections,
 };
 using "ModuleFrontend.cod" {
     ModuleBindingResult, select_parsed_module, bind_selected_module, module_read_failed, module_binding_failed,
     module_selection_failed, module_operands_failed, binding_diagnostic, rejected_unsupported_declaration,
 };
-using "NameResolution.cod" { NameBindings, NameWork, first_item };
+using "NameResolution.cod" { NameBinding, NameBindings, NameWorkSlot, NameWork };
 using "NativeDeclarations.cod" {
     ModulePublication, NativeDeclarationResult, prepare_module_calls, check_module_interfaces, publish_interfaces,
     publish_module_exports,
 };
 using "DeclarationTypes.cod" { prepare_native_operand_types, publish_type_interfaces, DeclaredExpressionResult, check_declared_expressions };
 using "Compiler.cod" ExpressionScratchPlan;
-using "ModuleDriver.cod" { plan_module_workspace, ModuleWorkspacePlan };
-using "OperandChecking.cod" { OperandFacts, CallOwners, OperandCheckResult, prepare_imported_calls, publish_native_interfaces };
-using "CompletionChecking.cod" CompletionSites;
+using "ModuleDriver.cod" { plan_module_source, plan_module_workspace, ModuleWorkspacePlan };
+using "OperandChecking.cod" {
+    OperandFact, OperandFacts, OwnerEvidence, CallOwners, OperandCheckResult, prepare_imported_calls, publish_native_interfaces,
+};
+using "CompletionChecking.cod" { CompletionSite, CompletionSites };
 using "ModuleCompiler.cod" compile_bound_commands;
-using "NativeCommands.cod" { NativeCommands, NativePlan };
+using "NativeCommands.cod" {
+    NativeCommand, NativeCommands, NativePlan, NativeUnitRow, NativeUnitRows,
+    NativeLiteralRange, NativeLiteralRanges, text_literal,
+};
+using "ModuleIndex.cod" {
+    Visits, KeyLookup, lookup_path, insert_visit, visit_is_checked, growth_capacity, reserve_keys, mark_checked,
+};
 using "ModuleLowering.cod" native_unsupported;
-using "NativeScratch.cod" ScratchOpenException;
-using "NativeLLVM.cod" LLVMSession;
 using "CompilerStatus.cod" CompilerStatus { Complete, Rejected, FormUnsupported, LoweringFailed, ScratchFailed, SourceOpenFailed };
 
-handle type ModuleFrame;
-export handle type NativeGraph;
+export enum GraphPurpose:u8 { Declarations; NativeObject; }
 
-proc "C" NativeGraph() throws ScratchOpenException;
-export proc "C" collect_native_graph(handle graph:NativeGraph in G, handle input:Path in A,
-                                     handle diagnostic:DiagnosticDestination in D, spellings:const SourceBytes in B,
-                                     exports:const ModuleExports in B) -> CompilerStatus
-    where {owner G, const owner A, owner D, const owner B};
-export proc "C" construct_native_graph(handle graph:NativeGraph in G, handle session:LLVMSession in L) -> u8
-    where {const owner G, owner L};
+proc with_source(here work(bytes:const SourceBytes in S, lines:const SourceLines in S) -> CompilerStatus,
+                 handle opened:SourceRevision in S) -> CompilerStatus where {const owner S} {
+    return source_use(opened) (bytes, lines) => { continue work(bytes, lines); };
+}
+
+export data DependencyEdge {
+    site:u64;
+    first:u64;
+    past:u64;
+    decoded_first:u64;
+    decoded_past:u64;
+}
+export array DependencyEdges [u64]:DependencyEdge;
+
+export func collect_dependency_edges(source:const SourceBytes in S, nodes:const ExprNodes in F,
+                                     used:u64, revision:u64, edges:DependencyEdges in E)
+    -> u64 where {const owner S, const owner F, owner E} {
+    val count <- 0u64;
+    val site <- next_module_dependency(source, nodes, used, revision, 0u64);
+    ref selection = make ModuleSelectionSites {
+        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
+        symbolic <- false; mode <- UseResource;
+    };
+    for (scan in 0u64 .. used) {
+        if (site == no_node()) return count;
+        if (count >= intrinsic (len)(edges) ||
+            inspect_module_selection(nodes, revision, used, site, selection) != SelectionReady)
+            return no_node();
+        edges[count].site <- site;
+        edges[count].first <- syntax_first(nodes, used, selection.path);
+        edges[count].past <- syntax_past(nodes, used, selection.path);
+        count <- count + 1u64;
+        site <- next_module_dependency(source, nodes, used, revision, site + 1u64);
+    };
+    return count;
+}
+
+export func decode_dependency_path(source:const SourceBytes in S, first:u64, past:u64,
+                                   decoded:SourceBytes in F, start:u64)
+    -> u64 where {const owner S, owner F} {
+    if (first >= past || past > intrinsic (len)(source) || past - first < 3u64) return no_node();
+    if (source[first] != 34u8 || source[past - 1u64] != 34u8) return no_node();
+    if (start > intrinsic (len)(decoded) || past - first - 2u64 > intrinsic (len)(decoded) - start)
+        return no_node();
+    val count <- start;
+    val escaped <- false;
+    for (at in first + 1u64 .. past - 1u64) {
+        if (escaped) {
+            if (source[at] != 34u8 && source[at] != 92u8) return no_node();
+            decoded[count] <- source[at];
+            count <- count + 1u64;
+            escaped <- false;
+        } else {
+            if (source[at] == 92u8) {
+                escaped <- true;
+            } else {
+                if (source[at] == 0u8 || source[at] == 34u8) return no_node();
+                decoded[count] <- source[at];
+                count <- count + 1u64;
+            };
+        };
+    };
+    if (escaped) return no_node();
+    return count;
+}
+
+data PublicationSize {
+    source_bytes:u64;
+    spelling_bytes:u64;
+    literal_bytes:u64;
+    literals:u64;
+}
+array PublicationSizes[u64]:PublicationSize;
+
+proc reserve_exports(ref var rows:ModuleExports in G, used:u64, required:u64) -> void where {owner G} {
+    val capacity <- intrinsic (len)(rows);
+    if (required <= capacity) return;
+    ref next = make ModuleExports(growth_capacity(capacity, required), make ModuleExport {
+        module_first <- 0u64; module_past <- 0u64; name_first <- 0u64; name_past <- 0u64;
+        identity <- 0u64; kind <- 0u8; checked <- 0u8; publishing_module <- 0u64; origin_module <- 0u64;
+        owner_module <- 0u64; owner_identity <- 0u64; shape <- 0u8;
+    }) in G;
+    for (i in 0u64 .. used) { next[i] <- rows[i]; };
+    rows = next;
+    return;
+}
+
+proc reserve_interfaces(ref var rows:ModuleInterfaces in G, used:u64, required:u64) -> void where {owner G} {
+    val capacity <- intrinsic (len)(rows);
+    if (required <= capacity) return;
+    ref next = make ModuleInterfaces(growth_capacity(capacity, required), make ModuleInterfaceRow {
+        defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
+        interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
+        type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
+        target_readonly <- 0u8; owner_readonly <- 0u8; has_here <- 0u8; failure_checked <- 0u8;
+        failure_module <- 0u64; failure_identity <- 0u64; name_first <- 0u64; name_past <- 0u64;
+        enum_code <- 0u64; native_function <- no_node(); native_procedure <- 0u8; native_reception <- 0u8;
+        native_passes_owner <- 0u8;
+        sum_payload <- make NoSumInterface {};
+    }) in G;
+    for (i in 0u64 .. used) { next[i] <- rows[i]; };
+    rows = next;
+    return;
+}
+
+proc reserve_commands(ref var rows:NativeCommands in G, used:u64, required:u64) -> void where {owner G} {
+    val capacity <- intrinsic (len)(rows);
+    if (required <= capacity) return;
+    ref next = make NativeCommands(growth_capacity(capacity, required),
+        make NativeCommand { opcode <- 0u8; a <- 0u64; b <- 0u64; c <- 0u64; d <- 0u64; }) in G;
+    for (i in 0u64 .. used) { next[i] <- rows[i]; };
+    rows = next;
+    return;
+}
+
+proc reserve_units(ref var rows:NativeUnitRows in G, used:u64, required:u64) -> void where {owner G} {
+    val capacity <- intrinsic (len)(rows);
+    if (required <= capacity) return;
+    ref next = make NativeUnitRows(growth_capacity(capacity, required), make NativeUnitRow {
+        command_first <- 0u64; command_past <- 0u64; literal_first <- 0u64; literal_past <- 0u64;
+        name_first <- 0u64; name_past <- 0u64; source_size <- 0u64; labels <- 0u64; slots <- 0u64;
+    }) in G;
+    for (i in 0u64 .. used) { next[i] <- rows[i]; };
+    rows = next;
+    return;
+}
+
+proc reserve_literals(ref var rows:NativeLiteralRanges in G, used:u64, required:u64) -> void where {owner G} {
+    val capacity <- intrinsic (len)(rows);
+    if (required <= capacity) return;
+    ref next = make NativeLiteralRanges(growth_capacity(capacity, required),
+        make NativeLiteralRange { first <- 0u64; past <- 0u64; }) in G;
+    for (i in 0u64 .. used) { next[i] <- rows[i]; };
+    rows = next;
+    return;
+}
+
+func add_span(size:u64, first:u64, past:u64, limit:u64) -> u64 {
+    if (first > past || past > limit || past - first >= no_node() - size) return no_node();
+    return size + (past - first);
+}
+
+func measure_publication(source:const SourceBytes in S, exports:const ModuleExports in F,
+                         interfaces:const ModuleInterfaces in F, commands:const NativeCommands in F,
+                         module:u64, export_count:u64, interface_count:u64, command_count:u64,
+                         size:PublicationSize in M)
+    -> bool where {const owner S, const owner F, owner M} {
+    if (export_count > intrinsic (len)(exports) || interface_count > intrinsic (len)(interfaces) ||
+        command_count > intrinsic (len)(commands)) return false;
+    val limit <- intrinsic (len)(source);
+    val spelling_bytes <- 0u64;
+    val literal_bytes <- 0u64;
+    val literals <- 0u64;
+    val remaining_members <- 0u64;
+    for (i in 0u64 .. export_count) {
+        if (exports[i].publishing_module != module) return false;
+        spelling_bytes <- add_span(spelling_bytes, exports[i].name_first, exports[i].name_past, limit);
+        if (spelling_bytes == no_node()) return false;
+    };
+    for (i in 0u64 .. interface_count) {
+        if (remaining_members == 0u64) {
+            if (interfaces[i].defining_module != module || interfaces[i].interface_kind == 0u8 ||
+                interfaces[i].value_kind != 0u8 || interfaces[i].entry_count >= interface_count - i) return false;
+            remaining_members <- interfaces[i].entry_count;
+        } else {
+            remaining_members <- remaining_members - 1u64;
+        };
+        spelling_bytes <- add_span(spelling_bytes, interfaces[i].name_first, interfaces[i].name_past, limit);
+        if (spelling_bytes == no_node()) return false;
+    };
+    for (i in 0u64 .. command_count) {
+        if (commands[i].opcode == text_literal()) {
+            literal_bytes <- add_span(literal_bytes, commands[i].b, commands[i].c, limit);
+            if (literal_bytes == no_node() || commands[i].c - commands[i].b < 2u64) return false;
+            literals <- literals + 1u64;
+        };
+    };
+    size.source_bytes <- limit;
+    size.spelling_bytes <- spelling_bytes;
+    size.literal_bytes <- literal_bytes;
+    size.literals <- literals;
+    return true;
+}
+
+func copy_span(source:const SourceBytes in S, first:u64, past:u64,
+               destination:SourceBytes in G, start:u64) -> u64 where {const owner S, owner G} {
+    for (i in 0u64 .. past - first) { destination[start + i] <- source[first + i]; };
+    return start + (past - first);
+}
+
+func copy_publication(source:const SourceBytes in S, exports:const ModuleExports in F, interfaces:const ModuleInterfaces in F,
+                      published:ModuleExports in G, published_interfaces:ModuleInterfaces in G, spellings:SourceBytes in G,
+                      export_count:u64, interface_count:u64, export_first:u64, interface_first:u64, spelling_first:u64)
+    -> void where {const owner S, const owner F, owner G} {
+    val start <- spelling_first;
+    val past <- spelling_first;
+    for (i in 0u64 .. export_count) {
+        past <- copy_span(source, exports[i].name_first, exports[i].name_past, spellings, start);
+        published[export_first + i] <- exports[i];
+        published[export_first + i].name_first <- start;
+        published[export_first + i].name_past <- past;
+        start <- past;
+    };
+    for (i in 0u64 .. interface_count) {
+        past <- copy_span(source, interfaces[i].name_first, interfaces[i].name_past, spellings, start);
+        published_interfaces[interface_first + i] <- interfaces[i];
+        published_interfaces[interface_first + i].name_first <- start;
+        published_interfaces[interface_first + i].name_past <- past;
+        start <- past;
+    };
+}
+
+func copy_unit_material(source:const SourceBytes in S, staged:const NativeCommands in F,
+                        commands:NativeCommands in G, literals:NativeLiteralRanges in G, spellings:SourceBytes in G,
+                        count:u64, command_first:u64, literal_first:u64, spelling_first:u64)
+    -> void where {const owner S, const owner F, owner G} {
+    val literal_index <- literal_first;
+    val start <- spelling_first;
+    val past <- spelling_first;
+    for (i in 0u64 .. count) {
+        commands[command_first + i] <- staged[i];
+        if (staged[i].opcode == text_literal()) {
+            past <- copy_span(source, staged[i].b, staged[i].c, spellings, start);
+            literals[literal_index].first <- start;
+            literals[literal_index].past <- past;
+            literal_index <- literal_index + 1u64;
+            commands[command_first + i].d <- literal_index - literal_first;
+            start <- past;
+        };
+    };
+}
 
 data ModuleProgress {
     identity:u64;
     used:u64;
     root:u64;
+    revision:u64;
+    dependencies:u64;
     count:u64;
     interface_count:u64;
-    failed_first:u64;
-    failed_past:u64;
-    native:u8;
+    purpose:GraphPurpose;
     entry:u8;
     function_base:u64;
+    functions:u64;
     command_count:u64;
     labels:u64;
     slots:u64;
 }
 array ModuleProgressRows[u64]:ModuleProgress;
 
-proc "C" prepare_graph_frame(handle frame:ModuleFrame in W, val tokens:u64, val nodes:u64, val commands:u64) -> u8 where {owner W};
-proc "C" graph_frame_use(
-    here work(ref tokens:Tokens in W, ref nodes:ExprNodes in W, ref selected:SelectedExports in W,
-              ref names:NameBindings in W, ref work:NameWork in W, ref staged:ModuleExports in W,
-              ref progress:ModuleProgressRows in W, ref spellings:const SourceBytes in W,
-              ref published:const ModuleExports in W, ref staged_interfaces:ModuleInterfaces in W,
-              ref published_interfaces:const ModuleInterfaces in W, ref facts:OperandFacts in W,
-              ref owners:CallOwners in W, ref sites:CompletionSites in W, ref commands:NativeCommands in W) -> CompilerStatus,
-    handle frame:ModuleFrame in W) -> CompilerStatus where {owner W};
-proc "C" remember_graph_dependency(handle frame:ModuleFrame in W, ref source:const SourceBytes in S,
-                                    val site:u64, val first:u64, val past:u64) -> u8
-    where {owner W, const owner S};
-proc "C" follow_graph_dependencies(handle frame:ModuleFrame in W) -> u8 where {owner W};
-proc "C" commit_graph_exports(handle frame:ModuleFrame in W, ref source:const SourceBytes in S) -> u8
-    where {owner W, const owner S};
-
-proc discover_graph_dependencies(source:const SourceBytes in S, lines:const SourceLines in S,
-                                 handle frame:ModuleFrame in W, handle diagnostic:DiagnosticDestination in D,
-                                 tokens:Tokens in T, nodes:ExprNodes in T, selected:SelectedExports in T,
-                                 progress:ModuleProgressRows in T) -> CompilerStatus
-    where {const owner S, owner W, owner D, owner T} {
+proc read_visit_frame(source:const SourceBytes in S, lines:const SourceLines in S,
+                      handle diagnostic:DiagnosticDestination in D, tokens:Tokens in F, nodes:ExprNodes in F,
+                      selected:SelectedExports in F, edges:DependencyEdges in F, decoded:SourceBytes in F,
+                      progress:ModuleProgressRows in F)
+    -> CompilerStatus where {const owner S, owner D, owner F} {
     ref result = make FrontendResult {
         scan <- make ScanResult { used <- 0u64; next <- 0u64; complete <- false; invalid_source <- false; };
-        tree <- make ParseResult { next <- 0u64; used <- 0u64; root <- no_node(); diagnostic <- 0u8; supplied_here <- false; case_control <- false; };
+        tree <- make ParseResult {
+            revision <- progress[0u64].revision; next <- 0u64; used <- 0u64; root <- no_node(); diagnostic <- 0u8;
+            supplied_here <- false; case_control <- false;
+        };
         diagnostic_first <- no_node(); diagnostic_past <- no_node();
     };
     if (!read_module(source, tokens, nodes, result)) {
         report_rejection(source, lines, diagnostic, module_read_failed(), result.tree.diagnostic,
                          result.diagnostic_first, result.diagnostic_past, no_node());
         return Rejected;
-    } else {};
-    if (!prepare_module_dependencies(selected, result.tree.used)) {
+    };
+    val count <- collect_dependency_edges(source, nodes, result.tree.used, result.tree.revision, edges);
+    if (count == no_node() || !prepare_module_dependencies(selected, result.tree.used)) {
         report_scratch_error(diagnostic, 1u32);
         return ScratchFailed;
-    } else {};
+    };
+    val first <- 0u64;
+    val past <- 0u64;
+    for (edge in 0u64 .. count) {
+        past <- decode_dependency_path(source, edges[edge].first, edges[edge].past, decoded, first);
+        if (past == no_node()) {
+            report_rejection(source, lines, diagnostic, module_selection_failed(), 1u8,
+                             edges[edge].first, edges[edge].past, no_node());
+            return Rejected;
+        };
+        edges[edge].decoded_first <- first;
+        edges[edge].decoded_past <- past;
+        first <- past;
+    };
     progress[0u64].used <- result.tree.used;
     progress[0u64].root <- result.tree.root;
-    val site <- next_module_dependency(source, nodes, result.tree.used, 0u64);
-    val path <- no_node();
-    val status <- 0u8;
-    for (unused in 0u64 .. result.tree.used) {
-        if (site == no_node()) return Complete;
-        path <- nodes[site].left;
-        status <- remember_graph_dependency(frame, source, site, nodes[path].first, nodes[path].past);
-        if (status != 0u8) {
-            report_rejection(source, lines, diagnostic, module_selection_failed(), status,
-                             nodes[path].first, nodes[path].past, no_node());
-            return Rejected;
-        } else {};
-        site <- next_module_dependency(source, nodes, result.tree.used, site + 1u64);
-    };
+    progress[0u64].dependencies <- count;
     return Complete;
 }
 
 func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
-                      spellings:const SourceBytes in W, published:const ModuleExports in W,
-                      interfaces:const ModuleInterfaces in W, selected:SelectedExports in W,
+                      catalog_spellings:const SourceBytes in B, catalog_exports:const ModuleExports in B,
+                      spellings:const SourceBytes in G, published:const ModuleExports in G, spelling_size:u64,
+                      export_count:u64, interfaces:const ModuleInterfaces in G, interface_count:u64, selected:SelectedExports in W,
                       names:NameBindings in W, work:NameWork in W, result:ModuleBindingResult in R, native:bool) -> bool
-    where {const owner S, owner W, owner R} {
-    if (!select_parsed_module(source, nodes, spellings, published, selected, native, result)) return false;
+    where {const owner S, owner W, const owner B, const owner G, owner R} {
+    if (!select_parsed_module(source, nodes, catalog_spellings, catalog_exports, spellings, published,
+                             spelling_size, export_count, selected, native, result)) return false;
     ref members = make ExportResolutionResult { diagnostic <- 0u8; node <- no_node(); };
-    if (!resolve_enum_selections(source, nodes, result.frontend.tree.used, spellings, interfaces, selected, members)) {
+    if (!resolve_enum_selections(source, nodes, result.frontend.tree.used, result.frontend.tree.revision,
+                                 spellings, interfaces, interface_count, selected, members)) {
         binding_diagnostic(nodes, result, module_selection_failed(), members.diagnostic, members.node);
         return false;
     } else {};
+    if (!resolve_sum_selections(source, nodes, result.frontend.tree.used, result.frontend.tree.revision,
+                                spellings, spelling_size, interfaces, interface_count, selected, members)) {
+        binding_diagnostic(nodes, result, module_selection_failed(), members.diagnostic, members.node);
+        return false;
+    };
     if (!bind_selected_module(source, nodes, selected, names, work, native, result)) return false;
     if (native) return true;
     val used <- result.frontend.tree.used;
     ref checked = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
-    if (!prepare_module_calls(nodes, names, selected, interfaces, work, used, checked)) {
+    if (!prepare_module_calls(nodes, names, selected, interfaces, interface_count, work, used, result.frontend.tree.revision, checked)) {
         binding_diagnostic(nodes, result, module_binding_failed(), checked.diagnostic, checked.node);
         return false;
     } else {};
     ref expressions = make DeclaredExpressionResult { diagnostic <- 0u8; node <- no_node(); };
-    if (!check_declared_expressions(source, nodes, names, selected, work, spellings, interfaces, used, expressions)) {
+    if (!check_declared_expressions(source, nodes, names, selected, work, spellings, interfaces,
+                                    interface_count, used, result.frontend.tree.revision, expressions)) {
         binding_diagnostic(nodes, result, module_binding_failed(), expressions.diagnostic, expressions.node);
         return false;
     } else {};
     return true;
 }
 
-func first_library_initialization(nodes:const ExprNodes in N, work:const NameWork in W, root:u64) -> u64
-    where {const owner N, const owner W} {
-    val item <- first_item(nodes, nodes[root].left);
-    val kind <- 0u8;
-    for (unused in 0u64 .. root) {
+func first_library_initialization(nodes:const ExprNodes in N, work:const NameWork in W, tree:const ParseResult in T) -> u64
+    where {const owner N, const owner W, const owner T} {
+    ref item = make u64 { no_node() };
+    if (!first_module_item(nodes, tree.revision, tree.used, tree.root, item)) return tree.root;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
+    for (unused in 0u64 .. tree.used) {
         if (item == no_node()) return no_node();
-        kind <- nodes[nodes[item].right].kind;
-        if (!local_module_selection(kind) && kind != callable_node() && kind != data_record_node() &&
-            kind != enum_declaration_node() && kind != export_node() && kind != export_from_node())
-            return nodes[item].right;
+        if (inspect_sequence_entry(nodes, tree.revision, tree.used, item, entry) != ModuleSequence) return item;
+        if (!library_declaration(nodes, tree, entry.item)) return entry.item;
         item <- work[item].next;
     };
     return no_node();
 }
 
+func library_declaration(nodes:const ExprNodes in N, tree:const ParseResult in T, at:u64) -> bool
+    where {const owner N, const owner T} {
+    ref selection = make ModuleSelectionSites {
+        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
+        symbolic <- false; mode <- UseResource;
+    };
+    if (inspect_module_selection(nodes, tree.revision, tree.used, at, selection) == SelectionReady) return true;
+    ref callable_site = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
+    if (inspect_callable(nodes, tree.revision, tree.used, at, callable_site) == ModuleCallable) return true;
+    ref declaration = make DeclarationSites {
+        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
+    };
+    val shape <- inspect_declaration(nodes, tree.revision, tree.used, at, declaration);
+    return shape == NominalRecord || shape == EnumTypeDeclaration || shape == LocalPublication;
+}
+
 proc compile_graph_unit(source:const SourceBytes in S, lines:const SourceLines in S,
                         handle diagnostic:DiagnosticDestination in D, nodes:const ExprNodes in W,
                         selected:const SelectedExports in W, names:const NameBindings in W, work:NameWork in W,
-                        progress:ModuleProgressRows in W, contracts:const ModuleInterfaces in W,
+                        progress:ModuleProgressRows in W, contracts:const ModuleInterfaces in G, interface_count:u64,
                         facts:OperandFacts in W, owners:CallOwners in W, sites:CompletionSites in W,
                         commands:NativeCommands in W, result:ModuleBindingResult in R) -> CompilerStatus
-    where {const owner S, owner D, owner W, owner R} {
+    where {const owner S, owner D, owner W, const owner G, owner R} {
     if (progress[0u64].entry == 0u8) {
-        val initializer <- first_library_initialization(nodes, work, progress[0u64].root);
+        val initializer <- first_library_initialization(nodes, work, result.frontend.tree);
         if (initializer != no_node()) {
             report_rejection(source, lines, diagnostic, module_binding_failed(), 111u8,
-                             nodes[initializer].first, nodes[initializer].past, no_node());
+                             syntax_first(nodes, result.frontend.tree.used, initializer), syntax_past(nodes, result.frontend.tree.used, initializer), no_node());
             return FormUnsupported;
         };
     };
     ref operands = make OperandCheckResult { diagnostic <- 0u8; node <- no_node(); };
-    if (!prepare_imported_calls(nodes, names, selected, work, contracts, progress[0u64].used, operands)) {
+    if (!prepare_imported_calls(nodes, names, selected, work, contracts, interface_count,
+                                progress[0u64].used, result.frontend.tree.revision, operands)) {
         binding_diagnostic(nodes, result, module_operands_failed(), operands.diagnostic, operands.node);
         report_rejection(source, lines, diagnostic, result.stage, result.diagnostic, result.frontend.diagnostic_first,
                          result.frontend.diagnostic_past, result.related_first);
@@ -193,13 +449,14 @@ proc compile_graph_unit(source:const SourceBytes in S, lines:const SourceLines i
             if (rejected_unsupported_declaration(result)) return FormUnsupported;
             return Rejected;
         };
-        val first <- if (plan.node == no_node()) { no_node() } else { (nodes[plan.node].first) };
-        val past <- if (plan.node == no_node()) { no_node() } else { (nodes[plan.node].past) };
+        val first <- if (plan.node == no_node()) { no_node() } else { (syntax_first(nodes, result.frontend.tree.used, plan.node)) };
+        val past <- if (plan.node == no_node()) { no_node() } else { (syntax_past(nodes, result.frontend.tree.used, plan.node)) };
         report_rejection(source, lines, diagnostic, 0u8, plan.diagnostic, first, past, no_node());
         if (plan.diagnostic == native_unsupported()) return FormUnsupported;
         return LoweringFailed;
     };
     progress[0u64].command_count <- plan.used;
+    progress[0u64].functions <- plan.functions;
     progress[0u64].labels <- plan.labels;
     progress[0u64].slots <- plan.slots;
     return Complete;
@@ -209,23 +466,25 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
                        handle diagnostic:DiagnosticDestination in D, nodes:const ExprNodes in W,
                        selected:SelectedExports in W, names:NameBindings in W, work:NameWork in W,
                        staged:ModuleExports in W, progress:ModuleProgressRows in W,
-                       spellings:const SourceBytes in W, published:const ModuleExports in W,
-                       staged_interfaces:ModuleInterfaces in W, published_interfaces:const ModuleInterfaces in W,
+                       catalog_spellings:const SourceBytes in B, catalog_exports:const ModuleExports in B,
+                       spellings:const SourceBytes in G, published:const ModuleExports in G, spelling_size:u64, export_count:u64,
+                       staged_interfaces:ModuleInterfaces in W, published_interfaces:const ModuleInterfaces in G, interface_count:u64,
                        facts:OperandFacts in W, owners:CallOwners in W, sites:CompletionSites in W,
                        commands:NativeCommands in W) -> CompilerStatus
-    where {const owner S, owner D, owner W} {
+    where {const owner S, owner D, owner W, const owner B, const owner G} {
     ref result = make ModuleBindingResult {
         frontend <- make FrontendResult {
             scan <- make ScanResult { used <- 0u64; next <- 0u64; complete <- true; invalid_source <- false; };
             tree <- make ParseResult {
-                next <- 0u64; used <- progress[0u64].used; root <- progress[0u64].root; diagnostic <- 0u8; supplied_here <- false; case_control <- false;
+                revision <- progress[0u64].revision; next <- 0u64; used <- progress[0u64].used; root <- progress[0u64].root; diagnostic <- 0u8; supplied_here <- false; case_control <- false;
             };
             diagnostic_first <- no_node(); diagnostic_past <- no_node();
         };
         stage <- 0u8; diagnostic <- 0u8; related_first <- no_node();
     };
-    val native <- progress[0u64].native != 0u8;
-    if (!bind_graph_names(source, nodes, spellings, published, published_interfaces, selected, names, work, result, native)) {
+    val native <- progress[0u64].purpose == (NativeObject:GraphPurpose);
+    if (!bind_graph_names(source, nodes, catalog_spellings, catalog_exports, spellings, published, spelling_size,
+                          export_count, published_interfaces, interface_count, selected, names, work, result, native)) {
         val code <- if (result.stage == module_read_failed()) { result.frontend.tree.diagnostic } else { result.diagnostic };
         report_rejection(source, lines, diagnostic, result.stage, code,
                          result.frontend.diagnostic_first, result.frontend.diagnostic_past, result.related_first);
@@ -235,35 +494,37 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     val used <- result.frontend.tree.used;
     if (native) {
         val checked_unit <- compile_graph_unit(source, lines, diagnostic, nodes, selected, names, work, progress,
-                                               published_interfaces, facts, owners, sites, commands, result);
+                                               published_interfaces, interface_count, facts, owners, sites, commands, result);
         if (checked_unit != Complete) return checked_unit;
     } else {
-        prepare_native_operand_types(source, nodes, names, selected, work, spellings, published_interfaces, used);
+        prepare_native_operand_types(source, nodes, names, selected, work, spellings, published_interfaces,
+                                     interface_count, used, result.frontend.tree.revision);
         ref checked = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
-        if (!check_module_interfaces(nodes, names, selected, published_interfaces, work, used, checked)) {
+        if (!check_module_interfaces(nodes, names, selected, published_interfaces, interface_count, work,
+                                     used, result.frontend.tree.revision, checked)) {
             report_rejection(source, lines, diagnostic, module_binding_failed(), checked.diagnostic,
-                             nodes[checked.node].first, nodes[checked.node].past, no_node());
+                             syntax_first(nodes, result.frontend.tree.used, checked.node), syntax_past(nodes, result.frontend.tree.used, checked.node), no_node());
             return Rejected;
         };
     };
     ref publication = make ModulePublication { module_identity <- progress[0u64].identity; source_first <- 0u64; };
     val count <- 0u64;
     val conflict <- no_node();
-    if (!publish_module_exports(source, nodes, names, selected, publication, used, staged, count, conflict)) {
+    if (!publish_module_exports(source, nodes, names, selected, publication, used, result.frontend.tree.revision, staged, count, conflict)) {
         if (conflict != no_node()) {
             report_rejection(source, lines, diagnostic, module_binding_failed(), 75u8,
-                             nodes[conflict].first, nodes[conflict].past, no_node());
+                             syntax_first(nodes, result.frontend.tree.used, conflict), syntax_past(nodes, result.frontend.tree.used, conflict), no_node());
             return Rejected;
         } else {};
         report_scratch_error(diagnostic, 1u32);
         return ScratchFailed;
     } else {};
     val interfaces <- if (native) {
-        publish_native_interfaces(nodes, names, work, facts, used, publication.module_identity,
+        publish_native_interfaces(nodes, names, work, facts, used, result.frontend.tree.revision, publication.module_identity,
                                   progress[0u64].function_base, staged_interfaces)
-    } else { publish_interfaces(nodes, names, selected, work, used, publication.module_identity, staged_interfaces) };
+    } else { publish_interfaces(nodes, names, selected, work, used, result.frontend.tree.revision, publication.module_identity, staged_interfaces) };
     if (!native && interfaces != no_node()) {
-        (interfaces <- publish_type_interfaces(nodes, names, selected, work, used, publication.module_identity,
+        (interfaces <- publish_type_interfaces(nodes, names, selected, work, used, result.frontend.tree.revision, publication.module_identity,
                                                interfaces, staged_interfaces)):void;
     } else {};
     if (interfaces == no_node()) {
@@ -275,66 +536,367 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     return Complete;
 }
 
-proc check_graph_revision(source:const SourceBytes in S, lines:const SourceLines in S,
-                          handle frame:ModuleFrame in W, handle diagnostic:DiagnosticDestination in D) -> CompilerStatus
-    where {const owner S, owner W, owner D} {
-    ref plan = make ModuleWorkspacePlan {
-        source <- make ExpressionScratchPlan {
-            token_count <- 0u64; node_capacity <- 0u64; diagnostic <- 0u8;
-            diagnostic_first <- no_node(); diagnostic_past <- no_node();
-        };
-        commands <- 0u64;
+func write_unit_row(units:NativeUnitRows in G, at:u64, command_first:u64, command_past:u64,
+                    literal_first:u64, literal_past:u64, key_first:u64, key_past:u64,
+                    source_size:u64, labels:u64, slots:u64) -> void where {owner G} {
+    units[at].command_first <- command_first;
+    units[at].command_past <- command_past;
+    units[at].literal_first <- literal_first;
+    units[at].literal_past <- literal_past;
+    units[at].name_first <- key_first;
+    units[at].name_past <- key_past;
+    units[at].source_size <- source_size;
+    units[at].labels <- labels;
+    units[at].slots <- slots;
+    return;
+}
+
+proc publish_visit(handle opened:SourceRevision in S, progress:const ModuleProgressRows in F,
+                   staged:const ModuleExports in F, staged_interfaces:const ModuleInterfaces in F,
+                   staged_commands:const NativeCommands in F, visits:Visits in G,
+                   ref var exports:ModuleExports in G, ref var interfaces:ModuleInterfaces in G,
+                   ref var spellings:SourceBytes in G, ref var commands:NativeCommands in G,
+                   ref var units:NativeUnitRows in G, ref var literals:NativeLiteralRanges in G,
+                   export_used:u64 in G, interface_used:u64 in G, spelling_used:u64 in G,
+                   command_used:u64 in G, unit_used:u64 in G, literal_used:u64 in G, function_used:u64 in G,
+                   const val key_first:u64, const val key_past:u64)
+    -> CompilerStatus where {const owner S, const owner F, owner G} {
+    const val module <- progress[0u64].identity;
+    const val export_count <- progress[0u64].count;
+    const val interface_count <- progress[0u64].interface_count;
+    const val command_count <- progress[0u64].command_count;
+    ref sizes = make PublicationSizes(1u64, make PublicationSize {
+        source_bytes <- 0u64; spelling_bytes <- 0u64; literal_bytes <- 0u64; literals <- 0u64;
+    });
+    val measured <- with_source(opened) (source, lines) => {
+        if (!measure_publication(source, staged, staged_interfaces, staged_commands,
+                                 module, export_count, interface_count, command_count, sizes[0u64]))
+            { continue ScratchFailed; };
+        continue Complete;
     };
-    val planned <- plan_module_workspace(source, plan);
-    if (planned != Complete) {
-        if (plan.source.diagnostic != 0u8) {
-            report_rejection(source, lines, diagnostic, module_read_failed(), plan.source.diagnostic,
-                             plan.source.diagnostic_first, plan.source.diagnostic_past, no_node());
-        };
-        return planned;
-    } else {};
-    val prepared <- prepare_graph_frame(frame, plan.source.token_count, plan.source.node_capacity, plan.commands);
-    if (prepared != 0u8) {
-        report_scratch_error(diagnostic, prepared);
-        return ScratchFailed;
-    } else {};
-    val parsed <- graph_frame_use(frame) (tokens, nodes, selected, names, work, staged, progress, spellings, published, interfaces, contracts,
-                                         facts, owners, sites, commands) => {
-        continue discover_graph_dependencies(source, lines, frame, diagnostic, tokens, nodes, selected, progress);
+    if (measured != Complete) return measured;
+
+    const val export_first <- export_used;
+    const val interface_first <- interface_used;
+    const val spelling_first <- spelling_used;
+    const val command_first <- command_used;
+    const val literal_first <- literal_used;
+    val export_past <- add_span(export_first, 0u64, export_count, no_node());
+    val interface_past <- add_span(interface_first, 0u64, interface_count, no_node());
+    const val literal_start <- add_span(spelling_first, 0u64, sizes[0u64].spelling_bytes, no_node());
+    val spelling_past <- add_span(literal_start, 0u64, sizes[0u64].literal_bytes, no_node());
+    val command_past <- add_span(command_first, 0u64, command_count, no_node());
+    val literal_past <- add_span(literal_first, 0u64, sizes[0u64].literals, no_node());
+    val has_commands <- command_count != 0u64;
+    val unit_past <- add_span(unit_used, 0u64, if (has_commands) { 1u64 } else { 0u64 }, no_node());
+    val function_past <- add_span(progress[0u64].function_base, 0u64, progress[0u64].functions, no_node());
+    if (export_past == no_node() || interface_past == no_node() || spelling_past == no_node() ||
+        command_past == no_node() || literal_past == no_node() || unit_past == no_node() ||
+        function_past == no_node() || module == 0u64) return ScratchFailed;
+    reserve_exports(exports, export_first, export_past);
+    reserve_interfaces(interfaces, interface_first, interface_past);
+    reserve_keys(spellings, spelling_first, spelling_past);
+    reserve_commands(commands, command_first, command_past);
+    reserve_literals(literals, literal_first, literal_past);
+    reserve_units(units, unit_used, unit_past);
+
+    with_source(opened) (source, lines) => {
+        copy_publication(source, staged, staged_interfaces, exports, interfaces, spellings,
+                         export_count, interface_count, export_first, interface_first, spelling_first);
+        copy_unit_material(source, staged_commands, commands, literals, spellings, command_count,
+                           command_first, literal_first, literal_start);
+        continue Complete;
     };
-    if (parsed != Complete) return parsed;
-    val followed:const u8 <- follow_graph_dependencies(frame);
-    if (followed != 0u8)
-        return graph_frame_use(frame) (tokens, nodes, selected, names, work, staged, progress, spellings, published, interfaces, contracts,
-                                       facts, owners, sites, commands) => {
-            report_rejection(source, lines, diagnostic, module_selection_failed(), followed,
-                             progress[0u64].failed_first, progress[0u64].failed_past, no_node());
-            continue if (followed == 16u8) { FormUnsupported } else { Rejected };
-        };
-    val checked <- graph_frame_use(frame) (tokens, nodes, selected, names, work, staged, progress, spellings, published, interfaces, contracts,
-                                          facts, owners, sites, commands) => {
-        continue bind_graph_module(source, lines, diagnostic, nodes, selected, names, work,
-                                   staged, progress, spellings, published, interfaces, contracts, facts, owners, sites, commands);
+    if (has_commands) {
+        write_unit_row(units, unit_used, command_first, command_past, literal_first, literal_past, key_first, key_past,
+                       sizes[0u64].source_bytes, progress[0u64].labels, progress[0u64].slots);
     };
-    if (checked != Complete) return checked;
-    val committed <- commit_graph_exports(frame, source);
-    if (committed != 0u8) {
-        report_scratch_error(diagnostic, committed);
-        return ScratchFailed;
-    } else {};
+    if (!mark_checked(visits, module - 1u64, export_first, export_past)) return ScratchFailed;
+    export_used <- export_past;
+    interface_used <- interface_past;
+    spelling_used <- spelling_past;
+    command_used <- command_past;
+    unit_used <- unit_past;
+    literal_used <- literal_past;
+    function_used <- function_past;
     return Complete;
 }
 
-export proc "C" check_graph_module(handle input:Path in A, handle frame:ModuleFrame in W,
-                                    handle diagnostic:DiagnosticDestination in D) -> CompilerStatus
-    where {const owner A, owner W, owner D} {
-    try {
-        own handle revision:SourceRevision <- make own handle SourceRevision(input);
-        return source_use(revision) (source, lines) => {
-            continue check_graph_revision(source, lines, frame, diagnostic);
+data VisitWorkspacePlan {
+    plan:ModuleWorkspacePlan;
+    source_size:u64;
+}
+array VisitWorkspacePlans[u64]:VisitWorkspacePlan;
+
+proc plan_opened_workspace(source:const SourceBytes in S, lines:const SourceLines in S,
+                           handle diagnostic:DiagnosticDestination in D, workspaces:VisitWorkspacePlans in F, purpose:GraphPurpose)
+    -> CompilerStatus where {const owner S, owner D, owner F} {
+    workspaces[0u64].source_size <- intrinsic (len)(source);
+    val result <- if (purpose == (NativeObject:GraphPurpose)) { (plan_module_workspace(source, workspaces[0u64].plan)) }
+        else { if (plan_module_source(source, workspaces[0u64].plan.source)) { Complete } else { Rejected } };
+    if (result == Rejected) {
+        report_rejection(source, lines, diagnostic, module_read_failed(), workspaces[0u64].plan.source.diagnostic,
+                         workspaces[0u64].plan.source.diagnostic_first, workspaces[0u64].plan.source.diagnostic_past, no_node());
+    };
+    if (result == ScratchFailed) { report_scratch_error(diagnostic, 2u32); };
+    return result;
+}
+
+symbol @followDependency:proc(u64) -> u8;
+
+proc reject_dependency(handle opened:SourceRevision in S, handle diagnostic:DiagnosticDestination in D,
+                       const val code:u8, const val first:u64, const val past:u64)
+    -> CompilerStatus where {const owner S, owner D} {
+    return with_source(opened) (source, lines) => {
+        report_rejection(source, lines, diagnostic, module_selection_failed(), code, first, past, no_node());
+        continue if (code == 16u8) { FormUnsupported } else { Rejected };
+    };
+}
+
+proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in P,
+                         handle diagnostic:DiagnosticDestination in D, const val purpose:GraphPurpose,
+                         builtin_spellings:const SourceBytes in B,
+                         builtins:const ModuleExports in B,
+                         ref var visits:Visits in G, ref var keys:SourceBytes in G,
+                         const used:u64 in G, const key_used:u64 in G, const next_revision:u64 in G,
+                         ref var exports:ModuleExports in G, ref var interfaces:ModuleInterfaces in G,
+                         ref var spellings:SourceBytes in G, ref var commands:NativeCommands in G,
+                         ref var units:NativeUnitRows in G, ref var literals:NativeLiteralRanges in G,
+                         const export_used:u64 in G, const interface_used:u64 in G,
+                         const spelling_used:u64 in G, const command_used:u64 in G, const unit_used:u64 in G,
+                         const literal_used:u64 in G, const function_used:u64 in G,
+                         revision:u64, id:u64, key_first:u64, key_past:u64, depth:u64, failure:u8 in R)
+    -> CompilerStatus where {const owner S, const owner P, owner D, const owner B, owner G, owner R} {
+    failure <- 0u8;
+    ref workspaces = make VisitWorkspacePlans(1u64, make VisitWorkspacePlan {
+        plan <- make ModuleWorkspacePlan {
+            source <- make ExpressionScratchPlan {
+                token_count <- 0u64; node_capacity <- 0u64;
+                diagnostic <- 0u8; diagnostic_first <- no_node(); diagnostic_past <- no_node();
+            };
+            commands <- 0u64;
         };
-    } catch (error:SourceOpenException) {
+        source_size <- 0u64;
+    });
+    val planned <- with_source(opened) (source, lines) => {
+        continue plan_opened_workspace(source, lines, diagnostic, workspaces, purpose);
+    };
+    if (planned != Complete) return planned;
+
+    val allocating <- true;
+    try {
+        val capacity <- workspaces[0u64].plan.source.node_capacity;
+        ref tokens = make Tokens(workspaces[0u64].plan.source.token_count, make Token { kind <- 0u8; first <- 0u64; past <- 0u64; });
+        ref nodes = make ExprNodes(capacity, make Vacant {});
+        ref selected = make SelectedExports(capacity, make SelectedExport {
+            dependency_module <- 0u64; identity <- 0u64; kind <- 0u8; checked <- 0u8;
+            origin_module <- 0u64; owner_module <- 0u64; owner_identity <- 0u64; shape <- 0u8;
+            enum_head <- no_node(); next_enum_selection <- no_node(); enum_code <- 0u64;
+            sum_head <- no_node(); next_sum_selection <- no_node();
+            constructor_selection <- no_node(); constructor_row <- no_node();
+        });
+        ref names = make NameBindings(capacity, make NameBinding {
+            kind <- 0u8; imported_kind <- 0u8; guarded_local <- 0u8; declaration <- no_node();
+            scope <- no_node(); finalizer <- no_node(); guarded_local_link <- no_node(); handle_guard <- no_node();
+        });
+        ref work = make NameWork(capacity, make NameWorkSlot {
+            active <- no_node(); next <- no_node(); next_method <- no_node();
+            imported_function <- no_node(); imported_owner_argument <- no_node(); imported_failure <- 0u64;
+            imported_kind <- 0u8; imported_procedure <- 0u8; imported_reception <- 0u8;
+            imported_target_readonly <- 0u8; imported_owner_readonly <- 0u8;
+            imported_passes_owner <- 0u8; imported_failure_checked <- 0u8;
+            enum_code <- 0u64; value_module <- 0u64; value_identity <- 0u64; value_kind <- 0u8; expects_here <- 0u8;
+        });
+        ref facts = make OperandFacts(capacity, make OperandFact {
+            kind <- 0u8; reception <- 0u8; checked_exception <- 0u8; target_readonly <- 0u8; needs_target <- 0u8;
+            target_presence <- 0u8; selection <- no_node(); discarded_result <- 0u8; arm_result <- 0u8;
+            case_item <- 0u8; case_match <- 0u8; case_body <- 0u8; case_guard <- 0u8; case_resume <- 0u8;
+            case_end <- 0u8; case_presence <- 0u8; case_selection <- no_node(); case_context <- no_node();
+            case_after_subject <- no_node(); case_discriminator <- 0u8; case_may_be_absent <- 0u8;
+            enum_constant <- 0u8; discriminator_code <- 0u64;
+            case_excluded_at <- no_node(); case_exclusion_member <- no_node(); case_exclusion_previous <- no_node();
+            case_exclusion_next <- no_node(); case_exit_link <- no_node(); case_exit_tail <- no_node();
+            owner <- no_node(); identity <- 0u64; reservation <- no_node(); product_words <- 0u64;
+            word_offset <- 0u64; last_initializer <- no_node(); writable_text_place <- 0u8; call_definition <- no_node();
+            text_nul <- 0u8; allocation_owner <- no_node(); owner_chain <- no_node(); owner_use_next <- no_node();
+            passes_owner <- 0u8; text_assertion <- 0u8; text_intrinsic <- 0u8;
+        });
+        ref owners = make CallOwners(capacity, make OwnerEvidence {
+            call_site <- no_node(); actual_owner <- no_node(); uses <- 0u64;
+        });
+        ref sites = make CompletionSites(capacity, make CompletionSite {
+            event <- 0u8; presence <- 0u8; can_continue <- 0u8; local_return <- 0u8; retains_caught <- 0u8;
+            forwarded_operand <- 0u8; in_delayed_body <- 0u8; escaping_failure <- 0u8; case_break <- 0u8; case_scan <- 0u8;
+            guarded_by <- no_node(); incoming_handler <- no_node(); throws_clause <- no_node(); category <- 0u64;
+            destination <- no_node(); cleanup_first <- no_node(); cleanup_stop <- no_node(); registration <- no_node();
+            previous_defer <- no_node(); last_defer <- no_node(); replacing_try <- no_node();
+            failure_user <- no_node(); failure_work <- no_node();
+        });
+        ref staged_commands = make NativeCommands(workspaces[0u64].plan.commands, make NativeCommand {
+            opcode <- 0u8; a <- 0u64; b <- 0u64; c <- 0u64; d <- 0u64;
+        });
+        ref edges = make DependencyEdges(capacity, make DependencyEdge {
+            site <- 0u64; first <- 0u64; past <- 0u64; decoded_first <- 0u64; decoded_past <- 0u64;
+        });
+        ref decoded = make SourceBytes(workspaces[0u64].source_size, 0u8);
+        ref progress = make ModuleProgressRows(1u64, make ModuleProgress {
+            identity <- id + 1u64; used <- 0u64; root <- no_node(); revision <- revision; dependencies <- 0u64;
+            count <- 0u64; interface_count <- 0u64;
+            purpose <- purpose; entry <- if (depth == 0u64) { 1u8 } else { 0u8 };
+            function_base <- 0u64; functions <- 0u64; command_count <- 0u64; labels <- 0u64; slots <- 0u64;
+        });
+        ref staged = make ModuleExports(capacity, make ModuleExport {
+            module_first <- 0u64; module_past <- 0u64; name_first <- 0u64; name_past <- 0u64;
+            identity <- 0u64; kind <- 0u8; checked <- 0u8; publishing_module <- 0u64; origin_module <- 0u64;
+            owner_module <- 0u64; owner_identity <- 0u64; shape <- 0u8;
+        });
+        ref staged_interfaces = make ModuleInterfaces(capacity, make ModuleInterfaceRow {
+            defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
+            interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
+            type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
+            target_readonly <- 0u8; owner_readonly <- 0u8; has_here <- 0u8; failure_checked <- 0u8;
+            failure_module <- 0u64; failure_identity <- 0u64; name_first <- 0u64; name_past <- 0u64;
+            enum_code <- 0u64; native_function <- no_node(); native_procedure <- 0u8; native_reception <- 0u8;
+            native_passes_owner <- 0u8;
+            sum_payload <- make NoSumInterface {};
+        });
+        allocating <- false;
+        val parsed <- with_source(opened) (source, lines) => {
+            continue read_visit_frame(source, lines, diagnostic, tokens, nodes, selected, edges, decoded, progress);
+        };
+        if (parsed != Complete) return parsed;
+        const val child_depth <- depth + 1u64;
+        effect @followDependency(edge:u64) -> u8 {
+            return visit_child(path, diagnostic, purpose, builtin_spellings, builtins, edges, decoded, selected, edge, child_depth,
+                               visits, keys, used, key_used, next_revision, exports, interfaces, spellings, commands, units,
+                               literals, export_used, interface_used, spelling_used, command_used, unit_used,
+                               literal_used, function_used);
+        };
+        val edge_code <- 0u8;
+        for (edge in 0u64 .. progress[0u64].dependencies) {
+            edge_code <- behave @followDependency(edge);
+            if (edge_code != 0u8) {
+                failure <- edge_code;
+                return reject_dependency(opened, diagnostic, edge_code, edges[edge].first, edges[edge].past);
+            };
+        };
+        if (purpose == (NativeObject:GraphPurpose) &&
+            (progress[0u64].used == 0u64 || progress[0u64].used >= no_node() - function_used))
+            return ScratchFailed;
+        progress[0u64].function_base <- function_used;
+        const val export_count <- export_used;
+        const val interface_count <- interface_used;
+        const val spelling_size <- spelling_used;
+        val bound <- with_source(opened) (source, lines) => {
+            continue bind_graph_module(source, lines, diagnostic, nodes, selected, names, work, staged, progress,
+                                       builtin_spellings, builtins, spellings, exports, spelling_size, export_count,
+                                       staged_interfaces, interfaces, interface_count, facts, owners, sites, staged_commands);
+        };
+        if (bound != Complete) return bound;
+        return publish_visit(opened, progress, staged, staged_interfaces, staged_commands, visits, exports, interfaces,
+                             spellings, commands, units, literals, export_used, interface_used, spelling_used,
+                             command_used, unit_used, literal_used, function_used, key_first, key_past);
+    } catch (error:const OutOfMemoryError) {
+        if (!allocating) { throw; };
+        report_scratch_error(diagnostic, 3u32);
+        return ScratchFailed;
+    }
+}
+
+export proc compile_graph(handle input:Path in A, handle diagnostic:DiagnosticDestination in D, purpose:GraphPurpose,
+                          builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B,
+                          ref var visits:Visits in G, ref var keys:SourceBytes in G,
+                          used:u64 in G, key_used:u64 in G, next_revision:u64 in G,
+                          ref var exports:ModuleExports in G, ref var interfaces:ModuleInterfaces in G,
+                          ref var spellings:SourceBytes in G, ref var commands:NativeCommands in G,
+                          ref var units:NativeUnitRows in G, ref var literals:NativeLiteralRanges in G,
+                          export_used:u64 in G, interface_used:u64 in G, spelling_used:u64 in G,
+                          command_used:u64 in G, unit_used:u64 in G, literal_used:u64 in G, function_used:u64 in G)
+    -> CompilerStatus where {const owner A, owner D, const owner B, owner G} {
+    try {
+        own handle opened:SourceRevision <- make own handle SourceRevision(input);
+        own handle canonical:PathOwner <- make own handle PathOwner();
+        val prepared <- prepare_root(canonical, input);
+        if (prepared != 0u64) {
+            report_source_open_error(diagnostic, prepared);
+            return SourceOpenFailed;
+        };
+        handle path:Path = make handle Path() in canonical;
+        ref key = make KeyLookup { id <- 0u64; length <- 0u64; };
+        lookup_path(canonical, visits, keys, used, key);
+        val revision <- next_revision;
+        val first <- key_used;
+        val root <- used;
+        if (key.id != root || insert_visit(canonical, key.length, visits, keys, used, key_used, next_revision) != Complete)
+            return ScratchFailed;
+        ref failure = make u8 { 0u8 };
+        return visit_open_revision(opened, path, diagnostic, purpose, builtin_spellings, builtins,
+                                   visits, keys, used, key_used, next_revision, exports, interfaces, spellings,
+                                   commands, units, literals, export_used, interface_used, spelling_used,
+                                   command_used, unit_used, literal_used, function_used, revision, root, first, key_used, 0u64, failure);
+    } catch (error:const SourceOpenException) {
         report_source_open_error(diagnostic, error.os_error);
         return SourceOpenFailed;
+    } catch (error:const PathStorageException) {
+        report_scratch_error(diagnostic, 3u32);
+        return ScratchFailed;
+    } catch (error:const PathNotReadyException) {
+        report_scratch_error(diagnostic, 1u32);
+        return ScratchFailed;
+    }
+}
+
+proc visit_child(handle parent_path:Path in P, handle diagnostic:DiagnosticDestination in D, purpose:GraphPurpose,
+                 builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B,
+                 edges:const DependencyEdges in F, decoded:const SourceBytes in F, selected:SelectedExports in F,
+                 edge:u64, depth:u64,
+                 ref var visits:Visits in G, ref var keys:SourceBytes in G,
+                 used:u64 in G, key_used:u64 in G, next_revision:u64 in G,
+                 ref var exports:ModuleExports in G, ref var interfaces:ModuleInterfaces in G,
+                 ref var spellings:SourceBytes in G, ref var commands:NativeCommands in G,
+                 ref var units:NativeUnitRows in G, ref var literals:NativeLiteralRanges in G,
+                 export_used:u64 in G, interface_used:u64 in G, spelling_used:u64 in G, command_used:u64 in G,
+                 unit_used:u64 in G, literal_used:u64 in G, function_used:u64 in G)
+    -> u8 where {const owner P, owner D, const owner B, owner F, owner G} {
+    val first <- edges[edge].decoded_first;
+    val past <- edges[edge].decoded_past;
+    ref spelling = make SourceBytes(past - first, 0u8);
+    copy_span(decoded, first, past, spelling, 0u64);
+    try {
+        own handle owner_path:PathOwner <- make own handle PathOwner();
+        if (prepare_child(owner_path, parent_path, spelling, past - first) != 0u64) return 1u8;
+        ref match_key = make KeyLookup { id <- 0u64; length <- 0u64; };
+        lookup_path(owner_path, visits, keys, used, match_key);
+        val child_id <- match_key.id;
+        if (child_id < used) {
+            if (!visit_is_checked(visits, child_id)) return 6u8;
+        } else {
+            if (depth >= 128u64) return 9u8;
+            handle child_path:Path = make handle Path() in owner_path;
+            own handle child_source:SourceRevision <- make own handle SourceRevision(child_path);
+            val revision <- next_revision;
+            val key_first <- key_used;
+            if (insert_visit(owner_path, match_key.length, visits, keys, used, key_used, next_revision) != Complete)
+                return 8u8;
+            ref child_failure = make u8 { 0u8 };
+            val compiled <- visit_open_revision(child_source, child_path, diagnostic, purpose, builtin_spellings, builtins,
+                                               visits, keys, used, key_used, next_revision, exports, interfaces, spellings,
+                                               commands, units, literals, export_used, interface_used, spelling_used,
+                                               command_used, unit_used, literal_used, function_used,
+                                               revision, child_id, key_first, key_used, depth, child_failure);
+            if (compiled != Complete) {
+                if (child_failure == 6u8 || child_failure == 9u8) return child_failure;
+                if (compiled == FormUnsupported) return 16u8;
+                return 7u8;
+            };
+        };
+        selected[edges[edge].site].dependency_module <- child_id + 1u64;
+        return 0u8;
+    } catch (error:const SourceOpenException) {
+        return 7u8;
+    } catch (error:const PathStorageException) {
+        return 8u8;
+    } catch (error:const PathNotReadyException) {
+        return 1u8;
     }
 }

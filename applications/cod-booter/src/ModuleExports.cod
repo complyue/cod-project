@@ -1,11 +1,19 @@
 using "SourceStorage.cod" SourceBytes;
 using "SourceAccess.cod" same_bytes;
 using "ParserStorage.cod" {
-    ExprNodes, len as syntax_len, no_node, module_node, module_selection, symbol_node, name_node,
-    import_node, member_selector_node, selected_resource_name,
+    ExprNodes, len as syntax_len, no_node, selected_resource_name,
+    ModuleSelectionSites, inspect_module_selection, first_module_item, syntax_first, syntax_past,
+    NameSyntax, name_syntax, SequenceEntry, inspect_sequence_entry, inspect_member_selector,
 };
+using "ParserStorage.cod" NameSyntax { NotAName, SymbolicName };
+using "ParserStorage.cod" SequenceSyntax { MemberSequence };
+using "ParserStorage.cod" MemberSelectionSyntax { InvalidMemberSelector, AllSelectedMembers };
+using "ParserStorage.cod" SelectionSyntax { SelectionReady, InvalidSelection };
+using "ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource };
 using "ParserInput.cod" ParseResult;
-using "ModuleExportStorage.cod" { ModuleExport, ModuleExports, ModuleInterfaces, find_interface, enum_type };
+using "ModuleExportStorage.cod" {
+    ModuleExport, ModuleExports, ModuleInterfaces, find_interface, enum_type, sum_type, checked_sum_constructor,
+};
 
 export data SelectedExport {
     # Input from dependency discovery. Zero selects the builtin namespace.
@@ -20,6 +28,10 @@ export data SelectedExport {
     enum_head:u64;
     next_enum_selection:u64;
     enum_code:u64;
+    sum_head:u64;
+    next_sum_selection:u64;
+    constructor_selection:u64;
+    constructor_row:u64;
 }
 export array SelectedExports[u64]:SelectedExport;
 
@@ -43,6 +55,7 @@ export func lexical_builder_export() -> u8 { return 13u8; }
 export func lexical_result_export() -> u8 { return 14u8; }
 export func text_size_export() -> u8 { return 15u8; }
 export func text_byte_export() -> u8 { return 16u8; }
+export func sum_export() -> u8 { return 18u8; }
 export func ordinary_callable_shape() -> u8 { return 1u8; }
 export func print_export_identity() -> u64 { return 0u64; }
 export func exception_root_identity() -> u64 { return 0u64; }
@@ -63,6 +76,8 @@ func unproved_import_interpretation() -> u8 { return 12u8; }
 func invalid_member_selection() -> u8 { return 13u8; }
 func missing_enum_member() -> u8 { return 14u8; }
 func conflicting_enum_members() -> u8 { return 15u8; }
+func missing_sum_constructor() -> u8 { return 17u8; }
+func conflicting_sum_constructors() -> u8 { return 18u8; }
 
 func same_module_path(source:const SourceBytes in S, first:u64, past:u64,
                       spellings:const SourceBytes in B, module_first:u64, module_past:u64) -> bool
@@ -87,15 +102,16 @@ func builtin_path(source:const SourceBytes in S, first:u64, past:u64) -> bool wh
         source[first + 3u64] == 100u8 && source[first + 4u64] == 58u8;
 }
 
-export func next_module_dependency(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, start:u64) -> u64
+export func next_module_dependency(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64, start:u64) -> u64
     where {const owner S, const owner N} {
     if (used > syntax_len(nodes) || start >= used) return no_node();
-    val path <- no_node();
+    ref selection = make ModuleSelectionSites {
+        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
+        symbolic <- false; mode <- UseResource;
+    };
     for (at in start .. used) {
-        if (module_selection(nodes[at].kind)) {
-            path <- nodes[at].left;
-            if (!builtin_path(source, nodes[path].first, nodes[path].past)) return at;
-        } else {};
+        if (inspect_module_selection(nodes, revision, used, at, selection) == SelectionReady &&
+            !builtin_path(source, syntax_first(nodes, used, selection.path), syntax_past(nodes, used, selection.path))) return at;
     };
     return no_node();
 }
@@ -117,7 +133,11 @@ func clear_selection(selected:SelectedExports in R, at:u64) -> void
     selected[at].shape <- 0u8;
     selected[at].enum_head <- no_node();
     selected[at].next_enum_selection <- no_node();
-    (selected[at].enum_code <- 0u64):void;
+    selected[at].enum_code <- 0u64;
+    selected[at].sum_head <- no_node();
+    selected[at].next_sum_selection <- no_node();
+    selected[at].constructor_selection <- no_node();
+    (selected[at].constructor_row <- no_node()):void;
 }
 
 func select_export(exports:const ModuleExports in E, row:u64, selected:SelectedExports in R, at:u64) -> void
@@ -131,35 +151,32 @@ func select_export(exports:const ModuleExports in E, row:u64, selected:SelectedE
     (selected[at].shape <- exports[row].shape):void;
 }
 
-func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N, site:u64,
-                       spellings:const SourceBytes in B, exports:const ModuleExports in E,
-                       selected:SelectedExports in R, declarations_only:bool) -> u8
-    where {const owner S, const owner N, const owner B, const owner E, owner R} {
-    val path <- nodes[site].left;
-    val name <- selected_resource_name(nodes, site);
-    val symbolic <- nodes[name].kind == symbol_node();
-    val name_first <- nodes[name].first + if (symbolic) { 1u64 } else { 0u64 };
-    val name_past <- nodes[name].past;
-    val path_first <- nodes[path].first;
-    val path_past <- nodes[path].past;
+func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, site:u64, syntax:const ModuleSelectionSites in M,
+                       spellings:const SourceBytes in B, exports:const ModuleExports in E, spelling_size:u64,
+                       export_count:u64, selected:SelectedExports in R, declarations_only:bool) -> u8
+    where {const owner S, const owner N, const owner M, const owner B, const owner E, owner R} {
+    val name_first <- syntax_first(nodes, used, syntax.resource) + if (syntax.symbolic) { 1u64 } else { 0u64 };
+    val name_past <- syntax_past(nodes, used, syntax.resource);
+    val path_first <- syntax_first(nodes, used, syntax.path);
+    val path_past <- syntax_past(nodes, used, syntax.path);
     val dependency <- selected[site].dependency_module;
     val intrinsic_path <- builtin_path(source, path_first, path_past);
     if ((dependency == 0u64 && !intrinsic_path) || dependency == no_node() ||
         (dependency != 0u64 && intrinsic_path)) return unproved_module_exports();
     val diagnostic <- if (dependency == 0u64) { unproved_module_exports() } else { missing_module_export() };
-    for (at in 0u64 .. intrinsic (len)(exports)) {
+    for (at in 0u64 .. export_count) {
         if (exports[at].kind != 0u8 && exports[at].publishing_module == dependency &&
-            exports[at].name_first <= exports[at].name_past && exports[at].name_past <= intrinsic (len)(spellings) &&
+            exports[at].name_first <= exports[at].name_past && exports[at].name_past <= spelling_size &&
             (dependency != 0u64 ||
-             (exports[at].module_first <= exports[at].module_past && exports[at].module_past <= intrinsic (len)(spellings) &&
+             (exports[at].module_first <= exports[at].module_past && exports[at].module_past <= spelling_size &&
               same_module_path(source, path_first, path_past, spellings, exports[at].module_first, exports[at].module_past)))) {
             if (same_bytes(source, name_first, name_past, spellings, exports[at].name_first, exports[at].name_past)) {
-                if (symbolic == (exports[at].kind == symbol_export())) {
-                    if (nodes[site].kind == import_node() && exports[at].kind != enum_export() &&
+                if (syntax.symbolic == (exports[at].kind == symbol_export())) {
+                    if (syntax.mode == ImportResource && exports[at].kind != enum_export() && exports[at].kind != sum_export() &&
                         !(declarations_only && exports[at].kind == callable_export() &&
                           exports[at].shape == ordinary_callable_shape()))
                         return unproved_import_interpretation();
-                    if (nodes[nodes[site].right].kind == member_selector_node() && exports[at].kind != enum_export())
+                    if (syntax.members != no_node() && exports[at].kind != enum_export() && exports[at].kind != sum_export())
                         return invalid_member_selection();
                     select_export(exports, at, selected, site);
                     return 0u8;
@@ -177,30 +194,45 @@ func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N
 # publication table carries a checked prefix for those module identities.
 # On failure only the diagnostic is available.
 export func resolve_module_exports(source:const SourceBytes in S, nodes:const ExprNodes in N, tree:const ParseResult in T,
-                                   spellings:const SourceBytes in B, exports:const ModuleExports in E,
+                                   builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in E,
+                                   graph_spellings:const SourceBytes in G, graph_exports:const ModuleExports in H,
+                                   spelling_size:u64, export_count:u64,
                                    selected:SelectedExports in X, declarations_only:bool, report:ExportResolutionResult in R) -> bool
-    where {const owner S, const owner N, const owner T, const owner B, const owner E, owner X, owner R} {
+    where {const owner S, const owner N, const owner T, const owner B, const owner E,
+           const owner G, const owner H, owner X, owner R} {
     report.node <- no_node();
     report.diagnostic <- invalid_export_tree();
+    if (spelling_size > intrinsic (len)(graph_spellings) || export_count > intrinsic (len)(graph_exports)) return false;
     if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) ||
-        tree.root != tree.used - 1u64 || nodes[tree.root].kind != module_node()) return false;
+        tree.root != tree.used - 1u64) return false;
+    ref first = make u64 { no_node() };
+    if (!first_module_item(nodes, tree.revision, tree.used, tree.root, first)) return false;
     if (intrinsic (len)(selected) < tree.used) {
         report.diagnostic <- export_storage_exhausted();
         return false;
     } else {};
+    ref syntax = make ModuleSelectionSites {
+        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
+        symbolic <- false; mode <- UseResource;
+    };
+    val shape <- InvalidSelection;
     for (at in 0u64 .. tree.used) {
         clear_selection(selected, at);
-        if (module_selection(nodes[at].kind)) {
-            report.diagnostic <- resolve_selection(source, nodes, at, spellings, exports, selected, declarations_only);
+        shape <- inspect_module_selection(nodes, tree.revision, tree.used, at, syntax);
+        if (shape == InvalidSelection) { report.node <- at; report.diagnostic <- invalid_export_tree(); return false; };
+        if (shape == SelectionReady) {
+            if (selected[at].dependency_module == 0u64) {
+                report.diagnostic <- resolve_selection(source, nodes, tree.used, at, syntax, builtin_spellings, builtins,
+                    intrinsic (len)(builtin_spellings), intrinsic (len)(builtins), selected, declarations_only);
+            } else {
+                report.diagnostic <- resolve_selection(source, nodes, tree.used, at, syntax, graph_spellings, graph_exports,
+                    spelling_size, export_count, selected, declarations_only);
+            };
             if (report.diagnostic != 0u8) {
-                report.node <- if (report.diagnostic == unproved_module_exports()) {
-                    (nodes[at].left)
-                } else {
-                    selected_resource_name(nodes, at)
-                };
+                report.node <- if (report.diagnostic == unproved_module_exports()) { (syntax.path) } else { (syntax.resource) };
                 return false;
-            } else {};
-        } else {};
+            };
+        };
     };
     report.diagnostic <- 0u8;
     return true;
@@ -217,24 +249,31 @@ export func enum_spelling(source:const SourceBytes in S, first:u64, past:u64,
 }
 
 func exposes_spelling(source:const SourceBytes in S, nodes:const ExprNodes in N, site:u64,
-                      spellings:const SourceBytes in B, first:u64, past:u64) -> bool
+                      spellings:const SourceBytes in B, first:u64, past:u64, used:u64, revision:u64) -> bool
     where {const owner S, const owner N, const owner B} {
-    val selector <- nodes[site].right;
-    val item <- nodes[selector].right;
-    if (item == no_node()) return true;
-    val name <- no_node();
-    for (unused in 0u64 .. selector) {
-        if (item == no_node()) return false;
-        name <- nodes[item].right;
-        if (same_bytes(source, nodes[name].first, nodes[name].past, spellings, first, past)) return true;
-        item <- nodes[item].left;
+    ref selection = make ModuleSelectionSites {
+        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
+        symbolic <- false; mode <- UseResource;
+    };
+    if (inspect_module_selection(nodes, revision, used, site, selection) != SelectionReady ||
+        selection.members == no_node()) return false;
+    ref item = make u64 { no_node() };
+    val shape <- inspect_member_selector(nodes, revision, used, selection.members, item);
+    if (shape == InvalidMemberSelector) return false;
+    if (shape == AllSelectedMembers) return true;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
+    for (unused in 0u64 .. selection.members) {
+        if (item == no_node() || inspect_sequence_entry(nodes, revision, used, item, entry) != MemberSequence) return false;
+        if (same_bytes(source, syntax_first(nodes, used, entry.item), syntax_past(nodes, used, entry.item),
+                        spellings, first, past)) return true;
+        item <- entry.previous;
     };
     return false;
 }
 
 func exposing_site(source:const SourceBytes in S, nodes:const ExprNodes in N, selected:const SelectedExports in E,
                    spellings:const SourceBytes in B, interfaces:const ModuleInterfaces in I, last:u64,
-                   names:const SourceBytes in P, first:u64, past:u64) -> u64
+                   names:const SourceBytes in P, first:u64, past:u64, used:u64, revision:u64) -> u64
     where {const owner S, const owner N, const owner E, const owner B, const owner I, const owner P} {
     val site <- last;
     val member <- no_node();
@@ -242,34 +281,41 @@ func exposing_site(source:const SourceBytes in S, nodes:const ExprNodes in N, se
         if (site == no_node()) return no_node();
         member <- enum_spelling(names, first, past, spellings, interfaces, selected[site].enum_head);
         if (member != no_node() &&
-            exposes_spelling(source, nodes, site, spellings, interfaces[member].name_first, interfaces[member].name_past))
+            exposes_spelling(source, nodes, site, spellings, interfaces[member].name_first, interfaces[member].name_past, used, revision))
             return site;
         site <- selected[site].next_enum_selection;
     };
     return no_node();
 }
 
-func absent_enum_selection(source:const SourceBytes in S, nodes:const ExprNodes in N, selector:u64,
-                           spellings:const SourceBytes in B, interfaces:const ModuleInterfaces in I, head:u64) -> u64
-    where {const owner S, const owner N, const owner B, const owner I} {
-    val item <- nodes[selector].right;
-    val name <- no_node();
-    for (unused in 0u64 .. selector) {
+func absent_enum_selection(source:const SourceBytes in S, nodes:const ExprNodes in N, tail:u64,
+                           spellings:const SourceBytes in B, interfaces:const ModuleInterfaces in I, head:u64,
+                           used:u64, revision:u64) -> u64 where {const owner S, const owner N, const owner B, const owner I} {
+    val item <- tail;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
+    for (unused in 0u64 .. used) {
         if (item == no_node()) return no_node();
-        name <- nodes[item].right;
-        if (enum_spelling(source, nodes[name].first, nodes[name].past, spellings, interfaces, head) == no_node()) return name;
-        item <- nodes[item].left;
+        if (inspect_sequence_entry(nodes, revision, used, item, entry) != MemberSequence) return item;
+        if (enum_spelling(source, syntax_first(nodes, used, entry.item), syntax_past(nodes, used, entry.item),
+                          spellings, interfaces, head) == no_node()) return entry.item;
+        item <- entry.previous;
     };
     return no_node();
 }
 
 func validate_enum_selection(source:const SourceBytes in S, nodes:const ExprNodes in N, selected:const SelectedExports in E,
                              spellings:const SourceBytes in B, interfaces:const ModuleInterfaces in I,
-                             site:u64, prior:u64, report:ExportResolutionResult in R) -> bool
+                             site:u64, selector:u64, prior:u64, used:u64, revision:u64,
+                             report:ExportResolutionResult in R) -> bool
     where {const owner S, const owner N, const owner E, const owner B, const owner I, owner R} {
     val head <- selected[site].enum_head;
-    val selector <- nodes[site].right;
-    val absent <- absent_enum_selection(source, nodes, selector, spellings, interfaces, head);
+    ref tail = make u64 { no_node() };
+    if (inspect_member_selector(nodes, revision, used, selector, tail) == InvalidMemberSelector) {
+        report.node <- selector;
+        report.diagnostic <- invalid_member_selection();
+        return false;
+    };
+    val absent <- absent_enum_selection(source, nodes, tail, spellings, interfaces, head, used, revision);
     if (absent != no_node()) {
         report.node <- absent;
         report.diagnostic <- missing_enum_member();
@@ -281,8 +327,8 @@ func validate_enum_selection(source:const SourceBytes in S, nodes:const ExprNode
     for (row in head + 1u64 .. head + 1u64 + interfaces[head].entry_count) {
         first <- interfaces[row].name_first;
         past <- interfaces[row].name_past;
-        if (exposes_spelling(source, nodes, site, spellings, first, past)) {
-            previous <- exposing_site(source, nodes, selected, spellings, interfaces, prior, spellings, first, past);
+        if (exposes_spelling(source, nodes, site, spellings, first, past, used, revision)) {
+            previous <- exposing_site(source, nodes, selected, spellings, interfaces, prior, spellings, first, past, used, revision);
             if (previous != no_node() && selected[previous].enum_head != head) {
                 report.node <- selector;
                 report.diagnostic <- conflicting_enum_members();
@@ -305,22 +351,28 @@ export func bind_enum_member(interfaces:const ModuleInterfaces in I, head:u64, m
 
 # The graph lends complete checked domains. Only validated selectors contribute
 # member spellings to ordinary lookup in this source revision.
-export func resolve_enum_selections(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64,
-                                    spellings:const SourceBytes in B, interfaces:const ModuleInterfaces in I,
+export func resolve_enum_selections(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64,
+                                    spellings:const SourceBytes in B, interfaces:const ModuleInterfaces in I, interface_count:u64,
                                     selected:SelectedExports in E, report:ExportResolutionResult in R) -> bool
     where {const owner S, const owner N, const owner B, const owner I, owner E, owner R} {
     val last <- no_node();
     val head <- no_node();
+    ref selection = make ModuleSelectionSites {
+        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
+        symbolic <- false; mode <- UseResource;
+    };
     for (site in 0u64 .. used) {
-        if (selected[site].kind == enum_export() && nodes[nodes[site].right].kind == member_selector_node()) {
-            head <- find_interface(interfaces, selected[site].origin_module, selected[site].identity);
+        if (selected[site].kind == enum_export() &&
+            inspect_module_selection(nodes, revision, used, site, selection) == SelectionReady &&
+            selection.members != no_node()) {
+            head <- find_interface(interfaces, interface_count, selected[site].origin_module, selected[site].identity);
             if (head == no_node() || interfaces[head].interface_kind != enum_type()) {
-                report.node <- selected_resource_name(nodes, site);
+                report.node <- selected_resource_name(nodes, revision, used, site);
                 report.diagnostic <- invalid_member_selection();
                 return false;
             } else {};
             selected[site].enum_head <- head;
-            if (!validate_enum_selection(source, nodes, selected, spellings, interfaces, site, last, report)) return false;
+            if (!validate_enum_selection(source, nodes, selected, spellings, interfaces, site, selection.members, last, used, revision, report)) return false;
             selected[site].next_enum_selection <- last;
             last <- site;
         } else {};
@@ -329,16 +381,174 @@ export func resolve_enum_selections(source:const SourceBytes in S, nodes:const E
     val site <- no_node();
     val first <- 0u64;
     val member <- no_node();
+    val kind <- NotAName;
+    val past <- 0u64;
     for (at in 0u64 .. used) {
-        if (nodes[at].kind == name_node() || nodes[at].kind == symbol_node()) {
-            first <- nodes[at].first + if (nodes[at].kind == symbol_node()) { 1u64 } else { 0u64 };
-            site <- exposing_site(source, nodes, selected, spellings, interfaces, last, source, first, nodes[at].past);
+        kind <- name_syntax(nodes, used, at);
+        if (kind != NotAName) {
+            first <- syntax_first(nodes, used, at) + if (kind == SymbolicName) { 1u64 } else { 0u64 };
+            past <- syntax_past(nodes, used, at);
+            site <- exposing_site(source, nodes, selected, spellings, interfaces, last, source, first, past, used, revision);
             if (site != no_node()) {
                 head <- selected[site].enum_head;
-                member <- enum_spelling(source, first, nodes[at].past, spellings, interfaces, head);
+                member <- enum_spelling(source, first, past, spellings, interfaces, head);
                 bind_enum_member(interfaces, head, member, selected[at]);
             } else {};
         } else {};
+    };
+    return true;
+}
+
+func constructor_spelling(names:const SourceBytes in N, first:u64, past:u64, spellings:const SourceBytes in B,
+                          limit:u64, interfaces:const ModuleInterfaces in I, published:u64, head:u64)
+    -> u64 where {const owner N, const owner B, const owner I} {
+    if (first >= past || past > intrinsic (len)(names)) return no_node();
+    val constructor <- no_node();
+    for (entry in head + 1u64 .. head + 1u64 + interfaces[head].entry_count) {
+        constructor <- checked_sum_constructor(interfaces, published, head, entry);
+        if (constructor != no_node() && interfaces[constructor].name_first < interfaces[constructor].name_past &&
+            interfaces[constructor].name_past <= limit &&
+            same_bytes(names, first, past, spellings, interfaces[constructor].name_first, interfaces[constructor].name_past))
+            return constructor;
+    };
+    return no_node();
+}
+
+func exposed_constructor(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64,
+                         spellings:const SourceBytes in B, limit:u64, interfaces:const ModuleInterfaces in I, published:u64,
+                         selected:const SelectedExports in E, site:u64,
+                         names:const SourceBytes in Q, first:u64, past:u64) -> u64
+    where {const owner S, const owner N, const owner B, const owner I, const owner E, const owner Q} {
+    val constructor <- constructor_spelling(names, first, past, spellings, limit, interfaces, published, selected[site].sum_head);
+    if (constructor == no_node()) return no_node();
+    if (exposes_spelling(source, nodes, site, spellings,
+                        interfaces[constructor].name_first, interfaces[constructor].name_past, used, revision))
+        return constructor;
+    return no_node();
+}
+
+func first_constructor_selection(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64,
+                                  spellings:const SourceBytes in B, limit:u64, interfaces:const ModuleInterfaces in I, published:u64,
+                                  selected:const SelectedExports in E, last:u64,
+                                  names:const SourceBytes in Q, first:u64, past:u64, constructor:u64 in C)
+    -> u64 where {const owner S, const owner N, const owner B, const owner I, const owner E, const owner Q, owner C} {
+    val site <- last;
+    for (offset in 0u64 .. used) {
+        if (site == no_node()) return no_node();
+        constructor <- exposed_constructor(source, nodes, used, revision, spellings, limit, interfaces, published,
+                                           selected, site, names, first, past);
+        if (constructor != no_node()) return site;
+        site <- selected[site].next_sum_selection;
+    };
+    return no_node();
+}
+
+func validate_sum_members(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64,
+                          spellings:const SourceBytes in B, limit:u64, interfaces:const ModuleInterfaces in I, published:u64,
+                          selected:const SelectedExports in E, site:u64, selector:u64, prior:u64,
+                          report:ExportResolutionResult in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner I, const owner E, owner R} {
+    val head <- selected[site].sum_head;
+    ref tail = make u64 { no_node() };
+    if (selector != no_node() && inspect_member_selector(nodes, revision, used, selector, tail) == InvalidMemberSelector) {
+        report.node <- selector;
+        report.diagnostic <- invalid_member_selection();
+        return false;
+    };
+    ref arm = make SequenceEntry { previous <- no_node(); item <- no_node(); };
+    val item <- tail;
+    for (offset in 0u64 .. used) {
+        if (item != no_node()) {
+            if (inspect_sequence_entry(nodes, revision, used, item, arm) != MemberSequence ||
+                constructor_spelling(source, syntax_first(nodes, used, arm.item), syntax_past(nodes, used, arm.item),
+                                     spellings, limit, interfaces, published, head) == no_node()) {
+                report.node <- if (arm.item < used) { arm.item } else { selector };
+                report.diagnostic <- missing_sum_constructor();
+                return false;
+            };
+            (item <- arm.previous):void;
+        };
+    };
+    val constructor <- no_node();
+    val other <- no_node();
+    val previous <- no_node();
+    val first <- 0u64;
+    val past <- 0u64;
+    for (entry in head + 1u64 .. head + 1u64 + interfaces[head].entry_count) {
+        constructor <- checked_sum_constructor(interfaces, published, head, entry);
+        if (constructor != no_node()) {
+            first <- interfaces[constructor].name_first;
+            (past <- interfaces[constructor].name_past):void;
+        };
+        if (constructor == no_node() || first >= past || past > limit) {
+            report.node <- selected_resource_name(nodes, revision, used, site);
+            report.diagnostic <- invalid_member_selection();
+            return false;
+        };
+        if (selector != no_node() && exposes_spelling(source, nodes, site, spellings, first, past, used, revision)) {
+            previous <- prior;
+            for (offset in 0u64 .. site) {
+                if (previous != no_node()) {
+                    other <- exposed_constructor(source, nodes, used, revision, spellings, limit, interfaces, published,
+                                                 selected, previous, spellings, first, past);
+                    if (other != no_node() && constructor != other) {
+                        report.node <- selector;
+                        report.diagnostic <- conflicting_sum_constructors();
+                        return false;
+                    };
+                    (previous <- selected[previous].next_sum_selection):void;
+                };
+            };
+        };
+    };
+    return true;
+}
+
+export func resolve_sum_selections(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64,
+                                   spellings:const SourceBytes in B, limit:u64, interfaces:const ModuleInterfaces in I, published:u64,
+                                   selected:SelectedExports in E, report:ExportResolutionResult in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner I, owner E, owner R} {
+    val last <- no_node();
+    val head <- no_node();
+    ref selection = make ModuleSelectionSites {
+        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
+        symbolic <- false; mode <- UseResource;
+    };
+    for (site in 0u64 .. used) {
+        if (selected[site].kind == sum_export() &&
+            inspect_module_selection(nodes, revision, used, site, selection) == SelectionReady) {
+            head <- find_interface(interfaces, published, selected[site].origin_module, selected[site].identity);
+            if (head == no_node() || interfaces[head].interface_kind != sum_type() ||
+                interfaces[head].entry_count == 0u64 || limit > intrinsic (len)(spellings)) {
+                report.node <- selected_resource_name(nodes, revision, used, site);
+                report.diagnostic <- invalid_member_selection();
+                return false;
+            };
+            selected[site].sum_head <- head;
+            if (!validate_sum_members(source, nodes, used, revision, spellings, limit, interfaces, published,
+                                      selected, site, selection.members, last, report)) return false;
+            if (selection.members != no_node()) {
+                selected[site].next_sum_selection <- last;
+                (last <- site):void;
+            };
+        };
+    };
+    if (last == no_node()) return true;
+    val site <- no_node();
+    val first <- 0u64;
+    val past <- 0u64;
+    ref constructor = make u64 { no_node() };
+    for (at in 0u64 .. used) {
+        if (name_syntax(nodes, used, at) != NotAName && name_syntax(nodes, used, at) != SymbolicName) {
+            first <- syntax_first(nodes, used, at);
+            past <- syntax_past(nodes, used, at);
+            site <- first_constructor_selection(source, nodes, used, revision, spellings, limit, interfaces, published,
+                                                selected, last, source, first, past, constructor);
+            if (site != no_node()) {
+                selected[at].constructor_selection <- site;
+                (selected[at].constructor_row <- constructor):void;
+            };
+        };
     };
     return true;
 }

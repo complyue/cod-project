@@ -1,8 +1,6 @@
-#include "cod_providers.h"
+#include "path_owner.h"
 
 #include "cod_source.h"
-
-_Static_assert(UINTPTR_MAX <= UINT64_MAX, "source handles require a pointer that fits in a handle word");
 
 static uint64_t source_error_number(cod_source_error error) {
   if (error.system_error) return error.system_error;
@@ -25,11 +23,11 @@ static uint64_t source_error_number(cod_source_error error) {
 
 cod_native_status cod_native_SourceRevision_construct_impl(cod_native_Path_borrow path, uint64_t *resource,
                                                             cod_native_SourceRevision_failure *failure) {
-  const char *filename = (const char *)(uintptr_t)path.payload;
-  if (!filename) return COD_NATIVE_BOUNDARY_ERROR;
+  const cod_booter_path_owner *selected = cod_booter_path_selected(path);
+  if (!selected) return COD_NATIVE_BOUNDARY_ERROR;
 
   cod_source_error error;
-  cod_source_revision *revision = cod_source_open_readonly(filename, &error);
+  cod_source_revision *revision = cod_source_open_readonly(selected->bytes, &error);
   if (!revision) {
     failure->os_error = source_error_number(error);
     return COD_NATIVE_FAILURE;

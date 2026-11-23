@@ -1,12 +1,27 @@
+using "ParserStorage.cod" AstSlot { Vacant, Occupied };
+using "ParserStorage.cod" ExprPayload {
+    NameReference, IntegerLiteral, BooleanLiteral, NamedThrow, LocalBinding, Formal, ExceptionResult, TypeConstraint, SumDefinition,
+    IndexSelection, ArrayLength, DeferredClauses, LocalCallableSlot, CallableDefinition, RaiseWithCause,
+    RethrowWithCause, NamedArgument, OwningHandleBinding, BorrowedHandleBinding, OwnHandleConstruction,
+    BorrowHandleConstruction, HereInvocation, RegionDefinition, OwningRegionBinding, RegionConstruction, OwningRegionResult,
+    ConstructorCasePattern,
+};
+using "ParserStorage.cod" ConstructionSyntax {
+    OtherConstruction, InvalidConstruction, ExceptionConstructionSyntax, PositionalConstruction,
+};
+using "ParserStorage.cod" DeclarationSyntax { NominalRecord, LocalPublication, EnumTypeDeclaration, OtherDeclaration };
+using "ParserStorage.cod" CallableSyntax { ModuleCallable, CProvider, CEntry };
+using "ParserStorage.cod" SignatureSyntax { BorrowedResultClause };
+using "ParserStorage.cod" SequenceSyntax { ModuleSequence };
+using "ParserStorage.cod" ModuleSelectionMode { UseResource, ReexportResource };
+using "ParserStorage.cod" SelectionSyntax { SelectionReady };
+using "ParserStorage.cod" LocalMode { ExceptionLocal };
+using "ParserStorage.cod" FormalMode { ExceptionFormal, HandleFormal, RetainedHandleFormal };
 using "ParserStorage.cod" {
-    callable_local_node, lexical_callable_node, throw_with_cause_node, throw_named_node, rethrow_from_node,
-    named_argument_node, exception_local_node, bodyless_defer_node, exception_parameter_node,
-    exception_result_node, ref_result_node, make_exception_node, make_named_node, construction_body,
-    reserves_storage, positional_construction, construction_type_query_node, name_node, literal_node, bool_node,
-    data_record_node, index_access_node, array_length_node, catch_binding_node, handle_local,
-    handle_construction, handle_parameter_node, here_parameter_node, here_call_node, Tokens,
-    ExprNodes, no_node, enum_declaration_node, readonly_declaration, type_parameter_node, callable_node, export_node,
-    export_from_node,
+    ExprNodes, Tokens, no_node, ConstructionSites, inspect_construction, syntax_first, syntax_past,
+    first_module_item, SequenceEntry, inspect_sequence_entry, module_item_publication,
+    DeclarationSites, inspect_declaration, CallableSites, inspect_callable, ModuleSelectionSites, inspect_module_selection,
+    SignatureSites, inspect_signature, BindingSites, inspect_type_annotation, CatchSites, inspect_catch_binding, is_here_formal,
 };
 using "SourceStorage.cod" SourceBytes;
 using "Frontend.cod" { FrontendResult, read_module };
@@ -17,11 +32,11 @@ using "ModuleExports.cod" {
 };
 using "NameResolution.cod" {
     NameBindings, NameWork, NameResolutionResult, unsupported_module_declaration,
-    unsupported_ordinary_construction, declaration_requires_native_output, first_item,
+    unsupported_ordinary_construction,
     resolve_module_names, text_type, is_lexical_builder, owner_binding, ordinary_selection, record_type,
 };
 using "NativeDeclarations.cod" {
-    NativeDeclarationResult, check_native_declarations, declared_exception_type,
+    NativeDeclarationResult, check_native_declarations, declared_exception_type, native_declaration_first, unsupported_owning_region_result,
 };
 using "OperandChecking.cod" {
     OperandFacts, CallOwners, OperandCheckResult, check_module_operands,
@@ -48,6 +63,10 @@ func unsupported_array_length() -> u8 { return 74u8; }
 func unsupported_ordinary_here() -> u8 { return 76u8; }
 func invalid_catch_annotation() -> u8 { return 77u8; }
 func unsupported_lexical_callable() -> u8 { return 108u8; }
+func unsupported_nominal_sum() -> u8 { return 114u8; }
+func unsupported_named_region() -> u8 { return 116u8; }
+func unsupported_const_local() -> u8 { return 117u8; }
+func unsupported_constructor_case() -> u8 { return 120u8; }
 
 export func rejected_unsupported_declaration(result:const ModuleBindingResult in R) -> bool where {const owner R} {
     if (result.stage == module_operands_failed())
@@ -58,7 +77,9 @@ export func rejected_unsupported_declaration(result:const ModuleBindingResult in
     if (result.stage == module_completion_failed()) return result.diagnostic == unsupported_case_transfer();
     return result.stage == module_binding_failed() &&
         (result.diagnostic == unsupported_module_declaration() || result.diagnostic == unsupported_array_length() ||
-         result.diagnostic == unsupported_lexical_callable() ||
+         result.diagnostic == unsupported_lexical_callable() || result.diagnostic == unsupported_nominal_sum() ||
+         result.diagnostic == unsupported_named_region() || result.diagnostic == unsupported_const_local() ||
+         result.diagnostic == unsupported_owning_region_result() || result.diagnostic == unsupported_constructor_case() ||
          (result.diagnostic >= 28u8 && result.diagnostic <= 40u8));
 }
 
@@ -69,72 +90,134 @@ export func binding_diagnostic(nodes:const ExprNodes in N, result:ModuleBindingR
     result.frontend.diagnostic_first <- no_node();
     result.frontend.diagnostic_past <- no_node();
     if (at != no_node()) {
-        result.frontend.diagnostic_first <- nodes[at].first;
-        (result.frontend.diagnostic_past <- nodes[at].past):void;
+        result.frontend.diagnostic_first <- syntax_first(nodes, result.frontend.tree.used, at);
+        (result.frontend.diagnostic_past <- syntax_past(nodes, result.frontend.tree.used, at)):void;
     } else {};
 }
 
 func first_extended_declaration(nodes:const ExprNodes in N, work:const NameWork in W, tree:const ParseResult in T,
-                               emit_object:bool) -> u64
-    where {const owner N, const owner W, const owner T} {
-    val item <- first_item(nodes, nodes[tree.root].left);
-    val form <- no_node();
-    val kind <- 0u8;
-    val lowered_in_entry <- false;
+                               emit_object:bool) -> u64 where {const owner N, const owner W, const owner T} {
+    ref item = make u64 { no_node() };
+    if (!first_module_item(nodes, tree.revision, tree.used, tree.root, item)) return tree.root;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     for (unused in 0u64 .. tree.used) {
         if (item == no_node()) return no_node();
-        form <- nodes[item].right;
-        kind <- nodes[form].kind;
-        # Publishing an ordinary local definition does not change its entry
-        # module body. The declaration graph still records the publication.
-        lowered_in_entry <- emit_object && (kind == data_record_node() || kind == callable_node() ||
-            kind == export_node() || kind == export_from_node());
-        if (kind != enum_declaration_node() && !lowered_in_entry &&
-            (nodes[item].number != 0u64 || declaration_requires_native_output(kind))) return form;
+        if (inspect_sequence_entry(nodes, tree.revision, tree.used, item, entry) != ModuleSequence) return item;
+        if (extended_declaration(nodes, tree.revision, tree.used, item, entry.item, emit_object)) return entry.item;
         item <- work[item].next;
     };
     return no_node();
 }
 
+func extended_declaration(nodes:const ExprNodes in N, revision:u64, used:u64, item:u64, form:u64,
+                          emit_object:bool) -> bool where {const owner N} {
+    ref declaration = make DeclarationSites {
+        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
+    };
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
+    ref selected = make ModuleSelectionSites {
+        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node(); mode <- UseResource; symbolic <- false;
+    };
+    val shape <- inspect_declaration(nodes, revision, used, form, declaration);
+    if (shape == EnumTypeDeclaration) return false;
+    val mode <- inspect_callable(nodes, revision, used, form, callable);
+    val reexport <- inspect_module_selection(nodes, revision, used, form, selected) == SelectionReady &&
+        selected.mode == ReexportResource;
+    if (emit_object && (shape == NominalRecord || shape == LocalPublication || mode == ModuleCallable || reexport)) return false;
+    return shape != OtherDeclaration || mode == CProvider || mode == CEntry || reexport || module_item_publication(nodes, used, item);
+}
+
 func uses_native_boundary(nodes:const ExprNodes in N, used:u64) -> bool where {const owner N} {
-    val kind <- 0u8;
     for (at in 0u64 .. used) {
-        kind <- nodes[at].kind;
-        if (handle_local(kind) || handle_construction(kind) || kind == handle_parameter_node() ||
-            kind == here_call_node()) return true;
+        if (native_boundary_form(nodes, at)) return true;
     };
     return false;
 }
 
-func supported_construction_shape(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
-    if (construction_body(nodes, at) == no_node() && !reserves_storage(nodes, at)) return false;
-    val requested <- nodes[at].left;
-    if (nodes[requested].kind != construction_type_query_node()) return true;
-    val subject <- nodes[nodes[requested].left].kind;
-    return subject == name_node() || subject == literal_node() || subject == bool_node();
+func native_boundary_form(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+    return case nodes[at] of {
+        (Vacant) -> { false };
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (OwningHandleBinding) -> { true };
+                (BorrowedHandleBinding) -> { true };
+                (OwnHandleConstruction) -> { true };
+                (BorrowHandleConstruction) -> { true };
+                (HereInvocation) -> { true };
+                (Formal { val mode <- mode; }) -> { mode == HandleFormal || mode == RetainedHandleFormal };
+                (_) -> { false };
+            }
+        };
+    };
+}
+
+func construction_query_supported(nodes:const ExprNodes in N, operand:u64) -> bool where {const owner N} {
+    if (operand == no_node()) return true;
+    return case nodes[operand] of {
+        (Vacant) -> { false };
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (NameReference) -> { true };
+                (IntegerLiteral { val width <- width; }) -> { width == 64u64 };
+                (BooleanLiteral) -> { true };
+                (_) -> { false };
+            }
+        };
+    };
 }
 
 # Declaration checking can resolve projection operands without emitting an address.
-func unsupported_source_form(nodes:const ExprNodes in N, at:u64, emit_object:bool) -> u8 where {const owner N} {
-    val kind <- nodes[at].kind;
-    if (kind == exception_local_node()) return 28u8;
-    if (kind == exception_parameter_node()) return 29u8;
-    if (kind == exception_result_node()) return 30u8;
-    if (kind == make_exception_node()) return 33u8;
-    if (emit_object && kind == type_parameter_node()) return unsupported_module_declaration();
-    if (kind == make_named_node() && !supported_construction_shape(nodes, at) && !positional_construction(nodes, at)) return unsupported_ordinary_construction();
-    if (emit_object && kind == index_access_node()) return 39u8;
-    if (emit_object && kind == array_length_node()) return unsupported_array_length();
-    if (kind == bodyless_defer_node()) return 40u8;
-    if (kind == callable_local_node()) return 41u8;
-    if (emit_object && kind == lexical_callable_node()) return unsupported_lexical_callable();
-    if (kind == throw_with_cause_node()) return 42u8;
-    if (kind == throw_named_node()) return 43u8;
-    if (kind == rethrow_from_node()) return 44u8;
-    if (kind == named_argument_node()) return 45u8;
-    if (emit_object && kind == catch_binding_node() && nodes[at].number == 0u64 && nodes[at].right != no_node())
-        return 36u8;
-    return 0u8;
+func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, emit_object:bool) -> u8
+    where {const owner N} {
+    ref construction = make ConstructionSites {
+        requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
+        initializer <- no_node(); contents <- no_node();
+    };
+    val shape <- inspect_construction(nodes, revision, used, at, construction);
+    if (shape == ExceptionConstructionSyntax) return 33u8;
+    if (shape == InvalidConstruction) return unsupported_ordinary_construction();
+    if (shape != OtherConstruction) {
+        return if (shape == PositionalConstruction || construction_query_supported(nodes, construction.queried_operand)) {
+            0u8
+        } else { unsupported_ordinary_construction() };
+    };
+    ref caught = make CatchSites { name <- no_node(); annotation <- no_node(); readonly <- false; };
+    if (emit_object && inspect_catch_binding(nodes, revision, used, at, caught) && !caught.readonly &&
+        caught.annotation != no_node()) return 36u8;
+    return case nodes[at] of {
+        (Vacant) -> { unsupported_module_declaration() };
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (LocalBinding { val mode <- mode; val declaration_const <- declaration_const; }) -> {
+                    if (declaration_const) return unsupported_const_local();
+                    if (mode == ExceptionLocal) return 28u8;
+                    0u8
+                };
+                (SumDefinition) -> { if (emit_object) { unsupported_nominal_sum() } else { 0u8 } };
+                (ConstructorCasePattern) -> { unsupported_constructor_case() };
+                (RegionDefinition) -> { unsupported_named_region() };
+                (OwningRegionBinding) -> { unsupported_named_region() };
+                (RegionConstruction) -> { unsupported_named_region() };
+                (OwningRegionResult) -> { unsupported_owning_region_result() };
+                (Formal { val mode <- mode; }) -> { if (mode == ExceptionFormal) { 29u8 } else { 0u8 } };
+                (ExceptionResult) -> { 30u8 };
+                (TypeConstraint) -> { if (emit_object) { unsupported_module_declaration() } else { 0u8 } };
+                (IndexSelection) -> { if (emit_object) { 39u8 } else { 0u8 } };
+                (ArrayLength) -> { if (emit_object) { unsupported_array_length() } else { 0u8 } };
+                (DeferredClauses) -> { 40u8 };
+                (LocalCallableSlot) -> { 41u8 };
+                (CallableDefinition { val lexical <- lexical; }) -> {
+                    if (emit_object && lexical) { unsupported_lexical_callable() } else { 0u8 }
+                };
+                (RaiseWithCause) -> { 42u8 };
+                (NamedThrow) -> { 43u8 };
+                (RethrowWithCause) -> { 44u8 };
+                (NamedArgument) -> { 45u8 };
+                (_) -> { 0u8 };
+            }
+        };
+    };
 }
 
 # Find the first unsupported source form by byte position, including headers
@@ -146,8 +229,8 @@ func check_source_profile(nodes:const ExprNodes in N, used:u64, emit_object:bool
     val cause <- 0u8;
     val next <- 0u8;
     for (at in 0u64 .. used) {
-        next <- unsupported_source_form(nodes, at, emit_object);
-        if (next != 0u8 && (first == no_node() || nodes[at].first < nodes[first].first)) {
+        next <- unsupported_source_form(nodes, result.frontend.tree.revision, used, at, emit_object);
+        if (next != 0u8 && (first == no_node() || syntax_first(nodes, used, at) < syntax_first(nodes, used, first))) {
             cause <- next;
             (first <- at):void;
         } else {};
@@ -161,15 +244,18 @@ func check_source_profile(nodes:const ExprNodes in N, used:u64, emit_object:bool
 
 # Resolve resource selections in the retained syntax against its discovered dependencies.
 export func select_parsed_module(source:const SourceBytes in S, nodes:const ExprNodes in N,
-                                spellings:const SourceBytes in B, exports:const ModuleExports in E,
+                                builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in E,
+                                graph_spellings:const SourceBytes in G, graph_exports:const ModuleExports in H,
+                                spelling_size:u64, export_count:u64,
                                 selected:SelectedExports in X, emit_object:bool, result:ModuleBindingResult in R) -> bool
-    where {const owner S, const owner N, const owner B, const owner E, owner X, owner R} {
+    where {const owner S, const owner N, const owner B, const owner E, const owner G, const owner H, owner X, owner R} {
     result.stage <- 0u8;
     result.diagnostic <- 0u8;
     result.related_first <- no_node();
     if (!check_source_profile(nodes, result.frontend.tree.used, emit_object, result)) return false;
     ref publication = make ExportResolutionResult { diagnostic <- 0u8; node <- no_node(); };
-    if (!resolve_module_exports(source, nodes, result.frontend.tree, spellings, exports, selected, !emit_object, publication)) {
+    if (!resolve_module_exports(source, nodes, result.frontend.tree, builtin_spellings, builtins,
+                                graph_spellings, graph_exports, spelling_size, export_count, selected, !emit_object, publication)) {
         binding_diagnostic(nodes, result, module_selection_failed(), publication.diagnostic, publication.node);
         return false;
     } else {};
@@ -183,34 +269,47 @@ export func bind_selected_module(source:const SourceBytes in S, nodes:const Expr
     ref names = make NameResolutionResult { diagnostic <- 0u8; node <- no_node(); enclosing_defer <- no_node(); };
     if (!resolve_module_names(source, nodes, result.frontend.tree, selected, bindings, work, !emit_object, names)) {
         binding_diagnostic(nodes, result, module_binding_failed(), names.diagnostic, names.node);
-        if (names.enclosing_defer != no_node()) { result.related_first <- nodes[names.enclosing_defer].first; {}; } else {};
+        if (names.enclosing_defer != no_node()) { result.related_first <- syntax_first(nodes, result.frontend.tree.used, names.enclosing_defer); {}; } else {};
         return false;
     } else {};
+    val revision <- result.frontend.tree.revision;
+    val used <- result.frontend.tree.used;
+    ref signature = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false;
+    };
+    ref target = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
+    };
+    ref caught = make CatchSites { name <- no_node(); annotation <- no_node(); readonly <- false; };
     val marker <- no_node();
     val text <- false;
     val product <- false;
     val annotation <- no_node();
     val selection <- no_node();
     for (at in 0u64 .. result.frontend.tree.used) {
-        if (nodes[at].kind == ref_result_node()) {
-            marker <- nodes[nodes[at].right].left;
+        if (inspect_signature(nodes, revision, used, at, signature) == BorrowedResultClause) {
+            if (!inspect_type_annotation(nodes, revision, used, signature.annotation, target) || target.owner_name == no_node()) {
+                binding_diagnostic(nodes, result, module_binding_failed(), 101u8, at);
+                return false;
+            };
+            marker <- target.target_type;
             text <- text_type(bindings[marker].kind);
             product <- bindings[marker].kind == record_type();
             if ((!text && !product && (emit_object || bindings[at].declaration == no_node() ||
-                 !is_lexical_builder(nodes, bindings, marker))) ||
+                 !is_lexical_builder(nodes, bindings, marker, revision, used))) ||
                 (emit_object && bindings[at].declaration != no_node())) {
                 binding_diagnostic(nodes, result, module_binding_failed(), 35u8, at);
                 return false;
             } else {};
-            if ((text && nodes[at].number != readonly_declaration()) ||
-                bindings[nodes[nodes[at].right].right].kind != owner_binding()) {
+            if ((text && !signature.readonly) ||
+                bindings[target.owner_name].kind != owner_binding()) {
                 binding_diagnostic(nodes, result, module_binding_failed(), 101u8, at);
                 return false;
             } else {};
         } else {};
-        if (nodes[at].kind == catch_binding_node() && nodes[at].right != no_node()) {
-            annotation <- nodes[at].right;
-            if (!declared_exception_type(nodes, bindings, selected, annotation)) {
+        if (inspect_catch_binding(nodes, revision, used, at, caught) && caught.annotation != no_node()) {
+            annotation <- caught.annotation;
+            if (!declared_exception_type(nodes, bindings, selected, annotation, used, revision)) {
                 binding_diagnostic(nodes, result, module_binding_failed(), invalid_catch_annotation(), annotation);
                 return false;
             };
@@ -226,8 +325,9 @@ export func bind_selected_module(source:const SourceBytes in S, nodes:const Expr
     if (!emit_object || first_extended_declaration(nodes, work, result.frontend.tree, false) != no_node() ||
         uses_native_boundary(nodes, result.frontend.tree.used)) {
         ref declarations = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
-        if (!check_native_declarations(nodes, bindings, work, selected, result.frontend.tree.used, emit_object, declarations)) {
+        if (!check_native_declarations(nodes, bindings, work, selected, result.frontend.tree.used, result.frontend.tree.revision, emit_object, declarations)) {
             binding_diagnostic(nodes, result, module_binding_failed(), declarations.diagnostic, declarations.node);
+            result.frontend.diagnostic_first <- native_declaration_first(nodes, result.frontend.tree.used, declarations);
             return false;
         } else {};
     } else {};
@@ -250,7 +350,7 @@ export func bind_module(source:const SourceBytes in S, tokens:Tokens in T, nodes
         binding_diagnostic(nodes, result, module_selection_failed(), export_storage_exhausted(), no_node());
         return false;
     } else {};
-    if (!select_parsed_module(source, nodes, spellings, exports, selected, true, result)) return false;
+    if (!select_parsed_module(source, nodes, spellings, exports, spellings, exports, 0u64, 0u64, selected, true, result)) return false;
     return bind_selected_module(source, nodes, selected, bindings, work, true, result);
 }
 
@@ -278,7 +378,7 @@ export func analyze_bound_operands(source:const SourceBytes in S, nodes:const Ex
         return false;
     } else {};
     for (at in 0u64 .. result.frontend.tree.used) {
-        if (nodes[at].kind == here_parameter_node()) {
+        if (is_here_formal(nodes, result.frontend.tree.used, at)) {
             binding_diagnostic(nodes, result, module_binding_failed(), unsupported_ordinary_here(), at);
             return false;
         } else {};

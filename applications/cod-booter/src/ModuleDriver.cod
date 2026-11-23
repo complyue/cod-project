@@ -1,6 +1,6 @@
 using "SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
 using "SourceAccess.cod" locate_source_position;
-using "ParserStorage.cod" { Tokens, ExprNodes, no_node };
+using "ParserStorage.cod" { Tokens, ExprNodes, no_node, syntax_first, syntax_past };
 using "ModuleExports.cod" { ModuleExports, SelectedExports };
 using "NameResolution.cod" { NameBindings, NameWork };
 using "OperandChecking.cod" { OperandFacts, CallOwners };
@@ -115,8 +115,8 @@ func retain_rejection(nodes:const ExprNodes in N, result:NativeModuleResult in R
         return Rejected;
     } else {};
     if (result.plan.node != no_node()) {
-        result.rejected_first <- nodes[result.plan.node].first;
-        (result.rejected_past <- nodes[result.plan.node].past):void;
+        result.rejected_first <- syntax_first(nodes, result.analysis.frontend.tree.used, result.plan.node);
+        (result.rejected_past <- syntax_past(nodes, result.analysis.frontend.tree.used, result.plan.node)):void;
     } else {};
     if (result.plan.diagnostic == native_unsupported()) return FormUnsupported;
     return LoweringFailed;

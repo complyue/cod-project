@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Build the standalone booter through the CoD graph
+
+<a id="k-booter-cod-cutover-20261122"></a>
+**K-BOOTER-COD-CUTOVER-20261122.** Implementation continuity from `55c0b35ab938a295bac448286ac3ee3d2a03c799:applications/cod-booter/docs/ModuleGraph.md`, “Standalone build cutover”. The reviewed CoD graph owns traversal and typed workspace, and the native components implement the requested operations. Both seed modes build all three entries with the established Makefile. Cross-module and deferred execution, exact release and provider fixture parity preserve the reviewed boundary under P-680/P-681 and charter §§4.3, 6.3 and 12. Production self-input and complete-pair relink remain open. D-20-MODULE-GRAPH r30 to r31, registry r1083.
+
 ## 2026-11-22 — Review the path wrapper’s owned throw and forwarded callback
 
 <a id="k-booter-owned-throw-lowering-20261122"></a>

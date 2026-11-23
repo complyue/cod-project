@@ -1,0 +1,397 @@
+using "../../../cod/library/string.cod" { StringBuilder, emit, emitStr };
+using symbol "../../../cod/library/string.cod" @sout;
+using "SourceStorage.cod" SourceBytes;
+using "ModuleIndex.cod" Visits;
+using "ModuleExportStorage.cod" { ModuleInterfaces, enum_type, find_interface };
+using "NameResolution.cod" {
+    c_entry, c_operation, c_handle_type, array_type, record_type, builtin_void, builtin_bool, builtin_string,
+    builtin_c_string, text_type,
+};
+using "ProviderTypeNames.cod" {
+    ProviderPrefixes, find_provider_handle, emit_provider_handle_type,
+    emit_provider_bits_type, first_prior_handle_with_role,
+};
+using "ProviderViews.cod" { ABIPrimitiveLayouts, write_provider_view, emit_provider_scalar_type };
+using "ParserStorage.cod" no_node;
+
+enum ArgumentABI:u8 { CallInput; ImplementationInput; EntryInput; }
+
+proc emit_call_name(name:const String in N, ending:const String in E) -> void
+    where {const owner N, const owner E} {
+    emit("cod_native_");
+    emit(name);
+    emit(ending);
+    return;
+}
+
+export proc emit_indexed_name(name:const String in N, ending:const String in E, index:u64)
+    -> void where {const owner N, const owner E} {
+    emit_call_name(name, ending);
+    emitStr(index);
+    return;
+}
+
+export func native_argument_array(rows:const ModuleInterfaces in G, used:u64, input:u64) -> u64 where {const owner G} {
+    val head <- find_interface(rows, used, rows[input].type_module, rows[input].type_identity);
+    if (head == no_node() || rows[head].interface_kind != array_type() || rows[head].entry_count != 0u64) return no_node();
+    return head;
+}
+
+proc emit_argument(name:const String in N, visits:const Visits in G, keys:const SourceBytes in G,
+                   spellings:const SourceBytes in G, rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R,
+                   input:u64, index:u64, abi:ArgumentABI) -> bool where {const owner N, const owner G, const owner R} {
+    val kind <- rows[input].value_kind;
+    if (kind == c_handle_type() || kind == array_type()) {
+        if (abi != (ImplementationInput:ArgumentABI)) { emit("const "); };
+        if (kind == c_handle_type()) {
+            val borrowed <- find_provider_handle(rows, prefix.interfaces, rows[input].type_module, rows[input].type_identity);
+            if (borrowed == no_node() || !emit_provider_handle_type(spellings, prefix.spellings, rows, borrowed)) return false;
+        } else {
+            if (abi == (EntryInput:ArgumentABI)) return false;
+            emit_indexed_name(name, "_view", index);
+        };
+        emit(" ");
+        if (abi == (CallInput:ArgumentABI)) { emit("*"); };
+        if (abi == (EntryInput:ArgumentABI)) { emit("* "); };
+    } else {
+        if (kind == builtin_string()) { emit("const cod_native_text *"); }
+        else {
+            if (kind == builtin_c_string()) {
+                if (abi == (ImplementationInput:ArgumentABI)) { emit("const char *"); } else { emit("const cod_native_text *"); };
+            } else {
+                if (!emit_provider_bits_type(visits, keys, spellings, rows, prefix, kind,
+                                             rows[input].type_module, rows[input].type_identity)) return false;
+                emit(" ");
+            };
+        };
+    };
+    emit("arg");
+    emitStr(index);
+    return true;
+}
+
+export proc emit_provider_result_type(visits:const Visits in G, keys:const SourceBytes in G, spellings:const SourceBytes in G,
+                 rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R, head:u64)
+    -> bool where {const owner G, const owner R} {
+    return emit_provider_bits_type(visits, keys, spellings, rows, prefix, rows[head].result_kind,
+                                   rows[head].type_module, rows[head].type_identity);
+}
+
+proc emit_signature(name:const String in N, visits:const Visits in G, keys:const SourceBytes in G,
+                    spellings:const SourceBytes in G, rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R,
+                    head:u64, implementation:bool) -> bool where {const owner N, const owner G, const owner R} {
+    val entry <- rows[head].interface_kind == c_entry();
+    val count <- rows[head].entry_count;
+    val owners <- if (entry) { (rows[head].owner_count) } else { 0u64 };
+    val has_result <- rows[head].result_kind != builtin_void();
+    if (entry && implementation) { emit("void "); } else { emit("cod_native_status "); };
+    if (entry) {
+        emit_call_name(name, if (implementation) { "_entry_body" } else { "_entry" });
+    } else {
+        emit_call_name(name, if (implementation) { "_impl" } else { "_call" });
+    };
+    emit("(");
+    val abi <- if (entry) { (EntryInput:ArgumentABI) }
+               else { if (implementation) { (ImplementationInput:ArgumentABI) } else { (CallInput:ArgumentABI) } };
+    for (index in 0u64 .. count) {
+        if (index != 0u64) { emit(", "); };
+        if (!emit_argument(name, visits, keys, spellings, rows, prefix, head + 1u64 + index, index, abi)) return false;
+    };
+    for (index in 0u64 .. owners) {
+        if (index != 0u64 || count != 0u64) { emit(", "); };
+        if (implementation) { emit("const void * loan"); } else { emit("const cod_native_loan * loan"); };
+        emitStr(index);
+    };
+    if (has_result) {
+        if (count != 0u64 || owners != 0u64) { emit(", "); };
+        if (!emit_provider_result_type(visits, keys, spellings, rows, prefix, head)) return false;
+        if (entry) { emit(" * value"); } else { emit(" *value"); };
+    } else {
+        if (count == 0u64 && owners == 0u64) { emit("void"); };
+    };
+    emit(")");
+    return true;
+}
+
+proc emit_arg_site(index:u64, callback:bool, accessor:bool) -> void {
+    if (callback) { emit("views->array"); } else { emit("arg"); };
+    emitStr(index);
+    if (accessor) {
+        if (callback) { emit("."); } else { emit("->"); };
+    };
+    return;
+}
+
+export proc emit_invalid_view(name:const String in N, index:u64, kind:u8, callback:bool)
+    -> bool where {const owner N} {
+    emit_arg_site(index, callback, true);
+    emit("count > (uint64_t)PTRDIFF_MAX / sizeof(*");
+    emit_arg_site(index, callback, true);
+    emit("base) || (");
+    emit_arg_site(index, callback, true);
+    emit("count && (!");
+    emit_arg_site(index, callback, true);
+    emit("base || (uintptr_t)");
+    emit_arg_site(index, callback, true);
+    emit("base % _Alignof(");
+    if (kind == record_type()) { emit_indexed_name(name, "_row", index); }
+    else { if (!emit_provider_scalar_type(kind)) return false; };
+    emit(")))");
+    return true;
+}
+
+proc emit_call_input_checks(name:const String in N, visits:const Visits in G, keys:const SourceBytes in G,
+                            spellings:const SourceBytes in G, rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R,
+                            head:u64) -> bool where {const owner N, const owner G, const owner R} {
+    val entry <- rows[head].interface_kind == c_entry();
+    val input <- 0u64;
+    val kind <- 0u8;
+    val related <- no_node();
+    for (index in 0u64 .. rows[head].entry_count) {
+        input <- head + 1u64 + index;
+        kind <- rows[input].value_kind;
+        if (kind == c_handle_type() || kind == array_type()) {
+            emit("    if (!");
+            emit_arg_site(index, false, false);
+            if (kind == c_handle_type()) {
+                if (entry) {
+                    if (rows[input].owner_role >= rows[head].owner_count) return false;
+                    emit(" || ");
+                    emit_arg_site(index, false, true);
+                    emit("owner != loan");
+                    emitStr(rows[input].owner_role);
+                    emit("->owner");
+                } else {
+                    related <- first_prior_handle_with_role(rows, head + 1u64, input);
+                    if (related != no_node()) {
+                        emit(" || ");
+                        emit_arg_site(index, false, true);
+                        emit("owner != ");
+                        emit_arg_site(related - head - 1u64, false, true);
+                        emit("owner");
+                    };
+                };
+            } else {
+                related <- native_argument_array(rows, prefix.interfaces, input);
+                if (entry || related == no_node()) return false;
+                emit(" || ");
+                if (!emit_invalid_view(name, index, rows[related].element_kind, false)) return false;
+            };
+            emit(") return COD_NATIVE_BOUNDARY_ERROR;\n");
+        };
+        if (!entry && kind == builtin_string()) {
+            emit("    if (!cod_text_has_extent(arg");
+            emitStr(index);
+            emit(")) return COD_NATIVE_BOUNDARY_ERROR;\n");
+        };
+        if (kind == builtin_bool()) {
+            emit("    if (arg");
+            emitStr(index);
+            emit(" > 1) return COD_NATIVE_BOUNDARY_ERROR;\n");
+        };
+        if (kind == enum_type()) {
+            emit("    if (!");
+            if (!emit_provider_bits_type(visits, keys, spellings, rows, prefix, kind,
+                                         rows[input].type_module, rows[input].type_identity)) return false;
+            emit("_valid(arg");
+            emitStr(index);
+            emit(")) return COD_NATIVE_BOUNDARY_ERROR;\n");
+        };
+    };
+    return true;
+}
+
+func prepared_text(kind:u8, entry:bool) -> bool {
+    if (entry) return text_type(kind);
+    return kind == builtin_c_string();
+}
+
+proc emit_text_release(index:u64, entry:bool, indentation:const String in I) -> void where {const owner I} {
+    emit(indentation);
+    if (entry) { emit("free((void *)text"); } else { emit("free(text_backing"); };
+    emitStr(index);
+    if (entry) { emit(".bytes);\n"); } else { emit(");\n"); };
+    return;
+}
+
+proc emit_text_inputs(rows:const ModuleInterfaces in G, head:u64, entry:bool) -> void where {const owner G} {
+    val kind <- 0u8;
+    for (index in 0u64 .. rows[head].entry_count) {
+        kind <- rows[head + 1u64 + index].value_kind;
+        if (prepared_text(kind, entry)) {
+            if (entry) {
+                emit("    cod_native_text text");
+                emitStr(index);
+                emit(";\n    if (!cod_text_snapshot(arg");
+                emitStr(index);
+                emit(if (kind == builtin_c_string()) { ", 1, &text" } else { ", 0, &text" });
+                emitStr(index);
+                emit(")) {\n");
+            } else {
+                emit("    char *text_backing");
+                emitStr(index);
+                emit(" = NULL;\n    const char *text");
+                emitStr(index);
+                emit(" = cod_text_c_string(arg");
+                emitStr(index);
+                emit(", &text_backing");
+                emitStr(index);
+                emit(");\n    if (!text");
+                emitStr(index);
+                emit(") {\n");
+            };
+            for (prior in 0u64 .. index) {
+                if (prepared_text(rows[head + 1u64 + prior].value_kind, entry)) {
+                    emit_text_release(prior, entry, "        ");
+                };
+            };
+            emit("        return COD_NATIVE_BOUNDARY_ERROR;\n    }\n");
+        };
+    };
+    return;
+}
+
+proc emit_implementation_call(name:const String in N, rows:const ModuleInterfaces in G, head:u64,
+                              entry:bool, stores_result:bool, enum_result:bool)
+    -> void where {const owner N, const owner G} {
+    val count <- rows[head].entry_count;
+    val owners <- if (entry) { (rows[head].owner_count) } else { 0u64 };
+    if (entry) {
+        emit("    ");
+        emit_call_name(name, "_entry_body(");
+    } else {
+        emit("    const cod_native_status status = ");
+        emit_call_name(name, "_impl(");
+    };
+    val kind <- 0u8;
+    for (index in 0u64 .. count) {
+        if (index != 0u64) { emit(", "); };
+        kind <- rows[head + 1u64 + index].value_kind;
+        if (prepared_text(kind, entry)) {
+            if (entry) { emit("&"); };
+            emit("text");
+        } else {
+            if (!entry && (kind == array_type() || kind == c_handle_type())) { emit("*"); };
+            emit("arg");
+        };
+        emitStr(index);
+    };
+    for (index in 0u64 .. owners) {
+        if (index != 0u64 || count != 0u64) { emit(", "); };
+        emit("loan");
+        emitStr(index);
+        emit("->activation");
+    };
+    if (stores_result) {
+        if (count != 0u64 || owners != 0u64) { emit(", "); };
+        if (entry && !enum_result) { emit("value"); } else { emit("&result"); };
+    };
+    emit(");\n");
+    for (index in 0u64 .. count) {
+        if (prepared_text(rows[head + 1u64 + index].value_kind, entry)) {
+            emit_text_release(index, entry, "    ");
+        };
+    };
+    return;
+}
+
+proc emit_stub(name:const String in N, visits:const Visits in G, keys:const SourceBytes in G,
+               spellings:const SourceBytes in G, rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R,
+               head:u64) -> bool where {const owner N, const owner G, const owner R} {
+    val entry <- rows[head].interface_kind == c_entry();
+    val result <- rows[head].result_kind;
+    val has_result <- result != builtin_void();
+    val enum_result <- result == enum_type();
+    if (entry) {
+        emit("extern ");
+        if (!emit_signature(name, visits, keys, spellings, rows, prefix, head, true)) return false;
+        emit(";\n\n");
+    };
+    if (!emit_signature(name, visits, keys, spellings, rows, prefix, head, false)) return false;
+    emit(" {\n");
+    if (has_result) { emit("    if (!value) return COD_NATIVE_BOUNDARY_ERROR;\n"); };
+    if (entry) {
+        for (index in 0u64 .. rows[head].owner_count) {
+            emit("    if (!loan");
+            emitStr(index);
+            emit(" || !loan");
+            emitStr(index);
+            emit("->activation) return COD_NATIVE_BOUNDARY_ERROR;\n");
+        };
+    };
+    if (!emit_call_input_checks(name, visits, keys, spellings, rows, prefix, head)) return false;
+    emit_text_inputs(rows, head, entry);
+    if (enum_result || (!entry && has_result)) {
+        emit("    ");
+        if (!emit_provider_result_type(visits, keys, spellings, rows, prefix, head)) return false;
+        emit(" result = 0;\n");
+    };
+    emit_implementation_call(name, rows, head, entry, has_result, enum_result);
+    if (!entry) { emit("    if (status != COD_NATIVE_OK) return COD_NATIVE_BOUNDARY_ERROR;\n"); };
+    if (enum_result) {
+        emit("    if (!");
+        if (!emit_provider_result_type(visits, keys, spellings, rows, prefix, head)) return false;
+        emit("_valid(result)) return COD_NATIVE_BOUNDARY_ERROR;\n");
+    };
+    if (enum_result || (!entry && has_result)) { emit("    *value = result;\n"); };
+    emit("    return COD_NATIVE_OK;\n}\n\n");
+    return true;
+}
+
+proc emit_callable_header(name:const String in N, visits:const Visits in G, keys:const SourceBytes in G,
+                          spellings:const SourceBytes in G, rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R,
+                          head:u64) -> bool where {const owner N, const owner G, const owner R} {
+    if (!emit_signature(name, visits, keys, spellings, rows, prefix, head, false)) return false;
+    emit(";\n");
+    if (rows[head].interface_kind != c_entry()) {
+        if (!emit_signature(name, visits, keys, spellings, rows, prefix, head, true)) return false;
+        emit(";\n");
+    };
+    emit("\n");
+    return true;
+}
+
+export proc write_provider_call_views(header:StringBuilder in H, stubs:StringBuilder in S,
+                                      primitives:const ABIPrimitiveLayouts in L, record_alignment:u64,
+                                      name:const String in N, spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
+                                      prefix:const ProviderPrefixes in R, head:u64)
+    -> bool where {owner H, owner S, const owner L, const owner N, const owner G, const owner R} {
+    if (prefix.interfaces > intrinsic (len)(rows) || head >= prefix.interfaces ||
+        rows[head].interface_kind != c_operation() || rows[head].has_here != 0u8 ||
+        rows[head].value_kind != 0u8 || rows[head].entry_count >= prefix.interfaces - head) return false;
+    val input <- 0u64;
+    val array_head <- no_node();
+    for (index in 0u64 .. rows[head].entry_count) {
+        input <- head + 1u64 + index;
+        if (rows[input].value_kind == array_type()) {
+            array_head <- native_argument_array(rows, prefix.interfaces, input);
+            if (array_head == no_node() || rows[input].target_readonly == 0u8 ||
+                !write_provider_view(header, stubs, primitives, record_alignment, name, index, true, rows, prefix.interfaces,
+                                     array_head, spellings, prefix.spellings)) return false;
+        };
+    };
+    return true;
+}
+
+export proc write_provider_callable(header:StringBuilder in H, stubs:StringBuilder in S, name:const String in N,
+                                    visits:const Visits in G, keys:const SourceBytes in G,
+                                    spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
+                                    prefix:const ProviderPrefixes in R, head:u64)
+    -> bool where {owner H, owner S, const owner N, const owner G, const owner R} {
+    if (prefix.interfaces > intrinsic (len)(rows) || head >= prefix.interfaces ||
+        (rows[head].interface_kind != c_entry() && rows[head].interface_kind != c_operation()) ||
+        rows[head].has_here != 0u8 || rows[head].value_kind != 0u8 ||
+        rows[head].entry_count >= prefix.interfaces - head)
+        return false;
+    val ready <- false;
+    {{
+        effect @sout = header;
+        (ready <- emit_callable_header(name, visits, keys, spellings, rows, prefix, head)):void;
+    }};
+    if (!ready) return false;
+    {{
+        effect @sout = stubs;
+        (ready <- emit_stub(name, visits, keys, spellings, rows, prefix, head)):void;
+    }};
+    return ready;
+}

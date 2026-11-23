@@ -2,7 +2,7 @@
 
 #include "cod_region_storage.h"
 #include "compile_diagnostic.h"
-#include "module_graph.h"
+#include "path_owner.h"
 #include "provider_output.h"
 
 #include <inttypes.h>
@@ -140,6 +140,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: the unbraced throwing arm requires an unguarded catch-all\n", stderr);
     else if (diagnostic->stage == 1 && diagnostic->code == 113)
         fputs(": error: invalid UTF-8 text literal or escape\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 115)
+        fputs(": error: expected '(expression -> capacity)' in region construction\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 77)
         fputs(": error: catch annotation must name an exception type\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 7)
@@ -249,6 +251,18 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: a direct String place requires a String or CString source\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 111)
         fputs(": error: dependency initialization is outside the supported object profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 114)
+        fputs(": error: nominal sum declaration checking is outside the current compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 116)
+        fputs(": error: named region checking is outside the current compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 117)
+        fputs(": error: const value local checking is outside the current compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 118)
+        fputs(": error: sum constructor initializers are outside the current compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 119)
+        fputs(": error: owning region result checking is outside the current compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 120)
+        fputs(": error: constructor case reception checking is outside the current compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 20)
         fputs(": error: narrow integer execution is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 21)
@@ -324,11 +338,15 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
     else if (diagnostic->stage == 2 && diagnostic->code == 12)
         fputs(": error: this import is outside the supported enum import profile\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == 13)
-        fputs(": error: member selection requires a checked enum type\n", stderr);
+        fputs(": error: member selection requires a checked enum or sum type\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == 14)
         fputs(": error: no such member of the selected enum type\n", stderr);
     else if (diagnostic->stage == 2 && diagnostic->code == 15)
         fputs(": error: conflicting enum member selections\n", stderr);
+    else if (diagnostic->stage == 2 && diagnostic->code == 17)
+        fputs(": error: no such constructor of the selected sum type\n", stderr);
+    else if (diagnostic->stage == 2 && diagnostic->code == 18)
+        fputs(": error: conflicting sum constructor selections\n", stderr);
     else
         fprintf(stderr, ": error: %s failed (code %" PRIu32 ")\n", diagnostic_phase(diagnostic->stage), diagnostic->code);
     if (diagnostic->related.line)
@@ -338,11 +356,36 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
 
 typedef cod_enum_CompilerStatusx2ecod_14_CompilerStatus compiler_status;
 
+static cod_native_status check_declarations(const char *source, cod_booter_diagnostic *diagnostic,
+                                            compiler_status *status) {
+    *diagnostic = (cod_booter_diagnostic){0};
+    const cod_booter_path_owner root = {source, strlen(source), COD_BOOTER_PATH_LAUNCHER};
+    const cod_native_loan argument_owner = {&root, (uint64_t)(uintptr_t)&root};
+    const cod_native_loan destination = {diagnostic, (uint64_t)(uintptr_t)diagnostic};
+    const cod_native_Path_borrow input = {(uint64_t)(uintptr_t)source, argument_owner.owner};
+    const cod_native_DiagnosticDestination_borrow record = {destination.owner, destination.owner};
+    return cod_native_check_cli_entry(&input, &record, &argument_owner, &destination, status);
+}
+
+static cod_native_status generate_providers(const char *source, const char *directory, cod_booter_diagnostic *diagnostic,
+                                           compiler_status *status) {
+    *diagnostic = (cod_booter_diagnostic){0};
+    const cod_booter_path_owner root = {source, strlen(source), COD_BOOTER_PATH_LAUNCHER};
+    const cod_booter_path_owner output = {directory, strlen(directory), COD_BOOTER_PATH_LAUNCHER};
+    const cod_native_loan input_owner = {&root, (uint64_t)(uintptr_t)&root};
+    const cod_native_loan output_owner = {&output, (uint64_t)(uintptr_t)&output};
+    const cod_native_loan destination = {diagnostic, (uint64_t)(uintptr_t)diagnostic};
+    const cod_native_Path_borrow input = {(uint64_t)(uintptr_t)source, input_owner.owner};
+    const cod_native_Path_borrow target = {(uint64_t)(uintptr_t)directory, output_owner.owner};
+    const cod_native_DiagnosticDestination_borrow record = {destination.owner, destination.owner};
+    return cod_native_providers_cli_entry(&input, &target, &record, &input_owner, &output_owner, &destination, status);
+}
+
 static cod_native_status compile(const char *source, const char *object, cod_booter_diagnostic *diagnostic,
                                  compiler_status *status) {
     *diagnostic = (cod_booter_diagnostic){0};
-    const char *arguments[] = {source, object};
-    const cod_native_loan argument_owner = {arguments, (uint64_t)(uintptr_t)arguments};
+    const cod_booter_path_owner root = {source, strlen(source), COD_BOOTER_PATH_LAUNCHER};
+    const cod_native_loan argument_owner = {&root, (uint64_t)(uintptr_t)&root};
     const cod_native_loan destination = {diagnostic, (uint64_t)(uintptr_t)diagnostic};
     const cod_native_Path_borrow input = {(uint64_t)(uintptr_t)source, argument_owner.owner};
     const size_t output_size = strlen(object);
@@ -359,15 +402,29 @@ int main(int argc, char **argv) {
         return 64;
     }
     if (providers) {
+        if (LLVMInitializeNativeTarget()) {
+            fputs("cod-booter: native LLVM target unavailable\n", stderr);
+            return 70;
+        }
         cod_booter_diagnostic diagnostic;
-        const uint8_t status = cod_booter_emit_c_providers(argv[2], argv[3], &diagnostic);
-        if (status) report(argv[2], status, &diagnostic);
+        compiler_status status;
+        if (generate_providers(argv[2], argv[3], &diagnostic, &status) != COD_NATIVE_OK) {
+            fputs("cod-booter: invalid native entry\n", stderr);
+            return 70;
+        }
+        if (status != cod_enum_CompilerStatusx2ecod_14_CompilerStatus_member_Complete)
+            report(argv[2], status, &diagnostic);
         return status;
     }
     if (strcmp(argv[1], "--check-declarations") == 0) {
         cod_booter_diagnostic diagnostic;
-        const uint8_t status = cod_booter_check_declarations(argv[2], &diagnostic);
-        if (status) report(argv[2], status, &diagnostic);
+        compiler_status status;
+        if (check_declarations(argv[2], &diagnostic, &status) != COD_NATIVE_OK) {
+            fputs("cod-booter: invalid native entry\n", stderr);
+            return 70;
+        }
+        if (status != cod_enum_CompilerStatusx2ecod_14_CompilerStatus_member_Complete)
+            report(argv[2], status, &diagnostic);
         return status;
     }
     if (LLVMInitializeNativeTarget() || LLVMInitializeNativeAsmPrinter()) {

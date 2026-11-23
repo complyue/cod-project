@@ -2,24 +2,32 @@ using "Lexer.cod" {
     own_word, quoted_text, identifier, using_word, as_word, symbol_word, symbol_name,
     from_word, proc_word, func_word, ref_word, ptr_word, where_word, const_word, in_word,
     data_word, array_word, export_word, handle_word, c_linkage, enum_word, integer_literal,
-    import_word, type_word, valid_module_path, invalid_module_path_escape,
+    import_word, type_word, region_word, valid_module_path, invalid_module_path_escape,
 };
 using "ExpressionParser.cod" {
     callable_local_head, parse_symbol, parse_callable, parse_next_expression, integer_width, parse_integer_magnitude,
 };
 using "ParserInput.cod" {
-    ParseResult, punct_at, punct_pair_at, append_node, parse_identifier,
+    ParseResult, punct_at, punct_pair_at, append_syntax_node, append_module_item, append_module, parse_identifier,
     parse_module_name, parse_resource_name, reset_parse_result, expected_name, expected_type, expected_c_linkage,
 };
 using "CallableSyntax.cod" { expected_owner_clause, parse_constraints, parse_parameter };
 using "ParserStorage.cod" {
-    Tokens, ExprNodes, len as token_len, no_node, module_node, module_item_node, using_node, module_path_node,
-    callable_node, procedure_definition, function_definition, owned_type_node, c_handle_type_node, c_procedure_node,
-    handle_parameter_node, data_record_node, c_record_node, data_parent_node, export_node, export_from_node,
-    array_declaration_node, array_shape_node, readonly_declaration, enum_declaration_node, enum_member_node,
-    enum_integer_node, import_node, local_module_selection, member_selector_node, member_selection_item_node,
-    native_symbol_declaration_node, reference_symbol_declaration_node, abstract_type_node,
+    Tokens, ExprNodes, NodeId, len as token_len, no_node, syntax_first, syntax_past, ModuleSelectionMode,
+    BindingSites, FormalSites, SignatureSites, inspect_binding, inspect_formal, inspect_signature,
 };
+using "ParserStorage.cod" AstSlot { Vacant, Occupied };
+using "ParserStorage.cod" ExprPayload {
+    CallableDefinition, CEntryDefinition, ModulePathSyntax, ModuleSelection, AllMembers, ChosenMembers, ChosenMember,
+    HandleType, NominalParent, RecordDefinition, AbstractType, HandleSymbol, ReferenceSymbol, Publication,
+    ArrayDefinition, EnumInteger, EnumMember, EnumDefinition, SumDefinition, SumArm, RegionDefinition,
+};
+using "ParserStorage.cod" FormalSyntax { OrdinaryFormal };
+using "ParserStorage.cod" FormalMode { ValueFormal, HandleFormal, RetainedHandleFormal };
+using "ParserStorage.cod" BindingSyntax { TypedBinding };
+using "ParserStorage.cod" SignatureSyntax { OwnerSignatureClause };
+using "ParserStorage.cod" NodeLink { NoLink, LinkTo };
+using "ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource, ReexportResource };
 using "SourceStorage.cod" SourceBytes;
 using "SourceAccess.cod" { len as source_len, same_bytes };
 
@@ -29,6 +37,28 @@ func expected_record_fields() -> u8 { return 30u8; }
 func expected_array_shape() -> u8 { return 31u8; }
 func expected_group_delimiter() -> u8 { return 44u8; }
 func expected_enum_member() -> u8 { return 45u8; }
+
+func append_selected_member(nodes:ExprNodes in A, result:ParseResult in R, preceding:u64, item:u64) -> void
+    where {owner A, owner R} {
+    ref previous = make NoLink {};
+    if (preceding != no_node()) {
+        previous = make LinkTo { node <- make NodeId { revision <- result.revision; index <- preceding; }; };
+        {};
+    };
+    append_syntax_node(nodes, result, syntax_first(nodes, result.used, item), syntax_past(nodes, result.used, item),
+                       make ChosenMember {
+                           previous <- previous;
+                           member <- make NodeId { revision <- result.revision; index <- item; };
+                       });
+}
+
+func append_chosen_members(nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64,
+                           tail:u64, opening:u64) -> void where {owner A, owner R} {
+    append_syntax_node(nodes, result, first, past, make ChosenMembers {
+        items <- make NodeId { revision <- result.revision; index <- tail; };
+        opening <- opening;
+    });
+}
 
 func parse_member_selector(source:const SourceBytes in S, tokens:const Tokens in T,
                            nodes:ExprNodes in A, result:ParseResult in R, past:u64, name:u64) -> void
@@ -41,8 +71,8 @@ func parse_member_selector(source:const SourceBytes in S, tokens:const Tokens in
             result.diagnostic <- expected_group_delimiter();
             return;
         } else {};
-        append_node(nodes, result, member_selector_node(), nodes[name].first, tokens[result.next].past,
-                    0u64, name, no_node(), first);
+        append_syntax_node(nodes, result, syntax_first(nodes, result.used, name), tokens[result.next].past,
+                           make AllMembers { opening <- first; });
         result.next <- result.next + 1u64;
         return;
     } else {};
@@ -52,15 +82,13 @@ func parse_member_selector(source:const SourceBytes in S, tokens:const Tokens in
     for (unused in result.next .. past) {
         if (!parse_module_name(source, tokens, nodes, result, past)) return;
         item <- result.root;
-        append_node(nodes, result, member_selection_item_node(), nodes[item].first, nodes[item].past,
-                    0u64, last, item, nodes[item].first);
+        append_selected_member(nodes, result, last, item);
         if (result.diagnostic != 0u8) return;
         last <- result.root;
         delimiter <- punct_at(source, tokens, result.next, past);
         if (delimiter == 44u8) { (result.next <- result.next + 1u64):void; } else {};
         if (punct_at(source, tokens, result.next, past) == 125u8) {
-            append_node(nodes, result, member_selector_node(), nodes[name].first, tokens[result.next].past,
-                        0u64, name, last, first);
+            append_chosen_members(nodes, result, syntax_first(nodes, result.used, name), tokens[result.next].past, last, first);
             result.next <- result.next + 1u64;
             return;
         } else {};
@@ -71,7 +99,7 @@ func parse_member_selector(source:const SourceBytes in S, tokens:const Tokens in
 
 func parse_selection(source:const SourceBytes in S, tokens:const Tokens in T,
                      nodes:ExprNodes in A, result:ParseResult in R,
-                     past:u64, first:u64, path:u64, kind:u8, symbolic:bool) -> void
+                     past:u64, first:u64, path:u64, mode:ModuleSelectionMode, symbolic:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
     if (symbolic) {
         if (!parse_symbol(tokens, nodes, result, past)) return;
@@ -79,7 +107,7 @@ func parse_selection(source:const SourceBytes in S, tokens:const Tokens in T,
         if (!parse_resource_name(source, tokens, nodes, result, past)) return;
     };
     val selection <- result.root;
-    val local_name <- 0u64;
+    ref renamed = make NoLink {};
     if (result.next < past && as_word(source, tokens[result.next])) {
         result.next <- result.next + 1u64;
         if (symbolic) {
@@ -87,39 +115,47 @@ func parse_selection(source:const SourceBytes in S, tokens:const Tokens in T,
         } else {
             if (!parse_resource_name(source, tokens, nodes, result, past)) return;
         };
-        (local_name <- result.root + 1u64):void;
+        renamed = make LinkTo { node <- make NodeId { revision <- result.revision; index <- result.root; }; };
+        {};
     } else {};
-    val end <- nodes[result.root].past;
-    if (!symbolic && local_module_selection(kind) && punct_at(source, tokens, result.next, past) == 123u8) {
+    val end <- syntax_past(nodes, result.used, result.root);
+    ref members = make NoLink {};
+    if (!symbolic && mode != ReexportResource && punct_at(source, tokens, result.next, past) == 123u8) {
         parse_member_selector(source, tokens, nodes, result, past, selection);
         if (result.diagnostic != 0u8) return;
-        selection <- result.root;
-        (end <- nodes[selection].past):void;
+        members = make LinkTo { node <- make NodeId { revision <- result.revision; index <- result.root; }; };
+        (end <- syntax_past(nodes, result.used, result.root)):void;
     } else {};
-    append_node(nodes, result, kind, first, end, local_name, path, selection, first);
+    append_syntax_node(nodes, result, first, end, make ModuleSelection {
+        path <- make NodeId { revision <- result.revision; index <- path; };
+        resource <- make NodeId { revision <- result.revision; index <- selection; };
+        renamed <- renamed; members <- members; mode <- mode;
+    });
 }
 
-func finish_selection_items(source:const SourceBytes in S, tokens:const Tokens in T,
-                            nodes:ExprNodes in A, result:ParseResult in R, past:u64, tail:u64) -> bool
+func finish_selection_item(source:const SourceBytes in S, tokens:const Tokens in T,
+                           nodes:ExprNodes in A, result:ParseResult in R, past:u64, first:u64,
+                           preceding:u64, form:u64, published:bool) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     if (punct_at(source, tokens, result.next, past) != 59u8) {
         result.diagnostic <- expected_module_separator();
         return false;
-    } else {};
-    nodes[tail].past <- tokens[result.next].past;
+    };
+    append_module_item(nodes, result, first, tokens[result.next].past, preceding, form, published);
+    if (result.diagnostic != 0u8) return false;
     result.next <- result.next + 1u64;
     return true;
 }
 
 func parse_selection_items(source:const SourceBytes in S, tokens:const Tokens in T,
                            nodes:ExprNodes in A, result:ParseResult in R,
-                           past:u64, previous:u64, kind:u8, exported:bool) -> bool
+                           past:u64, previous:u64, mode:ModuleSelectionMode, exported:bool) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val start <- result.next;
     val first <- tokens[start].first;
-    val reexporting <- kind == export_from_node();
+    val reexporting <- mode == ReexportResource;
     result.next <- start + if (reexporting || exported) { 2u64 } else { 1u64 };
-    val symbolic <- kind == using_node() && result.next < past && symbol_word(source, tokens[result.next]);
+    val symbolic <- mode == UseResource && result.next < past && symbol_word(source, tokens[result.next]);
     if (symbolic) { (result.next <- result.next + 1u64):void; } else {};
     val path <- result.next;
     if (path >= past || tokens[path].kind != quoted_text()) {
@@ -130,8 +166,7 @@ func parse_selection_items(source:const SourceBytes in S, tokens:const Tokens in
         result.diagnostic <- invalid_module_path_escape();
         return false;
     } else {};
-    append_node(nodes, result, module_path_node(), tokens[path].first, tokens[path].past,
-                0u64, 0u64, 0u64, tokens[path].first);
+    append_syntax_node(nodes, result, tokens[path].first, tokens[path].past, make ModulePathSyntax {});
     if (result.diagnostic != 0u8) return false;
     val path_node <- result.root;
     result.next <- path + 1u64;
@@ -146,24 +181,24 @@ func parse_selection_items(source:const SourceBytes in S, tokens:const Tokens in
     val delimiter <- 0u8;
     for (unused in result.next .. past) {
         if (grouped) { (item_first <- tokens[result.next].first):void; } else {};
-        parse_selection(source, tokens, nodes, result, past, item_first, path_node, kind, symbolic);
+        parse_selection(source, tokens, nodes, result, past, item_first, path_node, mode, symbolic);
         if (result.diagnostic != 0u8) return false;
         form <- result.root;
-        append_node(nodes, result, module_item_node(), item_first, nodes[form].past,
-                    if (exported) { 1u64 } else { 0u64 }, tail, form, item_first);
-        if (result.diagnostic != 0u8) return false;
-        tail <- result.root;
-        if (!grouped) return finish_selection_items(source, tokens, nodes, result, past, tail);
+        if (!grouped)
+            return finish_selection_item(source, tokens, nodes, result, past, item_first, tail, form, exported);
         delimiter <- punct_at(source, tokens, result.next, past);
-        if (delimiter == 44u8) { (result.next <- result.next + 1u64):void; } else {};
+        if (delimiter == 44u8) { (result.next <- result.next + 1u64):void; };
         if (punct_at(source, tokens, result.next, past) == 125u8) {
             result.next <- result.next + 1u64;
-            return finish_selection_items(source, tokens, nodes, result, past, tail);
-        } else {};
+            return finish_selection_item(source, tokens, nodes, result, past, item_first, tail, form, exported);
+        };
         if (delimiter != 44u8) {
             result.diagnostic <- expected_group_delimiter();
             return false;
-        } else {};
+        };
+        append_module_item(nodes, result, item_first, syntax_past(nodes, result.used, form), tail, form, exported);
+        if (result.diagnostic != 0u8) return false;
+        tail <- result.root;
     };
     result.diagnostic <- expected_module_separator();
     return false;
@@ -180,7 +215,10 @@ func parse_record_fields(source:const SourceBytes in S, tokens:const Tokens in T
     } else {};
     result.next <- result.next + 1u64;
     val last <- no_node();
-    val binding <- no_node();
+    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
+    };
     val delimiter <- 0u8;
     for (unused in result.next .. past) {
         if (punct_at(source, tokens, result.next, past) == 125u8) {
@@ -193,8 +231,9 @@ func parse_record_fields(source:const SourceBytes in S, tokens:const Tokens in T
         } else {};
         if (!parse_parameter(source, tokens, nodes, result, past, last, true)) return no_node();
         last <- result.root;
-        binding <- nodes[last].right;
-        if (nodes[last].kind == handle_parameter_node() || nodes[nodes[binding].right].kind == owned_type_node()) {
+        if (inspect_formal(nodes, result.revision, result.used, last, formal) != OrdinaryFormal ||
+            inspect_binding(nodes, result.revision, result.used, formal.binding, binding) != TypedBinding ||
+            formal.mode == HandleFormal || formal.mode == RetainedHandleFormal || binding.owner_name != no_node()) {
             result.diagnostic <- expected_record_fields();
             return no_node();
         } else {};
@@ -205,6 +244,64 @@ func parse_record_fields(source:const SourceBytes in S, tokens:const Tokens in T
     };
     result.diagnostic <- expected_record_fields();
     return no_node();
+}
+
+func parse_sum_arm(source:const SourceBytes in S, tokens:const Tokens in T,
+                   nodes:ExprNodes in A, result:ParseResult in R, past:u64, previous:u64) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    if (!parse_module_name(source, tokens, nodes, result, past)) return false;
+    val name <- result.root;
+    val first <- syntax_first(nodes, result.used, name);
+    val fields <- parse_record_fields(source, tokens, nodes, result, past, false);
+    if (result.diagnostic != 0u8) return false;
+    ref preceding = make NoLink {};
+    if (previous != no_node()) {
+        preceding = make LinkTo { node <- make NodeId { revision <- result.revision; index <- previous; }; };
+        {};
+    };
+    ref contents = make NoLink {};
+    if (fields != no_node()) {
+        contents = make LinkTo { node <- make NodeId { revision <- result.revision; index <- fields; }; };
+        {};
+    };
+    append_syntax_node(nodes, result, first, tokens[result.next - 1u64].past, make SumArm {
+        name <- make NodeId { revision <- result.revision; index <- name; };
+        previous <- preceding;
+        fields <- contents;
+    });
+    return result.diagnostic == 0u8;
+}
+
+func append_sum_declaration(nodes:ExprNodes in A, result:ParseResult in R, first:u64, heading:u64, last:u64) -> void
+    where {owner A, owner R} {
+    append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, last), make SumDefinition {
+        heading <- make NodeId { revision <- result.revision; index <- heading; };
+        last_arm <- make NodeId { revision <- result.revision; index <- last; };
+    });
+}
+
+func parse_sum_declaration(source:const SourceBytes in S, tokens:const Tokens in T,
+                           nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64, heading:u64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    result.next <- result.next + 1u64;
+    val last <- no_node();
+    val delimiter <- 0u8;
+    for (unused in 0u64 .. past) {
+        if (!parse_sum_arm(source, tokens, nodes, result, past, last)) return;
+        last <- result.root;
+        delimiter <- punct_at(source, tokens, result.next, past);
+        if (delimiter == 59u8) {
+            append_sum_declaration(nodes, result, first, heading, last);
+            return;
+        };
+        if (delimiter != 124u8) {
+            result.diagnostic <- expected_module_separator();
+            return;
+        };
+        result.next <- result.next + 1u64;
+    };
+    result.diagnostic <- expected_name();
+    return;
 }
 
 func handle_type_head(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> bool
@@ -224,10 +321,38 @@ func parse_handle_type(source:const SourceBytes in S, tokens:const Tokens in T,
         result.next <- result.next + 1u64;
         if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
         val owner_type <- result.root;
-        append_node(nodes, result, c_handle_type_node(), first, nodes[owner_type].past, 0u64, name, owner_type, in_at);
+        append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, owner_type), make HandleType {
+            name <- make NodeId { revision <- result.revision; index <- name; };
+            parent_type <- make LinkTo { node <- make NodeId { revision <- result.revision; index <- owner_type; }; };
+            parent_at <- in_at;
+        });
         return;
     } else {};
-    append_node(nodes, result, c_handle_type_node(), first, nodes[name].past, 0u64, name, no_node(), first);
+    append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, name), make HandleType {
+        name <- make NodeId { revision <- result.revision; index <- name; };
+        parent_type <- make NoLink {};
+        parent_at <- first;
+    });
+}
+
+func parse_region_definition(source:const SourceBytes in S, tokens:const Tokens in T,
+                             nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val first <- tokens[result.next].first;
+    result.next <- result.next + 1u64;
+    if (!parse_module_name(source, tokens, nodes, result, past)) return;
+    val name <- result.root;
+    val fields <- parse_record_fields(source, tokens, nodes, result, past, false);
+    if (result.diagnostic != 0u8) return;
+    ref entries = make NoLink {};
+    if (fields != no_node()) {
+        entries = make LinkTo { node <- make NodeId { revision <- result.revision; index <- fields; }; };
+        {};
+    };
+    append_syntax_node(nodes, result, first, tokens[result.next - 1u64].past, make RegionDefinition {
+        name <- make NodeId { revision <- result.revision; index <- name; };
+        fields <- entries;
+    });
 }
 
 func parse_nominal_type(source:const SourceBytes in S, tokens:const Tokens in T,
@@ -249,18 +374,37 @@ func parse_nominal_type(source:const SourceBytes in S, tokens:const Tokens in T,
         result.next <- result.next + 1u64;
         if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
         val parent <- result.root;
-        append_node(nodes, result, data_parent_node(), nodes[name].first, nodes[parent].past, 0u64, name, parent, parent_at);
+        append_syntax_node(nodes, result, syntax_first(nodes, result.used, name), syntax_past(nodes, result.used, parent),
+                           make NominalParent {
+            name <- make NodeId { revision <- result.revision; index <- name; };
+            parent_type <- make NodeId { revision <- result.revision; index <- parent; };
+            anchor <- parent_at;
+        });
         if (result.diagnostic != 0u8) return;
         (descriptor <- result.root):void;
     } else {};
     if (abstract) {
-        append_node(nodes, result, abstract_type_node(), first, nodes[descriptor].past, 0u64, descriptor, no_node(), first);
+        append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, descriptor), make AbstractType {
+            heading <- make NodeId { revision <- result.revision; index <- descriptor; };
+        });
+        return;
+    };
+    if (!native && punct_at(source, tokens, result.next, past) == 61u8) {
+        parse_sum_declaration(source, tokens, nodes, result, first, past, descriptor);
         return;
     };
     val fields <- parse_record_fields(source, tokens, nodes, result, past, native);
     if (result.diagnostic != 0u8) return;
-    val kind <- if (native) { c_record_node() } else { data_record_node() };
-    append_node(nodes, result, kind, first, tokens[result.next - 1u64].past, 0u64, descriptor, fields, first);
+    ref entries = make NoLink {};
+    if (fields != no_node()) {
+        entries = make LinkTo { node <- make NodeId { revision <- result.revision; index <- fields; }; };
+        {};
+    };
+    append_syntax_node(nodes, result, first, tokens[result.next - 1u64].past, make RecordDefinition {
+        heading <- make NodeId { revision <- result.revision; index <- descriptor; };
+        fields <- entries;
+        native <- native;
+    });
 }
 
 func parse_native_symbol_declaration(source:const SourceBytes in S, tokens:const Tokens in T,
@@ -280,7 +424,10 @@ func parse_native_symbol_declaration(source:const SourceBytes in S, tokens:const
     result.next <- qualifier + 2u64;
     if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
     val marker <- result.root;
-    append_node(nodes, result, native_symbol_declaration_node(), first, nodes[marker].past, 0u64, name, marker, first);
+    append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, marker), make HandleSymbol {
+        name <- make NodeId { revision <- result.revision; index <- name; };
+        marker <- make NodeId { revision <- result.revision; index <- marker; };
+    });
 }
 
 func reference_symbol_head(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> bool
@@ -312,19 +459,27 @@ func parse_reference_symbol(source:const SourceBytes in S, tokens:const Tokens i
     result.root <- no_node();
     parse_constraints(source, tokens, nodes, result, past, false);
     if (result.diagnostic != 0u8) return;
-    val clause <- result.root;
-    val parameter <- nodes[clause].right;
-    if (nodes[clause].left != no_node() ||
-        !same_bytes(source, nodes[owner].first, nodes[owner].past, source, nodes[parameter].first, nodes[parameter].past)) {
+    ref constraint = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false;
+    };
+    if (inspect_signature(nodes, result.revision, result.used, result.root, constraint) != OwnerSignatureClause ||
+        constraint.previous != no_node()) {
         result.diagnostic <- expected_owner_clause();
         return;
     };
-    val access <- if (readonly || nodes[clause].number == readonly_declaration()) { readonly_declaration() } else { 0u64 };
-    append_node(nodes, result, owned_type_node(), nodes[target].first, nodes[owner].past, access, target, owner, nodes[owner].first);
-    if (result.diagnostic != 0u8) return;
-    val annotation <- result.root;
-    append_node(nodes, result, reference_symbol_declaration_node(), first, tokens[result.next - 1u64].past,
-                if (nullable) { 1u64 } else { 0u64 }, name, annotation, first);
+    val parameter <- constraint.annotation;
+    if (!same_bytes(source, syntax_first(nodes, result.used, owner), syntax_past(nodes, result.used, owner),
+                    source, syntax_first(nodes, result.used, parameter), syntax_past(nodes, result.used, parameter))) {
+        result.diagnostic <- expected_owner_clause();
+        return;
+    };
+    append_syntax_node(nodes, result, first, tokens[result.next - 1u64].past, make ReferenceSymbol {
+        name <- make NodeId { revision <- result.revision; index <- name; };
+        target <- make NodeId { revision <- result.revision; index <- target; };
+        owner_name <- make NodeId { revision <- result.revision; index <- owner; };
+        readonly <- readonly || constraint.readonly;
+        nullable <- nullable;
+    });
 }
 
 func parse_publication(source:const SourceBytes in S, tokens:const Tokens in T,
@@ -338,7 +493,9 @@ func parse_publication(source:const SourceBytes in S, tokens:const Tokens in T,
         if (!parse_resource_name(source, tokens, nodes, result, past)) return;
     };
     val name <- result.root;
-    append_node(nodes, result, export_node(), first, nodes[name].past, 0u64, name, no_node(), first);
+    append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, name), make Publication {
+        name <- make NodeId { revision <- result.revision; index <- name; };
+    });
 }
 
 func parse_array(source:const SourceBytes in S, tokens:const Tokens in T,
@@ -364,10 +521,12 @@ func parse_array(source:const SourceBytes in S, tokens:const Tokens in T,
     result.next <- result.next + 2u64;
     if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
     val element <- result.root;
-    append_node(nodes, result, array_shape_node(), shape_first, nodes[element].past, 0u64, index, element, shape_first);
-    val shape <- result.root;
-    if (result.diagnostic != 0u8) return;
-    append_node(nodes, result, array_declaration_node(), first, nodes[element].past, 0u64, name, shape, first);
+    append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, element), make ArrayDefinition {
+        name <- make NodeId { revision <- result.revision; index <- name; };
+        index_type <- make NodeId { revision <- result.revision; index <- index; };
+        element_type <- make NodeId { revision <- result.revision; index <- element; };
+        dimension_at <- shape_first;
+    });
 }
 
 func parse_enum_initializer(source:const SourceBytes in S, tokens:const Tokens in T,
@@ -380,8 +539,9 @@ func parse_enum_initializer(source:const SourceBytes in S, tokens:const Tokens i
         val width <- integer_width(source, tokens[at]);
         val magnitude <- parse_integer_magnitude(source, tokens[at], result, width);
         if (result.diagnostic != 0u8) return false;
-        append_node(nodes, result, enum_integer_node(), tokens[first].first, tokens[at].past, magnitude,
-                    if (negative) { 1u64 } else { 0u64 }, width, tokens[first].first);
+        append_syntax_node(nodes, result, tokens[first].first, tokens[at].past, make EnumInteger {
+            magnitude <- magnitude; negative <- negative; width <- width;
+        });
         result.next <- at + 1u64;
         return result.diagnostic == 0u8;
     } else {};
@@ -405,10 +565,33 @@ func parse_enum_member(source:const SourceBytes in S, tokens:const Tokens in T, 
         result.diagnostic <- expected_module_separator();
         return false;
     } else {};
-    val first <- nodes[name].first;
-    append_node(nodes, result, enum_member_node(), first, tokens[result.next].past, initializer, previous, name, first);
+    ref preceding = make NoLink {};
+    if (previous != no_node()) {
+        preceding = make LinkTo { node <- make NodeId { revision <- result.revision; index <- previous; }; };
+        {};
+    };
+    ref input = make NoLink {};
+    if (initializer != no_node()) {
+        input = make LinkTo { node <- make NodeId { revision <- result.revision; index <- initializer; }; };
+        {};
+    };
+    val first <- syntax_first(nodes, result.used, name);
+    append_syntax_node(nodes, result, first, tokens[result.next].past, make EnumMember {
+        previous <- preceding;
+        name <- make NodeId { revision <- result.revision; index <- name; };
+        initializer <- input;
+    });
     result.next <- result.next + 1u64;
     return result.diagnostic == 0u8;
+}
+
+func append_enum(nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64,
+                  name:u64, backing:u64, member:u64) -> void where {owner A, owner R} {
+    append_syntax_node(nodes, result, first, past, make EnumDefinition {
+        name <- make NodeId { revision <- result.revision; index <- name; };
+        backing <- make NodeId { revision <- result.revision; index <- backing; };
+        member_tail <- make NodeId { revision <- result.revision; index <- member; };
+    });
 }
 
 func parse_enum(source:const SourceBytes in S, tokens:const Tokens in T,
@@ -434,7 +617,7 @@ func parse_enum(source:const SourceBytes in S, tokens:const Tokens in T,
     for (unused in result.next .. past) {
         if (punct_at(source, tokens, result.next, past) == 125u8) {
             if (member == no_node()) { result.diagnostic <- expected_enum_member(); return; } else {};
-            append_node(nodes, result, enum_declaration_node(), first, tokens[result.next].past, backing, name, member, first);
+            append_enum(nodes, result, first, tokens[result.next].past, name, backing, member);
             result.next <- result.next + 1u64;
             return;
         } else {};
@@ -450,8 +633,7 @@ func parse_module_form(source:const SourceBytes in S, tokens:const Tokens in T,
     val at <- result.next;
     val function_form <- func_word(source, tokens[at]);
     if ((function_form || proc_word(source, tokens[at])) && !callable_local_head(source, tokens, at, past)) {
-        val kind <- if (function_form) { function_definition() } else { procedure_definition() };
-        parse_callable(source, tokens, nodes, result, past, kind, false);
+        parse_callable(source, tokens, nodes, result, past, function_form, false);
         return;
     } else {};
     val named_declaration <- at + 1u64 < past && tokens[at + 1u64].kind == identifier();
@@ -468,6 +650,10 @@ func parse_module_form(source:const SourceBytes in S, tokens:const Tokens in T,
         parse_handle_type(source, tokens, nodes, result, past);
         return;
     } else {};
+    if (named_declaration && region_word(source, tokens[at]) && punct_at(source, tokens, at + 2u64, past) == 123u8) {
+        parse_region_definition(source, tokens, nodes, result, past);
+        return;
+    };
     if ((data_word(source, tokens[at]) && (named_declaration || marked_declaration)) ||
         (type_word(source, tokens[at]) && named_declaration)) {
         parse_nominal_type(source, tokens, nodes, result, past);
@@ -501,39 +687,57 @@ func named_definition_head(source:const SourceBytes in S, tokens:const Tokens in
         ((type_word(source, tokens[at]) || array_word(source, tokens[at]) || enum_word(source, tokens[at])) && next_kind == identifier());
 }
 
+func braced_callable_definition(nodes:const ExprNodes in N, used:u64, at:u64) -> bool where {const owner N} {
+    if (at >= used) return false;
+    return case nodes[at] of {
+        (Vacant) -> { false };
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (CallableDefinition) -> { true };
+                (CEntryDefinition) -> { true };
+                (_) -> { false };
+            }
+        };
+    };
+}
+
 func parse_module_item(source:const SourceBytes in S, tokens:const Tokens in T,
                        nodes:ExprNodes in A, result:ParseResult in R,
                        past:u64, previous:u64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     if (using_word(source, tokens[at]))
-        return parse_selection_items(source, tokens, nodes, result, past, previous, using_node(), false);
+        return parse_selection_items(source, tokens, nodes, result, past, previous, UseResource, false);
     if (import_word(source, tokens[at]))
-        return parse_selection_items(source, tokens, nodes, result, past, previous, import_node(), false);
+        return parse_selection_items(source, tokens, nodes, result, past, previous, ImportResource, false);
     val export_prefix <- export_word(source, tokens[at]);
     if (export_prefix && at + 2u64 < past && from_word(source, tokens[at + 1u64]) &&
         tokens[at + 2u64].kind == quoted_text())
-        return parse_selection_items(source, tokens, nodes, result, past, previous, export_from_node(), false);
+        return parse_selection_items(source, tokens, nodes, result, past, previous, ReexportResource, false);
     if (export_prefix && at + 1u64 < past && import_word(source, tokens[at + 1u64]))
-        return parse_selection_items(source, tokens, nodes, result, past, previous, import_node(), true);
+        return parse_selection_items(source, tokens, nodes, result, past, previous, ImportResource, true);
     val public_definition <- export_prefix && named_definition_head(source, tokens, at + 1u64, past);
     if (public_definition) { (result.next <- at + 1u64):void; } else {};
+    val definition_start <- result.next;
     parse_module_form(source, tokens, nodes, result, past);
     if (result.diagnostic != 0u8) return false;
     val form <- result.root;
-    val end <- nodes[form].past;
-    val kind <- nodes[form].kind;
+    val end <- syntax_past(nodes, result.used, form);
     if (punct_at(source, tokens, result.next, past) == 59u8) { # ';'
         end <- tokens[result.next].past;
         (result.next <- result.next + 1u64):void;
     } else {
-        val definition <- (kind == callable_node() || kind == c_procedure_node()) && nodes[form].right != no_node();
-        val delimited <- definition || kind == c_record_node() || kind == data_record_node() || kind == enum_declaration_node();
+        val braced_type <- definition_start + 1u64 < result.next &&
+            punct_at(source, tokens, result.next - 1u64, past) == 125u8 &&
+            (((enum_word(source, tokens[definition_start]) || region_word(source, tokens[definition_start])) &&
+              tokens[definition_start + 1u64].kind == identifier()) ||
+             (data_word(source, tokens[definition_start]) &&
+              (tokens[definition_start + 1u64].kind == identifier() || tokens[definition_start + 1u64].kind == quoted_text())));
+        val delimited <- braced_type || braced_callable_definition(nodes, result.used, form);
         if (!delimited) { result.diagnostic <- expected_module_separator(); return false; } else {};
     };
     val first <- tokens[at].first;
-    append_node(nodes, result, module_item_node(), first, end, if (public_definition) { 1u64 } else { 0u64 },
-                previous, form, first);
+    append_module_item(nodes, result, first, end, previous, form, public_definition);
     return result.diagnostic == 0u8;
 }
 
@@ -545,7 +749,7 @@ export func parse_module(source:const SourceBytes in S, tokens:const Tokens in T
     val last <- no_node();
     for (unused in 0u64 .. past + 1u64) {
         if (result.next >= past) {
-            append_node(nodes, result, module_node(), 0u64, source_len(source), 0u64, last, no_node(), 0u64);
+            append_module(nodes, result, source_len(source), last);
             return;
         } else {};
         if (!parse_module_item(source, tokens, nodes, result, past, last)) return;
