@@ -25,7 +25,7 @@ namespace cod::language {
   throw std::runtime_error(location_text(at) + ": " + message);
 }
 
-enum class TokenKind { identifier, symbol, integer, real, string, punctuation, end };
+enum class TokenKind { identifier, symbol, integer, real, string, multiline_string, punctuation, end };
 struct Token {
   TokenKind kind;
   std::string text;
@@ -124,19 +124,24 @@ inline std::vector<Token> tokenize(const std::shared_ptr<const IndexedSource> &r
       continue;
     }
     if (c == '"') {
-      ++cursor;
+      const auto delimiter = cod_text_literal_delimiter(reinterpret_cast<const uint8_t *>(source.data() + cursor),
+                                                        source.size() - cursor);
+      const bool multiline = delimiter == 3;
+      cursor += delimiter;
+      const auto content = cursor;
+      const auto closing = source.substr(offset, delimiter);
       bool escaped = false;
       while (cursor < source.size()) {
         const auto next = source[cursor];
-        if (next == '\n') fail(start, "newline in quoted text");
-        if (!escaped && next == '"') break;
+        if (!multiline && next == '\n') fail(start, "newline in quoted text");
+        if (!escaped && next == '"' && source.substr(cursor, delimiter) == closing) break;
         escaped = !escaped && next == '\\';
         ++cursor;
       }
       if (cursor == source.size()) fail(start, "unterminated quoted text");
-      const auto raw = source.substr(offset + 1, cursor - offset - 1);
-      ++cursor;
-      emit(TokenKind::string, std::string(raw), offset);
+      const auto raw = source.substr(content, cursor - content);
+      cursor += delimiter;
+      emit(multiline ? TokenKind::multiline_string : TokenKind::string, std::string(raw), offset);
       continue;
     }
     std::string punctuation(1, c);
@@ -707,10 +712,14 @@ class Parser {
       fail(peek().at, kind == TokenKind::symbol ? "expected a symbol name" : "expected a lexical name");
     return tokens_[cursor_++];
   }
+  void skip_member_doclet() {
+    if (peek().kind == TokenKind::multiline_string) ++cursor_;
+  }
   std::vector<Parameter> parse_data_fields() {
     std::vector<Parameter> fields;
     expect("{");
     while (!take("}")) {
+      skip_member_doclet();
       const bool fixed_binding = take("const");
       if (is("region") || ownership_qualifier("region"))
         fail(peek().at, "region handles cannot be stored in user data fields");
@@ -732,6 +741,7 @@ class Parser {
 
   void parse_sum_alternatives(Form &form) {
     do {
+      skip_member_doclet();
       auto name = ordinary_name();
       const auto first = name.at.span.first;
       auto fields = parse_data_fields();
@@ -800,7 +810,8 @@ class Parser {
     std::string result(token.text.size(), '\0');
     std::size_t written = 0;
     if (const auto *error = cod_decode_text_literal(reinterpret_cast<const uint8_t *>(token.text.data()),
-            token.text.size(), reinterpret_cast<uint8_t *>(result.data()), &written))
+            token.text.size(), token.kind == TokenKind::multiline_string,
+            reinterpret_cast<uint8_t *>(result.data()), &written))
       fail(token.at, error);
     result.resize(written);
     return result;
@@ -1274,10 +1285,27 @@ class Parser {
     if (inline_effect && (!form.symbolic || declaration || function))
       fail(form.at, "effect proc requires a symbolic procedure definition");
   }
-  bool callable_binding() const {
-    const size_t prefix = is("const") ? 1 : 0;
+  bool callable_binding(size_t ahead = 0) const {
+    const size_t prefix = ahead + (is("const", ahead) ? 1 : 0);
     return (is("func", prefix) || is("proc", prefix)) && tokens_[cursor_ + prefix + 1].kind == TokenKind::identifier &&
            (is("=", prefix + 2) || is(":", prefix + 2));
+  }
+  bool module_doclet_target(size_t head) const {
+    if (is("export", head)) ++head;
+    if (cursor_ + head + 1 >= tokens_.size()) return false;
+    const auto next = tokens_[cursor_ + head + 1].kind;
+    if (is("handle", head)) return is("type", head + 1);
+    if (is("symbol", head)) return next == TokenKind::symbol ||
+        (next == TokenKind::identifier &&
+         !(is("from", head + 1) && tokens_[cursor_ + head + 2].kind == TokenKind::string));
+    if (is("ref", head) || is("ptr", head)) return is("symbol", head + 1);
+    if (is("region", head)) return is("symbol", head + 1) || (next == TokenKind::identifier && is("{", head + 2));
+    if (is("data", head)) return next == TokenKind::identifier || next == TokenKind::string;
+    if (is("function", head) || is("func", head) || is("procedure", head) || is("proc", head))
+      return !callable_binding(head) && (next == TokenKind::identifier || next == TokenKind::symbol ||
+             next == TokenKind::string || is("(", head + 1));
+    return next == TokenKind::identifier && (is("type", head) || is("array", head) ||
+        is("enum", head) || is("unit", head) || is("global", head) || is("conversion", head));
   }
   ReceivingItem receiving_item(bool operation_required, bool labelled) {
     const bool fixed = take("const");
@@ -1496,7 +1524,7 @@ class Parser {
     return handler;
   }
 
-  bool starts_case_arm() const {
+  bool starts_full_case_arm() const {
     if (!is("(")) return false;
     const auto close = right_paren_[cursor_] - cursor_;
     return is("|", close + 1) || (is("->", close + 1) && (is("{", close + 2) || is("throw", close + 2)));
@@ -1510,39 +1538,52 @@ class Parser {
     const bool previous = std::exchange(parsing_case_, true);
     while (!take("}")) {
       if (peek().kind == TokenKind::end) fail(peek().at, "unterminated case body");
-      if (!starts_case_arm()) {
+      const bool short_head = peek().kind == TokenKind::identifier && is("->", 1);
+      if (!short_head && !starts_full_case_arm()) {
         result->children.push_back(expression());
       } else {
-        auto arm = make(K::case_arm, expect("("));
-        if (is(")")) arm->text = "_";
-        else {
-          const auto pattern = peek();
-          if (pattern.kind != TokenKind::identifier || (!is(")", 1) && !is("{", 1)))
-            fail(pattern.at, "case pattern is outside the supported seed profile");
-          arm->text = tokens_[cursor_++].text;
-          if (is("{")) {
-            ReceivingHeader reception;
-            labelled_receiving(reception);
-            validate_receivers(reception);
-            for (const auto &item : reception.items) {
-              auto binding = make(K::pointer, Token{TokenKind::identifier, item.name, item.at});
-              binding->annotation = item.annotation;
-              binding->declaration_kind = item.declaration_kind;
-              binding->fixed_binding = item.fixed_binding;
-              binding->read_only = item.read_only;
-              arm->case_bindings.push_back(std::move(binding));
+        auto arm = make(K::case_arm, short_head ? peek() : expect("("));
+        if (short_head) {
+          arm->text = ordinary_name().text;
+        } else {
+          if (is(")")) arm->text = "_";
+          else {
+            const auto pattern = peek();
+            if (pattern.kind != TokenKind::identifier || (!is(")", 1) && !is("{", 1)))
+              fail(pattern.at, "case pattern is outside the supported seed profile");
+            arm->text = tokens_[cursor_++].text;
+            if (is("{")) {
+              ReceivingHeader reception;
+              labelled_receiving(reception);
+              validate_receivers(reception);
+              for (const auto &item : reception.items) {
+                auto binding = make(K::pointer, Token{TokenKind::identifier, item.name, item.at});
+                binding->annotation = item.annotation;
+                binding->declaration_kind = item.declaration_kind;
+                binding->fixed_binding = item.fixed_binding;
+                binding->read_only = item.read_only;
+                arm->case_bindings.push_back(std::move(binding));
+              }
+              arm->receiving = std::make_shared<ReceivingHeader>(std::move(reception));
             }
-            arm->receiving = std::make_shared<ReceivingHeader>(std::move(reception));
           }
+          expect(")");
+          if (take("|") && !is("->")) arm->children.push_back(expression(0, HereAttachment::immediate, false));
         }
-        expect(")");
-        if (take("|") && !is("->")) arm->children.push_back(expression(0, HereAttachment::immediate, false));
         expect("->");
         if (is("throw")) {
           if (arm->text != "_" || !arm->children.empty())
             fail(peek().at, "the unbraced throwing arm requires an unguarded catch-all");
           arm->children.push_back(make(K::case_failure, expect("throw")));
-        } else arm->children.push_back(block());
+        } else if (!short_head || is("{")) {
+          arm->children.push_back(block());
+        } else {
+          if (is("return") || is("break") || is("continue") || is("rethrow") || is("defer") || is("fallthrough"))
+            fail(peek().at, "use braces for explicit control in a case arm");
+          auto group = make(K::block, peek());
+          group->children.push_back(expression());
+          arm->children.push_back(finish(std::move(group)));
+        }
         result->children.push_back(finish(std::move(arm)));
       }
       if (!is("}")) expect(";");
@@ -1555,7 +1596,7 @@ class Parser {
   Expr primary(HereAttachment attachment, bool owner_projection) {
     const bool pipeline_operand = attachment == HereAttachment::pipeline_body;
     auto token = peek();
-    if (token.kind == TokenKind::string) {
+    if (token.kind == TokenKind::string || token.kind == TokenKind::multiline_string) {
       ++cursor_;
       auto literal = make(Expression::Kind::string_literal, token);
       literal->text = text_literal(token);
@@ -2295,6 +2336,7 @@ public:
       forms.push_back(std::move(form));
     };
     while (peek().kind != TokenKind::end) {
+      if (peek().kind == TokenKind::multiline_string && module_doclet_target(1)) ++cursor_;
       auto start = peek();
       auto form = std::make_unique<Form>();
       form->at = start.at;
@@ -2412,6 +2454,7 @@ public:
         form->result_type = parse_type();
         expect("{");
         while (!take("}")) {
+          skip_member_doclet();
           EnumMember member{ordinary_name(), {}};
           if (take("=")) {
             member.negative = take("-");

@@ -3,14 +3,19 @@
 
 #include "../include/cod_utf8.h"
 
+static inline size_t cod_text_literal_delimiter(const uint8_t *source, size_t length) {
+  if (!length || source[0] != '"') return 0;
+  return length >= 3 && source[1] == '"' && source[2] == '"' ? 3 : 1;
+}
+
 /* Decode the interior of a quoted runtime literal. Escapes never expand
    past their source width, so the original span bounds the output. */
-static inline const char *cod_decode_text_literal(const uint8_t *source, size_t length,
+static inline const char *cod_decode_text_literal(const uint8_t *source, size_t length, bool multiline,
                                                   uint8_t *output, size_t *written) {
   size_t count = 0;
   for (size_t at = 0; at < length;) {
     const uint8_t byte = source[at++];
-    if (byte == '\r' || byte == '\n') return "newline in text literal";
+    if (!multiline && (byte == '\r' || byte == '\n')) return "newline in text literal";
     if (byte != '\\') {
       output[count++] = byte;
       continue;
