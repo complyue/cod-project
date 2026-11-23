@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Parse the graph region and bind CLI destinations at their entries
+
+<a id="k-booter-region-parser-terminal-inputs-20261122"></a>
+**K-BOOTER-REGION-PARSER-TERMINAL-INPUTS-20261122.** Delegated review under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122 cleared booter syntax for the graph schema, owning local and ordered acquisition. It revises the driver placement in `d2883ac4e911124d6d614a2b60564038bad7216e:applications/cod-booter/docs/ModuleGraph.md`, “Consuming the completed graph”. The command entry holds G, an ordinary table establishes G in the shared procedure, and a synchronous terminal retains lexical access to the entry's destination. H-596–H-599, D-14-REF-ARGUMENT and D-18-HERE-STORAGE supply the existing source contracts. D-20-MODULE-GRAPH r18 to r19, D-ARCH-REVIEW r21 to r22, P-680–P-683, registry r1070.
+
 ## 2026-11-22 — Read nominal sums and consume the completed booter graph
 
 <a id="k-booter-sum-parser-graph-output-20261122"></a>
