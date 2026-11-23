@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Check the forwarded path callback and exception re-exports
+
+<a id="k-booter-here-and-exception-selection-20261123"></a>
+**K-BOOTER-HERE-AND-EXCEPTION-SELECTION-20261123.** Delegated pre-code review continues the path callback, nominal exception and module selection contracts at `75e8d6482e9a7fd1da3dce2e60cc2c8f4f99322d:applications/cod-booter/docs/ModuleGraph.md`, “Checking the forwarded path callback”, and `75e8d6482e9a7fd1da3dce2e60cc2c8f4f99322d:design/ModuleWorlds.md`, “Publication-only re-export”. D-20-MODULE-GRAPH r36 to r37 and D-ARCH-REVIEW r42 to r43 clear shared checked-call evidence and both exception selection paths with separate receiver-world acceptance. Executable native-here lowering retains its own review.
+
 ## 2026-11-23 — Review the bootstrap recovery path through diagnostic delivery
 
 <a id="k-parser-recovery-architecture-20261123"></a>
