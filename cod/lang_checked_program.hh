@@ -525,15 +525,16 @@ struct QueryBinding {
   std::optional<EvidenceOwner> owner_binding = {};
   bool operator==(const QueryBinding &) const = default;
 };
-enum class ResultMode { value, borrowed_ref, borrowed_ptr, borrowed_handle };
+enum class ResultMode { value, borrowed_ref, borrowed_ptr, borrowed_handle, owned_region };
 struct ResultContract {
   std::optional<Type> type;
   ResultMode mode = ResultMode::value;
   std::string owner = {};
   bool read_only = false;
-  bool borrowed() const { return mode != ResultMode::value; }
+  bool borrowed() const { return mode == ResultMode::borrowed_ref || mode == ResultMode::borrowed_ptr || native_borrow(); }
   bool nullable() const { return mode == ResultMode::borrowed_ptr; }
   bool native_borrow() const { return mode == ResultMode::borrowed_handle; }
+  bool owns_region() const { return mode == ResultMode::owned_region; }
   bool operator==(const ResultContract &) const = default;
 };
 // Declaration evidence has no runtime payload or authority to access retained storage.
