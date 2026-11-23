@@ -1,11 +1,11 @@
 # Idiomatics guideline
 
-Guideline revision: 1 · Confirmed: 2026-11-23
+Guideline revision: 2 · Confirmed: 2026-11-23
 
 ## Design authority
 
 [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics) covers this guideline at
-r1. [D-10-FORMAT-POLICY](../design/DesignAuthorityRegistry.md#d-10-format-policy) covers its
+r2. [D-10-FORMAT-POLICY](../design/DesignAuthorityRegistry.md#d-10-format-policy) covers its
 [canonical code style](#canonical-code-style). The project user's
 [quality-standard approval and formatting decisions](../CHANGELOG.md#h-idiomatics-guideline-20261123)
 establish both scopes, including the initial maximum of 100 source columns.
@@ -15,8 +15,9 @@ The value is readable business intent and useful programming judgment, following
 The guideline depends on the registry's scoped design authority and the applicable language contracts.
 It preserves their identities, permissions, lifetimes, effects and observable control. It introduces no
 additional language mechanism or unconfirmed formatting detail. Acceptance requires the quality,
-example, coverage and style checks below. This is the initial confirmed guideline; existing language
-contracts retain their own confirmation and revision boundaries.
+example, coverage and style checks below. The project user's [symbolic procedure guidance](../CHANGELOG.md#h-symbolic-selector-guideline-20261123)
+applies the authoring standard to module examples. Review the consumer, installer and extension
+roles against D-15-DEFAULT-EXPORTS and D-10-HANDLER-INSTALL.
 
 ## Purpose and reader
 
@@ -182,6 +183,20 @@ normative guidance or examples.
 | Traversal and composition | Express observation, feedback, early completion and synchronous forwarding using confirmed generator, here and composition contracts. |
 | Modules and public interfaces | Choose publication, reuse and extension operations while preserving identity, meaningful dependency groups and definition documentation. |
 | Source presentation | Apply the 100-column limit and confirmed separator, layout, naming and comment rules consistently. |
+
+### Selecting a symbolic procedure family
+
+Discourage routine `using proc` and `import proc` in application examples. Show a named callable for
+a fixed calculation. A billing helper that follows the active tariff needs only the vocabulary
+identity (`symbol from`) and a dynamic call (`behave` or `perform`).
+
+A family selector needs a concrete reason. An application entry may use `using proc` to select a
+carrier's complete tariff and install it for a billing run. A package adding a refrigerated-shipment
+method to that operation may use `import proc` with the required destination and extension
+permission. Explain who selects, who installs and who calls. A `using` selection grants no extension
+permission. A lexical call to the selected family bypasses a dynamic replacement for that callee.
+[Guide example](IdiomaticCoD.md#keep-symbolic-procedure-families-at-integration-boundaries) ·
+[Module contract](../design/ModuleWorlds.md#selecting-a-symbolic-procedure-family)
 
 ## Handling undecided design
 

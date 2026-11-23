@@ -1,10 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 69 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 70 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
 
-The [symbolic family reuse guideline](../CHANGELOG.md#h-symbolic-family-reuse-idiom-20261123) applies to D-15-DEFAULT-EXPORTS and D-DOC-IDIOMATICS. Selector permissions and initialization continue to follow the written verb.
+At r70 the [symbolic selector guidance](../CHANGELOG.md#h-symbolic-selector-guideline-20261123) annotates [family selection](#selecting-a-symbolic-procedure-family) under D-15-DEFAULT-EXPORTS and D-DOC-IDIOMATICS. P-692/P-693 preserve module authors' public vocabularies and receivers' choice of reuse. Check that each example identifies the required identity, family or extension and the site that installs it. The [family reuse baseline](../CHANGELOG.md#h-symbolic-family-reuse-idiom-20261123) and existing permissions govern all three examples.
 
 [Review backlog and status reconciliation](../CHANGELOG.md#h-review-backlog-duty-20261123) reconciles the scoped confirmations below with their registry records.
 
@@ -367,8 +367,6 @@ For each of `using`, `import` and `mixin`, writing only `"./hooks.cod"` has exac
 
 Use `var @name` for a symbolic variable resource and `proc @name` for a symbolic procedure resource in export, using, import and mixin selectors. The prefix states what is requested of the source. Match it to the published declaration and reject a missing or wrong kind. `var` in a selector declares no local place or writable access. It preserves the published storage and access contract, including a reference symbol’s owner role. `proc` selects the procedure family under the receiving verb. For `using`, a free receiving name introduces the published identity and its source-preserving family. Reusing the same nominal identity succeeds. A different identity at that name rejects. `import` and `mixin` keep their own destination and body requirements. It does not extract a first-class procedure or perform a call. Bare `@name` remains the operand of the separate identity operation `symbol from "./hooks.cod" @name`. That operation can establish the typed identity before an `effect` installs anything. For a published variable, `using var` also selects that typed identity. For a published procedure, the `using proc` selector itself suffices.
 
-Prefer explicit identity selection for dynamic consumers and ordinary named callables for fixed behavior. Keep `using proc` for intentional reuse of a published implementation family and `import proc` for a module that needs to extend that operation under the established grants. [Integration examples](../docs/IdiomaticCoD.md#keep-symbolic-procedure-families-at-integration-boundaries)
-
 For `var` under `using`, apply the [same identity selection as `symbol from`](#selecting-a-symbolic-variable). A missing dynamic installation cannot make either declaration fail.
 
 A complete definition with an attached `export` already states the kind. For example, `export ref symbol @sout:Utf8StreamOut in O where {owner O}` publishes the same variable resource as the corresponding declaration followed by `export var @sout`. Likewise an already declared procedure symbol can be published by `export proc @flush`. A default mark on a definition contributes the same kind-qualified selector. Publication alone reads no active binding. Preserve explicit symbol identity selection for a caller that only wants to install a writer. Verify that the same unsupported resource, missing destination or symbol conflict rejects with omitted and explicit lists and that a wrong kind rejects even when the spelling matches. A complete or default selection grants exactly what its expanded entries under that verb would grant.
@@ -376,6 +374,29 @@ A complete definition with an attached `export` already states the kind. For exa
 A newline between a module path and an explicit selection is ordinary whitespace. Recognize a path-only directive at an unambiguous grammar boundary, with an explicit semicolon available for disambiguation. Preserve multiline named selectors and an ordinary identifier named `default` wherever the contextual declaration does not apply.
 
 For acceptance, compile an external source containing `using "string.cod"` with a relocated toolchain. Exercise the default `str`, `repr` and `(++)` families, a public entry outside the default set, and independent access to a public symbol identity before installation. Check a namespaced same-package module, explicit sibling, package shadow and warning, ambiguous package claim, broken selected package module and absent fallback. Verify both compilers agree across working directories and reuse cached dependencies correctly after adding a shadowing module or changing a default. Migrate actual booter sibling imports and the repository-relative string-library imports alongside the resolver. Preserve intentional named selection, receiver-world extensions and re-exports in the formatter.
+
+### Selecting a symbolic procedure family
+
+These excerpts belong to three separate modules. The tariff package publishes its methods under
+the billing vocabulary's `@quote` identity.
+
+```cod
+# Billing engine calls the active tariff through behave @quote(shipment).
+symbol from "./billing-vocabulary.cod" @quote
+```
+
+```cod
+# Batch entry selects the complete carrier tariff for a scoped effect proc @quote installation.
+using "./carrier-tariff.cod" proc @quote
+```
+
+```cod
+# Refrigerated-shipping integration establishes the destination and contributes a method there.
+symbol from "./billing-vocabulary.cod" @quote
+import "./carrier-tariff.cod" proc @quote
+```
+
+The batch entry can introduce a free `@quote` with the single `using` directive. Its `effect proc @quote` installs the family for downstream dynamic calls. Selection itself performs no installation. The refrigerated-shipping module must satisfy the destination, extension and overload checks for its contribution. A module with only `using` cannot add that method. Prefer an ordinary named callable for a fixed calculation. [Programming guideline](../docs/IdiomaticsGuideline.md#selecting-a-symbolic-procedure-family) · [Worked example](../docs/IdiomaticCoD.md#keep-symbolic-procedure-families-at-integration-boundaries)
 
 ### Selecting a symbolic variable
 

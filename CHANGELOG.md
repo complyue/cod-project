@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Document when to select a symbolic procedure family
+
+<a id="h-symbolic-selector-guideline-20261123"></a>
+**H-SYMBOLIC-SELECTOR-GUIDELINE-20261123.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-23 (America/Los_Angeles), the project user directed “using/import symbolic proc 应该落到 guidelines 文档，语言支持也要加注释说明适用场景。” D-DOC-IDIOMATICS guideline r2 and D-15r70 distinguish the dynamic consumer, policy installer and family contributor. P-692/P-693 and P-694/P-695 retain the permissions and idiom recorded at `499da9275e93ec78959ab3070120f324d1ef0a51:design/ModuleWorlds.md` and `docs/IdiomaticCoD.md` in that commit.
+
 ## 2026-11-23 — Prefer ordinary calls and identity-only use in application code
 
 <a id="h-symbolic-family-reuse-idiom-20261123"></a>
