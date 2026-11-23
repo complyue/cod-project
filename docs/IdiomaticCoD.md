@@ -1,230 +1,993 @@
 # Idiomatic CoD
 
-**Discussion draft.** These excerpts show the intended style, including confirmed forms whose frontend support is being rolled out.
+CoD lets an operation state which storage it reads or changes, which owner keeps that storage alive,
+and whether its behavior depends on explicit inputs or installed dynamic context. Idiomatic code
+makes those choices visible at the interface and uses local structure to make their consequences
+easy to follow.
 
-## Semicolons
+This guide is for programmers learning how to make those choices in CoD. Its small shipment, stock
+and billing examples are independent unless a section explicitly reuses a definition. Statements
+shown outside a named callable run in a full lexical scope; procedural contexts and application
+dependencies are identified where needed.
 
-Omit a semicolon when the intended boundary is clear. Write it when the grammar needs it to distinguish two readings or when the reader would otherwise have to stop and reconstruct the grouping.
+## Design authority
+
+Guide revision 1 applies the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
+[D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics), P-694/P-695, and the
+[canonical source style](IdiomaticsGuideline.md#canonical-code-style). The
+[continuity record](../CHANGELOG.md#k-idiomatic-cod-rewrite-20261123) identifies its source baseline.
+The design sections linked throughout own the language rules, including identity, permissions,
+owners, effects, control and cleanup. This guide explains their use without extending those rules.
+Acceptance applies the guideline's semantic, example, coverage and mandatory style checks.
+[Long-term design topics](DesignTopics.md) retain their separate scope.
+
+## Contents
+
+- [Model the states your program can observe](#model-the-states-your-program-can-observe)
+- [Make storage and access visible](#make-storage-and-access-visible)
+- [Choose a callable by its dependencies](#choose-a-callable-by-its-dependencies)
+- [Treat absence as part of the interface](#treat-absence-as-part-of-the-interface)
+- [Choose control and cleanup boundaries](#choose-control-and-cleanup-boundaries)
+- [Traverse and compose through declared protocols](#traverse-and-compose-through-declared-protocols)
+- [Make module boundaries express intent](#make-module-boundaries-express-intent)
+- [Give domain values a display vocabulary](#give-domain-values-a-display-vocabulary)
+- [Use canonical source form](#use-canonical-source-form)
+
+## Model the states your program can observe
+
+Choose a sum when alternatives carry different information. A shipment waiting for dispatch has no
+dispatched carton count; a dispatched shipment does. Keeping the count inside its alternative makes
+that relationship part of the type.
 
 ```cod
-func increment(n:u64) -> u64 {
-    n + 1u64
+export data Shipment =
+    Queued {}
+  | Dispatched { cartons:u64; }
+
+"""Returns the dispatched carton count for [Shipment](Shipment)."""
+export func cartons_sent(shipment:const Shipment in O) -> u64 where {const owner O} {
+    case shipment of {
+        (Dispatched { val count <- cartons; }) -> { count };
+        Queued -> 0u64
+    }
+}
+
+func sample_count() -> u64 {
+    ref sent:Shipment = make Dispatched { cartons <- 3u64 }
+    cartons_sent(sent)
 }
 ```
 
-For a call that accepts a trailing block, these two independent operations need a separator:
+The result of `sample_count()` is `3u64`. No initializer overload is declared for `Dispatched`, so
+the braced construction establishes its payload directly. With no contextual owner, this `make`
+uses the current full lexical scope. The query borrows that live target with readonly access and
+returns independent bits. The object can therefore finish its lifetime when `sample_count` exits
+without invalidating the returned count.
+
+In the case, the constructor test precedes field reception. Only a `Dispatched` target supplies
+`cartons`; `count` is local to that arm. The `Queued` arm needs only a tag test, so its short form
+has no field receiver. Both alternatives complete with `u64`, and the parameter requires a present
+target. These arms cover the whole subject domain without a catch-all.
+
+Use this form when the payload belongs to the state. Separate flags and a universally present count
+would instead require callers to maintain their relationship. If every alternative has the same
+independent information, a product with an appropriate discriminant can express that different
+intent. Do not introduce a sum merely to rename a Boolean.
+
+Construction names the selected alternative: `make Dispatched`, not `make Shipment`. Once a
+constructor has initializer overloads, use its initializer contract; direct field writes cannot
+bypass it. This matters when a domain constructor validates information before publishing an object.
+
+A guard runs after its pattern's receiving operations. Receive into arm-local variables when the
+guard may decline; move writes that should occur only on acceptance into the body. A false guard
+does not roll back reception or its own effects.
+
+[Sum construction](../design/DomainLanguageDesign.md#named-sum-constructors) ·
+[Lexical construction](../design/ConstructionAndAcquisition.md#owner-directed-construction) ·
+[Case reception and completion](../design/DomainLanguageDesign.md#case-expressions-and-branch-local-variables)
+
+### Use an enum for a closed set of payload-free choices
+
+A service priority is a choice with no per-alternative payload:
+
+```cod
+export enum Priority:u8 {
+    Standard;
+    Urgent;
+}
+
+func handling_order(priority:Priority) -> u8 {
+    case priority of {
+        Standard -> 1u8;
+        Urgent -> 0u8
+    }
+}
+```
+
+`handling_order(Urgent:Priority)` returns `0u8`, assuming no lexical binding shadows the expression
+name `Urgent`. The case heads resolve members through the subject's enum, so a same-spelled lexical
+variable does not change their patterns.
+
+The `u8` backing gives the enum a representation; it does not grant arithmetic, ordering or implicit
+integer conversion. The function states the application's ordering explicitly. Use a sum instead
+when a priority needs distinct payloads, such as a deadline belonging only to one alternative.
+
+Member aliases retain one value identity, and coverage counts distinct members of the complete
+enum. Selecting only some member names does not reduce its domain. An exhaustive case makes each
+current choice explicit. Use a wildcard when treating all remaining choices alike is the intended
+policy, accepting that it also covers members added later.
+
+[Enum identity](../design/TypedEnums.md#declaration-and-value-identity) ·
+[Member names and case coverage](../design/TypedEnums.md#names-and-case-matching)
+
+## Make storage and access visible
+
+An interface should show whether an operation needs a number, a continuing view of a target, or
+responsibility for an entire resource. Keep those choices distinct as the program grows.
+
+### Choose independent state, a borrowed target, or an existing place
+
+When a stock count is saved for later comparison, the saved number should survive later updates to
+the count. When an operation must update the count itself, it needs a reference to that storage.
+Choose between those intentions before choosing a declaration.
+
+The following statements run in one full lexical scope. Both counts belong to that scope.
+
+```cod
+val available <- 10u64
+val reserved <- 3u64
+val before <- available
+ref current = available
+
+current <- 8u64
+ref retained = current
+ref var selected -> current
+selected = reserved
+selected <- 4u64
+```
+
+`before` remains 10. `available` is 8 and `reserved` is 4. `retained` still selects `available`;
+`current` now selects `reserved`. These observations follow from three different operations:
+
+- `val before <- available` transfers bits into independent storage.
+- `ref retained = current` creates an independent reference binding to the selected target.
+- `ref var selected -> current` declares another name for `current`'s existing binding slot.
+
+The last declaration is **declared place aliasing**. Rebinding through `selected` changes `current`
+because they name the same slot. It leaves `retained`'s independent binding alone. The two references
+initially selecting `available` illustrate **runtime target aliasing**. That sharing requires no
+pairwise declaration and does not merge their slots.
+
+Use a place alias when several operations should address the same selected field, array element or
+binding slot. Its selection happens once. Use a new reference when the new name should retain its
+own target selection. Neither choice duplicates an object graph, transfers ownership or prolongs
+the selected storage's lifetime. A reference rebind must also preserve its fixed actual owner; the
+two local counts above satisfy that condition because they have the same lexical owner.
+
+See [operation terminology](../design/CallableViewsAndCaptures.md#copying-moving-and-graph-transfer)
+and [declared place aliases](../design/CallableViewsAndCaptures.md#declared-place-aliases).
+
+### Ask an operation for the access it needs
+
+A stock reservation changes existing storage. Express that capability directly in its parameter.
+It needs neither authority to allocate in the stock's owner nor access to dynamic context.
+
+```cod
+func take_one(stock:u64 in O) -> bool where {const owner O} {
+    if (stock == 0u64) return false
+    stock <- stock - 1u64
+    return true
+}
+```
+
+The ordinary `stock:u64 in O` formal is a non-null borrowed reference. A successful reservation
+decrements its target once; an empty stock leaves it unchanged and returns false. The `const owner`
+qualifier withholds allocation authority through `O`. It leaves the writable target access intact.
+This is an ordinary `func`: its inputs identify the storage it reads and changes. Mutation alone
+does not call for a procedure.
+
+A comparison only needs readonly views. Independent counts should normally have independent owner
+parameters:
+
+```cod
+func same_count(left:const u64 in L, right:const u64 in R) -> bool
+    where {const owner L, const owner R} {
+    left == right
+}
+```
+
+`L` and `R` may denote the same owner or different owners. Distinct names allow either situation;
+they do not prove disjointness. Repeating one owner parameter would require the arguments to have
+the same actual owner. Use that relationship when the operation needs it, such as installing a
+reference into a same-owner field. A comparison gains no such benefit from coupling its inputs.
+
+By contrast, an owner-free bits parameter such as `amount:u64` supplies independent callee-local
+bits. Adding `in O` changes the contract to external storage. Choose it for a borrow whose identity
+or updates matter, rather than adding owner annotations to ordinary numeric inputs indiscriminately.
+
+See [owner-qualified formals](../design/RegionalOwnership.md#owner-qualified-reference-arguments),
+[owner constraints](../design/RegionalOwnership.md#confirmed-owner-syntax) and
+[allocation authority](../design/RegionalOwnership.md#owner-constness-and-allocation).
+
+### Distinguish a fixed binding from readonly access
+
+A fixed selection and a readonly target solve different problems. A cashier may need a reference
+that stays attached to one stock count while still updating that count. An observer may need to
+switch between counts while retaining readonly access.
+
+```cod
+val shelf <- 8u64
+val reserve <- 3u64
+const ref fixed = shelf
+ref observed:const u64 = shelf
+
+fixed <- 7u64
+observed = reserve
+reserve <- 4u64
+```
+
+`fixed` still selects `shelf`, whose value is now 7. `observed` selects `reserve` and reads 4.
+Declaration-leading `const` prevents rebinding `fixed`; it permits the shown target write.
+Type-leading `const` prevents writes through `observed`; it permits the shown rebind. Combining both
+qualifiers fixes the binding and restricts its target access.
+
+`fixed = reserve` is rejected because the binding is fixed. `observed <- 5u64` is rejected because
+that view is readonly. The legitimate write through `reserve` shows why readonly access is not a
+promise that the underlying value never changes. Readonly access also propagates through reference
+fields and derived views; another spelling cannot recover write permission from that path.
+
+See [independent qualifiers](../design/RegionalOwnership.md#independent-binding-and-target-qualifiers).
+
+### Choose the result contract before choosing the receiver
+
+A scalar result without an owner, such as `-> u64`, supplies independent bits. A result such as
+`-> ref const u64 in O` supplies a readonly view of existing storage in O. Choose the result mode
+according to what the caller is meant to retain.
+
+```cod
+func read_count(count:const u64 in O) -> u64 where {const owner O} {
+    count
+}
+
+func count_view(count:const u64 in O) -> ref const u64 in O
+    where {const owner O} {
+    count
+}
+```
+
+These two operations select the same input target, but make different promises. In one scope:
+
+```cod
+val count <- 3u64
+val saved <- read_count(count)
+ref live = count_view(count)
+count <- 9u64
+```
+
+`saved` remains 3; reading `live` observes 9. The readonly view limits writes through that view.
+It does not prevent the owner from using another writable path to the same target.
+
+The receiver cannot change the operation's contract. `ref local = read_count(count)` materializes
+the returned bits in new local storage; it does not turn `read_count` into a borrow. Conversely,
+`val snapshot <- count_view(count)` reads the returned target into independent bits. State the
+borrow in the result signature when target identity matters, and use a value result when the caller
+needs a measurement or decision independent of later mutation.
+
+For a fresh scalar ref declaration, an independent initializer can materialize local storage.
+Later reference assignment only selects an existing compatible target. Thus updating the existing
+target and selecting a different target remain separate operations. A returned reference also needs
+an owner that survives the call; a function cannot export its local scalar's lifetime by returning
+a view of it.
+
+These distinctions become especially useful in interfaces: a query that returns a count can expose
+`u64` without making every caller track the queried storage, while an editing or observing interface
+can deliberately return a borrowed view. Do not choose a borrow merely to avoid the small bits result.
+Choose it when the continuing connection to that target is part of the operation.
+
+[Scalar result modes](../design/ScalarCallResults.md#result-mode-belongs-to-the-callable) ·
+[Receiving new storage](../design/ScalarCallResults.md#call-site-matrix-new-declarations) ·
+[Updating existing storage](../design/ScalarCallResults.md#call-site-matrix-existing-variables)
+
+### Keep borrowing separate from responsibility for a region
+
+A query needs access to stock. An ownership handoff gives another operation responsibility for the
+whole region. Declare the latter only when that transfer belongs to the operation's purpose.
+
+```cod
+region Stock {
+    remaining:u64
+}
+
+func stock_count(region stock:const Stock) -> u64 {
+    stock.remaining
+}
+
+func accept_stock(own region stock:Stock) -> own region :Stock {
+    return stock
+}
+
+own region incoming:Stock <- make region Stock(4096u64 -> capacity) {
+    remaining <- 12u64
+}
+val before <- stock_count(incoming)
+own region inventory:Stock <- accept_stock(incoming)
+val after <- stock_count(inventory)
+```
+
+After successful construction, both observations are 12. `stock_count` borrows the region and
+acquires no release responsibility. `accept_stock` consumes its input at successful call entry and
+returns that same region through an owning result. The caller receives responsibility in
+`inventory`; no stock graph has been copied. `incoming` is consumed: reading or transferring it
+again before reinitializing it is rejected. It does not silently become a nullable region.
+
+The still-held `inventory` is released at its owning scope's exit. Construction must initialize
+every required root before delivering the new owner; a failure releases the unfinished region.
+Argument preparation precedes consumption at call entry. A failure while preparing arguments does
+not, by itself, transfer the owner to a callee that was never entered.
+
+An interior `ref` or an ordinary whole-region borrow grants neither release responsibility nor a
+longer lifetime. Return a borrowed view only under an owner that remains valid after the call. When
+the result must carry the resource's lifetime responsibility, use the owning result contract.
+
+See [region construction](../design/ConstructionAndAcquisition.md#region-construction-and-named-root-initializers),
+[region declarations](../design/RegionalOwnership.md#region-as-a-declaration-keyword-throughout-the-language),
+[consumed names](../design/RegionalOwnership.md#named-owner-consumption) and
+[call entry and owning results](../design/ExceptionControl.md#e4--consuming-calls-and-results).
+
+## Choose a callable by its dependencies
+
+### Pass state explicitly, or borrow the caller's live work
+
+Use a function value when selecting an operation independently of the activation that selected it.
+Its runtime state belongs in explicit inputs. For example, billing can select this calculation and
+supply the fee with each call:
+
+```cod
+func add_fee(total:u64, fee:u64) -> u64 {
+    total + fee
+}
+
+func quote = add_fee
+val quoted <- quote(100u64, 2u64)
+```
+
+`quoted` is 102. A storable function has no enclosing runtime capture. Referring to a factory's local
+fee from such a function is rejected even when that local is readonly. Store the fee as data and
+pass it explicitly when the calculation must remain available later.
+
+Use `here` for work that runs while its supplier's activation and referenced owners are live. It can
+operate on the supplier's actual slots:
+
+```cod
+func twice(here action() -> void) -> void {
+    action()
+    action()
+}
+
+func count_quotes() -> u64 {
+    val count <- 0u64
+    twice() {{
+        count <- count + 1u64
+        return
+    }}
+    return count
+}
+```
+
+`count_quotes()` returns 2. Each invocation updates the same `count`; it does not update a saved
+copy. A receiver may forward the work synchronously to another compatible `here` parameter. It
+cannot store or return that supplied work for execution after the supplier ends.
+
+A function's own statements cannot call named or symbolic procedures. Use a procedure when the
+operation itself needs that authority.
+
+A `here` body written in a procedure keeps its lexical permissions when a function invokes it.
+That permits a general function library to drive caller-supplied work without giving the library's
+own statements permission to access dynamic bindings. The choice of braces also controls return
+and exception destinations; choose those boundaries deliberately.
+
+Procedures remain directly callable definitions or symbol-selected handlers, not ordinary callable
+values. Saving a named procedure in a local, ordinary parameter or returned callable is rejected.
+For delayed business work, keep the operation's data and dispatch to a named procedure in the
+delivery context. A synchronous callback uses `here` while that context is still live.
+
+See [callable kinds](../design/CallableStorageAndHereAccess.md#callable-value-kinds),
+[function inputs](../design/CallableViewsAndCaptures.md#callable-owners-and-captures) and
+[direct lexical access](../design/CallableViewsAndCaptures.md#here-callables-and-direct-lexical-access).
+
+### Choose which dynamic context an operation should observe
+
+A procedure is appropriate when an operation depends on installed dynamic context. A direct named
+procedure call uses current bindings. Symbolic calls also select the operation through a symbol:
+`behave` uses the current dynamic values, while `perform` temporarily installs the selected
+handler's saved dynamic values.
+
+This module-scope example distinguishes those values from a live lexical fee:
+
+```cod
+symbol @rate:u64
+symbol @quote:proc() -> u64
+
+val fee <- 1u64
+effect @rate <- 10u64
+effect @quote() -> u64 { return @rate + fee }
+
+fee <- 2u64
+effect @rate <- 20u64
+val saved <- perform @quote()
+val current <- behave @quote()
+val scoped <- {{
+    effect @rate <- 30u64
+    behave @quote()
+}}
+val restored <- @rate
+```
+
+`saved` is 12: the installation saved rate 10, and the live lexical fee is now 2. `current` is 22.
+`scoped` is 32, and `restored` is 20 after the inner full scope ends. `effect` installs a scoped
+binding. `perform` and `behave` invoke an installed handler; neither is another installation syntax.
+
+Choose `behave` when work should adapt to the active caller context. Choose `perform` when it should
+use the symbolic values retained when that handler was installed. Both preserve the handler's
+lexical accesses and restore bindings on scope exit, including unwind. Restoration does not undo
+writes through valid references, copy a regional graph or extend its owner's lifetime. A quoted
+rate retained as a symbolic value is consequently different from freezing an entire invoice.
+
+See [call forms](../design/SymbolicDynamicScope.md#functions-and-procedures),
+[capture and restoration](../design/SymbolicDynamicScope.md#captured-values-and-call-behavior) and
+[symbolic snapshots](../design/CallableViewsAndCaptures.md#symbolic-snapshots-at-definition-activation).
+
+## Treat absence as part of the interface
+
+When a missing stock entry means the item is unavailable, return that ordinary business outcome.
+Reusing `take_one` above, a nullable wrapper can handle absence before requesting a required borrow:
+
+```cod
+func take_if_present(ptr stock:u64 in O) -> bool where {const owner O} {
+    if (stock is null) return false
+    take_one(stock)
+}
+```
+
+The remaining path proves presence for the argument selection. A missing entry and a present entry
+with zero stock both return false under this interface's stated policy. If callers need to tell
+those outcomes apart, give them distinct domain results rather than relying on a null exception.
+
+When absence is a failure that the caller must handle, make that checked selection explicit:
+
+```cod
+using "std:exceptions" NullPointerException
+
+func take_required(ptr stock:u64 in O) -> bool
+    throws NullPointerException where {const owner O} {
+    take_one(not null stock)
+}
+```
+
+`not null` selects the target once at that argument's evaluation position. Absence throws before
+entering `take_one`; presence supplies the same target and access. Declaring `throws` alone would
+not make an unproved plain pointer argument valid. Accept a `ptr` directly when handling absence
+belongs to the callee; use a ref formal when every call must supply a target.
+
+Presence is only one obligation. The target must also be initialized, suitably accessible and owned
+by a live owner. Rebinding a tested slot, or invoking work that may change it, can invalidate the
+presence fact before a later selection. A null check never repairs an expired owner.
+
+See [reference argument selection](../design/RegionalOwnership.md#owner-qualified-reference-arguments)
+and [separate storage obligations](../design/RegionalOwnership.md#separate-initialization-absence-and-access).
+
+## Choose control and cleanup boundaries
+
+### Preserve the intended control destination
+
+Choose a body form by where its work should finish. A single-brace supplied `here` body keeps the
+supplier's lexical control destinations. Double braces give the body its own callable return.
+Adding a scope therefore changes what an early return means.
+
+A function can use its final expression as its result, with explicit returns for early completion.
+An ordinary procedure needs an explicit return on every successful completion. A full-scope here
+invocation has its own final-expression result. Keep that result separate from the supplier's
+result and from feedback requested by a receiving operation.
+
+```cod
+func plus_one(here body() -> u64) -> u64 {
+    body() + 1u64
+}
+
+proc demo() -> u64 {
+    val n <- plus_one() { continue 7u64 }
+    return n + 100u64
+}
+```
+
+With this receiver and supplier, the following alternative bodies have different results:
+
+| Supplied body | Destination | Result of `demo()` |
+| --- | --- | --- |
+| `{ 7u64 }` or `{ continue 7u64 }` | One invocation of `body`; both additions run. | 108 |
+| `{{ return 7u64 }}` | The body's own invocation; both additions run. | 108 |
+| `{ break 7u64 }` | The original `plus_one` call; only the supplier's addition runs. | 107 |
+| `{ return 7u64 }` | The supplying `demo` invocation; neither addition runs. | 7 |
+
+Use `continue` to supply feedback, `break` to finish the receiving call, and `return` to leave the
+supplier. A forwarding helper preserves these destinations. The value of a `continue` must satisfy
+the body signature; a `break` value must satisfy the original call's result contract. They need not
+have the same type. A generator's final result is void, so its traversal accepts bare `break`.
+
+A successful early exit still owes the cleanup and initialization guarantees of its destination.
+For example, a `break` cannot report successful completion if it skips an initialization that the
+receiver promised to perform. Cleanup must finish before an outgoing result is delivered.
+
+[Here control destinations](../design/CallableStorageAndHereAccess.md#break-and-continue-in-a-single-brace-here-body)
+and [body results](../design/CallableResultInference.md#results-of-proc-func-and-here-bodies).
+The example returns independent scalar bits. Replacing them with references also requires proving
+that the selected owners remain live through cleanup and delivery.
+
+### Give temporary work an actual scope
+
+Ordinary braces group expressions. Use `{{ ... }}` when work needs its own local declarations,
+deferred actions or local return. Its return ends that immediate invocation, even inside a loop.
+To deliver its result as feedback, put the `continue` outside it.
+
+Here `source()` is an externally supplied generator with contract `yields u64 -> u64`; it has no
+other inputs or checked failures, and the offered values can be doubled within `u64`. Its application
+contract determines how it uses the feedback.
+
+```cod
+for val item <- source() {
+    continue {{
+        val doubled <- item * 2u64
+        return doubled
+    }}
+}
+```
+
+The local return supplies the number; the outer continue sends it to the active yield. Writing
+`{{ continue item }}` cannot continue the outer loop: that full scope has introduced a callable
+boundary. Similarly, a return inside an iteration-local full scope does not finish the surrounding
+search.
+
+A direct defer in an ordinary loop body registers with the nearest enclosing full scope. It can
+accumulate work across iterations. Put the registration inside an explicit full scope when cleanup
+must finish for that iteration. Effect restoration at a handoff remains part of the loop contract;
+it does not give direct defers an implicit per-iteration queue.
+
+[Full scopes inside a loop body](../design/RangedForAndGenerators.md#full-scopes-inside-a-loop-body)
+and [loop scoping](../design/ExceptionControl.md#loop-scoping-rules). The example sends bits out of
+the inner scope. A reference to its local storage could not survive that exit.
+
+### Register cleanup at the time you mean
+
+Use a deferred call to save a particular invocation's inputs. Use a deferred block when its work
+must read the state present at cleanup. Assume `record(value:u64)` is a procedure that records its
+bits argument and completes normally.
+
+```cod
+proc record_timing() -> void {
+    val n <- 1u64
+    defer record(n)
+    defer { record(n) }
+    n <- 2u64
+    return
+}
+```
+
+This records 2, then 1. Registrations run in reverse order. The block reads `n` during cleanup; the
+plain call prepared its bits argument when registered. Its callable selection and argument
+preparation also happen then. A failure during preparation registers no partial call.
+
+Preparing a reference saves its selected target under its access and owner contract, rather than
+copying that target's contents. Keep that owner alive until the deferred invocation. Preparing a
+direct procedure call does not freeze unrelated dynamic bindings: its execution still follows
+ordinary current-binding rules.
+
+A deferred block does not provide an implicit scope for new variables or effect installation.
+Introduce an explicit nested full scope if that cleanup needs either. The nested scope owns and
+drains its own deferred work; an action cannot append another defer directly to the scope already
+being drained.
+
+[Deferred calls and blocks](../design/ExceptionControl.md#deferred-work-and-explicit-scopes)
+and [nested defer](../design/ExceptionControl.md#nested-defer-declarations). The example's outer
+scalar remains live throughout its cleanup. A borrowed loop-control slot cannot be kept alive
+merely by registering a deferred call.
+
+### Handle failure where cleanup occurs
+
+Keep ordinary failure propagation and deferred failure handling explicit. A checked operation in
+ordinary execution needs a covering catch or an appropriate declared `throws` contract. Checked
+failures from deferred work must instead be covered before their owning defer pass finishes.
+
+In this fragment, the buffer API supplies an already acquired buffer whose owner survives the
+procedure. `flush_buffer()` declares `throws FlushException`, its library's checked failure type.
+`report_flush_failure` borrows that exception synchronously and handles its own failures.
+`write_buffer()` completes normally.
+
+```cod
+proc update_buffer() -> void {
+    defer catch (failure:const FlushException) {
+        report_flush_failure(failure)
+    }
+    defer { flush_buffer() }
+    write_buffer()
+    return
+}
+```
+
+The handler is registered first, so it is visited after the flush. It can handle a checked flush
+failure before the pass completes. Registering it after the flush would visit and retire it too
+early. Adding `throws FlushException` to `update_buffer` would not repair missing deferred
+coverage. An attached catch on the flushing action is another way to handle that action's failure.
+
+A deferred catch handles deferred failures offered at its position. It does not handle an ordinary
+body failure just because cleanup follows that failure. Ordinary deferred actions still run when
+another action has failed. Remaining unchecked deferred failures produce `UnhandledDeferError`
+after the pass; an outstanding body failure is retained separately from those deferred members.
+
+A catch binding owns its exception-handling scope even when its target annotation is `const`.
+Borrow it for synchronous inspection; preserve or transfer the actual owning responsibility when
+propagating it. Inside a catch, `throw;` forwards the incoming tip unchanged; `rethrow;` adds a
+trace-bearing standard wrapper. Public failure contracts should name the application failure that
+callers can handle. Transparent rethrow does not require exposing wrapper names as API outcomes.
+
+Honor declared checked obligations. An explicit `throws Exception` remains checked even if a
+particular implementation currently produces only unchecked errors. A runtime-type observation
+cannot silently narrow the public contract.
+
+[Deferred failure handling](../design/ExceptionControl.md#exceptions-between-deferred-actions),
+[catch ownership](../design/ExceptionControl.md#exception-declarations-and-catch-bindings),
+[application-facing failures](../design/ExceptionControl.md#application-facing-failure-contracts)
+and [declared obligations](../design/ExceptionControl.md#declared-handling-obligations).
+The reporting helper must not retain a borrow after the catch releases its holder.
+
+## Traverse and compose through declared protocols
+
+### Drive traversal through its declared feedback
+
+A generator controls when it offers an item and what it does with the body's response. Boolean
+false is not an automatic stop instruction. The generator has to act on it. Here
+`finish_attempt()` is an externally supplied procedure that records completion and returns
+normally.
+
+```cod
+proc candidates() yields u64 -> bool {
+    try {
+        if (not yield(7u64)) { return }
+        yield(9u64) : void
+    } finally {
+        finish_attempt()
+    }
+    return
+}
+
+proc first_large() -> u64 {
+    for val n <- candidates() {
+        if (n >= 8u64) return n
+        continue true
+    }
+    return 0u64
+}
+```
+
+The first handoff returns true to `candidates`, which then offers 9. The body's return exits
+`first_large`. The generator's finally runs before 9 is delivered to its caller. Its try encloses
+both yields, so the finally runs when that protected construct exits, not after every handoff.
+
+Supply the declared feedback on every normally completing body path. A path that returns from the
+supplier owes no feedback because it never resumes the yield. For void feedback, use bare
+`continue`; for non-void feedback, supply the required result. A normal result in a void-feedback
+body is discarded with its effects and cleanup intact.
+
+Use `break` when the traversal should finish and the supplier should continue after it. Use
+`return` when the surrounding operation is complete. Put resource cleanup in finally or defer,
+rather than only after a yield: an outward exit may never reach that later statement.
+
+A failure escaping a single-brace consumer reaches its supplying loop or call site. A producer
+catch around the handoff cannot intercept it; the producer can catch failures from its own work.
+A double-brace supplied body instead has ordinary callback exception matching and a local return.
+In both cases, entered cleanup remains required. A new escaping cleanup failure can prevent a
+pending result from being delivered.
+
+[Generalized loops](../design/RangedForAndGenerators.md#generalized-for-loops),
+[explicit feedback](../design/RangedForAndGenerators.md#explicit-continue-feedback),
+[finally](../design/RangedForAndGenerators.md#finally-and-defer-are-independent-of-the-transport)
+and [supplied body forms](../design/CallableStorageAndHereAccess.md#single-brace-bodies-for-a-here-callable).
+This example yields bits. A borrowed yield component needs one fixed, proven actual owner for the
+traversal, and its consumer cannot extend that owner's lifetime.
+
+### Name reusable pipeline connections
+
+Use composition when stages have compatible traversal protocols and the intermediate connection
+deserves a name. The invoice library in this example supplies three readonly processor functors,
+each taking a `here` source yielding `u64` with void feedback and yielding `u64` downstream:
+
+| Processor | Contract |
+| --- | --- |
+| `InvoiceFloor(base, discount)` | Compute the minimum whole-cent total once, rounded up; filter lower totals. |
+| `WholeUnits(places)` | Divide each amount by the decimal divisor established at construction. |
+| `FirstN(limit)` | Keep a fresh per-invocation count; stop upstream after the limit; skip input at zero. |
+
+Select these processor definitions and methods. Assume no applicable library composition or
+attachment overload and a procedure `report(u64)` that completes normally. These are the
+[documented invoice processor contracts](../design/ProducersAndTransformers.md#processor-functors-in-either-direction).
+
+```cod
+proc report_invoices(here src() yields u64) -> void {
+    ref floor = make InvoiceFloor(12500u32, 2000u16)
+    ref units = make WholeUnits(2u8)
+    ref limit = make FirstN(2u64)
+
+    here stages = floor |> units |> limit
+    here selected = src !> stages
+    here reporting = stages $> report
+
+    selected $> report
+    return
+}
+```
+
+The three bindings demonstrate the bounded partial shapes: `stages` has both ends open,
+`selected` needs a consumer, and `reporting` needs a source. Binding prepares operands without
+starting traversal. `src !> reporting` is an alternative to the final invocation, not an additional
+required pass.
+
+For an input offering 8000, 12050, 14099 and 16000 cents, the invocation reports 120 and 140. The
+floor is 10000 cents, conversion divides by 100, and the limit stops upstream before it offers the
+fourth item. Reusing a stage gives it fresh traversal-local state; reusing a source does not promise
+that an already consumed cursor will replay.
+
+For prebound operands, the corresponding downstream-first spelling is:
+
+```cod
+report <$ limit <| units <| floor <! src
+```
+
+This has the same processing order. Computed operands still prepare once in their written order,
+so reversing expressions with observable effects can change behavior. Bind those computations
+explicitly before changing direction. Domain operator overloads retain their own effects and result
+contracts; composition is not permission to cache mutable configuration or reorder library work.
+
+Keep every receiver and source dependency alive through use. Rebinding an original processor slot
+does not redirect the saved target, while permitted writes to that target remain observable.
+A lexical connection cannot escape into a region or outlive its supplying activation. Forward
+feedback and checked failures through every stage, including the feedback needed for filtered
+items. A terminal outward return crosses the entered pipeline cleanups.
+
+[Composition and attachment](../design/ProducersAndTransformers.md#processor-composition-and-source-attachment),
+[lexical partials](../design/ProducersAndTransformers.md#lexical-variables-for-open-pipelines)
+and [confirmed composite scope](../design/ProducersAndTransformers.md#composite-implementation-target).
+All three processor owners in the example remain live until the single traversal and its cleanup
+finish. Neither the partial bindings nor the reverse spelling grant ownership or access.
+
+## Make module boundaries express intent
+
+Use `using` when a published component should retain the interpretation its author selected.
+Choose `import` when the receiving module deliberately adapts callable dependencies or extends a
+selected family. Those choices can change a helper's behavior even when its body text is unchanged.
+
+| Operation | Use it to express |
+| --- | --- |
+| `using` | Reuse a published definition with its selected source implementation context. |
+| `import` | Select the receiving callable implementation context and obtain the applicable extension permission. Source bodies, non-callable lexical resources and captures retain their contracts. |
+| `mixin` | Redefine an admitted procedure body in the receiving lexical and dynamic context, with its symbol-role mappings and definition-time capture rules. |
+| `export` | Publish a selected identity under a public name. This is an onward interface decision. |
+
+These operations do not make a source module mutable. Importing a type does not automatically turn
+every same-named local function into an extension of an associated source family. Explicitly import
+the callable you intend to extend. A local shadow and an extension carry different identities and
+can lead to different dispatch.
+
+Treat the public declarations in the shipment example as `shipping.cod`. A consumer that uses the
+model and its query together can state that dependency in one selection:
+
+```cod
+using "./shipping.cod" { Shipment, cartons_sent }
+```
+
+Keep the verb and the semantic purpose consistent within a group. Preserve separate selections when
+they explain separate dependencies or when intervening declarations matter. A single selected name
+needs no artificial group. Put `export` at a public definition so its visibility is apparent where
+the reader learns what it means.
+
+A library may designate a default public selection. After those shipment declarations, write:
+
+```cod
+default { Shipment, cartons_sent }
+```
+
+Now `using "./shipping.cod"` selects that same list. It does not select every public name.
+`using "./shipping.cod" {..}` selects the complete explicit public table. If the library has no
+default selection, name the required entries or request the complete table explicitly.
+
+Omitted selectors substitute the publisher's default list under the verb actually written.
+Replacing `using` with `import` or `mixin` preserves that verb's ordinary permissions and
+requirements; defaults cannot make an otherwise invalid selection valid. `default export` can also
+mark a name directly at its definition.
+
+A facade that only republishes a model can use:
+
+```cod
+export from "./shipping.cod" Shipment
+```
+
+This publishes the upstream identity without introducing a local alias or requesting import
+adaptation. Use `export import` when the facade intentionally combines receiving-context import
+with publication. Neither form grants downstream users access to private definitions.
+
+[Reuse and interpretation](../design/DomainLanguageDesign.md#extension-module-callable-identities-and-local-unions) ·
+[Explicit extension](../design/ModuleWorlds.md#type-selection-and-shadowable-associated-methods) ·
+[Grouped public selections](../design/ModuleWorlds.md#public-definitions-and-grouped-selections) ·
+[Defaults and complete selections](../design/ModuleWorlds.md#default-and-complete-public-selections) ·
+[Publication-only re-export](../design/ModuleWorlds.md#publication-only-re-export)
+
+### State whether a module path is relative or logical
+
+Use `./` for a source-relative dependency. Other module paths identify entries in the project's
+resolved package namespace; a bare filename is a logical root entry.
+
+| Path | Meaning |
+| --- | --- |
+| `"./shipping.cod"` | The sibling of the selecting source module. |
+| `"warehouse/shipping.cod"` | That complete logical path in the resolved package namespace. |
+| `"string.cod"` | The logical root entry, with the bundled library as fallback when no package module exists. |
+
+Write the complete logical path even for another module in the same package. Package modules take
+precedence over a bundled module of the same path, with a warning for that shadowing. A failed read
+or check of the selected module reports its error; it does not silently choose the fallback.
+Neither the process working directory nor an ordered directory search list determines the
+interpretation of a logical dependency.
+
+[Source module paths](../design/ModuleWorlds.md#resolving-source-module-paths)
+
+### Select a symbol's identity before using its current binding
+
+A module can share a symbolic variable's identity without reading an installed value. These two
+alternative declarations select the same published output identity:
+
+```cod
+using "string.cod" { var @sout }
+```
+
+```cod
+symbol from "string.cod" { @sout }
+```
+
+The `var` selector checks that the published resource is a symbolic variable; it does not grant a
+writable target or acquire ownership. A later procedural read uses the binding installed at that
+execution point. Select the identity in the vocabulary that needs it, and establish a live,
+suitably accessible target before any path reads it.
+
+A symbolic procedure selector uses `proc @name` under its receiving verb's rules. It does not turn
+a procedure into an ordinary function value. Keep publication, identity selection, binding
+installation and invocation as separate decisions.
+
+[Symbolic variable identity](../design/ModuleWorlds.md#selecting-a-symbolic-variable) ·
+[Kind-qualified selectors](../design/ModuleWorlds.md#default-and-complete-public-selections)
+
+## Give domain values a display vocabulary
+
+Keep a value's display logic with its domain vocabulary. The standard text library separates
+streaming from collection: `emitStr` and `emitRepr` write to the scoped output; `str` and `repr`
+collect the corresponding representation into immutable text. This lets one representation serve
+a streamed report and a collected diagnostic without duplicating field-by-field formatting.
+
+The following module publishes a small `Price` type and its adapted formatting families:
+
+```cod
+export data Price {
+    cents:u64
+}
+
+export import "string.cod" { str, repr, emitStr, emitRepr, (++) }
+import "string.cod" emit
+
+proc emitStr(price:const Price in P) -> void where {const owner P} {
+    emitStr(price.cents)
+    emit(" cents")
+    return
+}
+
+proc emitRepr(price:const Price in P) -> void where {const owner P} {
+    emit("Price(cents=")
+    emitStr(price.cents)
+    emit(")")
+    return
+}
+```
+
+The imported families are adapted in this module's interpretation. Publishing the adapted
+collectors with their hooks ensures that a consumer selects the interpretation containing these
+methods. This is a concrete reason to use `import` when extending a library family; merely selecting
+the original source-preserving collector does not move its internal lookup into this adapter.
+
+Inside a procedure with this module's vocabulary selected:
+
+```cod
+ref price = make Price { cents <- 4200u64 }
+ref label = str(price)
+ref detail = repr(price)
+```
+
+The results contain `4200 cents` and `Price(cents=4200)`. The collectors install their own private
+output for rendering and restore the preceding `@sout`. They require no existing writer for this
+collection. A call to `emitStr(price)` instead requires a live installed output and writes there.
+Ignoring the result of `str(price)` still performs collection; it never changes the call into
+streaming.
+
+Use `emitStr` or `emitRepr` for a nested value when writing a larger representation incrementally.
+Use `str` or `repr` when the caller needs the text as a value. Give persisted or interoperable text
+its own specified format: a user-defined diagnostic representation does not promise reconstruction
+or version stability.
+
+### Keep text working storage local; choose the owner of retained text
+
+`StringBuilder` is lexical working storage. `++` builds text there, while `make String(builder) in D`
+constructs immutable text in the explicitly chosen allocation-capable owner D. For example, inside
+a procedure selecting `(++)` and the Price vocabulary from this adapter, with the standard String
+construction selected and a live allocation-capable owner D:
+
+```cod
+ref price = make Price { cents <- 4200u64 }
+ref builder = "Total: " ++ price
+ref retained = make String(builder) in D
+```
+
+`retained` contains `Total: 4200 cents` and follows D's lifetime. The builder remains usable in its
+own lexical scope. Constructing the String consumes the accumulated contents for the result, not
+the builder's ownership or ability to be used again.
+
+The standard text-only concatenations are functions. Formatting an arbitrary domain value uses
+procedural display hooks, so choose a procedural context for that path. Operand preparation occurs
+before rendering. A borrowed operand remains connected to its selected target; a later operand
+that writes that target can affect what the formatter sees. When an earlier scalar snapshot is the
+intent, prepare it explicitly in a `val` before the operation. Prefer such named preparation when
+side effects would make a compact concatenation hard to read.
+
+Put per-record builders inside a helper or explicit full scope when their workspace should end with
+that record. Stream completed pieces when a report need not be retained as one String. Collect when
+the caller actually needs the complete text, and make its owner visible when it must outlive the
+current scope.
+
+[Building text](../design/StringBuilding.md#building-a-piece-of-text) ·
+[Display operand preparation](../design/StringBuilding.md#preparing-display-operands) ·
+[Shared rendering hooks](../design/StringBuilding.md#user-defined-display-and-diagnostic-representations)
+
+## Use canonical source form
+
+CoD source follows the canonical style, including the initial maximum of **100 columns**.
+Break long signatures at their structural boundaries and keep related information recognizable.
+Canonical style is an acceptance requirement. CoD's planned formatter is almost configuration-free.
+Automatic formatting in commit hooks, backed by
+independent formatting checks at submission or integration, is the recommended enforcement workflow.
+
+Omit semicolons when token boundaries already make the intended structure clear. Retain necessary
+separators, including those separating ambiguous expressions or required by a receiving list.
+A newline has the same effect as horizontal whitespace between tokens; moving code to another line
+does not end a call or change callback attachment. A semicolon separates an expression without
+discarding its result. Use an explicit `: void` when the intent is to discard a typed result;
+its effects and cleanup still occur.
+
+For example, suppose `run` has a defaulted niladic callback and `work() -> void` completes normally.
+When the work must run independently after the call, make that boundary explicit:
 
 ```cod
 run();
 {{ work() }}
 ```
 
-Without the semicolon, the block attaches to `run()` as its callback. A semicolon also leaves a function tail's result intact. In grammar design, minimize the forms that need explicit separators. [Semicolon omission and syntax UX](../design/SymbolicDynamicScope.md#semicolon-omission-and-syntax-ux)
+Omitting the separator attaches the block to the call. Its execution then depends on `run`'s
+callback behavior. A line break alone cannot express the independent-scope intent.
 
-## Modules
+The shipment example's triple-quoted doclet sits directly before the exported function. It documents
+that definition and contributes no runtime text value or effect. Its `[Shipment](Shipment)` link
+resolves in the documented declaration's context. A renamed import does not retarget it to an
+unrelated type in the consumer.
 
-### Do put publication at the definition and group related selections
+Put the operation's intent and useful preconditions in its doclet. Use ordinary `#` comments to
+explain a local choice where the code needs it. Keep doclets in leading documentation position:
+an intervening semicolon or unrelated item breaks attachment, while a triple-quoted expression in
+a return remains a text result.
 
-```cod
-export data SourcePosition {
-    line:u64;
-    column:u64;
-}
+[Canonical style](IdiomaticsGuideline.md#canonical-code-style) ·
+[Separators and whitespace](../design/SymbolicDynamicScope.md#semicolon-omission-and-syntax-ux) ·
+[Definition doclets](../design/DomainLanguageDesign.md#definition-doclets)
 
-using "SourceStorage.cod" { SourceBytes, SourceLines };
-using "SourceStorage.cod" SourcePosition;
-```
-
-Here the byte and line views form one input. A separate selection can call out a dependency used for a different purpose, such as formatting positions.
-
-### Don’t repeat paths or mix selection purposes
-
-```cod
-using "ParserStorage.cod" Tokens;
-using "ParserStorage.cod" ExprNodes;
-
-data ParsePlan {
-    node_capacity:u64;
-}
-export ParsePlan;
-```
-
-Group names that work together in one operation. Put the public marker where readers meet the definition. Keep distinct selection verbs and meaningful groups separate. [Public definitions and grouped selections](../design/ModuleWorlds.md#public-definitions-and-grouped-selections)
-
-## Signatures
-
-### Do indent long signatures by structure
-
-```cod
-proc walk_expression(
-    here begin(first:u64, past:u64) -> bool,
-    here visit(
-        ordinal:u64, kind:u8, number:u64, left:u64, right:u64, operation_at:u64
-    ) -> bool,
-    here finish(visited:u64) -> void,
-    source:const SourceBytes in S, nodes:const ExprNodes in N,
-    result:VisitResult in R
-) -> bool where {const owner S, const owner N, const owner R} {
-    # Body omitted.
-}
-```
-
-Start a long parameter list on the next line. Give each `here` formal its own line, indent its nested parameters one level, and keep short related inputs together. Keep the closing parenthesis, result and `where` together when they fit.
-
-### Don’t pad continuations to the opening parenthesis
-
-```cod
-func record_parse_diagnostic(destination:ParseDiagnostic in D,
-                             stage:u8, code:u32, first:u64,
-                             past:u64) -> void where {const owner D} {
-    # Body omitted.
-}
-```
-
-Use a normal indentation level. Keep the span bounds together so a reader can see the range at a glance.
-
-## Callable kind and dynamic context
-
-### Do choose the callable kind by what the body needs
-
-```cod
-func increment(cursor:u64 in O) -> void where {const owner O} {
-    cursor <- cursor + 1u64
-}
-
-symbol @budget:u64;
-
-proc current_budget() -> u64 {
-    return @budget
-}
-```
-
-A `func` can read and write explicitly supplied storage and use intrinsics whose inputs are explicit. Access to dynamic symbolic bindings such as `@budget` and calls to a `proc` require a procedure. Mutation through a writable borrow is part of the ordinary function contract. Purity has its own contract. [Functions and procedures](../design/SymbolicDynamicScope.md#functions-and-procedures) · [Const-function boundary](../design/ConstFunctionsAndTailCalls.md#boundary-of-a-const-function)
-
-### Don’t hide a procedure call in a func
-
-```cod
-func within_budget(cost:u64) -> bool {
-    return cost <= current_budget()
-}
-```
-
-`current_budget` is a procedure, so a wrapper that calls it needs `proc`. The restriction also applies to indirect calls. A `here` body supplied by a procedure runs under the permissions of its own lexical site when a function invokes it. [Here callables and direct lexical access](../design/CallableViewsAndCaptures.md#here-callables-and-direct-lexical-access)
-
-### Do distinguish a direct call, symbolic dispatch, and installation
-
-```cod
-check_revision(source, lines)
-
-symbol @rate:u64;
-symbol @quote:proc()->u64;
-effect @rate <- 10u64
-effect @quote() -> u64 { return @rate }
-effect @rate <- 20u64
-val current <- behave @quote()    # 20
-val captured <- perform @quote()  # 10
-```
-
-A direct call resolves a lexical name. An `effect` installs a binding in the current dynamic scope. Both symbolic call forms select the procedure through its active symbol binding. `behave` uses the current dynamic bindings. `perform` temporarily installs the selected procedure’s captured dynamic values. [Functions and procedures](../design/SymbolicDynamicScope.md#functions-and-procedures)
-
-## Access and storage
-
-### Do show access, shared owners, and storage operations
-
-```cod
-func next_byte(source:const SourceBytes in S, cursor:u64 in O) -> u8
-    where {const owner S, const owner O} {
-    val byte <- source[cursor]
-    cursor <- cursor + 1u64
-    return byte
-}
-
-val checkpoint <- cursor
-ref active = cursor
-active <- checkpoint
-```
-
-`const T` grants readonly access through that parameter. `const owner O` withholds allocation authority through that owner parameter, and the writable borrow still permits the cursor update. Use `val` for independent bits. In `ref active = cursor`, `=` binds the reference. `active <- checkpoint` writes the selected target.
-
-### Don’t demand extra access or tie independent inputs to one owner
-
-```cod
-func source_size(source:SourceBytes in S) -> u64 where {owner S} {
-    return len(source)
-}
-
-func compare_sources(left:const SourceBytes in S, right:const SourceBytes in S)
-    -> bool where {const owner S} {
-    # Body omitted.
-}
-```
-
-A length query needs readonly access. Give independent source inputs separate owner parameters. Reuse an owner parameter when the operation actually requires the same owner. [Owner-qualified parameters and access](../design/RegionalOwnership.md#confirmed-owner-syntax)
-
-## Nullable arguments
-
-### Do use an ordinary branch for an optional target
-
-```cod
-proc update_count(count:u64 in O) -> void where {const owner O} {
-    count <- count + 1u64
-    return
-}
-
-proc update_if_present(ptr pending_count:u64 in O) -> bool where {const owner O} {
-    if (pending_count is null) return false
-    update_count(pending_count)
-    return true
-}
-```
-
-Absence returns an ordinary result. On the remaining path the branch proves that the pointer is present, so it can be passed directly to the `ref` formal written as `count:u64 in O`. This use has no null exception to catch or declare. The booter’s current scalar checker can prove presence from a pointer initializer. Branch-based proof still needs booter support.
-
-### Don’t pass an unproved pointer directly to a required reference
-
-```cod
-proc update_without_proof(ptr pending_count:u64 in O) -> void
-    where {const owner O} {
-    update_count(pending_count)
-    return
-}
-```
-
-The call is rejected because presence is unproved. A `throws` clause would leave that obligation in place. Declare a `ptr` formal when handling absence belongs to the callee. [Owner-qualified reference arguments](../design/RegionalOwnership.md#owner-qualified-reference-arguments)
-
-### Don’t turn normal absence into an exception
-
-```cod
-using "std:exceptions" NullPointerException;
-
-proc visit_next(ptr next_token:const Token in O) -> void
-    throws NullPointerException where {const owner O} {
-    visit_token(not null next_token)
-    return
-}
-```
-
-When an absent next token means the input ended, take the end-of-input branch. Reserve `not null` for a selection whose absence should actually fail with checked `NullPointerException`.
-
-## Loop scopes
-
-### Do give iteration-local declarations an explicit scope
-
-```cod
-for (index in 0u64 .. used) {{
-    val first <- nodes[index].first
-    check_offset(first)
-}}
-```
-
-Use `{{ ... }}` when an iteration needs local declarations or a separate cleanup boundary.
-
-### Don’t add a scope just to group statements
-
-```cod
-for (index in 0u64 .. used) {{
-    check_node(nodes[index])
-}}
-```
-
-Use ordinary braces for a body that needs no local scope. A full scope has its own lifetime, cleanup and return destination. [Full scopes in a loop body](../design/RangedForAndGenerators.md#full-scopes-inside-a-loop-body)

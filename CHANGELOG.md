@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-23 — Rewrite Idiomatic CoD against settled language contracts
+
+<a id="k-idiomatic-cod-rewrite-20261123"></a>
+**K-IDIOMATIC-COD-REWRITE-20261123.** Editorial continuity from `9d17ad62b9499826aaaee21c4a80c7773ac1f5e6:docs/IdiomaticCoD.md` under the confirmed guideline r1 at `d99a307f388bb680f12393ed0ff60e3680c19317:docs/IdiomaticsGuideline.md`. In the current cod project conversation, the project user directed the rewrite to proceed within settled design after reserving the first three [DesignTopics](docs/DesignTopics.md) for longer-term discussion.
+
+[Guide r1](docs/IdiomaticCoD.md) replaces syntax-led excerpts with explanations of programming choices: domain modeling; storage, access and ownership; callable and dynamic context; absence; control and cleanup; traversal and bounded pipeline composition; modules; domain display; and canonical source form. Examples identify their context and derive observable results, owner obligations and control destinations. General collection APIs, general producer binding and mutable here holders, and pure-related admission remain outside this rewrite; the already confirmed pipeline partials remain included.
+
+D-DOC-IDIOMATICS is **continued** from the approved authoring standards to their guide r1 application under H-IDIOMATICS-GUIDELINE-20261123 and P-694/P-695. Each language operation retains its existing confirmation boundary. The guide preserves identities, permissions, actual owners, effects and cleanup, introduces no language mechanism and follows settled source behavior independently of implementation progress. Acceptance applied the guideline's semantic, example, coverage and hard style checks, including the 100-column maximum; review checked the design references, links and code widths. No compiler-execution claim is made.
+
 ## 2026-11-23 — Published bootstrap compiler milestones
 
 <a id="k-bootstrap-delivery-20261123"></a>
