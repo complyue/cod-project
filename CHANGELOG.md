@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review the seed’s indexed declared-place representation
+
+<a id="k-seed-indexed-declared-place-20261123"></a>
+**K-SEED-INDEXED-DECLARED-PLACE-20261123.** D-ARCH-REVIEW r59→60 continues H-PROJECT-ARCHITECTURE-REVIEW-20261122 and H-AUGMENTED-TRANSFER-PLACE-20261123 under P-682/P-683. The [review](design/ImplementationArchitecture.md#declared-places-on-lexical-array-elements) qualifies the shared checked path for explicit and implicit declared places on stable lexical named-array elements. The prior checker gate is at `ec9ac9091925f97ec8caf0cd329f6aaa6e515a4c:cod/lang_checked.hh`, with index preparation in `cod/lang_llvm.hh` at the same commit. Mainline owns implementation and verification of this scope.
+
 ## 2026-11-23 — Record booter support for native function declarations and Boolean results
 
 <a id="k-native-callable-booter-status-20261123"></a>
