@@ -8,7 +8,7 @@ using "ParserStorage.cod" {
 using "ParserStorage.cod" NodeLink { NoLink, LinkTo };
 using "ParserStorage.cod" ExprPayload { NameReference, ModuleSyntax, ModuleItem, BlockSyntax, ScopeSyntax, BlockItem, AnnotatedBinding, OwnerQualifiedType };
 using "ParserStorage.cod" AstSlot { Occupied };
-using "ParserStorage.cod" { SyntaxRole { InitializerRole, ExpressionRole, BlockItemRole }, ExprPayload { ParseReport, ErrorReport } };
+using "ParserStorage.cod" { SyntaxRole { InitializerRole, ExpressionRole, BlockItemRole, BindingNameRole, TypeAnnotationRole }, ExprPayload { ParseReport, ErrorReport } };
 using "SourceStorage.cod" { SourceBytes, DelimiterLink { MatchedDelimiter } };
 
 export data ParseResult {
@@ -164,15 +164,17 @@ export func exception_binder_width(source:const SourceBytes in S, tokens:const T
     return 0u64;
 }
 
-export func parse_binding_name(source:const SourceBytes in S, tokens:const Tokens in T,
-                               nodes:ExprNodes in A, result:ParseResult in R,
-                               past:u64, require_type:bool, qualified:bool, field:bool) -> bool
+func parse_binding(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
+                   result:ParseResult in R, past:u64, require_type:bool, qualified:bool, field:bool, recover_local:bool) -> bool
     where {const owner S, const owner T, owner A, owner R} {
+    val name_start <- result.next;
     if (!field && result.next < past && reserved_lexical_binder(source, tokens[result.next])) {
         result.diagnostic <- expected_name();
-        return false;
-    } else {};
-    if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) return false;
+        if (!recover_local || !recover_syntax(source, tokens, nodes, result, name_start, past, BindingNameRole)) return false
+    } else {
+        if (!parse_identifier(source, tokens, nodes, result, past, expected_name()) &&
+            (!recover_local || !recover_syntax(source, tokens, nodes, result, name_start, past, BindingNameRole))) return false
+    };
     if (punct_at(source, tokens, result.next, past) != 58u8) { # ':'
         if (require_type) { result.diagnostic <- expected_type(); return false; } else {};
         return true;
@@ -182,7 +184,9 @@ export func parse_binding_name(source:const SourceBytes in S, tokens:const Token
     result.next <- result.next + 1u64;
     val readonly <- qualified && result.next < past && const_word(source, tokens[result.next]);
     if (readonly) { (result.next <- result.next + 1u64):void; } else {};
-    if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return false;
+    val type_start <- result.next;
+    if (!parse_identifier(source, tokens, nodes, result, past, expected_type()) &&
+        (!recover_local || !recover_syntax(source, tokens, nodes, result, type_start, past, TypeAnnotationRole))) return false;
     val annotation <- result.root;
     if (result.next < past && in_word(source, tokens[result.next])) {
         val anchor <- tokens[result.next].first;
@@ -201,6 +205,19 @@ export func parse_binding_name(source:const SourceBytes in S, tokens:const Token
         colon <- colon;
     });
     return result.diagnostic == 0u8;
+}
+
+export func parse_binding_name(source:const SourceBytes in S, tokens:const Tokens in T,
+                               nodes:ExprNodes in A, result:ParseResult in R,
+                               past:u64, require_type:bool, qualified:bool, field:bool) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    return parse_binding(source, tokens, nodes, result, past, require_type, qualified, field, false)
+}
+
+export func parse_local_binding_name(source:const SourceBytes in S, tokens:const Tokens in T,
+                                     nodes:ExprNodes in A, result:ParseResult in R, past:u64, require_type:bool) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    return parse_binding(source, tokens, nodes, result, past, require_type, true, false, true)
 }
 
 export func reset_parse_result(first:u64, result:ParseResult in R) -> void where {owner R} {
@@ -285,7 +302,9 @@ func lexical_report_at(nodes:const ExprNodes in A, result:const ParseResult in R
 
 func is_recovery_separator(mark:u8, role:SyntaxRole) -> bool {
     if (mark == 59u8 || mark == 125u8) return true;
-    return (role == InitializerRole || role == ExpressionRole) &&
+    if (role == BindingNameRole && mark == 58u8) return true;
+    if ((role == BindingNameRole || role == TypeAnnotationRole) && mark == 61u8) return true;
+    return (role == InitializerRole || role == ExpressionRole || role == BindingNameRole || role == TypeAnnotationRole) &&
            (mark == 44u8 || mark == 41u8 || mark == 93u8)
 }
 
@@ -297,6 +316,8 @@ func recovery_boundary(source:const SourceBytes in S, tokens:const Tokens in T,
     for (step in first .. past) {
         if (at >= past) return past;
         if (is_recovery_separator(punct_at(source, tokens, at, past), role)) return at;
+        if ((role == BindingNameRole || role == TypeAnnotationRole) &&
+            (punct_pair_at(source, tokens, at, past, 60u8, 45u8) || in_word(source, tokens[at]))) return at;
         closing <- closing_token(tokens, at, past);
         at <- if (closing == no_node()) { at + 1u64 } else { closing + 1u64 }
     };

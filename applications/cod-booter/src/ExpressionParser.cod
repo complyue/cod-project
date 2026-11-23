@@ -1,6 +1,6 @@
 using "ParserInput.cod" {
     ParseResult, append_syntax_node, append_block_item, append_block,
-    exception_binder_width, expected_name, expected_type, parse_binding_name,
+    exception_binder_width, expected_name, expected_type, parse_binding_name, parse_local_binding_name,
     parse_identifier, punct_at, punct_pair_at, reset_parse_result, expected_c_linkage, closing_token, recover_syntax, recover_block_separator, seed_lexical_reports,
 };
 using "CallableSyntax.cod" { parse_callable_signature, parse_scoped_procedure_signature };
@@ -596,7 +596,7 @@ func parse_local_binding(source:const SourceBytes in S, tokens:const Tokens in T
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + (if (declaration_const) { 2u64 } else { 1u64 });
-    if (!parse_binding_name(source, tokens, nodes, result, past, mode == PointerLocal, true, false)) return;
+    if (!parse_local_binding_name(source, tokens, nodes, result, past, mode == PointerLocal)) return;
     val binding <- result.root;
     val assignment <- result.next;
     val valid <- if (mode != ValueLocal) {

@@ -22,7 +22,9 @@ export enum FormalMode:u8 {
     ReferenceSlotFormal;
 }
 
-export enum SyntaxRole:u8 { ModuleItemRole; BlockItemRole; InitializerRole; ExpressionRole; }
+export enum SyntaxRole:u8 {
+    ModuleItemRole; BlockItemRole; InitializerRole; ExpressionRole; BindingNameRole; TypeAnnotationRole;
+}
 
 export enum LocalMode:u8 { ValueLocal; ReferenceLocal; PointerLocal; ExceptionLocal; }
 export enum ArithmeticOperation:u8 { Addition; Subtraction; Multiplication; Division; Remainder; }
@@ -937,7 +939,42 @@ export func named_operator_at(nodes:const ExprNodes in N, at:u64) -> u64 where {
 }
 
 export data BindingSites { name:u64; annotation:u64; target_type:u64; owner_name:u64; readonly:bool; }
-export enum BindingSyntax:u8 { InvalidBindingSyntax; BareBinding; TypedBinding; }
+export enum BindingSyntax:u8 { InvalidBindingSyntax; BareBinding; TypedBinding; RecoveredBinding; }
+
+func has_error_role(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, expected:SyntaxRole) -> bool
+    where {const owner N} {
+    ref role = make SyntaxRole { expected };
+    ref report = make u64 { no_node() };
+    return inspect_error_report(nodes, revision, used, at, role, report) && role == expected
+}
+
+func recovered_type(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, sites:BindingSites in S) -> bool
+    where {const owner N, owner S} {
+    if (has_error_role(nodes, revision, used, at, TypeAnnotationRole:SyntaxRole)) {
+        sites.annotation <- at;
+        sites.target_type <- at;
+        sites.owner_name <- no_node();
+        return true
+    };
+    return case nodes[at] of {
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (OwnerQualifiedType { val target <- target; val owner_name <- declared_owner; }) -> {
+                    if (!published_syntax_id(nodes, revision, at, target) ||
+                        !published_syntax_id(nodes, revision, at, owner_name) ||
+                        name_syntax(nodes, at, owner_name.index) != (OrdinaryName:NameSyntax) ||
+                        !has_error_role(nodes, revision, at, target.index, TypeAnnotationRole:SyntaxRole)) return false;
+                    sites.annotation <- at;
+                    sites.target_type <- target.index;
+                    sites.owner_name <- owner_name.index;
+                    true
+                };
+                _ -> false
+            }
+        };
+        _ -> false
+    }
+}
 
 export func inspect_type_annotation(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
                                     sites:BindingSites in S) -> bool where {const owner N, owner S} {
@@ -967,6 +1004,8 @@ export func inspect_type_annotation(nodes:const ExprNodes in N, revision:u64, us
 export func inspect_binding(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
                             sites:BindingSites in S) -> BindingSyntax where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidBindingSyntax:BindingSyntax;
+    val named <- false;
+    val typed <- false;
     return case nodes[at] of {
         (Vacant) -> { InvalidBindingSyntax:BindingSyntax };
         (Occupied { val syntax <- node; }) -> {
@@ -979,14 +1018,26 @@ export func inspect_binding(nodes:const ExprNodes in N, revision:u64, used:u64, 
                     sites.readonly <- false;
                     BareBinding:BindingSyntax
                 };
+                (ErrorReport) -> {
+                    if (!has_error_role(nodes, revision, used, at, BindingNameRole:SyntaxRole)) return InvalidBindingSyntax:BindingSyntax;
+                    sites.name <- at;
+                    sites.annotation <- no_node();
+                    sites.target_type <- no_node();
+                    sites.owner_name <- no_node();
+                    sites.readonly <- false;
+                    RecoveredBinding:BindingSyntax
+                };
                 (AnnotatedBinding { val name <- name; val annotation <- annotation; val readonly <- readonly; }) -> {
                     if (!published_syntax_id(nodes, revision, at, name) ||
-                        name_syntax(nodes, at, name.index) != (OrdinaryName:NameSyntax) ||
-                        !published_syntax_id(nodes, revision, at, annotation) ||
-                        !inspect_type_annotation(nodes, revision, at, annotation.index, sites)) return InvalidBindingSyntax:BindingSyntax;
+                        !published_syntax_id(nodes, revision, at, annotation)) return InvalidBindingSyntax:BindingSyntax;
+                    named <- name_syntax(nodes, at, name.index) == (OrdinaryName:NameSyntax);
+                    if (!named && !has_error_role(nodes, revision, at, name.index, BindingNameRole:SyntaxRole))
+                        return InvalidBindingSyntax:BindingSyntax;
+                    typed <- inspect_type_annotation(nodes, revision, at, annotation.index, sites);
+                    if (!typed && !recovered_type(nodes, revision, at, annotation.index, sites)) return InvalidBindingSyntax:BindingSyntax;
                     sites.name <- name.index;
                     sites.readonly <- readonly;
-                    TypedBinding:BindingSyntax
+                    if (named && typed) { TypedBinding:BindingSyntax } else { RecoveredBinding:BindingSyntax }
                 };
                 (_) -> { InvalidBindingSyntax:BindingSyntax };
             }
