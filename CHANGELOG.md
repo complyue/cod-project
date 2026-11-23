@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Read a symbolic dependency procedure and its scoped definition
+
+<a id="k-booter-symbolic-procedure-syntax-20261122"></a>
+**K-BOOTER-SYMBOLIC-PROCEDURE-SYNTAX-20261122.** Under H-PROJECT-ARCHITECTURE-REVIEW-20261122, the delegated review clears CoD booter syntax and profile checks for the procedure type and installation used by the dependency visit. H-EFFECTFUL-PROC-INSTALL-20261118 and the scoped activation at `651dc83c11e844e49841c2a6c92e95fc2e59d6f8:applications/cod-booter/docs/ModuleGraph.md`, “Dependency handler activation”, supply the existing contract. D-20-MODULE-GRAPH r27 to r28, D-ARCH-REVIEW r31 to r32, P-680–P-683, registry r1080.
+
 ## 2026-11-22 — Read the module index’s slot and fixed value parameters
 
 <a id="k-booter-slot-formal-syntax-20261122"></a>
