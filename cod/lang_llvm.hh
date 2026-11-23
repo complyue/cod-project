@@ -4930,6 +4930,7 @@ public:
     if (!target) throw std::runtime_error("cannot obtain the native target data layout");
     module_.setTargetTriple(triple); module_.setDataLayout(target->getDataLayoutString());
     call_layouts_.resize(program.methods.size());
+    std::map<size_t, std::set<size_t>> here_array_owners;
     for (size_t i = 0; i < program.methods.size(); ++i) {
       if (!emitted_methods[i]) continue;
       const auto &method = program.methods[i];
@@ -4946,13 +4947,21 @@ public:
         call.callable_destination |= !result.borrowed() && result.type->kind == Type::procedure;
         call.native_borrow_destination |= result.native_borrow();
       }
-      call.array_owners.assign(array_owners.begin(), array_owners.end());
+      if (!method.here.empty() && !method.scope_inputs) {
+        auto &owners = here_array_owners[method.definition];
+        owners.insert(array_owners.begin(), array_owners.end());
+      } else call.array_owners.assign(array_owners.begin(), array_owners.end());
     }
     general_.resize(program.methods.size()); specialized_.resize(program.instances.size());
     for (size_t i = 0; i < program.methods.size(); ++i) {
       if (!emitted_methods[i]) continue;
       const auto &method = program.methods[i];
-      const auto &layout = call_layouts_[i];
+      auto &layout = call_layouts_[i];
+      // An observed supplier return can select either profile at the same call site.
+      if (!method.here.empty() && !method.scope_inputs) {
+        const auto &owners = here_array_owners.at(method.definition);
+        layout.array_owners.assign(owners.begin(), owners.end());
+      }
       const auto prefix = "cod.method." + std::to_string(method.definition) + "." + method.source->name +
           (i == method.definition ? std::string{} : ".interpretation." + std::to_string(i));
       if (method.instances.size() == 1 && method.source->type_parameters.empty() && method.captures.empty() &&
