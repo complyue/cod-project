@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Adopt the five colon-marked arithmetic updates
+
+<a id="h-augmented-transfer-tokens-20261123"></a>
+**H-AUGMENTED-TRANSFER-TOKENS-20261123.** On Nov 23 (America/Los_Angeles), the project user approved the five spellings `<-:+`, `<-:-`, `<-:*`, `<-:/` and `<-:%` with “好的，按此决定落实” in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). D-10 r239→240 closes the spelling question at `5a30c19e330e78387f5d037607a4c187aa1a64fa:design/SymbolicDynamicScope.md` under H-AUGMENTED-TRANSFER-PLACE-20261123 and P-698/P-699. Guide r3 uses spaces around each complete token. Joined `n<--1` keeps its prior meaning. D-ARCH-REVIEW r58 clears both frontend paths and equivalence checks against the declared-place expansion.
+
 ## 2026-11-23 — Review checked selection records in booter name resolution
 
 <a id="k-booter-checked-selection-integration-20261123"></a>

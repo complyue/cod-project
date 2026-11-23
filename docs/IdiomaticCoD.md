@@ -12,11 +12,12 @@ dependencies are identified where needed.
 
 ## Design authority
 
-Guide revision 2 applies the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
+Guide revision 3 applies the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
 [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics), P-694/P-695, and the
 [canonical source style](IdiomaticsGuideline.md#canonical-code-style). The
-[guide baseline](../CHANGELOG.md#k-idiomatic-cod-rewrite-20261123) and the
-[case spelling update](../CHANGELOG.md#h-guarded-short-heads-20261123) identify its scope.
+[guide baseline](../CHANGELOG.md#k-idiomatic-cod-rewrite-20261123),
+[case spelling](../CHANGELOG.md#h-guarded-short-heads-20261123) and
+[arithmetic updates](../CHANGELOG.md#h-augmented-transfer-tokens-20261123) identify its scope.
 The design sections linked throughout own the language rules, including identity, permissions,
 owners, effects, control and cleanup. This guide explains their use without extending those rules.
 Acceptance applies the guideline's semantic, example, coverage and mandatory style checks.
@@ -176,7 +177,7 @@ It needs neither authority to allocate in the stock's owner nor access to dynami
 ```cod
 func take_one(stock:u64 in O) -> bool where {const owner O} {
     if (stock == 0u64) return false
-    stock <- stock - 1u64
+    stock <-:- 1u64
     return true
 }
 ```
@@ -368,7 +369,7 @@ func twice(here action() -> void) -> void {
 func count_quotes() -> u64 {
     val count <- 0u64
     twice() {{
-        count <- count + 1u64
+        count <-:+ 1u64
         return
     }}
     return count
@@ -959,6 +960,10 @@ Break long signatures at their structural boundaries and keep related informatio
 Canonical style is an acceptance requirement. CoD's planned formatter is almost configuration-free.
 Automatic formatting in commit hooks, backed by
 independent formatting checks at submission or integration, is the recommended enforcement workflow.
+
+Put spaces around an augmented transfer token, as in `stock <-:- 1u64`. The four characters
+together specify a read, arithmetic operation and transfer back to the selected place.
+[Augmented transfer](../design/SymbolicDynamicScope.md#augmented-transfer)
 
 Omit semicolons when token boundaries already make the intended structure clear. Retain necessary
 separators, including those separating ambiguous expressions or required by a receiving list.
