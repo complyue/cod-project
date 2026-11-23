@@ -112,6 +112,7 @@ struct CheckedOperation {
   Type type;
   Type operand_type;
   std::optional<size_t> symbol;
+  std::optional<size_t> scoped_effect;
   bool publishes_effect = true;
   std::optional<size_t> callee;
   struct NominalCall {
@@ -799,6 +800,8 @@ struct CheckedSymbol {
   bool intrinsic_print = false;
   std::string name;
   std::optional<SymbolReference> reference = {};
+  bool live_scope = false;
+  std::optional<size_t> scoped_instance = {};
 };
 // Borrowed symbol inputs occupy a separate range from scope and formal owner roles.
 inline constexpr size_t first_symbol_owner = null_target / 2;
