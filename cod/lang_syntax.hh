@@ -38,7 +38,7 @@ public:
   throw LocatedFailure(at, message);
 }
 
-enum class SyntaxRole { module_item, block_item, initializer };
+enum class SyntaxRole { module_item, block_item, binding_name, type_annotation, initializer };
 struct SyntaxErrorReference {
   SyntaxRole role;
   size_t report;
@@ -375,6 +375,8 @@ struct Expression {
   bool spread = false;
   std::optional<Location> checked_ref_argument;
   std::optional<Type> annotation;
+  // Recovered slots remain distinct from an ordinary name or an omitted annotation.
+  std::unique_ptr<Expression> binding_name_error, annotation_error;
   std::shared_ptr<Form> definition = {};
   bool intrinsic = false;
   bool fixed_binding = false;
@@ -751,7 +753,10 @@ class Parser {
 
   bool operand_boundary(SyntaxRole role) const {
     if (is(";") || is("}") || peek().kind == TokenKind::end) return true;
-    return role == SyntaxRole::initializer && (is(",") || is(")") || is("]"));
+    if (role == SyntaxRole::module_item || role == SyntaxRole::block_item) return false;
+    if (is(",") || is(")") || is("]")) return true;
+    if (role == SyntaxRole::initializer) return false;
+    return is("<-") || is("=") || is("in") || (role == SyntaxRole::binding_name && is(":"));
   }
 
   void synchronize_operand(size_t first, SyntaxRole role) {
@@ -780,6 +785,32 @@ class Parser {
     } catch (const LocatedFailure &failure) {
       controls_ = saved;
       return recover_operand(first, failure.diagnostic, SyntaxRole::initializer);
+    }
+  }
+
+  Expr local_binding_name() {
+    const auto first = cursor_;
+    try {
+      return make(Expression::Kind::pointer, value_name());
+    } catch (const LocatedFailure &failure) {
+      auto binding = make(Expression::Kind::pointer, {TokenKind::invalid, {}, tokens_[first].at});
+      binding->binding_name_error = recover_operand(first, failure.diagnostic, SyntaxRole::binding_name);
+      return binding;
+    }
+  }
+
+  void local_binding_annotation(Expression &binding) {
+    if (!take(":")) return;
+    binding.read_only = take("const");
+    const auto first = cursor_;
+    const auto saved = controls_;
+    try {
+      if (peek().kind != TokenKind::identifier && operand_boundary(SyntaxRole::type_annotation))
+        fail(peek().at, "expected a type annotation");
+      binding.annotation = parse_type();
+    } catch (const LocatedFailure &failure) {
+      controls_ = saved;
+      binding.annotation_error = recover_operand(first, failure.diagnostic, SyntaxRole::type_annotation);
     }
   }
 
@@ -1939,9 +1970,9 @@ class Parser {
       group->declaration_kind = mode;
       do {
         if (is("{")) { group->children.push_back(block()); break; }
-        auto expr = make(Expression::Kind::pointer, value_name());
+        auto expr = local_binding_name();
         expr->declaration_kind = mode;
-        if (take(":")) { expr->read_only = take("const"); expr->annotation = parse_type(); }
+        local_binding_annotation(*expr);
         if (take("in")) expr->owner_name = ordinary_name().text;
         if (take("<-")) expr->binding = "<-";
         else { expect("="); expr->binding = "="; }
