@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Initialize a reserved target in a ref group
+
+<a id="h-placement-init-20261123"></a>
+**H-PLACEMENT-INIT-20261123.** On 2026-11-23 (America/Los_Angeles) the project user confirmed explicit reservation followed by in-place constructor invocation in the [design chat](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50): “只能传递给明确 `not init ref` 的参数；分配失败后续 side effects 都因不执行而不生效。” [D-22-PLACEMENT-INIT](design/ConstructionAndAcquisition.md#in-place-construction-in-a-ref-group), D-22r70/D-07r211, P-705/P-706, selects `init a(args)` on the reserved identity, restricted ctor peer access, readiness of the linked pair and ordinary ordered failure/cleanup. This resolves the deferred in-place question at `24be1843fdd364393881ca604a2f7cb563540ea8:design/DomainLanguageDesign.md`, “Sum object construction and reference storage”, under [H-562](#h-562), [constructor selection](#h-dctor-source-20261118) and [H-428](#h-428). Compiler structure, ABI and live-object replacement are outside the confirmation.
+
 ## 2026-11-23 — Review the seed guard in the opening-bid workload
 
 <a id="k-seed-effect-only-guard-20261123"></a>
