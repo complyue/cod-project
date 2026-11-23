@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Apply ordinary argument preparation when forwarding a value pack
+
+<a id="k-value-pack-forwarding-20261123"></a>
+**K-VALUE-PACK-FORWARDING-20261123.** [D-10-VARARGS r249](design/SymbolicDynamicScope.md#indexed-by-value-elements), P-403/P-404, continues [callee-local value semantics](#k-variadic-local-values-20261123) and [ordered expansion](#h-ordered-pack-expansions-20261123). The second call observes writes made before forwarding and receives independent storage. At `b0b8648a4e99a593b77e3f277b3c16c9031a0078:design/SymbolicDynamicScope.md` the open-scope wording still included pack forwarding generally. Ordinary `len` lookup follows H-ORDINARY-NAMES-20261119. Wider pack storage and collection traversal retain their own contracts.
+
 ## 2026-11-23 — Review seed placement for products with regional scalar fields
 
 <a id="k-seed-regional-scalar-product-20261123"></a>

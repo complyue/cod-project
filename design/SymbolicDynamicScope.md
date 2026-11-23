@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 248 · Recorded: 2026-11-23 · Phase: language/application co-design.
+Design revision: 249 · Recorded: 2026-11-23 · Phase: language/application co-design.
 
 ## Design authority
+
+[D-10-VARARGS](DesignAuthorityRegistry.md#d-10-varargs) r249 continues H-272, H-449 and P-403/P-404 for [forwarding local by-value elements](#indexed-by-value-elements). Check the value received by the second call, both callers' values after it returns, and ordinary name lookup for a length query. [Continuity](../CHANGELOG.md#k-value-pack-forwarding-20261123)
 
 At r248 [D-10-VARARGS](DesignAuthorityRegistry.md#d-10-varargs) applies ordinary callee-local value storage (H-272) and ordinary qualifiers (H-366–H-369) to [indexed by-value elements](#indexed-by-value-elements). P-403/P-404 preserve one typed tail with independently prepared values. Check a local write, an unchanged caller element and a rejected write through readonly access. [Scope and user clarification](../CHANGELOG.md#k-variadic-local-values-20261123)
 
@@ -890,7 +892,7 @@ No public pack type, heap allocation, permanent ABI or native specialization per
 
 **Acceptance.** Reject uncalled fixed-plus-variadic and variadic-plus-variadic families at formation, locally and at the first receiving module that combines the methods. Check both declaration orders, disjoint types and differing prefixes. Accept fixed-only overloads, a standalone variadic method, a matching declaration and definition, and two import paths that select one defining method. For a valid variadic method check empty, singleton and longer array expansion, implicit trailing arguments, contextual `[]...`, and element-type, owner, access and initialization failures. Exercise multiple expansions with empty and nonempty arrays, a later operand mutating the first array, and an earlier failure that skips the later operand and the callee. Preserve independent value elements, borrowed target identities and the bounds policy whenever indexing is supported.
 
-Remaining operational questions cover borrowed-element indexing, pack storage and escape, and callable-view contracts. The remaining contracts for `len(rest)` and pack forwarding, and the physical pack transport, retain their own review scope.
+Remaining operational questions cover borrowed-element indexing, pack storage and escape, and callable-view contracts. A proposed `len(rest)` uses ordinary lookup of the visible `len` family under [the ordinary-name rule](#ordinary-names-for-traversal-and-storage). Its standard pack overload and physical pack transport have separate implementation and library scopes.
 
 H-448 separately settles the builtin bounds policy through [D-17](ExceptionControl.md#unchecked-bounds-exceptions-and-optional-checks): out-of-range indexing raises unchecked IndexOutOfBoundsError under default runtime checks, with an explicit compiler opt-out at the programmer's risk. No throws annotation is required for this exception. It does not qualify broader pack operations or change argument evaluation, owners, initialization or the selected user-defined indexing method's contract.
 
@@ -913,6 +915,13 @@ still reads 7. The same write through `bids:const u64...` is rejected. Apply the
 and target qualifiers](RegionalOwnership.md#independent-binding-and-target-qualifiers) and
 the ordinary lexical lifetime to the selected storage. An implementation may elide physical
 storage when it preserves these observations.
+
+When a body calls another by-value variadic function with `bids...`, the new call prepares each
+element from its current value in index order. For example, if the original caller supplied 7
+and the first callee wrote 10, the second receives 10. If it writes 12, the first callee still
+reads 10 after the call and the original caller still reads 7. This follows the ordinary
+parameter rule at each call. A reference to a callee-local element has that invocation's
+lexical lifetime.
 
 ### Expression type conversion and assertion
 
