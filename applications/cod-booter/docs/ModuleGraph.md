@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 21. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 22. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
 
 [K-BOOTER-AST-TABLE-20261122](../../../CHANGELOG.md#k-booter-ast-table-20261122) continues that architecture for the [first indexed AST path](#first-indexed-ast-path). Its private representation uses the existing named-array constructor, valid bits transfer and constructor-pattern checks. Acceptance includes the parser, checker, lowering and emitted object.
 
@@ -27,6 +27,8 @@ The [region syntax and terminal input review](../../../CHANGELOG.md#k-booter-reg
 The [constructor identity review](../../../CHANGELOG.md#k-booter-sum-interfaces-20261122) covers checked publication and typed selection of nominal sum constructors.
 
 The [readonly budget declaration review](../../../CHANGELOG.md#k-booter-const-val-parser-20261122) covers the typed local syntax and its checking boundary.
+
+The [fresh graph result review](../../../CHANGELOG.md#k-booter-fresh-graph-result-20261122) covers construction rollback, a direct owning result and cleanup at the receiving entry.
 
 ## Layer responsibilities
 
@@ -318,6 +320,32 @@ return with_keys(keys, graph.key_used) (bytes, count) => {
 The full shared procedure traverses once and selects the current table bindings and published counts **after** success, including any replacement during child visits. The object terminal calls the named writer with its actual output text. The provider terminal passes the required published spans to the CoD renderer and the finished pair to the file publisher with its actual directory. The check-only path returns the checked status and opens no output. Keep graph borrows, launcher loans and callback use within their respective live scopes. A failed visit skips output. Terminal cleanup precedes release of G, including on protected exits. Place the owner inside the existing failure-handling boundary so outer handlers observe completed release. The external callback contract needs neither a fresh owner binder nor an output-purpose data type. [Owner-qualified arguments](../../../design/RegionalOwnership.md#owner-qualified-reference-arguments) · [Here bodies](../../../design/CallableStorageAndHereAccess.md#single-brace-bodies-for-a-here-callable)
 
 Check the three distinct entry signatures, a failed visit before the terminal, terminal failure, a nested command with a separate graph, and release on each exit. Exercise the actual object and provider routes, including a native directory outside UTF-8. A focused seed check establishes input binding and terminal typing. The common factory, construction in a supplied owner, user-program booter lowering and real CLI publication each need their own execution evidence.
+
+### Returning the freshly constructed graph
+
+Use one named CoD factory for the initial graph. Each invocation acquires one independent region and supplies its owner to the typed command entry.
+
+```cod
+func fresh_graph() -> own region :GraphRoot {
+    const val graph_budget <- 64u64 * 1024u64 * 1024u64;
+    return make region GraphRoot(graph_budget -> capacity) {
+        used <- 0u64; key_used <- 0u64; next_revision <- 1u64;
+        export_used <- 0u64; interface_used <- 0u64; spelling_used <- 0u64;
+        command_used <- 0u64; unit_used <- 0u64; literal_used <- 0u64; function_used <- 0u64;
+    };
+}
+
+# Inside the existing failure boundary of each command:
+own region graph:GraphRoot <- fresh_graph();
+```
+
+**Seed scope.** Clear an ordinary named CoD factory with an explicit owning result, a direct fresh `return make region`, and a direct call initializing a new lexical owning holder. The checker must prove for every admitted return path that no intervening callee cleanup can replace, throw over or otherwise abandon the completed owner before handoff. For this workload it suffices to admit the straight-line budget declaration and return, and reject any unproved path before lowering. Include enclosing scopes and registrations made during capacity or root evaluation when they can still act on the pending return. A helper’s cleanup that has already finished and the caller’s active cleanup have their ordinary semantics. General cleanup that can change the factory’s completion needs a subsequent implementation review for disposal of a pending result. [Consuming calls and results](../../../design/ExceptionControl.md#e4--consuming-calls-and-results)
+
+**Construction and delivery.** Carry the owning result and concrete region schema through signature registration, checked calls, return checking and the private LLVM outcome. Keep the distinction from both scalar values and borrowed views in every selected profile. Separate the existing capacity, ordered root initialization and partial-construction rollback from publication in a local holder. Reuse that construction path for both the direct local and factory. A failed capacity expression acquires nothing. Failure after acquisition releases the region exactly once and preserves the original failure. On normal completion transfer the existing region control to the caller. Before any further fallible work, initialize the new holder and enroll its normal release action. Each invocation establishes a fresh actual owner even when two invocations share one schema. [Region initialization](../../../design/ConstructionAndAcquisition.md#region-construction-and-named-root-initializers) · [Named root access](../../../design/GraphGrainedMemoryManagement.md#named-root-access-and-receiving-specifications)
+
+Use the ordinary internal named-call transport in both seed modes and the existing C region operations. Check all executable uses of the result. Discard, forwarding, indirect calls and other destinations outside this first slice must stop at checking if their ownership cleanup is unavailable. Reject incompatible root contracts. A sound subset can require the same resolved concrete schema and report other structurally compatible layouts as unsupported. The runtime control pointer grants no source-level bits-transfer or regional-field storage permission.
+
+**Acceptance.** Exercise all three typed command entries against the one ten-root factory. In both seed modes verify two simultaneously live calls with distinct root contents, caller success and caller throw with one release per instance, capacity failure before acquisition, and a later root initializer that throws after acquisition. Trace rollback before the outer handler and preserve existing output on failure. Include a mismatched schema, attempted borrow or bits reception of the fresh ownership, a discarded result, and factory exits through a throwing `finally` or replacing `defer` that the scoped proof must reject. A caller with ordinary cleanup must still receive the region. The seed probes and the linked CLI object, check-only and provider workloads supply separate evidence.
 
 ### Generating and publishing the provider pair
 
