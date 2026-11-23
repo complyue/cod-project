@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review writable product access in the package loader
+
+<a id="k-booter-package-loader-here-place-20261123"></a>
+**K-BOOTER-PACKAGE-LOADER-HERE-PLACE-20261123.** D-ARCH-REVIEW r52→r53 and D-20-MODULE-GRAPH r46→r47 continue the crossing at `7c36178e:applications/cod-booter/docs/ModuleGraph.md` under H-PROJECT-ARCHITECTURE-REVIEW-20261122 and H-CALLABLE-MODEL-20261118. The approved seed projection preserves the supplier’s actual lexical place, target access and completion effects for the two-phase loader. Linked acceptance and delivery belong to mainline.
+
 ## 2026-11-23 — Align lexical call examples and record deferred discussion topics
 
 <a id="k-lexical-callee-examples-20261123"></a>
