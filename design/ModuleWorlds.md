@@ -1,12 +1,12 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 63 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 64 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
 
 [D-15-MODULE-PATH](DesignAuthorityRegistry.md#d-15-module-path) and [D-15-DEFAULT-EXPORTS](DesignAuthorityRegistry.md#d-15-default-exports) at r62 cover [module path resolution](#resolving-source-module-paths) and [the default public selection](#default-and-complete-public-selections). The project user [confirmed the lookup order, precedence warning and module declarations](../CHANGELOG.md#h-module-paths-and-default-exports-20261123). P-690–P-693 connect reproducible dependencies and library-author intent to explicit module identity and readable source. Verify distinct sibling, package and bundled modules and actual string-library selection in both bootstrap compilers. Runtime effect installation, package acquisition, toolchain layout and overload dispatch retain their separate contracts.
 
-[D-15-DEFAULT-EXPORTS](DesignAuthorityRegistry.md#d-15-default-exports) at r63 clarifies [the authority of a bulk symbol entry](#default-and-complete-public-selections) under the [delegated review](../CHANGELOG.md#k-bulk-symbol-selection-and-checked-object-20261123). P-692/P-693 preserve publication identity and the existing separate grant required for an explicit callable-symbol import. Verify mixed bulk selection and prior explicit grants.
+[D-15-DEFAULT-EXPORTS](DesignAuthorityRegistry.md#d-15-default-exports) and [D-15-PUBLIC-SOURCE](DesignAuthorityRegistry.md#d-15-public-source) at r64 cover [default selector substitution and kind-qualified symbolic resources](#default-and-complete-public-selections). The [user decision](../CHANGELOG.md#h-module-default-selector-substitution-20261123) supersedes the r63 bulk-symbol interpretation. P-692/P-693 and P-662/P-663 preserve the author's public vocabulary and the caller's choice of reuse operation. Verify explicit and omitted lists under each verb, including failures, and verify independent symbol identity selection. Package precedence and overload dispatch have separate scopes.
 
 [D-15-PUBLIC-SOURCE](DesignAuthorityRegistry.md#d-15-public-source) at r61 applies its single-identity publication rule to [a named owning handle symbol](../applications/cod-booter/docs/LLVMInterop.md#owning-native-handle-effects) under [H-NATIVE-HANDLE-EFFECT-20261121](../CHANGELOG.md#h-native-handle-effect-20261121). P-662/P-663 preserve vocabulary identity and separate publication from runtime installation. Check an exported symbol selected before any acquisition.
 
@@ -339,18 +339,31 @@ default export func version() -> u64 { 1u64 }
 
 | Consumer spelling | Explicit selection |
 | --- | --- |
-| `using "string.cod"` or `import "string.cod"` | The publisher's default entries, with the ordinary meaning of the written verb. A module with no defaults requires explicit selection and the diagnostic may suggest `{..}`. |
+| `using "string.cod"`, `import "string.cod"` or `mixin "string.cod"` | Substitute the publisher's selector list for the omitted braces, then apply the written verb. A module with no defaults requires explicit selection and the diagnostic may suggest `{..}`. |
 | `import "string.cod" {..}` or `using "string.cod" {..}` | All explicitly published entries of the selected module, including named re-exports. |
 | `import "string.cod" { emitStr, emitRepr }` | The written entries, with ordinary binding, naming and extension rules. |
 | `using "./palette.cod" Color {..}` | The members of the selected type under its existing rules. |
 
-Default and complete selection operate on the checked publication table. Neither enumerates private names or flattens names reachable through lookup in other modules. A selected type still carries its usual family and fallback relationships. A selected public symbol such as `@sout` introduces its existing symbol identity under the ordinary symbol-selection permissions. Selecting a symbol does not install a stream or grant a new extension permission. Ordinary callable entries retain the distinction between source-preserving `using` and receiver-world `import`. A name conflict follows the same rule as explicitly selecting those entries. Use an explicit group with `as` to resolve it. Each consumer depends on the selected public or default table as well as the module identity.
+For example, a module can publish a symbolic variable and a symbolic procedure family under their respective kinds. The entries in its default list have the same spelling as the entries in a consumer’s list:
 
-For a symbol entry, both a path-only `import` and `import "./writer.cod" {..}` introduce the published symbol identity, as an ordinary symbol identity selection would. This applies to a borrowed output symbol and to a procedure-typed symbol. Retain its declared contract and existing source-visible family information. A repeated bulk selection preserves any separately acquired receiver grant. A conflicting local symbol identity rejects. Selecting a lexical callable family in the same bulk `import` still performs ordinary receiver-world import. An explicit named callable-symbol import that requests extension still checks its destination, identity and grant. Its own explicit operation can use a compatible identity previously selected by a bulk directive. Expanding the bulk directive itself cannot manufacture that second operation. Direct symbol access and `perform` or `behave` retain their existing installation checks. Verify a mixed module exporting a borrowed symbol and a lexical callable: bulk import permits ordinary extension of the lexical family, a read of the uninstalled symbol still rejects, and a later explicit installation is visible through the original identity.
+```cod
+# hooks.cod, after the declarations
+export var @sout
+export proc @flush
+default { var @sout, proc @flush }
+```
+
+For each of `using`, `import` and `mixin`, writing only `"./hooks.cod"` has exactly the meaning of writing `"./hooks.cod" { var @sout, proc @flush }` after that verb. Substitution is a source-level equivalence. The compiler can retain checked selectors with their published spellings, kinds, origins and order. Apply ordinary privacy, renaming, destination, access, extension and body-availability rules at the receiving directive. If the explicitly written list would fail for one item, the omitted form fails there too. Items are never silently dropped to make a verb applicable. This also governs generated entries from the complete public table where module `{..}` is admitted. The public table excludes private entries and implicit fallback names. Type-associated methods and nested type-member selectors retain their existing rules.
+
+Use `var @name` for a symbolic variable resource and `proc @name` for a symbolic procedure resource in export, using, import and mixin selectors. The prefix states what is requested of the source. Match it to the published declaration and reject a missing or wrong kind. `var` in a selector declares no local place or writable access. It preserves the published storage and access contract, including a reference symbol’s owner role. `proc` selects the procedure family subject to the verb’s destination or body requirements. It does not extract a first-class procedure or perform a call. Bare `@name` remains the operand of the separate identity operation `symbol from "./hooks.cod" @name`. That operation can establish the typed identity before an `effect` installs anything. Keep an identity-only dependency explicit.
+
+**Open variable selection case.** A library may publish `var @sout` before any stream is installed. Naming it with `symbol from` for a later installer is already covered. For `using "./sinks.cod" { var @sout }`, the timing of the source-binding requirement is under review: selecting an active source resource would require it at selection, while selecting its variable declaration would require an installation at the first value use. The omitted form must produce the same outcome. Compiler acceptance of this particular case awaits that decision.
+
+A complete definition with an attached `export` already states the kind. For example, `export ref symbol @sout:Utf8StreamOut in O where {owner O}` publishes the same variable resource as the corresponding declaration followed by `export var @sout`. Likewise an already declared procedure symbol can be published by `export proc @flush`. A default mark on a definition contributes the same kind-qualified selector. Publication alone reads no active binding. Preserve explicit symbol identity selection for a caller that only wants to install a writer. Verify that the same unsupported resource, missing destination or symbol conflict rejects with omitted and explicit lists and that a wrong kind rejects even when the spelling matches. A complete or default selection grants exactly what its expanded entries under that verb would grant.
 
 A newline between a module path and an explicit selection is ordinary whitespace. Recognize a path-only directive at an unambiguous grammar boundary, with an explicit semicolon available for disambiguation. Preserve multiline named selectors and an ordinary identifier named `default` wherever the contextual declaration does not apply.
 
-For acceptance, compile an external source containing `using "string.cod"` with a relocated toolchain. Exercise the default `str`, `repr` and `(++)` families, a public entry outside the default set, and a public symbol whose selection leaves its dynamic binding alone. Check a namespaced same-package module, explicit sibling, package shadow and warning, ambiguous package claim, broken selected package module and absent fallback. Verify both compilers agree across working directories and reuse cached dependencies correctly after adding a shadowing module or changing a default. Migrate actual booter sibling imports and the repository-relative string-library imports alongside the resolver. Preserve intentional named selection, receiver-world extensions and re-exports in the formatter.
+For acceptance, compile an external source containing `using "string.cod"` with a relocated toolchain. Exercise the default `str`, `repr` and `(++)` families, a public entry outside the default set, and independent access to a public symbol identity before installation. Check a namespaced same-package module, explicit sibling, package shadow and warning, ambiguous package claim, broken selected package module and absent fallback. Verify both compilers agree across working directories and reuse cached dependencies correctly after adding a shadowing module or changing a default. Migrate actual booter sibling imports and the repository-relative string-library imports alongside the resolver. Preserve intentional named selection, receiver-world extensions and re-exports in the formatter.
 
 ### Public definitions and grouped selections
 
@@ -369,7 +382,7 @@ using "./SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
 
 The prefix publishes the same local identity that a separate `export name;` would publish after the declaration. This includes named `data`, `array`, `func`, `proc`, `enum` and `handle type` declarations. It applies to a foreign-marked declaration with a separately publishable identity under its existing rules, including a local `data "C"` or `proc "C"` declaration. Marking one method publishes its complete locally resolved callable family. Likewise a public type carries its existing constructors, methods or member table according to that type's contract. A private definition sharing only a foreign object's spelling cannot publish that foreign object by accident. Use the [publication-only re-export](#publication-only-re-export) when the public identity comes from upstream.
 
-The prefix applies to a declaration that has a single publishable name, including a named overload family. For `export symbol @s :own handle S;`, the published name is the symbol identity `@s`. Another module can select it with `using symbol "m" @s;` before any resource is installed. Anonymous forms, expressions, initializer blocks and individual fields have no such publication. Split a declaration of multiple independent identities when their visibility differs, or select them using standalone exports. Prefixing a declaration adds no initialization, repeats no method body and confers no additional extension grant. Existing `export name;`, `export from` and `export import` retain their uses and privacy checks.
+The prefix applies to a declaration that has a single publishable name, including a named overload family. For `export symbol @s :own handle S;`, the published name is the symbol identity `@s`. Another module can name its identity with `symbol from "m" @s` before any resource is installed. Anonymous forms, expressions, initializer blocks and individual fields have no such publication. Split a declaration of multiple independent identities when their visibility differs, or select them using standalone exports. Prefixing a declaration adds no initialization, repeats no method body and confers no additional extension grant. Existing `export name;`, `export from` and `export import` retain their uses and privacy checks.
 
 For several selections with one source and operation, place a comma-separated list **after the quoted module path**. Each item obeys the same source-name, destination-name and suffix grammar as a singleton of that operation. For example:
 
@@ -380,7 +393,7 @@ using "./Compiler.cod" { NativeError { Rejected, OpenFailed }, ExpressionScratch
 
 The outer braces group public selections. The braces following NativeError select members *of that type*. The same distinction applies to sum constructors. Existing per-item `as`, `with methods` and a mixin's `with { ... }` symbol map attach only to their item, wherever that singleton already permits the combination. A parenthesized operator occupies one item. Commas inside a member selector and semicolons inside a symbol map belong to the nested production. Require at least one item, allow a trailing comma, and apply the existing statement-termination rules after the closing brace. The single-selection spelling remains idiomatic for one item.
 
-Expand the group into individual selections in written order with the same source module, verb and any shared verb qualifier. An `@symbol` item is admissible exactly where the corresponding standalone selection of that symbol is admissible. For `using symbol "m" { @a, @b as @local }`, both items use the symbol-selection operation. A group never changes symbol identity, installs a dynamic effect by itself, or makes `import symbol` or `mixin symbol` valid. Keep a different selection verb or qualifier in its own statement. The independent `symbol from` identity-selection and `using units` forms keep their existing grammar. A grouped `export import` applies publication to each imported item. There is no group-wide post-brace modifier.
+Apply grouped items in written order using the same source module and verb. A group can contain ordinary names and kind-qualified symbolic items, for example `using "./hooks.cod" { emit, var @sout, proc @flush }`. Each item has the same rules as its singleton. An identity-only dependency uses `symbol from`. The `using units` form keeps its own grammar. A grouped `export import` applies publication to each imported item. There is no group-wide post-brace modifier.
 
 Repeated selections of the same identity/context, conflicting explicit names, private sources, adaptation, whole-family import and mixin mappings all receive the same outcome as their expanded source. A group neither resolves ambiguity by order nor initializes the source once per item. For migration, consolidate same-module items that express one purpose. Preserve semantically significant intervening declarations, selection order and business-meaningful separation. Identify an error at the offending item. Exercise both frontends on the migrated `applications/cod-booter/src` modules, including grouped lookup of sibling type names, private helpers, prefixed publication of an overloaded family, re-export under another name and generated C declarations. An unsupported underlying singleton retains its ordinary capability boundary.
 
@@ -759,7 +772,7 @@ H-502 makes block membership decisive. The scheduler executes each initializatio
 ```cod
 # a.cod: both writes are in one scheduling node.
 symbol @x:u64;
-export @x;
+export var @x
 postpon {
     effect @x <- 1u64;
     effect @x <- 2u64;
@@ -773,12 +786,12 @@ Splitting the writes exposes an interleaving boundary:
 ```cod
 # a.cod
 symbol @x:u64;
-export @x;
+export var @x
 postpon { effect @x <- 1u64; }  # A1
 postpon { effect @x <- 2u64; }  # A2
 
 # b.cod
-using "./a.cod" @x;
+using "./a.cod" var @x
 symbol @seen:u64;
 postpon { effect @seen <- @x; }
 ```
@@ -799,12 +812,12 @@ H-501 extends reverse registration order across the selected program's module-le
 
 ```cod
 # a.cod
-using symbol "std:io" @print;
+symbol from "std:io" @print
 postpon { defer { behave @print(1u64); } }  # A1
 postpon { defer { behave @print(3u64); } }  # A2
 
 # b.cod
-using symbol "std:io" @print;
+symbol from "std:io" @print
 postpon { defer { behave @print(2u64); } }  # B1
 ```
 

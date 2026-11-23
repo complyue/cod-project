@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Substitute kind-qualified module selectors under the receiving verb
+
+<a id="h-module-default-selector-substitution-20261123"></a>
+**H-MODULE-DEFAULT-SELECTOR-SUBSTITUTION-20261123.** The project user in the [CoD design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-23 (America/Los_Angeles) specified “相当于给使用者模块 using/import/mixin 省略的花括号内容补上” and required a symbolic object's nature as a selector prefix, giving `var @sout` and `proc @xxx` to distinguish resource selection from `symbol from`. This supersedes the special bulk-symbol interpretation in K-BULK-SYMBOL-SELECTION-AND-CHECKED-OBJECT-20261123 at `f7dda3349583680463ef296e93c2c06bfbf988f2:design/ModuleWorlds.md`. D-15r64 (P-662/P-663, P-692/P-693) governs the language clarification. D-10r235, D-07-STRING-BUILD r8, interop r26, D-20-MODULE-GRAPH r43 and D-ARCH-REVIEW r48 apply it. Package lookup, overload delegation and the independent exception object review keep their recorded status.
+
 ## 2026-11-23 — Clarify bulk symbol rights and review checked throw object integration
 
 <a id="k-bulk-symbol-selection-and-checked-object-20261123"></a>
