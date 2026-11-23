@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 56. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 57. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+
+The [r57 review](../../../CHANGELOG.md#k-booter-source-handle-helper-20261123) covers [an imported helper reached from a catch](#checking-an-imported-helper-that-borrows-a-handle). P-680/P-681 and the checked native handle and exception contracts govern publication of its source signature and validation of each live call.
 
 [Symbolic procedure selection, activation and calls](../../../CHANGELOG.md#h-lexical-symbolic-proc-20261123) at r56 supersedes the missing-destination stop in the [procedure selector checks](#checking-a-symbolic-procedure-selector). D-15-DEFAULT-EXPORTS and D-10-HANDLER-INSTALL supply the source and acceptance rules.
 
@@ -567,6 +569,33 @@ Record which callable or supplied body owns each relevant site. Follow direct ca
 Bound the worklist by the live revision’s checked frame indices. A visited definition can stop duplicate discovery. It cannot certify an in-progress recursive call or transfer one invocation’s loan or handler facts to another. Use the validated declared contract on recursive edges and check each required definition. Give a located profile failure when the required contract or completion cannot be established. Validate imported identities and ranges against the published graph prefix. A malformed header, absent native ordinal or unanswered callback obligation cannot supply evidence of success. One shared proof gates interface and provider publication. Object mode retains its executable body checks and separate lowering requirements.
 
 The frozen graph input enters `check_graph_revision` through a `source_use` body and calls `discover_graph_dependencies` through a `graph_frame_use` body. Preserve both edges and their checked source contracts. In both linked modes replay the 38 frozen declaration results and generated pairs, and independently check the actual unedited `NativeSource.path_key` with the ready-path `continue work(bytes)` and the not-ready throw. Use the same binary to accept the matching catch and reject the unrelated same-spelled catch at `signal(code)`, locally and through both facade forms. Check a normal-only callee with a declared failure and an otherwise unmarked local caller, a checked call in a reached helper or callback, an unsupported demanded signature and a malformed imported interface. Rejected publication preserves prior outputs. The linked object workload and executable exception ownership retain their own acceptance.
+
+### Checking an imported helper that borrows a handle
+
+In a source-open failure handler, `report_source_open_error(diagnostic, error.os_error)` lends the
+live launcher destination and passes independent error-code bits. The helper returns void after
+calling the declared native diagnostic operation. Declaration and provider commands must check
+this ordinary CoD call even when neither command emits the helper's body.
+
+Publish the selected ordinary definition's identity, callable kind, independent scalar or void
+result, ordered scalar-value or borrowed-handle formals, and checked failure contract in the
+existing module interface rows. Validate a defined helper's demanded body, including its native
+calls, before accepting the producer. A helper can genuinely have an empty checked failure set.
+A missing or truncated signature cannot establish that fact. Keep the published rows within the
+checked graph prefix and use the existing defining identity through re-exports.
+
+In the importing frame, bind the call to that interface header and use the shared handle-loan
+checks for nominal CType, target access, owner access and actual owner. Bind role D to the
+caller's live owner at this call. Two formals sharing a role must agree on the actual owner.
+The loan lasts for the invocation. The caught holder remains responsible for its exception.
+Check the scalar read and completion under the selected signature. Executable emission still
+requires a proved implementation. Declaration checking neither invokes a writer nor requires
+a native function ordinal for an ordinary CoD helper.
+
+Verify the real catch in the frozen ModuleGraph and its importing modules in both linked compiler
+modes. Exercise an unproved or mismatched handle, readonly access, two distinct owners supplied
+to a shared role, a malformed header and a callee with an uncovered checked failure. Preserve
+earlier output on rejection and replay all 38 declaration and provider inputs.
 
 ### Reading a scalar field from a caught exception
 

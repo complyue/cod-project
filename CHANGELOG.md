@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Check a borrowed diagnostic handle across an ordinary module call
+
+<a id="k-booter-source-handle-helper-20261123"></a>
+**K-BOOTER-SOURCE-HANDLE-HELPER-20261123.** Delegated architecture review continues D-20-MODULE-GRAPH r56→57 and D-ARCH-REVIEW r65→66 under P-680–P-683. The [checked interface and acceptance](applications/cod-booter/docs/ModuleGraph.md#checking-an-imported-helper-that-borrows-a-handle) apply the declaration-proof contract at `a90aa348759cba9cfa2d05f8a41f203ffd9373e7:applications/cod-booter/docs/ModuleGraph.md` to an ordinary imported diagnostic helper reached inside a catch. Source applicability, checked failures and executable availability retain separate evidence.
+
 ## 2026-11-23 — Document when to select a symbolic procedure family
 
 <a id="h-symbolic-selector-guideline-20261123"></a>
