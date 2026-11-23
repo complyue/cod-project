@@ -38,7 +38,7 @@ public:
   throw LocatedFailure(at, message);
 }
 
-enum class SyntaxRole { module_item, block_item, binding_name, type_annotation, initializer };
+enum class SyntaxRole { module_item, block_item, binding_name, type_annotation, initializer, ref_group_item };
 struct SyntaxErrorReference {
   SyntaxRole role;
   size_t report;
@@ -351,8 +351,8 @@ struct Expression {
   enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, value_call, perform, behave, effect,
                     block, grouped, conditional, return_test, field, range_for, index, null_ref,
                     try_scope, handler, raise, return_value, deferred, make_region, touch, effect_group, transfer,
-                    augmented_transfer, procedure_effect,
-                    pointer_group, pointer, rebind, region_binding, callable, alias, capture_owner,
+                    augmented_transfer, procedure_effect, predicate_assertion,
+                    pointer_group, pointer, bare_ref_slot, init_reserved, rebind, region_binding, callable, alias, capture_owner,
                     here_body, named_argument, break_value, continue_value, typed_expression, return_tail,
                     processor_composition, pipeline, here_binding, make_object, native_handle_binding, make_owned_handle, make_borrowed_handle,
                     exception_binding, make_exception, rethrow_from, case_expression, case_arm, string_literal,
@@ -418,6 +418,10 @@ struct Expression {
   bool braced_if_with_empty_alternative() const {
     return ordinary_braced_if() && !children[2]->scoped && children[2]->children.empty();
   }
+  bool braced_ref_group() const {
+    return kind == Kind::pointer_group && declaration_kind == "ref" && children.size() > 1 &&
+        children.back()->kind == Kind::block;
+  }
   bool deferred_catch() const {
     return kind == Kind::deferred && binding == "fallback" && children.at(1)->kind == Kind::handler;
   }
@@ -443,6 +447,7 @@ struct Parameter {
   bool fixed_binding = false;
   std::shared_ptr<HereSignature> here = {};
   CallerPlace caller_place = CallerPlace::none;
+  std::optional<Location> not_init_ref = {};
   bool selects_caller_place() const { return caller_place != CallerPlace::none; }
   bool selects_caller_ref_slot() const { return caller_place == CallerPlace::reference_slot; }
   bool initializes_caller_place() const { return caller_place == CallerPlace::initializing; }
@@ -775,7 +780,7 @@ class Parser {
     if (is(";") || is("}") || peek().kind == TokenKind::end) return true;
     if (role == SyntaxRole::module_item || role == SyntaxRole::block_item) return false;
     if (is(",") || is(")") || is("]")) return true;
-    if (role == SyntaxRole::initializer) return false;
+    if (role == SyntaxRole::initializer || role == SyntaxRole::ref_group_item) return false;
     return is("<-") || is("=") || is("in") || (role == SyntaxRole::binding_name && is(":"));
   }
 
@@ -808,6 +813,21 @@ class Parser {
     }
   }
 
+  Expr predicate_assertion() {
+    using K = Expression::Kind;
+    auto assertion = make(K::predicate_assertion, expect("assert"));
+    assertion->children.push_back(binding_initializer());
+    if (take(",")) {
+      if (peek().kind != TokenKind::string)
+        fail(peek().at, "expected a quoted assertion diagnostic");
+      const auto message = tokens_[cursor_++];
+      auto literal = make(K::string_literal, message);
+      literal->text = text_literal(message);
+      assertion->children.push_back(std::move(literal));
+    }
+    return finish(std::move(assertion));
+  }
+
   Expr local_binding_name() {
     const auto first = cursor_;
     try {
@@ -831,6 +851,33 @@ class Parser {
     } catch (const LocatedFailure &failure) {
       controls_ = saved;
       binding.annotation_error = recover_operand(first, failure.diagnostic, SyntaxRole::type_annotation);
+    }
+  }
+
+  Expr local_binding_item(const std::string &mode) {
+    const auto first = cursor_;
+    const auto saved = controls_;
+    try {
+      auto expr = local_binding_name();
+      expr->declaration_kind = mode;
+      local_binding_annotation(*expr);
+      if (take("in")) expr->owner_name = ordinary_name().text;
+      if (mode == "ref" && operand_boundary(SyntaxRole::ref_group_item)) {
+        if (!expr->annotation && !expr->annotation_error && !expr->binding_name_error)
+          fail(expr->at, "a bare ref declaration requires a target type");
+        expr->kind = Expression::Kind::bare_ref_slot;
+        return finish(std::move(expr));
+      }
+      if (take("<-")) expr->binding = "<-";
+      else { expect("="); expr->binding = "="; }
+      if (mode == "val" && expr->binding != "<-") fail(expr->at, "val initialization requires '<-', not '='");
+      if (mode == "ref" && expr->binding != "=") fail(expr->at, "ref initialization requires '='; use val for an independent copy");
+      expr->children.push_back(binding_initializer());
+      return finish(std::move(expr));
+    } catch (const LocatedFailure &failure) {
+      if (mode != "ref") throw;
+      controls_ = saved;
+      return recover_operand(first, failure.diagnostic, SyntaxRole::ref_group_item);
     }
   }
 
@@ -1200,23 +1247,32 @@ class Parser {
     }
     return parse_type();
   }
-  Parameter parameter_declaration(bool native_handles = false, bool caller_places = false) {
+  Parameter parameter_declaration(bool native_handles = false, bool caller_places = false, bool protocol_field = false) {
     const bool fixed_binding = take("const");
-    const bool initializes = caller_places && is("init") && is("val", 1) && is("var", 2);
+    std::optional<Location> not_init_ref;
+    if (!protocol_field && is("not") && is("init", 1)) {
+      not_init_ref = expect("not").at;
+      expect("init");
+      not_init_ref->span.past = expect("ref").at.span.past;
+    }
+    const bool initializes = !not_init_ref && caller_places && is("init") && is("val", 1) && is("var", 2);
     if (initializes) expect("init");
-    const bool exception = exception_binding_head();
+    const bool exception = !not_init_ref && exception_binding_head();
     if (exception) expect_exception_binder();
-    const bool owned_region = ownership_qualifier("region");
+    const bool owned_region = !not_init_ref && ownership_qualifier("region");
     if (owned_region) expect("own");
-    const bool regional = !exception && take("region");
+    const bool regional = !not_init_ref && !exception && take("region");
     std::string mode;
-    if (!regional && !exception && (is("ptr") || is("ref") || is("val") || (native_handles && is("handle") && !is(":", 1))))
+    if (not_init_ref) mode = "ref";
+    else if (!regional && !exception && (is("ptr") || is("ref") || is("val") || (native_handles && is("handle") && !is(":", 1))))
       mode = tokens_[cursor_++].text;
-    const bool place = caller_places && (mode == "val" || mode == "ref") && is("var") && !is(":", 1);
+    const bool place = !not_init_ref && caller_places && (mode == "val" || mode == "ref") &&
+        is("var") && !is(":", 1);
     if (place) expect("var");
     auto param = value_name();
     Parameter parameter{param.text, Type::void_type, param.at, false, {}};
     parameter.fixed_binding = fixed_binding;
+    parameter.not_init_ref = std::move(not_init_ref);
     if (regional) parameter.type = region_annotation(owned_region, &parameter.read_only);
     else {
       type_separator();
@@ -1248,7 +1304,7 @@ class Parser {
     std::vector<Parameter> fields;
     std::set<std::string> labels;
     while (!take("}")) {
-      auto field = parameter_declaration();
+      auto field = parameter_declaration(false, false, true);
       if (field.variadic) fail(field.at, "a protocol field cannot be variadic");
       if (!labels.insert(field.name).second) fail(field.at, "duplicate protocol label '" + field.name + "'");
       fields.push_back(std::move(field));
@@ -2025,18 +2081,15 @@ class Parser {
       group->declaration_kind = mode;
       do {
         if (is("{")) { group->children.push_back(block()); break; }
-        auto expr = local_binding_name();
-        expr->declaration_kind = mode;
-        local_binding_annotation(*expr);
-        if (take("in")) expr->owner_name = ordinary_name().text;
-        if (take("<-")) expr->binding = "<-";
-        else { expect("="); expr->binding = "="; }
-        if (mode == "val" && expr->binding != "<-") fail(expr->at, "val initialization requires '<-', not '='");
-        if (mode == "ref" && expr->binding != "=") fail(expr->at, "ref initialization requires '='; use val for an independent copy");
-        expr->children.push_back(binding_initializer());
-        group->children.push_back(std::move(expr));
+        group->children.push_back(local_binding_item(mode));
       } while (take(","));
       return group;
+    }
+    if (is("init") && is("(", 2) && tokens_[cursor_ + 1].kind == TokenKind::identifier) {
+      auto expr = make(Expression::Kind::init_reserved, expect("init"));
+      expr->children.push_back(finish(make(Expression::Kind::name, value_name())));
+      arguments(*expr);
+      return expr;
     }
     if (is("var"))
       fail(token.at, "use ref/ptr for reference bindings or val for independent bits storage");
@@ -2348,7 +2401,8 @@ class Parser {
       const auto saved = controls_;
       try {
         auto label = initializer && starts_field_initializer() ? construction_label() : Expr{};
-        result->children.push_back(expression(0, HereAttachment::immediate, true, true, std::move(label)));
+        result->children.push_back(!initializer && is("assert") ? predicate_assertion() :
+            expression(0, HereAttachment::immediate, true, true, std::move(label)));
       } catch (const LocatedFailure &failure) {
         controls_ = saved;
         result->children.push_back(recover_operand(first, failure.diagnostic, SyntaxRole::block_item));
@@ -2358,10 +2412,12 @@ class Parser {
         return result;
       }
       if (take(";") || is("}")) continue;
-      if (!initializer && result->children.back()->ordinary_braced_if() && starts_block_item()) continue;
+      if (!initializer &&
+          (result->children.back()->ordinary_braced_if() || result->children.back()->braced_ref_group()) &&
+          starts_block_item()) continue;
       if (reports_.size() == reports_before_item || reports_.back().at.span.first != peek().at.span.first)
         record_fault({peek().at, "expected ';'"});
-      if (is("return") || is("val") || is("ref") || is("ptr") || is("const") ||
+      if (is("return") || is("val") || is("ref") || is("ptr") || is("const") || is("assert") ||
           is("if") || is("try") || is("throw") || is("defer") || is("for") || is("effect"))
         continue;
       synchronize_operand(cursor_, SyntaxRole::block_item);
@@ -2948,8 +3004,11 @@ public:
         expect(";");
       } else {
         form->kind = Form::Kind::expression;
-        form->body = expression();
-        expect(";");
+        form->body = is("assert") ? predicate_assertion() : expression();
+        if (form->body->braced_ref_group() && (peek().kind == TokenKind::end || starts_block_item()))
+          take(";");
+        else
+          expect(";");
       }
       append(std::move(form));
     };

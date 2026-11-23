@@ -146,6 +146,7 @@ struct CheckedOperation {
   };
   std::optional<NativeAcquisition> native_acquisition;
   std::optional<size_t> native_call;
+  bool rebind_native_handle = false;
   bool reborrows_native_owner = false;
   std::optional<size_t> binding;
   // Immutable selected reference, independent of the mutable binding version.
@@ -168,6 +169,7 @@ struct CheckedOperation {
   bool enum_literal = false;
   bool enum_assertion = false;
   bool check_c_string = false;
+  bool check_predicate_assertion = false;
   struct LexicalAllocation {
     size_t owner;
     enum Kind { text, builder_snapshot, builder, text_slice } kind;
@@ -416,6 +418,7 @@ struct CheckedBinding {
   bool nullable = false;
   const Expression *pipeline = nullptr;
   bool direct_text_place = false;
+  bool native_borrow_slot = false;
   PlaceKind kind() const { return place_kind(value_binding, requires_initialized); }
 };
 
@@ -516,6 +519,7 @@ struct ViewEvidence {
   std::optional<PlaceKind> storage_kind = {};
   NominalTargets nominal_targets = {};
   bool direct_text_place = false;
+  bool native_borrow_slot = false;
   void project_target() {
     value_binding.reset();
     fixed_binding.reset();
@@ -523,6 +527,7 @@ struct ViewEvidence {
     place_owners.clear();
     storage_kind.reset();
     direct_text_place = false;
+    native_borrow_slot = false;
   }
   template <typename Map> void map_owners(Map map) {
     if (owner) owner = map(*owner);

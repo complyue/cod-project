@@ -26,6 +26,17 @@
     "stderr_contains": "variadic execution with a differently shaped callable declaration"
   },
   {
+    "file": "predicate-assertion.cod",
+    "exit": 0,
+    "stdout": "1\n11\n2\n21\n3\n9\n"
+  },
+  {
+    "file": "predicate-assertion-false.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "assertion predicate is provably false"
+  },
+  {
     "file": "recursive-bits-array.cod",
     "exit": 0,
     "stdout": "11\n13\n42\n1\n0\n12\n29\n"

@@ -1,0 +1,43 @@
+using symbol "std:io" @print;
+using "std:exceptions" { AssertionFailedError, Exception }
+
+data PredicateFailure <: Exception { code:u64; }
+
+proc observe(flag:bool, counter:u64 in R) -> bool where {owner R} {
+    counter <- counter + 1u64;
+    return flag
+}
+
+proc check(flag:bool, counter:u64 in A, cleaned:u64 in C) -> void where {owner A, owner C} {
+    defer { (cleaned <- cleaned + 10u64):void };
+    assert observe(flag, counter);
+    cleaned <- cleaned + 1u64;
+    return
+}
+
+proc fail_predicate() -> bool throws PredicateFailure {
+    throw PredicateFailure { code <- 9u64 }
+}
+
+val attempts <- 0u64;
+val cleanup <- 0u64;
+check(true, attempts, cleanup);
+behave @print(attempts);
+behave @print(cleanup);
+try {
+    check(false, attempts, cleanup)
+} catch (error:const AssertionFailedError) {
+    behave @print(attempts);
+    behave @print(cleanup)
+};
+
+assert observe(false, attempts) or true;
+behave @print(attempts);
+try {
+    assert fail_predicate();
+    behave @print(0u64)
+} catch (error:PredicateFailure) {
+    behave @print(error.code)
+} catch (error:const AssertionFailedError) {
+    behave @print(100u64)
+};

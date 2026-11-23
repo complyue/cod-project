@@ -34,7 +34,8 @@
   ENTRY(unexpected_case, UnexpectedCaseError, 9, 0) \
   ENTRY(type_assertion_failed, TypeAssertionFailedError, 10, 0) \
   ENTRY(error_root, Error, COD_LANG_ERROR_ROOT_ID, 0) \
-  ENTRY(unhandled_defer, UnhandledDeferError, 12, 0)
+  ENTRY(unhandled_defer, UnhandledDeferError, 12, 0) \
+  ENTRY(assertion_failed, AssertionFailedError, 13, 0)
 
 /* An identity is read with its kind. These records describe publications
    during checking, independently of a compiler's runtime symbol table. */

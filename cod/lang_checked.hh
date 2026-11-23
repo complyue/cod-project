@@ -6192,6 +6192,15 @@ class ScalarChecker {
   static bool matches_native_handle(const Type &type, const Type &marker) {
     return type.kind == Type::native_handle && type.identity == marker.identity;
   }
+  static void check_native_rebind_operands(const Type &destination, const Type &source,
+      std::optional<bool> destination_readonly, std::optional<bool> source_readonly, const Location &at) {
+    if (source.owned || !matches_native_handle(source, destination))
+      fail(at, "native handle rebinding requires the exact borrowed CType");
+    if (!destination_readonly || !source_readonly)
+      implementation_gap(at, "unproved native handle access for rebinding");
+    if (!*destination_readonly && *source_readonly)
+      fail(at, "readonly handle cannot rebind a writable handle local");
+  }
   CheckedOperation check_handle_loan(const Expression &operand, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, std::optional<size_t> selected_binding = {}) {
     if (selected_binding) operations[&operand] = read_native_loan(operand, *selected_binding);
@@ -7533,7 +7542,9 @@ class ScalarChecker {
     const auto retain = [&](const Capture &capture, bool query = false) {
       if (const auto found = available.bindings.find(capture.name); found != available.bindings.end()) {
         context.bindings.emplace(*found);
-        context.views.emplace(capture.name, available.views.at(capture.name));
+        auto view = available.views.at(capture.name);
+        view.native_borrow_slot = false;
+        context.views.emplace(capture.name, std::move(view));
       } else if (query && lexical_self(capture.name, available.method)) {
         context.bindings.emplace(capture.name, callable_query({*available.method}, nullptr, capture.at, available));
         context.views.emplace(capture.name, ViewEvidence{false, false, {}});
@@ -8318,6 +8329,7 @@ class ScalarChecker {
     }
     if (a.storage_kind && b.storage_kind)
       result.storage_kind = a.storage_kind == b.storage_kind ? *a.storage_kind : PlaceKind::mixed;
+    result.native_borrow_slot = a.native_borrow_slot && b.native_borrow_slot && a.place_owners == b.place_owners;
     return result;
   }
   enum class GroupResult { value, target, unsupported };
@@ -12149,6 +12161,21 @@ class ScalarChecker {
     case K::boolean:
       if (state.selections.tracking) target_facts.branches = PresenceBranches::constant(expr.text == "true");
       return Type::boolean;
+    case K::predicate_assertion: {
+      const auto predicate = child(0);
+      if (!predicate || predicate == Type::never) return predicate;
+      if (state.required && predicate != Type::boolean) fail(expr.at, "assert requires a bool predicate");
+      const auto proof = state.target.branches;
+      if (state.selections.reachable(proof, false)) {
+        if (state.required && !state.selections.reachable(proof, true))
+          fail(expr.at, "assertion predicate is provably false");
+        auto failed = state;
+        failed.selections.assume(proof, false);
+        note_type_exit(failed, Completion::failure(exception_id(ExceptionCategory::assertion_failed)));
+      }
+      state.selections.assume(proof, true);
+      return Type::void_type;
+    }
     case K::return_test: {
       const auto pattern = return_pattern_evidence(expr, state);
       if (pattern.matches == OwnerMatch::mismatch || state.observed_return.present == false)
@@ -12556,6 +12583,7 @@ class ScalarChecker {
           fail(initializer.at, "handle initializer must have CType '" + declared.name + "'");
         binding.owner = state.value.owner;
         binding.read_only = state.value.read_only;
+        binding.native_borrow_slot = !expr.fixed_binding;
       }
       state.bindings[expr.text] = native_handle_type(declared, owned);
       state.local_declarations[expr.text] = &expr;
@@ -12716,6 +12744,32 @@ class ScalarChecker {
       return type;
     }
     case K::transfer: case K::rebind: {
+      if (expr.kind == K::rebind) {
+        const auto &destination = ungrouped_expression(*expr.children[0]);
+        const auto binding = state.bindings.find(destination.text);
+        if (destination.kind == K::name && binding != state.bindings.end() &&
+            binding->second && binding->second->kind == Type::native_handle) {
+          const auto target = state.views.at(destination.text);
+          const auto target_type = *binding->second;
+          if (state.required && !target.native_borrow_slot)
+            fail(destination.at, "native handle rebinding requires a mutable borrowed handle local");
+          if (state.required && !state.validating_body && !state.local_declarations.contains(destination.text))
+            check_query_binding(destination.text, destination.at);
+          if (state.required && state.preparing(expr))
+            implementation_gap(expr.at, "a prepared deferred native handle rebind");
+          const auto &operand = *expr.children[1];
+          const auto source = type_evidence(operand, state, false, nullptr, nullptr,
+              ExpectedTypeUse::materialization, true, EvidenceRead::native_loan);
+          if (!source || source == Type::never) return source;
+          if (state.required) {
+            check_native_rebind_operands(target_type, *source, target.read_only, state.value.read_only, operand.at);
+            if (state.value.view != true || state.value.mixed_view ||
+                compare_owners(target.owner, state.value.owner, &state) != OwnerMatch::satisfied)
+              fail(operand.at, "native handle rebinding requires its original actual owner");
+          }
+          return Type::void_type;
+        }
+      }
       const auto read_destination = expr.kind == K::rebind ? EvidenceRead::binding_slot : EvidenceRead::transfer_destination;
       const auto type = child(0, false, true, read_destination); view = state.value;
       auto destination = state.target;
@@ -14303,6 +14357,7 @@ class ScalarChecker {
         for (const auto owner : bindings_->at(slot).place_owners) state.views.at(name).place_owners.insert(owner);
       state.views.at(name).storage_kind = binding.kind();
       state.views.at(name).direct_text_place = binding.direct_text_place;
+      state.views.at(name).native_borrow_slot = binding.native_borrow_slot;
       if (!track_selection || binding.owner_binding || physical_selection.empty()) return;
       if (binding.value_binding) {
         if (physical_selection.size() == 1) {
@@ -18388,12 +18443,48 @@ class ScalarChecker {
     }
     const auto place = declare(expr.text, value.type, value.read_only, true, expr.at);
     const auto binding = storage(place).binding;
-    bindings_->at(binding).fixed = true;
+    auto &slot = bindings_->at(binding);
+    // A native pair never supplies an ordinary reference slot.
+    slot.fixed = true;
+    slot.native_borrow_slot = !expr.fixed_binding;
     lexical_.owners.at(binding) = {owner};
     initialize(place);
     result.type = Type::void_type;
     result.place = place;
     return result;
+  }
+  CheckedOperation check_native_handle_rebind(const Expression &expr, const Expression &destination, size_t binding,
+      CheckedInstance *instance, std::map<const Expression *, CheckedOperation> &operations) {
+    const auto &slot = bindings_->at(binding);
+    if (!slot.native_borrow_slot)
+      fail(destination.at, "native handle rebinding requires a mutable borrowed handle local");
+    if (&expr == prepared_call_ || delayed_)
+      implementation_gap(expr.at, "deferred native handle rebinding");
+    const auto target = read_native_loan(destination, binding);
+    const auto owner = one_owner(target);
+    if (!target.place || !owner)
+      implementation_gap(destination.at, "native handle rebind without one live local slot and owner");
+    const auto &operand = *expr.children[1];
+    const auto source = check_handle_loan(operand, instance, operations);
+    CheckedOperation operation;
+    operation.type = source.type == Type::never ? Type::never : Type::void_type;
+    operation.place = target.place;
+    operation.rebind_native_handle = true;
+    if (source.type == Type::never) return operation;
+    check_native_rebind_operands(target.type, source.type, target.read_only, source.read_only, operand.at);
+    if (compare_owners(owner, one_owner(source)) != OwnerMatch::satisfied)
+      fail(operand.at, "native handle rebinding requires its original actual owner");
+    require_live_view(target, destination.at);
+    if (lexical_.live && !external_owner(*owner)) {
+      const auto lifetime = owner_lifetime_scope(*owner);
+      const auto local_scope = storage(*target.place).scope;
+      const auto lifetime_position = std::ranges::find(lexical_.scopes, lifetime, &LexicalState::Scope::id);
+      const auto local_position = std::ranges::find(lexical_.scopes, local_scope, &LexicalState::Scope::id);
+      if (lifetime_position == lexical_.scopes.end() || local_position == lexical_.scopes.end() ||
+          lifetime_position > local_position)
+        fail(operand.at, "native handle borrow does not outlive the destination binding");
+    }
+    return operation;
   }
   size_t construction_destination(const Expression &expr, std::optional<size_t> required) const {
     auto owner = required.value_or(cleanup_scope_);
@@ -19208,6 +19299,24 @@ class ScalarChecker {
       operation.type = Type::boolean; operation.integer = expr.text == "true";
       operation.predicate = constant_predicate(operation.integer);
       break;
+    case K::predicate_assertion: {
+      const auto &predicate = *expr.children.front();
+      const auto type = child(0);
+      operation.type = type == Type::never ? Type::never : Type::void_type;
+      if (type == Type::never) break;
+      if (type != Type::boolean) fail(predicate.at, "assert requires a bool predicate");
+      if (!lexical_.live) break;
+      const auto completed = lexical_;
+      refine(predicate, false, operations);
+      operation.check_predicate_assertion = lexical_.live;
+      if (operation.check_predicate_assertion)
+        note_abrupt(expr.at, {exception_id(ExceptionCategory::assertion_failed)});
+      lexical_ = completed;
+      refine(predicate, true, operations);
+      if (proving_ && validating_ && !lexical_.live)
+        fail(predicate.at, "assertion predicate is provably false");
+      break;
+    }
     case K::return_test: {
       operation.type = Type::boolean;
       const auto &group = checking_method_->here_group;
@@ -20242,6 +20351,16 @@ class ScalarChecker {
       break;
     }
     case K::transfer: case K::rebind: {
+      if (expr.kind == K::rebind) {
+        const auto &destination = ungrouped_expression(*expr.children[0]);
+        if (destination.kind == K::name) {
+          const auto binding = lexical_.lookup(destination.text);
+          if (binding && bindings_->at(*binding).type.kind == Type::native_handle) {
+            operation = check_native_handle_rebind(expr, destination, *binding, instance, operations);
+            break;
+          }
+        }
+      }
       const bool prepared = &expr == prepared_call_;
       operation.arguments = {{ArgumentMode::borrowed_ptr, Type::never, expr.kind == K::rebind},
                              {expr.kind == K::transfer ? ArgumentMode::value : ArgumentMode::borrowed_ptr, Type::never}};
@@ -23182,6 +23301,7 @@ class ScalarChecker {
   }
 
   static void require_implemented_source_forms(const Parameter &parameter) {
+    if (parameter.not_init_ref) implementation_gap(*parameter.not_init_ref, "not init ref parameters");
     require_implemented_source_forms(parameter.type, parameter.at, "owning exception parameter");
     if (!parameter.here) return;
     for (const auto &input : parameter.here->parameters) require_implemented_source_forms(input);
@@ -23194,6 +23314,10 @@ class ScalarChecker {
     if (!form.body) return;
     const auto visit = [&](auto &&self, const Expression &expr) -> void {
       using K = Expression::Kind;
+      if (expr.kind == K::bare_ref_slot) implementation_gap(expr.at, "bare ref slots");
+      if (expr.kind == K::init_reserved) implementation_gap(expr.at, "initializing a reserved target");
+      if (expr.kind == K::predicate_assertion && expr.children.size() > 1)
+        implementation_gap(expr.children[1]->at, "predicate assertion with a written diagnostic");
       if (expr.kind == K::exception_binding) implementation_gap(expr.at, "owning exception local");
       if (expr.kind == K::rethrow_from) implementation_gap(expr.at, "rethrow with an explicit cause");
       if (expr.kind == K::make_exception) implementation_gap(expr.at, "owning make exception expression");

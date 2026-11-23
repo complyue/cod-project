@@ -4065,6 +4065,23 @@ class LLVMEmission {
       auto *view = llvm::ConstantStruct::get(text_view_, {bytes, integer(expr.text.size()), integer(expr.text.size() + 1)});
       return new llvm::GlobalVariable(module_, text_view_, true, llvm::GlobalValue::PrivateLinkage, view, "text.literal");
     }
+    case K::predicate_assertion: {
+      auto *value = emit_expression(*expr.children.front());
+      if (!reachable()) return nullptr;
+      std::map<bool, std::vector<size_t>> checks;
+      for (size_t i = 0; i < contexts_.size(); ++i)
+        checks[contexts_[i].at(&expr).check_predicate_assertion].push_back(i);
+      return contextual_value(expr, checks, "predicate.assertion", [&](bool check) {
+        if (check) {
+          auto *ready = block("assertion.satisfied"), *failed = block("assertion.failed");
+          b_.CreateCondBr(unpack(value, Type::boolean), ready, failed);
+          b_.SetInsertPoint(failed);
+          fail_path(ExceptionCategory::assertion_failed, expr.at);
+          b_.SetInsertPoint(ready);
+        }
+        return empty_scalar();
+      });
+    }
     case K::return_test: {
       std::map<CheckedOperation::ReturnFilter, std::vector<size_t>> alternatives;
       for (size_t i = 0; i < contexts_.size(); ++i) alternatives[contexts_[i].at(&expr).return_filter].push_back(i);
@@ -4344,6 +4361,18 @@ class LLVMEmission {
       return empty_scalar();
     }
     case K::transfer: case K::rebind: {
+      if (fact.rebind_native_handle) {
+        std::map<size_t, std::vector<size_t>> destinations;
+        for (size_t i = 0; i < contexts_.size(); ++i)
+          destinations[*contexts_[i].at(&expr).place].push_back(i);
+        auto *destination = contextual_value(expr, destinations, "native.rebind.place",
+            [&](size_t place) { return storage_.at(place); }, b_.getPtrTy());
+        auto *source = emit_expression(*expr.children[1], Projection::target);
+        if (!reachable()) return nullptr;
+        auto *selection = b_.CreateLoad(native_handle_pair(), source);
+        b_.CreateStore(selection, destination);
+        return empty_scalar();
+      }
       if (projection == Projection::slot) throw std::logic_error("assignment result has no binding slot");
       const auto assignment = [&](bool policy) -> llvm::Value * {
         if (policy) {
