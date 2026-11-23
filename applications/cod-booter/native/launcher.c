@@ -383,6 +383,8 @@ static int finish_command(const char *input, cod_native_status result, compiler_
             report(diagnostic->path, status, &diagnostic->reports[i]);
         if (!diagnostic->count || diagnostic->primary.stage != diagnostic->reports[0].stage)
             report(input, status, &diagnostic->primary);
+        if (diagnostic->snapshot_failed)
+            fprintf(stderr, "%s: error: could not retain the complete parser diagnostics\n", input);
     }
     free(diagnostic->reports);
     free(diagnostic->path);

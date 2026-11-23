@@ -1,6 +1,7 @@
 #ifndef COD_BOOTER_COMPILE_DIAGNOSTIC_H
 #define COD_BOOTER_COMPILE_DIAGNOSTIC_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -36,6 +37,7 @@ typedef struct {
     cod_booter_diagnostic *reports;
     char *path;
     size_t count;
+    bool snapshot_failed;
     cod_booter_diagnostic primary;
 } cod_booter_diagnostic_sink;
 
