@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Read the module index’s slot and fixed value parameters
+
+<a id="k-booter-slot-formal-syntax-20261122"></a>
+**K-BOOTER-SLOT-FORMAL-SYNTAX-20261122.** Delegated pre-code review under H-PROJECT-ARCHITECTURE-REVIEW-20261122 continues the caller-slot contract at `c3ccddb0db35e84cb4f290bf29bd1fc55cedf4b6:applications/cod-booter/docs/ModuleGraph.md`, “First-edge implementation”. D-23 supplies fixed scalar binding access. Clearance covers the two formal syntax forms in the unedited module index and their located bootstrap checks. D-20-MODULE-GRAPH r26 to r27, D-ARCH-REVIEW r30 to r31, P-680–P-683, registry r1079.
+
 ## 2026-11-22 — Check finite aggregate storage in the booter
 
 <a id="k-booter-aggregate-schemas-20261122"></a>
