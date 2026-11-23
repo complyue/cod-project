@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Read nominal sums and consume the completed booter graph
+
+<a id="k-booter-sum-parser-graph-output-20261122"></a>
+**K-BOOTER-SUM-PARSER-GRAPH-OUTPUT-20261122.** Under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122, delegated review cleared the CoD declaration parser for H-DCTOR-SOURCE-20261118 and ordinary named terminal calls under the CLI driver’s graph owner. The preceding boundary is at `432c961202fddf42710523f75157c6d036362208:applications/cod-booter/docs/ModuleGraph.md`, “Typed syntax consumers” and “Checking declarations and publishing generated providers”. H-600/H-604 retain their existing lending scope. D-20-MODULE-GRAPH r17 to r18, D-ARCH-REVIEW r20 to r21, P-680–P-683, registry r1069.
+
 ## 2026-11-22 — Native target layout facts for provider rows
 
 <a id="k-booter-provider-target-layout-20261122"></a>
