@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review effect scope in the booter’s session proof
+
+<a id="k-booter-session-installation-scope-20261123"></a>
+**K-BOOTER-SESSION-INSTALLATION-SCOPE-20261123.** [D-20-MODULE-GRAPH r61→r62](applications/cod-booter/docs/ModuleGraph.md#tracing-the-installed-session-to-its-operand) and D-ARCH-REVIEW r77→r78 continue P-680–P-683. [H-319](#h-319) and the [owning effect contract](#h-native-handle-effect-20261121) govern the use-site proof for the call reviewed at `142d400ecdbdcb5421fc409842392b6022469f14:applications/cod-booter/docs/ModuleGraph.md`. An ordinary group carries a successful installation forward. A full scope restores the preceding binding on exit. A demanded join must account for every reaching installation.
+
 ## 2026-11-23 — Review source checking of two native handle loans
 
 <a id="k-booter-two-handle-source-call-20261123"></a>
