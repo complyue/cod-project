@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 70 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 71 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+[D-15-PUBLIC-SOURCE](DesignAuthorityRegistry.md#d-15-public-source) r71 applies the [confirmed semicolon policy](SymbolicDynamicScope.md#semicolon-omission-and-syntax-ux) to the closing delimiter of an [explicit resource group](#public-definitions-and-grouped-selections). P-662/P-663 preserve public identity and each verb's permissions. Compare both spellings at EOF and before a following module item in both frontends, including recovery from malformed lists. [Continuity and human baselines](../CHANGELOG.md#k-grouped-selector-boundary-20261123)
 
 At r70 the [symbolic selector guidance](../CHANGELOG.md#h-symbolic-selector-guideline-20261123) annotates [family selection](#selecting-a-symbolic-procedure-family) under D-15-DEFAULT-EXPORTS and D-DOC-IDIOMATICS. P-692/P-693 preserve module authors' public vocabularies and receivers' choice of reuse. Check that each example identifies the required identity, family or extension and the site that installs it. The [family reuse baseline](../CHANGELOG.md#h-symbolic-family-reuse-idiom-20261123) and existing permissions govern all three examples.
 
@@ -428,7 +430,7 @@ export data SourcePosition {
     column:u64;
 }
 
-using "./SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
+using "./SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition }
 ```
 
 The prefix publishes the same local identity that a separate `export name;` would publish after the declaration. This includes named `data`, `array`, `func`, `proc`, `enum` and `handle type` declarations. It applies to a foreign-marked declaration with a separately publishable identity under its existing rules, including a local `data "C"` or `proc "C"` declaration. Marking one method publishes its complete locally resolved callable family. Likewise a public type carries its existing constructors, methods or member table according to that type's contract. A private definition sharing only a foreign object's spelling cannot publish that foreign object by accident. Use the [publication-only re-export](#publication-only-re-export) when the public identity comes from upstream.
@@ -438,11 +440,20 @@ The prefix applies to a declaration that has a single publishable name, includin
 For several selections with one source and operation, place a comma-separated list **after the quoted module path**. Each item obeys the same source-name, destination-name and suffix grammar as a singleton of that operation. For example:
 
 ```cod
-using "./SourceStorage.cod" { SourceBytes, SourcePosition as Position };
-using "./Compiler.cod" { NativeError { Rejected, OpenFailed }, ExpressionScratchPlan };
+using "./SourceStorage.cod" { SourceBytes, SourcePosition as Position }
+using "./Compiler.cod" { NativeError { Rejected, OpenFailed }, ExpressionScratchPlan }
 ```
 
-The outer braces group public selections. The braces following NativeError select members *of that type*. The same distinction applies to sum constructors. Existing per-item `as`, `with methods` and a mixin's `with { ... }` symbol map attach only to their item, wherever that singleton already permits the combination. A parenthesized operator occupies one item. Commas inside a member selector and semicolons inside a symbol map belong to the nested production. Require at least one item, allow a trailing comma, and apply the existing statement-termination rules after the closing brace. The single-selection spelling remains idiomatic for one item.
+The outer braces group public selections. The braces following NativeError select members *of that type*. The same distinction applies to sum constructors. Existing per-item `as`, `with methods` and a mixin's `with { ... }` symbol map attach only to their item, wherever that singleton already permits the combination. A parenthesized operator occupies one item. Commas inside a member selector and semicolons inside a symbol map belong to the nested production. An enumerated list requires at least one item and permits a trailing comma. The single-selection spelling remains idiomatic for one item.
+
+The outer `}` completes an explicit module selection group. At end of file or before the next module item, the trailing semicolon is optional for `using`, `import`, `mixin` and grouped `export import`. The rule applies to every admitted item kind and to a module-level `{..}` wherever that verb admits it. For example, both directives here are complete:
+
+```cod
+using "string.cod" { var @sout }
+symbol from "string.cod" { @sout }
+```
+
+A space in place of the newline yields the same two directives. The next item parses by its own grammar. A comma, item modifier or unmatched brace after the closed group cannot extend it. Inside the list, a newline cannot supply a missing comma or closing brace. An inner type-member selector's `}` closes only that selector. [Semicolon policy](SymbolicDynamicScope.md#semicolon-omission-and-syntax-ux)
 
 Apply grouped items in written order using the same source module and verb. A group can contain ordinary names and kind-qualified symbolic items, for example `using "./hooks.cod" { emit, var @sout, proc @flush }`. Each item has the same rules as its singleton. An identity-only dependency uses `symbol from`. The `using units` form keeps its own grammar. A grouped `export import` applies publication to each imported item. There is no group-wide post-brace modifier.
 

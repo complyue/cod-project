@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Let the outer brace terminate a grouped module selection
+
+<a id="k-grouped-selector-boundary-20261123"></a>
+**K-GROUPED-SELECTOR-BOUNDARY-20261123.** Design-review continuity for [D-15-PUBLIC-SOURCE r71](design/ModuleWorlds.md#public-definitions-and-grouped-selections), P-662/P-663. At `7e1230a3ce6832ce373fa6e5f5fe93a410bdc232:design/ModuleWorlds.md` the grouped selection rule left termination implicit while the published variable example omitted its semicolon. The outer brace determines the boundary under [H-MODULE-SOURCE-STYLE-20261121](#h-module-source-style-20261121), [H-IDIOMATIC-SEMICOLONS-20261122](#h-idiomatic-semicolons-20261122) and [H-NEWLINE-AND-LONG-TEXT-20261123](#h-newline-and-long-text-20261123). The review covers admitted outer selection groups and preserves item syntax and selection permissions.
+
 ## 2026-11-23 — Distinguish a present zero from an absent regional ptr field
 
 <a id="h-regional-ptr-field-initialization-20261123"></a>
