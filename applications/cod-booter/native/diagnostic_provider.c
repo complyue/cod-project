@@ -54,6 +54,7 @@ cod_native_status cod_native_write_parse_reports_impl(cod_native_DiagnosticDesti
     if (!copied || !copied_path) {
         free(copied_path);
         free(copied);
+        sink->snapshot_failed = true;
         *status = 1;
         return COD_NATIVE_OK;
     }
@@ -74,6 +75,7 @@ cod_native_status cod_native_write_parse_reports_impl(cod_native_DiagnosticDesti
     sink->path = copied_path;
     sink->reports = copied;
     sink->count = (size_t)used;
+    sink->snapshot_failed = false;
     *status = 0;
     return COD_NATIVE_OK;
 }
