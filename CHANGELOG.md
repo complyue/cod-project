@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Check finite aggregate storage in the booter
+
+<a id="k-booter-aggregate-schemas-20261122"></a>
+**K-BOOTER-AGGREGATE-SCHEMAS-20261122.** Delegated review under H-PROJECT-ARCHITECTURE-REVIEW-20261122 continues the sum interface at `eb912a27dc9755449ed58a9b193d29428befa2a2:applications/cod-booter/docs/ModuleGraph.md`, “Publishing nominal sum interfaces”. H-383/H-384 and D-22 R1 supply the finite bits rule. D-20-C-HANDLES retains the C-record boundary. Clearance covers declaration checking in F and publication of completed facts in G. D-20-MODULE-GRAPH r25 to r26, D-ARCH-REVIEW r29 to r30, P-680–P-683, registry r1078.
+
 ## 2026-11-22 — Parse named constructor fields in booter case arms
 
 <a id="k-booter-constructor-case-syntax-20261122"></a>
