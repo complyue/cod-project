@@ -1,21 +1,62 @@
 using "ParserStorage.cod" {
-    ExprNodes, len, literal_node, add_node, multiply_node, group_node, no_node,
+    ExprNodes, len, literal_node, add_node, multiply_node, group_node, no_node, published_syntax_id,
 };
+using "ParserStorage.cod" AstSlot { Vacant, Occupied };
+using "ParserStorage.cod" ExprPayload { IntegerLiteral, Parenthesized, ArithmeticExpression };
+using "ParserStorage.cod" ArithmeticOperation { Addition, Multiplication };
 using "ParserInput.cod" ParseResult;
 
-export func arithmetic_node(kind:u8) -> bool {
-    return kind == literal_node() || kind == add_node() || kind == multiply_node() || kind == group_node();
+# This small expression backend accepts only its existing four operations.
+# The slots here are backend operands in postorder.
+export data ArithmeticOperands {
+    opcode:u8;
+    immediate:u64;
+    left_slot:u64;
+    right_slot:u64;
+    source_at:u64;
 }
 
-func node_ready(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
-    val operation_at <- nodes[at].operation_at;
-    if (operation_at < nodes[at].first || operation_at >= nodes[at].past) return false;
-    val kind <- nodes[at].kind;
-    if (kind == literal_node()) return true;
-    if (kind == group_node()) return nodes[at].left < at;
-    if (kind == add_node() || kind == multiply_node())
-        return nodes[at].left < at && nodes[at].right < at;
-    return false;
+func checked_anchor(first:u64, past:u64, at:u64) -> bool {
+    return first <= at && at < past;
+}
+
+export func arithmetic_operands(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+                                operation:ArithmeticOperands in O) -> bool where {const owner N, owner O} {
+    if (at >= used || at >= len(nodes)) return false;
+    operation.immediate <- 0u64;
+    operation.left_slot <- 0u64;
+    operation.right_slot <- 0u64;
+    return case nodes[at] of {
+        (Vacant) -> { false };
+        (Occupied { val syntax <- node; }) -> {
+            operation.source_at <- syntax.span.first;
+            case syntax.payload of {
+                (IntegerLiteral { val magnitude <- magnitude; val width <- width; }) -> {
+                    if (width != 64u64) return false;
+                    operation.opcode <- literal_node();
+                    operation.immediate <- magnitude;
+                    checked_anchor(syntax.span.first, syntax.span.past, operation.source_at)
+                };
+                (Parenthesized { val inner <- expression; }) -> {
+                    if (!published_syntax_id(nodes, revision, at, inner)) return false;
+                    operation.opcode <- group_node();
+                    operation.left_slot <- inner.index;
+                    checked_anchor(syntax.span.first, syntax.span.past, operation.source_at)
+                };
+                (ArithmeticExpression { val operands <- operands; val kind <- operation; }) -> {
+                    if (kind != Addition && kind != Multiplication) return false;
+                    if (!published_syntax_id(nodes, revision, at, operands.left_operand) ||
+                        !published_syntax_id(nodes, revision, at, operands.right_operand)) return false;
+                    operation.opcode <- if (kind == Addition) { add_node() } else { multiply_node() };
+                    operation.left_slot <- operands.left_operand.index;
+                    operation.right_slot <- operands.right_operand.index;
+                    operation.source_at <- operands.operator_at;
+                    checked_anchor(syntax.span.first, syntax.span.past, operation.source_at)
+                };
+                (_) -> { false };
+            }
+        };
+    };
 }
 
 # Emit in postorder so both operands are available. The backend emits checked
@@ -28,9 +69,12 @@ export proc lower_expression(here emit(ordinal:u64, kind:u8, number:u64, left:u6
     rejected_node <- no_node();
     if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > len(nodes)) return false;
     if (tree.root != tree.used - 1u64) return false;
+    ref operation = make ArithmeticOperands {
+        opcode <- 0u8; immediate <- 0u64; left_slot <- 0u64; right_slot <- 0u64; source_at <- 0u64;
+    };
     for (at in 0u64 .. tree.used) {
-        if (!node_ready(nodes, at) ||
-            !emit(at, nodes[at].kind, nodes[at].number, nodes[at].left, nodes[at].right, nodes[at].operation_at)) {
+        if (!arithmetic_operands(nodes, tree.revision, tree.used, at, operation) ||
+            !emit(at, operation.opcode, operation.immediate, operation.left_slot, operation.right_slot, operation.source_at)) {
             rejected_node <- at;
             return false;
         } else {};

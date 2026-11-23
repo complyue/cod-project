@@ -2,11 +2,16 @@ using "Lexer.cod" {
     const_word, exception_word, identifier, in_word, not_word, own_word, punctuation,
     reserved_lexical_binder, reserved_module_name,
 };
-using "ParserStorage.cod" { ExprNodes, Tokens, len, name_node, no_node, owned_type_node,
-                            readonly_declaration, typed_name_node };
+using "ParserStorage.cod" {
+    ExprNodes, ExprNode, ExprPayload, SourceSpan, NodeId, Tokens, len, no_node, syntax_first, syntax_past,
+};
+using "ParserStorage.cod" NodeLink { NoLink, LinkTo };
+using "ParserStorage.cod" ExprPayload { NameReference, ModuleSyntax, ModuleItem, BlockSyntax, ScopeSyntax, BlockItem, AnnotatedBinding, OwnerQualifiedType };
+using "ParserStorage.cod" AstSlot { Occupied };
 using "SourceStorage.cod" SourceBytes;
 
 export data ParseResult {
+    revision:u64;
     next:u64;
     used:u64;
     root:u64;
@@ -39,24 +44,81 @@ export func punct_pair_at(source:const SourceBytes in S, tokens:const Tokens in 
     return tokens[at].past - first == 2u64 && source[first] == left && source[first + 1u64] == right;
 }
 
-export func append_node(nodes:ExprNodes in A, result:ParseResult in R,
-                        kind:u8, first:u64, past:u64, number:u64, left:u64,
-                        right:u64, operation_at:u64) -> void where {owner A, owner R} {
+export func append_syntax_node(nodes:ExprNodes in A, result:ParseResult in R,
+                               first:u64, past:u64, payload:const ExprPayload in P) -> void
+    where {owner A, owner R, const owner P} {
     val id <- result.used;
-    if (id >= len(nodes)) {
-        result.diagnostic <- node_storage_exhausted();
-        return;
-    } else {};
-    nodes[id].kind <- kind;
-    nodes[id].first <- first;
-    nodes[id].past <- past;
-    nodes[id].number <- number;
-    nodes[id].left <- left;
-    nodes[id].right <- right;
-    nodes[id].operation_at <- operation_at;
+    if (id >= len(nodes)) { result.diagnostic <- node_storage_exhausted(); return; };
+    nodes[id] <- make Occupied {
+        node <- make ExprNode {
+            span <- make SourceSpan { first <- first; past <- past; };
+            payload <- payload;
+        };
+    };
     result.root <- id;
     result.used <- id + 1u64;
     return;
+}
+
+export func append_qualified_type(nodes:ExprNodes in A, result:ParseResult in R,
+                                  target:u64, owner_name:u64, anchor:u64) -> void where {owner A, owner R} {
+    append_syntax_node(nodes, result, syntax_first(nodes, result.used, target), syntax_past(nodes, result.used, owner_name),
+                       make OwnerQualifiedType {
+        target <- make NodeId { revision <- result.revision; index <- target; };
+        declared_owner <- make NodeId { revision <- result.revision; index <- owner_name; };
+        anchor <- anchor;
+    });
+}
+
+export func append_block_item(nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64,
+                              preceding:u64, expression:u64) -> void where {owner A, owner R} {
+    ref previous = make NoLink {};
+    if (preceding != no_node()) {
+        previous = make LinkTo { node <- make NodeId { revision <- result.revision; index <- preceding; }; };
+        {};
+    };
+    append_syntax_node(nodes, result, first, past, make BlockItem {
+        previous <- previous;
+        expression <- make NodeId { revision <- result.revision; index <- expression; };
+    });
+}
+
+export func append_block(nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64,
+                         tail:u64, scoped:bool) -> void where {owner A, owner R} {
+    ref items = make NoLink {};
+    if (tail != no_node()) {
+        items = make LinkTo { node <- make NodeId { revision <- result.revision; index <- tail; }; };
+        {};
+    };
+    if (scoped) {
+        append_syntax_node(nodes, result, first, past, make ScopeSyntax { items <- items; });
+    } else {
+        append_syntax_node(nodes, result, first, past, make BlockSyntax { items <- items; });
+    };
+}
+
+export func append_module_item(nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64,
+                               preceding:u64, form:u64, published:bool) -> void where {owner A, owner R} {
+    ref previous = make NoLink {};
+    if (preceding != no_node()) {
+        previous = make LinkTo { node <- make NodeId { revision <- result.revision; index <- preceding; }; };
+        {};
+    };
+    append_syntax_node(nodes, result, first, past, make ModuleItem {
+        previous <- previous;
+        form <- make NodeId { revision <- result.revision; index <- form; };
+        published <- published;
+    });
+}
+
+export func append_module(nodes:ExprNodes in A, result:ParseResult in R, past:u64, tail:u64) -> void
+    where {owner A, owner R} {
+    ref items = make NoLink {};
+    if (tail != no_node()) {
+        items = make LinkTo { node <- make NodeId { revision <- result.revision; index <- tail; }; };
+        {};
+    };
+    append_syntax_node(nodes, result, 0u64, past, make ModuleSyntax { items <- items; });
 }
 
 export func parse_identifier(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
@@ -68,7 +130,7 @@ export func parse_identifier(source:const SourceBytes in S, tokens:const Tokens 
         return false;
     } else {};
     val first <- tokens[at].first;
-    append_node(nodes, result, name_node(), first, tokens[at].past, 0u64, 0u64, 0u64, first);
+    append_syntax_node(nodes, result, first, tokens[at].past, make NameReference {});
     if (result.diagnostic != 0u8) return false;
     result.next <- at + 1u64;
     return true;
@@ -108,20 +170,24 @@ export func parse_binding_name(source:const SourceBytes in S, tokens:const Token
         result.next <- result.next + 1u64;
         if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) return false;
         val owner_name <- result.root;
-        append_node(nodes, result, owned_type_node(), nodes[annotation].first, nodes[owner_name].past,
-                    0u64, annotation, owner_name, anchor);
+        append_qualified_type(nodes, result, annotation, owner_name, anchor);
         if (result.diagnostic != 0u8) return false;
         (annotation <- result.root):void;
     } else {};
-    append_node(nodes, result, typed_name_node(), nodes[name].first, nodes[annotation].past,
-                if (readonly) { readonly_declaration() } else { 0u64 }, name, annotation, colon);
+    append_syntax_node(nodes, result, syntax_first(nodes, result.used, name), syntax_past(nodes, result.used, annotation),
+                       make AnnotatedBinding {
+        name <- make NodeId { revision <- result.revision; index <- name; };
+        annotation <- make NodeId { revision <- result.revision; index <- annotation; };
+        readonly <- readonly;
+        colon <- colon;
+    });
     return result.diagnostic == 0u8;
 }
 
 export func reset_parse_result(first:u64, result:ParseResult in R) -> void where {owner R} {
     result.next <- first;
     result.used <- 0u64;
-    result.root <- 0u64;
+    result.root <- no_node();
     result.diagnostic <- 0u8;
     result.supplied_here <- false;
     result.case_control <- false;
@@ -152,7 +218,7 @@ export func parse_resource_name(source:const SourceBytes in S, tokens:const Toke
         return false;
     } else {};
     val first <- tokens[at + 1u64].first;
-    append_node(nodes, result, name_node(), first, tokens[at + 1u64].past, 0u64, no_node(), no_node(), first);
+    append_syntax_node(nodes, result, first, tokens[at + 1u64].past, make NameReference {});
     result.next <- at + 3u64;
     return result.diagnostic == 0u8;
 }

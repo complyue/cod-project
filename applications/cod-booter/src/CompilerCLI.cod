@@ -1,8 +1,7 @@
-using "ModuleGraph.cod" check_graph_module;
 using "NativeSource.cod" Path;
 using "NativeCatalog.cod" { IntrinsicCatalog, catalog_use };
 using "NativeDiagnostics.cod" DiagnosticDestination;
-using "ObjectCompiler.cod" compile_object;
+using "ObjectCompiler.cod" { compile_object, check_declarations, compile_providers };
 using "CompilerStatus.cod" CompilerStatus;
 
 proc "C" compile_cli(handle input:Path in A, output:const String in A,
@@ -10,5 +9,21 @@ proc "C" compile_cli(handle input:Path in A, output:const String in A,
     own handle catalog:IntrinsicCatalog <- make own handle IntrinsicCatalog();
     return catalog_use(catalog) (spellings, exports) => {
         continue compile_object(input, output, diagnostic, spellings, exports);
+    };
+}
+
+proc "C" check_cli(handle input:Path in A, handle diagnostic:DiagnosticDestination in D) -> CompilerStatus
+    where {const owner A, owner D} {
+    own handle catalog:IntrinsicCatalog <- make own handle IntrinsicCatalog();
+    return catalog_use(catalog) (spellings, exports) => {
+        continue check_declarations(input, diagnostic, spellings, exports);
+    };
+}
+
+proc "C" providers_cli(handle input:Path in A, handle directory:Path in P, handle diagnostic:DiagnosticDestination in D)
+    -> CompilerStatus where {const owner A, const owner P, owner D} {
+    own handle catalog:IntrinsicCatalog <- make own handle IntrinsicCatalog();
+    return catalog_use(catalog) (spellings, exports) => {
+        continue compile_providers(input, directory, diagnostic, spellings, exports);
     };
 }

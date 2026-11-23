@@ -15,6 +15,25 @@ export data NativeCommand {
 }
 export array NativeCommands[u64]:NativeCommand;
 
+export data NativeLiteralRange {
+    first:u64;
+    past:u64;
+}
+export array NativeLiteralRanges[u64]:NativeLiteralRange;
+
+export data NativeUnitRow {
+    command_first:u64;
+    command_past:u64;
+    literal_first:u64;
+    literal_past:u64;
+    name_first:u64;
+    name_past:u64;
+    source_size:u64;
+    labels:u64;
+    slots:u64;
+}
+export array NativeUnitRows[u64]:NativeUnitRow;
+
 export data NativePlan {
     used:u64;
     functions:u64;

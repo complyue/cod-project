@@ -1,4 +1,4 @@
-using "ParserStorage.cod" no_node;
+using "ParserStorage.cod" { no_node, FormalMode };
 
 # The name span and any builtin path span belong to the catalog's spelling
 # bytes. A source export names its publishing module independently of origin.
@@ -18,6 +18,15 @@ export data ModuleExport {
 }
 export array ModuleExports[u64]:ModuleExport;
 export func enum_type() -> u8 { return 26u8; }
+export func sum_type() -> u8 { return 39u8; }
+export func constructor_type() -> u8 { return 40u8; }
+
+export data SumInterfacePayload =
+    NoSumInterface {} |
+    SumInterface {} |
+    ConstructorReference { defining_module:u64; declaration:u64; } |
+    ConstructorInterface { sum_module:u64; sum_declaration:u64; } |
+    ConstructorField { field_kind:u8; field_module:u64; field_identity:u64; mode:FormalMode; readonly:bool; };
 
 # An interface header has value_kind zero and precedes its entries. A here
 # operation lists its supplier, then receivers. A record lists its fields.
@@ -47,6 +56,7 @@ export data ModuleInterfaceRow {
     native_procedure:u8;
     native_reception:u8;
     native_passes_owner:u8;
+    sum_payload:SumInterfacePayload;
 }
 export array ModuleInterfaces[u64]:ModuleInterfaceRow;
 
@@ -75,20 +85,82 @@ export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:
     row.native_function <- no_node();
     row.native_procedure <- 0u8;
     row.native_reception <- 0u8;
-    (row.native_passes_owner <- 0u8):void;
+    row.native_passes_owner <- 0u8;
+    return;
 }
 
-export func find_interface(interfaces:const ModuleInterfaces in I, defining_module:u64, declaration:u64) -> u64
+export func write_sum_row(interfaces:ModuleInterfaces in I, row:u64, module:u64, declaration:u64,
+                         kind:u8, entries:u64, first:u64, past:u64, payload:const SumInterfacePayload in P) -> void
+    where {owner I, const owner P} {
+    interfaces[row] <- make ModuleInterfaceRow {
+        defining_module <- module; declaration <- declaration; entry_count <- entries; owner_count <- 0u64;
+        interface_kind <- kind; result_kind <- 0u8; element_kind <- 0u8;
+        value_kind <- if (kind == 0u8) { constructor_type() } else { 0u8 };
+        type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
+        target_readonly <- 0u8; owner_readonly <- 0u8; has_here <- 0u8; failure_checked <- 0u8;
+        failure_module <- 0u64; failure_identity <- 0u64; name_first <- first; name_past <- past;
+        enum_code <- 0u64; native_function <- no_node(); native_procedure <- 0u8; native_reception <- 0u8;
+        native_passes_owner <- 0u8; sum_payload <- payload;
+    };
+    return;
+}
+
+export func find_interface(interfaces:const ModuleInterfaces in I, published:u64, defining_module:u64, declaration:u64) -> u64
     where {const owner I} {
-    val limit <- intrinsic (len)(interfaces);
+    if (published > intrinsic (len)(interfaces)) return no_node();
     val row <- 0u64;
     val width <- 0u64;
-    for (unused in 0u64 .. limit) {
-        if (row >= limit || interfaces[row].value_kind != 0u8) return no_node();
+    for (unused in 0u64 .. published) {
+        if (row >= published || interfaces[row].value_kind != 0u8 || interfaces[row].interface_kind == 0u8)
+            return no_node();
         width <- interfaces[row].entry_count;
-        if (width >= limit - row) return no_node();
+        if (width >= published - row) return no_node();
         if (interfaces[row].defining_module == defining_module && interfaces[row].declaration == declaration) return row;
         row <- row + width + 1u64;
     };
     return no_node();
+}
+
+func sum_field_row(row:const ModuleInterfaceRow in R) -> bool where {const owner R} {
+    return case row.sum_payload of {
+        (ConstructorField { val kind <- field_kind; }) -> { row.value_kind == constructor_type() && kind != 0u8 };
+        (_) -> { false };
+    };
+}
+
+func constructor_parent(row:const ModuleInterfaceRow in R, module:u64, declaration:u64) -> bool where {const owner R} {
+    return case row.sum_payload of {
+        (ConstructorInterface { val parent_module <- sum_module; val parent_declaration <- sum_declaration; }) -> {
+            parent_module == module && parent_declaration == declaration
+        };
+        (_) -> { false };
+    };
+}
+
+export func checked_sum_constructor(interfaces:const ModuleInterfaces in I, published:u64, parent:u64, entry:u64) -> u64
+    where {const owner I} {
+    if (published > intrinsic (len)(interfaces) || parent >= published ||
+        interfaces[parent].interface_kind != sum_type() || interfaces[parent].value_kind != 0u8 ||
+        interfaces[parent].entry_count >= published - parent || entry <= parent ||
+        entry - parent > interfaces[parent].entry_count || interfaces[entry].value_kind != constructor_type())
+        return no_node();
+    case interfaces[parent].sum_payload of {
+        (SumInterface) -> {};
+        (_) -> { return no_node(); };
+    };
+    val constructor <- no_node();
+    case interfaces[entry].sum_payload of {
+        (ConstructorReference { val module <- defining_module; val declaration <- declaration; }) -> {
+            if (module != interfaces[parent].defining_module) return no_node();
+            (constructor <- find_interface(interfaces, published, module, declaration)):void;
+        };
+        (_) -> { return no_node(); };
+    };
+    if (constructor == no_node() || interfaces[constructor].interface_kind != constructor_type() ||
+        !constructor_parent(interfaces[constructor], interfaces[parent].defining_module, interfaces[parent].declaration))
+        return no_node();
+    for (field in constructor + 1u64 .. constructor + 1u64 + interfaces[constructor].entry_count) {
+        if (!sum_field_row(interfaces[field])) return no_node();
+    };
+    return constructor;
 }

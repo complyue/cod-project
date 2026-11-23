@@ -1,0 +1,126 @@
+using "../../../cod/library/string.cod" { StringBuilder, append };
+using "ModuleExportStorage.cod" ModuleInterfaces;
+using "NameResolution.cod" { builtin_c_string, builtin_string, c_operation, c_entry, text_type };
+
+export proc begin_provider_pair(header:StringBuilder in H, stubs:StringBuilder in S) -> void
+    where {owner H, owner S} {
+    append(header, "#ifndef COD_GENERATED_PROVIDERS_H\n#define COD_GENERATED_PROVIDERS_H\n\n#include <stdint.h>\n\n");
+    append(header, "#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n");
+    append(header, "typedef uint32_t cod_native_status;\nenum {\n");
+    append(header, "    COD_NATIVE_OK = 0,\n    COD_NATIVE_FAILURE = 1,\n    COD_NATIVE_BOUNDARY_ERROR = 2\n};\n\n");
+    append(stubs, "#include \"cod_providers.h\"\n#include <stddef.h>\n\n");
+    return;
+}
+
+export proc finish_provider_header(header:StringBuilder in H) -> void where {owner H} {
+    append(header, "#ifdef __cplusplus\n}\n#endif\n\n#endif\n");
+    return;
+}
+
+export data ProviderPreamble {
+    here_steps:bool;
+    incoming_loans:bool;
+    incoming_text:bool;
+    bounded_text_output:bool;
+    c_string_output:bool;
+}
+
+export func prepare_provider_preamble(interfaces:const ModuleInterfaces in G, used:u64,
+                                      features:ProviderPreamble in F) -> bool where {const owner G, owner F} {
+    features.here_steps <- false;
+    features.incoming_loans <- false;
+    features.incoming_text <- false;
+    features.bounded_text_output <- false;
+    features.c_string_output <- false;
+    if (used > intrinsic (len)(interfaces)) return false;
+    val head <- 0u64;
+    val count <- 0u64;
+    val kind <- 0u8;
+    val value_kind <- 0u8;
+    for (unused in 0u64 .. used + 1u64) {
+        if (head == used) return true;
+        count <- interfaces[head].entry_count;
+        if (interfaces[head].value_kind != 0u8 || count >= used - head) return false;
+        kind <- interfaces[head].interface_kind;
+        if (kind == c_operation() && interfaces[head].has_here != 0u8) {
+            (features.here_steps <- true):void;
+        };
+        if (kind == c_entry() && interfaces[head].owner_count != 0u64) {
+            (features.incoming_loans <- true):void;
+        };
+        for (row in head + 1u64 .. head + 1u64 + count) {
+            value_kind <- interfaces[row].value_kind;
+            if (kind == c_entry() && text_type(value_kind)) { (features.incoming_text <- true):void; };
+            if (kind == c_operation() && value_kind == builtin_string()) { (features.bounded_text_output <- true):void; };
+            if (kind == c_operation() && value_kind == builtin_c_string()) { (features.c_string_output <- true):void; };
+        };
+        head <- head + 1u64 + count;
+    };
+    return false;
+}
+
+export proc write_provider_preamble(header:StringBuilder in H, stubs:StringBuilder in S,
+                                    features:const ProviderPreamble in F) -> void
+    where {owner H, owner S, const owner F} {
+    begin_provider_pair(header, stubs);
+    if (features.here_steps) {
+        append(header, "typedef uint32_t cod_native_here_step;\nenum {\n    COD_NATIVE_HERE_VALUE = 0,\n    COD_NATIVE_HERE_PROTECTED = 1,\n    COD_NATIVE_HERE_INVALID = 2\n};\n\n");
+    };
+    if (features.incoming_loans) {
+        append(header, "/* The supplying native activation keeps the lent backing live through the call. */\ntypedef struct cod_native_loan {\n    const void *activation;\n    uint64_t owner;\n} cod_native_loan;\n\n");
+    };
+    if (!features.incoming_text && !features.bounded_text_output && !features.c_string_output) return;
+    append(header, "typedef struct cod_native_text {\n    const uint8_t *bytes;\n    uint64_t size;\n    uint64_t extent;\n} cod_native_text;\n\n");
+    if (features.incoming_text || features.c_string_output) {
+        append(stubs, "#include <stdlib.h>\n#include <string.h>\n");
+    };
+    if (features.incoming_text) { append(stubs, "#include <cod_utf8.h>\n"); };
+    append(stubs, "\nstatic int cod_text_has_extent(const cod_native_text *text) {\n");
+    append(stubs, "    return text && text->bytes && text->size <= text->extent && text->extent <= PTRDIFF_MAX &&\n");
+    append(stubs, "           text->size < PTRDIFF_MAX;\n}\n\n");
+    if (features.incoming_text) {
+        append(stubs, "static int cod_text_snapshot(const cod_native_text *input, int c_string, cod_native_text *output) {\n");
+        append(stubs, "    if (!cod_text_has_extent(input)) return 0;\n");
+        append(stubs, "    const size_t size = (size_t)input->size;\n");
+        append(stubs, "    if (c_string && (input->extent == input->size || input->bytes[size] != 0)) return 0;\n");
+        append(stubs, "    uint8_t *bytes = malloc(size + 1);\n    if (!bytes) return 0;\n");
+        append(stubs, "    memcpy(bytes, input->bytes, size);\n    bytes[size] = 0;\n");
+        append(stubs, "    if (!cod_utf8_valid(bytes, size) || (c_string && memchr(bytes, 0, size))) { free(bytes); return 0; }\n");
+        append(stubs, "    *output = (cod_native_text){bytes, size, size + 1};\n    return 1;\n}\n\n");
+    };
+    if (features.c_string_output) {
+        append(stubs, "static const char *cod_text_c_string(const cod_native_text *text, char **temporary) {\n");
+        append(stubs, "    if (!cod_text_has_extent(text)) return NULL;\n    const size_t size = (size_t)text->size;\n");
+        append(stubs, "    if (text->extent > text->size && text->bytes[size] == 0) return (const char *)text->bytes;\n");
+        append(stubs, "    *temporary = malloc(size + 1);\n    if (!*temporary) return NULL;\n");
+        append(stubs, "    memcpy(*temporary, text->bytes, size);\n    (*temporary)[size] = 0;\n");
+        append(stubs, "    return *temporary;\n}\n\n");
+    };
+    return;
+}
+
+proc append_borrow_name(out:StringBuilder in B, name:const String in N) -> void
+    where {owner B, const owner N} {
+    append(out, "cod_native_");
+    append(out, name);
+    append(out, "_borrow");
+    return;
+}
+
+export proc write_provider_borrow(header:StringBuilder in H, stubs:StringBuilder in S, name:const String in N)
+    -> void where {owner H, owner S, const owner N} {
+    append(header, "typedef struct ");
+    append_borrow_name(header, name);
+    append(header, " {\n    uint64_t payload;\n    uint64_t owner;\n} ");
+    append_borrow_name(header, name);
+    append(header, ";\n\n");
+
+    append(stubs, "_Static_assert(sizeof(");
+    append_borrow_name(stubs, name);
+    append(stubs, ") == 2 * sizeof(uint64_t) &&\n               offsetof(");
+    append_borrow_name(stubs, name);
+    append(stubs, ", owner) == sizeof(uint64_t), \"invalid ");
+    append_borrow_name(stubs, name);
+    append(stubs, " layout\");\n");
+    return;
+}

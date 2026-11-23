@@ -1,0 +1,172 @@
+using "SourceStorage.cod" SourceBytes;
+using "NativeSource.cod" { PathOwner, PathNotReadyException, path_key };
+using "CompilerStatus.cod" CompilerStatus { Complete, ScratchFailed };
+
+export data VisitSlot =
+    Vacant {} |
+    Visiting { key_first:u64; key_past:u64; revision:u64; } |
+    Checked { key_first:u64; key_past:u64; revision:u64; exports_first:u64; exports_past:u64; };
+
+export array Visits [u64]:VisitSlot;
+export data KeyLookup { id:u64; length:u64; }
+
+func same_key(bytes:const SourceBytes in G, first:u64, past:u64, canonical:const SourceBytes in P)
+    -> bool where {const owner G, const owner P} {
+    if (first > past || past > intrinsic (len)(bytes)) return false;
+    if (past - first != intrinsic (len)(canonical)) return false;
+    for (i in 0u64 .. past - first) {
+        if (bytes[first + i] != canonical[i]) return false;
+    };
+    return true;
+}
+
+export func find_visit(visits:const Visits in G, bytes:const SourceBytes in G, used:u64,
+                       canonical:const SourceBytes in P) -> u64 where {const owner G, const owner P} {
+    for (id in 0u64 .. used) {
+        case visits[id] of {
+            (Vacant) -> {};
+            (Visiting { val first <- key_first; val past <- key_past; }) -> {
+                if (same_key(bytes, first, past, canonical)) return id;
+            };
+            (Checked { val first <- key_first; val past <- key_past; }) -> {
+                if (same_key(bytes, first, past, canonical)) return id;
+            };
+        };
+    };
+    return used;
+}
+
+export func growth_capacity(current:u64, required:u64) -> u64 {
+    if (current <= 9223372036854775807u64 && current * 2u64 >= required) return current * 2u64;
+    return required;
+}
+
+export proc reserve_visits(ref var visits:Visits in G, used:u64, required:u64) -> void where {owner G} {
+    val current <- intrinsic (len)(visits);
+    if (required <= current) return;
+    ref replacement = make Visits(growth_capacity(current, required), make Vacant {}) in G;
+    for (id in 0u64 .. used) { replacement[id] <- visits[id]; };
+    visits = replacement;
+    return;
+}
+
+export proc reserve_keys(ref var keys:SourceBytes in G, used:u64, required:u64) -> void where {owner G} {
+    val current <- intrinsic (len)(keys);
+    if (required <= current) return;
+    ref replacement = make SourceBytes(growth_capacity(current, required), 0u8) in G;
+    for (i in 0u64 .. used) { replacement[i] <- keys[i]; };
+    keys = replacement;
+    return;
+}
+
+export proc fill_key(bytes:SourceBytes in G, first:u64, canonical:const SourceBytes in P)
+    -> bool where {owner G, const owner P} {
+    val limit <- intrinsic (len)(bytes);
+    val count <- intrinsic (len)(canonical);
+    if (first > limit || count > limit - first) return false;
+    for (i in 0u64 .. count) { bytes[first + i] <- canonical[i]; };
+    return true;
+}
+
+export proc lookup_path(handle path:PathOwner in P, visits:const Visits in G, keys:const SourceBytes in G,
+                        const val used:u64, result:KeyLookup in R)
+    -> void throws PathNotReadyException where {const owner P, const owner G, owner R} {
+    val id <- used;
+    val length <- 0u64;
+    path_key(path) (key) => {
+        id <- find_visit(visits, keys, used, key);
+        length <- intrinsic (len)(key);
+        continue Complete;
+    };
+    result.id <- id;
+    result.length <- length;
+    return;
+}
+
+export proc fill_path(handle path:PathOwner in P, keys:SourceBytes in G, const val first:u64, const val length:u64)
+    -> CompilerStatus throws PathNotReadyException where {const owner P, owner G} {
+    return path_key(path) (key) => {
+        if (intrinsic (len)(key) != length || !fill_key(keys, first, key)) { continue ScratchFailed; };
+        continue Complete;
+    };
+}
+
+export proc insert_visit(handle path:PathOwner in P, length:u64,
+                         ref var visits:Visits in G, ref var keys:SourceBytes in G, used:u64 in G,
+                         key_used:u64 in G, next_revision:u64 in G)
+    -> CompilerStatus throws PathNotReadyException where {const owner P, owner G} {
+    val limit <- 18446744073709551615u64;
+    if (used >= limit - 1u64 || next_revision == limit || length == 0u64 || length >= limit - key_used)
+        return ScratchFailed;
+    val id <- used;
+    val first <- key_used;
+    val past <- first + length;
+    reserve_visits(visits, id, id + 1u64);
+    reserve_keys(keys, first, past);
+    val filled <- fill_path(path, keys, first, length);
+    if (filled != Complete) return filled;
+    mark_visiting(visits, id, first, past, next_revision);
+    key_used <- past;
+    next_revision <- next_revision + 1u64;
+    used <- id + 1u64;
+    return Complete;
+}
+
+export func visit_is_checked(visits:const Visits in G, id:u64) -> bool where {const owner G} {
+    return case visits[id] of {
+        (Checked) -> { true };
+        (Visiting) -> { false };
+        (Vacant) -> { false };
+    };
+}
+
+export data CanonicalKeyRange { first:u64; past:u64; }
+
+export func checked_module_key(visits:const Visits in G, used:u64, key_used:u64, module:u64,
+                               key:CanonicalKeyRange in K) -> bool where {const owner G, owner K} {
+    if (module == 0u64 || module > used || used > intrinsic (len)(visits)) return false;
+    return case visits[module - 1u64] of {
+        (Checked { val first <- key_first; val past <- key_past; }) -> {
+            if (first >= past || past > key_used) return false;
+            key.first <- first;
+            key.past <- past;
+            true
+        };
+        (_) -> { false };
+    };
+}
+
+export proc mark_visiting(visits:Visits in G, id:u64, first:u64, past:u64, revision:u64)
+    -> void where {owner G} {
+    visits[id] <- make Visiting { key_first <- first; key_past <- past; revision <- revision; };
+    return;
+}
+
+export proc mark_checked(visits:Visits in G, id:u64, exports_first:u64, exports_past:u64)
+    -> bool where {owner G} {
+    if (exports_first > exports_past) return false;
+    case visits[id] of {
+        (Visiting { val first <- key_first; val past <- key_past; val opening <- revision; }) -> {
+            visits[id] <- make Checked {
+                key_first <- first;
+                key_past <- past;
+                revision <- opening;
+                exports_first <- exports_first;
+                exports_past <- exports_past;
+            };
+            return true;
+        };
+        (Checked) -> {};
+        (Vacant) -> {};
+    };
+    return false;
+}
+
+export proc retire_visit(visits:Visits in G, id:u64) -> void where {owner G} {
+    case visits[id] of {
+        (Visiting) -> { visits[id] <- make Vacant {}; return; };
+        (Checked) -> {};
+        (Vacant) -> {};
+    };
+    return;
+}

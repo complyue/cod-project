@@ -1,0 +1,114 @@
+using "../../../cod/library/string.cod" { StringBuilder, emit, emitStr };
+using symbol "../../../cod/library/string.cod" @sout;
+using "SourceStorage.cod" SourceBytes;
+using "ModuleExportStorage.cod" { ModuleInterfaces, enum_type };
+using "NameResolution.cod" { builtin_u8, builtin_u32, builtin_u64, builtin_i64 };
+using "ProviderNames.cod" { emit_provider_identifier, emit_provider_enum_name };
+
+proc emit_backing(kind:u8) -> void {
+    if (kind == builtin_u8()) { emit("uint8_t"); return; };
+    if (kind == builtin_u32()) { emit("uint32_t"); return; };
+    if (kind == builtin_u64()) { emit("uint64_t"); return; };
+    emit("int64_t");
+    return;
+}
+
+proc emit_code(kind:u8, code:u64) -> void {
+    if (kind == builtin_i64() && code > 9223372036854775807u64) {
+        if (code == 9223372036854775808u64) { emit("INT64_MIN"); return; };
+        emit("(-INT64_C(");
+        emitStr(18446744073709551615u64 - code + 1u64);
+        emit("))");
+        return;
+    };
+    if (kind == builtin_u8()) { emit("UINT8_C("); };
+    if (kind == builtin_u32()) { emit("UINT32_C("); };
+    if (kind == builtin_u64()) { emit("UINT64_C("); };
+    if (kind == builtin_i64()) { emit("INT64_C("); };
+    emitStr(code);
+    emit(")");
+    return;
+}
+
+func first_member_identity(rows:const ModuleInterfaces in G, first:u64, row:u64) -> bool where {const owner G} {
+    for (earlier in first .. row) {
+        if (rows[earlier].declaration == rows[row].declaration) return false;
+    };
+    return true;
+}
+
+proc emit_enum_header(name:const String in N, spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
+                      spelling_used:u64, kind:u8, first:u64, past:u64) -> bool where {const owner N, const owner G} {
+    emit("typedef ");
+    emit_backing(kind);
+    emit(" ");
+    emit(name);
+    emit(";\n");
+    for (i in first .. past) {
+        if (rows[i].value_kind != enum_type() || rows[i].name_past > spelling_used) return false;
+        emit("#define ");
+        emit(name);
+        emit("_member_");
+        if (!emit_provider_identifier(spellings, rows[i].name_first, rows[i].name_past)) return false;
+        emit(" ");
+        emit_code(kind, rows[i].enum_code);
+        emit("\n");
+    };
+    emit("\n");
+    return true;
+}
+
+proc emit_enum_validation(name:const String in N, spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
+                          first:u64, past:u64) -> bool where {const owner N, const owner G} {
+    emit("static int ");
+    emit(name);
+    emit("_valid(");
+    emit(name);
+    emit(" value) {\n    switch (value) {\n");
+    for (i in first .. past) {
+        if (first_member_identity(rows, first, i)) {
+            emit("    case ");
+            emit(name);
+            emit("_member_");
+            if (!emit_provider_identifier(spellings, rows[i].name_first, rows[i].name_past)) return false;
+            emit(":\n");
+        };
+    };
+    emit("        return 1;\n    default:\n        return 0;\n    }\n}\n\n");
+    return true;
+}
+
+export proc write_provider_enum(header:StringBuilder in H, stubs:StringBuilder in S,
+                                keys:const SourceBytes in G, key_used:u64, entry_first:u64, entry_past:u64,
+                                module_first:u64, module_past:u64, spellings:const SourceBytes in G,
+                                spelling_used:u64, rows:const ModuleInterfaces in G, head:u64, published:u64) -> bool
+    where {owner H, owner S, const owner G} {
+    if (key_used > intrinsic (len)(keys) || entry_past > key_used || module_past > key_used ||
+        spelling_used > intrinsic (len)(spellings) || published > intrinsic (len)(rows) ||
+        head >= published || rows[head].interface_kind != enum_type() || rows[head].name_past > spelling_used ||
+        rows[head].value_kind != 0u8 || rows[head].entry_count == 0u64 || rows[head].entry_count >= published - head)
+        return false;
+    val kind <- rows[head].element_kind;
+    if (kind != builtin_u8() && kind != builtin_u32() && kind != builtin_u64() && kind != builtin_i64()) return false;
+    ref spelling = make StringBuilder();
+    val ready <- false;
+    {{
+        effect @sout = spelling;
+        (ready <- emit_provider_enum_name(keys, entry_first, entry_past, module_first, module_past, spellings,
+                                          rows[head].name_first, rows[head].name_past)):void;
+    }};
+    if (!ready) return false;
+    ref name = make String(spelling);
+    val first <- head + 1u64;
+    val past <- first + rows[head].entry_count;
+    {{
+        effect @sout = header;
+        (ready <- emit_enum_header(name, spellings, rows, spelling_used, kind, first, past)):void;
+    }};
+    if (!ready) return false;
+    {{
+        effect @sout = stubs;
+        (ready <- emit_enum_validation(name, spellings, rows, first, past)):void;
+    }};
+    return ready;
+}

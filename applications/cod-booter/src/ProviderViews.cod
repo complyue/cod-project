@@ -1,0 +1,225 @@
+using "../../../cod/library/string.cod" { StringBuilder, emit, emitStr };
+using symbol "../../../cod/library/string.cod" @sout;
+using "SourceStorage.cod" SourceBytes;
+using "ParserStorage.cod" no_node;
+using "ModuleExportStorage.cod" { ModuleInterfaces, find_interface };
+using "NameResolution.cod" {
+    array_type, record_type, builtin_bool, builtin_u8, builtin_u32, builtin_u64, builtin_i64, builtin_f32, builtin_f64,
+};
+using "NativeProviderLayout.cod" {
+    ProviderLayout, provider_alloc_size, provider_abi_alignment, provider_struct_alignment,
+    ABIRepresentation { ABIInt8, ABIInt32, ABIInt64, ABIFloat32, ABIFloat64 },
+};
+using "ProviderRecordLayout.cod" { ABIRecordLayout, append_layout_field, finish_layout };
+using "ProviderNames.cod" emit_provider_member;
+
+enum ScalarSpelling:u8 { UnsupportedScalar; UInt8; UInt32; UInt64; Int64; Float32; Float64; }
+array FieldOffsets[u64]:u64;
+
+export data ABIPrimitiveLayout { size:u64; alignment:u64; }
+export array ABIPrimitiveLayouts[u64]:ABIPrimitiveLayout;
+
+func primitive_layout_index(representation:ABIRepresentation) -> u64 {
+    return case representation of {
+        (ABIInt8) -> { 0u64 };
+        (ABIInt32) -> { 1u64 };
+        (ABIInt64) -> { 2u64 };
+        (ABIFloat32) -> { 3u64 };
+        (ABIFloat64) -> { 4u64 };
+    };
+}
+
+proc measure_primitive(handle target:ProviderLayout in L, representation:ABIRepresentation,
+                        layouts:ABIPrimitiveLayouts in A) -> void where {const owner L, owner A} {
+    val index <- primitive_layout_index(representation);
+    layouts[index].size <- provider_alloc_size(target, representation);
+    layouts[index].alignment <- provider_abi_alignment(target, representation);
+    return;
+}
+
+export proc measure_provider_primitives(handle target:ProviderLayout in L, layouts:ABIPrimitiveLayouts in A)
+    -> u64 where {const owner L, owner A} {
+    if (intrinsic (len)(layouts) != 5u64) return 0u64;
+    measure_primitive(target, ABIInt8, layouts);
+    measure_primitive(target, ABIInt32, layouts);
+    measure_primitive(target, ABIInt64, layouts);
+    measure_primitive(target, ABIFloat32, layouts);
+    measure_primitive(target, ABIFloat64, layouts);
+    return provider_struct_alignment(target);
+}
+
+func scalar_spelling(kind:u8) -> ScalarSpelling {
+    if (kind == builtin_bool() || kind == builtin_u8()) return (UInt8:ScalarSpelling);
+    if (kind == builtin_u32()) return (UInt32:ScalarSpelling);
+    if (kind == builtin_u64()) return (UInt64:ScalarSpelling);
+    if (kind == builtin_i64()) return (Int64:ScalarSpelling);
+    if (kind == builtin_f32()) return (Float32:ScalarSpelling);
+    if (kind == builtin_f64()) return (Float64:ScalarSpelling);
+    return (UnsupportedScalar:ScalarSpelling);
+}
+
+func abi_representation(representation:ScalarSpelling) -> ABIRepresentation {
+    return case representation of {
+        (UInt8) -> { ABIInt8 };
+        (UInt32) -> { ABIInt32 };
+        (UInt64) -> { ABIInt64 };
+        (Int64) -> { ABIInt64 };
+        (Float32) -> { ABIFloat32 };
+        (Float64) -> { ABIFloat64 };
+        (UnsupportedScalar) -> { ABIInt8 };
+    };
+}
+
+proc emit_scalar(representation:ScalarSpelling) -> void {
+    case representation of {
+        (UInt8) -> { emit("uint8_t"); };
+        (UInt32) -> { emit("uint32_t"); };
+        (UInt64) -> { emit("uint64_t"); };
+        (Int64) -> { emit("int64_t"); };
+        (Float32) -> { emit("float"); };
+        (Float64) -> { emit("double"); };
+        (UnsupportedScalar) -> {};
+    };
+    return;
+}
+
+export proc emit_provider_scalar_type(kind:u8) -> bool {
+    val representation <- scalar_spelling(kind);
+    if (representation == (UnsupportedScalar:ScalarSpelling)) return false;
+    emit_scalar(representation);
+    return true;
+}
+
+proc emit_view_name(name:const String in N, index:u64, row:bool) -> void where {const owner N} {
+    emit("cod_native_");
+    emit(name);
+    if (row) { emit("_row"); } else { emit("_view"); };
+    emitStr(index);
+    return;
+}
+
+func measure_fields(primitives:const ABIPrimitiveLayouts in L, interfaces:const ModuleInterfaces in G, head:u64,
+                    layout:ABIRecordLayout in R, offsets:FieldOffsets in R) -> bool
+    where {const owner L, const owner G, owner R} {
+    val representation <- (UnsupportedScalar:ScalarSpelling);
+    val index <- 0u64;
+    val offset <- no_node();
+    for (i in 0u64 .. interfaces[head].entry_count) {
+        representation <- scalar_spelling(interfaces[head + 1u64 + i].value_kind);
+        if (representation == (UnsupportedScalar:ScalarSpelling)) return false;
+        index <- primitive_layout_index(abi_representation(representation));
+        offset <- append_layout_field(layout, primitives[index].size, primitives[index].alignment);
+        if (offset == no_node()) return false;
+        offsets[i] <- offset;
+    };
+    return true;
+}
+
+proc emit_c_row(name:const String in N, index:u64, spellings:const SourceBytes in G, spelling_used:u64,
+                interfaces:const ModuleInterfaces in G, head:u64) -> bool where {const owner N, const owner G} {
+    emit("typedef struct ");
+    emit_view_name(name, index, true);
+    emit(" {\n");
+    for (field in head + 1u64 .. head + 1u64 + interfaces[head].entry_count) {
+        if (interfaces[field].name_past > spelling_used) return false;
+        emit("    ");
+        emit_scalar(scalar_spelling(interfaces[field].value_kind));
+        emit(" ");
+        if (!emit_provider_member(spellings, spelling_used, interfaces[field].name_first, interfaces[field].name_past)) return false;
+        emit(";\n");
+    };
+    emit("} ");
+    emit_view_name(name, index, true);
+    emit(";\n");
+    return true;
+}
+
+proc emit_row_layout(name:const String in N, index:u64, spellings:const SourceBytes in G,
+                     spelling_used:u64, interfaces:const ModuleInterfaces in G, head:u64, offsets:const FieldOffsets in R,
+                     size:u64, alignment:u64) -> bool where {const owner N, const owner G, const owner R} {
+    emit("_Static_assert(sizeof(");
+    emit_view_name(name, index, true);
+    emit(") == ");
+    emitStr(size);
+    emit(" && _Alignof(");
+    emit_view_name(name, index, true);
+    emit(") == ");
+    emitStr(alignment);
+    emit(", \"unexpected native row layout\");\n");
+    val field <- 0u64;
+    for (i in 0u64 .. interfaces[head].entry_count) {
+        field <- head + 1u64 + i;
+        emit("_Static_assert(offsetof(");
+        emit_view_name(name, index, true);
+        emit(", ");
+        if (!emit_provider_member(spellings, spelling_used, interfaces[field].name_first, interfaces[field].name_past)) return false;
+        emit(") == ");
+        emitStr(offsets[i]);
+        emit(", \"unexpected native row offset\");\n");
+    };
+    return true;
+}
+
+proc emit_view_header(name:const String in N, index:u64, readonly:bool, representation:ScalarSpelling)
+    -> void where {const owner N} {
+    emit("typedef struct ");
+    emit_view_name(name, index, false);
+    emit(" {\n    ");
+    if (readonly) { emit("const "); };
+    if (representation == (UnsupportedScalar:ScalarSpelling)) { emit_view_name(name, index, true); }
+    else { emit_scalar(representation); };
+    emit(" *base;\n    uint64_t count;\n} ");
+    emit_view_name(name, index, false);
+    emit(";\n");
+    return;
+}
+
+proc emit_view_layout(name:const String in N, index:u64) -> void where {const owner N} {
+    emit("_Static_assert(sizeof(");
+    emit_view_name(name, index, false);
+    emit(") == 2 * sizeof(uint64_t) && offsetof(");
+    emit_view_name(name, index, false);
+    emit(", count) == sizeof(uint64_t), \"unexpected native view layout\");\n");
+    return;
+}
+
+export proc write_provider_view(header:StringBuilder in H, stubs:StringBuilder in S,
+                               primitives:const ABIPrimitiveLayouts in L, record_alignment:u64,
+                               name:const String in N, index:u64, readonly:bool,
+                               interfaces:const ModuleInterfaces in G, used:u64, array_row:u64,
+                               spellings:const SourceBytes in G, spelling_used:u64) -> bool
+    where {owner H, owner S, const owner L, const owner N, const owner G} {
+    if (used > intrinsic (len)(interfaces) || spelling_used > intrinsic (len)(spellings) ||
+        array_row >= used || interfaces[array_row].interface_kind != array_type() ||
+        interfaces[array_row].value_kind != 0u8 || interfaces[array_row].entry_count != 0u64) return false;
+    val element <- interfaces[array_row].element_kind;
+    val representation <- scalar_spelling(element);
+    if (element == record_type()) {
+        val record <- find_interface(interfaces, used, interfaces[array_row].type_module, interfaces[array_row].type_identity);
+        if (record == no_node() || interfaces[record].interface_kind != record_type() ||
+            interfaces[record].entry_count == 0u64) return false;
+        if (record_alignment == 0u64 || intrinsic (len)(primitives) != 5u64) return false;
+        ref layout = make ABIRecordLayout { size <- 0u64; alignment <- record_alignment; };
+        ref offsets = make FieldOffsets(interfaces[record].entry_count, 0u64);
+        if (!measure_fields(primitives, interfaces, record, layout, offsets)) return false;
+        val size <- finish_layout(layout);
+        if (size == no_node()) return false;
+        val rendered <- false;
+        {{
+            effect @sout = header;
+            (rendered <- emit_c_row(name, index, spellings, spelling_used, interfaces, record)):void;
+        }};
+        if (!rendered) return false;
+        {{
+            effect @sout = stubs;
+            (rendered <- emit_row_layout(name, index, spellings, spelling_used, interfaces, record, offsets,
+                                         size, layout.alignment)):void;
+        }};
+        if (!rendered) return false;
+    } else {
+        if (representation == (UnsupportedScalar:ScalarSpelling)) return false;
+    };
+    {{ effect @sout = header; emit_view_header(name, index, readonly, representation); }};
+    {{ effect @sout = stubs; emit_view_layout(name, index); }};
+    return true;
+}

@@ -1,0 +1,243 @@
+using "../../../cod/library/string.cod" { StringBuilder, emit, emitStr };
+using symbol "../../../cod/library/string.cod" @sout;
+using "SourceStorage.cod" SourceBytes;
+using "ParserStorage.cod" no_node;
+using "ModuleExportStorage.cod" { ModuleInterfaces, enum_type, find_interface };
+using "ModuleIndex.cod" Visits;
+using "NameResolution.cod" { builtin_bool, c_constructor, c_handle_type, record_type };
+using "ProviderNames.cod" { emit_provider_identifier, emit_provider_member };
+using "ProviderViews.cod" emit_provider_scalar_type;
+using "ProviderTypeNames.cod" {
+    ProviderPrefixes, emit_provider_interface_name, emit_provider_handle_type, emit_provider_bits_type, find_provider_handle,
+    first_prior_handle_with_role,
+};
+
+proc emit_failure_type(name:const String in N, spellings:const SourceBytes in G, spelling_used:u64,
+                        interfaces:const ModuleInterfaces in G, failure:u64) -> bool
+    where {const owner N, const owner G} {
+    if (interfaces[failure].name_past > spelling_used) return false;
+    emit("/* Payload of the checked ");
+    if (!emit_provider_identifier(spellings, interfaces[failure].name_first, interfaces[failure].name_past))
+        return false;
+    emit(" exception. */\ntypedef struct cod_native_");
+    emit(name);
+    emit("_failure {\n");
+    if (interfaces[failure].entry_count == 0u64) { emit("    uint8_t reserved;\n"); };
+    for (field in failure + 1u64 .. failure + 1u64 + interfaces[failure].entry_count) {
+        emit("    ");
+        if (!emit_provider_scalar_type(interfaces[field].value_kind)) return false;
+        emit(" ");
+        if (!emit_provider_member(spellings, spelling_used, interfaces[field].name_first, interfaces[field].name_past))
+            return false;
+        emit(";\n");
+    };
+    emit("} cod_native_");
+    emit(name);
+    emit("_failure;\n\n");
+    return true;
+}
+
+export proc write_provider_failure_type(header:StringBuilder in H, name:const String in N,
+                                       spellings:const SourceBytes in G, spelling_used:u64,
+                                       interfaces:const ModuleInterfaces in G, interface_used:u64,
+                                       failure_module:u64, failure_identity:u64) -> bool
+    where {owner H, const owner N, const owner G} {
+    if (spelling_used > intrinsic (len)(spellings)) return false;
+    val failure <- find_interface(interfaces, interface_used, failure_module, failure_identity);
+    if (failure == no_node() || interfaces[failure].interface_kind != record_type()) return false;
+    val written <- false;
+    {{
+        effect @sout = header;
+        (written <- emit_failure_type(name, spellings, spelling_used, interfaces, failure)):void;
+    }};
+    return written;
+}
+
+proc emit_constructor_name(name:const String in N, operation:const String in O) -> void
+    where {const owner N, const owner O} {
+    emit("cod_native_");
+    emit(name);
+    emit(operation);
+    return;
+}
+
+proc emit_handle_input(spellings:const SourceBytes in G, spelling_used:u64, rows:const ModuleInterfaces in G,
+                       head:u64, implementation:bool) -> bool where {const owner G} {
+    if (!implementation) { emit("const "); };
+    if (!emit_provider_handle_type(spellings, spelling_used, rows, head)) return false;
+    emit(" ");
+    if (!implementation) { emit("*"); };
+    return true;
+}
+
+proc emit_constructor_signature(name:const String in N, visits:const Visits in G, keys:const SourceBytes in G,
+                                spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
+                                prefix:const ProviderPrefixes in R, head:u64, parent:u64, failure:u64,
+                                implementation:bool) -> bool where {const owner N, const owner G, const owner R} {
+    emit("cod_native_status ");
+    emit_constructor_name(name, "_construct");
+    if (implementation) { emit("_impl"); };
+    emit("(");
+    if (parent != no_node()) {
+        if (!emit_handle_input(spellings, prefix.spellings, rows, parent, implementation)) return false;
+        emit("owner, ");
+    };
+    val input <- 0u64;
+    val handle_head <- no_node();
+    for (offset in 0u64 .. rows[head].entry_count) {
+        input <- head + 1u64 + offset;
+        if (rows[input].value_kind == c_handle_type()) {
+            handle_head <- find_provider_handle(rows, prefix.interfaces, rows[input].type_module, rows[input].type_identity);
+            if (handle_head == no_node() ||
+                !emit_handle_input(spellings, prefix.spellings, rows, handle_head, implementation)) return false;
+        } else {
+            if (!emit_provider_bits_type(visits, keys, spellings, rows, prefix, rows[input].value_kind,
+                                         rows[input].type_module, rows[input].type_identity)) return false;
+            emit(" ");
+        };
+        emit("arg");
+        emitStr(offset);
+        emit(", ");
+    };
+    emit("uint64_t *resource");
+    if (failure != no_node()) {
+        emit(", ");
+        emit_constructor_name(name, "_failure *error");
+    };
+    emit(")");
+    return true;
+}
+
+proc emit_constructor_checks(visits:const Visits in G, keys:const SourceBytes in G, spellings:const SourceBytes in G,
+                             rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R,
+                             head:u64, parent:u64, failure:u64) -> bool where {const owner G, const owner R} {
+    emit(" {\n    if (!resource");
+    if (parent != no_node()) { emit(" || !owner"); };
+    if (failure != no_node()) { emit(" || !error"); };
+    val input <- 0u64;
+    for (offset in 0u64 .. rows[head].entry_count) {
+        input <- head + 1u64 + offset;
+        if (rows[input].value_kind == c_handle_type()) { emit(" || !arg"); emitStr(offset); };
+        if (rows[input].value_kind == builtin_bool()) { emit(" || arg"); emitStr(offset); emit(" > 1"); };
+        if (rows[input].value_kind == enum_type()) {
+            emit(" || !");
+            if (!emit_provider_bits_type(visits, keys, spellings, rows, prefix, rows[input].value_kind,
+                                         rows[input].type_module, rows[input].type_identity)) return false;
+            emit("_valid(arg");
+            emitStr(offset);
+            emit(")");
+        };
+    };
+    emit(") return COD_NATIVE_BOUNDARY_ERROR;\n");
+    val prior <- no_node();
+    for (offset in 0u64 .. rows[head].entry_count) {
+        input <- head + 1u64 + offset;
+        if (rows[input].value_kind == c_handle_type()) {
+            prior <- first_prior_handle_with_role(rows, head + 1u64, input);
+            if (prior != no_node()) {
+                emit("    if (arg");
+                emitStr(prior - head - 1u64);
+                emit("->owner != arg");
+                emitStr(offset);
+                emit("->owner) return COD_NATIVE_BOUNDARY_ERROR;\n");
+            };
+        };
+    };
+    return true;
+}
+
+proc emit_constructor_call(name:const String in N, spellings:const SourceBytes in G, spelling_used:u64,
+                           rows:const ModuleInterfaces in G, head:u64, parent:u64, failure:u64)
+    -> bool where {const owner N, const owner G} {
+    emit("    uint64_t acquired = 0;\n");
+    if (failure != no_node()) {
+        emit("    ");
+        emit_constructor_name(name, "_failure reported = {0};\n");
+    };
+    emit("    const cod_native_status status = ");
+    emit_constructor_name(name, "_construct_impl(");
+    if (parent != no_node()) { emit("*owner, "); };
+    for (offset in 0u64 .. rows[head].entry_count) {
+        if (rows[head + 1u64 + offset].value_kind == c_handle_type()) { emit("*"); };
+        emit("arg");
+        emitStr(offset);
+        emit(", ");
+    };
+    emit("&acquired");
+    if (failure != no_node()) { emit(", &reported"); };
+    emit(");\n    if (status == COD_NATIVE_OK) {\n        *resource = acquired;\n        return status;\n    }\n");
+    if (failure != no_node()) {
+        emit("    if (status == COD_NATIVE_FAILURE) {\n");
+        for (field in failure + 1u64 .. failure + 1u64 + rows[failure].entry_count) {
+            if (rows[field].value_kind == builtin_bool()) {
+                emit("        if (reported.");
+                if (!emit_provider_member(spellings, spelling_used, rows[field].name_first, rows[field].name_past))
+                    return false;
+                emit(" > 1) return COD_NATIVE_BOUNDARY_ERROR;\n");
+            };
+        };
+        emit("        *error = reported;\n        return status;\n    }\n");
+    };
+    emit("    return COD_NATIVE_BOUNDARY_ERROR;\n}\n\n");
+    if (parent == no_node()) {
+        emit("void ");
+        emit_constructor_name(name, "_destroy(uint64_t resource) {\n    ");
+        emit_constructor_name(name, "_destroy_impl(resource);\n}\n\n");
+    };
+    return true;
+}
+
+proc emit_constructor_header(name:const String in N, visits:const Visits in G, keys:const SourceBytes in G,
+                             spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
+                             prefix:const ProviderPrefixes in R, head:u64, parent:u64, failure:u64)
+    -> bool where {const owner N, const owner G, const owner R} {
+    if (failure != no_node() && !emit_failure_type(name, spellings, prefix.spellings, rows, failure)) return false;
+    if (!emit_constructor_signature(name, visits, keys, spellings, rows, prefix, head, parent, failure, false)) return false;
+    emit(";\n");
+    if (parent == no_node()) { emit("void "); emit_constructor_name(name, "_destroy(uint64_t resource);\n"); };
+    if (!emit_constructor_signature(name, visits, keys, spellings, rows, prefix, head, parent, failure, true)) return false;
+    emit(";\n");
+    if (parent == no_node()) { emit("void "); emit_constructor_name(name, "_destroy_impl(uint64_t resource);\n"); };
+    emit("\n");
+    return true;
+}
+
+export proc write_provider_constructor(header:StringBuilder in H, stubs:StringBuilder in S,
+                                       visits:const Visits in G, keys:const SourceBytes in G,
+                                       spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
+                                       prefix:const ProviderPrefixes in R, head:u64)
+    -> bool where {owner H, owner S, const owner G, const owner R} {
+    if (prefix.interfaces > intrinsic (len)(rows) || head >= prefix.interfaces ||
+        rows[head].interface_kind != c_constructor() || rows[head].value_kind != 0u8 ||
+        rows[head].entry_count >= prefix.interfaces - head) return false;
+    val parent <- no_node();
+    if (rows[head].type_module != 0u64) {
+        parent <- find_provider_handle(rows, prefix.interfaces, rows[head].type_module, rows[head].type_identity);
+        if (parent == no_node()) return false;
+    };
+    val failure <- no_node();
+    if (rows[head].failure_module != 0u64) {
+        failure <- find_interface(rows, prefix.interfaces, rows[head].failure_module, rows[head].failure_identity);
+        if (failure == no_node() || rows[failure].interface_kind != record_type()) return false;
+    };
+    ref spelling = make StringBuilder();
+    val ready <- false;
+    {{
+        effect @sout = spelling;
+        (ready <- emit_provider_interface_name(spellings, prefix.spellings, rows, head)):void;
+    }};
+    if (!ready) return false;
+    ref name = make String(spelling);
+    {{
+        effect @sout = header;
+        (ready <- emit_constructor_header(name, visits, keys, spellings, rows, prefix, head, parent, failure)):void;
+    }};
+    if (!ready) return false;
+    {{
+        effect @sout = stubs;
+        (ready <- emit_constructor_signature(name, visits, keys, spellings, rows, prefix, head, parent, failure, false) &&
+                  emit_constructor_checks(visits, keys, spellings, rows, prefix, head, parent, failure) &&
+                  emit_constructor_call(name, spellings, prefix.spellings, rows, head, parent, failure)):void;
+    }};
+    return ready;
+}

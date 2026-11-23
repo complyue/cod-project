@@ -1,0 +1,291 @@
+using "../../../cod/library/string.cod" { StringBuilder, append };
+using symbol "../../../cod/library/string.cod" @sout;
+using "SourceStorage.cod" SourceBytes;
+using "SourceAccess.cod" same_bytes;
+using "ModuleIndex.cod" { Visits, CanonicalKeyRange, checked_module_key };
+using "ModuleExportStorage.cod" { ModuleInterfaces, enum_type, find_interface };
+using "NameResolution.cod" { c_constructor, c_entry, c_operation, c_handle_type, array_type, record_type };
+using "ProviderTypeNames.cod" { ProviderPrefixes, emit_provider_interface_name, find_provider_handle };
+using "ProviderNames.cod" provider_member_error;
+using "ProviderText.cod" { ProviderPreamble, prepare_provider_preamble, write_provider_preamble,
+                           write_provider_borrow, finish_provider_header };
+using "ProviderViews.cod" ABIPrimitiveLayouts;
+using "ProviderEnums.cod" write_provider_enum;
+using "ProviderConstructors.cod" write_provider_constructor;
+using "ProviderCalls.cod" { native_argument_array, write_provider_call_views, write_provider_callable };
+using "ProviderHere.cod" write_provider_here;
+using "ParserStorage.cod" no_node;
+
+data ProviderTypeUse { seen:bool; borrowed:bool; }
+array ProviderTypeUses[u64]:ProviderTypeUse;
+
+func native_group(ordinal:u64) -> u8 {
+    if (ordinal == 0u64) return c_constructor();
+    if (ordinal == 1u64) return c_entry();
+    return c_operation();
+}
+
+export func provider_record_layout_needed(rows:const ModuleInterfaces in G, used:u64) -> bool
+    where {const owner G} {
+    if (used > intrinsic (len)(rows)) return false;
+    val head <- 0u64;
+    val count <- 0u64;
+    val array_head <- no_node();
+    for (unused in 0u64 .. used) {
+        if (head == used) return false;
+        count <- rows[head].entry_count;
+        if (rows[head].value_kind != 0u8 || count >= used - head) return false;
+        if (rows[head].interface_kind == c_operation()) {
+            for (input in head + 1u64 .. head + 1u64 + count) {
+                if (rows[input].value_kind == array_type()) {
+                    array_head <- native_argument_array(rows, used, input);
+                    if (array_head != no_node() && rows[array_head].element_kind == record_type()) return true;
+                };
+            };
+        };
+        head <- head + 1u64 + count;
+    };
+    return false;
+}
+
+func same_native_name(rows:const ModuleInterfaces in G, spellings:const SourceBytes in G,
+                      left:u64, right:u64, used:u64) -> bool where {const owner G} {
+    return rows[left].name_past <= used && rows[right].name_past <= used &&
+        same_bytes(spellings, rows[left].name_first, rows[left].name_past,
+                   spellings, rows[right].name_first, rows[right].name_past);
+}
+
+func register_handle_name(rows:const ModuleInterfaces in G, spellings:const SourceBytes in G,
+                          prefix:const ProviderPrefixes in R, types:ProviderTypeUses in T, head:u64)
+    -> bool where {const owner G, const owner R, owner T} {
+    if (types[head].seen) return true;
+    for (prior in 0u64 .. prefix.interfaces) {
+        if (types[prior].seen && (rows[prior].interface_kind == c_handle_type() || rows[prior].interface_kind == c_constructor()) &&
+            same_native_name(rows, spellings, head, prior, prefix.spellings)) return false;
+    };
+    types[head].seen <- true;
+    return true;
+}
+
+proc emit_borrow_once(header:StringBuilder in H, stubs:StringBuilder in S,
+                       rows:const ModuleInterfaces in G, spellings:const SourceBytes in G, prefix:const ProviderPrefixes in R,
+                       types:ProviderTypeUses in T, module:u64, identity:u64, wrote_borrow:bool in B)
+    -> bool where {owner H, owner S, const owner G, const owner R, owner T, owner B} {
+    val head <- find_provider_handle(rows, prefix.interfaces, module, identity);
+    if (head == no_node() || !register_handle_name(rows, spellings, prefix, types, head)) return false;
+    if (types[head].borrowed) return true;
+    ref spelling = make StringBuilder();
+    val ready <- false;
+    {{
+        effect @sout = spelling;
+        (ready <- emit_provider_interface_name(spellings, prefix.spellings, rows, head)):void;
+    }};
+    if (!ready) return false;
+    write_provider_borrow(header, stubs, make String(spelling));
+    types[head].borrowed <- true;
+    wrote_borrow <- true;
+    return true;
+}
+
+proc emit_enum_once(header:StringBuilder in H, stubs:StringBuilder in S, visits:const Visits in G,
+                     keys:const SourceBytes in G, spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
+                     prefix:const ProviderPrefixes in R, types:ProviderTypeUses in T, module:u64, identity:u64)
+    -> bool where {owner H, owner S, const owner G, const owner R, owner T} {
+    val head <- find_interface(rows, prefix.interfaces, module, identity);
+    if (head == no_node() || rows[head].interface_kind != enum_type()) return false;
+    if (types[head].seen) return true;
+    ref entry = make CanonicalKeyRange { first <- 0u64; past <- 0u64; };
+    ref origin = make CanonicalKeyRange { first <- 0u64; past <- 0u64; };
+    if (!checked_module_key(visits, prefix.modules, prefix.keys, 1u64, entry) ||
+        !checked_module_key(visits, prefix.modules, prefix.keys, module, origin) ||
+        !write_provider_enum(header, stubs, keys, prefix.keys, entry.first, entry.past, origin.first, origin.past,
+                             spellings, prefix.spellings, rows, head, prefix.interfaces)) return false;
+    types[head].seen <- true;
+    return true;
+}
+
+proc emit_group_enums(header:StringBuilder in H, stubs:StringBuilder in S, visits:const Visits in G,
+                       keys:const SourceBytes in G, spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
+                       prefix:const ProviderPrefixes in R, types:ProviderTypeUses in T, group:u8)
+    -> bool where {owner H, owner S, const owner G, const owner R, owner T} {
+    val head <- 0u64;
+    val past <- 0u64;
+    for (unused in 0u64 .. prefix.interfaces) {
+        if (head == prefix.interfaces) return true;
+        past <- head + 1u64 + rows[head].entry_count;
+        if (rows[head].interface_kind == group) {
+            for (input in head + 1u64 .. past) {
+                if (rows[input].value_kind == enum_type() &&
+                    !emit_enum_once(header, stubs, visits, keys, spellings, rows, prefix, types,
+                                    rows[input].type_module, rows[input].type_identity)) return false;
+            };
+            if (group != c_constructor() && rows[head].result_kind == enum_type() &&
+                !emit_enum_once(header, stubs, visits, keys, spellings, rows, prefix, types,
+                                rows[head].type_module, rows[head].type_identity)) return false;
+        };
+        head <- past;
+    };
+    return head == prefix.interfaces;
+}
+
+proc emit_group_borrows(header:StringBuilder in H, stubs:StringBuilder in S, spellings:const SourceBytes in G,
+                         rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R, types:ProviderTypeUses in T,
+                         group:u8, wrote_borrow:bool in B)
+    -> bool where {owner H, owner S, const owner G, const owner R, owner T, owner B} {
+    val head <- 0u64;
+    val past <- 0u64;
+    for (unused in 0u64 .. prefix.interfaces) {
+        if (head == prefix.interfaces) return true;
+        past <- head + 1u64 + rows[head].entry_count;
+        if (rows[head].interface_kind == group) {
+            if (group == c_constructor()) {
+                if (!register_handle_name(rows, spellings, prefix, types, head)) return false;
+                if (rows[head].type_module != 0u64 &&
+                    !emit_borrow_once(header, stubs, rows, spellings, prefix, types,
+                                      rows[head].type_module, rows[head].type_identity, wrote_borrow)) return false;
+            };
+            for (input in head + 1u64 .. past) {
+                if (rows[input].value_kind == c_handle_type() &&
+                    !emit_borrow_once(header, stubs, rows, spellings, prefix, types,
+                                      rows[input].type_module, rows[input].type_identity, wrote_borrow)) return false;
+            };
+        };
+        head <- past;
+    };
+    return head == prefix.interfaces;
+}
+
+func unique_callable_name(rows:const ModuleInterfaces in G, spellings:const SourceBytes in G,
+                          head:u64, spelling_used:u64) -> bool where {const owner G} {
+    val earlier <- 0u64;
+    for (unused in 0u64 .. head) {
+        if (earlier == head) return true;
+        if (rows[earlier].interface_kind == rows[head].interface_kind &&
+            same_native_name(rows, spellings, head, earlier, spelling_used)) return false;
+        earlier <- earlier + 1u64 + rows[earlier].entry_count;
+    };
+    return earlier == head;
+}
+
+func check_provider_record(rows:const ModuleInterfaces in G, spellings:const SourceBytes in G,
+                           prefix:const ProviderPrefixes in R, module:u64, identity:u64)
+    -> u32 where {const owner G, const owner R} {
+    val head <- find_interface(rows, prefix.interfaces, module, identity);
+    if (head == no_node() || rows[head].interface_kind != record_type()) return 2u32;
+    val status <- 0u32;
+    for (field in head + 1u64 .. head + 1u64 + rows[head].entry_count) {
+        status <- provider_member_error(spellings, prefix.spellings, rows[field].name_first, rows[field].name_past);
+        if (status != 0u32) return status;
+    };
+    return 0u32;
+}
+
+export func provider_boundary_error(rows:const ModuleInterfaces in G, spellings:const SourceBytes in G,
+                                    prefix:const ProviderPrefixes in R) -> u32
+    where {const owner G, const owner R} {
+    if (prefix.interfaces > intrinsic (len)(rows) || prefix.spellings > intrinsic (len)(spellings)) return 2u32;
+    val head <- 0u64;
+    val past <- 0u64;
+    val status <- 0u32;
+    val array_head <- no_node();
+    for (unused in 0u64 .. prefix.interfaces) {
+        if (head == prefix.interfaces) return 0u32;
+        if (rows[head].value_kind != 0u8 || rows[head].entry_count >= prefix.interfaces - head) return 2u32;
+        past <- head + 1u64 + rows[head].entry_count;
+        if (rows[head].interface_kind == c_constructor() && rows[head].failure_module != 0u64) {
+            status <- check_provider_record(rows, spellings, prefix, rows[head].failure_module, rows[head].failure_identity);
+            if (status != 0u32) return status;
+        };
+        if (rows[head].interface_kind == c_entry() || rows[head].interface_kind == c_operation()) {
+            if (!unique_callable_name(rows, spellings, head, prefix.spellings)) return 1u32;
+        };
+        if (rows[head].interface_kind == c_operation()) {
+            for (input in head + 1u64 .. past) {
+                if (rows[input].value_kind == array_type()) {
+                    array_head <- native_argument_array(rows, prefix.interfaces, input);
+                    if (array_head == no_node()) return 2u32;
+                    if (rows[array_head].element_kind == record_type()) {
+                        status <- check_provider_record(rows, spellings, prefix, rows[array_head].type_module,
+                                                        rows[array_head].type_identity);
+                        if (status != 0u32) return status;
+                    };
+                };
+            };
+        };
+        head <- past;
+    };
+    return if (head == prefix.interfaces) { 0u32 } else { 2u32 };
+}
+
+proc emit_callable(header:StringBuilder in H, stubs:StringBuilder in S,
+                    primitives:const ABIPrimitiveLayouts in L, record_alignment:u64, visits:const Visits in G,
+                    keys:const SourceBytes in G, spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
+                    prefix:const ProviderPrefixes in R, head:u64)
+    -> bool where {owner H, owner S, const owner L, const owner G, const owner R} {
+    ref spelling = make StringBuilder();
+    val ready <- false;
+    {{
+        effect @sout = spelling;
+        (ready <- emit_provider_interface_name(spellings, prefix.spellings, rows, head)):void;
+    }};
+    if (!ready) return false;
+    ref name = make String(spelling);
+    if (rows[head].has_here != 0u8)
+        return write_provider_here(header, stubs, primitives, record_alignment, name, visits, keys,
+                                   spellings, rows, prefix, head);
+    if (rows[head].interface_kind == c_operation() &&
+        !write_provider_call_views(header, stubs, primitives, record_alignment, name, spellings, rows, prefix, head))
+        return false;
+    return write_provider_callable(header, stubs, name, visits, keys, spellings, rows, prefix, head);
+}
+
+proc emit_group_adapters(header:StringBuilder in H, stubs:StringBuilder in S,
+                          primitives:const ABIPrimitiveLayouts in L, record_alignment:u64, visits:const Visits in G,
+                          keys:const SourceBytes in G, spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
+                          prefix:const ProviderPrefixes in R, group:u8)
+    -> bool where {owner H, owner S, const owner L, const owner G, const owner R} {
+    val head <- 0u64;
+    for (unused in 0u64 .. prefix.interfaces) {
+        if (head == prefix.interfaces) return true;
+        if (rows[head].interface_kind == group) {
+            if (group == c_constructor()) {
+                if (!write_provider_constructor(header, stubs, visits, keys, spellings, rows, prefix, head)) return false;
+            } else {
+                if (!emit_callable(header, stubs, primitives, record_alignment, visits, keys, spellings, rows, prefix, head))
+                    return false;
+            };
+        };
+        head <- head + 1u64 + rows[head].entry_count;
+    };
+    return head == prefix.interfaces;
+}
+
+export proc render_provider_pair(header:StringBuilder in H, stubs:StringBuilder in S,
+                                 primitives:const ABIPrimitiveLayouts in L, record_alignment:u64, visits:const Visits in G,
+                                 keys:const SourceBytes in G, spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
+                                 prefix:const ProviderPrefixes in R)
+    -> bool where {owner H, owner S, const owner L, const owner G, const owner R} {
+    if (prefix.modules > intrinsic (len)(visits) || prefix.keys > intrinsic (len)(keys) ||
+        prefix.spellings > intrinsic (len)(spellings)) return false;
+    ref features = make ProviderPreamble {
+        here_steps <- false; incoming_loans <- false; incoming_text <- false;
+        bounded_text_output <- false; c_string_output <- false;
+    };
+    if (!prepare_provider_preamble(rows, prefix.interfaces, features)) return false;
+    write_provider_preamble(header, stubs, features);
+    ref types = make ProviderTypeUses(prefix.interfaces, make ProviderTypeUse { seen <- false; borrowed <- false; });
+    for (group in 0u64 .. 3u64) {
+        if (!emit_group_enums(header, stubs, visits, keys, spellings, rows, prefix, types, native_group(group))) return false;
+    };
+    ref wrote_borrow = make bool { false };
+    for (group in 0u64 .. 3u64) {
+        if (!emit_group_borrows(header, stubs, spellings, rows, prefix, types, native_group(group), wrote_borrow)) return false;
+    };
+    if (wrote_borrow) { append(stubs, "\n"); };
+    for (group in 0u64 .. 3u64) {
+        if (!emit_group_adapters(header, stubs, primitives, record_alignment, visits, keys, spellings, rows, prefix,
+                                 native_group(group))) return false;
+    };
+    finish_provider_header(header);
+    return true;
+}
