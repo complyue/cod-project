@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 18. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
+[D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph), revision 19. The project user set the compiler/native boundary and delegated pre-code architecture review to the design discussion. [H-COMPILER-LAYERS-20261122](../../../CHANGELOG.md#h-compiler-layers-20261122) records the instruction and the reviewer's scoped clearance. P-680 derives the design from C-80. Inspectable compiler decisions and lifetimes make a real module compilation a test of the compiler language. P-681 identifies the applicable sum, regional storage, module selection, dynamic installation and native loan contracts. Coverage includes the first booter's declaration, C-provider and object routes. The [acceptance workload](#acceptance) checks their behavior and physical separation. Permanent ABI, persistent caches and changes to language semantics require their own decisions.
 
 [K-BOOTER-AST-TABLE-20261122](../../../CHANGELOG.md#k-booter-ast-table-20261122) continues that architecture for the [first indexed AST path](#first-indexed-ast-path). Its private representation uses the existing named-array constructor, valid bits transfer and constructor-pattern checks. Acceptance includes the parser, checker, lowering and emitted object.
 
@@ -21,6 +21,8 @@ The [visit publication review](../../../CHANGELOG.md#k-booter-visit-publication-
 The [provider publication review](../../../CHANGELOG.md#k-booter-provider-publication-20261122) covers the declaration driver, the CoD renderer and the native file boundary. The [target layout review](../../../CHANGELOG.md#k-booter-provider-target-layout-20261122) covers native ABI queries for this renderer.
 
 The [sum parser and graph output review](../../../CHANGELOG.md#k-booter-sum-parser-graph-output-20261122) covers nominal sum declarations in the typed syntax table and calls that consume the completed graph while G is live.
+
+The [region syntax and terminal input review](../../../CHANGELOG.md#k-booter-region-parser-terminal-inputs-20261122) covers the graph driver’s source forms and the entry-owned graph used by its synchronous terminal.
 
 ## Layer responsibilities
 
@@ -88,6 +90,22 @@ export data NodeLink = NoLink {} | LinkTo { node:NodeId; };
 Store a typed sum declaration and an ordered sequence of typed alternatives in the frame’s syntax table. Preserve the heading, including any parsed parent, and the ordinary module-item export marker. Each alternative retains its name, its span through the closing brace and its own fields. Reuse the product-field reader for their shared grammar, preserving order, type, binding mode and target access. Start a fresh field list for each alternative. The reader returns an absent last field for both a valid empty list and a parse failure. Check the diagnostic before accepting a fieldless alternative. Use the frame’s revision-bound links and checked lookup for all children.
 
 In both seed-built modes inspect the actual `NodeLink`, `ExprPayload`, `AstSlot` and `VisitSlot` declarations. The two occurrences of `Vacant` must remain accessible under their own declarations and source revisions. Accept a single alternative. Reject a missing alternative, a trailing separator, `||` between alternatives, a malformed field and a C-layout sum. Preserve the existing product and C-record paths. On the full sources, distinguish passing the original declaration site from checking the whole module. Until a semantic consumer supports the declaration, issue a located rejection before publishing an interface or emitting output. Binding constructor identities, selecting them across modules, checking payload patterns and lowering uses have separate review scopes. [Named sum constructors](../../../design/DomainLanguageDesign.md#named-sum-constructors)
+
+### Parsing the graph region
+
+The real object driver declares a structural root schema and later acquires one instance. The CoD parser distinguishes the named schema, the owning local declaration and its RHS expression. For example, this smaller driver has the same forms:
+
+```cod
+region GraphRoot { used:u64; next_revision:u64; }
+own region graph:GraphRoot <- make region GraphRoot(budget -> capacity) {
+    used <- 0u64;
+    next_revision <- 1u64;
+};
+```
+
+In the module parser recognize the `region Name {` heading. Reuse the field reader for the shared root syntax, retaining each field’s name, type, qualifiers and source order under the schema. In the expression parser preserve the local holder name, ownership, annotation and transfer operand. Represent acquisition separately with the named schema, capacity expression, `-> capacity` site and ordered initializer block. If the construction-local binder spelling is parsed, keep its declaration and span distinct from the receiving holder. The block uses ordinary ordered syntax, including repeated writes. Keep revision-bound links and spans through the closing brace. Existing native handle construction, exception capacity placement, product declarations and `make T in graph` retain their own syntax roles. [Region construction and named root initializers](../../../design/ConstructionAndAcquisition.md#region-construction-and-named-root-initializers)
+
+In both seed-built modes inspect the ten fields of the actual `GraphRoot` in `ObjectCompiler.cod`, the holder and its acquisition, and the runtime capacity operand. Check empty braces, a missing arrow or capacity label, a missing closing brace and the wrong binding operator for an owning holder. Distinguish a malformed construct from well-formed syntax with a mismatched schema or an uninitialized root. Schema resolution, readiness, ownership transfer and execution belong to the checker and backend. Until supported there, reject at the recognized source before publishing or emitting anything. Passing the original line 17 heading establishes parser progress only.
 
 ### Typed syntax consumers
 
@@ -238,9 +256,32 @@ In both seed modes, link a real root and child twice with different child result
 
 The launcher routes `--check-declarations SOURCE` and `--emit-c-provider SOURCE DIRECTORY` through generated CoD entries. Both run the declaration pass on the same module graph used for object compilation. Preserve checking of ordinary definitions, selected declarations and owner contracts, including diagnostics at the requesting import. Checking alone finishes after graph validation. Provider generation then reads the published interfaces, spelling prefixes and canonical module keys under the live G. Both routes can finish without producing LLVM commands or acquiring an object-emission session.
 
-**Consuming the completed graph.** The common CoD driver owns the region and lexical table holders through traversal and the selected terminal operation. Dispatch the CLI purpose in that scope after a successful visit. Declaration checking can return its status immediately. Object emission calls `write_object`. Provider generation calls a named CoD renderer with the published interface, spelling and name ranges it needs. Each reader binds `where {const owner G}` from ordinary readonly graph arguments. Pass the published counts and keep each output path, sink or diagnostic under its own actual owner. A traversal failure skips terminal work. A terminal failure unwinds its local resources while G is live. The owning scope releases G once on either exit. Exercise all three CLI purposes with real inputs, including failure before and during output and file preservation under the publication contract.
+### Supplying the output destination
 
-An externally supplied `here finish(keys:const Keys in G, ...)` with no ordinary input establishing G would need a contract for lending a region created inside the receiver. Synchronous execution keeps storage live during the callback. It supplies no binding for G in that signature. `in here` names the invocation's lexical owner. A helper that receives ordinary graph borrows can invoke a compatible here body under that established owner. The three CLI purposes need only direct named terminal calls. [Owner-qualified arguments](../../../design/RegionalOwnership.md#owner-qualified-reference-arguments) · [Borrowed yields and owner scope](../../../design/RangedForAndGenerators.md#borrowed-yields-and-owner-scope)
+Keep the three typed command entries. Object emission receives its output `String`, provider publication receives a borrowed native directory `Path`, and declaration checking needs only the common inputs. A `GraphPurpose` chooses the traversal work. Each entry supplies its output behavior by a synchronous `here` body with direct lexical access to that entry’s real arguments.
+
+Acquire the owning graph in the command’s scope before calling the shared graph procedure. The graph schema, budget and root initialization can be defined once in a named factory returning `own region :GraphRoot`. Successful delivery transfers the single release obligation to the entry. Set up the graph tables through common CoD code. Pass a table the traversal actually uses as an ordinary input in G. This establishes which live region the terminal’s readonly arguments come from. The same parameter relationship already appears in `compile_native_module`: its ordinary `commands:NativeCommands in C` establishes C for its `here construct(rows:const NativeCommands in C, ...)` argument. [Module driver](../src/ModuleDriver.cod) · [Whole-region results](../../../design/RegionalOwnership.md#region-as-a-declaration-keyword-throughout-the-language)
+
+For example, a procedure delivering a finished key range can use the following signature and call. The supplying procedure already holds the graph, the keys and its caller's directory. The directory remains a lexical input of the supplying body.
+
+```cod
+proc with_keys(here finish(keys:const SourceBytes in G, used:u64) -> CompilerStatus,
+               keys:const SourceBytes in G, used:u64) -> CompilerStatus
+    where {const owner G} {
+    return finish(keys, used);
+}
+
+# Inside the provider entry, after publication, with a matching named writer:
+return with_keys(keys, graph.key_used) (bytes, count) => {
+    continue write_keys(directory, bytes, count);
+};
+```
+
+The full shared procedure traverses once and selects the current table bindings and published counts **after** success, including any replacement during child visits. The object terminal calls the named writer with its actual output text. The provider terminal passes the required published spans to the CoD renderer and the finished pair to the file publisher with its actual directory. The check-only path returns the checked status and opens no output. Keep graph borrows, launcher loans and callback use within their respective live scopes. A failed visit skips output. Terminal cleanup precedes release of G, including on protected exits. Place the owner inside the existing failure-handling boundary so outer handlers observe completed release. The external callback contract needs neither a fresh owner binder nor an output-purpose data type. [Owner-qualified arguments](../../../design/RegionalOwnership.md#owner-qualified-reference-arguments) · [Here bodies](../../../design/CallableStorageAndHereAccess.md#single-brace-bodies-for-a-here-callable)
+
+Check the three distinct entry signatures, a failed visit before the terminal, terminal failure, a nested command with a separate graph, and release on each exit. Exercise the actual object and provider routes, including a native directory outside UTF-8. A focused seed check establishes input binding and terminal typing. The common factory, construction in a supplied owner, user-program booter lowering and real CLI publication each need their own execution evidence.
+
+### Generating and publishing the provider pair
 
 **Generating the pair.** CoD resolves each required native constructor, entry, operation and referenced type by its defining identity. Include private native declarations that need C bindings, such as the launcher's `compile_cli` entry. A renamed re-export keeps that identity. Generate a shared declaration once, and check conflicting generated names and reserved field names before publishing. For enum names use the defining module’s canonical path bytes relative to the entry source directory. Apply the existing byte escaping even to a non-UTF-8 path component. Keep all member spellings and one validation case per distinct member identity. Preserve the seed’s deterministic declaration and preamble order. [Generated C contract](LLVMInterop.md#generated-c-providers-for-the-first-booter)
 
