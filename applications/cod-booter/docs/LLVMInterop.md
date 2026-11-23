@@ -1,8 +1,10 @@
 # Native C providers, LLVM bindings and scoped cleanup
 
-Revision 27 · 2026-11-23 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
+Revision 28 · 2026-11-23 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
 
 ## Design authority
+
+[D-20-C-DECLARATIONS](../../../design/DesignAuthorityRegistry.md#d-20-c-declarations) at r28 covers [ordinary Boolean results](#ordinary-native-boolean-results) under the [native predicate decision](../../../CHANGELOG.md#h-native-boolean-result-20261123). P-644/P-645 connect the typed CoD predicate to its checked provider output. Exercise both possible readiness states, an invalid foreign byte, and transport failure before delivery. Callback feedback and record layout keep their own contracts.
 
 [D-20-C-DECLARATIONS](../../../design/DesignAuthorityRegistry.md#d-20-c-declarations) at r27 applies the [minimum-permission decision](../../../CHANGELOG.md#h-native-callable-kind-20261123) to [native callable kind and C linkage](#native-callable-kind-and-c-linkage). C-80/P-644/P-645 and the function restriction C-48/P-117 let a CoD caller see whether an operation needs dynamic context. Check a handle constructor and an ordinary provider under an explicit owner, an effectful caller selecting that owner, and both callable kinds at generated entry boundaries. Direct C access to dynamic symbols and a permanent TLS ABI are outside this scope.
 
@@ -44,6 +46,30 @@ Use `func "C"` when the operation can honor the ordinary [CoD function contract]
 The first-host C interface exposes generated entries, arguments and synchronous callbacks. The actual [object writer](../src/ObjectCompiler.cod) evaluates `@llvmSession` in CoD and supplies the selected handle to the native operation. For a borrow-only constructor, `in session` likewise supplies the actual owner to C. Private TLS slots and installed procedure entry addresses are outside the provider interface. A raw address cannot establish which installation applies on reentry, whether a loan remains live, or which binding context `perform` or `behave` requires. Code needing these operations can express them in CoD and pass selected inputs or an explicit synchronous callback across the boundary.
 
 Check both frontends and generators on a CoD function constructing and inspecting a view under one of two live sessions. The provider must observe the selected owner. Compare with a CoD procedure selecting the session through its symbol. Reject that lookup in a function and reject a call from a function to a named procedure across C linkage. Preserve the declared kind through module selection, the generated loan representation, callback completion, constructor rollback and disposal. A concrete production migration case is [`path_ready`](../native/path_provider.c), which tests the explicitly supplied path owner. The seed and booter currently restrict the C linkage marker to procedures.
+
+### Ordinary native Boolean results
+
+An ordinary C-linked operation can declare an independent `bool` result. The [path provider](../native/path_provider.c) tests whether the selected owner holds a canonical path. In [`path_key`](../src/NativeSource.cod), an unprepared owner follows the existing checked failure path.
+
+```cod
+func "C" path_ready(handle prepared:PathOwner in P) -> bool where {const owner P};
+
+# Inside path_key
+if (!path_ready(prepared)) {
+    throw PathNotReadyException { status <- 1u64; }
+}
+```
+
+The generated C header names the byte used for an ordinary Boolean result. It uses the exact-width integer type from `<stdint.h>`.
+
+```c
+typedef uint8_t COD_BOOL;
+
+cod_native_status cod_native_path_ready_impl(cod_native_PathOwner_borrow loan,
+                                            COD_BOOL *result);
+```
+
+A successful provider writes `0` for false or `1` for true. The generated adapter checks transport status first and validates the full result byte before publishing it. A successful transport carrying any value from 2 through 255 returns `COD_NATIVE_BOUNDARY_ERROR` from the adapter. A failing transport leaves the caller’s result untouched even if the provider wrote its temporary. These failures follow the existing native boundary error path. Only a successfully delivered false can take the not-ready branch. A C-callable CoD entry returning `bool` writes the same canonical byte on success. The CoD signature retains `bool` through module selection and call checking. A declared `u8` result continues to carry all 256 values.
 
 ### Ordinary native u64 results
 
