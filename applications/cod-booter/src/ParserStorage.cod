@@ -19,6 +19,7 @@ export enum FormalMode:u8 {
     HandleFormal;
     RetainedHandleFormal;
     ExceptionFormal;
+    ReferenceSlotFormal;
 }
 
 export enum LocalMode:u8 { ValueLocal; ReferenceLocal; PointerLocal; ExceptionLocal; }
@@ -103,6 +104,10 @@ export data ExprPayload =
     | Concatenation { operands:BinaryOperands; }
     | BindSymbolEffect { name:NodeId; input:NodeId; operator_at:u64; }
     | InstallSymbolEffect { name:NodeId; acquisition:NodeId; operator_at:u64; }
+    | ProcedureSymbol { name:NodeId; input_types:NodeLink; result_type:NodeId; arrow:u64; }
+    | ProcedureTypeInput { previous:NodeLink; annotation:NodeId; }
+    | ProcedureTypeAnnotation { type_name:NodeId; mode:FormalMode; readonly:bool; }
+    | ScopedProcedureDefinition { header:NodeId; body:NodeId; }
     | BooleanCasePattern { truth:bool; }
     | NullCasePattern {}
     | MemberCasePattern {}
@@ -118,9 +123,10 @@ export data ExprPayload =
     | ScopeSyntax { items:NodeLink; }
     | BlockItem { previous:NodeLink; expression:NodeId; }
     | CallableHeader { name:NodeId; parameters:NodeLink; opening:u64; }
+    | ScopedProcedureHeader { name:NodeId; parameters:NodeLink; opening:u64; }
     | AnnotatedBinding { name:NodeId; annotation:NodeId; readonly:bool; colon:u64; }
     | OwnerQualifiedType { target:NodeId; declared_owner:NodeId; anchor:u64; }
-    | Formal { previous:NodeLink; binding:NodeId; mode:FormalMode; }
+    | Formal { previous:NodeLink; binding:NodeId; mode:FormalMode; binding_const:bool; }
     | HereFormal { previous:NodeLink; signature:NodeId; }
     | OwnerConstraint { previous:NodeLink; declared_owner:NodeId; readonly:bool; }
     | TypeConstraint { previous:NodeId; type_name:NodeId; }
@@ -298,6 +304,7 @@ export enum SequenceSyntax:u8 {
     ClauseSequence;
     MemberSequence;
     SumSequence;
+    ProcedureTypeSequence;
 }
 
 export data SequenceEntry { previous:u64; item:u64; }
@@ -355,6 +362,9 @@ export func inspect_sequence_entry(nodes:const ExprNodes in N, revision:u64, use
                         FormalSequence:SequenceSyntax
                     } else { InvalidSequence:SequenceSyntax };
                 };
+                (ProcedureTypeInput { val previous <- previous; val annotation <- annotation; }) -> {
+                    read_procedure_input(nodes, revision, at, previous, annotation, entry)
+                };
                 (EnumMember { val previous <- previous; val name <- name; }) -> {
                     return if (read_sequence_links(nodes, revision, at, previous, name, entry)) {
                         EnumSequence:SequenceSyntax
@@ -399,6 +409,89 @@ export func first_sequence_entry(nodes:const ExprNodes in N, revision:u64, used:
         at <- entry.previous;
     };
     return false;
+}
+
+func is_procedure_type_input(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+    return case nodes[at] of {
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of { (ProcedureTypeInput) -> { true }; (_) -> { false }; }
+        };
+        (Vacant) -> { false };
+    };
+}
+
+export data ProcedureTypeSites { name:u64; mode:FormalMode; readonly:bool; }
+
+export func inspect_procedure_type(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+                                   sites:ProcedureTypeSites in R) -> bool where {const owner N, owner R} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (ProcedureTypeAnnotation { val name <- type_name; val mode <- mode; val readonly <- readonly; }) -> {
+                    if (!published_syntax_id(nodes, revision, at, name) ||
+                        name_syntax(nodes, at, name.index) != (OrdinaryName:NameSyntax) ||
+                        (mode != (ValueFormal:FormalMode) && mode != (ExplicitValueFormal:FormalMode) &&
+                         mode != (PointerFormal:FormalMode) && mode != (ReferenceFormal:FormalMode))) return false;
+                    sites.name <- name.index;
+                    sites.mode <- mode;
+                    sites.readonly <- readonly;
+                    true
+                };
+                (_) -> { false };
+            }
+        };
+        (Vacant) -> { false };
+    };
+}
+
+func read_procedure_input(nodes:const ExprNodes in N, revision:u64, at:u64,
+                          previous:const NodeLink in L, annotation:const NodeId in I, entry:SequenceEntry in E)
+    -> SequenceSyntax where {const owner N, const owner L, const owner I, owner E} {
+    if (!read_sequence_links(nodes, revision, at, previous, annotation, entry)) return InvalidSequence:SequenceSyntax;
+    ref sites = make ProcedureTypeSites { name <- no_node(); mode <- (ValueFormal:FormalMode); readonly <- false; };
+    return if (inspect_procedure_type(nodes, revision, at, entry.item, sites) &&
+        (entry.previous == no_node() || is_procedure_type_input(nodes, entry.previous))) {
+        ProcedureTypeSequence:SequenceSyntax
+    } else { InvalidSequence:SequenceSyntax };
+}
+
+export data ProcedureSymbolSites { symbol:u64; input_tail:u64; result_type:u64; arrow:u64; }
+
+func read_procedure_symbol(nodes:const ExprNodes in N, revision:u64, at:u64, name:const NodeId in I,
+                           inputs:const NodeLink in L, output:const NodeId in O, arrow:u64, sites:ProcedureSymbolSites in R)
+    -> bool where {const owner N, const owner I, const owner L, const owner O, owner R} {
+    ref kind = make ProcedureTypeSites { name <- no_node(); mode <- (ValueFormal:FormalMode); readonly <- false; };
+    val first <- no_node();
+    if (!published_syntax_id(nodes, revision, at, name) ||
+        name_syntax(nodes, at, name.index) != (SymbolicName:NameSyntax) ||
+        !published_syntax_id(nodes, revision, at, output) ||
+        !inspect_procedure_type(nodes, revision, at, output.index, kind) ||
+        !optional_syntax_link(nodes, revision, at, inputs, sites.input_tail) ||
+        !first_sequence_entry(nodes, revision, at, sites.input_tail, ProcedureTypeSequence:SequenceSyntax, first))
+        return false;
+    if (arrow < syntax_past(nodes, at, name.index) || arrow >= syntax_first(nodes, at, output.index) ||
+        (sites.input_tail != no_node() && syntax_past(nodes, at, sites.input_tail) > arrow)) return false;
+    sites.symbol <- name.index;
+    sites.result_type <- output.index;
+    sites.arrow <- arrow;
+    return true;
+}
+
+export func inspect_procedure_symbol(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+                                     sites:ProcedureSymbolSites in R) -> bool where {const owner N, owner R} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (ProcedureSymbol { val name <- name; val inputs <- input_types; val output <- result_type; val arrow <- arrow; }) -> {
+                    read_procedure_symbol(nodes, revision, at, name, inputs, output, arrow, sites)
+                };
+                (_) -> { false };
+            }
+        };
+        (Vacant) -> { false };
+    };
 }
 
 export func first_module_item(nodes:const ExprNodes in N, revision:u64, used:u64, root:u64, first:u64 in R)
@@ -913,6 +1006,32 @@ export func is_here_formal(nodes:const ExprNodes in N, used:u64, at:u64) -> bool
 export enum FormalSyntax:u8 { InvalidFormal; OrdinaryFormal; HereFormalSyntax; }
 export data FormalSites { binding:u64; signature:u64; mode:FormalMode; }
 
+func is_formal_node(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+    return case nodes[at] of {
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of { (Formal) -> { true }; (HereFormal) -> { true }; (_) -> { false }; }
+        };
+        (Vacant) -> { false };
+    };
+}
+
+func valid_prefixed_formal(nodes:const ExprNodes in N, revision:u64, at:u64, binding:u64,
+                           previous:const NodeLink in P, mode:FormalMode, fixed:bool) -> bool
+    where {const owner N, const owner P} {
+    ref prior = make u64 { no_node() };
+    if (!optional_syntax_link(nodes, revision, at, previous, prior) ||
+        (prior != no_node() && !is_formal_node(nodes, prior))) return false;
+    ref typed = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
+    };
+    if (inspect_binding(nodes, revision, at, binding, typed) != (TypedBinding:BindingSyntax)) return false;
+    if (fixed) {
+        if (typed.owner_name == no_node()) return mode == (ExplicitValueFormal:FormalMode);
+        return mode == (ReferenceFormal:FormalMode);
+    };
+    return mode == (ReferenceSlotFormal:FormalMode);
+}
+
 export func inspect_formal(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
                             sites:FormalSites in R) -> FormalSyntax where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidFormal:FormalSyntax;
@@ -920,8 +1039,11 @@ export func inspect_formal(nodes:const ExprNodes in N, revision:u64, used:u64, a
         (Vacant) -> { InvalidFormal:FormalSyntax };
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of {
-                (Formal { val binding <- binding; val mode <- mode; }) -> {
+                (Formal { val binding <- binding; val mode <- mode; val previous <- previous; val fixed <- binding_const; }) -> {
                     if (!published_syntax_id(nodes, revision, at, binding)) return InvalidFormal:FormalSyntax;
+                    if ((fixed || mode == (ReferenceSlotFormal:FormalMode)) &&
+                        !valid_prefixed_formal(nodes, revision, at, binding.index, previous, mode, fixed))
+                        return InvalidFormal:FormalSyntax;
                     sites.binding <- binding.index;
                     sites.mode <- mode;
                     sites.signature <- no_node();
@@ -939,6 +1061,23 @@ export func inspect_formal(nodes:const ExprNodes in N, revision:u64, used:u64, a
     };
 }
 
+export func formal_binding_is_fixed(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64) -> bool
+    where {const owner N} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        (Vacant) -> { false };
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (Formal { val binding <- binding; val mode <- mode; val previous <- previous; val fixed <- binding_const; }) -> {
+                    fixed && published_syntax_id(nodes, revision, at, binding) &&
+                        valid_prefixed_formal(nodes, revision, at, binding.index, previous, mode, fixed)
+                };
+                (_) -> { false };
+            }
+        };
+    };
+}
+
 export enum SignatureSyntax:u8 {
     OtherSignatureSyntax;
     InvalidSignature;
@@ -950,6 +1089,7 @@ export enum SignatureSyntax:u8 {
     OwnerSignatureClause;
     TypeSignatureClause;
     OwningRegionResultClause;
+    ScopedProcedureHead;
 }
 
 export data SignatureSites {
@@ -972,12 +1112,12 @@ func signature_step(nodes:const ExprNodes in N, revision:u64, at:u64,
     return mode;
 }
 
-func read_callable_header(nodes:const ExprNodes in N, revision:u64, at:u64,
-                          name:const NodeId in I, parameters:const NodeLink in P,
-                          sites:SignatureSites in S) -> SignatureSyntax
+func read_signature_header(nodes:const ExprNodes in N, revision:u64, at:u64,
+                            name:const NodeId in I, parameters:const NodeLink in P, required:NameSyntax,
+                            sites:SignatureSites in S, shape:SignatureSyntax) -> SignatureSyntax
     where {const owner N, const owner I, const owner P, owner S} {
     if (!published_syntax_id(nodes, revision, at, name) ||
-        name_syntax(nodes, at, name.index) != (OrdinaryName:NameSyntax) ||
+        name_syntax(nodes, at, name.index) != required ||
         !optional_syntax_link(nodes, revision, at, parameters, sites.parameter_tail))
         return InvalidSignature:SignatureSyntax;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
@@ -986,7 +1126,7 @@ func read_callable_header(nodes:const ExprNodes in N, revision:u64, at:u64,
         return InvalidSignature:SignatureSyntax;
     sites.name <- name.index;
     sites.previous <- no_node();
-    return SignatureHead:SignatureSyntax;
+    return shape;
 }
 
 export func inspect_signature(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
@@ -997,7 +1137,12 @@ export func inspect_signature(nodes:const ExprNodes in N, revision:u64, used:u64
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of {
                 (CallableHeader { val name <- name; val formals <- parameters; }) -> {
-                    read_callable_header(nodes, revision, at, name, formals, sites)
+                    read_signature_header(nodes, revision, at, name, formals, OrdinaryName:NameSyntax,
+                                          sites, SignatureHead:SignatureSyntax)
+                };
+                (ScopedProcedureHeader { val name <- name; val formals <- parameters; }) -> {
+                    read_signature_header(nodes, revision, at, name, formals, SymbolicName:NameSyntax,
+                                          sites, ScopedProcedureHead:SignatureSyntax)
                 };
                 (ValueResult { val previous <- previous; val target <- type_name; val readonly <- readonly; }) -> {
                     signature_step(nodes, revision, at, previous, target, readonly, sites, ValueResultClause:SignatureSyntax)
@@ -1052,10 +1197,55 @@ export func find_signature_clause(nodes:const ExprNodes in N, revision:u64, used
         if (shape == (OwningRegionResultClause:SignatureSyntax) &&
             (desired == (ValueResultClause:SignatureSyntax) || desired == (BorrowedResultClause:SignatureSyntax) ||
              desired == (ExceptionResultClause:SignatureSyntax))) return false;
-        if (shape == (SignatureHead:SignatureSyntax)) { found <- no_node(); return true; };
+        if (shape == (SignatureHead:SignatureSyntax) || shape == (ScopedProcedureHead:SignatureSyntax)) {
+            found <- no_node();
+            return true;
+        };
         at <- sites.previous;
     };
     return false;
+}
+
+export data ScopedProcedureSites { head:u64; signature:u64; body:u64; }
+
+func read_scoped_procedure(nodes:const ExprNodes in N, revision:u64, at:u64, header:const NodeId in H,
+                            body:const NodeId in B, sites:ScopedProcedureSites in R)
+    -> bool where {const owner N, const owner H, const owner B, owner R} {
+    if (!published_syntax_id(nodes, revision, at, header) ||
+        !published_syntax_id(nodes, revision, at, body)) return false;
+    val head <- no_node();
+    val items <- no_node();
+    if (!find_signature_clause(nodes, revision, at, header.index, ScopedProcedureHead:SignatureSyntax, head) ||
+        head == no_node() || !block_tail(nodes, revision, at, body.index, items))
+        return false;
+    ref signature = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node();
+        parameter_tail <- no_node(); readonly <- false;
+    };
+    val first <- no_node();
+    if (inspect_signature(nodes, revision, at, head, signature) != (ScopedProcedureHead:SignatureSyntax) ||
+        !first_sequence_entry(nodes, revision, head, signature.parameter_tail, FormalSequence:SequenceSyntax, first))
+        return false;
+    sites.head <- head;
+    sites.signature <- header.index;
+    sites.body <- body.index;
+    return true;
+}
+
+export func inspect_scoped_procedure(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+                                     sites:ScopedProcedureSites in R) -> bool where {const owner N, owner R} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (ScopedProcedureDefinition { val header <- header; val body <- body; }) -> {
+                    read_scoped_procedure(nodes, revision, at, header, body, sites)
+                };
+                (_) -> { false };
+            }
+        };
+        (Vacant) -> { false };
+    };
 }
 
 export enum CallableSyntax:u8 { OtherCallableSyntax; InvalidCallable; ModuleCallable; LexicalCallable; CProvider; CEntry; }

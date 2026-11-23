@@ -4,7 +4,7 @@ using "ParserStorage.cod" ExprPayload {
     IndexSelection, ArrayLength, DeferredClauses, LocalCallableSlot, CallableDefinition, RaiseWithCause,
     RethrowWithCause, NamedArgument, OwningHandleBinding, BorrowedHandleBinding, OwnHandleConstruction,
     BorrowHandleConstruction, HereInvocation, RegionDefinition, OwningRegionBinding, RegionConstruction, OwningRegionResult,
-    ConstructorCasePattern,
+    ConstructorCasePattern, ProcedureSymbol, ScopedProcedureDefinition,
 };
 using "ParserStorage.cod" ConstructionSyntax {
     OtherConstruction, InvalidConstruction, ExceptionConstructionSyntax, PositionalConstruction,
@@ -16,7 +16,7 @@ using "ParserStorage.cod" SequenceSyntax { ModuleSequence };
 using "ParserStorage.cod" ModuleSelectionMode { UseResource, ReexportResource };
 using "ParserStorage.cod" SelectionSyntax { SelectionReady };
 using "ParserStorage.cod" LocalMode { ExceptionLocal };
-using "ParserStorage.cod" FormalMode { ExceptionFormal, HandleFormal, RetainedHandleFormal };
+using "ParserStorage.cod" FormalMode { ValueFormal, ExceptionFormal, HandleFormal, RetainedHandleFormal, ReferenceSlotFormal };
 using "ParserStorage.cod" {
     ExprNodes, Tokens, no_node, ConstructionSites, inspect_construction, syntax_first, syntax_past,
     first_module_item, SequenceEntry, inspect_sequence_entry, module_item_publication,
@@ -37,6 +37,10 @@ using "NameResolution.cod" {
 };
 using "NativeDeclarations.cod" {
     NativeDeclarationResult, check_native_declarations, declared_exception_type, native_declaration_first, unsupported_owning_region_result,
+};
+using "AggregateSchemas.cod" AggregateFacts;
+using "ModuleExportStorage.cod" {
+    ModuleInterfaceRow, ModuleInterfaces, AggregateStorage { UnprovedAggregate }, SumInterfacePayload { NoSumInterface },
 };
 using "OperandChecking.cod" {
     OperandFacts, CallOwners, OperandCheckResult, check_module_operands,
@@ -67,6 +71,10 @@ func unsupported_nominal_sum() -> u8 { return 114u8; }
 func unsupported_named_region() -> u8 { return 116u8; }
 func unsupported_const_local() -> u8 { return 117u8; }
 func unsupported_constructor_case() -> u8 { return 120u8; }
+func unsupported_reference_slot_formal() -> u8 { return 121u8; }
+func unsupported_fixed_formal() -> u8 { return 122u8; }
+func unsupported_procedure_symbol() -> u8 { return 123u8; }
+func unsupported_scoped_procedure() -> u8 { return 124u8; }
 
 export func rejected_unsupported_declaration(result:const ModuleBindingResult in R) -> bool where {const owner R} {
     if (result.stage == module_operands_failed())
@@ -80,6 +88,8 @@ export func rejected_unsupported_declaration(result:const ModuleBindingResult in
          result.diagnostic == unsupported_lexical_callable() || result.diagnostic == unsupported_nominal_sum() ||
          result.diagnostic == unsupported_named_region() || result.diagnostic == unsupported_const_local() ||
          result.diagnostic == unsupported_owning_region_result() || result.diagnostic == unsupported_constructor_case() ||
+         result.diagnostic == unsupported_reference_slot_formal() || result.diagnostic == unsupported_fixed_formal() ||
+         result.diagnostic == unsupported_procedure_symbol() || result.diagnostic == unsupported_scoped_procedure() ||
          (result.diagnostic >= 28u8 && result.diagnostic <= 40u8));
 }
 
@@ -196,11 +206,17 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64,
                 };
                 (SumDefinition) -> { if (emit_object) { unsupported_nominal_sum() } else { 0u8 } };
                 (ConstructorCasePattern) -> { unsupported_constructor_case() };
+                (ProcedureSymbol) -> { unsupported_procedure_symbol() };
+                (ScopedProcedureDefinition) -> { unsupported_scoped_procedure() };
                 (RegionDefinition) -> { unsupported_named_region() };
                 (OwningRegionBinding) -> { unsupported_named_region() };
                 (RegionConstruction) -> { unsupported_named_region() };
                 (OwningRegionResult) -> { unsupported_owning_region_result() };
-                (Formal { val mode <- mode; }) -> { if (mode == ExceptionFormal) { 29u8 } else { 0u8 } };
+                (Formal { val mode <- mode; val fixed <- binding_const; }) -> {
+                    if (mode == ReferenceSlotFormal) return unsupported_reference_slot_formal();
+                    if (fixed) return unsupported_fixed_formal();
+                    if (mode == ExceptionFormal) { 29u8 } else { 0u8 }
+                };
                 (ExceptionResult) -> { 30u8 };
                 (TypeConstraint) -> { if (emit_object) { unsupported_module_declaration() } else { 0u8 } };
                 (IndexSelection) -> { if (emit_object) { 39u8 } else { 0u8 } };
@@ -264,8 +280,9 @@ export func select_parsed_module(source:const SourceBytes in S, nodes:const Expr
 
 export func bind_selected_module(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                  selected:const SelectedExports in X, bindings:NameBindings in Y,
-                                 work:NameWork in W, emit_object:bool, result:ModuleBindingResult in R) -> bool
-    where {const owner S, const owner N, const owner X, owner Y, owner W, owner R} {
+                                 work:NameWork in W, interfaces:const ModuleInterfaces in I, interface_used:u64,
+                                 facts:AggregateFacts in F, emit_object:bool, result:ModuleBindingResult in R) -> bool
+    where {const owner S, const owner N, const owner X, owner Y, owner W, const owner I, owner F, owner R} {
     ref names = make NameResolutionResult { diagnostic <- 0u8; node <- no_node(); enclosing_defer <- no_node(); };
     if (!resolve_module_names(source, nodes, result.frontend.tree, selected, bindings, work, !emit_object, names)) {
         binding_diagnostic(nodes, result, module_binding_failed(), names.diagnostic, names.node);
@@ -325,7 +342,8 @@ export func bind_selected_module(source:const SourceBytes in S, nodes:const Expr
     if (!emit_object || first_extended_declaration(nodes, work, result.frontend.tree, false) != no_node() ||
         uses_native_boundary(nodes, result.frontend.tree.used)) {
         ref declarations = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
-        if (!check_native_declarations(nodes, bindings, work, selected, result.frontend.tree.used, result.frontend.tree.revision, emit_object, declarations)) {
+        if (!check_native_declarations(nodes, bindings, work, selected, interfaces, interface_used, facts,
+                                        used, revision, emit_object, declarations)) {
             binding_diagnostic(nodes, result, module_binding_failed(), declarations.diagnostic, declarations.node);
             result.frontend.diagnostic_first <- native_declaration_first(nodes, result.frontend.tree.used, declarations);
             return false;
@@ -351,7 +369,18 @@ export func bind_module(source:const SourceBytes in S, tokens:Tokens in T, nodes
         return false;
     } else {};
     if (!select_parsed_module(source, nodes, spellings, exports, spellings, exports, 0u64, 0u64, selected, true, result)) return false;
-    return bind_selected_module(source, nodes, selected, bindings, work, true, result);
+    ref interfaces = make ModuleInterfaces(0u64, make ModuleInterfaceRow {
+        defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
+        interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
+        type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
+        target_readonly <- 0u8; owner_readonly <- 0u8; has_here <- 0u8; failure_checked <- 0u8;
+        failure_module <- 0u64; failure_identity <- 0u64; name_first <- 0u64; name_past <- 0u64;
+        enum_code <- 0u64; native_function <- no_node(); native_procedure <- 0u8; native_reception <- 0u8;
+        native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
+        aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal;
+    });
+    ref facts = make AggregateFacts(result.frontend.tree.used, UnprovedAggregate);
+    return bind_selected_module(source, nodes, selected, bindings, work, interfaces, 0u64, facts, true, result);
 }
 
 # A successful operand analysis supplies the facts for checking completion.

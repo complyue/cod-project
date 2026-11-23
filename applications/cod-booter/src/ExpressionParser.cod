@@ -3,7 +3,7 @@ using "ParserInput.cod" {
     exception_binder_width, expected_name, expected_type, parse_binding_name,
     parse_identifier, punct_at, punct_pair_at, reset_parse_result, expected_c_linkage,
 };
-using "CallableSyntax.cod" parse_callable_signature;
+using "CallableSyntax.cod" { parse_callable_signature, parse_scoped_procedure_signature };
 using "ParserStorage.cod" {
     AssignmentOperands, ungrouped, is_invocation, name_syntax,
     function_definition,
@@ -20,7 +20,7 @@ using "ParserStorage.cod" {
 using "ParserStorage.cod" ExprPayload {
     IntegerLiteral, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid,
     ContinueValue, ContinueVoid, BreakValue, BreakVoid,
-    CallableDefinition, CProviderDeclaration, CEntryDefinition,
+    CallableDefinition, ScopedProcedureDefinition, CProviderDeclaration, CEntryDefinition,
     ArgumentItem, NamedArgument, SymbolReference, SymbolicInvocation, HereInvocation, HereSupply, HereReceiver,
     RangeHeader, RangeLoop, Parenthesized, Transfer, Rebind, InitializerTransfer, InitializerRebind,
     NamedConstruction, ExceptionConstruction, ReserveStorage, PositionalInitializer, BracedInitializer,
@@ -1206,6 +1206,34 @@ func parse_text_literal(source:const SourceBytes in S, tokens:const Tokens in T,
     };
 }
 
+func parse_callable_body(source:const SourceBytes in S, tokens:const Tokens in T,
+                         nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val supplied_here <- result.supplied_here;
+    val case_control <- result.case_control;
+    result.supplied_here <- false;
+    result.case_control <- false;
+    parse_block(source, tokens, nodes, result, past);
+    result.supplied_here <- supplied_here;
+    result.case_control <- case_control;
+    return;
+}
+
+func parse_scoped_procedure(source:const SourceBytes in S, tokens:const Tokens in T,
+                           nodes:ExprNodes in A, result:ParseResult in R, past:u64, first:u64, name:u64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    parse_scoped_procedure_signature(source, tokens, nodes, result, past, name);
+    if (result.diagnostic != 0u8) return;
+    val header <- result.root;
+    parse_callable_body(source, tokens, nodes, result, past);
+    if (result.diagnostic != 0u8) return;
+    val body <- result.root;
+    append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, body), make ScopedProcedureDefinition {
+        header <- make NodeId { revision <- result.revision; index <- header; };
+        body <- make NodeId { revision <- result.revision; index <- body; };
+    });
+}
+
 func parse_effect(source:const SourceBytes in S, tokens:const Tokens in T,
                          nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
@@ -1214,6 +1242,10 @@ func parse_effect(source:const SourceBytes in S, tokens:const Tokens in T,
     if (!parse_symbol(tokens, nodes, result, past)) return;
     val name <- result.root;
     val assignment <- result.next;
+    if (punct_at(source, tokens, assignment, past) == 40u8) {
+        parse_scoped_procedure(source, tokens, nodes, result, past, first, name);
+        return;
+    };
     val bind <- punct_at(source, tokens, assignment, past) == 61u8;
     if (!bind && !punct_pair_at(source, tokens, assignment, past, 60u8, 45u8)) {
         result.diagnostic <- expected_binding_operator();
@@ -1260,13 +1292,7 @@ export func parse_callable(source:const SourceBytes in S, tokens:const Tokens in
         });
         return;
     } else {};
-    val supplied_here <- result.supplied_here;
-    val case_control <- result.case_control;
-    result.supplied_here <- false;
-    result.case_control <- false;
-    parse_block(source, tokens, nodes, result, past);
-    result.supplied_here <- supplied_here;
-    result.case_control <- case_control;
+    parse_callable_body(source, tokens, nodes, result, past);
     if (result.diagnostic != 0u8) return;
     val body <- result.root;
     val end <- syntax_past(nodes, result.used, body);

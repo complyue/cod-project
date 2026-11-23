@@ -22,16 +22,18 @@ using "TokenBuffer.cod" ScanResult;
 using "ParserInput.cod" ParseResult;
 using "Frontend.cod" { FrontendResult, read_module };
 using "ModuleExportStorage.cod" { ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces };
-using "ModuleExportStorage.cod" SumInterfacePayload { NoSumInterface };
+using "ParserStorage.cod" FormalMode { ValueFormal };
+using "ModuleExportStorage.cod" { SumInterfacePayload { NoSumInterface }, AggregateStorage { UnprovedAggregate } };
+using "AggregateSchemas.cod" AggregateFacts;
 using "ModuleExports.cod" {
     SelectedExport, SelectedExports, next_module_dependency, prepare_module_dependencies, ExportResolutionResult,
-    resolve_enum_selections, resolve_sum_selections,
+    resolve_enum_selections, resolve_sum_selections, verify_aggregate_selections,
 };
 using "ModuleFrontend.cod" {
     ModuleBindingResult, select_parsed_module, bind_selected_module, module_read_failed, module_binding_failed,
     module_selection_failed, module_operands_failed, binding_diagnostic, rejected_unsupported_declaration,
 };
-using "NameResolution.cod" { NameBinding, NameBindings, NameWorkSlot, NameWork };
+using "NameResolution.cod" { NameBinding, NameBindings, NameWorkSlot, NameWork, record_type };
 using "NativeDeclarations.cod" {
     ModulePublication, NativeDeclarationResult, prepare_module_calls, check_module_interfaces, publish_interfaces,
     publish_module_exports,
@@ -154,7 +156,7 @@ proc reserve_interfaces(ref var rows:ModuleInterfaces in G, used:u64, required:u
         failure_module <- 0u64; failure_identity <- 0u64; name_first <- 0u64; name_past <- 0u64;
         enum_code <- 0u64; native_function <- no_node(); native_procedure <- 0u8; native_reception <- 0u8;
         native_passes_owner <- 0u8;
-        sum_payload <- make NoSumInterface {};
+        sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal;
     }) in G;
     for (i in 0u64 .. used) { next[i] <- rows[i]; };
     rows = next;
@@ -352,8 +354,9 @@ func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
                       catalog_spellings:const SourceBytes in B, catalog_exports:const ModuleExports in B,
                       spellings:const SourceBytes in G, published:const ModuleExports in G, spelling_size:u64,
                       export_count:u64, interfaces:const ModuleInterfaces in G, interface_count:u64, selected:SelectedExports in W,
-                      names:NameBindings in W, work:NameWork in W, result:ModuleBindingResult in R, native:bool) -> bool
-    where {const owner S, owner W, const owner B, const owner G, owner R} {
+                      names:NameBindings in W, work:NameWork in W, facts:AggregateFacts in F,
+                      result:ModuleBindingResult in R, native:bool) -> bool
+    where {const owner S, owner W, const owner B, const owner G, owner F, owner R} {
     if (!select_parsed_module(source, nodes, catalog_spellings, catalog_exports, spellings, published,
                              spelling_size, export_count, selected, native, result)) return false;
     ref members = make ExportResolutionResult { diagnostic <- 0u8; node <- no_node(); };
@@ -367,7 +370,13 @@ func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
         binding_diagnostic(nodes, result, module_selection_failed(), members.diagnostic, members.node);
         return false;
     };
-    if (!bind_selected_module(source, nodes, selected, names, work, native, result)) return false;
+    if (!verify_aggregate_selections(nodes, result.frontend.tree.used, result.frontend.tree.revision,
+                                     interfaces, interface_count, selected, record_type(), members)) {
+        binding_diagnostic(nodes, result, module_selection_failed(), members.diagnostic, members.node);
+        return false;
+    };
+    if (!bind_selected_module(source, nodes, selected, names, work, interfaces, interface_count, facts, native, result))
+        return false;
     if (native) return true;
     val used <- result.frontend.tree.used;
     ref checked = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
@@ -483,8 +492,10 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         stage <- 0u8; diagnostic <- 0u8; related_first <- no_node();
     };
     val native <- progress[0u64].purpose == (NativeObject:GraphPurpose);
+    ref aggregate_facts = make AggregateFacts(result.frontend.tree.used, UnprovedAggregate);
     if (!bind_graph_names(source, nodes, catalog_spellings, catalog_exports, spellings, published, spelling_size,
-                          export_count, published_interfaces, interface_count, selected, names, work, result, native)) {
+                          export_count, published_interfaces, interface_count, selected, names, work,
+                          aggregate_facts, result, native)) {
         val code <- if (result.stage == module_read_failed()) { result.frontend.tree.diagnostic } else { result.diagnostic };
         report_rejection(source, lines, diagnostic, result.stage, code,
                          result.frontend.diagnostic_first, result.frontend.diagnostic_past, result.related_first);
@@ -510,7 +521,8 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     ref publication = make ModulePublication { module_identity <- progress[0u64].identity; source_first <- 0u64; };
     val count <- 0u64;
     val conflict <- no_node();
-    if (!publish_module_exports(source, nodes, names, selected, publication, used, result.frontend.tree.revision, staged, count, conflict)) {
+    if (!publish_module_exports(source, nodes, names, selected, aggregate_facts,
+                                 publication, used, result.frontend.tree.revision, staged, count, conflict)) {
         if (conflict != no_node()) {
             report_rejection(source, lines, diagnostic, module_binding_failed(), 75u8,
                              syntax_first(nodes, result.frontend.tree.used, conflict), syntax_past(nodes, result.frontend.tree.used, conflict), no_node());
@@ -523,9 +535,9 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         publish_native_interfaces(nodes, names, work, facts, used, result.frontend.tree.revision, publication.module_identity,
                                   progress[0u64].function_base, staged_interfaces)
     } else { publish_interfaces(nodes, names, selected, work, used, result.frontend.tree.revision, publication.module_identity, staged_interfaces) };
-    if (!native && interfaces != no_node()) {
-        (interfaces <- publish_type_interfaces(nodes, names, selected, work, used, result.frontend.tree.revision, publication.module_identity,
-                                               interfaces, staged_interfaces)):void;
+    if (interfaces != no_node()) {
+        (interfaces <- publish_type_interfaces(nodes, names, selected, work, aggregate_facts, used,
+                                               result.frontend.tree.revision, publication.module_identity, interfaces, staged_interfaces)):void;
     } else {};
     if (interfaces == no_node()) {
         report_scratch_error(diagnostic, 1u32);
@@ -758,7 +770,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             failure_module <- 0u64; failure_identity <- 0u64; name_first <- 0u64; name_past <- 0u64;
             enum_code <- 0u64; native_function <- no_node(); native_procedure <- 0u8; native_reception <- 0u8;
             native_passes_owner <- 0u8;
-            sum_payload <- make NoSumInterface {};
+            sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal;
         });
         allocating <- false;
         val parsed <- with_source(opened) (source, lines) => {

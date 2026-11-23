@@ -11,7 +11,7 @@ using "ParserInput.cod" {
     ParseResult, punct_at, punct_pair_at, append_syntax_node, append_module_item, append_module, parse_identifier,
     parse_module_name, parse_resource_name, reset_parse_result, expected_name, expected_type, expected_c_linkage,
 };
-using "CallableSyntax.cod" { expected_owner_clause, parse_constraints, parse_parameter };
+using "CallableSyntax.cod" { expected_owner_clause, parse_constraints, parse_parameter, parse_procedure_symbol_type };
 using "ParserStorage.cod" {
     Tokens, ExprNodes, NodeId, len as token_len, no_node, syntax_first, syntax_past, ModuleSelectionMode,
     BindingSites, FormalSites, SignatureSites, inspect_binding, inspect_formal, inspect_signature,
@@ -407,8 +407,8 @@ func parse_nominal_type(source:const SourceBytes in S, tokens:const Tokens in T,
     });
 }
 
-func parse_native_symbol_declaration(source:const SourceBytes in S, tokens:const Tokens in T,
-                                     nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+func parse_symbol_declaration(source:const SourceBytes in S, tokens:const Tokens in T,
+                              nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
@@ -417,6 +417,12 @@ func parse_native_symbol_declaration(source:const SourceBytes in S, tokens:const
     val colon <- result.next;
     if (punct_at(source, tokens, colon, past) != 58u8) { result.diagnostic <- expected_type(); return; } else {};
     val qualifier <- colon + 1u64;
+    if (qualifier < past && proc_word(source, tokens[qualifier]) &&
+        punct_at(source, tokens, qualifier + 1u64, past) == 40u8) {
+        result.next <- qualifier;
+        parse_procedure_symbol_type(source, tokens, nodes, result, past, first, name);
+        return;
+    };
     if (qualifier + 1u64 >= past || !own_word(source, tokens[qualifier]) || !handle_word(source, tokens[qualifier + 1u64])) {
         result.diagnostic <- expected_type();
         return;
@@ -643,7 +649,7 @@ func parse_module_form(source:const SourceBytes in S, tokens:const Tokens in T,
         return;
     };
     if (symbol_word(source, tokens[at])) {
-        parse_native_symbol_declaration(source, tokens, nodes, result, past);
+        parse_symbol_declaration(source, tokens, nodes, result, past);
         return;
     } else {};
     if (handle_type_head(source, tokens, at, past)) {
