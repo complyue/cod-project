@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Clarify disposal in the first native provider profile
+
+<a id="k-booter-disposal-profile-20261123"></a>
+**K-BOOTER-DISPOSAL-PROFILE-20261123.** [D-20-C-HANDLES, interop r31→r32](applications/cod-booter/docs/LLVMInterop.md#native-handles-and-c-records), P-646/P-647, continues the [first LLVM lifecycle](#h-booter-llvm-handles-20261120) and [host declaration scope](#h-booter-c-declarations-20261120). The overview now identifies the existing nonthrowing hook and explicit failure reporting specified at `5cfc4f3a629a3937f85c1fd9032b23e8d103a6c0:applications/cod-booter/docs/LLVMInterop.md`, “Declarations and the first host call”. The general policy remains open.
+
 ## 2026-11-23 — Drain one member at each handoff and release on overwrite
 
 <a id="h-drain-handoff-20261123"></a>

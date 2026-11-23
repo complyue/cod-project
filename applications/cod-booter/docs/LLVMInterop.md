@@ -1,8 +1,10 @@
 # Native C providers, LLVM bindings and scoped cleanup
 
-Revision 31 · 2026-11-23 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
+Revision 32 · 2026-11-23 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
 
 ## Design authority
+
+[The r32 continuity record](../../../CHANGELOG.md#k-booter-disposal-profile-20261123) applies the [first host contract](#declarations-and-the-first-host-call) to the [native handle overview](#native-handles-and-c-records), under [D-20-C-HANDLES](../../../design/DesignAuthorityRegistry.md#d-20-c-handles), C-80/C-65 and P-646/P-647. The caller can observe failure of an explicit operation while its owner is live. Check failure before publication and one disposal of each successfully acquired owner. General fallible destruction remains open.
 
 At r30 the [user’s same-owner rebinding decision](../../../CHANGELOG.md#h-native-handle-local-rebinding-20261123) qualifies [borrowed handle locals](#borrowed-handle-locals-and-results) under [D-20-C-HANDLES](../../../design/DesignAuthorityRegistry.md#d-20-c-handles), P-646/P-647. A writable lexical binding can select another borrow under its original live owner. Verify independent selections and provider cleanup under that owner.
 
@@ -92,7 +94,7 @@ A fieldless `handle type` declaration identifies a nominal native resource type.
 - A borrowed `handle in oh` crossing from CoD to C carries both opaque 64-bit words, one for its own payload and one for `oh`. They supply the native context even when a signature has no separate owner argument. The checked reference to the actual owner instance supplies the lifetime relationship. The words convey no proof of liveness or release authority.
 - Nonempty by-value `data "C"` records are recursively bits-only, including nested records. Borrowed handles can travel as explicit locals, arguments and results with their owner obligations. Native aggregates holding handles stay in C behind a typed handle. Native resources and their handle payloads are process-local.
 
-The lexical storage lifetime, the actual resource owner and the dependencies of any native child remain distinct. A failed acquisition must unwind partial native resources without leaving a live owner or borrow for the caller. The concrete destructor failure policy remains open.
+The lexical storage lifetime, the actual resource owner and the dependencies of any native child remain distinct. A failed acquisition must unwind partial native resources without leaving a live owner or borrow for the caller. In the [first host contract](#declarations-and-the-first-host-call), the disposal hook returns `void` and releases the resource once. Operations promising output report failure while the owner is live. For example, the provider publisher checks both staging-file closes before publishing the pair. A future provider that needs to raise an error from implicit disposal requires a separate decision. [Provider output](../native/provider_output.c)
 
 ### Declaring and borrowing native handles
 
