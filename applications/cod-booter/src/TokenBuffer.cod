@@ -1,5 +1,6 @@
-using "SourceStorage.cod" SourceBytes;
-using "ParserStorage.cod" { Tokens, len };
+using "SourceStorage.cod" { SourceBytes, Token, DelimiterLink { OrdinaryToken, UnmatchedDelimiter, MatchedDelimiter } };
+using "ParserInput.cod" punct_at;
+using "ParserStorage.cod" { Tokens, len, no_node };
 using "Lexer.cod" { scan_token, end_of_source, lexical_error };
 
 export data ScanResult {
@@ -7,6 +8,63 @@ export data ScanResult {
     next:u64;
     complete:bool;
     invalid_source:bool;
+}
+
+func opener_for(mark:u8) -> u8 {
+    if (mark == 41u8) return 40u8;
+    if (mark == 93u8) return 91u8;
+    if (mark == 125u8) return 123u8;
+    return 0u8
+}
+
+func mark_delimiter(tokens:Tokens in T, at:u64, link:const DelimiterLink in L) -> void
+    where {owner T, const owner L} {
+    tokens[at] <- make Token {
+        kind <- tokens[at].kind;
+        first <- tokens[at].first;
+        past <- tokens[at].past;
+        delimiter <- link
+    };
+    return
+}
+
+func close_delimiter(source:const SourceBytes in S, tokens:Tokens in T, open:u64 in O,
+                     closing:u64, expected:u8) -> void where {const owner S, owner T, owner O} {
+    val previous <- no_node();
+    val crossed <- false;
+    for (step in 0u64 .. closing) {
+        if (open == no_node() || open >= closing) return;
+        case tokens[open].delimiter of {
+            (UnmatchedDelimiter { val before <- previous; }) -> { (previous <- before):void };
+            _ -> { return }
+        };
+        if (punct_at(source, tokens, open, closing) == expected) {
+            if (!crossed) {{
+                mark_delimiter(tokens, open, make MatchedDelimiter { closing <- closing })
+            }};
+            open <- previous;
+            return
+        };
+        open <- previous;
+        crossed <- true
+    }
+}
+
+func index_delimiters(source:const SourceBytes in S, tokens:Tokens in T, eof:u64) -> void
+    where {const owner S, owner T} {
+    val open <- no_node();
+    val mark <- 0u8;
+    val expected <- 0u8;
+    for (at in 0u64 .. eof) {
+        mark <- punct_at(source, tokens, at, eof);
+        if (mark == 40u8 || mark == 91u8 || mark == 123u8) {
+            {{ mark_delimiter(tokens, at, make UnmatchedDelimiter { previous <- open }) }};
+            (open <- at):void
+        } else {
+            expected <- opener_for(mark);
+            if (expected != 0u8) { close_delimiter(source, tokens, open, at, expected); }
+        }
+    }
 }
 
 # The caller supplies initialized token storage. The produced token prefix
@@ -19,9 +77,11 @@ export func scan_tokens(source:const SourceBytes in S, tokens:Tokens in T,
     result.invalid_source <- false;
     for (index in 0u64 .. len(tokens)) {
         scan_token(source, result.next, tokens[index]);
+        {{ mark_delimiter(tokens, index, make OrdinaryToken {}) }};
         result.used <- index + 1u64;
         result.next <- tokens[index].past;
         if (tokens[index].kind == end_of_source()) {
+            index_delimiters(source, tokens, index);
             result.complete <- true;
             return;
         } else {};

@@ -1,3 +1,4 @@
+using "SourceStorage.cod" DelimiterLink { OrdinaryToken };
 using "SourceStorage.cod" { SourceBytes, Token };
 using "SourceAccess.cod" len;
 using "Lexer.cod" { scan_token, end_of_source };
@@ -42,7 +43,7 @@ export func plan_expression_scratch(source:const SourceBytes in S, scratch:Expre
     scratch.token_count <- 0u64;
     scratch.node_capacity <- 0u64;
     scratch.syntax_capacity <- 0u64;
-    ref token = make Token { kind <- end_of_source(); first <- 0u64; past <- 0u64; };
+    ref token = make Token { kind <- end_of_source(); first <- 0u64; past <- 0u64; delimiter <- make OrdinaryToken {}; };
     val count <- count_tokens(source, token);
     if (count > (no_node() - 1u64) / 3u64) return false;
     scratch.token_count <- count + 1u64;

@@ -6,6 +6,7 @@ using "NativeSourceUse.cod" source_use;
 using "NativeDiagnostics.cod" {
     DiagnosticDestination, report_rejection, report_parse_rejection, report_source_open_error, report_scratch_error,
 };
+using "SourceStorage.cod" DelimiterLink { OrdinaryToken };
 using "SourceStorage.cod" { SourceBytes, SourceLines, Token };
 using "ParserStorage.cod" {
     Tokens, ExprNodes, no_node, syntax_first, syntax_past, ModuleSelectionSites, inspect_module_selection,
@@ -708,7 +709,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
     val allocating <- true;
     try {
         val capacity <- workspaces[0u64].plan.source.node_capacity;
-        ref tokens = make Tokens(workspaces[0u64].plan.source.token_count, make Token { kind <- 0u8; first <- 0u64; past <- 0u64; });
+        ref tokens = make Tokens(workspaces[0u64].plan.source.token_count, make Token { kind <- 0u8; first <- 0u64; past <- 0u64; delimiter <- make OrdinaryToken {}; });
         ref nodes = make ExprNodes(workspaces[0u64].plan.source.syntax_capacity, make Vacant {});
         ref selected = make SelectedExports(capacity, make SelectedExport {
             dependency_module <- 0u64; identity <- 0u64; kind <- 0u8; checked <- 0u8;

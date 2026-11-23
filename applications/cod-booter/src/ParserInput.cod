@@ -3,13 +3,13 @@ using "Lexer.cod" {
     reserved_lexical_binder, reserved_module_name,
 };
 using "ParserStorage.cod" {
-    ExprNodes, ExprNode, ExprPayload, SourceSpan, NodeId, Tokens, len, no_node, syntax_first, syntax_past,
+    ExprNodes, ExprNode, ExprPayload, SourceSpan, NodeId, Tokens, len, no_node, syntax_first, syntax_past, parse_report_code,
 };
 using "ParserStorage.cod" NodeLink { NoLink, LinkTo };
 using "ParserStorage.cod" ExprPayload { NameReference, ModuleSyntax, ModuleItem, BlockSyntax, ScopeSyntax, BlockItem, AnnotatedBinding, OwnerQualifiedType };
 using "ParserStorage.cod" AstSlot { Occupied };
-using "ParserStorage.cod" { SyntaxRole { InitializerRole, ExpressionRole }, ExprPayload { ParseReport, ErrorReport } };
-using "SourceStorage.cod" SourceBytes;
+using "ParserStorage.cod" { SyntaxRole { InitializerRole, ExpressionRole, BlockItemRole }, ExprPayload { ParseReport, ErrorReport } };
+using "SourceStorage.cod" { SourceBytes, DelimiterLink { MatchedDelimiter } };
 
 export data ParseResult {
     revision:u64;
@@ -46,6 +46,17 @@ export func punct_pair_at(source:const SourceBytes in S, tokens:const Tokens in 
     if (at >= past || tokens[at].kind != punctuation()) return false;
     val first <- tokens[at].first;
     return tokens[at].past - first == 2u64 && source[first] == left && source[first + 1u64] == right;
+}
+
+export func closing_token(tokens:const Tokens in T, opening:u64, past:u64) -> u64 where {const owner T} {
+    if (opening >= past || past >= len(tokens)) return no_node();
+    return case tokens[opening].delimiter of {
+        (MatchedDelimiter { val close <- closing; }) -> {
+            if (close <= opening || close >= past) return no_node();
+            close
+        };
+        _ -> no_node()
+    }
 }
 
 export func append_syntax_node(nodes:ExprNodes in A, result:ParseResult in R,
@@ -278,37 +289,47 @@ func is_recovery_separator(mark:u8, role:SyntaxRole) -> bool {
            (mark == 44u8 || mark == 41u8 || mark == 93u8)
 }
 
-# Recover to this list's separator. An unmatched opener does not let the
-# error swallow every later item before the remainder of the input ends.
+# Skip only groups the source delimiter map proved complete.
 func recovery_boundary(source:const SourceBytes in S, tokens:const Tokens in T,
                        first:u64, past:u64, role:SyntaxRole) -> u64 where {const owner S, const owner T} {
-    val parentheses <- 0u64;
-    val brackets <- 0u64;
-    val braces <- 0u64;
-    val fallback <- past;
-    val mark <- 0u8;
-    for (at in first .. past) {
-        mark <- punct_at(source, tokens, at, past);
-        if (is_recovery_separator(mark, role) && parentheses == 0u64 && brackets == 0u64 && braces == 0u64)
-            return at;
-        if (fallback == past && is_recovery_separator(mark, role) &&
-            (mark == 59u8 || mark == 125u8)) { (fallback <- at):void; };
-        if (mark == 40u8) { (parentheses <- parentheses + 1u64):void; };
-        if (mark == 91u8) { (brackets <- brackets + 1u64):void; };
-        if (mark == 123u8) { (braces <- braces + 1u64):void; };
-        if (mark == 41u8 && parentheses != 0u64) { (parentheses <- parentheses - 1u64):void; };
-        if (mark == 93u8 && brackets != 0u64) { (brackets <- brackets - 1u64):void; };
-        if (mark == 125u8 && braces != 0u64) { (braces <- braces - 1u64):void; };
+    val at <- first;
+    val closing <- no_node();
+    for (step in first .. past) {
+        if (at >= past) return past;
+        if (is_recovery_separator(punct_at(source, tokens, at, past), role)) return at;
+        closing <- closing_token(tokens, at, past);
+        at <- if (closing == no_node()) { at + 1u64 } else { closing + 1u64 }
     };
-    if (parentheses != 0u64 || brackets != 0u64 || braces != 0u64) return fallback;
     return past
 }
 
-export func recover_syntax(source:const SourceBytes in S, tokens:const Tokens in T,
-                           nodes:ExprNodes in A, result:ParseResult in R,
-                           start:u64, past:u64, role:SyntaxRole) -> bool
+# A missing separator is a fault of the enclosing list. Preserve its
+# completed item and reuse a report already anchored at the offending token.
+export func recover_block_separator(source:const SourceBytes in S, tokens:const Tokens in T,
+                                    nodes:ExprNodes in A, result:ParseResult in R,
+                                    first_new:u64, past:u64, code:u8, keep_current:bool) -> bool
     where {const owner S, const owner T, owner A, owner R} {
-    if (result.exhausted || result.diagnostic == 0u8 || start > past || past >= len(tokens)) return false;
+    if (result.exhausted || result.next > past || past >= len(tokens)) return false;
+    val first <- tokens[result.next].first;
+    val present <- lexical_report_at(nodes, result, first) != no_node();
+    for (at in first_new .. result.used) {
+        if (parse_report_code(nodes, result.used, at) != 0u8 && syntax_first(nodes, result.used, at) == first) {
+            (present <- true):void
+        }
+    };
+    if (!present && append_parse_report(nodes, result, first, tokens[result.next].past, code) == no_node())
+        return false;
+    if (!keep_current) {
+        (result.next <- recovery_boundary(source, tokens, result.next, past, BlockItemRole)):void
+    };
+    return true
+}
+
+export func recover_syntax_until(tokens:const Tokens in T, nodes:ExprNodes in A, result:ParseResult in R,
+                                 start:u64, boundary:u64, past:u64, role:SyntaxRole) -> bool
+    where {const owner T, owner A, owner R} {
+    if (result.exhausted || result.diagnostic == 0u8 || start > boundary || boundary > past || past >= len(tokens))
+        return false;
     val failure <- past;
     if (result.next < past) { (failure <- result.next):void; };
     val first <- tokens[failure].first;
@@ -317,9 +338,18 @@ export func recover_syntax(source:const SourceBytes in S, tokens:const Tokens in
         report <- append_parse_report(nodes, result, first, tokens[failure].past, result.diagnostic);
         if (report == no_node()) return false
     };
-    result.next <- recovery_boundary(source, tokens, start, past, role);
+    result.next <- boundary;
     result.diagnostic <- 0u8;
     append_syntax_node(nodes, result, tokens[start].first, tokens[result.next].first,
                        make ErrorReport { role <- role; report <- make NodeId { revision <- result.revision; index <- report } });
     return !result.exhausted
+}
+
+
+export func recover_syntax(source:const SourceBytes in S, tokens:const Tokens in T,
+                           nodes:ExprNodes in A, result:ParseResult in R,
+                           start:u64, past:u64, role:SyntaxRole) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    if (result.exhausted || result.diagnostic == 0u8 || start > past || past >= len(tokens)) return false;
+    return recover_syntax_until(tokens, nodes, result, start, recovery_boundary(source, tokens, start, past, role), past, role)
 }

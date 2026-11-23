@@ -1,7 +1,7 @@
 using "ParserInput.cod" {
     ParseResult, append_syntax_node, append_block_item, append_block,
     exception_binder_width, expected_name, expected_type, parse_binding_name,
-    parse_identifier, punct_at, punct_pair_at, reset_parse_result, expected_c_linkage, recover_syntax, seed_lexical_reports,
+    parse_identifier, punct_at, punct_pair_at, reset_parse_result, expected_c_linkage, closing_token, recover_syntax, recover_block_separator, seed_lexical_reports,
 };
 using "CallableSyntax.cod" { parse_callable_signature, parse_scoped_procedure_signature };
 using "ParserStorage.cod" {
@@ -200,11 +200,20 @@ func parse_defer(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 # Each block item links its preceding item and its own expression.
+func starts_recoverable_block_item(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    return return_word(source, token) || val_word(source, token) || ref_word(source, token) ||
+        ptr_word(source, token) || const_word(source, token) || if_word(source, token) ||
+        try_word(source, token) || throw_word(source, token) || defer_word(source, token) ||
+        for_word(source, token) || effect_word(source, token)
+}
+
 func parse_block_item(source:const SourceBytes in S, tokens:const Tokens in T,
                       nodes:ExprNodes in A, result:ParseResult in R,
                       past:u64, previous:u64, initializer:bool, case_arm:bool) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val start <- result.next;
+    val first_new <- result.used;
     val supplied <- result.supplied_here;
     val in_case <- result.case_control;
     val label <- if (initializer) { initializer_label(source, tokens, start, past) } else { no_node() };
@@ -226,16 +235,16 @@ func parse_block_item(source:const SourceBytes in S, tokens:const Tokens in T,
     val first <- syntax_first(nodes, result.used, expression);
     val end <- syntax_past(nodes, result.used, expression);
     val separator <- result.next;
-    if (separator >= past) { result.diagnostic <- expected_block_close(); return false; } else {};
-    val delimiter <- punct_at(source, tokens, separator, past);
-    if (delimiter == 59u8) { # ';'
-        end <- tokens[separator].past;
-        (result.next <- separator + 1u64):void;
-    } else {};
-    if (delimiter != 59u8 && delimiter != 125u8) { # ';' or '}'
-        result.diagnostic <- expected_block_separator();
-        return false;
-    } else {};
+    if (separator < past) {
+        val delimiter <- punct_at(source, tokens, separator, past);
+        if (delimiter != 59u8 && delimiter != 125u8 &&
+            !recover_block_separator(source, tokens, nodes, result, first_new, past, expected_block_separator(),
+                                     starts_recoverable_block_item(source, tokens[separator]))) return false;
+        if (punct_at(source, tokens, result.next, past) == 59u8) {
+            end <- tokens[result.next].past;
+            (result.next <- result.next + 1u64):void
+        }
+    };
     append_block_item(nodes, result, first, end, previous, expression);
     return result.diagnostic == 0u8;
 }
@@ -248,9 +257,12 @@ func finish_block(source:const SourceBytes in S, tokens:const Tokens in T,
     if (scoped) {
         close <- close + 1u64;
         if (punct_at(source, tokens, close, past) != 125u8) { # '}'
+            val end <- tokens[result.next].past;
             result.next <- close;
-            result.diagnostic <- expected_block_close();
-            return;
+            if (recover_block_separator(source, tokens, nodes, result, result.used, past, expected_block_close(), true)) {
+                append_block(nodes, result, first, end, last, scoped)
+            };
+            return
         } else {};
     } else {};
     append_block(nodes, result, first, tokens[close].past, last, scoped);
@@ -277,7 +289,12 @@ func parse_braced_items(source:const SourceBytes in S, tokens:const Tokens in T,
             finish_block(source, tokens, nodes, result, past, first, last, scoped);
             return;
         } else {};
-        if (result.next >= past) { result.diagnostic <- expected_block_close(); return; } else {};
+        if (result.next >= past) {
+            if (recover_block_separator(source, tokens, nodes, result, result.used, past, expected_block_close(), true)) {
+                append_block(nodes, result, first, tokens[past].first, last, scoped)
+            };
+            return
+        };
         if (!parse_block_item(source, tokens, nodes, result, past, last, initializer, false)) return;
         last <- result.root;
     };
@@ -887,24 +904,13 @@ func starts_case_arm(source:const SourceBytes in S, tokens:const Tokens in T, fi
     where {const owner S, const owner T} {
     if (starts_short_case_arm(source, tokens, first, past)) return true;
     if (punct_at(source, tokens, first, past) != 40u8) return false; # '('
-    val depth <- 0u64;
-    val delimiter <- 0u8;
-    val following <- first;
-    for (at in first .. past) {
-        delimiter <- punct_at(source, tokens, at, past);
-        if (delimiter == 40u8) { (depth <- depth + 1u64):void; } else {};
-        if (delimiter == 41u8) {
-            depth <- depth - 1u64;
-            if (depth == 0u64) {
-                following <- at + 1u64;
-                if (punct_at(source, tokens, following, past) == 124u8) return true; # '|'
-                return punct_pair_at(source, tokens, following, past, 45u8, 62u8) &&
-                    (punct_at(source, tokens, following + 1u64, past) == 123u8 ||
-                     (following + 1u64 < past && throw_word(source, tokens[following + 1u64])));
-            } else {};
-        } else {};
-    };
-    return false;
+    val close <- closing_token(tokens, first, past);
+    if (close == no_node()) return false;
+    val following <- close + 1u64;
+    if (punct_at(source, tokens, following, past) == 124u8) return true; # '|'
+    return punct_pair_at(source, tokens, following, past, 45u8, 62u8) &&
+        (punct_at(source, tokens, following + 1u64, past) == 123u8 ||
+         (following + 1u64 < past && throw_word(source, tokens[following + 1u64])))
 }
 
 func append_case_pattern(source:const SourceBytes in S, token:const Token in T,
