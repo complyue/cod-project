@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-11-23 — Define the Actor and typed chan boundary
+
+<a id="h-actor-chan-boundary-20261123"></a>
+**H-ACTOR-CHAN-BOUNDARY-20261123.** In the current cod project conversation on 2026-11-23 (America/Los_Angeles), the project user directed research into future Actor communication using complyue/nedh's networking and complyue/sedh's cluster scheduling as business context. They ruled out a separate language-level thread concurrency model, initially described Erlang-like communicating virtual processes with isolated TLS, then selected a 1:1 relation with OS threads for a simple, effective structure. They requested Actor and chan as the language terminology and required CoD chan to be statically strongly typed.
+
+The user then specified:
+
+> 消息基本采用 udp 语义，不保证接收，不提供回执，应用自己处理流和其它可靠协议
+
+The subsequent refinement was:
+
+> 发送者在后续发送大概率失败的场景下，应收到系统故障报错，除此之外，应获得 “发后不管” 的发送语义。
+
+D-10-ACTOR-CHAN/P-702 covers the r242 Actor section: one dedicated OS thread per Actor, its own execution stack and isolated dynamic context; static message types; ordinary fire-and-forget sending; and system-fault feedback when subsequent sending is likely to fail. It continues H-151/H-168 while replacing the shared-worker execution candidate and narrowing the former generic local-send-error discussion. The UDP comparison selects a semantic boundary, not a physical transport, and does not prohibit a chosen transport's internal retransmission. Endpoint identities/forms, receiver count, source grammar, queue/close behavior, fault classification/reporting, exact ownership consumption and fault recovery, Actor/module lifetimes, native failure containment and wire compatibility remain open. P-131–P-135 retain their qualification. This is an attributed decision record with excerpts; no durable message URL or exact timestamp is available.
+
+## 2026-11-23 — Ground Actor and chan research in network and cluster workloads
+
+<a id="k-actor-chan-research-20261123"></a>
+**K-ACTOR-CHAN-RESEARCH-20261123.** [D-32](design/ActorChannels.md), research r1, inspects nedh at `04f5e0f62aabe656c21c3181edd9ba72c3f0c5b7` and sedh at `2567b52ed58985d0edfa6312a3b883c5cf8b79ab`. P-703 records the existing design dependencies; P-704 is a candidate value path. The work traces network routing, explicit reply endpoints, shared collectors, resource recruitment, job settlement and cancellation, and separates source facts, design constraints and operational candidates. Reference examples were inspected, not executed.
+
+Under H-ACTOR-CHAN-BOUNDARY-20261123, D-10 r241→242, D-12 r35→36, D-13 r36→37, D-14 r131→132 and D-07 r207→208 integrate Actor-local terminology, dedicated-thread execution and the systemic-fault/fire-and-forget boundary from the baseline `ec9ac9091925f97ec8caf0cd329f6aaa6e515a4c:design/SymbolicDynamicScope.md` and its companion files. The earlier one-worker/two-Actor milestone and generic per-message Accepted/LocalError recommendation are replaced. Existing H-262/H-263 consumed-name and view-validity rules, intrinsic owner carriers, callable restrictions and cleanup remain; ownership when a systemic fault is reported is not selected. The design-topic index links the research and its remaining decisions. The rest of each document is **continued** with its prior qualification. This records research and contract alignment, not new code or implementation approval.
+
 ## 2026-11-23 — Review the standalone booter’s prepared library dependency
 
 <a id="k-booter-standalone-bundle-inputs-20261123"></a>

@@ -160,6 +160,23 @@ Haskell，再按 CoD 的模块解释规则决定声明的可见性、优先级�
 
 用两路传感器共同报告一台泵的状态比较不同写法。让两路以不同速率到达，并加入迟到事件：谁负责缓冲，何时关闭窗口，消费者跟不上时生产者观察到什么？以同一输入的可观察结果对照已有复杂事件处理系统。[异步管道研究](../papers/OpenEventPipelines.md)
 
-## Actor model 与 mailbox
+## Actor 与 chan
 
-最后用一次本地发送串起 Actor 身份、动态上下文、排队、接收和关停。程序需要能判断发送成功或失败后谁拥有消息图、队列满时谁负责处理，以及接收方结束时谁释放未消费消息。把 mailbox 的类型与上述行为一起决定。[Actor 与 region](../design/GlobalVariablesDoneRight.md#actor-direction-and-region-holding)
+状态：已启动预研；基础执行与消息语义已确定，具体接口和生命周期继续讨论。
+
+语言概念统一为 Actor 和静态强类型的 `chan`。每个 Actor 对应一条专属 OS 线程，
+拥有独立执行栈和隔离的 TLS；语言不提供另一套线程并发模式。
+消息采用 UDP 式语义，不保证接收、不提供回执，应用自行建立流及其他可靠协议。
+当系统有依据判断后续发送大概率失败时，应向发送者报系统故障；
+其余情况提供“发后不管”的发送语义。具体物理传输不因此被限定为 UDP。
+[已确认边界](../design/SymbolicDynamicScope.md#actor-concurrency-direction)
+
+业务预研参考 [nedh 的网络通信](https://github.com/complyue/nedh) 和
+[sedh 的集群调度](https://github.com/complyue/sedh)，重点检验请求携带回信端点、
+多个 worker 汇流、资源征召、任务结算与取消。
+[预研与源码依据](../design/ActorChannels.md)
+
+接下来分别确定 chan 身份与端点权限、接收方数量、消息图的转移点、
+系统故障时的 owner 去向、队列资源与关闭、Actor 启动/退出及模块生命周期，
+以及网络类型/版本验证。不能把单条消息未收、业务拒绝或任务失败作为基础 send 的回执。
+本轮不重新讨论已经确定的术语、1:1 映射、静态类型和基础发送契约。

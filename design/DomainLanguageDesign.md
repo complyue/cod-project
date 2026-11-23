@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 207
+Discussion revision: 208
 
 Recorded: 2026-11-23
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+[D-10-ACTOR-CHAN](DesignAuthorityRegistry.md#d-10-actor-chan) governs r208's Actor-local context and chan summaries. [H-ACTOR-CHAN-BOUNDARY-20261123](../CHANGELOG.md#h-actor-chan-boundary-20261123) selects Actor/chan terminology, dedicated-thread 1:1 execution, isolated TLS, static message typing and fire-and-forget sending with systemic-fault feedback. [K-ACTOR-CHAN-RESEARCH-20261123](../CHANGELOG.md#k-actor-chan-research-20261123) carries these scoped changes into G-06, DL-05 and compilation context wording. Existing module, owner, callable and cleanup invariants remain; [D-32](ActorChannels.md) keeps endpoint, transfer-on-fault and application-protocol candidates separate.
 
 At r207, LI-04 writes the starred unit and its first conversion arrow as separate tokens under [D-10-OPERATOR-RUNS](DesignAuthorityRegistry.md#d-10-operator-runs). H-136–H-138 govern selection of the same direct or declared route. [Decision](../CHANGELOG.md#h-maximal-operator-runs-20261123)
 
@@ -65,7 +67,7 @@ The [diagnostic name decision](../CHANGELOG.md#h-diagnostic-names-20261122) appl
 - **Registry / current scope:** [D-07](DesignAuthorityRegistry.md#d-07); the semantic revision stated above and the independently qualified scopes in the current registry. **Whole file pending-human.** H-06/H-07 establishes the tracker; C-08–C-11/P-12–P-21 supplies candidate paths. Local decisions route through D-10/D-11/D-14–D-18/D-21–D-24.
 - **Value path:** C-10 supplies inspectable typed execution. C-35/C-43/C-45/C-46 through P-84/P-100/P-102/P-109–P-111 and C-56/C-57 through P-182–P-197 concern identity, composition, interfaces and explicit behavior selection. C-39/C-54 through P-94/P-143/P-155 supplies regional lifetime boundaries. C-58/P-199–P-202 adds explicit publication and module-scoped callable composition. These candidate paths serve charter §§2–4; dependency evidence does not qualify them.
 - **Contract boundary:** G-01–G-07, DL-01–DL-16 and DD-001–DD-151 retain the decision/acceptance inventory. H-351/H-352 settles library graph-transfer responsibility and IPC/DBMR planning directions, not protocols, ABI, concurrency, snapshot failure or retention. Past work-period permissions are not a new task.
-- **Invariants / non-goals:** preserve zero-cost regional relocation, H-478's owner-qualified one-ADT placement, no regional object copy/move, owner provenance, non-consuming capture replay and no dynamic effect/procedure calls from functions. No module-valued expression, runtime interface wrapper, allocator policy, bootstrap/toolchain change or SNN modeling choice is introduced. The confirmed method-selection increment does not settle qualifiers, ownership construction/transfer, standalone abstract signatures or mailbox semantics.
+- **Invariants / non-goals:** preserve zero-cost regional relocation, H-478's owner-qualified one-ADT placement, no regional object copy/move, owner provenance, non-consuming capture replay and no dynamic effect/procedure calls from functions. No module-valued expression, runtime interface wrapper, allocator policy, bootstrap/toolchain change or SNN modeling choice is introduced. The confirmed method-selection increment does not settle qualifiers, ownership construction/transfer, standalone abstract signatures or chan semantics.
 - **Acceptance:** Examples must distinguish source/caller contexts, visibility, conformance, use/extension permission, unique/ambiguous dispatch and demanded/unused implementations while preserving lifetimes and relocation. Current compiler availability is recorded in the [source capability reference](../tests/cod/language/README.md).
 - **Evidence / continuity:** human baselines remain the H records identified by the registry; [K-INFERENCE-CLEANUP-20261114](../CHANGELOG.md#k-inference-cleanup-20261114) covers r154→155: consolidate standalone-declaration semantics against D-10/H-258 and D-24/H-423, preserving unrelated local decisions and pending scopes.
 
@@ -100,7 +102,7 @@ These are summaries of the user's statements, not inferred approval of the prece
 | G-03 | Give the domain language explicit ADT semantics, including sum/product types, method invocation and memory management. | DL-01–DL-03 |
 | G-04 | Provide C/C++ compatibility interfaces for interoperability with other language runtimes. | DL-11 |
 | G-05 | Advance language and SNN design, implementation and validation together, using simulator requirements to choose useful initial language features. | H-96; DL-12–DL-16 |
-| G-06 | Nominal symbols, thread-scoped effects, captured/current procedure invocation, lexical functions and lexical or symbol-bound procedures, with whole-program call-path checking. | H-96–H-98, H-102–H-104, H-180; DL-02, DL-14, DL-15 |
+| G-06 | Nominal symbols, Actor-local scoped effects, captured/current procedure invocation, lexical functions and lexical or symbol-bound procedures, with whole-program call-path checking. | H-96–H-98, H-102–H-104, H-180; DL-02, DL-14, DL-15 |
 | G-07 | User storage is stack or `@region`. Captures are bits or regional pointers. Each region contains one direct-pointer graph. Relationships between regions are logical business associations. | H-99/H-100/H-156/H-157; DL-03, DL-08, DL-15 |
 
 H-352 assigns update/versioning behavior to the selected library's `<-` methods rather than one mandatory DBMR-wide policy. Actor-model design supplies language-level facilities for application outcomes and recovery; applications choose their business protocol. Snapshot save/replace and intrinsic SPI support are planning directions, with their operational interfaces still to be designed.
@@ -802,9 +804,9 @@ H-262 permits a named non-optional owning region to supply an effect installatio
 
 **Regional access:** functions operate on explicitly supplied regional data and may modify it; they cannot read/write dynamic bindings or invoke procedures. Procedures may call functions. H-197/H-198 establishes this mutable-state baseline; a separate const function may serve future read-only requirements. Regional references preserve their enclosing region association and lifetime across nested calls and returned views. See [D-10 storage semantics](SymbolicDynamicScope.md#storage-carriers-capture-types-and-lifetime).
 
-**Ownership boundary:** H-190 makes whole-region ownership intrinsic. Intra-region allocation/reuse policies belong to CoD user code, including free lists and pools. Typed slot reuse neither releases part of the region nor guarantees that an old reference still identifies the same logical item. D-14 prioritizes the missing ordinary holder, construction/result, optionality and reference-validity contract before mailbox transfer.
+**Ownership boundary:** H-190 makes whole-region ownership intrinsic. Intra-region allocation/reuse policies belong to CoD user code, including free lists and pools. Typed slot reuse neither releases part of the region nor guarantees that an old reference still identifies the same logical item. D-14 prioritizes the missing ordinary holder, construction/result, optionality and reference-validity contract before chan transfer.
 
-Lifecycle acceptance requires each selected short-circuit scope to release its local region before the next iteration, skipped operands to allocate nothing, and captured/hidden enclosing owners to remain live. These requirements do not decide pending owning construction, transfer or mailbox choices.
+Lifecycle acceptance requires each selected short-circuit scope to release its local region before the next iteration, skipped operands to allocate nothing, and captured/hidden enclosing owners to remain live. These requirements do not decide pending owning construction, transfer or chan choices.
 
 **Question:** Which region owns every value and reference throughout packet application, querying and persistence?
 
@@ -843,9 +845,9 @@ Lifecycle acceptance requires each selected short-circuit scope to release its l
 
 **Assigned design responsibility (H-352):** [Actor-model design](GlobalVariablesDoneRight.md#actor-implementation-readiness) must design the language-level support applications use for outcomes, failure and recovery. The packet format and graph-transfer operator do not impose a database transaction protocol.
 
-- Actor design must state local send/receive, handler completion and failure boundaries. H-168's intrinsic send reports local system errors only; it does not acknowledge delivery or application.
+- Actor design must state sending/receiving, handler completion and failure boundaries. D-10-ACTOR-CHAN refines H-168: sending is fire-and-forget except for reported systemic communication faults likely to compromise subsequent sends. It supplies no reception guarantee, receipt or application-completion acknowledgement.
 - Applications use the Actor facilities to define any response, retry, duplicate-handling or compensation protocol they need. Distinguish fully received, applied in memory and durably committed outcomes in that protocol.
-- Snapshot/file operations supply the persistence boundary in DL-09; their failure behavior must be explicit before applications can rely on it. Selecting Actor support does not yet choose a scheduler, supervision strategy, exactly-once guarantee or cross-region transaction mechanism.
+- Snapshot/file operations supply the persistence boundary in DL-09; their failure behavior must be explicit before applications can rely on it. D-10-ACTOR-CHAN fixes one dedicated OS thread per Actor. Priority/fairness policy, supervision, exactly-once application protocols and cross-region transactions retain their separate scope.
 
 **Decision evidence:** a small outcome table for failure before application, during application, after commit but before acknowledgment, and during retry. Select only the guarantees needed for the first business workflow.
 
@@ -962,7 +964,7 @@ The tooltip supports navigable links in its text. In the example the link label 
 - Decide which typed representation, checking rules and handler interfaces are shared. Layout/validation facilities must follow one defined type contract; graph transfer/compaction algorithms remain library code under H-351/H-352, with no implicit compiler-generated universal traversal.
 - Bound syntax, ADT/GADT features, effects, query primitives and FFI for an initial version. Distinguish deliberate omissions from restrictions that would prevent multi-domain integration or later type/kind work.
 - H-106 separates complete dependency scanning/registration from entry-driven compilation of execution semantics. Top-level procedure declarations do not execute during scanning. H-495–H-498 orders once-incorporated initialization blocks statically, with static namespaces ready first and entry execution last.
-- Keep program intent separate from native code and caches. H-96/H-102 specify demand-driven whole-program compilation, with the complete caller paths available and no independent module compilation. Collect required symbolic variables, check binding availability/types, then lay out direct per-thread access. Concrete lowering, specialization and cache dependencies remain to be specified; this does not select machine-code JIT.
+- Keep program intent separate from native code and caches. H-96/H-102 specify demand-driven whole-program compilation, with the complete caller paths available and no independent module compilation. Collect required symbolic variables, check binding availability/types, then lay out direct access in each Actor's dynamic context on its dedicated OS thread. Concrete lowering, specialization and cache dependencies remain to be specified; this does not select machine-code JIT.
 
 **Current bounded implementation:** the [native source prototype](../tests/cod/language/README.md) parses/checks CoD, specializes demanded call paths and emits LLVM IR/bitcode directly. The existing compiler/linker builds the native result with a small C++ system runtime. Experimental syntax and limits remain explicit. A persistent regional typed program core, general GADT and stable interoperation ABI remain design work. H-143 selects this execution path; H-144/H-145 require focused verification and removal of unnecessary complexity.
 

@@ -1,8 +1,10 @@
 # CoD Regional Memory Vision and Implementation Tracker
 
-Design revision 36 · 2026-11-21
+Design revision 37 · 2026-11-23
 
 ## Design authority
+
+[D-10-ACTOR-CHAN](DesignAuthorityRegistry.md#d-10-actor-chan) constrains r37's [Actor transfer review](#actor-holding-and-transfer-review) and [systemic-fault recovery](#ownership-when-a-systemic-fault-is-reported). [H-ACTOR-CHAN-BOUNDARY-20261123](../CHANGELOG.md#h-actor-chan-boundary-20261123) selects fire-and-forget sending except for system faults likely to compromise subsequent sends. [K-ACTOR-CHAN-RESEARCH-20261123](../CHANGELOG.md#k-actor-chan-research-20261123) removes the earlier generic per-message result recommendation. H-262/H-263 and intrinsic owner carriers remain; no exact send-consumption point or fault owner outcome is selected. C-39/C-54 and existing candidate value paths retain their scope. [D-32](ActorChannels.md) supplies the research workloads and acceptance cases.
 
 [D-10-OWN-QUALIFIER](DesignAuthorityRegistry.md#d-10-own-qualifier) and [H-CONTEXTUAL-OWN-20261121](../CHANGELOG.md#h-contextual-own-20261121) cover the qualifier in the illustrative region handoff at r36.
 
@@ -82,7 +84,7 @@ There is no implicit first-root selection or flattening of a referenced object's
 
 Cross-region relationships exist in the business model. They are represented by values such as typed IDs or keys and interpreted by the program in its business context. CoD’s physical pointer types are confined to a single region. A procedure can work with multiple live regions through separate inputs or bindings, each with its own lifetime. [Language boundary](SymbolicDynamicScope.md#logical-relationships-between-regions)
 
-For example, a `WorkPkg` for `Mainbox<WorkPkg>` could contain a task node, input buffers linked by direct pointers and a `CustomerId` value. The package region contains the task’s pointer graph. The receiving process can use the ID to look up a customer through its own business protocol. The customer’s region keeps its independent lifetime. [Actor design](SymbolicDynamicScope.md#actor-concurrency-direction)
+For example, a chan whose message type is `WorkPkg` could carry a task node, input buffers linked by direct pointers and a `CustomerId` value. The package region contains the task's pointer graph. The receiving Actor can use the ID to look up a customer through its own business protocol. The customer's region keeps its independent lifetime. [Actor design](SymbolicDynamicScope.md#actor-concurrency-direction)
 
 ## Packet transport and effect resources are distinct scenarios
 
@@ -90,7 +92,7 @@ H-180 separates these uses of the same regional storage substrate:
 
 | Scenario | Purpose | Relevant ownership operation |
 | --- | --- | --- |
-| Cross-process regional packet | Construct a payload, send it, receive it and apply its contents. | An ordinary owning value participates in the packet’s transfer/error/result protocol. No dynamic-resource installation is required to build or send it. |
+| Inter-Actor regional message | Construct a payload, send it, receive it and apply its contents. | An ordinary owning value participates in the packet’s transfer/error/result protocol. No dynamic-resource installation is required to build or send it. |
 | Region-backed effect resource | Construct a local resource and make it available by symbol throughout the applicable dynamic context. | H-179 consumes the ordinary source when installing the dynamic owner. Definition-time capture and perform replay affect lookup, not ownership. |
 
 A receiver can use its own effects to process a packet, but this does not turn the packet into an effect resource or make its transport inherit the sender’s dynamic context. Shared regional representation and relocation do not identify these lifecycle contracts. The effect-resource case must not be designed by asking how to move a captured resource through the packet send path.
@@ -120,10 +122,10 @@ For the exclusive-handoff candidate, one region has one release responsibility a
 | Stage | Holder and access under the candidate |
 | --- | --- |
 | Constructing | Sender holds the region and may access its graph through live references. The declared payload root must belong to this region. |
-| Local send error | Under H-170's returned-region proposal, the original source no longer owns the packet and the error result holds the unsent region until an ordinary holder acquires it or it is disposed. H-262 selects compiler-tracked unavailability of the transferred source; the precise send/result consumption boundary remains pending. This reports no remote delivery. |
-| Locally accepted / queued | The intrinsic/runtime holds the region; sender loses access through ordinary values and dynamic bindings. Sender scope exit must not free it. No recipient delivery is promised. |
+| Reported systemic communication fault | The exact consumption point and fault ownership postcondition remain pending: the source may still hold the region, an intrinsic carrier may return ownership, or the runtime may dispose of it under the eventual contract. A fault report concerns continued sending capability, not the delivery status of this message. |
+| Completed handoff / runtime retention | The intrinsic/runtime holds the region for delivery or disposal; sender loses access through ordinary values and dynamic bindings. Sender scope exit must not free it. The sender receives no delivery receipt, and ordinary later loss does not return ownership. |
 | Receiving | The receiver acquires holding and access. Queue removal must not release the payload before its handler finishes. |
-| Completed or abandoned | The current holder releases the region exactly once or explicitly transfers it again. Local failure and later message disposal are different stages. Later non-delivery cannot restore an already-consumed sender reference. |
+| Completed or abandoned | The current holder releases the region exactly once or explicitly transfers it again. A reported systemic fault and ordinary later message disposal are different observations. Later non-delivery cannot restore an already-consumed sender reference. |
 
 Invalidation should be reasoned about for the region as a whole, since all direct pointer edges stay inside it under H-156/H-157. Revoking only the root variable leaves aliases to interior nodes usable. Packet consumption must invalidate stale sender views; restoring an unrelated dynamic binding is not a way to recover a sent packet. Captured effect-resource replay follows the separate owner-preserving contract below. If the same allocation later returns to the sender, address equality alone is insufficient to revalidate earlier references. A fresh receipt/access contract is needed; no generation counter, borrow syntax or runtime reference table is selected here.
 
@@ -172,33 +174,33 @@ Current supported and missing behavior, implementation entry points and validati
 
 ### Local errors and source availability
 
-H-196 requires any returned-owner outcome/optional type to be intrinsic, including indirect containment. User-defined regional products/sums cannot embed a region owner. A payload root remains a user-defined type; the whole-region handle and its owning result forms are intrinsic. The notation below specifies an ownership outcome, not permission to declare a copyable SendResult in user code.
+The current [Actor/chan contract](SymbolicDynamicScope.md#actor-concurrency-direction) refines H-168: report a systemic communication fault when subsequent sends are likely to fail; otherwise provide fire-and-forget sending. Ordinary loss supplies no individual outcome, receipt or returned packet. Physical UDP is not required, and a chosen transport's own retransmissions do not create a stronger language guarantee.
 
-H-168’s no-delivery-feedback contract removes any need to wait for acknowledgement before changing sender ownership. After local acceptance, the runtime owns delivery or disposal even if the recipient never receives the message. This does not by itself decide what a *local send error* does to the owner.
+A reported systemic fault needs an explicit ownership postcondition. Whether send has already consumed the source, leaves ownership with the sender, returns an intrinsic owning carrier, or disposes of an accepted payload is not selected. These alternatives differ in source availability and cleanup. Reporting a system condition cannot leave ownership implicit.
 
-H-170 proposes returning the unsent region in a sum on local failure. The useful ownership contract is: entering the intrinsic consumes the original binding on every returning path; local acceptance leaves the runtime holding the packet, while local failure returns its ownership in the result. The failed payload is not discarded and the original binding does not silently become live again. Operand evaluation that fails before entering the intrinsic has not yet consumed it. The packet result may be acquired by an ordinary owner under H-177 or disposed according to the packet-result rule; its precise syntax remains open.
+After a completed transfer, H-262 makes the original owning name statically unavailable, without a nullable runtime payload. H-263's valid views under a new local holder do not grant outbound sender access. A later return of the same allocation does not by itself revive revoked views. Conditional sending must preserve these facts at control-flow joins.
 
-A failed-send return is a new owning value for the same region allocation, not a copy of the graph. Moving it into a retry binding restores an explicit local owner. The proof must use this ownership path rather than a coincidental matching address; which pre-existing non-owning references may then be reused needs an explicit validity rule. H-262 fixes the ordinary source's consumed state. H-263 preserves views across local ownership transfer while the new owner permits access; revival of revoked sender views after error recovery remains a separate question. H-169's historical effect-to-effect move rule is superseded by H-181 and does not settle ordinary packet-source syntax.
+H-196 requires any owner-bearing result or optional carrier to be intrinsic, including indirect containment; user regional products/sums cannot embed a whole-region owner. The message root may remain a user-defined type. Message ownership also remains distinct from capturing or replaying a dynamic resource under H-180/H-181.
 
-Under H-262, a transferred packet declaration is unavailable at compile time; it is not a nullable value that fails on later dereference. The proposed send contract also revokes saved sender views, while a local-error arm supplies an explicit returned owner from which new views can be derived. The exact failure sum, consumption boundary and reuse of pre-existing views remain pending. Explicit optional storage may model runtime absence but is not required for every named owner. H-194 additionally requires access-only versus transferring procedure parameters to be readable and lifetime-checked.
+Acceptance must distinguish completed handoff, a qualifying systemic fault under each selected ownership path, ordinary loss, abandoned runtime-held messages and invalid old views. Every path needs one responsible holder through release or onward transfer. Synchronous resource, capture and restoration evidence does not establish these chan transitions.
 
-The native `send` interface reports local errors without asserting delivery, and UDP does not guarantee delivery. These references support the feedback distinction, not a CoD ownership rule: [Linux send(2)](https://man7.org/linux/man-pages/man2/send.2.html), [RFC 768](https://www.rfc-editor.org/info/rfc768/). CoD is not required to use UDP packets, socket buffer semantics, retransmission or delivery-status tracking merely to adopt that distinction.
+<a id="packet-result-sums"></a>
 
-Packet-transfer acceptance must distinguish successful handoff, the selected source post-state and local-error rule, invalid old views, consumption inside nested calls and restoration of unrelated outer resources. Capture admissibility requires its own selected contract. The synchronous checks cover no dynamic extraction, captures, restoration, one-owner joins, per-iteration acquisition and module lifetime. They do not establish ordinary source moves, send outcomes, receipt or returned-owner validity.
+### Ownership when a systemic fault is reported
 
-### Packet result sums
+H-170's returned-region example remains a proposal for fault recovery. The current fire-and-forget boundary does not make an Accepted/LocalError sum the normal observation of every transmission. A later dropped message cannot return the already-consumed source or produce an implicit delivery report.
 
-H-170’s `Maybe<WorkPkg>` is illustrative. `WorkPkg` is the regional payload root; a return must carry the *whole-region owner*, not a stack copy of that regional object or merely a borrowed `WorkPkg`. An intrinsic optional whole-region owner expresses that alternative; a borrowed region declaration denotes access, not transferable ownership. Its optional syntax remains unselected. It can communicate local acceptance versus a returned region but has no field for the local error cause.
+Compare three possible fault postconditions before choosing an interface:
 
-A more informative candidate is the following logical sum, with names and generic/type-definition syntax still provisional:
+| Candidate | Consequence that must be specified |
+| --- | --- |
+| Reject before ownership transfer | The original holder remains responsible; prove which source/view facts still hold when the fault is reported. |
+| Consume and return through an intrinsic owner-bearing carrier | The old name stays consumed; the carrier needs defined acquisition, disposal and view-validity rules. |
+| Consume and dispose under runtime responsibility | The sender keeps no packet owner; the runtime must account for release even when reporting the system fault. |
 
-```text
-SendResult<P> = Accepted | LocalError { cause::SendError; own region packet::P }
-```
+None is selected here. The contract must separate failures in argument preparation, the exact send boundary and faults discovered after handoff. H-262's consumed state applies once transfer has completed. If the API admits returned ownership, H-196's intrinsic carrier rule and H-263's lifetime/access obligations still apply. A borrowed root cannot substitute for the whole-region owner.
 
-`Accepted` means local acceptance only. The error arm supplies both the system error and the returned owner, allowing a retry decision without a hidden last-error effect. This sum directly serves H-168’s local-error feedback and H-170’s returned-region purpose; it is not a proposal for delivery receipts, retries inside the primitive or a general exception system. If error detail is intentionally unnecessary, a simpler intrinsic optional owner remains an alternative to discuss. Both owner-bearing outcomes must be intrinsic under H-196, not user-defined regional sums.
-
-For either candidate, binding the result of `send(mailbox, packet)` is illustrative: the ordinary source `packet` relinquishes ownership at the intrinsic boundary, and only the error variant can return it in `outcome`. H-262 makes a transferred ordinary source statically unusable; explicit absence is modeled only where the source itself has an optional type. Matching that variant must move its owner into another ordinary holder; copying it into a second independent owner is invalid. This packet-result contract does not require making the result a dynamic effect resource. H-177 permits the ordinary carrier without settling exact owning-sum or matching syntax. Dropping a still-owning result must retain one defined cleanup responsibility. This does not permit owning region handles as ordinary fields inside user regional graphs.
+[Actor/chan research](ActorChannels.md#decisions-to-discuss-next) uses a request/reply workload and a shared result collector to make these alternatives reviewable without introducing source grammar.
 
 ### Direct dynamic resources and explicit Maybe values
 
@@ -240,21 +242,13 @@ H-277 admits interior symbolic references; H-180 value capture requires preservi
 
 ### Runtime creation, ordinary owners and editing
 
-H-175 requires CoD user programs to create and edit regions at runtime before sending them to other processes. H-177 permits ordinary variables to own these regions. Current `region(capacity)` already emits a runtime allocation through `cod_lang_region_new`; the frontend’s region IDs describe provenance and are not compile-time allocations. The current restrictions are owner placement/escape and the missing typed owner/root and mailbox interfaces.
+H-175 requires runtime construction and editing of regional messages before sending them to other Actors. H-177 permits ordinary variables to own those regions. The [construction contract](ConstructionAndAcquisition.md) and D-17 E1–E5 govern initialized construction, borrowing and owning calls; the chan-specific consumption and fault paths remain separate.
 
-A movable packet can be constructed and sent while held by ordinary variables. Separately, a region intended for dynamic-context use can be transferred into an effect binding. H-179 makes that transfer consuming: the source relinquishes ownership. H-262 makes the ordinary source statically unavailable after that transfer, without implicit absence. The packet workflow does not require dynamic installation. H-181’s restriction on transfer out belongs to effect-resource ownership, not to the definition of packet transport. In design notation only:
+A message can be built while held by an ordinary owner. Separately, a region intended for dynamic use can be consumed into an effect binding under H-179. H-262 makes the transferred ordinary source statically unavailable; H-181 prohibits extracting the installed dynamic owner. Message construction and sending need no such effect installation.
 
-```text
-ref packet = create_region(...);
-... construct and edit the graph using this procedure-local owner ...
-ref result = send(mailbox, packet);
-```
+The intended workflow is to construct and initialize a message graph, edit it under its ordinary owner, and send it through a chan with the matching static message type. This description selects neither a declaration spelling nor a returned-packet result. The [systemic-fault recovery alternatives](#ownership-when-a-systemic-fault-is-reported) must determine each remaining ownership path.
 
-Construction and editing under a procedure-local ordinary owner do not capture it or an interior pointer in a procedure definition. Captured effect-resource access must be distinguished from access to a packet region created during the current invocation. A packet-building procedure can eventually return ownership to its caller rather than retaining it dynamically. D-17 fixes bounded construction, borrowing and owning-call contracts; current support remains scoped by the source capability reference. Send and owner-bearing optional outcomes remain separate design work.
-
-An owner returned from a block or procedure must transfer cleanup responsibility to the receiving holder before the source scope closes. A conditional result may select different region instances with the same owner type: joining their types alone cannot invent a shared region identity or declare both source holders live. The result must have one owner on each path, and each source's ownership availability and existing views must be checked on that path. These are concrete extensions beyond today's same-region-only join and effect-only acquisition. No runtime alias registry or general predicate theorem prover is implied.
-
-Acceptance should cover one region created at runtime, populated through current-owner access, returned/moved into an ordinary holder, and eventually released exactly once. A branch-selected owner must remain usable while invalid source/view uses are rejected. Send/returned-error ownership additionally needs the pending mailbox and sum contracts; synchronous allocation evidence cannot establish cross-process delivery.
+Returning an owner must transfer cleanup responsibility before its previous scope closes. Branches cannot invent a common region identity or two live owners from an equal root type. Preserve each actual owner and all permitted views through the chosen paths. Runtime allocation evidence alone does not establish inter-Actor handoff or network delivery.
 
 ### Current branch-analysis precision
 
@@ -268,7 +262,7 @@ For the SNN, an owner for the CC plus a typed target-neuron index and frame sele
 
 Named root selection supplies the checked typed subview through `r.name`, without a whole-root intrinsic. Construction and field access retain explicit owner provenance; the wider optional-owner transport API remains unselected. The API should be designed from the actual access paths, without inventing an unrestricted offset-to-pointer primitive or a new global lookup service.
 
-H-170’s owner-bearing send result belongs to the ordinary packet flow. It does not force an owning sum into the proposed dynamic-value categories. H-181 independently permits an optional effect resource when that optionality is a business requirement. It does not make the packet result an effect resource or permit owner extraction from a dynamic optional value.
+H-170's proposed owner-bearing send result, if admitted for systemic-fault recovery, belongs to the ordinary packet flow. It does not force an owning sum into the proposed dynamic-value categories. H-181 independently permits an optional effect resource when that optionality is a business requirement. It does not make the packet result an effect resource or permit owner extraction from a dynamic optional value.
 
 The direction is runtime callable-value capture of permitted dynamic values, owner-preserving replay, ordinary packet owners and scoped effect-resource owners. Complete reference-provenance lowering and the remaining typed owner/root interfaces still require implementation and validation. Current branch precision and lexical-view validity need checking independently of these distinctions.
 
