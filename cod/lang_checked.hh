@@ -449,9 +449,24 @@ class ScalarChecker {
     if (const_owner(*actual)) fail(at, "const owner cannot allocate storage");
     if (const auto region = region_owners_.find(*actual); region != region_owners_.end())
       return {Allocator::region, region->second.holder};
-    if (external_owner(*actual) && checking_method_ && !checking_method_->here_inputs() &&
-        !checking_method_->source->c_linkage)
-      return {Allocator::input, null_target - 1 - *actual};
+    if (external_owner(*actual) && checking_method_ && !checking_method_->source->c_linkage) {
+      const auto role = null_target - 1 - *actual;
+      if (checking_method_->scope_inputs && checking_method_->scope_inputs->here_reception)
+        implementation_gap(at, "array allocation into an external owner from a supplied here body");
+      if (!checking_method_->here_inputs()) return {Allocator::input, role};
+      if (!checking_method_->scope_inputs && !checking_method_->source->supplied_scope && checking_instance_ &&
+          !checking_instance_->result.borrowed() && checking_instance_->result.type != Type::procedure) {
+        const auto &name = checking_method_->input_owners().at(role).name;
+        const auto parameters = checking_method_->input_parameters();
+        for (size_t i = 0; i < parameters.size(); ++i) {
+          const auto &parameter = parameters[i];
+          if (parameter.owner == name && argument_mode(parameter) == ArgumentMode::borrowed_ref &&
+              !parameter.selects_caller_place() && !parameter.read_only &&
+              checking_instance_->arguments.at(i).kind == Type::array)
+            return {Allocator::input, role};
+        }
+      }
+    }
     implementation_gap(at, "array allocation without a proved lexical or regional allocator");
   }
   void observe_array_allocation(const CheckedOperation::ArrayAllocator &allocator) {
@@ -489,7 +504,7 @@ class ScalarChecker {
   enum class EvidenceRead { payload, target, projection, binding_slot, transfer_destination, discarded, loop_discard, native_loan };
   enum class BindingUse { ordinary, exception_field, native_loan };
   enum class NativeLoanContext { none, borrow, discard_result };
-  enum class IndexedUse { value_only, immediate_target, transfer_destination };
+  enum class IndexedUse { value_only, immediate_target, transfer_destination, region_root_loan };
   static ExpectedTypeUse expected_type_use(ArgumentMode mode) {
     return mode == ArgumentMode::value ? ExpectedTypeUse::callable_result : ExpectedTypeUse::materialization;
   }
@@ -11398,8 +11413,9 @@ class ScalarChecker {
     return operand.type != Type::never && operand.checked_ref_presence != CheckedOperation::CheckedRefPresence::definite_absence;
   }
   CheckedOperation check_written_operand(const Expression &operand, ArgumentMode mode, CheckedInstance *instance,
-      std::map<const Expression *, CheckedOperation> &operations, bool aggregate_borrows = false) {
-    const auto view = check_argument_expression(operand, mode, instance, operations);
+      std::map<const Expression *, CheckedOperation> &operations, bool aggregate_borrows = false,
+      IndexedUse indexed_use = IndexedUse::value_only) {
+    const auto view = check_argument_expression(operand, mode, instance, operations, nullptr, indexed_use);
     const auto &type = view.type;
     if (mode != ArgumentMode::borrowed_handle && type != Type::never) {
       check_written_operand_type(type, mode, operand.at, aggregate_borrows);
@@ -16421,10 +16437,15 @@ class ScalarChecker {
           return operand->kind == Expression::Kind::name && here_slot(operand->text).has_value();
         });
     const bool aggregate_borrows = lexical_forwarding || (!terminal && syntax.body && here_count == 1);
+    const bool ordinary_receiver = std::ranges::none_of(candidates, [&](size_t candidate) {
+      return program_.methods[candidate].source->c_linkage;
+    });
     for (const auto [kind, slot] : operation.operand_preparation) {
       if (kind == PreparationKind::ordinary) {
         const auto mode = modes[slot];
-        views[slot] = check_written_operand(*operands[slot], mode, supplier, operations, aggregate_borrows);
+        const auto indexed_use = ordinary_receiver && mode == ArgumentMode::borrowed_ref ?
+            IndexedUse::region_root_loan : IndexedUse::value_only;
+        views[slot] = check_written_operand(*operands[slot], mode, supplier, operations, aggregate_borrows, indexed_use);
         arguments[slot] = views[slot].type;
         operation.arguments[slot] = {mode, arguments[slot]};
         completes = completes && prepared_argument_completes(views[slot]);
@@ -16522,6 +16543,17 @@ class ScalarChecker {
     join(normal, false, returned, false, expr.at);
     if (operation.type != with_return.type) {
       throw std::logic_error("supplied here return state changed the receiving result contract");
+    }
+    if (with_return.array_allocator_arguments) {
+      using Allocators = std::map<size_t, CheckedOperation::ArrayAllocator>;
+      auto allocators = operation.array_allocator_arguments ?
+          std::make_shared<Allocators>(*operation.array_allocator_arguments) : std::make_shared<Allocators>();
+      for (const auto &[role, allocator] : *with_return.array_allocator_arguments) {
+        const auto [found, inserted] = allocators->emplace(role, allocator);
+        if (!inserted && found->second != allocator)
+          implementation_gap(expr.at, "incompatible array allocation evidence across here receiver completions");
+      }
+      operation.array_allocator_arguments = std::move(allocators);
     }
     operation.supplied_here->returning = CheckedOperation::SuppliedHere::ReturningProfile{*returning, *with_return.callee};
     operation.predicate.reset();
@@ -20328,7 +20360,10 @@ class ScalarChecker {
     }
     default: implementation_gap(expr.at, "source expression '" + expr.text + "' is outside the scalar-method foundation");
     }
-    if (operation.indexed_target && (write_slot || (!read && !discard_view && indexed_use == IndexedUse::value_only)))
+    const bool accepts_indexed_borrow = indexed_use != IndexedUse::value_only &&
+        (indexed_use != IndexedUse::region_root_loan ||
+         (operation.region_holder && operation.place && !inline_aggregate_type(operation.type)));
+    if (operation.indexed_target && (write_slot || (!read && !discard_view && !accepts_indexed_borrow)))
       implementation_gap(expr.at, "borrowing an indexed array element outside a direct projection, transfer or call");
     if (operation.type.kind == Type::native_handle && native_loan == NativeLoanContext::none && !discard)
       implementation_gap(expr.at, "using a borrowed handle result outside a checked native loan");
