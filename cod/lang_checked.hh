@@ -11658,8 +11658,17 @@ class ScalarChecker {
     }
     return completes ? *receiving.type : Type{Type::never};
   }
+  static void check_native_invocation_kind(const Form *caller, const Form &callee, const Location &at, bool prepared = false) {
+    if (callee.kind == Form::Kind::function) {
+      if (prepared) fail(at, "defer call requires a procedure");
+    } else if (caller && caller->kind == Form::Kind::function) {
+      fail(at, "a function cannot invoke a procedure");
+    }
+  }
   bool native_constructor_evidence(const CheckedNativeConstructor &constructor, const Expression &initializer,
                                    TypeEvidenceState &state) const {
+    if (state.validating_body && state.method)
+      check_native_invocation_kind(program_.methods[*state.method].source, *constructor.source, initializer.at);
     bool completes = true;
     for (size_t i = 0; i < constructor.inputs.size(); ++i) {
       const auto &input = constructor.inputs[i];
@@ -11736,6 +11745,9 @@ class ScalarChecker {
     }
     if (expr.kind == K::call && !expr.intrinsic) if (const auto native = native_operation(expr.text, &state)) {
       const auto &operation = program_.native_operations[*native];
+      if (state.validating_body)
+        check_native_invocation_kind(state.method ? program_.methods[*state.method].source : nullptr,
+                                     *operation.contract.source, expr.at, state.preparing(expr));
       if (operation.has_here()) {
         if (!expr.has_here_body()) fail(expr.at, "C provider requires a directly supplied here body");
         if (state.required && !state.validating_body) implementation_gap(expr.at, "type inspection of a native here call");
@@ -17800,9 +17812,8 @@ class ScalarChecker {
   bool prepare_native_acquisition(const CheckedOperation::NativeAcquisition &acquisition, CheckedInstance *instance,
                                   std::map<const Expression *, CheckedOperation> &operations) {
     const auto &initializer = *acquisition.initializer;
-    if (checking_method_ && checking_method_->source->kind == Form::Kind::function)
-      fail(initializer.at, "a function cannot invoke a C handle constructor procedure");
     const auto &constructor = program_.native_constructors[acquisition.constructor];
+    check_native_invocation_kind(checking_method_ ? checking_method_->source : nullptr, *constructor.source, initializer.at);
     // A local native owner is distinct from its lexical lifetime scope and
     // from other acquisitions in that scope, even when their words coincide.
     std::map<size_t, size_t> owners;
@@ -18637,9 +18648,10 @@ class ScalarChecker {
       implementation_gap(expr.at, "supplier-owned allocation, owner selection or defer from a here group");
     if (expr.spread) implementation_gap(expr.at, "spread arguments");
     if (expr.kind == K::call && !expr.intrinsic) if (const auto native = native_operation(expr.text)) {
-      if (checking_method_ && checking_method_->source->kind == Form::Kind::function)
-        fail(expr.at, "a function cannot invoke a C provider procedure");
-      auto call = program_.native_operations[*native].has_here()
+      const auto &provider = program_.native_operations[*native];
+      check_native_invocation_kind(checking_method_ ? checking_method_->source : nullptr,
+                                   *provider.contract.source, expr.at, &expr == prepared_call_);
+      auto call = provider.has_here()
           ? check_native_here(expr, *native, instance, operations, read, discard)
           : check_native_call(expr, *native, instance, operations);
       return operations.insert_or_assign(&expr, std::move(call)).first->second.type;
@@ -22088,8 +22100,9 @@ class ScalarChecker {
     const auto result = form.result_type ? resolve_type(*form.result_type) : Type{Type::void_type};
     if (form.symbolic || form.operation || form.explicit_captures || !form.type_parameters.empty() ||
         !form.result_owner.empty() || !form.throws_types.empty() ||
-        (result != Type::uint8 && result != Type::uint64 && result != Type::void_type && result.kind != Type::enumeration))
-      implementation_gap(form.at, "C operations outside the nonthrowing u8, u64, enum or void result profile");
+        (result != Type::boolean && result != Type::uint8 && result != Type::uint64 &&
+         result != Type::void_type && result.kind != Type::enumeration))
+      implementation_gap(form.at, "C operations outside the nonthrowing bool, u8, u64, enum or void result profile");
     CheckedNativeOperation native;
     native.contract.source = &form;
     native.contract.module = module_;
@@ -22453,8 +22466,8 @@ class ScalarChecker {
             implementation_gap(parameter.at, "a direct String place outside a void transfer method");
         }
         if (parameter.declaration_kind == "handle") {
-          if (form->kind != Form::Kind::procedure || form->symbolic || !operation.empty() || lexical_methods_.contains(form))
-            implementation_gap(parameter.at, "native handle parameters outside named CoD procedures");
+          if (form->symbolic || !operation.empty() || lexical_methods_.contains(form))
+            implementation_gap(parameter.at, "native handle parameters outside ordinary named CoD callables");
           const auto marker = resolve_signature(parameter.type);
           if (marker.kind != Type::c_type_marker)
             fail(parameter.at, "handle parameter requires a 'handle type' name");

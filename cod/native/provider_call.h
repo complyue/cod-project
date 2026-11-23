@@ -10,6 +10,7 @@ typedef struct {
     const char *result;
     size_t owner_count;
     bool enum_result;
+    bool boolean_result;
 } cod_provider_callable;
 
 static inline void cod_provider_loan_preamble(cod_provider_text *header) {
@@ -81,7 +82,8 @@ static inline void cod_provider_call_signature(cod_provider_text *out, const cod
         if (i) cod_provider_print(out, ", ");
         cod_provider_callable_input(out, shape, i, implementation ? "" : "*");
     }
-    if (shape->result) cod_provider_print(out, "%s%s *value", shape->count ? ", " : "", shape->result);
+    if (shape->result) cod_provider_print(out, "%s%s *%s", shape->count ? ", " : "", shape->result,
+                                          implementation && shape->boolean_result ? "result" : "value");
     else if (!shape->count) cod_provider_print(out, "void");
     cod_provider_print(out, ")");
 }
@@ -142,6 +144,8 @@ static inline void cod_provider_write_call(cod_provider_text *header, cod_provid
     cod_provider_print(stubs, "    if (status != COD_NATIVE_OK) return COD_NATIVE_BOUNDARY_ERROR;\n");
     if (shape->enum_result)
         cod_provider_print(stubs, "    if (!%s_valid(result)) return COD_NATIVE_BOUNDARY_ERROR;\n", shape->result);
+    if (shape->boolean_result)
+        cod_provider_print(stubs, "    if (result > 1) return COD_NATIVE_BOUNDARY_ERROR;\n");
     if (shape->result) cod_provider_print(stubs, "    *value = result;\n");
     cod_provider_print(stubs, "    return COD_NATIVE_OK;\n}\n\n");
 }

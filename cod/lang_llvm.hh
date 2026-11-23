@@ -1233,7 +1233,10 @@ class LLVMEmission {
       b_.SetInsertPoint(invalid);
       fail_path(ExceptionCategory::system, expr.at, b_.CreateGlobalString(location_text(expr.at) + ": invalid native provider status"));
       b_.SetInsertPoint(ready);
-      return value ? pack(load(value), result) : empty_scalar();
+      if (!value) return empty_scalar();
+      auto *native_result = load(value);
+      if (result == Type::boolean) return pack(b_.CreateTrunc(native_result, b_.getInt1Ty()), result);
+      return pack(native_result, result);
     });
   }
   llvm::Function *native_here_bridge(const CheckedNativeOperation &native, llvm::StructType *frame) {

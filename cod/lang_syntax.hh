@@ -1312,8 +1312,8 @@ class Parser {
     form.kind = function ? Form::Kind::function : Form::Kind::procedure;
     if (peek().kind == TokenKind::string) {
       const auto linkage = name(TokenKind::string);
-      if (linkage.text != "C" || function || inline_effect || expression_form)
-        fail(linkage.at, "C linkage requires a module-level proc \"C\" declaration or definition");
+      if (linkage.text != "C" || form.conversion || inline_effect || expression_form)
+        fail(linkage.at, "C linkage requires a module-level func or proc declaration or definition");
       form.c_linkage = true;
     }
     form.symbolic = !function && peek().kind == TokenKind::symbol;

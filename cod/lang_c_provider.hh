@@ -102,6 +102,10 @@ inline const char *provider_value_type(const Type &type, const NativeEnumNames &
   return type.kind == Type::enumeration ? enums.at(type.identity).get() : provider_scalar(type);
 }
 
+inline const char *provider_result_type(const Type &type, const NativeEnumNames &enums) {
+  return type == Type::boolean ? "COD_BOOL" : provider_value_type(type, enums);
+}
+
 inline cod_provider_view emit_c_view(const CheckedProgram &program, const Type &type, bool read_only,
                                      const std::string &name, size_t index, const NativeRowLayouts &layouts,
                                      cod_provider_text &header, cod_provider_text &stubs) {
@@ -156,7 +160,8 @@ inline void emit_c_call(const CheckedProgram &program, const CheckedNativeOperat
   }
   const auto &result = *operation.contract.result.type;
   const cod_provider_callable shape{
-      name.c_str(), inputs.data(), inputs.size(), provider_value_type(result, enums), 0, result.kind == Type::enumeration};
+      name.c_str(), inputs.data(), inputs.size(), provider_result_type(result, enums), 0,
+      result.kind == Type::enumeration, result == Type::boolean};
   cod_provider_write_call(&header, &stubs, &shape, views.data());
 }
 
@@ -165,7 +170,8 @@ inline void emit_c_entry(const CheckedNativeEntry &entry, const Form &form, cons
   std::vector<cod_provider_argument> inputs;
   for (const auto &input : entry.inputs) inputs.push_back(describe_c_argument(input, enums));
   const cod_provider_callable shape{form.name.c_str(), inputs.data(), inputs.size(),
-      provider_value_type(entry.result, enums), form.owner_parameters.size(), entry.result.kind == Type::enumeration};
+      provider_result_type(entry.result, enums), form.owner_parameters.size(),
+      entry.result.kind == Type::enumeration, entry.result == Type::boolean};
   cod_provider_write_entry(&header, &stubs, &shape);
 }
 
@@ -174,6 +180,11 @@ inline NativeProviderFiles emit_native_providers(const CheckedProgram &program, 
   std::ostringstream header, stubs;
   cod_provider_text header_text{provider_stream_write, &header, false}, stubs_text{provider_stream_write, &stubs, false};
   cod_provider_begin(&header_text, &stubs_text);
+  if (std::ranges::any_of(program.native_entries, [](const auto &entry) { return entry.result == Type::boolean; }) ||
+      std::ranges::any_of(program.native_operations, [](const auto &operation) {
+        return *operation.contract.result.type == Type::boolean;
+      }))
+    cod_provider_print(&header_text, "typedef uint8_t COD_BOOL;\n\n");
   if (std::ranges::any_of(program.native_operations, &CheckedNativeOperation::has_here))
     cod_provider_here_preamble(&header_text);
 
