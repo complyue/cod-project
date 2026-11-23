@@ -139,6 +139,10 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: case pattern is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 1 && diagnostic->code == 49)
         fputs(": error: the unbraced throwing arm requires an unguarded catch-all\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 50)
+        fputs(": error: expected ref after not init\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 51)
+        fputs(": error: expected a quoted assertion diagnostic\n", stderr);
     else if (diagnostic->stage == 1 && diagnostic->code == 113)
         fputs(": error: invalid UTF-8 text literal or escape\n", stderr);
     else if (diagnostic->stage == 1 && diagnostic->code == 115)
@@ -159,6 +163,16 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: a callable promise supplies no implementation on this path\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 133)
         fputs(": error: rebinding a native handle is outside the checked compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 134)
+        fputs(": error: ref groups and bare ref slots are outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 135)
+        fputs(": error: not init ref parameters are outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 136)
+        fputs(": error: initializing a reserved target is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 137)
+        fputs(": error: predicate assertion checking is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 138)
+        fputs(": error: reference identity checking is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 49)
         fputs(": error: a declaration in a loop body or else requires an explicit {{ ... }} scope\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 50)

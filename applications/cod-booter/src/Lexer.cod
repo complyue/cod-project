@@ -491,6 +491,12 @@ export func not_word(source:const SourceBytes in S, token:const Token in T) -> b
     return source[first] == 110u8 && source[first + 1u64] == 111u8 && source[first + 2u64] == 116u8; # n o t
 }
 
+export func is_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    if (!identifier_width(token, 2u64)) return false;
+    return source[token.first] == 105u8 && source[token.first + 1u64] == 115u8
+}
+
 export func and_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     val first <- token.first;
@@ -605,6 +611,15 @@ export func return_word(source:const SourceBytes in S, token:const Token in T) -
     return source[first] == 114u8 && source[first + 1u64] == 101u8 && # r e
         source[first + 2u64] == 116u8 && source[first + 3u64] == 117u8 && # t u
         source[first + 4u64] == 114u8 && source[first + 5u64] == 110u8; # r n
+}
+
+export func assert_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    if (!identifier_width(token, 6u64)) return false;
+    val first <- token.first;
+    return source[first] == 97u8 && source[first + 1u64] == 115u8 &&
+        source[first + 2u64] == 115u8 && source[first + 3u64] == 101u8 &&
+        source[first + 4u64] == 114u8 && source[first + 5u64] == 116u8
 }
 
 func digit(byte:u8) -> bool {

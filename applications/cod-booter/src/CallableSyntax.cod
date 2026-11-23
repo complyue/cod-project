@@ -1,5 +1,5 @@
 using "./Lexer.cod" {
-    const_word, exception_word, handle_word, here_word, identifier, init_word, in_word, own_word, owner_word,
+    const_word, exception_word, handle_word, here_word, identifier, init_word, in_word, not_word, own_word, owner_word,
     ptr_word, ref_word, region_word, reserved_lexical_binder, reserved_module_name, throws_word, val_word, var_word,
     where_word, within_word, punctuation,
 };
@@ -20,7 +20,7 @@ using "./ParserStorage.cod" ExprPayload {
 };
 using "./ParserStorage.cod" FormalMode {
     ValueFormal, ExplicitValueFormal, ReferenceFormal, PointerFormal, PlaceFormal, InitializingPlaceFormal,
-    HandleFormal, RetainedHandleFormal, ExceptionFormal, ReferenceSlotFormal,
+    HandleFormal, RetainedHandleFormal, ExceptionFormal, ReferenceSlotFormal, IdentityOnlyRefFormal,
 };
 using "./ParserStorage.cod" BindingSyntax { TypedBinding };
 using "./SourceStorage.cod" SourceBytes;
@@ -29,6 +29,7 @@ func expected_parameter_list() -> u8 { return 23u8; }
 export func expected_owner_clause() -> u8 { return 24u8; }
 func invalid_exception_owner() -> u8 { return 35u8; }
 func invalid_value_parameter_owner() -> u8 { return 41u8; }
+func expected_identity_reference() -> u8 { return 50u8; }
 
 func direct_place_head(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> bool
     where {const owner S, const owner T} {
@@ -52,17 +53,29 @@ export func parse_parameter(source:const SourceBytes in S, tokens:const Tokens i
     val at <- result.next;
     if (at >= past) { result.diagnostic <- expected_name(); return false; } else {};
     val kind <- ValueFormal;
+    val identity_only <- !field && at + 1u64 < past && not_word(source, tokens[at]) &&
+        init_word(source, tokens[at + 1u64]);
     val width <- exception_binder_width(source, tokens, at, past);
     val reference_slot <- !field && at + 1u64 < past && ref_word(source, tokens[at]) && var_word(source, tokens[at + 1u64]);
     val const_prefix <- !field && at + 1u64 < past && const_word(source, tokens[at]);
     val fixed_value <- const_prefix && val_word(source, tokens[at + 1u64]);
     val fixed_reference <- const_prefix && !fixed_value && punct_at(source, tokens, at + 2u64, past) == 58u8;
     val binding_const <- fixed_value || fixed_reference;
-    if (reference_slot || binding_const) {
-        kind <- if (reference_slot) { ReferenceSlotFormal } else {
-            if (fixed_value) { ExplicitValueFormal } else { ReferenceFormal }
-        };
-        (result.next <- at + (if (fixed_reference) { 1u64 } else { 2u64 })):void;
+    if (identity_only || reference_slot || binding_const) {
+        if (identity_only) {
+            result.next <- at + 2u64;
+            if (result.next >= past || !ref_word(source, tokens[result.next])) {
+                result.diagnostic <- expected_identity_reference();
+                return false
+            };
+            kind <- IdentityOnlyRefFormal;
+            (result.next <- at + 3u64):void
+        } else {
+            kind <- if (reference_slot) { ReferenceSlotFormal } else {
+                if (fixed_value) { ExplicitValueFormal } else { ReferenceFormal }
+            };
+            (result.next <- at + (if (fixed_reference) { 1u64 } else { 2u64 })):void
+        }
     } else {
         if (width != 0u64) {
             kind <- ExceptionFormal;

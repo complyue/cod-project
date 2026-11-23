@@ -12,7 +12,7 @@ using "./ParserStorage.cod" ExprPayload {
 };
 using "./ParserStorage.cod" AstSlot { Occupied };
 using "./ParserStorage.cod" {
-    SyntaxRole { InitializerRole, ExpressionRole, BlockItemRole, BindingNameRole,
+    SyntaxRole { InitializerRole, ExpressionRole, BlockItemRole, BindingNameRole, ReferenceGroupEntryRole,
         TypeAnnotationRole }, ExprPayload { ParseReport, ErrorReport }
 };
 using "./SourceStorage.cod" { SourceBytes, DelimiterLink { MatchedDelimiter } };
@@ -308,8 +308,9 @@ func is_recovery_separator(mark:u8, role:SyntaxRole) -> bool {
     if (mark == 59u8 || mark == 125u8) return true;
     if (role == BindingNameRole && mark == 58u8) return true;
     if ((role == BindingNameRole || role == TypeAnnotationRole) && mark == 61u8) return true;
-    return (role == InitializerRole || role == ExpressionRole || role == BindingNameRole || role == TypeAnnotationRole) &&
-           (mark == 44u8 || mark == 41u8 || mark == 93u8)
+    return (role == InitializerRole || role == ExpressionRole || role == BindingNameRole ||
+            role == TypeAnnotationRole || role == ReferenceGroupEntryRole) &&
+        (mark == 44u8 || mark == 41u8 || mark == 93u8)
 }
 
 # Skip only groups the source delimiter map proved complete.

@@ -18,7 +18,7 @@ using "./CallableSyntax.cod" {
 };
 using "./ParserStorage.cod" {
     Tokens, ExprNodes, NodeId, len as token_len, no_node, syntax_first, syntax_past, ModuleSelectionMode,
-    BindingSites, FormalSites, SignatureSites, inspect_binding, inspect_formal, inspect_signature,
+    BindingSites, FormalSites, SignatureSites, inspect_binding, inspect_formal, inspect_signature, braced_reference_group,
 };
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" SyntaxRole { ModuleItemRole };
@@ -951,6 +951,7 @@ func parse_module_item(source:const SourceBytes in S, tokens:const Tokens in T,
         val starts_marks <- result.next < past && default_word(source, tokens[result.next]) &&
             punct_at(source, tokens, result.next + 1u64, past) == 123u8;
         val delimited <- braced_type || braced_callable_definition(nodes, result.used, form) ||
+            braced_reference_group(nodes, result.revision, result.used, form) ||
             (qualified_selector && (starts_marks || selection_boundary(source, tokens, result.next,
                 past)));
         if (!delimited) { result.diagnostic <- expected_module_separator(); return false; } else {};

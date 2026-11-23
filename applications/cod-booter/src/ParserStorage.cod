@@ -23,10 +23,12 @@ export enum FormalMode:u8 {
     RetainedHandleFormal;
     ExceptionFormal;
     ReferenceSlotFormal;
+    IdentityOnlyRefFormal;
 }
 
 export enum SyntaxRole:u8 {
     ModuleItemRole; BlockItemRole; InitializerRole; ExpressionRole; BindingNameRole; TypeAnnotationRole;
+    ReferenceGroupEntryRole;
 }
 
 export enum LocalMode:u8 { ValueLocal; ReferenceLocal; PointerLocal; ExceptionLocal; }
@@ -96,6 +98,11 @@ export data ExprPayload =
     | DeferredInvocation { operand:NodeId; invocation:NodeId; }
     | DeferredClauses { clause_tail:NodeId; }
     | LocalBinding { binding:NodeId; initializer:NodeId; mode:LocalMode; operator_at:u64; declaration_const:bool; }
+    | BareReferenceBinding { binding:NodeId; }
+    | ReferenceGroupItem { previous:NodeLink; binding_item:NodeId; }
+    | ReferenceBindingGroup { last_binding:NodeId; body:NodeLink; }
+    | InitializeReservation { destination:NodeId; arguments:NodeLink; opening:u64; }
+    | PredicateAssertion { predicate:NodeId; message:NodeLink; }
     | LocalCallableSlot { binding:NodeId; initializer:NodeId; function_form:bool; fixed:bool; operator_at:u64; }
     | OwningHandleBinding { binding:NodeId; initializer:NodeId; readonly:bool; operator_at:u64; }
     | BorrowedHandleBinding { binding:NodeId; initializer:NodeId; operator_at:u64; }
@@ -111,6 +118,7 @@ export data ExprPayload =
     | TextLiteral { interior_zero:bool; }
     | ArithmeticExpression { operands:BinaryOperands; operation:ArithmeticOperation; }
     | ComparisonExpression { operands:BinaryOperands; relation:ComparisonRelation; }
+    | ReferenceIdentity { operands:BinaryOperands; operator_past:u64; negated:bool; }
     | Concatenation { operands:BinaryOperands; }
     | BindSymbolEffect { name:NodeId; input:NodeId; operator_at:u64; }
     | InstallSymbolEffect { name:NodeId; acquisition:NodeId; operator_at:u64; }
@@ -323,6 +331,7 @@ export enum SequenceSyntax:u8 {
     MemberSequence;
     SumSequence;
     ProcedureTypeSequence;
+    ReferenceGroupSequence;
 }
 
 export data SequenceEntry { previous:u64; item:u64; }
@@ -359,6 +368,29 @@ export func inspect_sequence_entry(nodes:const ExprNodes in N, revision:u64, use
                     return if (read_sequence_links(nodes, revision, at, previous, expression, entry)) {
                         (BlockSequence:SequenceSyntax)
                     } else { (InvalidSequence:SequenceSyntax) };
+                };
+                (ReferenceGroupItem { val previous <- previous; val binding <- binding_item; }) -> {
+                    if (!read_sequence_links(nodes, revision, at, previous, binding, entry))
+                        return InvalidSequence:SequenceSyntax;
+                    case nodes[entry.item] of {
+                        (Occupied { val child <- node; }) -> {
+                            case child.payload of {
+                                BareReferenceBinding -> ReferenceGroupSequence:SequenceSyntax;
+                                (LocalBinding { val mode <- mode; }) -> {
+                                    if (mode == (ReferenceLocal:LocalMode)) { ReferenceGroupSequence:SequenceSyntax }
+                                    else { InvalidSequence:SequenceSyntax }
+                                };
+                                (ErrorReport { val role <- role; val report <- report; }) -> {
+                                    if (role == (ReferenceGroupEntryRole:SyntaxRole) &&
+                                        published_syntax_id(nodes, revision, entry.item, report)) {
+                                        ReferenceGroupSequence:SequenceSyntax
+                                    } else { InvalidSequence:SequenceSyntax }
+                                };
+                                _ -> InvalidSequence:SequenceSyntax;
+                            }
+                        };
+                        _ -> InvalidSequence:SequenceSyntax;
+                    }
                 };
                 (ArgumentItem { val previous <- previous; val operand <- operand; }) -> {
                     return if (read_sequence_links(nodes, revision, at, previous, operand, entry)) {
@@ -550,6 +582,33 @@ export func block_tail(nodes:const ExprNodes in N, revision:u64, used:u64, at:u6
             }
         };
     };
+}
+
+export func braced_reference_group(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64) -> bool
+    where {const owner N} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
+    val tail <- no_node();
+    return case nodes[at] of {
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (ReferenceBindingGroup { val last <- last_binding; val body <- body; }) -> {
+                    if (!published_syntax_id(nodes, revision, at, last) ||
+                        inspect_sequence_entry(nodes, revision, at, last.index, entry) !=
+                            (ReferenceGroupSequence:SequenceSyntax)) return false;
+                    case body of {
+                        (LinkTo { val child <- node; }) -> {
+                            published_syntax_id(nodes, revision, at, child) &&
+                                block_tail(nodes, revision, at, child.index, tail)
+                        };
+                        _ -> false;
+                    }
+                };
+                _ -> false;
+            }
+        };
+        _ -> false;
+    }
 }
 
 func block_item_tail(nodes:const ExprNodes in N, revision:u64, at:u64,

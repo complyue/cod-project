@@ -6,6 +6,7 @@ using "./ParserStorage.cod" ExprPayload {
     BorrowHandleConstruction, HereInvocation, RegionDefinition, OwningRegionBinding, RegionConstruction, OwningRegionResult,
     ConstructorCasePattern, ProcedureSymbol, ScopedProcedureDefinition,
     BulkModuleSelection, DefaultPublicSet, ModuleItem, ModuleSelection, Publication,
+    BareReferenceBinding, ReferenceBindingGroup, InitializeReservation, PredicateAssertion, ReferenceIdentity,
 };
 using "./ParserStorage.cod" ConstructionSyntax {
     OtherConstruction, InvalidConstruction, ExceptionConstructionSyntax, PositionalConstruction,
@@ -25,7 +26,7 @@ using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 using "./ParserStorage.cod" SelectionSyntax { SelectionReady };
 using "./ParserStorage.cod" LocalMode { ExceptionLocal };
 using "./ParserStorage.cod" FormalMode {
-    ValueFormal, ExceptionFormal, HandleFormal, RetainedHandleFormal, ReferenceSlotFormal
+    ValueFormal, ExceptionFormal, HandleFormal, RetainedHandleFormal, ReferenceSlotFormal, IdentityOnlyRefFormal,
 };
 using "./ParserStorage.cod" {
     ExprNodes, Tokens, no_node, ConstructionSites, inspect_construction, syntax_first, syntax_past,
@@ -85,6 +86,11 @@ func unsupported_reference_slot_formal() -> u8 { return 121u8; }
 func unsupported_fixed_formal() -> u8 { return 122u8; }
 func unsupported_procedure_symbol() -> u8 { return 123u8; }
 func unsupported_scoped_procedure() -> u8 { return 124u8; }
+func unsupported_reference_group() -> u8 { return 134u8; }
+func unsupported_identity_reference() -> u8 { return 135u8; }
+func unsupported_reserved_initializer() -> u8 { return 136u8; }
+func unsupported_predicate_assertion() -> u8 { return 137u8; }
+func unsupported_reference_identity() -> u8 { return 138u8; }
 
 export func rejected_unsupported_declaration(result:const ModuleBindingResult in R) -> bool where {const owner R} {
     if (result.stage == module_operands_failed())
@@ -100,6 +106,9 @@ export func rejected_unsupported_declaration(result:const ModuleBindingResult in
          result.diagnostic == unsupported_owning_region_result() || result.diagnostic == unsupported_constructor_case() ||
          result.diagnostic == unsupported_reference_slot_formal() || result.diagnostic == unsupported_fixed_formal() ||
          result.diagnostic == unsupported_procedure_symbol() || result.diagnostic == unsupported_scoped_procedure() ||
+         result.diagnostic == unsupported_reference_group() || result.diagnostic == unsupported_identity_reference() ||
+         result.diagnostic == unsupported_reserved_initializer() || result.diagnostic == unsupported_predicate_assertion() ||
+         result.diagnostic == unsupported_reference_identity() ||
          (result.diagnostic >= 28u8 && result.diagnostic <= 40u8));
 }
 
@@ -239,8 +248,14 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64,
                 (OwningRegionBinding) -> { unsupported_named_region() };
                 (RegionConstruction) -> { unsupported_named_region() };
                 (OwningRegionResult) -> { unsupported_owning_region_result() };
+                BareReferenceBinding -> unsupported_reference_group();
+                ReferenceBindingGroup -> unsupported_reference_group();
+                InitializeReservation -> unsupported_reserved_initializer();
+                PredicateAssertion -> unsupported_predicate_assertion();
+                ReferenceIdentity -> unsupported_reference_identity();
                 (Formal { val mode <- mode; val fixed <- binding_const; }) -> {
                     if (mode == ReferenceSlotFormal) return unsupported_reference_slot_formal();
+                    if (mode == IdentityOnlyRefFormal) return unsupported_identity_reference();
                     if (fixed) return unsupported_fixed_formal();
                     if (mode == ExceptionFormal) { 29u8 } else { 0u8 }
                 };
