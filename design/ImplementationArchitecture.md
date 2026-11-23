@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 37. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 38. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
 
 The [role clarification](../CHANGELOG.md#h-design-review-delivery-roles-20261122) defines the design discussion’s authority through review and assigns delivery to development mainline. [Design review and delivery responsibilities](#design-review-and-delivery-responsibilities)
 
@@ -42,7 +42,7 @@ The [graph formal syntax review](../CHANGELOG.md#k-booter-slot-formal-syntax-202
 
 The [symbolic procedure syntax review](../CHANGELOG.md#k-booter-symbolic-procedure-syntax-20261122) clears the [declaration, scoped definition and corresponding profile checks](../applications/cod-booter/docs/ModuleGraph.md#parsing-the-dependency-procedure) for the dependency visit.
 
-The [exception artifact review](../CHANGELOG.md#k-booter-exception-artifact-20261122) clears [type-header staging, scoped target layout and diagnostic name retention](../applications/cod-booter/docs/ModuleGraph.md#exception-identity-layout-and-names-in-the-object) on the object path.
+The [exception artifact review](../CHANGELOG.md#k-booter-exception-artifact-20261122) clears [type-header staging, scoped target layout and diagnostic name retention](../applications/cod-booter/docs/ModuleGraph.md#exception-identity-layout-and-names-in-the-object) on the object path. The [throw-site review](../CHANGELOG.md#k-booter-throw-site-names-20261122) clears CoD staging of the two names and LLVM lookup by the preserved artifact site.
 
 The [export kind review](../CHANGELOG.md#k-booter-export-kinds-20261122) clears the private row encoding and [catalog validation](../applications/cod-booter/docs/ModuleGraph.md#builtin-and-source-export-kinds) for both standalone modes.
 
