@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-23 — Short case arms and layout-independent CoD syntax
+
+<a id="h-short-case-arms-20261123"></a>
+**H-SHORT-CASE-ARMS-20261123.** Recorded Nov 23 (America/Los_Angeles) from the [project user’s design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). Following the `Vacant -> false;` assessment, the user added “还有 `enum` 也跟 sum type 类似” and “使用 `_ -> ...` 是CoD程序作者自担后果，CoD语言设计仅提供此便利性。按此决定落实执行。” D-07-CASE at language r203 and D-07-ENUM r4 extend the case and enum contracts at `499638e08258f02269b361e1248ac2b7a8f5d75d:design/DomainLanguageDesign.md` and `499638e08258f02269b361e1248ac2b7a8f5d75d:design/TypedEnums.md`. P-625/P-626 and P-658/P-659 apply existing identity, coverage and control rules to the short spelling. The wildcard applies to every subject.
+
+<a id="h-newline-and-long-text-20261123"></a>
+**H-NEWLINE-AND-LONG-TEXT-20261123.** In the same discussion the project user directed “newline 在 CoD 中总是承担 whitespace 职责，不做特殊语义设计；相应的长字符串literal要允许 `""" ... """` 这种包含内部换行的语法，其它有要求同行写的场景也通过语法设计消除限制。” D-10-SEMICOLON-UX at r234 supersedes the open newline choice at `499638e08258f02269b361e1248ac2b7a8f5d75d:design/SymbolicDynamicScope.md`. D-07-UTF8 r5 extends the literal forms in `499638e08258f02269b361e1248ac2b7a8f5d75d:design/Utf8Strings.md`. P-570–P-572 and P-674/P-675 preserve deterministic parsing and exact text bytes. Escape and indentation handling follow the existing text contract.
+
+<a id="k-compact-arms-and-literals-20261123"></a>
+**K-COMPACT-ARMS-AND-LITERALS-20261123.** The delegated pre-code review under H-PROJECT-ARCHITECTURE-REVIEW-20261122 continues D-ARCH-REVIEW r39 to r40 for both source frontends, the existing text emission path and direct acceptance. See `499638e08258f02269b361e1248ac2b7a8f5d75d:design/ImplementationArchitecture.md` for the preceding scope. Implementation and compatibility verification belong to mainline.
+
 ## 2026-11-22 — Review seed exception naming and booter publication of diagnostic names
 
 <a id="k-seed-nominal-diagnostic-names-20261122"></a>

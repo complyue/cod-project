@@ -65,7 +65,7 @@ Run test scripts only when asked. Confirm the component if unclear. Set `COD_TES
 
 ## Writing CoD source and diagnostics
 
-In CoD source and examples, omit a semicolon when the boundary is clear. Write one when it disambiguates the parse or materially helps the reader see the intended grouping. When designing syntax, minimize the cases that require a semicolon. Preserve the grammar of each supported form. [Semicolon omission and syntax UX](design/SymbolicDynamicScope.md#semicolon-omission-and-syntax-ux)
+In CoD source and examples, omit a semicolon when the boundary is clear. Write one when it disambiguates the parse or materially helps the reader see the intended grouping. When designing syntax, minimize the cases that require a semicolon. Between tokens, a newline has exactly the effect of horizontal whitespace. Use token grammar to delimit constructs and allow them to span lines. Preserve the grammar of each supported form. [Semicolon omission and syntax UX](design/SymbolicDynamicScope.md#semicolon-omission-and-syntax-ux)
 
 When a diagnostic refers to a resolved name/identity alias, show the name used at the reported site **and** the canonical fully qualified name of its referent. Carry this through renamed re-exports and runtime reports tied to a named source use. [Names in diagnostics](applications/cod-booter/README.md#names-in-diagnostics)
 
