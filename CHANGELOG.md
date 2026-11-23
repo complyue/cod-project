@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Apply ordinary value parameters to variadic element writes
+
+<a id="k-variadic-local-values-20261123"></a>
+**K-VARIADIC-LOCAL-VALUES-20261123.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-23 (America/Los_Angeles), the project user clarified “按值传的参数在 callee 的 lexical scope 分配空间，只要没声明 const ，当然允许修改本地值。 这种可以衍生决定，不需要跟我确认。” [D-10-VARARGS r248](design/SymbolicDynamicScope.md#indexed-by-value-elements), P-403/P-404, applies H-272 and H-366–H-369 to H-449's by-value elements. This closes the by-value portion of the indexing question at `00c32d5fa787151e685b9d609fd921f78a9929e4:design/SymbolicDynamicScope.md`. Pack transport and borrowed-element operations keep their separate scope.
+
 ## 2026-11-23 — Let the outer brace terminate a grouped module selection
 
 <a id="k-grouped-selector-boundary-20261123"></a>

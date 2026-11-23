@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 247 · Recorded: 2026-11-23 · Phase: language/application co-design.
+Design revision: 248 · Recorded: 2026-11-23 · Phase: language/application co-design.
 
 ## Design authority
+
+At r248 [D-10-VARARGS](DesignAuthorityRegistry.md#d-10-varargs) applies ordinary callee-local value storage (H-272) and ordinary qualifiers (H-366–H-369) to [indexed by-value elements](#indexed-by-value-elements). P-403/P-404 preserve one typed tail with independently prepared values. Check a local write, an unchanged caller element and a rejected write through readonly access. [Scope and user clarification](../CHANGELOG.md#k-variadic-local-values-20261123)
 
 At r247 [D-10-ARGUMENTS](DesignAuthorityRegistry.md#d-10-arguments) covers [inferred function values with different defaults](#inferred-function-values-with-different-defaults). The [project user’s decision](../CHANGELOG.md#h-inferred-function-defaults-20261123) applies P-405/P-406 and the common-result rule of D-22-CONDITIONAL. A single static signature makes an explicit call readable and checkable before the branch is known. Verify both selected implementations, missing arguments and named-origin controls. General callable conversion and representation retain their own scope.
 
@@ -888,9 +890,29 @@ No public pack type, heap allocation, permanent ABI or native specialization per
 
 **Acceptance.** Reject uncalled fixed-plus-variadic and variadic-plus-variadic families at formation, locally and at the first receiving module that combines the methods. Check both declaration orders, disjoint types and differing prefixes. Accept fixed-only overloads, a standalone variadic method, a matching declaration and definition, and two import paths that select one defining method. For a valid variadic method check empty, singleton and longer array expansion, implicit trailing arguments, contextual `[]...`, and element-type, owner, access and initialization failures. Exercise multiple expansions with empty and nonempty arrays, a later operand mutating the first array, and an earlier failure that skips the later operand and the callee. Preserve independent value elements, borrowed target identities and the bounds policy whenever indexing is supported.
 
-**Still under review:** indexed element result/mutation modes; escaping/storage and callable-view contracts; physical pack transport. The proposed body operations are `len(rest)`, `rest[i]` and forwarding through `other(first, rest...)`; their remaining details need the operational contract before implementation delegation.
+Remaining operational questions cover borrowed-element indexing, pack storage and escape, and callable-view contracts. The remaining contracts for `len(rest)` and pack forwarding, and the physical pack transport, retain their own review scope.
 
 H-448 separately settles the builtin bounds policy through [D-17](ExceptionControl.md#unchecked-bounds-exceptions-and-optional-checks): out-of-range indexing raises unchecked IndexOutOfBoundsError under default runtime checks, with an explicit compiler opt-out at the programmer's risk. No throws annotation is required for this exception. It does not qualify broader pack operations or change argument evaluation, owners, initialization or the selected user-defined indexing method's contract.
+
+#### Indexed by-value elements
+
+Each by-value argument has storage in the callee's lexical scope. For a by-value variadic parameter,
+`bids[i]` selects the corresponding local element. An ordinary read observes its current value.
+A write updates it when the declared access permits, including when the caller supplied the element
+by expanding an array.
+
+```cod
+func opening_bid(reserve:u64, bids:u64...) -> u64 {
+    if (bids[0u64] < reserve) { bids[0u64] <- reserve }
+    bids[0u64]
+}
+```
+
+With `submitted[0u64]` equal to 7, `opening_bid(10u64, submitted...)` returns 10 and the caller
+still reads 7. The same write through `bids:const u64...` is rejected. Apply the usual [binding
+and target qualifiers](RegionalOwnership.md#independent-binding-and-target-qualifiers) and
+the ordinary lexical lifetime to the selected storage. An implementation may elide physical
+storage when it preserves these observations.
 
 ### Expression type conversion and assertion
 
