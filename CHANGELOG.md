@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Native target layout facts for provider rows
+
+<a id="k-booter-provider-target-layout-20261122"></a>
+**K-BOOTER-PROVIDER-TARGET-LAYOUT-20261122.** Delegated review under H-COMPILER-LAYERS-20261122 and H-PROJECT-ARCHITECTURE-REVIEW-20261122 cleared the scoped LLVM target layout service and CoD record calculation. The renderer requires primitive allocation sizes, ABI alignments and the unpacked-record alignment floor. The preceding boundary is at `d9cceef92a045aec7e959658b2001896739d08ad:applications/cod-booter/docs/ModuleGraph.md`, “Checking declarations and publishing generated providers”. D-20-MODULE-GRAPH r16 to r17, D-ARCH-REVIEW r19 to r20, P-680–P-683, registry r1068.
+
 ## 2026-11-22 — Generate and publish the booter’s provider files through CoD
 
 <a id="k-booter-provider-publication-20261122"></a>
