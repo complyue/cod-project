@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review native callable-kind checking and the path provider migration
+
+<a id="k-native-callable-kind-architecture-20261123"></a>
+**K-NATIVE-CALLABLE-KIND-ARCHITECTURE-20261123.** Delegated pre-code review under H-PROJECT-ARCHITECTURE-REVIEW-20261122 continues [D-ARCH-REVIEW r48 to r49](design/ImplementationArchitecture.md#checking-callable-kind-at-c-linkage), P-682/P-683. The scope applies [H-NATIVE-CALLABLE-KIND-20261123](#h-native-callable-kind-20261123) at `56c3389e9bdbe6fea3cbf26c1a3dcf77584e26e5:applications/cod-booter/docs/LLVMInterop.md`, “Native callable kind and C linkage”, to the two frontends and the real `path_ready` provider. The two-session proof uses established owning bindings for attachment and forwards the resulting borrows for inspection. Mainline owns implementation, compatibility verification and publication.
+
 ## 2026-11-23 — Use the least required CoD callable permissions at C linkage
 
 <a id="h-native-callable-kind-20261123"></a>
