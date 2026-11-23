@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Carry a borrowed package edge through a synchronous directory loan
+
+<a id="k-seed-readonly-here-product-20261123"></a>
+**K-SEED-READONLY-HERE-PRODUCT-20261123.** D-ARCH-REVIEW r63→64 and D-20-MODULE-GRAPH r54→55 clear [readonly product access in an ordinary supplied body](design/ImplementationArchitecture.md#readonly-product-references-in-an-ordinary-here-body) under H-CALLABLE-MODEL-20261118, H-OWNER-REF-ARGUMENT-20261121 and P-680–P-683. The existing writable path at `ff472369f7468d0f576a90328955d4b3b35203ab:cod/lang_checked.hh`, `demand_supplied_here`, supplies the live binding projection. The readonly extension includes checked borrowed formals and preserves actual target and slot lifetimes, access and existing native loan boundaries.
+
 ## 2026-11-23 — Report the namespace entries that determined a package lookup
 
 <a id="k-booter-package-claim-origins-20261123"></a>
