@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Define augmented transfer through one declared place
+
+<a id="h-augmented-transfer-place-20261123"></a>
+**H-AUGMENTED-TRANSFER-PLACE-20261123.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on Nov 23 (America/Los_Angeles), the project user specified “展开语义准确定义为 `var the_n -> n; the_n <- the_n + 1`”. D-10 r238→239 and P-698/P-699 qualify the expansion under the declared-place and ordinary transfer contracts at `d090ccd4a4d0570d650800e4b72e051af9fdd47f:design/CallableViewsAndCaptures.md` and `design/RegionalOwnership.md` in the same commit. This record covers semantics. The subtraction spelling would reinterpret an existing assignment of a negative value and remains open with the operator inventory.
+
 ## 2026-11-23 — Word spellings for Boolean conjunction and disjunction
 
 <a id="h-boolean-word-operators-20261123"></a>

@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 238 · Recorded: 2026-11-23 · Phase: language/application co-design.
+Design revision: 239 · Recorded: 2026-11-23 · Phase: language/application co-design.
 
 ## Design authority
+
+The [augmented transfer expansion](../CHANGELOG.md#h-augmented-transfer-place-20261123) at r239 uses one [declared place](CallableViewsAndCaptures.md#declared-place-aliases) for the destination and the left operand. D-10-AUGMENTED-TRANSFER and P-698/P-699 cover this meaning. The token family and the compatibility decision for subtraction remain open.
 
 The [Boolean word-operator decision](../CHANGELOG.md#h-boolean-word-operators-20261123) qualifies [short-circuit conjunction and disjunction](#short-circuit-conjunction-and-disjunction) at r238 under D-10, C-41/C-37 and P-130/P-136. Readable predicates share one control-flow contract. Check precedence, conditional effects, null refinement and ordinary uses of the two names.
 
@@ -1604,6 +1606,21 @@ Only expression-level parentheses perform this projection. Call/signature parame
 The parser and source tools must preserve the parenthesized expression boundary until its typed effect is established. A formatter cannot add/remove parentheses as a cosmetic precedence edit without proving that value category, identity, overload selection and evaluation remain the same. Parentheses alter neither the established once-only operand/conversion order nor callable cleanup order; a returned view is projected only after its call completes. No new lexical scope is introduced.
 
 **Acceptance and remaining work:** distinguish bare/parenthesized scalar places and returned readonly/writable views; preserve snapshots across later writes; retain operator-result views for unparenthesized chains; reject scalar projected destinations/identity operands; distinguish nested grouping from call/type/operator-name delimiters. Preserve target-read readiness, actual owners, numeric/UoM/fraction validity, callable value rules and D-17 cleanup. Source policy is selected; typed group representation, complete generic/non-bits carrier integration and checker/native migration are not established by older parser evidence that erases parentheses.
+
+### Augmented transfer
+
+For the proposed spelling `n <-+ rhs`, the source meaning is the following expansion. Here `place` stands for a fresh compiler binding invisible to the surrounding program, and `rhs` stands for the entire written right-hand expression in the original lexical context.
+
+```cod
+var place -> n;
+place <- place + rhs
+```
+
+The expansion introduces no full scope. Its result is the result of the final transfer and retains that result’s access and actual owner. The binary operation receives the two original operand categories under its ordinary preparation rules. For multiplication, `n <-* a + b` uses the sum as its complete right operand. Grouping the syntax for expansion adds no source-level parentheses or value conversion.
+
+For `bins[next_bin()] <-+ incoming()`, first select the place designated by the indexed expression, calling `next_bin()` once. Then the ordinary transfer selects its destination and the addition prepares its left operand before `incoming()` runs. For a ref or ptr variable, the declared place is its binding slot. Reads and writes through it follow ordinary target selection, including the destination selected before the RHS. A container that offers only a logical indexed setter supplies no place for this expansion. A writable field or array element still requires valid storage, readability for the operation and write access for the transfer. The ordinary overload families, type and unit checks, ownership, failures and cleanup apply. A failed binary operation skips the final transfer. Effects already performed retain their usual semantics. [Place selection](CallableViewsAndCaptures.md#declared-place-aliases) · [Indexed transfer](RegionalOwnership.md#logical-indexed-transfer)
+
+The punctuation remains under review. In existing source `n <-- 1` stores negative one. Treating the joined characters as a subtraction update would change the result of that program. The confirmed expansion applies independently of that spelling choice.
 
 ### Operator and intrinsic overloads
 
