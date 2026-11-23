@@ -1,8 +1,10 @@
 # Native C providers, LLVM bindings and scoped cleanup
 
-Revision 26 · 2026-11-23 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
+Revision 27 · 2026-11-23 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
 
 ## Design authority
+
+[D-20-C-DECLARATIONS](../../../design/DesignAuthorityRegistry.md#d-20-c-declarations) at r27 applies the [minimum-permission decision](../../../CHANGELOG.md#h-native-callable-kind-20261123) to [native callable kind and C linkage](#native-callable-kind-and-c-linkage). C-80/P-644/P-645 and the function restriction C-48/P-117 let a CoD caller see whether an operation needs dynamic context. Check a handle constructor and an ordinary provider under an explicit owner, an effectful caller selecting that owner, and both callable kinds at generated entry boundaries. Direct C access to dynamic symbols and a permanent TLS ABI are outside this scope.
 
 The [symbol selector decision](../../../CHANGELOG.md#h-module-default-selector-substitution-20261123) at r26 applies to the LLVM session example. Verify that a caller can name the typed identity before acquiring the handle. Handle ownership, provider calls and cleanup keep their existing scope.
 
@@ -35,9 +37,17 @@ Calls in both directions use synchronous `here` semantics. A body can use direct
 
 For [enum arguments, results and normal feedback](../../../design/TypedEnums.md#generated-c-exchange), generate an exact-width carrier and namespaced constants. Validate C-originating normal values before exposing them as CoD enum values. For the [compiler status workload](../../../design/TypedEnums.md#first-workload-and-acceptance), the launcher receives codes 0–7 through the ordinary result channel.
 
+### Native callable kind and C linkage
+
+Use `func "C"` when the operation can honor the ordinary [CoD function contract](../../../design/SymbolicDynamicScope.md#callable-context-and-memory-access) using its explicit inputs, the owner selected at construction, and local resources. Use `proc "C"` when the implementation requires procedure permissions, including a call to an ordinary CoD procedure. This classification follows transitive behavior. A function may mutate an explicitly writable target, acquire a resource, or report a declared failure. Invoking a supplied synchronous `here` body hands control back to its supplier under that body's own permissions. These operations alone do not require a procedure declaration. The compiler checks CoD bodies and calls. For a handwritten provider, the declaration is a promise its implementation must uphold. Optimizers need independent evidence for memory-effect attributes.
+
+The first-host C interface exposes generated entries, arguments and synchronous callbacks. The actual [object writer](../src/ObjectCompiler.cod) evaluates `@llvmSession` in CoD and supplies the selected handle to the native operation. For a borrow-only constructor, `in session` likewise supplies the actual owner to C. Private TLS slots and installed procedure entry addresses are outside the provider interface. A raw address cannot establish which installation applies on reentry, whether a loan remains live, or which binding context `perform` or `behave` requires. Code needing these operations can express them in CoD and pass selected inputs or an explicit synchronous callback across the boundary.
+
+Check both frontends and generators on a CoD function constructing and inspecting a view under one of two live sessions. The provider must observe the selected owner. Compare with a CoD procedure selecting the session through its symbol. Reject that lookup in a function and reject a call from a function to a named procedure across C linkage. Preserve the declared kind through module selection, the generated loan representation, callback completion, constructor rollback and disposal. A concrete production migration case is [`path_ready`](../native/path_provider.c), which tests the explicitly supplied path owner. The seed and booter currently restrict the C linkage marker to procedures.
+
 ### Ordinary native u64 results
 
-A synchronous bodyless `proc "C"` with ordinary inputs may declare an independent `u64` result. Both frontends retain the result width when checking, publishing and importing the signature. Both generators emit a `uint64_t` output place in the provider contract. The native transport status stays separate; generated callers load the output only on successful transport. All 64 bits are ordinary values. For `prepare_root` and `prepare_child`, zero denotes successful preparation and a nonzero value carries the private POSIX errno.
+A synchronous bodyless C-linked callable with ordinary inputs may declare an independent `u64` result. Both frontends retain the result width when checking, publishing and importing the signature. Both generators emit a `uint64_t` output place in the provider contract. The native transport status stays separate; generated callers load the output only on successful transport. All 64 bits are ordinary values. For `prepare_root` and `prepare_child`, zero denotes successful preparation and a nonzero value carries the private POSIX errno.
 
 Verify generated header and stub parity, a real ordinary call returning zero, a value above 255 and a high-bit or maximum `u64`, and the existing transport-failure path. Check that ordinary `u8`, enum and void calls retain their generated contracts. The established C-entry and native `here` profiles retain their existing checks. The [canonical-key loan](ModuleGraph.md#first-edge-implementation) keeps matching `CompilerStatus` callback feedback and provider result, including protected completion.
 
@@ -59,8 +69,8 @@ The lexical storage lifetime, the actual resource owner and the dependencies of 
 ```cod
 handle type LLVMSession;
 handle type ModuleView in LLVMSession;
-proc "C" ModuleView(val index:u64);
-proc "C" inspect_module(handle view:ModuleView in O) where {const owner O};
+func "C" ModuleView(val index:u64);
+func "C" inspect_module(handle view:ModuleView in O) where {const owner O};
 
 # Inside a caller with a live binding declared as own handle session:LLVMSession:
 inspect_module(make handle ModuleView(0u64) in session);
@@ -89,10 +99,10 @@ handle type Transaction;
 handle type Cursor;
 handle type CachedPage in Database;
 
-proc "C" Database();
-proc "C" Transaction(handle within:Database);
-proc "C" Cursor(handle within:Transaction);
-proc "C" CachedPage(val index:u64);
+func "C" Database();
+func "C" Transaction(handle within:Database);
+func "C" Cursor(handle within:Transaction);
+func "C" CachedPage(val index:u64);
 
 proc scan() -> void {
     own handle db:Database <- make own handle Database();
@@ -106,7 +116,7 @@ The `within` contract borrows the selected container through destruction of the 
 
 Check this relationship against the selected constructor signature and the actual parent instance. A second live database of the same type cannot keep this transaction alive. A borrow supplied by a helper or synchronous `here` invocation can serve as the parent when its proved loan covers child destruction. Reject any escape, replacement or consumption that could destroy the parent first. Ordinary parent borrowing continues while the child is live, subject to access and provider operation contracts. Lexically nested owning locals can use their existing cleanup registrations. The ordering rule and static checks do not require a process-wide resource registry.
 
-In the constructor form `proc "C" S(handle within:C);`, the indicated parameter borrows the actual container through destruction of S. The call passes the existing `c` to `make own handle S(c)` as a borrow. The named constructor contract supplies the lifetime check at the call site, including across module boundaries. Native access still follows the declared capabilities. Publication preserves that role for the selected constructor. An ordinary handle argument can be needed only during acquisition. For instance, the [source provider](../native/source_provider.c) uses `Path` to open a revision. Its [destructor](../../../include/cod_source.h) releases the mapping and line storage; it has no use for the filename. If S requires a parent, every construction path for S must provide one. The first native profile already admits one constructor declaration per CType.
+In the constructor form `func "C" S(handle within:C);`, the indicated parameter borrows the actual container through destruction of S. The call passes the existing `c` to `make own handle S(c)` as a borrow. The named constructor contract supplies the lifetime check at the call site, including across module boundaries. Native access still follows the declared capabilities. Publication preserves that role for the selected constructor. An ordinary handle argument can be needed only during acquisition. For instance, the [source provider](../native/source_provider.c) uses `Path` to open a revision. Its [destructor](../../../include/cod_source.h) releases the mapping and line storage; it has no use for the filename. If S requires a parent, every construction path for S must provide one. The first native profile already admits one constructor declaration per CType.
 
 **Who releases the resource.** Only a successful `make own handle` establishes a CoD handle cleanup. Each cleanup scope runs its live owning handle destructors exactly once in reverse order of successful acquisition. Each enclosing owner survives the complete destruction of its dependent resources. New bindings of existing borrows, ordinary handle arguments, native entry loans and `make handle ... in owner` establish no CoD destructor. A generated owning destructor can call the C provider, which releases its own attached resources. A constructor that returns a view of existing storage may have nothing new to dispose.
 
@@ -200,7 +210,7 @@ The first generated boundary serves the indexed source, scratch and LLVM operati
 
 ### Declarations and the first host call
 
-**Direction of a checked declaration.** A bodyless `proc "C"` declares a C-provided operation. A `proc "C"` with a CoD body defines an entry that C can call through its generated adapter. Ordinary module lookup resolves the declaration and signature, and the generator diagnoses conflicting definitions of the same boundary identity. An unmarked CoD declaration or module export alone has no C linkage. A bodyless constructor named for a `handle type` declares its admitted arguments and failures. The generator also emits one disposal hook per owning CType for the provider to implement.
+**Direction of a checked declaration.** For both `func "C"` and `proc "C"`, a bodyless declaration selects a C-provided operation and a declaration with a CoD body defines an entry callable through its generated adapter. The entry must meet the declared callable kind and the checked requirements of its CoD body. Ordinary module lookup resolves the declaration and signature, and the generator diagnoses conflicting definitions of the same boundary identity. An unmarked CoD declaration or module export alone has no C linkage. A bodyless constructor named for a `handle type` declares its admitted arguments and failures. The generator also emits one disposal hook per owning CType for the provider to implement.
 
 ```cod
 handle type PathOwner;
@@ -208,10 +218,10 @@ handle type Path in PathOwner;
 handle type SourceRevision;
 data SourceOpenException <: Exception { os_error:u64; }
 
-proc "C" SourceRevision(handle path:Path in A) throws SourceOpenException
+func "C" SourceRevision(handle path:Path in A) throws SourceOpenException
     where {const owner A};
 
-proc "C" source_use(
+func "C" source_use(
     here work(ref bytes:const SourceBytes in S, ref lines:const SourceLines in S) -> u8,
     handle revision:SourceRevision in S
 ) -> u8 where {const owner S};
@@ -244,10 +254,10 @@ The native scratch interoperability fixture exercises nested loans. In that fixt
 For example, these fragments show the command-array part of the scratch interface. The other workspace arrays have their own element types and the same W. The LLVM operation names L and W independently.
 
 ```cod
-proc "C" scratch_use(here work(ref rows:NativeCommands in W) -> u8,
+func "C" scratch_use(here work(ref rows:NativeCommands in W) -> u8,
                      handle scratch:Scratch in W) -> u8 where {owner W};
 
-proc "C" construct(handle session:LLVMSession in L,
+func "C" construct(handle session:LLVMSession in L,
                    ref rows:const NativeCommands in W, used:u64) -> u8
     where {owner L, const owner W};
 ```
@@ -278,8 +288,8 @@ The first shipped booter uses a scoped native `IntrinsicCatalog`. Its checked sy
 
 ```cod
 handle type IntrinsicCatalog;
-proc "C" IntrinsicCatalog();
-proc "C" catalog_use(
+func "C" IntrinsicCatalog();
+func "C" catalog_use(
     here work(ref spellings:const SourceBytes in B, ref exports:const ModuleExports in B) -> u8,
     handle catalog:IntrinsicCatalog in B
 ) -> u8 where {const owner B};

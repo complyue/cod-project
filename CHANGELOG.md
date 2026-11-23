@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Use the least required CoD callable permissions at C linkage
+
+<a id="h-native-callable-kind-20261123"></a>
+**H-NATIVE-CALLABLE-KIND-20261123.** In the [CoD design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-23 (America/Los_Angeles), the project user specified that C code with no need for symbolic objects should declare `func "C"` under the “最小必要” principle, citing `ModuleView` and `inspect_module`. D-20-C-DECLARATIONS interop r27 applies the ordinary transitive function restrictions and the existing body-presence direction rule to this spelling. P-644/P-645 and C-48/P-117 preserve explicit owner selection, checked outcomes and synchronous callbacks. The preceding procedure-only profile is at `3db02f06c5cdd21c69bf57fcc5689effaaaa29ae:applications/cod-booter/docs/LLVMInterop.md`, “Declarations and the first host call”. The review found no qualified C API for direct dynamic-symbol lookup or invocation.
+
 ## 2026-11-23 — Selecting a symbolic variable names its identity before installation
 
 <a id="h-using-symbolic-variable-identity-20261123"></a>
