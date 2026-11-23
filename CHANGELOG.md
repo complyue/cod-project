@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review the object writer’s lexical helper and filename argument
+
+<a id="k-booter-object-writer-helper-and-text-20261123"></a>
+**K-BOOTER-OBJECT-WRITER-HELPER-AND-TEXT-20261123.** [D-20-MODULE-GRAPH r62→r63](applications/cod-booter/docs/ModuleGraph.md#checking-the-object-writers-lexical-helper) and D-ARCH-REVIEW r78→r79 continue P-680–P-683. The [callable](#h-callable-model-20261118), [owning effect](#h-native-handle-effect-20261121) and [UTF-8](#h-utf8-native-text-20261121) contracts govern the two source demands. Preserve the helper’s lexical diagnostic owner and nominal return, and the [filename assertion’s completion before native entry](applications/cod-booter/docs/ModuleGraph.md#checking-the-object-filename-argument). The prior source-checking boundary is at `eb8fd0d218c2770f51fa0f15b797631aa8e21443:applications/cod-booter/docs/ModuleGraph.md`.
+
 ## 2026-11-23 — Review effect scope in the booter’s session proof
 
 <a id="k-booter-session-installation-scope-20261123"></a>
