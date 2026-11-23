@@ -42,9 +42,24 @@ class ModuleLoader {
     } catch (const std::system_error &error) {
       fail(at, "cannot read CoD source '" + resolved.string() + "': " + error.code().message());
     }
+    auto parsed = Parser(source).parse();
+    if (!parsed.reports.empty()) {
+      std::vector<const SyntaxDiagnostic *> ordered;
+      ordered.reserve(parsed.reports.size());
+      for (const auto &report : parsed.reports) ordered.push_back(&report);
+      std::stable_sort(ordered.begin(), ordered.end(), [](const auto *lhs, const auto *rhs) {
+        return lhs->at.span.first < rhs->at.span.first;
+      });
+      std::string message;
+      for (const auto *report : ordered) {
+        if (!message.empty()) message += '\n';
+        message += location_text(report->at) + ": " + report->message;
+      }
+      throw std::runtime_error(std::move(message));
+    }
     const auto id = program_.modules.size();
     paths_.emplace(resolved, id);
-    program_.modules.push_back({resolved, source, Parser(source).parse(), {}});
+    program_.modules.push_back({resolved, source, std::move(parsed.forms), {}});
     scanning_.insert(id);
     pending_.push_back({id});
     return id;

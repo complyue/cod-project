@@ -21,15 +21,35 @@
 
 namespace cod::language {
 
+struct SyntaxDiagnostic {
+  Location at;
+  std::string message;
+};
+
+class LocatedFailure : public std::runtime_error {
+public:
+  const SyntaxDiagnostic diagnostic;
+
+  LocatedFailure(const Location &at, const std::string &message)
+      : std::runtime_error(location_text(at) + ": " + message), diagnostic{at, message} {}
+};
+
 [[noreturn]] inline void fail(const Location &at, const std::string &message) {
-  throw std::runtime_error(location_text(at) + ": " + message);
+  throw LocatedFailure(at, message);
 }
 
-enum class TokenKind { identifier, symbol, integer, real, string, multiline_string, punctuation, end };
+enum class SyntaxRole { module_item, block_item, initializer };
+struct SyntaxErrorReference {
+  SyntaxRole role;
+  size_t report;
+};
+
+enum class TokenKind { identifier, symbol, integer, real, string, multiline_string, punctuation, invalid, end };
 struct Token {
   TokenKind kind;
   std::string text;
   Location at;
+  std::optional<size_t> report = {};
 };
 
 struct PipelineOperator {
@@ -54,12 +74,18 @@ inline std::optional<PipelineOperator> pipeline_operator(std::string_view spelli
   return {};
 }
 
-inline std::vector<Token> tokenize(const std::shared_ptr<const IndexedSource> &revision) {
+inline std::vector<Token> tokenize(const std::shared_ptr<const IndexedSource> &revision,
+                                  std::vector<SyntaxDiagnostic> &reports) {
   const auto source = revision->bytes();
   std::vector<Token> tokens;
   size_t cursor = 0;
   const auto emit = [&](TokenKind kind, std::string text, size_t first) {
     tokens.push_back({kind, std::move(text), {{}, revision, {first, cursor}}});
+  };
+  const auto emit_error = [&](size_t first, std::string message) {
+    const Location at{{}, revision, {first, cursor}};
+    tokens.push_back({TokenKind::invalid, {}, at, reports.size()});
+    reports.push_back({at, std::move(message)});
   };
   auto identifier = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
   while (cursor < source.size()) {
@@ -73,19 +99,26 @@ inline std::vector<Token> tokenize(const std::shared_ptr<const IndexedSource> &r
         ++cursor;
       continue;
     }
-    if (c == '/' && cursor + 1 < source.size() && source[cursor + 1] == '/')
-      fail({{}, revision, {cursor, cursor + 2}}, "'//' is reserved for fraction construction; use '#' for line comments");
-    if (source.compare(cursor, 2, "::") == 0)
-      fail({{}, revision, {cursor, cursor + 2}}, "use a single colon for type annotations, or -> for callable results");
     const auto offset = cursor;
-    const Location start{{}, revision, {offset, offset + 1}};
+    if (source.compare(cursor, 2, "//") == 0) {
+      cursor += 2;
+      emit_error(offset, "'//' is reserved for fraction construction; use '#' for line comments");
+      continue;
+    }
+    if (source.compare(cursor, 2, "::") == 0) {
+      cursor += 2;
+      emit_error(offset, "use a single colon for type annotations, or -> for callable results");
+      continue;
+    }
     if (c == '@' || std::isalpha(static_cast<unsigned char>(c)) || c == '_') {
       const bool symbol = c == '@';
       if (symbol) {
         ++cursor;
         if (cursor == source.size() ||
-            !(std::isalpha(static_cast<unsigned char>(source[cursor])) || source[cursor] == '_'))
-          fail(start, "expected a symbol name after '@'");
+            !(std::isalpha(static_cast<unsigned char>(source[cursor])) || source[cursor] == '_')) {
+          emit_error(offset, "expected a symbol name after '@'");
+          continue;
+        }
       }
       const auto name_start = cursor;
       while (cursor < source.size() && identifier(source[cursor]))
@@ -108,8 +141,10 @@ inline std::vector<Token> tokenize(const std::shared_ptr<const IndexedSource> &r
         real = true;
         ++cursor;
         if (cursor < source.size() && (source[cursor] == '+' || source[cursor] == '-')) ++cursor;
-        if (cursor == source.size() || !std::isdigit(static_cast<unsigned char>(source[cursor])))
-          fail(start, "expected exponent digits");
+        if (cursor == source.size() || !std::isdigit(static_cast<unsigned char>(source[cursor]))) {
+          emit_error(offset, "expected exponent digits");
+          continue;
+        }
         while (cursor < source.size() && std::isdigit(static_cast<unsigned char>(source[cursor]))) ++cursor;
       }
       if (source.compare(cursor, 3, "f32") == 0 || source.compare(cursor, 3, "f64") == 0) {
@@ -133,12 +168,19 @@ inline std::vector<Token> tokenize(const std::shared_ptr<const IndexedSource> &r
       bool escaped = false;
       while (cursor < source.size()) {
         const auto next = source[cursor];
-        if (!multiline && next == '\n') fail(start, "newline in quoted text");
+        if (!multiline && next == '\n') break;
         if (!escaped && next == '"' && source.substr(cursor, delimiter) == closing) break;
         escaped = !escaped && next == '\\';
         ++cursor;
       }
-      if (cursor == source.size()) fail(start, "unterminated quoted text");
+      if (cursor == source.size()) {
+        emit_error(offset, "unterminated quoted text");
+        continue;
+      }
+      if (!multiline && source[cursor] == '\n') {
+        emit_error(offset, "newline in quoted text");
+        continue;
+      }
       const auto raw = source.substr(content, cursor - content);
       cursor += delimiter;
       emit(multiline ? TokenKind::multiline_string : TokenKind::string, std::string(raw), offset);
@@ -161,10 +203,10 @@ inline std::vector<Token> tokenize(const std::shared_ptr<const IndexedSource> &r
         ++cursor;
       }
     }
-    if (std::string("(){}[];,:.+-*/%<>=!|").find(c) == std::string::npos && punctuation.size() != 2)
-      fail(start, "unsupported character in CoD source");
     ++cursor;
-    emit(TokenKind::punctuation, std::move(punctuation), offset);
+    if (std::string("(){}[];,:.+-*/%<>=!|").find(c) == std::string::npos && punctuation.size() != 2)
+      emit_error(offset, "unsupported character in CoD source");
+    else emit(TokenKind::punctuation, std::move(punctuation), offset);
   }
   emit(TokenKind::end, "", cursor);
   return tokens;
@@ -321,13 +363,14 @@ struct Expression {
                     here_body, named_argument, break_value, continue_value, typed_expression, return_tail,
                     processor_composition, pipeline, here_binding, make_object, native_handle_binding, make_owned_handle, make_borrowed_handle,
                     exception_binding, make_exception, rethrow_from, case_expression, case_arm, string_literal,
-                    case_break, case_fallthrough, case_failure };
+                    case_break, case_fallthrough, case_failure, syntax_error };
   enum class ExceptionPlacement { default_region, capacity, cause };
   Kind kind;
   Location at;
   std::string text;
   std::vector<std::unique_ptr<Expression>> children;
   std::optional<size_t> symbol_id;
+  std::optional<SyntaxErrorReference> syntax_error;
   std::string binding;
   bool spread = false;
   std::optional<Location> checked_ref_argument;
@@ -456,7 +499,7 @@ struct SumAlternative {
 struct Form {
   enum class Kind { symbol, symbol_from, function, procedure, data, sum_data, region_definition, array, unit, using_units, global,
                     using_resource, import_resource, mixin_resource, export_resource, export_from_resource,
-                    expression, abstract_type, conformance, enumeration, native_handle_type };
+                    expression, abstract_type, conformance, enumeration, native_handle_type, syntax_error };
   Kind kind;
   Location at;
   std::string name;
@@ -472,6 +515,7 @@ struct Form {
   bool alias_operation = false;
   bool c_data = false;
   bool c_linkage = false;
+  std::optional<SyntaxErrorReference> syntax_error;
   std::optional<Type> native_owner_type;
   std::vector<SymbolMapping> mappings;
   std::vector<UnitSelection> units;
@@ -560,24 +604,35 @@ inline bool module_keyword(std::string_view name) {
          name == "using" || name == "import" || name == "mixin" || name == "export" || name == "conversion";
 }
 
+struct ParsedSource {
+  std::vector<std::unique_ptr<Form>> forms;
+  std::vector<SyntaxDiagnostic> reports;
+};
+
 class Parser {
   enum class HereAttachment { immediate, for_body, pipeline_body, initializer_operand };
+  std::vector<SyntaxDiagnostic> reports_;
   std::vector<Token> tokens_;
   size_t cursor_ = 0;
   static constexpr size_t structure_limit = 128;
   static constexpr size_t recursion_limit = 1024;
   size_t recursion_ = 0;
   std::map<const Expression *, size_t> depths_;
-  std::vector<size_t> right_paren_;
-  bool parsing_handoff_ = false;
-  bool parsing_case_ = false;
-  bool labelled_yield_ = false;
+  std::vector<size_t> closing_delimiter_;
+  struct ParseControls {
+    bool parsing_handoff = false;
+    bool parsing_case = false;
+    bool labelled_yield = false;
+  } controls_;
 
+  [[noreturn]] static void fail_resource_limit(const Location &at, const std::string &message) {
+    throw std::runtime_error(location_text(at) + ": " + message);
+  }
   struct ParseEntry {
     size_t &depth;
     ParseEntry(size_t &depth, const Location &at, std::string_view subject) : depth(depth) {
       if (depth == recursion_limit)
-        fail(at, "compiler resource limit: " + std::to_string(recursion_limit) +
+        fail_resource_limit(at, "compiler resource limit: " + std::to_string(recursion_limit) +
             " active recursive parsing entries while parsing " + std::string(subject));
       ++depth;
     }
@@ -587,7 +642,7 @@ class Parser {
   };
   static void check_depth(size_t depth, const Location &at, std::string_view subject) {
     if (depth > structure_limit)
-      fail(at, "compiler resource limit: " + std::to_string(structure_limit) +
+      fail_resource_limit(at, "compiler resource limit: " + std::to_string(structure_limit) +
           " source structure levels while parsing " + std::string(subject));
   }
   static size_t type_depth(const Type &type, const Location &at) {
@@ -684,6 +739,50 @@ class Parser {
     holder.target = std::make_shared<Type>(std::move(object));
     return holder;
   }
+  size_t record_fault(const SyntaxDiagnostic &failure) {
+    const auto token = std::lower_bound(tokens_.begin(), tokens_.end(), failure.at.span.first,
+        [](const Token &candidate, size_t offset) { return candidate.at.span.first < offset; });
+    if (token != tokens_.end() && token->at.span.first == failure.at.span.first && token->report)
+      return *token->report;
+    const auto report = reports_.size();
+    reports_.push_back(failure);
+    return report;
+  }
+
+  bool operand_boundary(SyntaxRole role) const {
+    if (is(";") || is("}") || peek().kind == TokenKind::end) return true;
+    return role == SyntaxRole::initializer && (is(",") || is(")") || is("]"));
+  }
+
+  void synchronize_operand(size_t first, SyntaxRole role) {
+    cursor_ = first;
+    while (!operand_boundary(role)) {
+      const auto close = closing_delimiter_[cursor_];
+      cursor_ = close < tokens_.size() ? close + 1 : cursor_ + 1;
+    }
+  }
+
+  Expr recover_operand(size_t first, const SyntaxDiagnostic &fault, SyntaxRole role) {
+    const auto report = record_fault(fault);
+    synchronize_operand(first, role);
+    Location location = tokens_[first].at;
+    location.span.past = peek().at.span.first;
+    auto result = make(Expression::Kind::syntax_error, {TokenKind::invalid, {}, std::move(location)});
+    result->syntax_error = SyntaxErrorReference{role, report};
+    return result;
+  }
+
+  Expr binding_initializer() {
+    const auto first = cursor_;
+    const auto saved = controls_;
+    try {
+      return expression();
+    } catch (const LocatedFailure &failure) {
+      controls_ = saved;
+      return recover_operand(first, failure.diagnostic, SyntaxRole::initializer);
+    }
+  }
+
   bool take(const std::string &text) {
     if (!is(text)) return false;
     ++cursor_;
@@ -695,7 +794,7 @@ class Parser {
   }
   bool here_header(size_t ahead = 0) const {
     if (!is("(", ahead)) return false;
-    const auto close = right_paren_[cursor_ + ahead];
+    const auto close = closing_delimiter_[cursor_ + ahead];
     return close < tokens_.size() && is("=>", close + 1 - cursor_);
   }
   std::optional<PipelineOperator> next_pipeline_operator() const {
@@ -962,10 +1061,10 @@ class Parser {
            kind == TokenKind::symbol || is("(", 2) || is("{", 2) || is("!", 2);
   }
   void arguments(Expression &expr, bool allow_supplied_body = true) {
-    const auto close = right_paren_[cursor_];
+    const auto close = closing_delimiter_[cursor_];
     const bool follows_call = allow_supplied_body && close < tokens_.size() &&
         (is("{", close + 1 - cursor_) || here_header(close + 1 - cursor_));
-    const bool labelled_yield = labelled_yield_ && expr.kind == Expression::Kind::call && expr.text == "yield";
+    const bool labelled_yield = controls_.labelled_yield && expr.kind == Expression::Kind::call && expr.text == "yield";
     const bool named = (expr.kind == Expression::Kind::call && !expr.intrinsic) ||
         expr.kind == Expression::Kind::make_exception || expr.kind == Expression::Kind::make_object ||
         (accepts_supplied_body(expr) && follows_call) || labelled_yield;
@@ -1276,10 +1375,10 @@ class Parser {
     if (declaration && form.conversion)
       fail(form.at, "a conversion requires an implemented function method");
     if (!declaration) {
-      const auto previous = std::exchange(labelled_yield_, !form.parameters.empty() && form.parameters.front().here &&
+      const auto previous = std::exchange(controls_.labelled_yield, !form.parameters.empty() && form.parameters.front().here &&
           form.parameters.front().name == "yield" && form.parameters.front().here->labelled);
       form.body = block();
-      labelled_yield_ = previous;
+      controls_.labelled_yield = previous;
       if (!inline_effect && !expression_form) take(";");
     }
     if (inline_effect && (!form.symbolic || declaration || function))
@@ -1358,9 +1457,9 @@ class Parser {
     supplied->receiving = std::make_shared<ReceivingHeader>(std::move(header));
     if (is("=>", 1) || (is("{", 1) && is("=>", 2)))
       fail(peek().at, "write the receiving header as '(...) => ' before the here body");
-    const bool previous = std::exchange(parsing_handoff_, true);
+    const bool previous = std::exchange(controls_.parsing_handoff, true);
     auto body = block();
-    parsing_handoff_ = previous;
+    controls_.parsing_handoff = previous;
     if (!supplied->receiving->from_for) supplied->scoped = std::exchange(body->scoped, false);
     supplied->children.push_back(std::move(body));
     call.children.push_back(finish(std::move(supplied)));
@@ -1526,7 +1625,7 @@ class Parser {
 
   bool starts_full_case_arm() const {
     if (!is("(")) return false;
-    const auto close = right_paren_[cursor_] - cursor_;
+    const auto close = closing_delimiter_[cursor_] - cursor_;
     return is("|", close + 1) || (is("->", close + 1) && (is("{", close + 2) || is("throw", close + 2)));
   }
   Expr case_expression(const Token &token) {
@@ -1535,7 +1634,7 @@ class Parser {
     result->children.push_back(expression());
     expect("of");
     expect("{");
-    const bool previous = std::exchange(parsing_case_, true);
+    const bool previous = std::exchange(controls_.parsing_case, true);
     while (!take("}")) {
       if (peek().kind == TokenKind::end) fail(peek().at, "unterminated case body");
       const bool short_head = peek().kind == TokenKind::identifier && is("->", 1);
@@ -1589,7 +1688,7 @@ class Parser {
       if (!is("}")) expect(";");
       else take(";");
     }
-    parsing_case_ = previous;
+    controls_.parsing_case = previous;
     return result;
   }
 
@@ -1792,9 +1891,9 @@ class Parser {
     }
     if (take("return")) return return_expression(token);
     if (take("case")) return case_expression(token);
-    if (parsing_case_ && is("fallthrough") && (is(";", 1) || is("}", 1)))
+    if (controls_.parsing_case && is("fallthrough") && (is(";", 1) || is("}", 1)))
       return make(Expression::Kind::case_fallthrough, expect("fallthrough"));
-    if ((parsing_handoff_ || parsing_case_) && (is("break") || is("continue"))) {
+    if ((controls_.parsing_handoff || controls_.parsing_case) && (is("break") || is("continue"))) {
       ++cursor_;
       auto expr = make(token.text == "break" ? Expression::Kind::break_value : Expression::Kind::continue_value, token);
       if (!is(";") && !is("}")) expr->children.push_back(expression());
@@ -1848,7 +1947,7 @@ class Parser {
         else { expect("="); expr->binding = "="; }
         if (mode == "val" && expr->binding != "<-") fail(expr->at, "val initialization requires '<-', not '='");
         if (mode == "ref" && expr->binding != "=") fail(expr->at, "ref initialization requires '='; use val for an independent copy");
-        expr->children.push_back(expression());
+        expr->children.push_back(binding_initializer());
         group->children.push_back(std::move(expr));
       } while (take(","));
       return group;
@@ -2119,9 +2218,23 @@ class Parser {
     if (initializer && result->scoped) fail(result->at, "use an ordinary initializer block after make");
     if (result->scoped) expect("{");
     while (!take("}")) {
-      if (peek().kind == TokenKind::end) fail(peek().at, "unterminated scope");
-      auto label = initializer && starts_field_initializer() ? construction_label() : Expr{};
-      result->children.push_back(expression(0, HereAttachment::immediate, true, true, std::move(label)));
+      if (peek().kind == TokenKind::end) {
+        record_fault({peek().at, "unterminated scope"});
+        return result;
+      }
+      const auto first = cursor_;
+      const auto saved = controls_;
+      try {
+        auto label = initializer && starts_field_initializer() ? construction_label() : Expr{};
+        result->children.push_back(expression(0, HereAttachment::immediate, true, true, std::move(label)));
+      } catch (const LocatedFailure &failure) {
+        controls_ = saved;
+        result->children.push_back(recover_operand(first, failure.diagnostic, SyntaxRole::block_item));
+      }
+      if (peek().kind == TokenKind::end) {
+        record_fault({peek().at, "unterminated scope"});
+        return result;
+      }
       if (!is("}")) expect(";");
       else take(";");
     }
@@ -2318,24 +2431,45 @@ class Parser {
 
 public:
   explicit Parser(const std::shared_ptr<const IndexedSource> &source)
-      : tokens_(tokenize(source)), right_paren_(tokens_.size(), tokens_.size()) {
+      : tokens_(tokenize(source, reports_)), closing_delimiter_(tokens_.size(), tokens_.size()) {
     std::vector<size_t> open;
-    for (size_t i = 0; i < tokens_.size(); ++i) if (tokens_[i].kind == TokenKind::punctuation) {
-      if (tokens_[i].text == "(") open.push_back(i);
-      if (tokens_[i].text == ")" && !open.empty()) {
-        right_paren_[open.back()] = i;
-        open.pop_back();
+    for (size_t i = 0; i < tokens_.size(); ++i) {
+      const auto &token = tokens_[i];
+      if (token.kind != TokenKind::punctuation) continue;
+      if (token.text == "(" || token.text == "[" || token.text == "{") {
+        open.push_back(i);
+        continue;
       }
+      const char expected = token.text == ")" ? '(' : token.text == "]" ? '[' : token.text == "}" ? '{' : '\0';
+      if (!expected) continue;
+      const auto previous_size = open.size();
+      while (!open.empty() && tokens_[open.back()].text.front() != expected) open.pop_back();
+      if (open.empty()) continue;
+      if (open.size() == previous_size) closing_delimiter_[open.back()] = i;
+      open.pop_back();
     }
   }
 
-  std::vector<std::unique_ptr<Form>> parse() {
+private:
+  void synchronize_module(size_t first) {
+    cursor_ = first;
+    while (peek().kind != TokenKind::end) {
+      if (cursor_ != first && (module_doclet_target(0) || is("export") || is("using") ||
+          is("import") || is("mixin"))) return;
+      if (take(";")) return;
+      const auto close = closing_delimiter_[cursor_];
+      cursor_ = close < tokens_.size() ? close + 1 : cursor_ + 1;
+    }
+  }
+
+public:
+  ParsedSource parse() {
     std::vector<std::unique_ptr<Form>> forms;
     const auto append = [&](std::unique_ptr<Form> form) {
       form->span = {form->at.span.first, tokens_[cursor_ - 1].at.span.past};
       forms.push_back(std::move(form));
     };
-    while (peek().kind != TokenKind::end) {
+    const auto parse_module_item = [&] {
       if (peek().kind == TokenKind::multiline_string && module_doclet_target(1)) ++cursor_;
       auto start = peek();
       auto form = std::make_unique<Form>();
@@ -2349,7 +2483,7 @@ public:
           resource(*form, false);
           expect(";");
           append(std::move(form));
-          continue;
+          return;
         }
         const auto next = peek().kind == TokenKind::end ? TokenKind::end : tokens_[cursor_ + 1].kind;
         const bool named_type = native_handle_head() || (is("data") && (next == TokenKind::identifier || next == TokenKind::string)) ||
@@ -2363,7 +2497,7 @@ public:
           form->name = form->symbolic ? name(TokenKind::symbol).text : lexical_name(&form->operation).text;
           expect(";");
           append(std::move(form));
-          continue;
+          return;
         }
       }
       if (reference_symbol_head()) {
@@ -2386,7 +2520,7 @@ public:
         expect("}"); expect(";");
         form->symbol_reference = SymbolReference{nullable, read_only || const_owner};
         append(std::move(form));
-        continue;
+        return;
       }
       const bool region_symbol = is("region") && is("symbol", 1);
       if (region_symbol) expect("region");
@@ -2438,7 +2572,7 @@ public:
           expect(";");
           for (const auto &[declaration, name] : declarations)
             declaration->span.past = tokens_[cursor_ - 1].at.span.past;
-          continue;
+          return;
         }
         expect(";");
       } else if (is("unit") && tokens_[cursor_ + 1].kind == TokenKind::identifier) {
@@ -2501,7 +2635,7 @@ public:
           form->kind = Form::Kind::sum_data;
           parse_sum_alternatives(*form);
           append(std::move(form));
-          continue;
+          return;
         }
         if (!is("{")) {
           if (form->c_data) fail(peek().at, "expected fields for a data \"C\" record; declare native handles with 'handle type'");
@@ -2511,7 +2645,7 @@ public:
           form->kind = data ? Form::Kind::conformance : Form::Kind::abstract_type;
           expect(";");
           append(std::move(form));
-          continue;
+          return;
         }
         if (!data)
           fail(start.at, "abstract type declarations have no body; use data for a representation");
@@ -2558,7 +2692,7 @@ public:
           expect("}");
           expect(";");
           append(std::move(form));
-          continue;
+          return;
         }
         if (take("symbol")) {
           if (!using_resource) fail(start.at, "combined symbol selection requires using; declare its destination first");
@@ -2580,7 +2714,7 @@ public:
           }
           expect("}");
           expect(";");
-          continue;
+          return;
         }
         resource_item(*form);
         expect(";");
@@ -2590,8 +2724,27 @@ public:
         expect(";");
       }
       append(std::move(form));
+    };
+    while (peek().kind != TokenKind::end) {
+      const auto first = cursor_;
+      const auto previous = forms.size();
+      try {
+        parse_module_item();
+      } catch (const LocatedFailure &failure) {
+        forms.resize(previous);
+        controls_ = {};
+        const auto report = record_fault(failure.diagnostic);
+        synchronize_module(first);
+        auto damaged = std::make_unique<Form>();
+        damaged->kind = Form::Kind::syntax_error;
+        damaged->at = tokens_[first].at;
+        damaged->span = {damaged->at.span.first, peek().at.span.first};
+        damaged->syntax_error = SyntaxErrorReference{SyntaxRole::module_item, report};
+        forms.push_back(std::move(damaged));
+      }
       depths_.clear();
     }
+    if (!reports_.empty()) return {std::move(forms), std::move(reports_)};
     for (const auto &form : forms) if (form->body) {
       const auto context = form->kind == Form::Kind::function || form->kind == Form::Kind::procedure
           ? ReturnContext::callable : ReturnContext::module;
@@ -2600,7 +2753,7 @@ public:
       normalize_full_scopes(*form->body, form->kind);
       normalize_return_tail(*form);
     }
-    return forms;
+    return {std::move(forms), std::move(reports_)};
   }
 };
 
