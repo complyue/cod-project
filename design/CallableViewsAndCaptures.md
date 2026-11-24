@@ -1,8 +1,10 @@
 # Function values, here callables and declared place aliases
 
-Design revision: 134 · Recorded: 2026-11-21 · Status: scoped callable contract; implementation boundaries recorded separately.
+Design revision: 135 · Recorded: 2026-11-24 · Status: scoped callable contract; implementation boundaries recorded separately.
 
 ## Design authority
+
+At r135 the [functor-value decision](../CHANGELOG.md#h-functor-value-distinction-20261124) applies [the callable terminology](CallableStorageAndHereAccess.md#function-value-and-functor-value) to lexical holders, owner projection and bounded here use. A functor value retains a selected receiver and actual owner throughout every use. P-721/P-722 connect that lifetime to D-18-FUNCTOR-VALUE.
 
 [D-07-STRING-FIELDS](DesignAuthorityRegistry.md#d-07-string-fields) covers [direct text places](Utf8Strings.md#direct-string-fields) under [H-STRING-BUILD-20261121](../CHANGELOG.md#h-string-build-20261121). The r134 string prototype distinguishes `val var` for a direct String place from `ref var` for a declared reference slot. Check exact place kind, actual owner and permitted updates through either name. Callable access and lifetime contracts continue.
 
@@ -26,7 +28,7 @@ Compiler implementations must preserve source-visible distinctions: independent 
 
 ## Callable views have lexical storage
 
-Function-value holders have lexical storage (H-563). The compiler can use registers, stack slots or lexical backing. Even an entry address that fits in one word cannot be placed in a regional field or array.
+Function-value and functor-value holders have lexical storage (H-563). A functor value’s receiver may live in a region. Its callable holder follows the lexical storage rule. The compiler can use registers, stack slots or lexical backing. Even an entry address that fits in one word cannot be placed in a regional field or array.
 
 A regional aggregate or array cannot evade this boundary by embedding a callable-view value directly, through another compound value or through a generic instantiation. Same-owner field references cannot make a lexical callable target regional. Storage eligibility is a type/owner contract, not a special permission inferred because one runtime value is null or has no captures. H-565/H-566 reviews whether callable-bearing ADTs should be admitted specifically in lexical storage; this does not reopen the regional prohibition or automatically qualify such aggregate fields.
 
@@ -148,7 +150,7 @@ Both calls update the same n. Likewise `{{ p = other; }}` rebinds the enclosing 
 
 ### Forms of here callable
 
-The source inventory has five families when a `for` body and a single-brace here call are counted together. A block literal describes how the body is written. A here-parameter call describes how a receiver invokes or forwards it. A single expression can use both. The two callable value kinds remain `func` and `here`.
+The source inventory has five families when a `for` body and a single-brace here call are counted together. A block literal describes how the body is written. A here-parameter call describes how a receiver invokes or forwards it. A single expression can use both. Function values and owner-qualified functor values have distinct assignment rules. Supplying a here body creates a synchronous use.
 
 | Source form | Lexical access and control obligations |
 | --- | --- |
@@ -158,7 +160,7 @@ The source inventory has five families when a `for` body and a single-brace here
 | Module top level | Each incorporated module, including the selected `__main__`, executes its top-level code with direct access to its own initialized lexical slots. Its prefix and `postpon` fragments share that module activation. A callable declared there keeps its own access rules. [Module scope and example](ModuleWorlds.md#here-callable-module-top-levels) |
 | Functor used as a here callable | A data receiver with a compatible `()` overload can supply a synchronous here argument. Invocation uses the receiver under its actual owner and access permissions. The bounded callable may be forwarded to another compatible here formal while the receiver remains live. The receiver itself keeps its ordinary data type and storage eligibility. |
 
-In `test(limit, 12u64)`, the functor supplies the predicate and the literal supplies the scalar input. Returning or storing the receiver-bound here callable for later execution rejects. Storing the underlying receiver data follows its own type and owner rules. The [functor examples](DomainLanguageDesign.md#functor-receivers-and-callback-arguments) show the difference between selecting the receiver at its written argument position and reading a lexical reference inside a supplied body.
+In `test(limit, 12u64)`, the functor supplies the predicate and the literal supplies the scalar input. The supplied here callable cannot escape its synchronous use. Preparing a functor value in an explicitly owner-qualified holder checks the selected receiver and its lifetime at that separate binding. Storing the underlying receiver data follows its own type and owner rules. The [functor examples](DomainLanguageDesign.md#functor-receivers-and-callback-arguments) show the difference between selecting the receiver at its written argument position and reading a lexical reference inside a supplied body.
 
 The frame proof leaves two obligations. A region referenced through an outer slot may be released while that slot still exists; using a ref to the old instance must reject. Also, a write to an outer slot can invalidate a caller's flow facts. The checker must account for zero, one or repeated calls, including exceptional exits: it cannot assume that a callback initialized a slot, preserved a non-null refinement, or can consume the same owner twice. Access to an outer slot grants no release authority beyond its ordinary declaration. A conservative checker may reject an unproved use.
 
@@ -206,7 +208,7 @@ A stored function cannot enclose n. A synchronous here callback can update n twi
 
 ## Owner projection
 
-A function has no hidden body owner to project. An owner required by an explicit parameter, result or type-bound default must satisfy its own declared contract. A here receiver cannot extract an arbitrary owner from the supplied body or extend that owner's lifetime by forwarding the body.
+A function value has no hidden body owner to project. A functor value carries the actual owner of its bound receiver. Receiving it under a fresh owner name binds that actual owner. Reception under an established owner requires the same actual owner. The actual owner and allocation permission must both be proved for construction through that name. An owner required by an explicit parameter, result or type-bound default must satisfy its own declared contract. A here receiver cannot extract an arbitrary owner from the supplied body or extend that owner's lifetime by forwarding the body.
 
 ## Runtime callable contract
 

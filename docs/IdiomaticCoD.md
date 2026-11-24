@@ -12,7 +12,7 @@ dependencies are identified where needed.
 
 ## Design authority
 
-Guide revision 7 applies the [single-directive import](../CHANGELOG.md#h-proc-import-identity-20261124) and the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
+Guide revision 8 applies the [single-directive import](../CHANGELOG.md#h-proc-import-identity-20261124) and the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
 [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics), P-694/P-695, and the
 [canonical source style](IdiomaticsGuideline.md#canonical-code-style). The
 [guide baseline](../CHANGELOG.md#k-idiomatic-cod-rewrite-20261123),
@@ -24,6 +24,7 @@ owners, effects, control and cleanup. This guide explains their use without exte
 The [symbolic family selection guideline](../CHANGELOG.md#h-symbolic-family-reuse-idiom-20261123)
 covers the distinction between consuming a symbol, installing a family and extending it.
 The [function-valued symbol decision](../CHANGELOG.md#h-function-valued-symbol-20261124) adds the direct call idiom under [D-10](../design/SymbolicDynamicScope.md#calling-a-function-valued-symbol).
+The [callable terminology](../design/CallableStorageAndHereAccess.md#function-value-and-functor-value) governs function and functor values under the [owner-qualified binding decision](../CHANGELOG.md#h-functor-value-distinction-20261124).
 Acceptance applies the guideline's semantic, example, coverage and mandatory style checks.
 [Long-term design topics](DesignTopics.md) retain their separate scope.
 
@@ -344,7 +345,11 @@ See [region construction](../design/ConstructionAndAcquisition.md#region-constru
 
 ### Pass state explicitly, or borrow the caller's live work
 
-Use a function value when selecting an operation independently of the activation that selected it.
+Use **function value** for a capture-free selection (`func …`). Use **functor value** for a
+call operator bound to a receiver in its owner (`func … in O`). Choose the latter when a
+pricing rule needs that particular receiver on every call. A function-valued holder or
+symbol accepts function values. A functor-valued one accepts functor values.
+[Function value and functor value](../design/CallableStorageAndHereAccess.md#function-value-and-functor-value)
 Its runtime state belongs in explicit inputs. For example, billing can select this calculation and
 supply the fee with each call:
 

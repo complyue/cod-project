@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Distinguish function values and functor values
+
+<a id="h-functor-value-distinction-20261124"></a>
+**H-FUNCTOR-VALUE-DISTINCTION-20261124.** The project user confirmed in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-24 (America/Los_Angeles) “`func ... in O` 叫作 functor value，`func ...` 叫作 function value，两者不能交叉赋值” and emphasized “术语要明确区分”. [D-18-FUNCTOR-VALUE](design/CallableStorageAndHereAccess.md#function-value-and-functor-value), P-721/P-722, and [D-10r262](design/SymbolicDynamicScope.md#installing-a-functor-value) cover owner-qualified reception and installation. This extends the stored-value inventory of [H-CALLABLE-MODEL-20261118](#h-callable-model-20261118) and preserves the unqualified slot of [D-10r261](#h-function-valued-symbol-20261124), previously recorded at `da12f768a12bd6dec6794820273feda0d3d9fc21:design/SymbolicDynamicScope.md:195`. D-18r135, D-15r79, guide r8 and the repository terminology rule apply the distinction. Compiler implementation has separate acceptance.
+
 ## 2026-11-24 — Compare ordinary tile operations over scoped state
 
 <a id="k-tile-scoped-state-and-traversal-20261124"></a>

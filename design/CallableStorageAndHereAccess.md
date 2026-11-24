@@ -1,8 +1,10 @@
 # Callable storage and direct lexical access
 
-Design revision: 18 · 2026-11-24 · Confirmed source contract
+Design revision: 19 · 2026-11-24 · Confirmed source contract
 
 ## Design authority
+
+[D-18-FUNCTOR-VALUE](DesignAuthorityRegistry.md#d-18-functor-value) r19 defines [function value and functor value](#function-value-and-functor-value). The [project user’s terminology and assignment decision](../CHANGELOG.md#h-functor-value-distinction-20261124), P-721/P-722, requires distinct types and preserves the receiver’s actual owner and access. Check both directions of assignment, symbol installation and owner-qualified reception. Synchronous here use, regional storage eligibility and native representation have their own contracts.
 
 D-18-HERE-STORAGE r18 applies the [grouped installation decision](../CHANGELOG.md#h-grouped-local-proc-install-20261124) and the [local handler decision](../CHANGELOG.md#h-local-proc-handler-body-20261124) to the installed methods’ existing capture, owner and restoration obligations (P-611/P-612). Verify the active body’s own frame through nested restoration. See [local procedure bodies](SymbolicDynamicScope.md#installing-a-local-procedure-body).
 
@@ -26,7 +28,20 @@ Acceptance covers function selection without an enclosing activation, direct slo
 
 ## Callable value kinds
 
-CoD has two callable value kinds. A `func` value may be stored, passed or returned subject to the usual owner and placement constraints. A `here` value may be invoked in its active scope or forwarded to another compatible `here` parameter in a synchronous call. It cannot escape. `proc` declares a procedure or a symbolic handler signature. Even a named proc with an empty body cannot initialize a callable-value holder.
+### Function value and functor value
+
+| Term | Type | What the value provides |
+| --- | --- | --- |
+| **Function value** | `func …` | A capture-free function selection and its checked signature. It carries no bound receiver. |
+| **Functor value** | `func … in O` | A selected `func` call operator bound to a particular initialized data receiver under its actual owner `O` and checked access. |
+
+The final `in O` here qualifies the callable value as a whole. An owner on an explicit parameter or result, or the storage owner of a borrowed callable holder, has its own meaning. **Stored functor** refers to a stored functor value. Use **receiver** for the data object and **call operator** for the selected operation. A supplied `here` body has its own synchronous use and control rules.
+
+Type-check the kind at initialization, assignment, symbol installation, argument passing and result delivery. Assigning a function value to a functor-value destination or a functor value to a function-value destination is a type error, even with identical parameter and result types and a provably live owner. A functor-value destination also checks the actual owner, receiver access and lifetime. Rebinding the source receiver slot leaves the selected receiver unchanged. [Symbol installation and reception](SymbolicDynamicScope.md#installing-a-functor-value)
+
+### Here use and procedure calls
+
+Use [function value and functor value](#function-value-and-functor-value) for the two kinds written with `func`. Ordinary function values can be stored, passed or returned under their callable contract. A functor value also carries its receiver’s owner and access requirements. A `here` value may be invoked in its active scope or forwarded to another compatible `here` parameter in a synchronous call. It cannot escape. `proc` declares a procedure or a symbolic handler signature. Even a named proc with an empty body cannot initialize a callable-value holder.
 
 ```cod
 func plus_one(n:u64) -> u64 { return n + 1u64; }
@@ -44,7 +59,7 @@ ping();                          # Direct procedure call.
 | Variables, ordinary parameters and results | Reject proc-valued locals, parameters, returns and structural result fields. An omitted type, a default argument, a conditional or a generic instantiation cannot produce a procedure value. References and pointers cannot designate a procedure holder. |
 | Procedure names and signatures | Named, imported, recursive and overloaded procedures remain directly callable. A declaration or type query can describe a procedure signature; using that signature in an ordinary value slot rejects, including via `typeof`. A `func` view must satisfy its complete contract. An incompatible proc method cannot be silently dropped or reclassified to make a family fit. |
 | Symbolic handlers and execution scopes | `symbol @send:proc()->void` declares the handler protocol. Definition activation installs the scoped implementation and its replay data. `perform` and `behave` use it. A standalone procedural `{{ ... }}`, a loop body, a module top level and a deferred call to a named proc can execute without constructing a user-visible procedure value. Their existing control, binding, owner and cleanup checks still apply. |
-| Function values and functors | A storable func is capture-free. A functor binds its data receiver for a here use. Invoking or forwarding it checks actual owner, access, signature and permissions. A direct data call may select an eligible proc overload. |
+| Receiver-bound calls | A stored functor value selects a compatible `func` call operator. A data receiver offered to a synchronous here parameter follows that parameter’s call and lifetime rules. A direct call on data may select an eligible proc overload. |
 
 **Retained work.** An application that chooses an operation now and invokes it later under symbolic effects loses a first-class proc as its event representation. For a known set of operations, enqueue a data constructor and dispatch to named procedures at delivery. An open integration can publish a symbolic operation and establish a handler in the delivery context. This does not preserve a producer's independently selected handler after its installation ends. If the application actually requires an open collection of independently selected procedure callbacks, that is a capability the restriction deliberately gives up.
 

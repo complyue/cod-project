@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 78 · Recorded: 2026-11-24 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 79 · Recorded: 2026-11-24 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+At r79 the [operation table](#callable-families-and-explicit-installation) applies the [functor-value decision](../CHANGELOG.md#h-functor-value-distinction-20261124) and its receiver-owner requirement to direct symbolic calls. D-10 and D-18 govern installation and value-kind checking.
 
 At r78 the [function-valued symbol decision](../CHANGELOG.md#h-function-valued-symbol-20261124) qualifies the call distinction in the [operation table](#callable-families-and-explicit-installation). Resolve the declared kind in the selected module interpretation and preserve the direct procedure call without installation. [D-10 source contract](SymbolicDynamicScope.md#calling-a-function-valued-symbol)
 
@@ -675,6 +677,7 @@ A declared symbol carries its identity and signature in the module world. Its ba
 | `effect proc @sym;` | Resolve the lexical family under the ordinary selection rules. | Activate it and install the scoped handler. |
 | `@sym(args)` for a procedure symbol | Select the lexical family and apply ordinary argument dispatch. | Call under current dynamic bindings, even without an installation for this callee. |
 | `@sym(args)` for a function-valued symbol | Check the ordinary call against the symbol’s function type. | Read the current function selection and call it with the arguments. |
+| `@sym(args)` for a functor-valued symbol | Check the owner-qualified callable type. | Invoke the installed functor value on its bound receiver. |
 | `effect @sym = other` or `effect @sym = @other` for procedure symbols | Reject assignment installation. | |
 
 A family installation retains its selected interpretation and uses ordinary method dispatch. Export, using/import/mixin and extension remain module construction; none implicitly installs a receiver TLS value. Dependency initialization still follows its once-only incorporation contract and can execute its own explicit effects.

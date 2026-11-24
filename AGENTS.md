@@ -73,6 +73,8 @@ When a diagnostic refers to a resolved name/identity alias, show the name used a
 
 ## Terminology and component conventions
 
+Use **function value** for `func …` and **functor value** for receiver-bound `func … in O`. Apply the terms consistently in designs, code comments, diagnostics and examples. The two types cannot be assigned to each other. [Callable terminology](design/CallableStorageAndHereAccess.md#function-value-and-functor-value)
+
 - Follow [CoD operation terminology](design/CallableViewsAndCaptures.md#copying-moving-and-graph-transfer) for bits transfer, reference binding, ownership transfer, callable construction/capture and graph transfer. Native byte copying and C++ moves grant no CoD permission. Callable views require lexical storage, including when part of a compound value.
 - Use the [three qualified alias concepts](design/CallableViewsAndCaptures.md#alias-terminology) in discussions, documentation, comments, diagnostics and interfaces. Distinguish declared place aliasing, runtime target aliasing and name/identity aliasing. Preserve access, owners, lifetimes and permitted overlap. A declaration can select storage at runtime, and independent references can share a target.
 - Keep YAML optional and separate from allocation. Use colocated `*_yaml.hh` conversions and reuse the helpers in `include/shilos/`.
