@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Frame effect composition and focused computation as language questions
+
+<a id="k-composition-presentation-20261124"></a>
+**K-COMPOSITION-PRESENTATION-20261124.** The [paper](papers/ComposingEffectsAndFocusedContexts.md) states its conditional bound on authored wiring and its Store reference semantics. The [applications](papers/examples/ComposedTileReport.md#application-end-in-cod-and-haskell) name both staging policies and show ordinary void procedures completing naturally under the user's clarified rule. The [engineering checks](papers/examples/ComposedTileReport.md#engineering-checks) compare the same observations separately. Previous text: `da12f768a12bd6dec6794820273feda0d3d9fc21:papers/examples/ComposedTileReport.md`.
+
 ## 2026-11-24 — Recover independent seed schema payload checks
 
 <a id="k-seed-payload-diagnostic-recovery-20261124"></a>

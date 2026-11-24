@@ -1,27 +1,29 @@
-# Extending an Effect Vocabulary and Refocusing a Raster Computation
+<a id="extending-an-effect-vocabulary-and-refocusing-a-raster-computation"></a>
+
+# Symbolic Effect Composition and Comonadic Refocusing in CoD
 
 ## Abstract
 
-A surface-inspection application scores a camera image by comparing neighbouring pixels.
-One library supplies the inspection rules. Other libraries choose how to tile the image,
-retain tentative results and recover from a bad tile. Can the author of a new rule add a
-capability without teaching every existing layer how to forward it? Can the author of a
-new layer preserve calculations that read their neighbours without knowing each calculation?
+How much code must independent authors write when they can add both an effect and a scope
+through which existing effects must pass? When can a computation that reads its surroundings
+be reused at a different focus? We study these questions together for CoD's typed symbolic
+bindings. In both cases, composition must preserve what a caller can observe.
 
-We study both questions on one raster. For the first we construct a small instance matrix
-from `mtl` and extend it along both axes. For the second we derive a two-stage inspection
-from a focused grid, using a Store comonad as its value semantics. CoD's symbolic bindings
-offer a way to write a rule once and run it at different foci. We identify which forwarding
-obligations can disappear, which pairs still require a business decision, and the exact
-assumptions under which the two ways of computing a score agree. We give a conditional
-M + N source-size bound for transparent composition, locate the independent policy cost,
-and compare retry and selective publication on a stack of **three State and five Writer
-instances**. With the same rejected acquisition followed by an accepted one, two of five
-journals change when the scopes exchange places. All three states and the other three
-journals must agree. The [eight-role programs](examples/ComposedTileReport.md) give the
-matched operation interfaces, two concrete transformer layouts and a labeled `effectful` comparison. A
-[one-handler control](examples/ScopedTileAudit.md) isolates invocation. All results below
-are paper derivations.
+For $M$ independently named operations and $N$ transparent scopes, we give a conditional
+$O(M + N)$ bound on authored routing code. The construction uses nominal lookup and restoration,
+bounded definitions and statically checked, live binding targets. With $K$ independent,
+bounded interaction rules the bound is $O(M + N + K)$. Arbitrary policies can still require
+a separate decision for each of the $M × N$ pairs. We relate this accounting to the interface-by-transformer
+instances in `mtl` and compare two orders of retry and selective publication in CoD,
+`mtl` and labeled `effectful`.
+
+For contextual computation, the Store comonad’s `extend` gives a reference meaning for applying a
+local rule at every focus. On stable input, with the same boundary policy, total and
+observationally pure kernels give the same values under materialization and recomputation.
+Once evaluating a kernel writes an observable log, reusing its value can change the published
+history even when every score agrees. A surface-inspection workload supplies counterexamples
+and worked traces for both questions. The results are paper derivations. General interfaces
+for eligible kernels and their interaction with effects remain design questions.
 
 ## The inspection that both extensions must preserve
 
@@ -98,22 +100,27 @@ only the named operations.
 | Stage defects and samples | The grouped stack filters two writer outputs. The labeled row installs two child writers and forwards accepted batches. | Bind those two destinations to temporary copies. On acceptance, write the completed journals to the restored parent targets. |
 
 Here are two CoD operation definitions and the application's choice of scope order.
-`append_digit` appends one item to the bounded journal. The same `charge()` reaches the
+`appended` computes the new contents of the bounded journal. The same `charge()` reaches the
 same balance in either order. The same `samples()` can reach a different destination.
 
 ```cod
 ref symbol @credit_cell:u64 in O where {owner O}
 ref symbol @samples_sink:u64 in O where {owner O}
 
-proc charge() { @credit_cell <- @credit_cell - 2u64; return }
-proc samples(n:u64)  { append_digit(@samples_sink, n); return }
+proc charge() { @credit_cell <- @credit_cell - 2u64 }
+proc samples(n:u64) { @samples_sink <- appended(@samples_sink, n) }
 
-proc tile(prefix:bool, per_acquisition:bool, reject_through:u64) -> bool {
-    if (prefix) { defects(7u64); samples(8u64) }
-    if (per_acquisition) {
-        return retry_once() { stage() { inspect(reject_through) } }
+enum StageScope:u8 { PerAcquisition; PerTile; }
+
+proc tile(scope:StageScope, reject_through:u64, prefix:bool) -> bool {
+    if (prefix) {
+        defects(7u64)
+        samples(8u64)
     }
-    return stage() { retry_once() { inspect(reject_through) } }
+    return case scope : StageScope of {
+        PerAcquisition -> retry_once() { stage() { inspect(reject_through) } };
+        PerTile -> stage() { retry_once() { inspect(reject_through) } }
+    }
 }
 ```
 
@@ -143,10 +150,11 @@ The Haskell application then makes the same scope choice. `runStack` initializes
 three states and runs the five writers.
 
 ```haskell
-run prefix perAcquisition k = runStack $ do
+run scope k prefix = runStack $ do
   when prefix $ defects ports 7 >> samples ports 8
-  if perAcquisition then retryOnce (stage (inspect ports k))
-                    else stage (retryOnce (inspect ports k))
+  case scope of
+    PerAcquisition -> retryOnce (stage (inspect ports k))
+    PerTile        -> stage (retryOnce (inspect ports k))
 ```
 
 With labeled `effectful` handlers the same choice is made in `tile`. The type fixes the
@@ -154,41 +162,23 @@ public row at the application boundary. Inside `stage`, `ports` can address the 
 private writers.
 
 ```haskell
-tile :: Bool -> Bool -> N -> Eff Eight Bool
-tile prefix perAcquisition k = do
+tile :: StageScope -> N -> Bool -> Eff Eight Bool
+tile scope k prefix = do
   when prefix $ defects ports 7 >> samples ports 8
-  if perAcquisition then retryOnce (stage (inspect ports k))
-                    else stage (retryOnce (inspect ports k))
+  case scope of
+    PerAcquisition -> retryOnce (stage (inspect ports k))
+    PerTile        -> stage (retryOnce (inspect ports k))
 
-run prefix perAcquisition k = runEight (tile prefix perAcquisition k)
+run scope k prefix = runEight (tile scope k prefix)
 ```
 
 Take `k = 1` and start with public entries `[7]` and `[8]`. The first acquisition fails
 at gain `3`, the second passes at gain `4`. A stage per acquisition publishes `[7,2]`
 and `[8,4]`. A stage around the entire retry publishes `[7,1,2]` and `[8,3,4]`.
-The two callers traverse the same six rows of expected reports, each with and without
-an existing prefix. Here is the CoD loop, followed by the Haskell loop for one backend.
-
-```cod
-for { val per <-; val k <-; val ds <-; val ss <-; } := reports() {
-    for val prefix <- prefixes() {
-        check(per, k, prefix, prefixed(prefix, 7u64, ds), prefixed(prefix, 8u64, ss))
-    }
-}
-```
-
-```haskell
-forM_ reports $ \(perAcquisition, k, ds, ss) ->
-  forM_ [False, True] $ \prefix -> do
-    let wantD = (if prefix then [7] else []) ++ ds
-        wantS = (if prefix then [8] else []) ++ ss
-    unless (check run perAcquisition k prefix wantD wantS) $
-      fail (backend ++ " failed for " ++ show (perAcquisition, k, prefix))
-```
-
-The [full application checks](examples/ComposedTileReport.md#application-end-in-cod-and-haskell)
-give the row data, the CoD digit encoding and the Haskell traversal over both backends.
-Each check inspects the verdict and all eight effect outputs.
+The [application entries and state setup](examples/ComposedTileReport.md#application-end-in-cod-and-haskell)
+show all three calls. The [engineering checks](examples/ComposedTileReport.md#engineering-checks)
+exercise twelve inputs and two nested-stage controls in each assembly. Each checks the verdict,
+three final states and all five journals.
 
 [CoD procedures, state and staging](examples/ComposedTileReport.md#cod) · [Haskell Ports and business rule](examples/ComposedTileReport.md#haskell-with-named-operations) · [Ports on the concrete transformer stack](examples/ComposedTileReport.md#wiring-ports-to-the-transformer-stack) · [Ports on the labeled effect row](examples/ComposedTileReport.md#wiring-ports-to-labeled-effectful-handlers)
 
@@ -412,16 +402,14 @@ has to pass the binding check.
 val symbol @tile:u64
 symbol @flag:proc(row:u64, col:u64, score:i64) -> void
 
-proc inspect_tile_cell(tile:u64) -> void {
-    effect @tile <- tile
+proc inspect_tile_cell(tile_id:u64) -> void {
+    effect @tile <- tile_id
     inspect_cell()
-    return
 }
 
 proc inspect_cell() -> void {
     val score <- north_contrast()
     if (score >= 12i64) { behave @flag(@row, @col, score) }
-    return
 }
 ```
 
@@ -526,11 +514,11 @@ proc north_contrast() -> i64 {
 effect @row <- 1u64
 effect @col <- 1u64
 effect @pixel() -> i64 { return fixture_at(@row, @col) }
-assert north_contrast() == 15i64
+val middle_score <- north_contrast()
 ```
 
-Inside the northward scope, `east_sum` reads 2, shifts one column, and reads 4. When both
-scopes exit, the focus is again the middle cell. Replace **both** `behave @pixel()` calls
+`middle_score` is **15**. Inside the northward scope, `east_sum` reads 2, shifts one column,
+and reads 4. When both scopes exit, the focus is again the middle cell. Replace **both** `behave @pixel()` calls
 with `perform @pixel()` and keep the same installation. The pixel handler replays (1,1);
 every read returns 8. Both sums become 16 and their difference becomes **0**. This change
 isolates refocusing from the choice of arithmetic. A second positive control is to direct

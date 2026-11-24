@@ -213,7 +213,7 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 
 ## 8. Symbolic effects 的可组合性与带焦点的上下文计算
 
-[表面检测栅格论文](../papers/ComposingEffectsAndFocusedContexts.md)把两项猜想放在同一业务中检验。普通动态绑定、`perform` 与 `behave` 的选择以及实际 owner 的存活条件沿用[已有契约](../design/SymbolicDynamicScope.md#captured-values-and-call-behavior)。下列问题留给语言与库的后续设计。
+[CoD 符号效应组合与 Comonad 重聚焦论文](../papers/ComposingEffectsAndFocusedContexts.md)把两项猜想放在同一业务中检验。普通动态绑定、`perform` 与 `behave` 的选择以及实际 owner 的存活条件沿用[已有契约](../design/SymbolicDynamicScope.md#captured-values-and-call-behavior)。下列问题留给语言与库的后续设计。
 
 论文中的标量阈值和坐标遵循已确认的[值符号声明规则](../design/SymbolicDynamicScope.md#declaring-a-bits-value-symbol)。当 `T` 解析为 bits 类型时，`symbol @x:T` 是 `val symbol @x:T` 的简写。两种写法使用同一套安装、读取和作用域恢复语义。
 
