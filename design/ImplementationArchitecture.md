@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r112 review](../CHANGELOG.md#k-grouped-dependency-failure-20261124) continues [entry-world diagnostics](../applications/cod-booter/README.md#diagnostic-coverage-of-the-entry-modules-fused-world) under P-682/P-683. A written [grouped import](#a-failed-path-in-a-grouped-import) supplies one dependency location even when its selectors expand into several syntax items.
+
 The [r111 review](../CHANGELOG.md#k-seed-drained-path-memory-20261124) covers [memory used to check scope exits in the seed](#consuming-completed-paths-in-the-seed-checker). It continues D-17-RETURN-STATE and the r110 terminal diagnostic proof under P-682/P-683. Reuse checker storage after its last consumer. Compare cleanup behavior and measure the full compiler invocation to establish any saving.
 
 The [r110 review](../CHANGELOG.md#k-seed-terminal-body-coverage-20261124) continues [entry-world diagnostic coverage](../applications/cod-booter/README.md#diagnostic-coverage-of-the-entry-modules-fused-world) under P-682/P-683. Two independently checked ordinary procedures can each prove that a checked exception escapes. [Final body validation](#reporting-uncovered-checked-exceptions-from-independent-bodies) specifies when the seed can retain both findings and which callers depend on a successful body proof.
@@ -393,6 +395,14 @@ One compiler invocation owns finding order, deduplication, coverage and the opti
 Count a finding once its record is retained. Import breadcrumbs attach to it without consuming another unit. For a source-ordered batch, commit at most the prefix that fits. Once the limit is reached, stop before starting another outstanding check or visit. A withheld suffix also makes coverage incomplete. If all required work has already been accounted for, reaching the number exactly leaves coverage complete. A check blocked solely by an established failed prerequisite is accounted for by that finding. Warning promotion still applies at admission. Only complete coverage and successful checks admit the ordinary artifact or execution path.
 
 The loader and reporting changes can proceed in both compilers. Independent semantic recovery also needs a boundary around each mutable proof. In the seed registrar and effect solver, and in the booter’s binding, interface and operand passes, each recovery boundary must identify which facts a failed check has written, which are safe to publish and which independent check can run next. The full acceptance input has three independently damaged sources (two siblings and a grandchild reached through the first) and two independent schema failures in another module. Both compilers must reach all five and exclude an unrelated file. Check a repeated source through a diamond, two failed receiving interpretations, a real shadow warning followed by an error with a cap of one, an exactly complete budget, and failed retention after earlier findings. The release comparison covers the existing 22 workloads, 38 declaration/provider inputs, recovered parser suffixes, prior artifacts and cleanup. [Diagnostic coverage and stage policy](../applications/cod-booter/README.md#diagnostic-coverage-of-the-entry-modules-fused-world)
+
+#### A failed path in a grouped import
+
+In `using "./Broken.cod" { first, second }`, both selections depend on the same written path. The parser gives them the same path node. Carry its checked revision-local identity with each dependency edge through restoration of source order. Adjacent members proved to share that path and directive can use one decoded range in the visit frame. This keeps the decoded bytes for one literal within its source-sized workspace.
+
+After the common prerequisite fails and its finding and any required import note have been retained, the remaining members of that directive are already blocked. Advance over them before testing the diagnostic limit. Preserve the original failure and its finding. A different or unproved occurrence ends reuse. Failed retention and incomplete traversal still end the visit immediately. After successful dependency lookup, check each selected member in its receiving context.
+
+With a limit of one, a single child error and two blocked members yield one error, one parent note and ordinary rejection. A further independent dependency yields incomplete coverage. Check two separately written directives, distinct receiver failures, a long path shared by several short selectors, a missing member of a healthy child and failed attachment after an earlier finding. Preserve note order and prior artifacts.
 
 #### Recovering between product declarations in the seed
 
