@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Plan CoD parser combinators for the production compiler
+
+<a id="h-production-parser-direction-20261124"></a>
+**H-PRODUCTION-PARSER-DIRECTION-20261124.** In the CoD project discussion the project user proposed “类 Megaparsec 技术路径留给规划中的 e-wrks/cod 编译器去推进设计开发更合适，等完成以后再视情况决定是否 backport 回 booter” and confirmed the proposed division with “同意，未来规划你落repo文档”. The [production parser plan](docs/DesignTopics.md#production-parser-combinators) places library and grammar development in `e-wrks/cod` and leaves the backport decision until that implementation is complete. Typed dynamically scoped effects should make the sequential grammar and its value dependencies clear in CoD. The library API, state representation and operator visibility rules remain open. Registry r1178→r1179 carries forward [repository roles](design/DesignAuthorityRegistry.md#d-20-repositories), [bootstrap operator scanning](design/DesignAuthorityRegistry.md#d-10-operator-runs) and [whole-file recovery](design/DesignAuthorityRegistry.md#d-20-parse-recovery) from `6748793ad600df30234b88a032f7eba11530620c:docs/DesignTopics.md` §4 and the registry at that revision.
+
 ## 2026-11-24 — Review booter module-root checking and borrowed source signatures
 
 <a id="k-booter-module-root-and-borrowed-signatures-20261124"></a>

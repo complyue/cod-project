@@ -133,7 +133,7 @@
 规划目标是让库声明新的中缀操作符，并在声明处指定优先级、左结合、右结合或不可连续结合。
 此功能由未来的 `e-wrks/cod` 编译器实现。seed 和 booter 负责按已确认的字符集合读取完整 token，
 并报告当前不支持的拼写。新操作符的声明写法、可供用户定义的拼写范围和跨模块规则留待讨论。
-[CoD 的操作符 token](../design/SymbolicDynamicScope.md#symbolic-operator-tokens)
+[CoD 的操作符 token](../design/SymbolicDynamicScope.md#symbolic-operator-tokens) · [生产解析器的技术路线](#production-parser-combinators)
 
 例如，假定某个库定义 `a <+> b` 的结果为 `10 * a + b`。对于整数表达式
 `1 <+> 2 <+> 3`，左结合得 123，右结合得 33，不可结合则要求作者明确分组。
@@ -190,6 +190,23 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 3. **展开后保留什么。** 确定别名与展开式在类型匹配和模块重导出时的相等规则。用一对带 owner 的输入检查访问权限、目标身份及生命周期，用发送端和接收端互换检查错误方向。[owner 与目标身份](../papers/CoarseGrainedOwnership.md#owner-identity-target-identity-and-representation)
 
 形成可评审提案时，给出示例的完整声明、两种合法实例化和 kind 不匹配诊断，再用上述同步与异步用例列出应接受和应拒绝的调用。声明拼写、kind 推断、部分应用及展开规则都在本议题中待定。
+
+<a id="production-parser-combinators"></a>
+
+## 7. 生产编译器的 CoD 解析组合子
+
+**已确认的分工。** 规划中的 `e-wrks/cod` 负责设计和开发类 Megaparsec 的 CoD 解析库，在生产编译器的 lexer 和 parser 中使用，并参照 Edh 组织产生式。booter 继续用递归下降处理 bootstrap 子集和固定优先级。生产实现完成后，另行决定是否将其中一部分回移到 booter。[项目用户的决定](../CHANGELOG.md#h-production-parser-direction-20261124) · [编译器分工](../design/DesignAuthorityRegistry.md#d-20-repositories) · [Edh 解析器](https://github.com/e-wrks/edh/blob/a2e9b95ef1f84cc5677499512c69d4b03a12cbdc/elr/src/Language/Edh/Parser.hs)
+
+### 怎样检验 CoD 的表达力
+
+选一条右操作数依赖已读运算符的真实产生式。目标是让作者按文法顺序写出读取左侧、查询结合强度、再解析右侧的过程。检验命名 `proc`、有类型的动态作用域 effects 和同步 `here` 正文怎样承担 Edh 中 monadic sequencing 的作用，让读者能从产生式看出值依赖、局部语法环境和失败处理位置。操作符声明的可见性和结合规则仍由前面的操作符议题决定。库接口、解析状态的表示和失败的传递方式留给原型比较。[动态调用与绑定](../design/SymbolicDynamicScope.md#lexical-selection-installation-and-invocation) · [同步正文的控制语义](../design/CallableStorageAndHereAccess.md#an-effect-in-a-here-callback)
+
+- **分支试探。** 让两个候选共享一个前缀。比较左支未消费即失败、消费后失败、显式允许回溯这三种情形。观察右支从哪里开始、失败位置是否保留、左支暂建的 AST 节点或候选诊断能否泄漏。恢复动态绑定与撤销对其引用目标的写入需要分别说明。[Megaparsec 的回溯与前瞻](https://github.com/mrkkrp/megaparsec/blob/0cae4396a870b7fa5058e957efbec188a224dda5/Text/Megaparsec/Internal.hs#L428-L449)
+- **整文件恢复。** 用同一过程体中两条缺初始化器的声明及后续合法 `return`，区分尚待选择的分支错误与已经发布的独立报告。核对两个零宽源码范围、错误节点的角色、保留下来的返回语句，以及物理资源耗尽时的未完成结果。[整文件恢复契约和样例](../applications/cod-booter/README.md#whole-file-parser-recovery)
+
+### 何时考虑回移
+
+生产 parser 完成并在正常编译入口使用后，选一条双方都支持且带局部恢复的产生式作对照，例如 `val` 初始化器。用相同输入比较 token 与源码范围、AST 分组、坏输入后的有效语法和诊断次序，同时记录源码可读性、对 seed 能力的要求、运行时间及峰值工作空间。这些结果用于决定保留现有实现，或回移有独立收益的词法、恢复或文法组件。
 
 ## 按实际用例重启的小议题
 
