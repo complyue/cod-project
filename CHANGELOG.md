@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Cover the entry module’s fused world in all compilers
+
+<a id="h-entry-world-diagnostics-20261124"></a>
+**H-ENTRY-WORLD-DIAGNOSTICS-20261124.** The project user in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) stated “parser是覆盖全文件，compiler要覆盖基于入口模块去准备 fused world 的全范围呀，这个从 seed/booter 应该就开始是这个模式，支持 opt-in 设一个最大 error/warning 数，提前中止”. [Roadmap r28](applications/cod-booter/README.md#diagnostic-coverage-of-the-entry-modules-fused-world) qualifies D-20-WORLD-DIAGNOSTICS under C-06/C-80, P-713/P-714. Graph r75 and architecture r96 apply it to discovery and publication. The invocation-wide combined count is the review’s reading of the requested single maximum. The user clarified that the reviewer should derive such consequences directly. This extends [per-file coverage](#h-whole-file-parser-recovery-20261123) while preserving the existing bootstrap diagnostic jobs. The prior loader gate is in `20871f88ba0ca17cbefd38a43662cf2087bdc339:design/ImplementationArchitecture.md`.
+
 ## 2026-11-24 — Study effect composition and focused raster computations
 
 <a id="k-effects-focused-contexts-20261124"></a>
