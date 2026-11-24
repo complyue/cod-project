@@ -38,8 +38,8 @@ public:
   throw LocatedFailure(at, message);
 }
 
-enum class SyntaxRole { module_item, block_item, binding_name, type_annotation, initializer, ref_group_item,
-                        argument_operand };
+enum class SyntaxRole { module_item, module_selection_item, block_item, binding_name, type_annotation,
+                        initializer, ref_group_item, argument_operand };
 struct SyntaxErrorReference {
   SyntaxRole role;
   size_t report;
@@ -2712,18 +2712,39 @@ public:
       form->span = {form->at.span.first, tokens_[cursor_ - 1].at.span.past};
       forms.push_back(std::move(form));
     };
+    const auto append_error = [&](size_t first, size_t report, SyntaxRole role) {
+      auto damaged = std::make_unique<Form>();
+      damaged->kind = Form::Kind::syntax_error;
+      damaged->at = tokens_[first].at;
+      damaged->span = {damaged->at.span.first, peek().at.span.first};
+      damaged->syntax_error = SyntaxErrorReference{role, report};
+      forms.push_back(std::move(damaged));
+    };
     const auto append_selection_group = [&](const Form &directive, bool identity) {
       if (is("}")) fail(peek().at, "expected a selection in the module group");
+      const auto close = closing_delimiter_[cursor_ - 1];
       while (true) {
-        auto item = std::make_unique<Form>();
-        item->at = peek().at;
-        item->kind = directive.kind;
-        item->path = directive.path;
-        item->using_symbol = directive.using_symbol;
-        item->exporting = directive.exporting;
-        if (identity) resource_selection(*item, true);
-        else resource_item(*item);
-        append(std::move(item));
+        const auto first = cursor_;
+        try {
+          auto item = std::make_unique<Form>();
+          item->at = peek().at;
+          item->kind = directive.kind;
+          item->path = directive.path;
+          item->using_symbol = directive.using_symbol;
+          item->exporting = directive.exporting;
+          if (identity) resource_selection(*item, true);
+          else resource_item(*item);
+          append(std::move(item));
+        } catch (const LocatedFailure &failure) {
+          if (close >= tokens_.size()) throw;
+          const auto report = record_fault(failure.diagnostic);
+          cursor_ = first;
+          while (cursor_ < close && !is(",")) {
+            const auto nested = closing_delimiter_[cursor_];
+            cursor_ = nested < close ? nested + 1 : cursor_ + 1;
+          }
+          append_error(first, report, SyntaxRole::module_selection_item);
+        }
         if (!take(",") || is("}")) break;
       }
       expect("}");
@@ -3040,12 +3061,7 @@ public:
         controls_ = {};
         const auto report = record_fault(failure.diagnostic);
         synchronize_module(first);
-        auto damaged = std::make_unique<Form>();
-        damaged->kind = Form::Kind::syntax_error;
-        damaged->at = tokens_[first].at;
-        damaged->span = {damaged->at.span.first, peek().at.span.first};
-        damaged->syntax_error = SyntaxErrorReference{SyntaxRole::module_item, report};
-        forms.push_back(std::move(damaged));
+        append_error(first, report, SyntaxRole::module_item);
       }
       depths_.clear();
     }
