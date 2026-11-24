@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Compare ordinary tile operations over scoped state
+
+<a id="k-tile-scoped-state-and-traversal-20261124"></a>
+**K-TILE-SCOPED-STATE-AND-TRAVERSAL-20261124.** The [tile study](papers/examples/ComposedTileReport.md#cod) implements the eight business operations as ordinary CoD procedures over scoped reference bindings. Its [case traversal](papers/examples/ComposedTileReport.md#cod-installation-and-check) matches the two inner Haskell `forM_` loops. The [paper](papers/ComposingEffectsAndFocusedContexts.md#compare-the-operations-the-inspector-can-request) distinguishes state selection from replacing an operation. The prior comparison is at `154e2634ac0870f40756999c7b70e854d4e96adc:papers/examples/ComposedTileReport.md`.
+
 ## 2026-11-24 — Retain the defining symbol name on a binder collision
 
 <a id="k-booter-protected-symbol-diagnostic-20261124"></a>

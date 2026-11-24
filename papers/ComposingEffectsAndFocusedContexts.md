@@ -85,37 +85,42 @@ and routing controls.
 
 ### Compare the operations the inspector can request
 
-Both inspectors get the rejection threshold as an ordinary argument. Each can ask for a
-fresh serial, charge one exposure, sample and advance the gain, and append to any of
-five journals. The Haskell business program accepts a record of named operations,
-`Ports m`. The CoD business program calls eight typed symbolic procedures. For example,
-`charge p` and `behave @charge()` both spend the agreed two credits. The business rule
-does not need a readable balance or an arbitrary balance setter. Those would be stronger
-operations. Switching from a writable `ref symbol @credits` to a proc changes what that
-interface lets its caller do.
+The Haskell leaf receives a `Ports m` record. The CoD leaf calls eight ordinary procedures.
+`charge p` and `charge()` both debit the currently selected balance by two. `samples p g`
+and `samples(g)` append the same gain reading to the currently selected sample journal.
+The CoD provider and runner use the storage identities. The business module selects
+only the named operations.
 
 | Author's job | Haskell | CoD |
 | --- | --- | --- |
-| Write the inspection | Use `nextSerial p`, `charge p`, `takeGain p` and the five journal fields. The same polymorphic leaf runs with either library. | Invoke the corresponding installed proc with `behave` at each site. The leaf can run under any installation that supplies the required operations. |
-| Supply the operation implementations | Build `Ports Stack` with real lifts into three states and five writers, or supply ports backed by labeled `effectful` handlers. | Install a body for each proc. Those bodies can update the state and journals using direct access to live storage in their defining scope. |
-| Stage defect IDs and samples | In the grouped stack, filter the two provisional writer outputs together. In the labeled row, install two child writers and forward their accepted batches. | Temporarily install two writers that append to private batches. After their scope exits, an accepted stage sends entries to the restored enclosing writers. The other six installations stay in effect. |
+| Write the inspection | Request the eight operations through `Ports m`. Both backends use the same leaf. | Call `next_serial()`, `charge()`, `take_gain()` and the five journal procedures. |
+| Supply state and routing | Fill `Ports Stack` with actions on three `StateT` and five `WriterT` layers, or use eight labeled `effectful` handlers. | Define each procedure once. Bind three state cells and five journal destinations at application entry. |
+| Stage defects and samples | The grouped stack filters two writer outputs. The labeled row installs two child writers and forwards accepted batches. | Bind those two destinations to temporary copies. On acceptance, write the completed journals to the restored parent targets. |
 
-The application author chooses how much work a stage covers. Here is that decision
-inside CoD's `check`. The prefix, when requested, is already public when inspection starts.
+Here are two CoD operation definitions and the application's choice of scope order.
+`append_digit` appends one item to the bounded journal. The same `charge()` reaches the
+same balance in either order. The same `samples()` can reach a different destination.
 
 ```cod
-if (prefix) { behave @defects(7u64); behave @samples(8u64) }
-val accepted <- if (per_acquisition) {
-    retry_once() { stage() { inspect(reject_through) } }
-} else {
-    stage() { retry_once() { inspect(reject_through) } }
+ref symbol @credit_cell:u64 in O where {owner O}
+ref symbol @samples_sink:u64 in O where {owner O}
+
+proc charge() { @credit_cell <- @credit_cell - 2u64; return }
+proc samples(n:u64)  { append_digit(@samples_sink, n); return }
+
+proc tile(prefix:bool, per_acquisition:bool, reject_through:u64) -> bool {
+    if (prefix) { defects(7u64); samples(8u64) }
+    if (per_acquisition) {
+        return retry_once() { stage() { inspect(reject_through) } }
+    }
+    return stage() { retry_once() { inspect(reject_through) } }
 }
 ```
 
 In Haskell the application supplies `inspect` with a `Ports Stack` value. This is its
 entire adapter for the `mtl` stack. The five outer layers are `WriterT` and the three
 inner layers are `StateT`. `charge` reaches the second state and `samples` the second
-writer. Their CoD counterparts are the installed `@charge` and `@samples` procedures.
+writer. These are the routes used by Haskell's counterparts to `charge()` and `samples()`.
 
 ```haskell
 fromStates :: States a -> Stack a
@@ -161,17 +166,39 @@ run prefix perAcquisition k = runEight (tile prefix perAcquisition k)
 Take `k = 1` and start with public entries `[7]` and `[8]`. The first acquisition fails
 at gain `3`, the second passes at gain `4`. A stage per acquisition publishes `[7,2]`
 and `[8,4]`. A stage around the entire retry publishes `[7,1,2]` and `[8,3,4]`.
-The [application checks in both languages](examples/ComposedTileReport.md#application-end-in-cod-and-haskell)
-also inspect the verdict, all three states and the other three journals for each order.
+The two callers traverse the same six rows of expected reports, each with and without
+an existing prefix. Here is the CoD loop, followed by the Haskell loop for one backend.
 
-[CoD procedure interface and handlers](examples/ComposedTileReport.md#cod) · [Haskell Ports and business rule](examples/ComposedTileReport.md#haskell-with-named-operations) · [Ports on the concrete transformer stack](examples/ComposedTileReport.md#wiring-ports-to-the-transformer-stack) · [Ports on the labeled effect row](examples/ComposedTileReport.md#wiring-ports-to-labeled-effectful-handlers)
+```cod
+for { val per <-; val k <-; val ds <-; val ss <-; } := reports() {
+    for val prefix <- prefixes() {
+        check(per, k, prefix, prefixed(prefix, 7u64, ds), prefixed(prefix, 8u64, ss))
+    }
+}
+```
 
-A comparison at the application boundary counts selecting and installing the CoD handlers
-and supplying the Haskell record and runners. Count reusable source definitions once and
-measure run-time activation or dispatch separately.
-In Haskell a positional lift for the wrong writer can still type-check when its output
-type agrees. In CoD an installation can likewise attach a method to the wrong journal
-of the same signature. Inspect every named journal when comparing the two applications.
+```haskell
+forM_ reports $ \(perAcquisition, k, ds, ss) ->
+  forM_ [False, True] $ \prefix -> do
+    let wantD = (if prefix then [7] else []) ++ ds
+        wantS = (if prefix then [8] else []) ++ ss
+    unless (check run perAcquisition k prefix wantD wantS) $
+      fail (backend ++ " failed for " ++ show (perAcquisition, k, prefix))
+```
+
+The [full application checks](examples/ComposedTileReport.md#application-end-in-cod-and-haskell)
+give the row data, the CoD digit encoding and the Haskell traversal over both backends.
+Each check inspects the verdict and all eight effect outputs.
+
+[CoD procedures, state and staging](examples/ComposedTileReport.md#cod) · [Haskell Ports and business rule](examples/ComposedTileReport.md#haskell-with-named-operations) · [Ports on the concrete transformer stack](examples/ComposedTileReport.md#wiring-ports-to-the-transformer-stack) · [Ports on the labeled effect row](examples/ComposedTileReport.md#wiring-ports-to-labeled-effectful-handlers)
+
+At the application boundary, count the CoD procedure definitions and state installations,
+and the Haskell record, its actions and the runners. Count a reusable definition once.
+A Haskell `Ports m` value also lets a caller substitute an arbitrary operation. This tile
+workload needs only to select state and scope. Runtime replacement of a method body and
+selection of its invocation context are exercised in the [audit control](examples/ScopedTileAudit.md).
+A lift can select the wrong same-typed writer. So can binding `@samples_sink` to the
+wrong `u64` cell at entry. Both errors are visible in the named observations.
 The [direct stack listings](examples/ComposedTileReport.md#haskell-with-mtl) expose how the
 ports are routed. The [interleaved layout](examples/ComposedTileReport.md#an-interleaved-stack-using-transformers-directly)
 places serial between the two staged writers. Its publication operation must preserve the
@@ -183,7 +210,7 @@ in this experiment. The size argument below has different axes: independently ex
 interfaces and layer forms. Freeze the two wrappers, add a separately named observation
 which must survive rejection, then add an independent scope which passes the other effects
 through. Record changes in the business leaf, operation interfaces, adapters, handler installations
-and observers. A reusable Haskell adapter is charged once, like a reusable set of CoD methods. Compare this with deliberately extending the publication contract to a third
+and observers. A reusable Haskell adapter and a reusable set of ordinary CoD procedures each count once. Compare this with deliberately extending the publication contract to a third
 staged output, which requires a change to the stage's policy.
 [Same-typed instances and extension](examples/ComposedTileReport.md#what-changes-when-another-author-extends-the-program)
 

@@ -4,7 +4,7 @@
 
 The [CoD inspector](#cod) and the [Haskell inspector with `Ports m`](#haskell-with-named-operations)
 request the same eight operations. Their implementations below show where the state lives
-and which two writer operations staging intercepts. The [application comparison](#application-end-in-cod-and-haskell)
+and which two journal destinations staging redirects. The [application comparison](#application-end-in-cod-and-haskell)
 shows both callers and checks the same observations on both Haskell backends and in CoD.
 The [direct transformer](#haskell-with-mtl) and [labeled effect](#haskell-with-effectful)
 listings expose the underlying routing.
@@ -128,43 +128,29 @@ pay :: N -> ((), N)
 pay c = ((), c - 2)
 ```
 
-The CoD inspection calls installed procedures of the same signatures and in the same
-order. Compare the two leaves here. Then compare where the application supplies their
-implementations, and how a publication scope redirects exactly two writers. A line count
-that includes the Haskell adapter also has to include the CoD installations. Readability
-and the cost of adding a new operation are separate observations.
+The CoD leaf requests the same eight operations, in the same order. Compare `charge p`
+with `charge()` and `samples p g` with `samples(gain)`. In each case the inspection
+can state the business rule without knowing where the balance or journal is kept.
 
 ## CoD
 
-The tile author uses eight domain operations. The first three correspond to
-`nextSerial`, `charge` and `takeGain` in Haskell's `Ports m`. Each of the other five
-appends one item to its named journal. A symbol declaration supplies a typed procedure
-slot. Each `effect proc @name(...)` installation supplies a method for that slot.
-The method can access live lexical storage in its defining activation. The same
-`inspect` works with the public journal and with a stage that intercepts two operations.
+The business module selects eight ordinary procedures from the provider. Their definitions
+are fixed. A call reads the state bindings active at that point, so `stage` can redirect
+both provisional journals while an unchanged `inspect` is running.
 
 ```cod
-symbol @next_serial:proc() -> u64
-symbol @charge:proc() -> void
-symbol @take_gain:proc() -> u64
-symbol @acquired:proc(n:u64) -> void
-symbol @rejects:proc(n:u64) -> void
-symbol @defects:proc(n:u64) -> void
-symbol @samples:proc(n:u64) -> void
-symbol @passes:proc(n:u64) -> void
-
 proc inspect(reject_through:u64) -> bool {
-    val id <- behave @next_serial()
-    behave @charge()
-    val gain <- behave @take_gain()
-    behave @acquired(id)
-    behave @defects(id)
-    behave @samples(gain)
+    val id <- next_serial()
+    charge()
+    val gain <- take_gain()
+    acquired(id)
+    defects(id)
+    samples(gain)
     if (id <= reject_through) {
-        behave @rejects(id)
+        rejects(id)
         return false
     }
-    behave @passes(id)
+    passes(id)
     return true
 }
 
@@ -174,52 +160,82 @@ func retry_once(here body() -> bool) -> bool {
 }
 ```
 
-A stage installs private implementations of `@defects` and `@samples` while the body
-runs. The contract above gives each at most two positive, single-digit entries. Two
-lexical slots per journal suffice for that bound. The helper below checks the bound
-and preserves order. An unbounded workload would supply a growable journal behind
-those same operations.
+The provider declares a separate identity for each mutable target. In each declaration,
+`O` is established from the target of that installation. These eight declarations can
+therefore select cells with different owners. `check` supplies the public cells, and each
+active `stage` owns its two temporary cells. The business module only needs the procedure
+names. For this fixture a journal stores its ordered, single-digit entries as a `u64`.
+A zero denotes the empty journal and appending `n` computes `10 * log + n`.
 
 ```cod
-func buffer(ref first:u64 in O, ref second:u64 in O, n:u64) where {owner O} {
-    assert n > 0u64
-    assert n < 10u64
-    if (first == 0u64) { first <- n } else { assert second == 0u64; second <- n }
+ref symbol @serial_cell:u64 in O where {owner O}
+ref symbol @credit_cell:u64 in O where {owner O}
+ref symbol @gain_cell:u64 in O where {owner O}
+ref symbol @acquired_sink:u64 in O where {owner O}
+ref symbol @rejects_sink:u64 in O where {owner O}
+ref symbol @passes_sink:u64 in O where {owner O}
+ref symbol @defects_sink:u64 in O where {owner O}
+ref symbol @samples_sink:u64 in O where {owner O}
+
+proc next_serial() -> u64 {
+    @serial_cell <- @serial_cell + 1u64
+    return @serial_cell
+}
+
+proc charge() { @credit_cell <- @credit_cell - 2u64; return }
+
+proc take_gain() -> u64 {
+    val previous <- @gain_cell
+    @gain_cell <- previous + 1u64
+    return previous
+}
+
+func append_digit(ref log:u64 in O, n:u64) where {owner O} {
+    log <- 10u64 * log + n
     return
 }
 
-func drain(here emit(n:u64) -> void, first:u64, second:u64) {
-    if (first != 0u64) { emit(first) }
-    if (second != 0u64) { emit(second) }
-    return
-}
+proc acquired(n:u64) { append_digit(@acquired_sink, n); return }
+proc rejects(n:u64)  { append_digit(@rejects_sink, n); return }
+proc passes(n:u64)   { append_digit(@passes_sink, n); return }
+proc defects(n:u64)  { append_digit(@defects_sink, n); return }
+proc samples(n:u64)  { append_digit(@samples_sink, n); return }
+```
 
+`effect @credit_cell = credits` borrows the caller's existing cell. The assignment in
+`charge()` writes through that binding, so a rejected acquisition still costs two credits.
+The earlier calibration example installs a scoped bits value with `effect @cutoff <- ...`.
+A direct call to an ordinary `proc` uses the current bindings without installing a callable
+for each operation. The separate [audit experiment](ScopedTileAudit.md) uses an installed
+procedure to compare invocation under saved and current bindings.
+[Ordinary procedure calls](../../design/SymbolicDynamicScope.md#functions-and-procedures) ·
+[Owner-parameter reference symbols](../../design/SymbolicDynamicScope.md#owner-parameter-reference-symbols-and-implementation-cost)
+
+On entry `stage` copies the two current journals, including any existing prefix. It
+redirects exactly those two destinations for the duration of `body()`. All appends in
+this synchronous example go through the selected destinations. An accepted stage can
+therefore publish the two completed values to its parent after the bindings are restored.
+
+```cod
 proc stage(here body() -> bool) -> bool {
-    val d1 <- 0u64
-    val d2 <- 0u64
-    val s1 <- 0u64
-    val s2 <- 0u64
+    val child_defects <- @defects_sink
+    val child_samples <- @samples_sink
     val accepted <- {{
-        effect proc @defects(n:u64) -> void { buffer(d1, d2, n) }
-        effect proc @samples(n:u64) -> void { buffer(s1, s2, n) }
+        effect @defects_sink = child_defects, @samples_sink = child_samples
         return body()
     }}
     if (accepted) {
-        drain(d1, d2) (n) => { behave @defects(n) }
-        drain(s1, s2) (n) => { behave @samples(n) }
+        @defects_sink <- child_defects
+        @samples_sink <- child_samples
     }
     return accepted
 }
 ```
 
-The end of the inner scope restores the enclosing procedures before either drain.
-An accepted batch therefore reaches the **immediately enclosing** pair of journals,
-one ordinary append at a time. Rejected batches make no calls to that pair. Older
-prefixes in the enclosing journals survive. A second enclosing stage can accept the
-inner batch into its own buffers and still drop it if its own body returns false.
-The other six operations continue to use their installed implementations. The
-observer specifies the order within each journal. Commit in this synchronous fixture
-assumes the enclosing appends complete normally.
+A rejected stage discards its two local copies. The other three journal destinations
+and the three state cells stay active throughout. The observations are the ordered journal
+contents on return. This copy-and-publish implementation assumes those contents fit in
+the fixture's bounded representation and no other path writes the parent during the call.
 
 One control deliberately rejects after an inner stage accepts. In a fresh run with
 the same public installations and prefixes [7] and [8], evaluate the following body.
@@ -238,14 +254,6 @@ to the public journals would incorrectly produce [7,1] and [8,3]. Change the out
 verdict to true with the same fresh inputs. Each entry should then reach the public
 journal exactly once, giving [7,1] and [8,3].
 
-The three state variables and five public journals are private to the caller. A `ref symbol`
-would also let the inspector address a selected cell directly. With `@charge` the caller
-exposes just the two-credit debit. The `ref` formals of `buffer` borrow two lexical slots
-for one call. Haskell's `Ports m` exposes the same eight operations to `inspect`.
-[Installing local procedure bodies](../../design/SymbolicDynamicScope.md#installing-a-local-procedure-body)
-· [Lexical access and invocation](../../design/SymbolicDynamicScope.md#captured-values-and-call-behavior)
-· [Synchronous callbacks](../../design/CallableStorageAndHereAccess.md#an-effect-in-a-here-callback)
-
 ## Application end in CoD and Haskell
 
 Each application starts serial, credits and gain at `(0, 8, 3)` and the five journals
@@ -262,9 +270,19 @@ and keep the prefix. These are the calls to the checkers defined below.
 
 ### CoD installation and check
 
-`check` installs eight procedure bodies over its local storage. To make the small
-ordered journals visible in an assertion, it appends a digit `n` with `10 * log + n`.
-Thus `0` denotes an empty journal and `712` records the three entries `[7,1,2]`.
+`tile` combines the same three operations as Haskell's `tile`. `check` owns the eight
+public cells for one run, binds each identity to its cell, calls `tile`, and checks the
+result through the eight local variables.
+
+```cod
+proc tile(prefix:bool, per_acquisition:bool, reject_through:u64) -> bool {
+    if (prefix) { defects(7u64); samples(8u64) }
+    if (per_acquisition) {
+        return retry_once() { stage() { inspect(reject_through) } }
+    }
+    return stage() { retry_once() { inspect(reject_through) } }
+}
+```
 
 ```cod
 proc check(per_acquisition:bool, reject_through:u64, prefix:bool,
@@ -278,41 +296,11 @@ proc check(per_acquisition:bool, reject_through:u64, prefix:bool,
     val defects_log <- 0u64
     val samples_log <- 0u64
 
-    effect proc @next_serial() -> u64 { serial <- serial + 1u64; return serial }
-    effect proc @charge() -> void { credits <- credits - 2u64; return }
-    effect proc @take_gain() -> u64 {
-        val previous <- gain
-        gain <- previous + 1u64
-        return previous
-    }
-    effect proc @acquired(n:u64) -> void {
-        acquired_log <- 10u64 * acquired_log + n
-        return
-    }
-    effect proc @rejects(n:u64) -> void {
-        rejects_log <- 10u64 * rejects_log + n
-        return
-    }
-    effect proc @passes(n:u64) -> void {
-        passes_log <- 10u64 * passes_log + n
-        return
-    }
-    effect proc @defects(n:u64) -> void {
-        defects_log <- 10u64 * defects_log + n
-        return
-    }
-    effect proc @samples(n:u64) -> void {
-        samples_log <- 10u64 * samples_log + n
-        return
-    }
+    effect @serial_cell = serial, @credit_cell = credits, @gain_cell = gain,
+           @acquired_sink = acquired_log, @rejects_sink = rejects_log, @passes_sink = passes_log,
+           @defects_sink = defects_log, @samples_sink = samples_log
 
-    if (prefix) { behave @defects(7u64); behave @samples(8u64) }
-    val accepted <- if (per_acquisition) {
-        retry_once() { stage() { inspect(reject_through) } }
-    } else {
-        stage() { retry_once() { inspect(reject_through) } }
-    }
-
+    val accepted <- tile(prefix, per_acquisition, reject_through)
     assert accepted == (reject_through < 2u64)
     assert defects_log == expected_defects
     assert samples_log == expected_samples
@@ -327,19 +315,43 @@ proc check(per_acquisition:bool, reject_through:u64, prefix:bool,
     }
     return
 }
+```
 
-check(true,  0u64, false,   1u64,   3u64)
-check(false, 0u64, false,   1u64,   3u64)
-check(true,  0u64, true,   71u64,  83u64)
-check(false, 0u64, true,   71u64,  83u64)
-check(true,  1u64, false,   2u64,   4u64)
-check(false, 1u64, false,  12u64,  34u64)
-check(true,  1u64, true,   72u64,  84u64)
-check(false, 1u64, true,  712u64, 834u64)
-check(true,  2u64, false,   0u64,   0u64)
-check(false, 2u64, false,   0u64,   0u64)
-check(true,  2u64, true,    7u64,   8u64)
-check(false, 2u64, true,    7u64,   8u64)
+The CoD driver traverses the same six rows as Haskell's `reports`, then both prefix
+values for each row. `ds` and `ss` give the expected journals with an empty prefix.
+`prefixed` prepends a digit to that expected sequence of zero, one or two entries.
+[Labelled yield components and receiving headers](../../design/RangedForAndGenerators.md#labelled-yield-components)
+
+```cod
+func reports() yields { per:bool; k:u64; ds:u64; ss:u64; } {
+    yield(true  -> per, 0u64 -> k,  1u64 -> ds,  3u64 -> ss)
+    yield(false -> per, 0u64 -> k,  1u64 -> ds,  3u64 -> ss)
+    yield(true  -> per, 1u64 -> k,  2u64 -> ds,  4u64 -> ss)
+    yield(false -> per, 1u64 -> k, 12u64 -> ds, 34u64 -> ss)
+    yield(true  -> per, 2u64 -> k,  0u64 -> ds,  0u64 -> ss)
+    yield(false -> per, 2u64 -> k,  0u64 -> ds,  0u64 -> ss)
+    return
+}
+
+func prefixes() yields bool { yield(false); yield(true); return }
+
+func prefixed(enabled:bool, digit:u64, log:u64) -> u64 {
+    if (not enabled) { return log }
+    if (log == 0u64) { return digit }
+    if (log < 10u64) { return 10u64 * digit + log }
+    return 100u64 * digit + log
+}
+
+proc check_all() {
+    for { val per <-; val k <-; val ds <-; val ss <-; } := reports() {
+        for val prefix <- prefixes() {
+            check(per, k, prefix, prefixed(prefix, 7u64, ds), prefixed(prefix, 8u64, ss))
+        }
+    }
+    return
+}
+
+check_all()
 ```
 
 ### Haskell check with both backends
@@ -348,6 +360,8 @@ check(false, 2u64, true,    7u64,   8u64)
 threshold. `check` accepts its arguments in the same order as CoD's `check` and unpacks
 the pairs returned by the five writer and three state runners. Each backend is checked
 against the expected report, including the acquisition, rejection and pass journals.
+The two inner `forM_` traversals correspond to CoD's two `for` loops. The outer `forM_`
+repeats those checks for each Haskell backend.
 
 ```haskell
 module Main where
@@ -754,7 +768,7 @@ run True False 2 == ((((((((False,[7]),[8]),[1,2]),[1,2]),[]),2),4),5)
 ```
 
 For all twelve inputs, combine both values of `prefix` and `perAcquisition` with
-`k = 0, 1, 2`. The [table above](#which-report-is-correct) gives all eight observations
+`k = 0, 1, 2`. The [table above](#which-report-is-correct) gives the verdict and all eight effect outputs
 for empty prefixes. With prefixes, prepend 7 to defects and 8 to samples for each
 corresponding result. Try a wrong route that still type-checks: use three lifts for the
 acquired append in `Stacked`, or change just its label to `"rejects"` in `Labeled`. For
@@ -769,10 +783,11 @@ new writer. With a fresh label in the effectful row, the old operation sites kee
 labels and the application still owes a handler and an observer for the ninth output.
 In the Ports version, the original leaf can keep its existing record; a wrapper may request
 the new telemetry operation separately. If the published record grows a field, count the
-change at each record construction. In CoD a new proc symbol, installation and wrapper
-call supply the new journal while the original operation signatures and both scopes keep
-their definitions. An independent lot-number binding tests the
-other axis by enclosing the unchanged acquisition in a new scope. If the business later
+change at each record construction. In CoD, add a journal identity, bind it to a cell at
+entry, and have the wrapper call an ordinary append procedure for it. The original eight
+operations and both scopes keep their definitions. The observer also checks the new journal.
+An independent lot-number binding tests the other axis by enclosing the unchanged
+acquisition in a new scope. If the business later
 includes telemetry in the provisional evidence, the stage must also implement its new
 publication contract.
 
