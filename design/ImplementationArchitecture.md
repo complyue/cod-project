@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 94. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 95. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+
+The [r95 review](../CHANGELOG.md#k-booter-direct-received-sum-20261124) covers the booter's [direct case on a sum received into an arm local](../applications/cod-booter/docs/ModuleGraph.md#matching-a-sum-received-into-an-arm-local). P-682/P-683 keep the source proof in the CoD checker under the existing case and owner contracts.
 
 The [user's readability brief](../CHANGELOG.md#h-booter-readable-grammar-20261124) and r94 review cover [word spelling, block-item grammar and fixed infix parsing](#reading-the-bootstrap-grammar-in-cod). P-682/P-683 place this work in the CoD frontend. D-20-PARSE-RECOVERY and the existing operator contracts govern token extents, syntax and diagnostics. The [production parser library](../docs/DesignTopics.md#production-parser-combinators) belongs to the future compiler.
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Check a case on a sum received into an arm local
+
+<a id="k-booter-direct-received-sum-20261124"></a>
+**K-BOOTER-DIRECT-RECEIVED-SUM-20261124.** The delegated review continues D-ARCH-REVIEW r94→r95 and [D-20-MODULE-GRAPH r73→r74](applications/cod-booter/docs/ModuleGraph.md#matching-a-sum-received-into-an-arm-local) under P-680–P-683 and D-07-CASE. The source checker may select the independently initialized `NodeLink` in `braced_reference_group`, with revision, arm membership, nominal identity and lexical lifetime checked at the use. The workload is `149d2b00afb7c6af9237837b1b8f3daaf8487094:applications/cod-booter/src/ParserStorage.cod:617`. [Prior receipt review](#k-booter-projected-case-helper-20261124)
+
 ## 2026-11-24 — Explore CoD language and library choices in the working papers
 
 **K-COD-DESIGN-PAPERS-20261124.** The [four papers](papers/README.md) develop CoD design cases on paper. A regional DCG can itself be the source edited by an AI-assisted CoD program. Replacing its actual owner bars subsequent uses of old views. The pipeline papers explore higher-kinded producer, transformer and consumer signatures for closed traversals and independent chan ends. A [Reflex-style fuel sale](papers/OpenEventPipelines.md#a-reflex-style-network-for-a-fuel-sale) compares timeline-indexed sampling and switching policies. Proposed notation and library contracts remain research choices under the [higher-kinded type synonym topic](docs/DesignTopics.md#higher-kinded-type-synonyms). This revision supersedes the working-paper framing at `5f8937a5dee62ab7458789f9b2af2501f3c86986`.
