@@ -9,7 +9,8 @@ using "./ParserStorage.cod" ExprPayload {
     Parenthesized, Transfer, Rebind, InitializerTransfer, InitializerRebind, NamedConstruction,
     BooleanLiteral, Negation, Conjunction, Disjunction, ArithmeticExpression, ComparisonExpression, Concatenation,
     IndexSelection, FieldSelection, ArrayLength, DiscardedExpression, Conditional, TextLiteral,
-    RaisePending, RaiseValue, NullLiteral, CaseFallthrough, CaseFailure, CaseExpression, CaseArm,
+    RaisePending, RaiseValue, NamedThrow, NullLiteral, CaseFallthrough, CaseFailure, CaseExpression,
+        CaseArm,
     LocalBinding, OwningHandleBinding, BorrowedHandleBinding, OwnHandleConstruction, BorrowHandleConstruction,
     BindSymbolEffect, InstallSymbolEffect, CheckedTypeAssertion, ProtectedBlock, DeferredBlock, DeferredInvocation,
     CallableDefinition,
@@ -68,7 +69,7 @@ using "./ParserStorage.cod" {
     HereSites, inspect_here_invocation, name_syntax, completion_operand, RangeSites, RangeBounds, inspect_range_header, inspect_range_loop, no_node,
     is_function,
     BinaryOperands, named_operator_at, inspect_assignment, AssignmentSites,
-    ConstructionSites, inspect_construction,
+    ConstructionSites, inspect_construction, NamedThrowSites, inspect_named_throw,
     SumArmSites, inspect_sum_arm,
     LogicalSites, inspect_logical,
     ungrouped,
@@ -120,11 +121,18 @@ export data NameWorkSlot {
     receiver_import:ReceiverImportCheck;
     active:u64;
     module_selection:u64;
+    # Reaching installation at expression entry. The syntax count denotes
+    # a join with no single proven installation.
+    native_installation:u64;
     next:u64;
     next_method:u64;
+    imported_interface:u64;
+    imported_type_module:u64;
+    imported_type_identity:u64;
     imported_function:u64;
     imported_owner_argument:u64;
     imported_failure:u64;
+    imported_failure_module:u64;
     imported_kind:u8;
     imported_callable_kind:InterfaceCallableKind;
     imported_reception:u8;
@@ -156,6 +164,7 @@ data NameState {
     runtime_floor:u64;
     transfer_binding:u64;
     transfer_resolved:bool;
+    native_installation:u64;
     scope_node:u64;
     delayed:u64;
     guard:u64;
@@ -691,9 +700,13 @@ func link_entries(nodes:const ExprNodes in N, work:NameWork in W, revision:u64, 
         work[at].next <- no_node();
         work[at].receiver_import <- NoReceiverCallables;
         work[at].next_method <- no_node();
+        work[at].imported_interface <- no_node();
+        work[at].imported_type_module <- 0u64;
+        work[at].imported_type_identity <- 0u64;
         work[at].imported_function <- no_node();
         work[at].imported_owner_argument <- no_node();
         work[at].imported_failure <- no_node();
+        work[at].imported_failure_module <- 0u64;
         work[at].imported_kind <- 0u8;
         work[at].imported_callable_kind <- NoCallableKind;
         work[at].imported_reception <- 0u8;
@@ -813,6 +826,7 @@ func resolve_full_scope(source:const SourceBytes in S, nodes:const ExprNodes in 
     val handoff <- state.handoff;
     val case_target <- state.case_target;
     val case_arm <- state.case_arm;
+    val native_installation <- state.native_installation;
     state.first <- first_local;
     state.scope_node <- scope;
     state.guard <- no_node();
@@ -837,7 +851,14 @@ func resolve_full_scope(source:const SourceBytes in S, nodes:const ExprNodes in 
     state.handoff <- handoff;
     state.case_target <- case_target;
     state.case_arm <- case_arm;
+    state.native_installation <- native_installation;
     (state.guard <- guard):void;
+}
+
+func join_native_installation(state:NameState in R, incoming:u64) -> void where {owner R} {
+    if (state.native_installation != incoming) {
+        (state.native_installation <- state.syntax_used):void
+    }
 }
 
 func resolve_handler(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
@@ -866,6 +887,15 @@ func resolve_handler(source:const SourceBytes in S, nodes:const ExprNodes in N, 
     (state.first <- first):void;
 }
 
+func resolve_handler_with_installation_join(source:const SourceBytes in S, nodes:const ExprNodes in N,
+                                          bindings:NameBindings in B, work:NameWork in W,
+                                          state:NameState in R, handler:u64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    val incoming <- state.native_installation;
+    resolve_handler(source, nodes, bindings, work, state, handler);
+    join_native_installation(state, incoming)
+}
+
 func resolve_clauses(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                      work:NameWork in W, state:NameState in R, tail:u64, enclosing_finalizer:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
@@ -880,7 +910,7 @@ func resolve_clauses(source:const SourceBytes in S, nodes:const ExprNodes in N, 
         if (clause == no_node()) return;
         shape <- inspect_guard_clause(nodes, state.syntax_revision, state.syntax_used, clause, sites);
         if (shape == HandlerClause) {
-            resolve_handler(source, nodes, bindings, work, state, sites.target);
+            resolve_handler_with_installation_join(source, nodes, bindings, work, state, sites.target);
         } else {
             if (shape != CleanupClause) { reject_name(state, clause, invalid_module_tree()); return; };
             state.guard <- sites.target;
@@ -905,9 +935,11 @@ func resolve_try(source:const SourceBytes in S, nodes:const ExprNodes in N, bind
     if (shape == InvalidGuardClause) { reject_name(state, at, invalid_module_tree()); return; };
     val guard <- state.guard;
     val enclosing_finalizer <- state.finalizer;
+    val native_installation <- state.native_installation;
     state.guard <- group.body;
     if (shape == CleanupClause) { (state.finalizer <- at):void; };
     resolve_expression(source, nodes, bindings, work, state, group.body);
+    join_native_installation(state, native_installation);
     if (state.diagnostic == 0u8) {
         resolve_clauses(source, nodes, bindings, work, state, group.clauses, enclosing_finalizer);
     };
@@ -1070,12 +1102,15 @@ func resolve_defer(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
     if (state.here_group) { reject_name(state, at, unsupported_here_group_storage()); return; } else {};
     val case_target <- state.case_target;
     val case_arm <- state.case_arm;
+    val native_installation <- state.native_installation;
+    state.native_installation <- state.syntax_used;
     if (block) {
         state.delayed <- at;
         state.case_target <- no_node();
         (state.case_arm <- no_node()):void;
     } else {};
     resolve_child_expression(source, nodes, bindings, work, state, at, action);
+    state.native_installation <- if (block) { native_installation } else { (state.syntax_used) };
     state.delayed <- no_node();
     state.case_target <- case_target;
     state.case_arm <- case_arm;
@@ -1097,15 +1132,13 @@ func resolve_transfer_family(source:const SourceBytes in S, nodes:const ExprNode
     remember(bindings, at, bindings[found].declaration, bindings[found].kind);
 }
 
-func resolve_record_initializer(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
-                                 work:NameWork in W, state:NameState in R, body:u64) -> void
+func resolve_record_fields(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    bindings:NameBindings in B,
+                            work:NameWork in W, state:NameState in R, at:u64, tail:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
-    if (body == no_node()) return;
-    ref tail = make u64 { no_node() };
     ref item = make u64 { no_node() };
-    if (!block_tail(nodes, state.syntax_revision, state.syntax_used, body, tail) ||
-        !first_sequence_entry(nodes, state.syntax_revision, state.syntax_used, tail, BlockSequence, item)) {
-        reject_name(state, body, invalid_module_tree());
+    if (!first_sequence_entry(nodes, state.syntax_revision, at, tail, BlockSequence, item)) {
+        reject_name(state, at, invalid_module_tree());
         return;
     };
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
@@ -1138,6 +1171,35 @@ func resolve_record_initializer(source:const SourceBytes in S, nodes:const ExprN
         if (state.diagnostic != 0u8 || item == tail) return;
         item <- work[item].next;
     };
+}
+
+func resolve_record_initializer(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    bindings:NameBindings in B,
+                                 work:NameWork in W, state:NameState in R, body:u64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    if (body == no_node()) return;
+    val tail <- no_node();
+    if (!block_tail(nodes, state.syntax_revision, state.syntax_used, body, tail)) {
+        reject_name(state, body, invalid_module_tree());
+        return;
+    };
+    resolve_record_fields(source, nodes, bindings, work, state, body, tail);
+}
+
+func resolve_constructing_throw(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    bindings:NameBindings in B,
+                                 work:NameWork in W, state:NameState in R, at:u64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    ref syntax = make NamedThrowSites { requested <- no_node(); fields <- no_node(); cause <-
+        no_node(); };
+    if (!inspect_named_throw(nodes, state.syntax_revision, state.syntax_used, at,
+        syntax) || syntax.cause != no_node()) {
+        reject_name(state, at, invalid_module_tree());
+        return;
+    };
+    resolve_type_name(source, nodes, bindings, work, state, syntax.requested);
+    if (state.diagnostic != 0u8) return;
+    resolve_record_fields(source, nodes, bindings, work, state, at, syntax.fields);
 }
 
 export func has_exception_parent(nodes:const ExprNodes in N, bindings:const NameBindings in B,
@@ -1272,6 +1334,7 @@ func resolve_range(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
     val first <- state.first;
     val enclosing_arm <- state.loop_arm;
     val repeated <- state.repeated;
+    val native_installation <- state.native_installation;
     val handoff <- state.handoff;
     val case_target <- state.case_target;
     state.first <- used;
@@ -1286,9 +1349,11 @@ func resolve_range(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
     state.used <- used;
     state.first <- first;
     state.repeated <- repeated;
+    state.native_installation <- native_installation;
     if (state.diagnostic == 0u8) {
         resolve_expression(source, nodes, bindings, work, state, loop.empty);
     } else {};
+    state.native_installation <- native_installation;
     state.handoff <- handoff;
     state.case_target <- case_target;
     (state.loop_arm <- enclosing_arm):void;
@@ -1349,6 +1414,8 @@ func resolve_here_call(source:const SourceBytes in S, nodes:const ExprNodes in N
     val target <- state.handoff;
     val case_target <- state.case_target;
     val case_arm <- state.case_arm;
+    val native_installation <- state.native_installation;
+    state.native_installation <- state.syntax_used;
     state.first <- used;
     resolve_here_receivers(source, nodes, bindings, work, state, sites.receivers);
     if (state.diagnostic == 0u8) {
@@ -1368,6 +1435,7 @@ func resolve_here_call(source:const SourceBytes in S, nodes:const ExprNodes in N
     state.here_group <- group;
     state.case_target <- case_target;
     state.case_arm <- case_arm;
+    state.native_installation <- if (sites.full_scope) { native_installation } else { (state.syntax_used) };
     (state.handoff <- target):void;
 }
 
@@ -1405,17 +1473,20 @@ func resolve_case_arm(source:const SourceBytes in S, nodes:const ExprNodes in N,
         return;
     };
     # Pattern names use the subject's type and never enter ordinary lookup.
+    val incoming <- state.native_installation;
     resolve_expression(source, nodes, bindings, work, state, arm.guard);
     if (state.diagnostic != 0u8) return;
     val body <- arm.body;
     if (is_scope_block(nodes, body)) {
         bindings[body].scope <- state.scope_node;
         resolve_full_scope(source, nodes, bindings, work, state, body, state.used, at);
+        join_native_installation(state, incoming);
         return;
     } else {};
     val enclosing <- state.case_arm;
     state.case_arm <- at;
     resolve_expression(source, nodes, bindings, work, state, body);
+    join_native_installation(state, incoming);
     (state.case_arm <- enclosing):void;
 }
 
@@ -1485,8 +1556,10 @@ func resolve_logical(source:const SourceBytes in S, nodes:const ExprNodes in N, 
     resolve_expression(source, nodes, bindings, work, state, sites.left_operand);
     if (state.diagnostic != 0u8 || mode == LogicalNot) return;
     val enclosing_guard <- state.guard;
+    val incoming <- state.native_installation;
     state.guard <- sites.right_operand;
     resolve_expression(source, nodes, bindings, work, state, sites.right_operand);
+    join_native_installation(state, incoming);
     (state.guard <- enclosing_guard):void;
 }
 
@@ -1516,11 +1589,17 @@ func resolve_conditional(source:const SourceBytes in S, nodes:const ExprNodes in
     resolve_child_expression(source, nodes, bindings, work, state, at, condition);
     if (state.diagnostic != 0u8) return;
     val guard <- state.guard;
+    val incoming <- state.native_installation;
     state.guard <- consequent.index;
     resolve_child_expression(source, nodes, bindings, work, state, at, consequent);
+    val yes <- state.native_installation;
     if (state.diagnostic == 0u8) {
         state.guard <- alternative.index;
+        state.native_installation <- incoming;
         resolve_child_expression(source, nodes, bindings, work, state, at, alternative);
+    };
+    if (state.native_installation != yes) {
+        (state.native_installation <- state.syntax_used):void
     };
     (state.guard <- guard):void;
 }
@@ -1539,6 +1618,9 @@ func resolve_effect(source:const SourceBytes in S, nodes:const ExprNodes in N, b
     if (state.diagnostic != 0u8) return;
     if (installs) {
         resolve_effect_initializer(source, nodes, bindings, work, state, input.index);
+        if (state.diagnostic == 0u8) {
+            (state.native_installation <- at):void
+        }
     } else {
         resolve_expression(source, nodes, bindings, work, state, input.index);
     };
@@ -1573,6 +1655,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
         (Occupied { val syntax <- node; }) -> {
             bindings[at].scope <- state.scope_node;
             bindings[at].finalizer <- state.finalizer;
+            work[at].native_installation <- state.native_installation;
             case syntax.payload of {
                 (Parenthesized { val expression <- expression; }) -> {
                     if (!published_syntax_id(nodes, state.syntax_revision, at, expression)) {
@@ -1695,6 +1778,8 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                 };
                 (TextLiteral) -> { remember(bindings, at, at, builtin_string()); return; };
                 (RaisePending) -> { return; };
+                (NamedThrow) -> { resolve_constructing_throw(source, nodes, bindings, work, state,
+                    at); return; };
                 (RaiseValue { val operand <- exception_value; }) -> {
                     resolve_child_expression(source, nodes, bindings, work, state, at, operand);
                     return;
@@ -2493,9 +2578,12 @@ func resolve_callable(source:const SourceBytes in S, nodes:const ExprNodes in N,
                       work:NameWork in W, state:NameState in R, definition:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val enclosing <- state.scope_node;
+    val native_installation <- state.native_installation;
     state.scope_node <- definition;
+    state.native_installation <- no_node();
     resolve_callable_body(source, nodes, bindings, work, state, definition);
     state.scope_node <- enclosing;
+    state.native_installation <- native_installation;
     (state.used <- state.module_names):void;
 }
 
@@ -2515,7 +2603,7 @@ func resolve_lexical_callable(source:const SourceBytes in S, nodes:const ExprNod
         used <- state.used; first <- state.used; module_names <- state.module_names; scope_node <- definition;
         module_candidates <- state.module_candidates;
         runtime_floor <- if (is_function(nodes, definition)) { mark } else { (state.runtime_floor) };
-        transfer_binding <- no_node(); transfer_resolved <- false;
+        transfer_binding <- no_node(); transfer_resolved <- false; native_installation <- no_node();
         delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
         here_group <- false; handoff <- no_node(); case_target <- no_node(); case_arm <- no_node(); diagnostic <- 0u8;
         failed_node <- no_node(); enclosing_defer <- no_node();
@@ -2870,7 +2958,7 @@ export func resolve_module_names(source:const SourceBytes in S, nodes:const Expr
         syntax_revision <- tree.revision; syntax_used <- tree.used;
         used <- 0u64; first <- 0u64; module_names <- 0u64; runtime_floor <- 0u64; scope_node <- tree.root;
         module_candidates <- selected_used != 0u64;
-        transfer_binding <- no_node(); transfer_resolved <- false;
+        transfer_binding <- no_node(); transfer_resolved <- false; native_installation <- no_node();
         delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
         here_group <- false; handoff <- no_node(); case_target <- no_node(); case_arm <- no_node(); diagnostic <- 0u8;
         failed_node <- no_node(); enclosing_defer <- no_node();

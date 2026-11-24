@@ -1,6 +1,7 @@
 using "./ParserInput.cod" {
     ParseResult, append_syntax_node, append_block_item, append_block,
-    exception_binder_width, expected_name, expected_type, parse_binding_name, parse_local_binding_name,
+    exception_binder_width, expected_name, expected_type, parse_binding_name,
+        parse_local_binding_name,
     parse_identifier, punct_at, punct_pair_at, reset_parse_result, expected_c_linkage, closing_token, recover_syntax, recover_block_separator, seed_lexical_reports,
 };
 using "./CallableSyntax.cod" { parse_callable_signature, parse_scoped_procedure_signature };
@@ -1796,7 +1797,7 @@ func parse_initializer_field(source:const SourceBytes in S, tokens:const Tokens 
     };
     if (result.diagnostic != 0u8) return false;
     val field <- result.root;
-    append_argument(nodes, result, first, end, previous, field, false, first);
+    append_block_item(nodes, result, first, end, previous, field);
     return result.diagnostic == 0u8;
 }
 

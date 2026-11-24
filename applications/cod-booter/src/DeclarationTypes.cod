@@ -56,6 +56,7 @@ using "./ModuleExportStorage.cod" {
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, NonBitsAggregate },
 };
 using "./AggregateSchemas.cod" AggregateFacts;
+using "./ExceptionTypes.cod" { ExceptionType, resolve_exception_type, exception_schema };
 
 export func type_module(names:const NameBindings in B, selected:const SelectedExports in E,
                         marker:u64, current_module:u64) -> u64 where {const owner B, const owner E} {
@@ -580,12 +581,18 @@ func stage_record(nodes:const ExprNodes in N, names:const NameBindings in B, sel
     val next <- count + 1u64;
     val name <- declaration.name;
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
+    ref failure = make ExceptionType { defining_module <- 0u64; declaration <- no_node(); checked <-
+        false; };
+    val nominal_failure <- resolve_exception_type(nodes, names, selected, name, defining_module,
+        used, revision, failure);
     for (unused in 0u64 .. intrinsic (len)(nodes)) {
         if (field == no_node()) {
             write_interface_header(interfaces[count], defining_module, record, record_type(), 0u8, next - count - 1u64);
             interfaces[count].name_first <- syntax_first(nodes, used, name);
             interfaces[count].name_past <- syntax_past(nodes, used, name);
             interfaces[count].aggregate_storage <- storage;
+            if (nominal_failure) { (interfaces[count].exception_schema <-
+                exception_schema(failure)):void; };
             return next;
         } else {};
         if (next >= limit || inspect_formal(nodes, revision, used, field, formal) != OrdinaryFormal ||

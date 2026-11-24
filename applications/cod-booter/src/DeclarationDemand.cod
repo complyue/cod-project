@@ -1,0 +1,188 @@
+using "./ParserStorage.cod" {
+    ExprNodes, no_node, CallableSites, inspect_callable, find_signature_clause,
+    DirectCallSites, direct_invocation, NamedThrowSites, inspect_named_throw,
+};
+using "./ParserStorage.cod" CallableSyntax { ModuleCallable, LexicalCallable, CEntry };
+using "./ParserStorage.cod" SignatureSyntax { ThrowsSignatureClause };
+using "./ParserStorage.cod" DirectInvocationSyntax { DirectInvocationReady, InvalidInvocation };
+using "./NameResolution.cod" { NameBindings, NameWork, enclosing_callable, callable_binding };
+using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField } };
+using "./ExceptionTypes.cod" ExceptionType;
+using "./NativeDeclarations.cod" {
+    SuppliedViews, read_acquisition_failure, has_imported_native_loan, source_handle_callable
+};
+using "./ModuleExports.cod" SelectedExports;
+
+export data DeclarationDemand {
+    scope:u64;
+    first_call:u64;
+    next_call:u64;
+    callee:u64;
+    pending:u64;
+    declared_failure:u64;
+    signature:bool;
+    body:bool;
+}
+export array DeclarationDemands[u64]:DeclarationDemand;
+
+export func needs_body_check(demand:const DeclarationDemands in D, at:u64) -> bool
+    where {const owner D} {
+    val extent <- intrinsic (len)(demand);
+    if (extent == 0u64) return true;
+    if (at >= extent) return false;
+    if (demand[at].body) return true;
+    val scope <- demand[at].scope;
+    return scope < extent && demand[scope].body
+}
+
+export func needs_signature_check(demand:const DeclarationDemands in D, at:u64) -> bool
+    where {const owner D} {
+    val extent <- intrinsic (len)(demand);
+    return extent == 0u64 || (at < extent && demand[at].signature)
+}
+
+func selects_caught_field(fields:const CaughtFieldUses in F, at:u64) -> bool where {const owner F} {
+    if (at >= intrinsic (len)(fields)) return false;
+    return case fields[at] of {
+        CaughtField -> true;
+        _ -> false
+    }
+}
+
+func require_body(demand:DeclarationDemands in D, definition:u64, count:u64 in Q, used:u64) -> bool
+    where {owner D, owner Q} {
+    if (definition >= used) return false;
+    if (demand[definition].body) return true;
+    if (count >= used) return false;
+    demand[definition].signature <- true;
+    demand[definition].body <- true;
+    demand[count].pending <- definition;
+    count <- count + 1u64;
+    return true
+}
+
+func local_body(nodes:const ExprNodes in N, revision:u64, used:u64, definition:u64,
+                         sites:CallableSites in S) -> bool where {const owner N, owner S} {
+    val form <- inspect_callable(nodes, revision, used, definition, sites);
+    return form == ModuleCallable || form == LexicalCallable || form == CEntry
+}
+
+func family_declares_failure(links:const NameWork in W, demand:const DeclarationDemands in D,
+                             head:u64, used:u64) -> bool where {const owner W, const owner D} {
+    val definition <- head;
+    for (unused in 0u64 .. used) {
+        if (definition == no_node()) return false;
+        if (definition >= used || demand[definition].declared_failure != no_node()) return true;
+        (definition <- links[definition].next_method):void
+    };
+    return true
+}
+
+func require_called_contracts(nodes:const ExprNodes in N, demand:DeclarationDemands in D,
+                              scope:u64, revision:u64, used:u64, count:u64 in Q) -> u64
+    where {const owner N, owner D, owner Q} {
+    ref sites = make CallableSites {
+        signature <- no_node(); body <- no_node(); function_form <- false;
+    };
+    val call <- demand[scope].first_call;
+    val definition <- no_node();
+    val form <- CEntry;
+    for (unused in 0u64 .. used) {
+        if (call == no_node()) return no_node();
+        definition <- demand[call].callee;
+        if (definition >= used) return call;
+        form <- inspect_callable(nodes, revision, used, definition, sites);
+        if (form != ModuleCallable && form != LexicalCallable && form != CEntry) return call;
+        demand[definition].signature <- true;
+        if (form == LexicalCallable && !require_body(demand, definition, count, used)) return call;
+        (call <- demand[call].next_call):void
+    };
+    return call
+}
+
+export func discover_declaration_demand(
+    nodes:const ExprNodes in N, names:const NameBindings in B,
+    links:const NameWork in W, selected:const SelectedExports in E,
+    fields:const CaughtFieldUses in F, views:const SuppliedViews in V,
+    demand:DeclarationDemands in D, used:u64, revision:u64, problem:u64 in P) -> bool
+    where {const owner N, const owner B, const owner W, const owner E, const owner F, const owner V,
+           owner D, owner P} {
+    if (used > intrinsic (len)(nodes) || used > intrinsic (len)(names) ||
+        used > intrinsic (len)(links) || used > intrinsic (len)(demand)) return false;
+    ref callable = make CallableSites {
+        signature <- no_node(); body <- no_node(); function_form <- false;
+    };
+    ref clause = make u64 { no_node() };
+    ref count = make u64 { 0u64 };
+    for (site in 0u64 .. used) {
+        if (local_body(nodes, revision, used, site, callable)) {
+            if (!find_signature_clause(
+                nodes, revision, used, callable.signature, ThrowsSignatureClause, clause)) {
+                problem <- site;
+                return false
+            };
+            demand[site].declared_failure <- clause;
+            if ((clause != no_node() ||
+                 source_handle_callable(nodes, names, selected, links, site, used, revision)) &&
+                !require_body(demand, site, count, used)) {
+                problem <- site;
+                return false
+            }
+        };
+    };
+    ref invocation = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
+    ref construction = make NamedThrowSites {
+        requested <- no_node(); fields <- no_node(); cause <- no_node();
+    };
+    ref failure = make ExceptionType {
+        defining_module <- 0u64; declaration <- no_node(); checked <- false;
+    };
+    val scope <- no_node();
+    val definition <- no_node();
+    val checked_call <- false;
+    val shape <- InvalidInvocation;
+    for (site in 0u64 .. used) {
+        scope <- enclosing_callable(nodes, names, names[site].scope);
+        demand[site].scope <- scope;
+        checked_call <- links[site].imported_interface != no_node() &&
+            links[site].imported_failure_checked != 0u8;
+        shape <- direct_invocation(nodes, revision, used, site, invocation);
+        if (shape == InvalidInvocation) {
+            problem <- site;
+            return false
+        };
+        if (shape == DirectInvocationReady && names[invocation.callee].kind == callable_binding()) {
+            definition <- names[invocation.callee].declaration;
+            if (definition >= used) {
+                problem <- site;
+                return false
+            };
+            (demand[site].callee <- definition):void;
+            if (scope < used) {
+                demand[site].next_call <- demand[scope].first_call;
+                (demand[scope].first_call <- site):void
+            };
+            (checked_call <- family_declares_failure(links, demand, definition, used)):void
+        };
+        if (selects_caught_field(fields, site) || checked_call ||
+            has_imported_native_loan(views, site) || read_acquisition_failure(views, site, failure) ||
+            inspect_named_throw(nodes, revision, used, site, construction)) {
+            if (scope >= used || !local_body(nodes, revision, used, scope, callable) ||
+                !require_body(demand, scope, count, used)) {
+                problem <- site;
+                return false
+            }
+        };
+    };
+    val failed <- no_node();
+    for (item in 0u64 .. used) {
+        if (item >= count) return true;
+        failed <- require_called_contracts(nodes, demand, demand[item].pending, revision, used,
+                                           count);
+        if (failed != no_node()) {
+            problem <- failed;
+            return false
+        }
+    };
+    return count == used
+}

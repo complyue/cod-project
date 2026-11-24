@@ -18,6 +18,7 @@ using "./ParserStorage.cod" ModuleSelectionMode {
 };
 using "./ParserInput.cod" ParseResult;
 using "./ModuleExportStorage.cod" {
+    ExceptionSchema { CheckedExceptionSchema, UncheckedExceptionSchema },
     ModuleExport, ModuleExports, ModuleInterfaces, DefaultExportRefs, find_interface,
     enum_type, sum_type, checked_sum_constructor, checked_aggregate_storage,
     AggregateStorage { CLayoutBitsRecord, CoDBitsAggregate, NonBitsAggregate },
@@ -341,6 +342,7 @@ func selection_profile(mode:ModuleSelectionMode, kind:u8, shape:u8, members:u64,
     if (mode == MixinResource) return unproved_import_interpretation();
     if (mode == IdentityResource && kind != symbol_export()) return wrong_export_kind();
     if (mode == ImportResource && kind != enum_export() && kind != sum_export() &&
+        kind != nominal_exception_export() &&
         !(declarations_only && kind == callable_export() && shape == ordinary_callable_shape()))
         return unproved_import_interpretation();
     if (members != no_node() && kind != enum_export() && kind != sum_export())
@@ -1300,8 +1302,22 @@ export func verify_aggregate_selections(nodes:const ExprNodes in N, used:u64, re
     val storage <- CLayoutBitsRecord;
     val shape <- 0u8;
     val derived <- 0u8;
+    val header <- no_node();
     for (site in 0u64 .. used) {
         kind <- selected[site].kind;
+        if (kind == nominal_exception_export()) {
+            header <- find_interface(interfaces, published, selected[site].origin_module,
+                selected[site].identity);
+            if (header == no_node() || interfaces[header].interface_kind != record_interface_kind ||
+                (selected[site].checked == 0u8 && interfaces[header].exception_schema !=
+                    UncheckedExceptionSchema) ||
+                (selected[site].checked != 0u8 && interfaces[header].exception_schema !=
+                    CheckedExceptionSchema)) {
+                report.node <- selected_resource_name(nodes, revision, used, site);
+                report.diagnostic <- unproved_module_exports();
+                return false
+            }
+        };
         if (kind == record_export() || kind == sum_export()) {
             expected <- if (kind == record_export()) { record_interface_kind } else { sum_type() };
             storage <- checked_aggregate_storage(interfaces, published, selected[site].origin_module,

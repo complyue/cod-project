@@ -1182,14 +1182,16 @@ export func named_operator_at(nodes:const ExprNodes in N, at:u64) -> u64 where {
 export data BindingSites { name:u64; annotation:u64; target_type:u64; owner_name:u64; readonly:bool; }
 export enum BindingSyntax:u8 { InvalidBindingSyntax; BareBinding; TypedBinding; RecoveredBinding; }
 
-func has_error_role(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, expected:SyntaxRole) -> bool
+func has_error_role(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+    expected:SyntaxRole) -> bool
     where {const owner N} {
     ref role = make SyntaxRole { expected };
     ref report = make u64 { no_node() };
     return inspect_error_report(nodes, revision, used, at, role, report) && role == expected
 }
 
-func recovered_type(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, sites:BindingSites in S) -> bool
+func recovered_type(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+    sites:BindingSites in S) -> bool
     where {const owner N, owner S} {
     if (has_error_role(nodes, revision, used, at, TypeAnnotationRole:SyntaxRole)) {
         sites.annotation <- at;
@@ -1200,11 +1202,13 @@ func recovered_type(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, 
     return case nodes[at] of {
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of {
-                (OwnerQualifiedType { val target <- target; val owner_name <- declared_owner; }) -> {
+                (OwnerQualifiedType { val target <- target; val owner_name <- declared_owner; })
+                    -> {
                     if (!published_syntax_id(nodes, revision, at, target) ||
                         !published_syntax_id(nodes, revision, at, owner_name) ||
                         name_syntax(nodes, at, owner_name.index) != (OrdinaryName:NameSyntax) ||
-                        !has_error_role(nodes, revision, at, target.index, TypeAnnotationRole:SyntaxRole)) return false;
+                        !has_error_role(nodes, revision, at, target.index,
+                            TypeAnnotationRole:SyntaxRole)) return false;
                     sites.annotation <- at;
                     sites.target_type <- target.index;
                     sites.owner_name <- owner_name.index;
@@ -1260,7 +1264,8 @@ export func inspect_binding(nodes:const ExprNodes in N, revision:u64, used:u64, 
                     BareBinding:BindingSyntax
                 };
                 (ErrorReport) -> {
-                    if (!has_error_role(nodes, revision, used, at, BindingNameRole:SyntaxRole)) return InvalidBindingSyntax:BindingSyntax;
+                    if (!has_error_role(nodes, revision, used, at,
+                        BindingNameRole:SyntaxRole)) return InvalidBindingSyntax:BindingSyntax;
                     sites.name <- at;
                     sites.annotation <- no_node();
                     sites.target_type <- no_node();
@@ -1270,15 +1275,19 @@ export func inspect_binding(nodes:const ExprNodes in N, revision:u64, used:u64, 
                 };
                 (AnnotatedBinding { val name <- name; val annotation <- annotation; val readonly <- readonly; }) -> {
                     if (!published_syntax_id(nodes, revision, at, name) ||
-                        !published_syntax_id(nodes, revision, at, annotation)) return InvalidBindingSyntax:BindingSyntax;
+                        !published_syntax_id(nodes, revision, at,
+                            annotation)) return InvalidBindingSyntax:BindingSyntax;
                     named <- name_syntax(nodes, at, name.index) == (OrdinaryName:NameSyntax);
-                    if (!named && !has_error_role(nodes, revision, at, name.index, BindingNameRole:SyntaxRole))
+                    if (!named && !has_error_role(nodes, revision, at, name.index,
+                        BindingNameRole:SyntaxRole))
                         return InvalidBindingSyntax:BindingSyntax;
                     typed <- inspect_type_annotation(nodes, revision, at, annotation.index, sites);
-                    if (!typed && !recovered_type(nodes, revision, at, annotation.index, sites)) return InvalidBindingSyntax:BindingSyntax;
+                    if (!typed && !recovered_type(nodes, revision, at, annotation.index,
+                        sites)) return InvalidBindingSyntax:BindingSyntax;
                     sites.name <- name.index;
                     sites.readonly <- readonly;
-                    if (named && typed) { TypedBinding:BindingSyntax } else { RecoveredBinding:BindingSyntax }
+                    if (named && typed) { TypedBinding:BindingSyntax }
+                        else { RecoveredBinding:BindingSyntax }
                 };
                 (_) -> { InvalidBindingSyntax:BindingSyntax };
             }
@@ -1910,6 +1919,27 @@ export func inspect_handle_binding(nodes:const ExprNodes in N, revision:u64, use
     };
 }
 
+export func native_installation_input(nodes:const ExprNodes in N, revision:u64, used:u64,
+                                      at:u64, input:u64 in R) -> bool
+    where {const owner N, owner R} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        Occupied { val syntax <- node; } -> {
+            case syntax.payload of {
+                InstallSymbolEffect { val name <- name; val acquisition <- acquisition; } -> {
+                    if (!published_syntax_id(nodes, revision, at, name) ||
+                        !published_syntax_id(nodes, revision, at, acquisition) ||
+                        name_syntax(nodes, at, name.index) != (SymbolicName:NameSyntax)) return false;
+                    input <- acquisition.index;
+                    true
+                };
+                _ -> false
+            }
+        };
+        Vacant -> false
+    }
+}
+
 func read_handle_constructor(nodes:const ExprNodes in N, revision:u64, at:u64, marker:const NodeId in I,
                              arguments:const NodeLink in L, sites:HandleConstructionSites in S) -> bool
     where {const owner N, const owner I, const owner L, owner S} {
@@ -2494,6 +2524,41 @@ export enum ConstructionSyntax:u8 {
     PositionalConstruction;
     BracedConstruction;
     ExceptionConstructionSyntax;
+}
+
+export data NamedThrowSites { requested:u64; fields:u64; cause:u64; }
+
+export func inspect_named_throw(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+                                sites:NamedThrowSites in R) -> bool where {const owner N, owner R} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        (Vacant) -> { false };
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (NamedThrow { val requested <- requested; val fields <- fields; val cause <- cause;
+                    }) -> {
+                    if (!published_syntax_id(nodes, revision, at, requested) ||
+                        name_syntax(nodes, at, requested.index) != (OrdinaryName:NameSyntax) ||
+                        !block_item_tail(nodes, revision, at, fields, sites.fields) ||
+                        !optional_syntax_link(nodes, revision, at, cause,
+                            sites.cause)) return false;
+                    sites.requested <- requested.index;
+                    true
+                };
+                (_) -> { false };
+            }
+        };
+    };
+}
+
+export func first_named_throw(nodes:const ExprNodes in N, revision:u64,
+    used:u64) -> u64 where {const owner N} {
+    ref syntax = make NamedThrowSites { requested <- no_node(); fields <- no_node(); cause <-
+        no_node(); };
+    for (at in 0u64 .. used) {
+        if (inspect_named_throw(nodes, revision, used, at, syntax)) return at;
+    };
+    return no_node();
 }
 
 export data ConstructionSites {

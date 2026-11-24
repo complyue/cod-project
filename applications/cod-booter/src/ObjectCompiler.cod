@@ -7,6 +7,7 @@ using "./NativeDiagnostics.cod" {
 using "./SourceStorage.cod" SourceBytes;
 using "./ParserStorage.cod" { no_node, FormalMode { ValueFormal } };
 using "./ModuleExportStorage.cod" FamilyMembership { UnprovedMembership };
+using "./ModuleExportStorage.cod" ExceptionSchema { OrdinarySchema };
 using "./ModuleExportStorage.cod" {
     CallableObjectView { NoCallableObjectView },
     ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces
@@ -168,7 +169,8 @@ proc traverse_graph(here finish(commands:const NativeCommands in G, units:const 
         native_reception <- 0u8;
         native_passes_owner <- 0u8;
         membership <- UnprovedMembership;
-        sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal;
+        sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
+        exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
         scalar_object_body <- false; object_view <- make NoCallableObjectView {}
     }) in G;
     ref commands = make NativeCommands(0u64,

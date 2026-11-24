@@ -9,6 +9,8 @@ export data ModuleExport {
     name_past:u64;
     identity:u64;
     kind:u8;
+    # Exception types carry checkedness. Ordinary callable exports mark a
+    # declared failure contract that a selected source call must check.
     checked:u8;
     publishing_module:u64;
     origin_module:u64;
@@ -27,6 +29,7 @@ export func constructor_type() -> u8 { return 40u8; }
 
 export enum AggregateStorage:u8 { UnprovedAggregate; CoDBitsAggregate; CLayoutBitsRecord; NonBitsAggregate; }
 export enum InterfaceCallableKind:u8 { NoCallableKind; CheckedFunction; CheckedProcedure; }
+export enum ExceptionSchema:u8 { OrdinarySchema; CheckedExceptionSchema; UncheckedExceptionSchema; }
 
 # Every membership header already identifies its defining source row. In
 # a variadic singleton it is also the identity of the sole implementation.
@@ -125,6 +128,7 @@ export data ModuleInterfaceRow {
     native_passes_owner:u8;
     sum_payload:SumInterfacePayload;
     aggregate_storage:AggregateStorage;
+    exception_schema:ExceptionSchema;
     field_mode:FormalMode;
     scalar_object_body:bool;
     object_view:CallableObjectView;
@@ -159,6 +163,7 @@ export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:
     row.native_reception <- 0u8;
     row.native_passes_owner <- 0u8;
     row.aggregate_storage <- (UnprovedAggregate:AggregateStorage);
+    row.exception_schema <- (OrdinarySchema:ExceptionSchema);
     row.field_mode <- ValueFormal;
     row.scalar_object_body <- false;
     return;
@@ -178,7 +183,8 @@ export func write_sum_row(interfaces:ModuleInterfaces in I, row:u64, module:u64,
             (NoCallableKind:InterfaceCallableKind); native_reception <- 0u8;
         native_passes_owner <- 0u8; sum_payload <- payload;
         membership <- (UnprovedMembership:FamilyMembership);
-        aggregate_storage <- (UnprovedAggregate:AggregateStorage); field_mode <- ValueFormal;
+        aggregate_storage <- (UnprovedAggregate:AggregateStorage);
+        exception_schema <- (OrdinarySchema:ExceptionSchema); field_mode <- ValueFormal;
         scalar_object_body <- false; object_view <- make NoCallableObjectView {};
     };
     return;
@@ -195,7 +201,9 @@ export func write_object_view(interfaces:ModuleInterfaces in I, at:u64, publishe
         enum_code <- 0u64; native_function <- no_node(); callable_kind <- (NoCallableKind:InterfaceCallableKind);
         native_reception <- 0u8; native_passes_owner <- 0u8; membership <- (UnprovedMembership:FamilyMembership);
         sum_payload <- make NoSumInterface {};
-        aggregate_storage <- (UnprovedAggregate:AggregateStorage); field_mode <- ValueFormal; scalar_object_body <- false;
+        aggregate_storage <- (UnprovedAggregate:AggregateStorage);
+        exception_schema <- (OrdinarySchema:ExceptionSchema); field_mode <- ValueFormal;
+        scalar_object_body <- false;
         object_view <- view
     };
     return

@@ -1,0 +1,75 @@
+using "./NameResolution.cod" { NameBindings, ordinary_selection, record_type };
+using "./ModuleExports.cod" {
+    SelectedExports, exception_type_export, nominal_exception_export, exception_root_identity,
+        error_root_identity,
+};
+using "./ModuleExportStorage.cod" ExceptionSchema {
+    CheckedExceptionSchema, UncheckedExceptionSchema
+};
+using "./ParserStorage.cod" {
+    ExprNodes, DeclarationSites, inspect_declaration, no_node, DeclarationSyntax { NominalRecord },
+};
+
+# Module zero identifies the builtin exception catalog. User definitions keep
+# the identity assigned by their defining module through every publication.
+export data ExceptionType { defining_module:u64; declaration:u64; checked:bool; }
+
+export func exception_schema(type:const ExceptionType in T) -> ExceptionSchema where {const owner T}
+    {
+    return if (type.checked) { CheckedExceptionSchema } else { UncheckedExceptionSchema };
+}
+
+func inspect_local_exception(nodes:const ExprNodes in N, names:const NameBindings in B,
+                             selected:const SelectedExports in E, record:u64, defining_module:u64,
+                             used:u64, revision:u64, result:ExceptionType in R) -> bool
+    where {const owner N, const owner B, const owner E, owner R} {
+    if (defining_module == 0u64 || defining_module == no_node() || record >= used) return false;
+    ref schema = make DeclarationSites {
+        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
+    };
+    if (inspect_declaration(nodes, revision, used, record, schema) != NominalRecord ||
+        schema.parent_type == no_node() || names[schema.parent_type].kind != ordinary_selection())
+            return false;
+    val parent <- names[schema.parent_type].declaration;
+    if (parent >= intrinsic (len)(selected) || selected[parent].kind != exception_type_export() ||
+        selected[parent].origin_module != 0u64) return false;
+    val root <- selected[parent].identity;
+    if (root != exception_root_identity() && root != error_root_identity()) return false;
+    result.defining_module <- defining_module;
+    result.declaration <- record;
+    result.checked <- root == exception_root_identity();
+    return true;
+}
+
+export func resolve_exception_type(nodes:const ExprNodes in N, names:const NameBindings in B,
+                                   selected:const SelectedExports in E, marker:u64,
+                                       defining_module:u64,
+                                   used:u64, revision:u64, result:ExceptionType in R) -> bool
+    where {const owner N, const owner B, const owner E, owner R} {
+    if (marker >= used || used > intrinsic (len)(names)) return false;
+    val identity <- names[marker].declaration;
+    if (names[marker].kind == record_type())
+        return inspect_local_exception(nodes, names, selected, identity, defining_module, used,
+            revision, result);
+    if (names[marker].kind != ordinary_selection() || identity >= intrinsic (len)(selected))
+        return false;
+    val row <- selected[identity].kind;
+    val origin <- selected[identity].origin_module;
+    if (origin == no_node() || selected[identity].identity == no_node() ||
+        (row != exception_type_export() && row != nominal_exception_export()) ||
+        ((row == exception_type_export()) != (origin == 0u64))) return false;
+    result.defining_module <- origin;
+    result.declaration <- selected[identity].identity;
+    result.checked <- selected[identity].checked != 0u8;
+    return true;
+}
+
+export func exception_type_covers(expected_module:u64, expected:u64, module:u64, category:u64,
+    checked:bool) -> bool {
+    if (expected_module == 0u64) {
+        if (expected == no_node() || expected == exception_root_identity()) return true;
+        if (expected == error_root_identity() && module != 0u64) return !checked;
+    };
+    return expected_module == module && expected == category;
+}

@@ -31,8 +31,10 @@ using "./ParserStorage.cod" {
     first_module_item, SequenceEntry, inspect_sequence_entry, module_item_publication,
     DeclarationSites, inspect_declaration, CallableSites, inspect_callable, ModuleSelectionSites, inspect_module_selection,
     SignatureSites, inspect_signature, BindingSites, inspect_type_annotation, CatchSites, inspect_catch_binding, is_here_formal,
+    first_named_throw, NamedThrowSites, inspect_named_throw,
 };
 using "./SourceStorage.cod" SourceBytes;
+using "./DeclarationDemand.cod" { DeclarationDemand, DeclarationDemands };
 using "./Frontend.cod" { FrontendResult, read_module };
 using "./ParserInput.cod" ParseResult;
 using "./ModuleExports.cod" {
@@ -47,13 +49,16 @@ using "./NameResolution.cod" {
 };
 using "./NativeDeclarations.cod" {
     NativeDeclarationResult, check_native_declarations, declared_exception_type, native_declaration_first, unsupported_owning_region_result,
+    SuppliedViews, SuppliedView { NoSuppliedView },
 };
 using "./AggregateSchemas.cod" AggregateFacts;
+using "./ModuleExportStorage.cod" ExceptionSchema { OrdinarySchema };
 using "./ModuleExportStorage.cod" {
     CallableObjectView { NoCallableObjectView },
     ReceiverImportCheck { ReceiverCallablesReady },
     ModuleInterfaceRow, ModuleInterfaces, AggregateStorage { UnprovedAggregate }, SumInterfacePayload { NoSumInterface },
 };
+using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { NoCaughtField } };
 using "./OperandChecking.cod" {
     OperandFacts, CallOwners, OperandCheckResult, check_module_operands,
     unsupported_case_subject, unsupported_case_pattern, unsupported_product_layout, unsupported_text_operation,
@@ -92,6 +97,15 @@ func unsupported_identity_reference() -> u8 { return 135u8; }
 func unsupported_reserved_initializer() -> u8 { return 136u8; }
 func unsupported_predicate_assertion() -> u8 { return 137u8; }
 func unsupported_reference_identity() -> u8 { return 138u8; }
+
+func constructing_throw_profile(nodes:const ExprNodes in N, revision:u64, used:u64,
+    at:u64) -> u8 where {const owner N} {
+    ref syntax = make NamedThrowSites { requested <- no_node(); fields <- no_node(); cause <-
+        no_node(); };
+    if (!inspect_named_throw(nodes, revision, used, at,
+        syntax) || syntax.cause != no_node()) return 43u8;
+    return 0u8;
+}
 
 export func rejected_unsupported_declaration(result:const ModuleBindingResult in R) -> bool where {const owner R} {
     if (result.stage == module_operands_failed())
@@ -274,7 +288,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64,
                     if (emit_object && lexical) { unsupported_lexical_callable() } else { 0u8 }
                 };
                 (RaiseWithCause) -> { 42u8 };
-                (NamedThrow) -> { 43u8 };
+                (NamedThrow) -> { constructing_throw_profile(nodes, revision, used, at) };
                 (RethrowWithCause) -> { 44u8 };
                 (NamedArgument) -> { 45u8 };
                 (_) -> { 0u8 };
@@ -336,8 +350,10 @@ export func bind_selected_module(source:const SourceBytes in S, nodes:const Expr
                                  selections:const CheckedSelections in C, selected_used:u64,
                                  selected:SelectedExports in X, bindings:NameBindings in Y,
                                  work:NameWork in W, interfaces:const ModuleInterfaces in I, interface_used:u64,
-                                 facts:AggregateFacts in F, emit_object:bool, allow_structural:bool, result:ModuleBindingResult in R) -> bool
-    where {const owner S, const owner N, const owner C, owner X, owner Y, owner W, const owner I, owner F, owner R} {
+                                 facts:AggregateFacts in F, views:SuppliedViews in H,
+                                     emit_object:bool, allow_structural:bool, result:ModuleBindingResult in R) -> bool
+    where {const owner S, const owner N, const owner C, owner X, owner Y, owner W, const owner I, owner F,
+        owner H, owner R} {
     ref names = make NameResolutionResult { diagnostic <- 0u8; node <- no_node(); enclosing_defer <- no_node(); };
     if (!resolve_module_names(source, nodes, result.frontend.tree, selected, bindings, work,
         interfaces, interface_used,
@@ -401,7 +417,8 @@ export func bind_selected_module(source:const SourceBytes in S, nodes:const Expr
     if (!emit_object || first_extended_declaration(nodes, work, result.frontend.tree, false) != no_node() ||
         uses_native_boundary(nodes, result.frontend.tree.used)) {
         ref declarations = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
-        if (!check_native_declarations(nodes, bindings, work, selected, interfaces, interface_used, facts,
+        if (!check_native_declarations(nodes, bindings, work, selected, interfaces, interface_used,
+            facts, views,
                                         used, revision, emit_object, declarations)) {
             binding_diagnostic(nodes, result, module_binding_failed(), declarations.diagnostic, declarations.node);
             result.frontend.diagnostic_first <- native_declaration_first(nodes, result.frontend.tree.used, declarations);
@@ -428,6 +445,12 @@ export func bind_module(source:const SourceBytes in S, tokens:Tokens in T, nodes
         return false;
     } else {};
     if (!select_parsed_module(source, nodes, spellings, exports, spellings, exports, 0u64, 0u64, selected, true, result)) return false;
+    val constructed <- first_named_throw(nodes, result.frontend.tree.revision,
+        result.frontend.tree.used);
+    if (constructed != no_node()) {
+        binding_diagnostic(nodes, result, module_binding_failed(), 43u8, constructed);
+        return false;
+    };
     ref interfaces = make ModuleInterfaces(0u64, make ModuleInterfaceRow {
         defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
         interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
@@ -438,12 +461,14 @@ export func bind_module(source:const SourceBytes in S, tokens:Tokens in T, nodes
         native_reception <- 0u8;
         membership <- UnprovedMembership;
         native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
-        aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal; scalar_object_body <- false; object_view <- make NoCallableObjectView {};
+        aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
+        scalar_object_body <- false; object_view <- make NoCallableObjectView {};
     });
     ref facts = make AggregateFacts(result.frontend.tree.used, UnprovedAggregate);
     ref no_selections = make CheckedSelections(0u64, make UnpublishedSelection {});
+    ref views = make SuppliedViews(result.frontend.tree.used, make NoSuppliedView {});
     return bind_selected_module(source, nodes, no_selections, 0u64, selected, bindings, work,
-        interfaces, 0u64, facts, true, false, result);
+        interfaces, 0u64, facts, views, true, false, result);
 }
 
 # A successful operand analysis supplies the facts for checking completion.
@@ -476,7 +501,15 @@ export func analyze_bound_operands(source:const SourceBytes in S, nodes:const Ex
         } else {};
     };
     ref operands = make OperandCheckResult { diagnostic <- 0u8; node <- no_node(); };
-    if (!check_module_operands(source, nodes, result.frontend.tree, bindings, work, selected, facts, owners, operands)) {
+    ref fields = make CaughtFieldUses(0u64, make NoCaughtField {});
+    ref no_native_loans = make SuppliedViews(0u64, make NoSuppliedView {});
+    ref executable = make DeclarationDemands(0u64, make DeclarationDemand {
+        scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
+        pending <- no_node(); declared_failure <- no_node(); signature <- false; body <- false;
+    });
+    if (!check_module_operands(source, nodes, result.frontend.tree, bindings, work, selected, 1u64,
+        facts, owners,
+                               fields, no_native_loans, executable, operands)) {
         binding_diagnostic(nodes, result, module_operands_failed(), operands.diagnostic, operands.node);
         return false;
     } else {};
@@ -499,8 +532,28 @@ export func analyze_bound_completion(nodes:const ExprNodes in N, bindings:const 
                                      work:const NameWork in W, facts:const OperandFacts in F,
                                      sites:CompletionSites in C, result:ModuleBindingResult in R) -> bool
     where {const owner N, const owner Y, const owner W, const owner F, owner C, owner R} {
+    ref executable = make DeclarationDemands(0u64, make DeclarationDemand {
+        scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
+        pending <- no_node(); declared_failure <- no_node(); signature <- false; body <- false;
+    });
+    ref no_native_loans = make SuppliedViews(0u64, make NoSuppliedView {});
+    return analyze_bound_declaration_completion(
+        nodes, bindings, work, facts, no_native_loans, executable, sites, result)
+}
+
+export func analyze_bound_declaration_completion(nodes:const ExprNodes in N,
+    bindings:const NameBindings in Y,
+                                                 work:const NameWork in W,
+                                                     facts:const OperandFacts in F,
+                                                 views:const SuppliedViews in H,
+                                                 demand:const DeclarationDemands in D,
+                                                     sites:CompletionSites in C,
+                                                 result:ModuleBindingResult in R) -> bool
+    where {const owner N, const owner Y, const owner W, const owner F, const owner H, const owner D,
+           owner C, owner R} {
     ref completion = make CompletionCheckResult { diagnostic <- 0u8; node <- no_node(); };
-    if (!check_module_completion(nodes, result.frontend.tree, bindings, work, facts, sites, completion)) {
+    if (!check_module_completion(
+        nodes, result.frontend.tree, bindings, work, facts, views, demand, sites, completion)) {
         binding_diagnostic(nodes, result, module_completion_failed(), completion.diagnostic, completion.node);
         return false;
     } else {};

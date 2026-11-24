@@ -1,0 +1,168 @@
+using "./SourceStorage.cod" SourceBytes;
+using "./ParserStorage.cod" {
+    ExprNodes, no_node, syntax_first, syntax_past, NamedThrowSites, inspect_named_throw,
+    SequenceEntry, first_sequence_entry, inspect_sequence_entry, SequenceSyntax { BlockSequence },
+    AssignmentSites, inspect_assignment, AssignmentSyntax { FieldTransfer },
+};
+using "./NameResolution.cod" { NameBindings, NameWork, record_initializer_label };
+using "./ModuleExports.cod" SelectedExports;
+using "./ModuleExportStorage.cod" ModuleInterfaces;
+using "./AggregateSchemas.cod" AggregateFacts;
+using "./ExceptionTypes.cod" { ExceptionType, resolve_exception_type };
+using "./ExceptionPayload.cod" { PayloadField, PayloadFields, PayloadSchema, find_payload_schema,
+    read_payload_schema,
+                               select_payload_field, unknown_exception_field };
+using "./OperandChecking.cod" {
+    OperandFacts, declared_scalar, require_typed_bits, never_result, remember_constructed_throw
+};
+
+export data ExceptionConstructionFact =
+    NoExceptionConstruction {} |
+    ConstructedException {
+        type:ExceptionType; first:u64; past:u64; field_count:u64; last_initializer:u64;
+            reaches_throw:bool;
+    } |
+    ExceptionInitializer { field:u64; value_kind:u8; operand:u64; };
+
+export array ExceptionConstructionFacts[u64]:ExceptionConstructionFact;
+
+export data ExceptionConstructionResult { diagnostic:u8; node:u64; }
+
+array FieldReadiness[u64]:bool;
+
+export func unsupported_constructed_exception() -> u8 { return 46u8; }
+export func incomplete_exception_initialization() -> u8 { return 48u8; }
+export func repeated_const_exception_initialization() -> u8 { return 49u8; }
+
+func reject(result:ExceptionConstructionResult in R, at:u64,
+    diagnostic:u8) -> bool where {owner R} {
+    result.diagnostic <- diagnostic;
+    result.node <- at;
+    return false;
+}
+
+func remember_exception(nodes:const ExprNodes in N, type:const ExceptionType in T,
+                        plans:ExceptionConstructionFacts in C, site:u64, count:u64, tail:u64,
+                            abrupt:bool) -> void
+    where {const owner N, const owner T, owner C} {
+    plans[site] <- make ConstructedException {
+        type <- type; first <- syntax_first(nodes, site + 1u64, site); past <- syntax_past(nodes,
+            site + 1u64, site);
+        field_count <- count; last_initializer <- tail; reaches_throw <- !abrupt;
+    };
+    return;
+}
+
+func remember_initializer(plans:ExceptionConstructionFacts in C, at:u64, field:u64, kind:u8,
+    operand:u64) -> void
+    where {owner C} {
+    plans[at] <- make ExceptionInitializer { field <- field; value_kind <- kind; operand <- operand;
+        };
+    return;
+}
+
+func prepare_initializers(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B,
+                          work:const NameWork in W, arguments:OperandFacts in A,
+                              field_names:const SourceBytes in P,
+                          fields:const PayloadFields in F, field_count:u64,
+                              plans:ExceptionConstructionFacts in C,
+                          type:const ExceptionType in T, site:u64, tail:u64, revision:u64,
+                              result:ExceptionConstructionResult in R)
+    -> bool where {const owner S, const owner N, const owner B, const owner W, owner A,
+        const owner P,
+                   const owner F, owner C, const owner T, owner R} {
+    val item <- no_node();
+    if (!first_sequence_entry(nodes, revision, site, tail, BlockSequence, item))
+        return reject(result, site, unsupported_constructed_exception());
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
+    ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node();
+        operator_at <- 0u64; };
+    val field <- no_node();
+    ref initialized = make FieldReadiness(field_count, false);
+    val ready <- 0u64;
+    val abrupt <- false;
+    val diagnostic <- 0u8;
+    for (unused in 0u64 .. site + 1u64) {
+        if (item == no_node()) {
+            if (!abrupt && ready != field_count)
+                return reject(result, site, incomplete_exception_initialization());
+            remember_exception(nodes, type, plans, site, field_count, tail, abrupt);
+            remember_constructed_throw(arguments, site, type, !abrupt);
+            return true;
+        };
+        if (inspect_sequence_entry(nodes, revision, site, item, entry) != BlockSequence ||
+            inspect_assignment(nodes, revision, item, entry.item, assignment) != FieldTransfer ||
+            names[assignment.destination].kind != record_initializer_label() ||
+                names[entry.item].kind != 0u8)
+            return reject(result, item, unsupported_constructed_exception());
+        field <- select_payload_field(source, syntax_first(nodes, site, assignment.destination),
+            syntax_past(nodes, site, assignment.destination),
+                              field_names, fields, field_count);
+        if (field == no_node()) return reject(result, assignment.destination,
+            unknown_exception_field());
+        if (initialized[field] && fields[field].readonly)
+            return reject(result, assignment.destination,
+                repeated_const_exception_initialization());
+        if (arguments[assignment.input].kind == never_result()) {
+            (abrupt <- true):void;
+        } else {
+            diagnostic <- require_typed_bits(nodes, arguments, assignment.input,
+                declared_scalar(fields[field].kind));
+            if (diagnostic != 0u8) return reject(result, assignment.input, diagnostic);
+        };
+        if (!initialized[field]) {
+            initialized[field] <- true;
+            (ready <- ready + 1u64):void;
+        };
+        remember_initializer(plans, entry.item, field, declared_scalar(fields[field].kind),
+            assignment.input);
+        if (item == tail) { (item <- no_node()):void; } else { (item <- work[item].next):void; };
+    };
+    return reject(result, site, unsupported_constructed_exception());
+}
+
+export proc check_exception_construction(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B,
+                                         work:const NameWork in W,
+                                             selected:const SelectedExports in E,
+                                                 aggregates:const AggregateFacts in G,
+                                         spellings:const SourceBytes in P, spelling_used:u64,
+                                         interfaces:const ModuleInterfaces in I, published:u64,
+                                         arguments:OperandFacts in A,
+                                             plans:ExceptionConstructionFacts in C, site:u64,
+                                         module:u64, used:u64, revision:u64,
+                                             result:ExceptionConstructionResult in R)
+    -> bool where {const owner S, const owner N, const owner B, const owner W, const owner E,
+        const owner G,
+                   const owner P, const owner I, owner A, owner C, owner R} {
+    ref syntax = make NamedThrowSites { requested <- no_node(); fields <- no_node(); cause <-
+        no_node(); };
+    ref type = make ExceptionType { defining_module <- 0u64; declaration <- no_node(); checked <-
+        false; };
+    if (used > intrinsic (len)(work) || used > intrinsic (len)(arguments) ||
+        used > intrinsic (len)(plans) ||
+        spelling_used > intrinsic (len)(spellings) ||
+        !inspect_named_throw(nodes, revision, used, site, syntax) || syntax.cause != no_node() ||
+        !resolve_exception_type(nodes, names, selected, syntax.requested, module, used, revision,
+            type) ||
+        type.defining_module == 0u64)
+        return reject(result, site, unsupported_constructed_exception());
+    ref schema = make PayloadSchema { count <- 0u64; local_first <- no_node(); imported_header <-
+        no_node(); };
+    if (!find_payload_schema(nodes, work, aggregates, interfaces, published, type, module, used,
+        revision, schema))
+        return reject(result, site, unsupported_constructed_exception());
+    ref fields = make PayloadFields(schema.count, make PayloadField { first <- 0u64; past <- 0u64;
+        kind <- 0u8; readonly <- false; });
+    if (!read_payload_schema(nodes, names, work, interfaces, spelling_used, type, used, revision,
+        schema, fields))
+        return reject(result, site, unsupported_constructed_exception());
+    if (schema.imported_header == no_node())
+        return prepare_initializers(source, nodes, names, work, arguments, source, fields,
+            schema.count, plans,
+                                    type, site, syntax.fields, revision, result);
+    return prepare_initializers(source, nodes, names, work, arguments, spellings, fields,
+        schema.count, plans,
+                                type, site, syntax.fields, revision, result)
+}
