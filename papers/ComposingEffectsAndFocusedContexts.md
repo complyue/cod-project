@@ -13,8 +13,10 @@ from `mtl` and extend it along both axes. For the second we derive a two-stage i
 from a focused grid, using a Store comonad as its value semantics. CoD's symbolic bindings
 offer a way to write a rule once and run it at different foci. We identify which forwarding
 obligations can disappear, which pairs still require a business decision, and the exact
-assumptions under which the two ways of computing a score agree. All results below are
-paper derivations.
+assumptions under which the two ways of computing a score agree. We give a conditional
+M + N source-size bound for transparent composition, locate the independent policy cost,
+and compare CoD, mtl and effectful on [matched programs](examples/ScopedTileAudit.md).
+All results below are paper derivations.
 
 ## The inspection that both extensions must preserve
 
@@ -125,6 +127,103 @@ dispatch cost. [fused-effects, comparison to mtl](https://github.com/fused-effec
 · [Polysemy, the two interpreter orders](https://github.com/polysemy-research/polysemy/blob/e41ef55ab3c28edb7d750664d583f2737237140f/src/Polysemy/Internal.hs#L108-L150)
 · [effectful, error/state order](https://hackage-content.haskell.org/package/effectful-core-2.7.1.2/docs/Effectful-Error-Static.html)
 · [Schrijvers et al., *Monad Transformers and Modular Algebraic Effects*](https://people.cs.kuleuven.be/~tom.schrijvers/portfolio/haskell2019a.html)
+
+<a id="additive-source-extension"></a>
+
+## When M × N becomes M + N
+
+**Claim to test.** For independently supplied operations and transparent scopes in the
+fragment below, the amount of authored routing code grows additively in the two
+vocabularies. An old scope can admit a new operation without an operation-specific adapter.
+An old operation can be used inside a new transparent scope without a scope-specific adapter.
+The claim concerns source changes when *both* populations can grow. A fixed small program
+with a short spelling supplies a witness, not the asymptotic argument.
+
+### Counting the things authors must supply
+
+Take M independently named operation interfaces and N independently written scope forms.
+Use the same required operations, supported programs, admissible owners, failure policy and
+observations in every encoding. A scope can introduce bindings, call its body and restore
+those bindings on exit. For an operation it promises to pass transparently, it invokes its
+body once, preserves the required underlying resources and capabilities, and supplies the
+agreed bindings. A layer may deliberately rebind a dependency. The client can then request
+the installation-time or current interpretation under the operation's contract. The
+comparison includes the type checker, standard dispatcher and reusable adapters as fixed
+infrastructure with their assumptions disclosed.
+
+Let each operation declare its identity, bounded signature and required interpretation once.
+Let each scope install a bounded number of bindings and use the same scoped-lookup and
+restoration protocol. The cost for these definitions is bounded by `aM + bN + c`. Here
+is a construction for that bound. Lookup selects a binding by nominal identity. Pushing a
+frame for a different identity leaves lookup of the old identity available by the same rule.
+Induction over nested frames permits any number of these transparent crossings without a
+new source declaration for the crossed pair. Popping frames in reverse order restores the
+previous bindings on normal and checked exceptional exits. For a selected handler, replay
+uses its required bindings saved at activation, whereas current invocation uses the effective
+bindings at the call. The actual targets must stay alive. The argument assumes the admissible
+call paths pass CoD's existing availability and owner checks. It does not establish how much
+work the checker needs to discharge them. [Symbolic installation and invocation](../design/SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
+· [Replay and resource lifetime](../design/SymbolicDynamicScope.md#regional-resource-capture-preserves-owners)
+
+The more general bound is the **total source size of the operations, scopes and independent
+interaction rules**, plus shared infrastructure. Under bounded-size definitions, K independent
+exception rules give `O(M + N + K)`. Count both registration and wiring at application entry;
+the additive fragment assumes these can be supplied once per independently chosen unit.
+Specify the rules before measuring. A generated M-by-N table whose input independently selects
+every cell still encodes M-by-N decisions. In fact, arbitrary, independent keep/discard choices
+for the cells allow `2^(M × N)` policies: selecting one in the worst case needs at least
+`M × N` bits somewhere. One rule such as “stage every public flag until this tile passes”
+can cover a whole family. Charge its description once. For policies involving three or more
+components, charge the actual multi-party rules and their size. The number of semantic
+outcomes, test obligations, compiled specializations and dynamic calls have separate costs.
+
+A useful boundary involves retry. Let the body append one flag per attempt, fail the first
+time and succeed the second. A fresh staging buffer for each attempt publishes only the
+successful flag. A single staging buffer around the entire retry sees both appends and
+publishes both on success. Each component can still be written once. Both orders are
+expressible; declaring the expected trace tells an author which composition satisfies the
+business requirement. Likewise a transparent pass through a new symbol cannot make a
+previously released owner accessible.
+
+### What would constitute an advance?
+
+Reduction in hand-written forwarding would be a material engineering result for CoD and a
+well-defined comparison with `mtl`'s explicit instance matrix. Several mechanisms already
+achieve modularity in relevant fragments. Modular lifting abstracts over classes of
+transformers and operations. Extensible effects use open requests, and fused carriers can
+delegate the remainder of a signature. The closest comparison for capture is the work on
+typed implicit functions that select a binding dynamically and evaluate under the binding
+environment. Work on lexical handlers also gives typed, semantics-preserving translations
+using second-class capabilities and region evidence. These references answer different
+parts of the proposed claim. [Modular lifting](https://www.fceia.unr.edu.ar/~mauro/pubs/mmt/mmt.pdf)
+· [Extensible effects](https://homes.luddy.indiana.edu/sabry/files/exteff.pdf)
+· [Implicit functions and dynamic binding](https://www.microsoft.com/en-us/research/publication/programming-with-implicit-values-functions-and-control-or-implicit-functions-dynamic-binding-with-lexical-scoping/)
+· [Müller et al., *From Capabilities to Regions*](https://pl.cs.uni-tuebingen.de/publications/mueller23capabilities-preprint.pdf)
+
+The stronger CoD research target is **additive source extension with the same observable
+behavior, two invocation modes on the same installed operation, and checked lifetimes for
+the actual application data its handlers can reach**. Freeze the old modules. Have independent
+authors supply a new operation and a new transparent scope, in either order. Compare to an
+explicit-capability reference with the same sequence of destinations, requests, results,
+faults and cleanup. Change only the backing owner and require an invalid old use to reject;
+retain a control where the same owner stays live. Repeat with a deliberately interacting
+layer, writing down the extra policy once. Count source edits in the application, libraries,
+generated inputs and any central dispatcher. A per-pair requirement hiding in any of those
+places defeats the additive claim for that fragment. A translation preserving accepted
+observations and the relevant rejections would go beyond a collection of passing examples.
+
+### What does the programmer actually write?
+
+The [matched CoD, mtl and effectful listings](examples/ScopedTileAudit.md) exercise both
+invocation modes on one audit operation. Install the audit at destination 1; rebind the
+caller to 9; inside a tile rebind to 2. The tile records one attempt before validation. With
+`perform @attempt()`, destination 1 receives it; with `behave @attempt()`, destination 2
+receives it. Both successful validation and a thrown fault observe 2. On leaving the tile the
+caller sees 9. The choice of 9 catches a plausible error: saving the destination at entry
+to the tile is too late. The examples show installation, both calls, exceptional restoration
+and an independent log. A short static-Reader control shows where the alternatives can be
+just as concise. This establishes the common observable behavior of this fixture by
+derivation. The general expressiveness and novelty claims remain research questions. A second [replaceable threshold policy](examples/ScopedTileAudit.md#adding-a-second-independently-installed-operation) takes seven nonblank lines in CoD, ten in mtl and fourteen in the nominal effectful encoding. Its two results agree for every score and pair of thresholds under the shared predicate contract.
 
 ## What named effects remove in CoD
 

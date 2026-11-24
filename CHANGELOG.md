@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Test the additive source-extension claim on matched effect programs
+
+<a id="k-additive-effect-sources-20261124"></a>
+**K-ADDITIVE-EFFECT-SOURCES-20261124.** At the user's request the [raster paper](papers/ComposingEffectsAndFocusedContexts.md#additive-source-extension) sharpens the M × N to M + N conjecture at `eaadae7073f1d0285ae7ce19a749da189b706413:papers/ComposingEffectsAndFocusedContexts.md`. It bounds authored source for a transparent fragment, identifies independent policy and wiring costs, and compares prior lifting and handler mechanisms. [Matched source](papers/examples/ScopedTileAudit.md) contrasts CoD, mtl and effectful on threshold selection and audited tile failure. These are worked language-design comparisons.
+
 ## 2026-11-24 — Record the seed’s delivered module diagnostic coverage
 
 <a id="k-seed-world-loader-status-20261124"></a>
