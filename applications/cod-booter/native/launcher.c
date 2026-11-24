@@ -456,22 +456,31 @@ static cod_native_DiagnosticDestination_borrow diagnostic_record(cod_booter_diag
 static int finish_command(const char *input, cod_native_status result, compiler_status status,
                           cod_booter_diagnostic_sink *diagnostic) {
     bool package_failure = false;
-    for (cod_booter_package_diagnostic *report = diagnostic->package_reports; report;) {
-        cod_booter_package_diagnostic *next = report->next;
-        report_package(report);
-        package_failure |= report->kind != package_shadow;
-        free(report);
-        report = next;
+    bool has_source_reports = false;
+    uint8_t latest_source_stage = 0;
+    for (cod_booter_diagnostic_event *event = diagnostic->first_event; event;) {
+        cod_booter_diagnostic_event *next = event->next;
+        if (event->kind == cod_booter_package_report) {
+            const cod_booter_package_diagnostic *package = (const cod_booter_package_diagnostic *)event;
+            report_package(package);
+            package_failure |= package->kind != package_shadow;
+        } else {
+            const cod_booter_source_diagnostics *batch = (const cod_booter_source_diagnostics *)event;
+            const char *path = (const char *)(batch->reports + batch->count);
+            for (size_t i = 0; i < batch->count; ++i) report(path, status, &batch->reports[i]);
+            has_source_reports = true;
+            latest_source_stage = batch->reports[0].stage;
+        }
+        free(event);
+        event = next;
     }
     if (result != COD_NATIVE_OK) {
         fputs("cod-booter: invalid native entry\n", stderr);
     } else if (status != cod_enum_CompilerStatusx2ecod_14_CompilerStatus_member_Complete) {
-        for (size_t i = 0; i < diagnostic->count; ++i)
-            report(diagnostic->path, status, &diagnostic->reports[i]);
         const bool detailed_package_failure = package_failure && diagnostic->primary.stage == 2 &&
             diagnostic->primary.code == module_package_diagnostic;
         if (!detailed_package_failure &&
-            (!diagnostic->count || diagnostic->primary.stage != diagnostic->reports[0].stage))
+            (!has_source_reports || diagnostic->primary.stage != latest_source_stage))
             report(input, status, &diagnostic->primary);
         if (diagnostic->snapshot_failed)
             fprintf(stderr, "%s: error: could not retain the complete parser diagnostics\n", input);
@@ -479,8 +488,6 @@ static int finish_command(const char *input, cod_native_status result, compiler_
     if (diagnostic->package_delivery_failed &&
         (diagnostic->primary.stage != 2 || diagnostic->primary.code != module_package_delivery_failed))
         fprintf(stderr, "%s: error: could not retain package resolution diagnostics\n", input);
-    free(diagnostic->reports);
-    free(diagnostic->path);
     return result == COD_NATIVE_OK ? status : 70;
 }
 

@@ -53,6 +53,12 @@ static bool diagnostic_range(const uint8_t *base, uint64_t count, uint64_t first
     return memchr(bytes->bytes, 0, bytes->size) == NULL;
 }
 
+static void append_event(cod_booter_diagnostic_sink *sink, cod_booter_diagnostic_event *event) {
+    if (sink->last_event) sink->last_event->next = event;
+    else sink->first_event = event;
+    sink->last_event = event;
+}
+
 cod_native_status cod_native_append_package_diagnostic_impl(
     cod_native_DiagnosticDestination_borrow destination, uint8_t kind, uint64_t os_error,
     uint64_t first_line, uint64_t first_column, uint64_t past_line, uint64_t past_column,
@@ -91,6 +97,7 @@ cod_native_status cod_native_append_package_diagnostic_impl(
         return COD_NATIVE_OK;
     }
     *report = (cod_booter_package_diagnostic){
+        .event = {.kind = cod_booter_package_report},
         .kind = kind,
         .os_error = os_error,
         .first = {first_line, first_column},
@@ -105,9 +112,7 @@ cod_native_status cod_native_append_package_diagnostic_impl(
         if (ranges[i].size) memcpy(copied, ranges[i].bytes, ranges[i].size);
         copied += ranges[i].size;
     }
-    if (sink->last_package_report) sink->last_package_report->next = report;
-    else sink->package_reports = report;
-    sink->last_package_report = report;
+    append_event(sink, &report->event);
     *status = 0;
     return COD_NATIVE_OK;
 }
@@ -122,35 +127,48 @@ cod_native_status cod_native_write_parse_reports_impl(cod_native_DiagnosticDesti
         return COD_NATIVE_BOUNDARY_ERROR;
 
     const size_t path_size = (size_t)(past - first);
-    const uint8_t *path_bytes = path.base + (size_t)first;
-    if (memchr(path_bytes, '\0', path_size)) return COD_NATIVE_BOUNDARY_ERROR;
-    char *copied_path = malloc(path_size + 1);
-    cod_booter_diagnostic *copied = malloc((size_t)used * sizeof(*copied));
-    if (!copied || !copied_path) {
-        free(copied_path);
-        free(copied);
+    const size_t header_size = sizeof(cod_booter_source_diagnostics);
+    const size_t bytes_limit = (size_t)PTRDIFF_MAX;
+    if (past > bytes_limit || path_size >= bytes_limit - header_size ||
+        used > (bytes_limit - header_size - path_size - 1) / sizeof(cod_booter_diagnostic)) {
         sink->snapshot_failed = true;
         *status = 1;
         return COD_NATIVE_OK;
     }
-
-    memcpy(copied_path, path_bytes, path_size);
-    copied_path[path_size] = '\0';
+    const uint8_t *path_bytes = path.base + (size_t)first;
+    if (memchr(path_bytes, '\0', path_size)) return COD_NATIVE_BOUNDARY_ERROR;
     for (size_t i = 0; i < (size_t)used; ++i) {
         const cod_native_write_parse_reports_row1 *row = &rows.base[i];
-        copied[i] = (cod_booter_diagnostic){
+        if (!row->code || !row->first_line || !row->first_column || !row->past_line || !row->past_column ||
+            row->past_line < row->first_line ||
+            (row->past_line == row->first_line && row->past_column < row->first_column))
+            return COD_NATIVE_BOUNDARY_ERROR;
+    }
+
+    cod_booter_source_diagnostics *batch =
+        malloc(header_size + (size_t)used * sizeof(cod_booter_diagnostic) + path_size + 1);
+    if (!batch) {
+        sink->snapshot_failed = true;
+        *status = 1;
+        return COD_NATIVE_OK;
+    }
+    *batch = (cod_booter_source_diagnostics){
+        .event = {.kind = cod_booter_source_reports},
+        .count = (size_t)used,
+    };
+    char *copied_path = (char *)(batch->reports + batch->count);
+    memcpy(copied_path, path_bytes, path_size);
+    copied_path[path_size] = '\0';
+    for (size_t i = 0; i < batch->count; ++i) {
+        const cod_native_write_parse_reports_row1 *row = &rows.base[i];
+        batch->reports[i] = (cod_booter_diagnostic){
             .stage = stage,
             .code = row->code,
             .first = {row->first_line, row->first_column},
             .past = {row->past_line, row->past_column},
         };
     }
-    free(sink->path);
-    free(sink->reports);
-    sink->path = copied_path;
-    sink->reports = copied;
-    sink->count = (size_t)used;
-    sink->snapshot_failed = false;
+    append_event(sink, &batch->event);
     *status = 0;
     return COD_NATIVE_OK;
 }
