@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Check protected symbol names at declaration
+
+<a id="k-runtime-symbol-declaration-check-20261124"></a>
+**K-RUNTIME-SYMBOL-DECLARATION-CHECK-20261124.** D-ARCH-REVIEW r102→103 continues [H-PROJECT-ARCHITECTURE-REVIEW-20261122](#h-project-architecture-review-20261122) under P-682/P-683 for the [runtime identity decision](#h-runtime-symbol-identity-20261124). The [review](design/ImplementationArchitecture.md#protecting-a-declared-symbol-name) covers both frontends’ module and lexical binding checks, including unused declarations and selected spellings. The earlier gates are in `00c971ba7c94685a8dfb8e81620e8c662d4f02fa:cod/lang_checked.hh` (declaration_scope) and `00c971ba7c94685a8dfb8e81620e8c662d4f02fa:applications/cod-booter/src/NameResolution.cod` (declare_name). Mainline owns implementation. Runtime value transport retains its own review.
+
 ## 2026-11-24 — Preserve the symbol identity at its bare name during execution
 
 <a id="h-runtime-symbol-identity-20261124"></a>
