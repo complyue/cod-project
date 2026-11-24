@@ -180,6 +180,7 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 | --- | --- |
 | 闭合遍历。票价依次为 120、80、80，筛选器跳过 120，调用方取首个可接受票价。 | 拒绝 120 时，筛选器仍须向要求布尔反馈的上游回答是否继续。在第一个 80 向外层返回时，已进入的遍历依次清理。比较命名签名与显式签名时，应对照反馈归属、退出目标和清理顺序。[枚举选择论文](../papers/ComposingEnumerativeChoice.md#what-an-equivalence-must-preserve) |
 | 开放管道。传感器提交读数后退出，worker 在稍后的调用中处理已入队事件。 | 签名要保留读取或转移载荷所需的 owner。把借用了 ingress 栈帧的 `here` 或局部引用排队应被拒绝。worker 的反馈只属于其本地调用。以回放 sink 和队列 sink 检验同一签名可采用的不同实现。[开放事件论文](../papers/OpenEventPipelines.md#a-dynamically-scoped-event-sink) |
+| 函数响应式编程（FRP）。提枪与改价同帧发生，挂枪与最后一升计量也在同一帧。 | 尝试固定一条本地时间线，再把事件、可采样值和带更新的状态用作不同的类型构造器。旧价启动、新量结账应得到 510 分。若换一个采样规则会收到 540 或 340 分，别名展开和库操作各自需要说明什么？[加油销售与 Reflex 风格的网络](../papers/OpenEventPipelines.md#a-reflex-style-network-for-a-fuel-sale) |
 
 仓储分配策略编辑器提供了一个管道以外的对照。论文以 `Program<Orders → Decisions>` 描述可编辑的程序图。给这个完整类型起简称时，普通别名就够用。若要让同一个编辑签名在多种程序表示之间复用，再给出必须把 `Program` 所在位置参数化的实际用例，并检查编辑程序图和执行它各自需要的权限。[程序编辑器论文](../papers/AlgebraicEffectsIsAllYouNeed.md#1-a-program-that-takes-a-program-as-its-input)
 

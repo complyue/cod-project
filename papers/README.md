@@ -1,36 +1,36 @@
 # CoD working papers
 
-A program can return the expected answer while contacting an extra warehouse, leaking a cursor,
-or sending a sensor reading to the wrong installation. An unchanged address can conceal a change
-of owner. These papers use small examples in which a plausible implementation gives the right
-answer to an inadequate check. Each identifies the additional observation needed to distinguish
-the two executions or representations.
+These papers accompany the long-term design of CoD. Each begins with a programming decision
+someone has to make: which edge to edit, when a borrowed view stops being usable, how to stop an
+inventory search, or which state belongs to a completed fuel sale. The worked examples let a
+reader compare possible language and library designs on paper. The [design registry](../design/DesignAuthorityRegistry.md)
+records settled language contracts; the [design topics](../docs/DesignTopics.md) track decisions
+still open.
 
-| Working paper | Research question | Evidence in the draft |
+| Paper | Design question | Case that separates the alternatives |
 | --- | --- | --- |
-| [Source and graph edits to an effectful policy](AlgebraicEffectsIsAllYouNeed.md) | When do a textual edit and an edit to a published program graph agree, including for the next editor? | A warehouse example has identical decisions on one order and different service requests. A second edit distinguishes a shared target from two identical copies. The draft specifies a comparison against a typed graph interpreter with an explicit service. |
-| [Composing enumerative choice](ComposingEnumerativeChoice.md) | Does extracting a filter and a dependent traversal preserve what a live source observes at each offer and exit? | A case argument for finite synchronous traversals, a reproducible comparison with explicit loops, and one-seat counterexamples for wrong feedback and cleanup. |
-| [Open event pipelines](OpenEventPipelines.md) | Which routing and progress information must survive a synchronous submission for later processing to give the correct answer? | A pair of indistinguishable untagged histories, an explicit-destination control, and a reproducible interleaving model with two deployments. |
-| [Coarse-grained ownership](CoarseGrainedOwnership.md) | When can several references share owner information while retaining distinct identities and permissions at each use? | Two representation arguments, a backing-growth versus owner-replacement counterexample, and a cost study that separates metadata, image relocation and retained memory. |
+| [Editing the Source Graph of an Effectful CoD Program](AlgebraicEffectsIsAllYouNeed.md) | How can a person use a bounded two-dimensional view and an AI-assisted CoD editing program to revise the DCG that is the program source? | Removing access to a backup warehouse for retail orders requires redirecting one edge. Editing the shared fallback can silently affect urgent orders too. |
+| [Which references survive replacement of a region?](CoarseGrainedOwnership.md) | What must a use prove about the actual owner originally selected by a reference? | A replacement can read the old revision during construction. After successful delivery to the occupied holder, a later read through the old view must be rejected. A saved value or a fresh selection in the replacement has a different dependency. |
+| [Composing enumerative choice with producers and transformers](ComposingEnumerativeChoice.md) | What can a higher-kinded synonym express about a synchronous traversal, its feedback and the stages that compose with it? | A seat filter must tell the upstream cursor to continue after skipping a fare. A caller returning the first affordable fare exits two live traversals and receives its result after cleanup. |
+| [Typing open event pipelines across Actors and reactive timelines](OpenEventPipelines.md) | How can a library abstract over independent send and receive families, and over the signal families of a local reactive network? | Pump monitoring separates submission from a later worker turn. A [fuel sale](OpenEventPipelines.md#a-reflex-style-network-for-a-fuel-sale) distinguishes same-frame sampling rules by the amount on a receipt, and a dispenser switch distinguishes which completion reaches the console. |
 
-The synchronous and open-pipeline studies meet at the point where an invocation ends. In the
-former, the original cursor is still waiting for a particular reply or exit. In the latter, the
-submitting frame can have retired before the next observation. The ownership study supplies a
-question for both: which actual owner makes each later access admissible? The graph-edit study
-adds a further horizon. Even agreement on every execution of the current policy can leave two
-editors with different targets for a subsequent change.
+### Read the two pipeline papers together
 
-The Python appendices in the two pipeline papers operate on finite models with stated inputs.
-The other results are worked examples or conditional arguments. Proposed measurements concern
-native execution, checking and resource costs under matched workloads. The individual papers
-give the controls and failure criteria for interpreting those measurements.
+Both ask what changes when a library can pass a type constructor such as `F : Type → Type`
+and use it at several item types. They share candidate notation for producer, transformer and
+consumer. In the booking example a suspended seat source can receive a Boolean from its active
+consumer. At a chan boundary the sending traversal can finish before a receiving traversal
+begins. A reactive timeline introduces a third question: which changes are simultaneous for
+a local network? Each paper gives examples a type checker could distinguish and examples whose
+answers depend on an operation's behavioral contract. The proposed notation and those
+contracts can be discussed independently. [Higher-kinded type synonym topic](../docs/DesignTopics.md#higher-kinded-type-synonyms)
 
-### Reading compiler evidence
+### How to read the examples
 
-Derive the expected observation from the scoped language contract or an explicitly stated research
-assumption before running a fixture. Record the seed or booter revision and the portion of the
-workload it accepts. A disagreement is evidence to diagnose. Check the fixture and model against
-the contract, then distinguish an implementation defect, missing coverage or an open design choice.
-Agreement between two compiler versions is still one implementation observation for each version.
-The paper's claims about the language rest on its contracts and arguments. This convention also
-allows a useful counterexample to be published before either compiler can run the complete study.
+CoD listings exercise the identified language rules under the stated application assumptions.
+Declarations labeled *paper notation* describe candidate future interfaces. A worked trace
+records what a particular choice would imply: a service request, access rejection, feedback
+to one active cursor, or price sampled at a particular instant. Changing one assumption and
+working out the first differing observation is a way to challenge a proposal before choosing
+syntax or implementing it. A seed or booter run can later be compared with that result. Its
+acceptance or rejection alone does not settle the design.

@@ -1,311 +1,557 @@
-# Open event pipelines with dynamically scoped event sinks
+<a id="open-event-pipelines-with-dynamically-scoped-event-sinks"></a>
+
+# Typing Open Event Pipelines across Actors and Reactive Timelines
 
 ## Abstract
 
-A pump monitor sees a high reading from sensor A in production and one from sensor B in a trial.
-Pooling the readings would raise an alarm at a pump where neither monitor saw a pair. Both
-deployments use the same adapter code, event type and sensor names. Can that code select its sink
-from the caller's dynamic scope and still give the same answers as an adapter passed its destination
-explicitly, after the caller has returned? We identify what the queue must preserve about each
-submission and what the sources must establish before a worker can finalize a window. Two histories
-with identical untagged records but opposite correct answers establish a limit on late destination
-selection. A finite model compares the two routing disciplines over 360 legal input orders. It also
-shows how often a wrong route escapes detection if the observer checks only the final alarms.
+Can a sensor adapter and a worker describe their halves of an event pipeline independently,
+then compose them without promising that every send reaches the worker? We explore higher-kinded
+producer, transformer and consumer signatures with separate type constructors for the sending
+and receiving ends of a chan. The same business types admit a local queue interpretation and an
+inter-Actor interpretation. CoD programs for live and trial pump monitors show what the signatures
+leave to the application. A synchronous submission must leave sufficient routing information for
+its eventual owner, and a progress record must follow every accepted reading it covers. Paired
+histories show how either condition can fail even when the signatures agree. The
+[fuel-sale case](#a-reflex-style-network-for-a-fuel-sale) extends the question to transactions,
+timeline identity and a point-of-sale Actor.
+
+## Which constructor belongs to each endpoint?
+
+The higher-kinded question is whether two components can type their halves of this application
+independently. An instrument adapter needs authority to *send* a measurement. A monitor needs
+authority to *receive* its admitted input. Neither needs the other component's endpoint. We
+would like to reuse the typing of local producer, transformer and consumer composition on each
+side while allowing the two sides to use different traversal and endpoint families. CoD identifies
+independent typed chan ends and higher-kinded type synonyms as the language direction. The following
+signatures are **paper notation for exploring the design**. An arrow names a typing relation for
+an operation. Its storage, calling convention, owner and dynamic requirements need their own CoD
+contracts. [Independent chan endpoints](../design/ActorChannels.md#independent-chan-endpoints)
+· [Producer and transformer contracts](../design/ProducersAndTransformers.md#a-transformer-takes-a-producer-as-an-input)
+
+Use the notation of the [closed traversal paper](ComposingEnumerativeChoice.md). A family `F` of
+kind `Type → Type` takes an element type `A` and produces a completed local producer signature
+`F[A]`. A transformer changes the element type and, if its contract calls for it, the family.
+A terminal consumer drives a whole producer and yields a local result `Z`.
+
+```text
+F, G, H, Tx, Rx             : Type → Type
+Producer[F, A]              ≔ F[A]
+Transformer[F, G, A, B]     ≔ F[A] → G[B]
+Consumer[F, A, Z]           ≔ F[A] → Z
+```
+
+This makes the direction of an endpoint precise. A sending end of type `Tx[A]` accepts each local
+item. A terminal can use that end to drive a producer of such items. A receiving end of type
+`Rx[A]` supplies items that the local worker can offer downstream. Give it a bounded turn so the
+paper can name its local producer without suspending a submitter until the next message arrives.
+The following are required adapter operations, parameterized over the admissible message types
+and the particular constructor families for which an implementation supplies them.
+
+```text
+sender[Tx, F, A]       : Tx[A] → Consumer[F, A, LocalExit]
+ready[Rx, G, A]        : (Rx[A], TurnBudget) → Producer[G, A]
+```
+
+`sender(tx)` is a terminal requiring only the sending end. On a normal local visit it offers the
+item and applies the local sending policy. `LocalExit` describes the local traversal's completion.
+`ready(rx, budget)` supplies only locally admitted input and can produce an empty turn. A chan
+can have outgoing traffic while the other Actor has nothing ready. These adapters also require
+an actual way to traverse `F` and `G`, an admissible payload, and permission to use the selected
+endpoint. The kind of a constructor by itself supplies none of those operations. In particular,
+`Consumer` in this notation consumes a *producer*. The per-item operation hidden inside the
+sending terminal consumes a *value*. Substituting one for the other changes the interface.
+
+### Two compositions and a missing arrow
+
+An adapter reading a sensor journal can normalize raw equipment records into the monitor's
+`Input`, including source progress. On another turn the monitor uses a window state `w` to
+produce alert records. Let `F` denote the local journal traversal, `G` its normalized traversal,
+`H` the worker's admitted batch and `J` the traversal of alarms. All four have kind `Type → Type`.
+`Input` below denotes the reading or progress fields used in the CoD examples. Fix a compatible
+sending endpoint `tx : Tx[Input]` and receiving endpoint `rx : Rx[Input]`.
+
+```text
+normalize                    : Transformer[F, G, Raw, Input]
+sender(tx)                   : Consumer[G, Input, LocalExit]
+sender(tx) ∘ normalize       : Consumer[F, Raw, LocalExit]
+
+ready(rx, budget)            : Producer[H, Input]
+decide(w)                    : Transformer[H, J, Input, Alarm]
+publish                      : Consumer[J, Alarm, LocalExit]
+publish ∘ decide(w)          : Consumer[H, Input, LocalExit]
+```
+
+The first composition checks because `normalize` ends with exactly `G[Input]`. The second checks
+because `decide(w)` takes `H[Input]` and produces `J[Alarm]`. Its terminal can run on
+`ready(rx, budget)`. Passing a sending end for `Alarm` into the first composition at `Input` is
+a type error. An adapter that can use two different `Tx[Input]` values for live and trial must still
+select the right one. Type correctness distinguishes the message families and endpoint roles.
+Source identity, route selection, owner lifetime and the watermark's meaning require more evidence.
+Even matching the payload on both sides leaves an operational question: which receiving endpoint
+does this particular sending endpoint reach? The application fixes the pairing in the examples.
+
+Here are two concrete instantiations of the *families*, keeping the same business types. They name
+hypothetical application signatures, rather than introducing built-in containers or endpoint APIs.
+
+| Context | Sender's substitution | Receiver's substitution | Where a value can outlive submission |
+| --- | --- | --- | --- |
+| One event loop | `Tx = QueueWriter`, `G = JournalVisit` | `Rx = QueueReader`, `H = ReadyBatch` | A destination-owned queue copies a complete input record. `ReadyBatch[Input]` borrows a later drain turn. |
+| Two Actors | `Tx = RegionSend`, `G = JournalVisit` | `Rx = RegionReceive`, `H = ReadyBatch` | The sender constructs an admissible regional representation. A receiving Actor offers the input only after the whole region has been received and validated. |
+
+For example, `RegionSend[Input]` and `RegionReceive[Input]` can share a payload type while a
+sensor module receives only the former. The higher-kinded abstraction is the ability to pass
+`QueueWriter` or `RegionSend` *before* applying it to a payload type, then reuse the adapter
+signature at both `Input` and `Alarm` when their admission evidence is available. An individual
+method taking ordinary generic `A` can type a fixed `QueueWriter[A]`. It cannot thereby abstract
+over whether the chosen writer family is `QueueWriter` or `RegionSend`.
+
+A tempting shorter signature gives both roles one family and calls both ends `Port[A]`. With no
+role parameter or restricted views, interchanging the two endpoints of the same payload type passes
+the shape check. Requiring one shared constructor `K` for both arguments instead excludes the
+`RegionSend` / `RegionReceive` substitution above. Independent `Tx` and `Rx` solve this part.
+A role-indexed family, partially applied at `Send` and `Receive` to yield two distinct unary
+families, is another candidate. Its useful test is whether a component holding only
+`Port[Send, Input]` can type its entire sender path without acquiring receive or close authority.
+Variance of the endpoint, close authority, multiple receivers and how local failures appear in
+`LocalExit` remain design choices.
+
+There is deliberately no composition equation identifying the sending terminal's result with the
+receiving turn's input. Consider a single submitted reading. The local traversal finishes, the
+region goes missing and the next receiving turn is empty. Alternatively, a receiver stops
+draining, retained items consume capacity, further admission or transmission slows, and work can
+resume as capacity becomes available. Both behaviors fit these endpoint families. Transport
+backpressure constrains resource use through time. Equating `LocalExit` with remote receipt, or
+using synchronous producer feedback to acknowledge the remote worker's computation, would exclude
+valid executions. A stronger acknowledged stream requires an application protocol and a return
+path. [Region publication and capacity](../design/ActorChannels.md#regional-transport-over-akcp)
+
+The pump example below asks what the constructor still leaves for the program to establish.
+The [fuel-sale example](#a-reflex-style-network-for-a-fuel-sale) tests a different family
+parameter, the timeline within which a price change and a sale can be observed together.
 
 <a id="where-asynchrony-enters"></a>
 
-## Which decision can a submission leave to its worker?
+## What outlives a submission?
 
-An independently invoked adapter can publish a reading and return before another invocation
-supplies the reading that completes the pair. The monitor owns the partial match across both calls.
-This is an *open* pipeline in the sense used here. A closed traversal hands each offer to a consumer
-while its traversal is still active. A queue and a later worker turn on one event loop suffice to
-expose the difference. [Closed traversals](ComposingEnumerativeChoice.md)
+A sensor adapter can return immediately after submitting its reading. The next reading may come
+from an independent invocation. A worker can emit an alarm after *both* adapters have returned.
+We call this an *open* pipeline. In a closed traversal, the producer that offered the current
+item can still receive feedback or a control exit from its active consumer. Here the pump monitor
+owns the unfinished correlation across calls. The distinction already arises on one event loop
+when ingestion and processing run on separate turns. [Closed traversal and feedback](ComposingEnumerativeChoice.md)
+
+The application has two queues, one per deployment, and an ordinary named procedure
+`admit(site:Site, s:Sensor, k:Kind, stamp:u64) -> void`. For the worked histories there is room
+for every record. Before `admit` returns, the selected queue holds a copy of the three input
+fields. The queue owner lives through the later worker turn. Its per-source ordering applies to
+the control records as well as the readings. These are contracts of this particular monitor.
+A shared queue storing a stable site with each entry could meet the same contract.
+
+The two implementations below use the same application procedure and types. Timestamps and progress
+values are nonnegative seconds. `High` reports a high reading at `stamp`. `Advance` announces that
+this source has finished its on-time contributions strictly earlier than `stamp` at this site.
+Each site has exactly the two sensors shown.
+
+```cod
+enum Site:u8 { Live; Trial; }
+enum Sensor:u8 { A; B; }
+enum Kind:u8 { High; Advance; }
+```
 
 <a id="a-dynamically-scoped-event-sink"></a>
 
-The operation under study is ingress. Consider two versions of the same adapter. In the first, an
-installation site passes a destination to the adapter and any named helpers on the path to its
-final submit. In the second, a named helper submits through a typed procedure symbol. Here `Input`
-is an application record made entirely of bits. It can represent a reading or a source-progress
-record. The owner of the symbol can supply this ingress definition for a live deployment. The named
-application helper copies an admitted record into the live monitor's queue.
+## Two CoD ingress procedures
+
+**Explicit destination.** An intermediate adapter that forwards a reading can inspect the `site`
+argument or pass it through unchanged. The last call names the destination that receives the copy.
 
 ```cod
-symbol @ingress:proc(r:Input)->void;
-
-proc submit(r:Input) -> void {
-    behave @ingress(r)
-}
-
-proc live_turn(r:Input) -> void {
-    effect @ingress(r:Input) { offer_live(r); };
-    submit(r)
+proc submit_to(site:Site, s:Sensor, k:Kind, stamp:u64) -> void {
+    admit(site, s, k, stamp)
+    return
 }
 ```
 
-A trial scope can install the corresponding trial definition for the same symbol. `behave` selects
-the active definition and uses current dynamic bindings. Scope exit restores the previous
-installation. The call to `submit` finishes synchronously in either deployment. The queue owner
-can subsequently retain the copied record, and the installation can retire. A worker drains the
-queue and calls the correlator with its own state. Alert output has a separate destination. The
-installed procedure and the adapter's live activation are unavailable as queue elements under CoD's
-callable and lifetime rules. [Procedure installation and restoration](../design/SymbolicDynamicScope.md#definition-installed-effectful-procedures)
-· [Scoped handler lifetime](../design/CallableStorageAndHereAccess.md#scoped-replay-without-a-first-class-handler)
+**Dynamically scoped destination.** The application owns the `@ingress` symbol and its procedure
+family. Its one method reads a typed `@site` binding. The adapter calls the installed family with
+`perform`, which replays the bindings that the activated method needs. An integration site can
+therefore select a destination once for a sequence of submissions.
 
-**Claim.** Replace explicit destination passing along the synchronous adapter call path by a scoped
-ingress operation. For executions with matching route selection at the installation sites, this
-replacement preserves each deployment's admitted records, drops and finalized alarms provided that:
+```cod
+symbol @site:Site;
+symbol @ingress:proc(s:Sensor, k:Kind, stamp:u64)->void;
 
-1. Every data or progress submission resolves its destination before admission. The accepted copy
-   retains that decision until consumption, either by membership in a destination-owned queue or
-   through an immutable route identity in a shared queue. The destination remains live throughout
-   its pending work.
-2. The explicit and scoped versions use the same admission rule, initial state and schedule of
-   submissions and drain opportunities. The record includes the same source identity at both
-   interfaces. All nested installations restore the prior route on exit.
-3. Each input source makes progress promises within its own deployment. For that source and
-   deployment, an admitted progress record follows every admitted reading that it covers.
-   The worker uses the same deterministic transition for each consumed record.
+proc @ingress(s:Sensor, k:Kind, stamp:u64) -> void {
+    admit(@site, s, k, stamp)
+    return
+}
 
-The first condition fixes where to record a decision. The third fixes what a progress record may
-assert. They need independent checks. A properly typed `Input` can still be sent to the wrong
-perfectly well-typed monitor. A correctly routed progress record can still overtake an accepted
-reading.
+proc submit(s:Sensor, k:Kind, stamp:u64) -> void {
+    perform @ingress(s, k, stamp)
+    return
+}
+```
 
-A direct argument explains the claimed equivalence. Couple the explicit destination at each
-installation site to the corresponding stack entry in the scoped program. Entering and exiting a
-nested trial changes both choices in the same way. An ingress call then selects the same queue and
-applies the same admission rule to the same record. A drain uses only queue contents and the
-worker's state, so equal histories remain equal at the next drain. These are all the transitions in
-the model. The obligations for a compiler or library implementation are the choice actually made
-at a call, the restoration on all exits and the absence of any later dependency on that installation.
-An implementation can share the underlying queue code between the two interfaces.
+The symbol declaration gives the operation its identity and signature. The method definition
+makes its behavior available. Executing `effect proc @ingress;` below installs it with the active
+site binding. `submit` is a named procedure reached while that binding is installed. Queued records
+contain only bits. Neither the handler nor its invoking activation has to survive until the worker
+runs. CoD requires a suitable installation on each reachable invocation path and prevents an
+installed handler from escaping as a stored callable.
+[Direct symbolic procedure declaration](../design/SymbolicDynamicScope.md#direct-symbolic-procedure-declaration)
+· [Installation, invocation and restoration](../design/SymbolicDynamicScope.md#definition-installed-effectful-procedures)
+· [Call-path checks](../design/SymbolicDynamicScope.md#call-path-binding-checks)
+
+### A trial that can end in two ways
+
+Suppose an operator sometimes ends a trial as soon as its reading has been recorded. To make the
+unwind observable, both versions call the same helper after admitting the trial reading.
+
+```cod
+data TrialEnded <: Exception { stamp:u64; }
+
+proc finish_trial(stop:bool) -> void throws TrialEnded {
+    if (stop) { throw TrialEnded { stamp <- 6u64 }; }
+    return
+}
+```
+
+With explicit routing, the outer caller selects live at both of its submit sites. Its local catch
+handles the trial's declared exception and execution proceeds to the second site.
+
+```cod
+proc explicit_trial(stop:bool) -> void throws TrialEnded {
+    submit_to(Trial:Site, B:Sensor, High:Kind, 6u64)
+    finish_trial(stop)
+    return
+}
+
+proc explicit_prefix(stop:bool) -> void {
+    submit_to(Live:Site, A:Sensor, High:Kind, 8u64)
+    try { explicit_trial(stop) }
+    catch (e:const TrialEnded) {}
+    submit_to(Live:Site, A:Sensor, Advance:Kind, 10u64)
+    return
+}
+```
+
+The scoped caller activates live. Its nested call activates the same procedure family again under
+trial. Each activation takes its own snapshot. The final `submit` in `scoped_prefix` uses whichever
+installation is active *after* the inner procedure has exited.
+
+```cod
+proc scoped_trial(stop:bool) -> void throws TrialEnded {
+    effect @site <- Trial:Site;
+    effect proc @ingress;
+    submit(B:Sensor, High:Kind, 6u64)
+    finish_trial(stop)
+    return
+}
+
+proc scoped_prefix(stop:bool) -> void {
+    effect @site <- Live:Site;
+    effect proc @ingress;
+    submit(A:Sensor, High:Kind, 8u64)
+    try { scoped_trial(stop) }
+    catch (e:const TrialEnded) {}
+    submit(A:Sensor, Advance:Kind, 10u64)
+    return
+}
+```
+
+Read these calls with the worker paused. The first accepted record belongs to live. The second
+belongs to trial. With `stop` false, the inner return restores the outer installation. With `stop`
+true, unwinding restores it before the catch completes. The trial queue still owns its accepted B
+record in both cases. Restoration changes the current binding and leaves completed writes intact.
+The final record advances **live A**. The two prefixes therefore leave identical queue contents
+after their own frames retire. A worker that later fails while consuming B cannot return that
+failure to either of these completed catches.
+[Scope restoration](../design/SymbolicDynamicScope.md#method-registration-and-scoped-installation)
+· [Exception construction and propagation](../design/ExceptionControl.md#exception-construction-throw-and-rethrow)
+
+There is a source-level distinction between selecting an installed procedure and choosing the
+environment in which its method runs. Call the following helper while the outer live installation
+is active. The helper rebinds the site and leaves the installed procedure in place.
+
+```cod
+proc compare_call_modes() -> void {
+    effect @site <- Trial:Site;
+    perform @ingress(A:Sensor, High:Kind, 8u64)
+    behave @ingress(B:Sensor, High:Kind, 6u64)
+    return
+}
+```
+
+The first reading goes to live, the captured site. The second goes to trial, the current site. A
+program that wants the most recent site rebinding can consistently choose `behave`. To reproduce
+the explicit prefixes with the `perform` convention used here, the trial must activate the handler
+under its own site. Simply changing `@site` and omitting the inner activation sends B to live.
+Every value in that erroneous program still has the required static type.
+[Procedure snapshots and current bindings](../design/SymbolicDynamicScope.md#captured-values-and-call-behavior)
 
 <a id="a-correlation-with-an-observable-answer"></a>
 
-## Two histories that a worker cannot distinguish without a route
+## A worker that can distinguish the histories
 
-Use one pump, two isolated deployments named *live* and *trial*, and two known sensors A and B in
-each. The pump and sensor names are intentionally identical across deployments. A high A sample
-at event time 8 and a high B sample at time 6 qualify for the same half-open window [0, 10).
-Each source has a monotone watermark. In this experiment a watermark of 10 is a binding promise
-that the source has finished its on-time contributions earlier than 10 in that deployment. The
-serial worker finalizes the window when both sources reach 10. It emits once if both reported
-high, then releases the window state. With the final-only policy, the second high reading alone
-cannot publish an alarm. The eligibility rule uses a set of distinct sensors, so a redelivery of
-the same high reading within this window cannot supply the other sensor.
+A worker consumes accepted records after the adapter calls have returned. For one pump and one
+site it tracks A and B's high readings in [0, 10), plus each source's latest progress. The
+following CoD function handles that particular window. The application supplies a live, distinct
+`FirstWindow` per site, initialized with false flags and both marks at zero. It supplies valid
+monotone progress within each source and consumes records in their per-source order. The function
+mutates storage supplied explicitly by its caller. A worker publishes an alarm only when the
+function returns `Alert` and can retire the closed window's partial match.
 
-| Submission in order | Split history | Pair history |
+```cod
+enum Decision:u8 { NoOutput; Quiet; Alert; }
+
+data FirstWindow {
+    a_high:bool; b_high:bool;
+    a_mark:u64; b_mark:u64;
+    closed:bool;
+}
+
+func step(w:FirstWindow in O, s:Sensor, k:Kind, stamp:u64) -> Decision
+    where {const owner O} {
+    if (w.closed) return NoOutput:Decision
+    if (k == (High:Kind)) {
+        if (stamp < 10u64) {
+            if (s == (A:Sensor)) { w.a_high <- true } else { w.b_high <- true }
+        }
+    } else {
+        if (s == (A:Sensor)) { w.a_mark <- stamp } else { w.b_mark <- stamp }
+    }
+    if (w.a_mark < 10u64) return NoOutput:Decision
+    if (w.b_mark < 10u64) return NoOutput:Decision
+
+    val result <- Quiet:Decision
+    if (w.a_high) {
+        if (w.b_high) { result <- Alert:Decision }
+    }
+    w.closed <- true
+    w.a_high <- false
+    w.b_high <- false
+    return result
+}
+```
+
+`NoOutput` leaves the public alarm log untouched. `Quiet` finalizes an unqualified window. `Alert`
+finalizes a qualified one. Repeating a high reading from A only sets A's flag again. A distinct
+high from B is required. The example discards later input for this closed window. A monitor for
+successive windows must separately route a reading at time 10 into [10, 20).
+[Access through an explicit target](../docs/IdiomaticCoD.md#ask-an-operation-for-the-access-it-needs)
+
+Consider two submission histories. **Split** starts with the prefixes above. **Pair** changes
+only the destination of B's high reading to live. Read each column from top to bottom. The last
+three control records complete the histories after the prefix. They use precisely the same ingress
+operation as readings in the proper deployment.
+
+| Accepted source record | Split destination | Pair destination |
 | --- | --- | --- |
-| A reports high at 8 | live | live |
-| B reports high at 6 | trial, inside a nested trial installation | live |
+| A high at 8 | live | live |
+| B high at 6 | trial | live |
 | A advances to 10 | live | live |
 | B advances to 10 | live | live |
 | A advances to 10 | trial | trial |
 | B advances to 10 | trial | trial |
-| Final alarms | none | one live alarm |
 
-Both histories permit the worker to wait until every ingress frame has retired. Erasing the
-destination makes their pending input identical, down to the order of their data and controls.
-A deterministic worker in the same initial state and with the same current bindings must then
-produce the same output for both. At least one result must be wrong. Separate owned queues carry
-the distinguishing information through queue membership alone. A shared log can instead store the
-resolved route with each entry. A deployment-owned source identity can also encode the distinction,
-provided its mapping stays valid for the lifetime of queued work. For these two histories, the retained state must distinguish at least two alternatives. Queue
-identity can supply that distinction without adding any bytes to the submitted record.
+In **Split**, live A sets `a_high`. When live B advances, both marks are at 10 but `b_high` is
+false, so live returns `Quiet`. Trial has only `b_high` and also returns `Quiet`. In **Pair**, both
+flags are set at live before B advances. Live returns `Alert` once. Trial returns `Quiet`. These
+steps remain valid if all consumption takes place after all six submissions. Each step still uses
+the state owned by the destination chosen for that record.
 
-There is a second way to lose the alarm. Keep every destination correct in the pair history but
-allow the two live watermarks to bypass the pending live readings on a priority control path. The
-worker legitimately finalizes an empty window given the order it sees. Delivering the two readings
-one turn later cannot repair an irrevocable final-only result. Fixing this error requires preserving
-the relation between progress and earlier accepted readings on the way to the worker.
+Erase the destinations and put the records into a common queue. The worker now receives exactly
+the same six inputs in both histories, in the same order. Starting with the same state, it has
+no observation from which to derive the different required alarms. This proves that routing
+information must survive until it can no longer influence processing. The queue's identity,
+a stored site field, or a stable mapping from a deployment-specific source identity all suffice.
+The names A and B alone cannot encode that distinction here.
+
+### A correct route can carry a false frontier
+
+Take **Pair** again. Admit both high readings to live, then allow live A and B's progress records
+to take a faster control path. At the worker the two marks are now processed first. `step` closes
+an empty live window with `Quiet`. Each high subsequently meets `w.closed` and yields `NoOutput`.
+The site, sensor, timestamp and procedure binding of every record are correct. The missed alarm
+comes from letting a progress promise overtake the very data that makes it valid.
+
+The three observations have different meanings. A sample's *event time* selects its window. A source's
+*progress* supplies evidence that a particular prefix is complete. *Processing time* measures how
+long the worker has waited. Finishing both adapter calls, waiting ten seconds of wall time, or
+draining a batch supplies no new source promise. If trial B never advances, the trial window stays
+open under this policy. Moving B's high timestamp from 6 to exactly 10 makes it ineligible for the
+first window even if every enqueue and dequeue occurs at the same wall time as before.
+
+## When the two programs agree
+
+The comparison fixes the inputs, their intended deployments, the schedule of admissions and
+drains, and each source's progress promises. An application may choose bounded admission. In that
+case both versions must apply the same capacity policy to the same destination, and progress
+must follow every *accepted* earlier reading it covers. A dropped reading cannot be recovered
+from a watermark.
+
+An argument by cases covers the permitted transitions. Entering live or trial couples the
+explicit destination to its scoped handler. A submit in either program adds the same value to
+the same queue, or takes the same capacity decision. Returning or unwinding restores the outer
+choice without changing an accepted copy. A worker step consults only queued data and its
+destination's state. These facts preserve the equivalence at the next transition. They also
+locate the first disagreement when one version departs from the contract. Observing the selected
+queue, its admitted prefix and the window's terminal decision can expose that disagreement even
+when both public alarm logs happen to be empty.
+
+If ingress and processing reside in separate CoD Actors, the receiver establishes its own dynamic
+context. An ordinary statically typed chan send is fire-and-forget. A systemic communication fault
+that makes subsequent sends likely to fail must be reported. An individual send supplies no
+receipt. An application that wants final-only windows across that boundary must establish which
+prefix its receiver may treat as complete, or continue waiting when that information is missing.
+The strict progress, ordering and admission policy used in this paper belong to the application.
+The argument selects no queue representation or endpoint syntax.
+[Actor context and chan guarantees](../design/SymbolicDynamicScope.md#actor-concurrency-direction)
+
+## A Reflex-style network for a fuel sale
+
+A customer lifts a nozzle as the posted price changes. At the end of the sale the last meter
+increment and the return of the nozzle reach the dispenser's sale controller together. Which price
+and quantity belong on the receipt? A queue can deliver both inputs to an Actor. The order of
+callbacks alone is a poor place to hide a pricing rule. This case examines the type language a
+CoD library would need to express a rule that the operator can inspect.
+
+Blackheath and Jones develop a petrol dispenser, its meter and its point-of-sale interface as
+an industrial FRP example. We borrow the business setting. The coincidence rules, prices and
+traces below are a new CoD paper exercise. For the comparison we use Reflex's distinction
+between an event occurrence, a sampleable value and a changing value that also exposes its
+updates. Its timeline parameter ties a network's signals together. Reflex distinguishes sampling
+the value before a simultaneous update from sampling the newly updated value. The difference is
+observable on the receipt. [Blackheath and Jones, chapter 4](https://livebook.manning.com/book/functional-reactive-programming/chapter-4)
+· [Reflex concepts](https://docs.reflex-frp.org/en/latest/overview.html)
+· [Reflex sampling and switching operations](https://hackage-content.haskell.org/package/reflex-0.9.3.4/docs/Reflex-Dynamic.html)
+
+### What the library would need to name
+
+Fix one local sale timeline `T`. Use `E_T[A]` for an event carrying an `A` when it occurs,
+`B_T[A]` for a value of type `A` that can be sampled, and `D_T[A]` for a changing value with
+both a current value and update occurrences. Each is a unary type constructor after fixing
+`T`. The following is **candidate type-level notation for CoD**. It gives a library author two
+constructor arguments to one synonym. For each use, `A` is the value sampled, `X` is the
+trigger payload and `(A, X)` carries both pieces of information.
+
+```text
+F, E                  : Type → Type
+Snapshot[F,E,A,X]     ≔ (F[A], E[X]) → E[(A, X)]
+before[T,A,X]         : Snapshot[B_T,E_T,A,X]
+includingUpdate[T,A,X]: Snapshot[D_T,E_T,A,X]
+```
+
+`Snapshot[B_T,E_T,UnitPrice,SaleId]` expands to a function taking a price behavior and a start
+event and producing a price together with the sale identity on that timeline. The first
+operation can sample the price shown at the beginning of the frame. The second can include
+a price update in the frame. The corresponding Reflex operations are `attach (current d)`
+and `attachPromptlyDyn d` for a dynamic value `d`. Take `d` and the trigger as the two inputs
+to each operation. Projecting `current d` inside the first one gives both the same expanded
+shape, `Snapshot[D_T,E_T,UnitPrice,SaleId]`. They still select different prices on coincidence.
+The type records the families, payloads and shared timeline. The sampling rule belongs to the
+operation's contract.
+
+One possible wiring for a single dispenser is short enough to derive by hand. These equations
+are paper notation for the candidate library. The two named sale operations are domain code.
+
+```text
+pricedStarts ≔ before(current(postedPrice), start)
+saleTotals   ≔ meterBySale(pricedStarts, litresAdded)
+receipts     ≔ matchClosingSale(includingUpdate(saleTotals, close))
+```
+
+`meterBySale` starts from idle. Each priced start establishes the sale ID, fixes the unit
+price and resets the volume. A later posted price has no path into its accumulated total.
+`matchClosingSale` emits a receipt for a matching close, at most once per sale ID.
+The total sampled at close includes its last increment. The next start resets the volume
+after that observation. Passing `current(saleTotals)` to the earlier-value sampler instead
+changes only one connection and yields a different receipt in the history below.
+
+A potential CoD library might offer one network-building context per local timeline, with a
+way to hold state with an initial value and derive current values and update events. The
+generality worth testing is whether a library can give the sampling pattern a name and export
+its lawful operations while retaining the same timeline on both arguments and the result.
+`E_T` and `E_U` have the same kind. Passing a start event from U to a sampling operation
+specialized to T must still fail under this candidate when T and U are distinct. An explicit
+input bridge can deliver data to T as a new local occurrence. An admitted regional value must
+be copied as permitted or carried under an appropriate ownership contract before a retained
+signal can use it. A timeline index by itself supplies no region lifetime.
+
+### A receipt that distinguishes the sampling rules
+
+For this exercise the sale controller promises the price displayed immediately *before* the start frame.
+That price is fixed for the sale. At completion the controller includes the final meter increment
+admitted in the close frame. A frame is one logical propagation step chosen by the local host.
+The table stipulates which inputs share a frame. Equal timestamps on two packets would not be
+enough to establish that fact. Prices are whole cents per litre, and the example uses whole litres.
+
+| Local frame | Inputs admitted together | Observation required by the sale policy |
+| --- | --- | --- |
+| Before start | Idle, zero volume, display at 170 cents/litre | A new sale can start at the posted price. |
+| 1 | Start sale S and post 180 cents/litre | Capture 170 for S. The posted price for future sales becomes 180. |
+| 2 | Add two litres to S | Display two litres and 340 cents for the active sale. |
+| 3 | Add the last litre and close S | Emit one local completion for S with three litres at 170, total 510 cents. Retain that completed value before resetting the meter. |
+| 4 | No input | The dispenser can display the completed sale. A redraw emits no additional completion. |
+
+Using the newly posted price at startup produces **540** cents. Sampling the preceding meter
+value at closure produces **340** cents. Publishing the total as each dependency arrives can
+also emit the partial result before the final one. A customer can observe the extra completion
+even if a later screen eventually displays 510. A proposed library must let the programmer
+name both sampling choices and arrange for the locally published completion to see one
+consistent sale. It also needs a causal account of stateful feedback: a completed value can
+trigger a reset for the next sale without feeding the reset's zero back into the receipt that
+caused it. Whether that needs a distinct delay operator, phased combinators or a checked
+construction rule is an open design question.
+
+### A network whose selected input can change
+
+A service console can follow one of two dispenser-specific completion feeds. A possible source
+for the console is `D_T[E_T[Sale]]`: the current value selects an event source, and that
+selection can itself change. A candidate `switch : D_T[E_T[A]] → E_T[A]` expresses this nested
+structure, but leaves a real policy choice. Begin with dispenser A selected. In one frame select
+B while A completes sale 17 and B completes sale 29. A switch that takes effect *after* the
+frame reports 17, as Reflex's `switchDyn` does. A switch that takes effect *in* the frame
+can report 29, as `switchPromptlyDyn` does for these coincident inputs. This gives CoD a second
+paper test that first-order mapping over `Sale` alone cannot express. A design that accepts the nested type
+but offers no way to specify the cutover still leaves a visible ambiguity.
+
+The host may first admit independent dispenser inputs to the console's own timeline. Neither
+that admission nor switching the displayed feed transfers sales settlement responsibility.
+The once-per-sale occurrence in the table is local to the stated input history. Sending a
+completed sale region to a point-of-sale Actor via a typed `chan` gives the sender no delivery
+receipt. A settlement protocol that requires recovery must define durable sale identities,
+deduplication and reconciliation at the application level. Two histories with the same local
+receipt can therefore differ in what the remote till has recorded. This is where a Reflex-style
+library, an input adapter and the CoD Actor transport each have a distinct observable contract.
+[CoD actor channels](../design/ActorChannels.md)
 
 <a id="prior-work-and-evaluation"></a>
 
-## A bounded comparison
-
-The executable model below varies the interleaving of four input lanes, one for each
-(deployment, sensor). In each history two lanes contain a high reading followed by their own
-watermark, and two contain only a watermark. This yields `6! / (2! × 2!) = 180` legal orders
-per history. The experiment has room for all six submissions and drains after the last one.
-The explicit adapter queues its argument's destination, while the scoped adapter resolves the
-currently installed route at each synchronous call. A trial call executes inside a nested
-installation and returns to live. After admission the worker has no access to the adapter.
-
-| Model and observation | Split, 180 orders | Pair, 180 orders |
-| --- | ---: | ---: |
-| Explicit and scoped ingress disagree on an admitted record and its route | 0 | 0 |
-| Correct scoped ingress gives the wrong alarms or fails to finalize both deployments | 0 | 0 |
-| Choose the drain-time route (live) for every record. Wrong final alarm set | 120 | 60 |
-| Deliver all watermarks before all readings, keeping their routes. Wrong final alarm set | 0 | 180 |
-
-The last two rows are deliberate negative controls that violate the claim's premises. The third
-row corrupts the input history in **every** order in both columns. In 60 split orders it
-nevertheless emits the expected empty alarm set. In 120 pair orders it happens to emit the expected
-live alarm. The fourth row similarly passes every split alarm check. A test that compares just
-the public alarms systematically misses routing and progress errors. The per-record admission log,
-which deployments finalized, and the resulting alarms give separate observations. The counts are
-exact for the finite model and were obtained by running the appendix. They establish fixture
-sensitivity and the model result. Native CoD execution, saturation and timing need separate evidence.
-
-### What a native reproduction must hold fixed
-
-Run the explicit and scoped adapters against one instrumented queue implementation and the same
-application worker. For each compiler revision, record coverage of the binding, restoration and
-lifetime cases. Derive routing expectations from the declared installations and the input schedule.
-Record the offered source, selected destination, admission decision, dequeue, window finalization,
-alert and state release with a logical step number. A mismatch for any matched schedule refutes
-the implementation's equivalence for that input, even if its alarms match. Record actual time
-separately if measuring latency. Vary batch size and drain position without violating any
-source's order. A changed trace of per-route admissions or final alarms, after accounting for the
-specified interleaving and admission decisions, identifies a semantic difference. Different wall
-times under the same logical schedule identify an implementation cost.
-
-Three further traces exercise obligations the appendix leaves open.
-
-* **Pressure.** Give the queue one slot. Admit live A's high reading, then offer live B's high
-  reading before a drain. Specify an ingress policy that drops this incoming reading and records
-  the drop. Hold a full-queue progress submission at its source until it can be admitted, and
-  prevent later submissions on that same lane from overtaking it. Drain and advance both sources
-  to 10. Expect one B data drop, no alarm and release of the live window state. In the paired
-  control, drain after A and admit B before the progress records. Expect one live alarm. The void
-  submit operation reports neither observation to the adapter. The ingress owner supplies the log.
-* **Scope and lifetime.** Route a valid submission to trial, then take an exceptional exit from
-  the nested scope. Catch at live and submit a second record. Drain only after both frames end.
-  Expect one record per intended destination. An ordinary call path reaching `behave @ingress`
-  without an installation is a separate checker-negative fixture. Attempting to enqueue the
-  installed handler as a callable is another. Those fixtures ask whether a path is admissible.
-  They cannot diagnose a live but wrongly selected destination of the same type.
-  [Call-path binding checks](../design/SymbolicDynamicScope.md#call-path-binding-checks)
-* **Event-time boundary.** Replay the live pair twice with identical submission and drain steps.
-  Move B's timestamp from 6 to exactly 10 on the second replay. After both watermarks reach 10,
-  expect the first replay to produce a live alarm and the second to close [0, 10) without one.
-  B now belongs to [10, 20), which remains open. A processing-time implementation that consults
-  only dequeue order cannot satisfy both observations.
-
-Event timestamps, watermark values and queue dwell time have different units of meaning here.
-The timestamp selects a window. A route-specific progress assertion permits finalization.
-Elapsed processing time measures delay and conveys no independent evidence of logical completion.
-If B stays silent in one deployment, that window can remain open indefinitely. A finite queue
-therefore gives no general bound on retained correlation state over many keys or windows. An idle
-source policy, replay after process failure, and acceptance of events behind an already finalized
-frontier each change the application's contract. The small model makes no claim about those policies.
-
-An inter-Actor version adds a real transport obligation. Each CoD Actor has its own dynamic context.
-Sending through a statically typed chan is normally fire-and-forget. A systemic fault that makes
-later sends likely to fail must be reported. An individual send gives the adapter no evidence of
-peer admission. An application needing the strict frontier used above must arrange a per-source
-prefix protocol spanning admission and receipt, or postpone finalization while a prefix remains
-unknown. An ordinary progress message that happens to arrive cannot establish this property by
-itself. The paper's one-event-loop fixture makes it possible to study the ingress question without
-assuming a stronger chan service. [Actor and chan contract](../design/SymbolicDynamicScope.md#actor-concurrency-direction)
-
 ## Relation to prior work
 
-Lewis, Shields, Meijer and Launchbury give statically typed implicit parameters a dynamic
-binding discipline and show how a caller-supplied parameter can travel through intermediate
-definitions. Their pretty-printer controls a choice deep inside one computation. The added issue
-here is which result of that choice must survive into separately scheduled work. CoD's
-definition-installed procedure supplies a particular source-language boundary at which to test it.
+Jones gives a type system in which constructors can be abstracted over and constrained by
+operations they support. The endpoint example uses that distinction twice, once to drive a
+producer into the selected sending end and once to obtain a local producer from the receiving end.
+Which obligations travel in a constructor index and which require separate witnesses also arises in
+the [fuel-sale timeline](#a-reflex-style-network-for-a-fuel-sale).
+[Jones, *A System of Constructor Classes*, FPCA 1993](https://web.cecs.pdx.edu/~mpj/pubs/fpca93.pdf)
+
+Lewis, Shields, Meijer and Launchbury showed how a statically typed implicit parameter can carry a
+caller's choice through intermediate functions. CoD's installed procedure raises a further question
+for a pipeline whose processing outlasts its caller. The choice must leave evidence in an owned
+record or destination before the call ends. The explicit version makes the choice visible at every
+forwarding interface. The scoped version keeps the adapter interface independent of deployment and
+moves responsibility for selecting it to the installation sites.
 [Lewis et al., *Implicit Parameters: Dynamic Scoping with Static Types*, POPL 2000](https://launchbury.blog/wp-content/uploads/2019/01/implicit-paramters.pdf)
 
-Tucker, Maier, Sheard and Fegaras treat punctuation as a promise that a described part of a stream
-has ended and use it to justify emitting results or releasing state. Akidau and colleagues analyze
-how stream processors communicate event-time progress and the practical limits of watermark
-estimation. Our final-only oracle deliberately uses a strict, per-source promise over the records
-admitted to a particular destination. Applying an estimated watermark would require an explicit
-late-data and correction policy before these same alarm checks could be used.
+Tucker, Maier, Sheard and Fegaras use punctuation to express that a described part of a stream
+has ended, allowing an operator to emit a result or release state. Akidau and colleagues analyze
+how stream processors communicate and estimate event-time progress. The strict promise used for
+the two-sensor monitor supplies a precise boundary for irrevocable publication. A deployment
+using estimated watermarks would have to specify what happens to late readings and when an earlier
+alarm may be corrected. Selecting a different CoD ingress binding cannot settle those temporal
+questions.
 [Tucker et al., *Exploiting Punctuation Semantics in Continuous Data Streams*, TKDE 2003](https://dsf.berkeley.edu/cs286/papers/punctuations-tkde2003.pdf)
 · [Akidau et al., *Watermarks in Stream Processing Systems*, PVLDB 2021](https://www.vldb.org/pvldb/vol14/p3135-begoli.pdf)
-
-The strongest comparison supported here concerns when a route choice must take effect. A programmer
-can make that choice correctly through either interface. The explicit version exposes the route at
-each forwarding boundary. The scoped version can leave those signatures alone, at the price of a
-binding obligation and a need to inspect installation sites when explaining a route. Code-change
-scope across real adapter libraries, diagnostic quality and runtime costs would decide whether
-that trade pays for a particular deployment.
-
-## Executable finite model
-
-Run this block with Python 3. `H` denotes the sole high reading of its lane at the event time above.
-`W` advances that lane to 10. The model retains only the state needed for one pump and one window.
-High readings at a finalized destination cannot change its published result. The three output
-counts per case are legal orders, wrong alarms with drain-time routing, and wrong alarms with
-watermarks first.
-
-<details>
-<summary>Python 3 enumeration and alarm oracle</summary>
-
-
-```python
-def interleave(lanes):
-    if not any(lanes):
-        yield ()
-    for i, lane in enumerate(lanes):
-        if lane:
-            rest = lanes[:i] + (lane[1:],) + lanes[i + 1:]
-            for tail in interleave(rest):
-                yield (lane[0],) + tail
-
-
-def ingest(order, dynamic):
-    queue, bindings = [], ["live"]
-
-    def adapter(sensor, kind):
-        queue.append((bindings[-1], sensor, kind))
-
-    for route, sensor, kind in order:
-        if not dynamic:
-            queue.append((route, sensor, kind))
-        elif route == "trial":
-            bindings.append("trial")
-            try:
-                adapter(sensor, kind)
-            finally:
-                bindings.pop()
-        else:
-            adapter(sensor, kind)
-    return queue
-
-
-def finalize(queue):
-    marks = {r: set() for r in ("live", "trial")}
-    highs = {r: set() for r in marks}
-    closed, alerts = set(), set()
-    for r, s, kind in queue:
-        if kind == "H":
-            if r not in closed:
-                highs[r].add(s)
-        else:
-            marks[r].add(s)
-            if len(marks[r]) == 2 and r not in closed:
-                if len(highs[r]) == 2:
-                    alerts.add(r)
-                closed.add(r)
-                highs[r].clear()
-    return alerts, closed
-
-
-for case, b_route in (("split", "trial"), ("pair", "live")):
-    lanes = tuple(
-        tuple((r, s, k) for k in
-              ("HW" if (r, s) in {("live", "A"), (b_route, "B")} else "W"))
-        for r in ("live", "trial") for s in ("A", "B")
-    )
-    expected = {"live"} if case == "pair" else set()
-    total = late_route = early_mark = 0
-    for order in interleave(lanes):
-        explicit, bound = ingest(order, False), ingest(order, True)
-        assert explicit == bound == list(order)
-        assert finalize(bound) == (expected, {"live", "trial"})
-        wrong = [("live", s, k) for _, s, k in bound]
-        first = sorted(bound, key=lambda row: row[2] != "W")
-        late_route += finalize(wrong)[0] != expected
-        early_mark += finalize(first)[0] != expected
-        total += 1
-    print(case, total, late_route, early_mark)
-```
-
-</details>
 

@@ -2,331 +2,349 @@
 
 ## Abstract
 
-A booking service searches the seats on each eligible route. It should return the first affordable
-fare, close the two cursors it has already opened, and leave the next route untouched. Can a library
-factor that search into reusable expansion and filtering stages while preserving what the service
-does? We give a trace equivalence for finite, synchronous traversals with typed feedback and
-successful cursor cleanup. Its decisive case is a discarded seat. Although the price filter makes
-no downstream call, it must still decide what answer to send to the seat source. A normal negative
-answer ends the current route. An outward return from the booking service supplies no answer and
-ends the search. A case argument establishes the equivalence for the stated fragment. Two
-independently written executable models agree on all 399 cases of a bounded comparison. One-seat
-inputs distinguish two faulty translations even when their final fares agree with the reference.
+A booking service can stop at the first affordable fare while its route and seat cursors are open.
+What should a higher-kinded transformer signature tell a library author who wants to reuse that
+search with a different inventory source? We compare two choices. One abstracts over the family
+that carries the offered items. The other makes the source's normal feedback visible in that
+family. Both can type the composition of route expansion and price filtering. Only the second
+exposes the difference between a route that expects void feedback and a seat source that expects a
+Boolean. Even a correctly typed filter can answer the seat source incorrectly or open a cursor it
+never needs. We derive the missing behavioral obligations from explicit CoD loops and trace which
+ones a future type language could check at an adapter boundary.
+
+## Two ways to type a transformer
+
+The running inventory offers routes A and B. A offers seats priced 120, 80 and 80, in that order.
+B offers one at 90. The filter accepts fares at most 100. A searcher can collect every accepted
+seat or return as soon as the first one appears.
+
+In the *paper notation* below, `Type` stands for a completed type or protocol signature. The kind
+`Type → Type` classifies a family that still needs one type argument. `F`, `G` and `H` range over
+such families. A type synonym abbreviates a type expression. These equations propose ways to write
+and compare contracts in a future CoD type language. The CoD listings later in the paper provide
+the independent source semantics. The project specifically identifies higher-kinded type synonyms
+and a formal producer/transformer/consumer language as an endpoint-design requirement.
+[Design direction](../design/ActorChannels.md#independent-chan-endpoints)
+
+### Candidate A. Abstract over the item carrier
+
+```text
+F, G, H                         : Type → Type
+Producer[F, A]                  ≔ F[A]
+Transformer[F, G, A, B]         ≔ F[A] → G[B]
+Stage[F, A, B]                  ≔ Transformer[F, F, A, B]
+Consumer[F, A, Z]               ≔ F[A] → Z
+```
+
+`Consumer` here names a terminal that drives a **whole traversal** and produces a result `Z`. One
+invocation of the loop body receives an individual item. Keeping those roles distinct makes it
+possible for the terminal to return a fare while its source finishes void. The companion paper can
+instantiate the same family notation for events with an entirely different way of consuming them.
+
+The higher-kinded step is passing `F` itself to `Stage`, then applying it at two potentially
+different types, `A` and `B`. A parameterized name like `Fares[A]` with a fixed definition would
+let us vary the item type alone. The composition rule also admits a change of carrier.
+
+```text
+p : Transformer[F, G, A, B]       q : Transformer[G, H, B, C]
+q ∘ p : Transformer[F, H, A, C]
+
+c : Consumer[H, C, Z]
+c ∘ q ∘ p : Consumer[F, A, Z]
+```
+
+Read composition here as connection of already prepared stages. Operand evaluation, opening a
+source and cleanup follow their own contracts. A bare family parameter supplies no operation for
+iterating an arbitrary `F[A]`. A generic stage that needs to drive it must receive that operation
+or require it through an admitted protocol.
+
+Let `Ordered[A]` denote a finite sequence of A. With `F = G = H = Ordered`, a route expander has
+type `Ordered[Route] → Ordered[Fare]`, a filter has type `Ordered[Fare] → Ordered[Fare]`, and their
+composition maps routes to fares. `Route` and `Fare` are domain labels in the paper notation. The
+CoD fixture uses scalar IDs and prices. This instantiation captures the full-enumeration result
+80, 80, 90. Its terminal can select the first of those answers. A version that materializes all
+seats first can have exactly the same types and answer while opening an extra inventory cursor.
+For a replay over immutable data, item order and multiplicity may be all its caller needs.
+
+### Candidate B. Index a closed traversal by the reply it requires
+
+Keep the outer composition rule. This second design specializes the first by making one index
+part of the producer family. It changes the contract that library interfaces must expose while
+retaining the same arity for `Transformer`. Introduce a family that includes a synchronous
+driver. For the scalar fragment, the driver takes a live single-brace consumer, may offer an
+`A` to it, receives an `R` when the offer completes normally, and finishes void. In the following
+notation `Here` stands for this bounded invocation with CoD lexical control. It carries no right
+to retain the supplied body.
+
+```text
+Visit                           : Type → (Type → Type)
+Visit[R][A]                     ≔ traversal driven by Here(A → R), with void completion
+Routes                          ≔ Visit[void]       : Type → Type
+Seats                           ≔ Visit[bool]       : Type → Type
+
+expand                          : Transformer[Routes, Seats, Route, Fare]
+price_filter                    : Stage[Seats, Fare, Fare]
+first                           : Consumer[Seats, Fare, Fare]
+
+price_filter ∘ expand           : Visit[void][Route] → Visit[bool][Fare]
+first ∘ price_filter ∘ expand   : Visit[void][Route] → Fare
+```
+
+The partial applications `Visit[void]` and `Visit[bool]` leave their item argument open. Substitution
+now does real work. Expansion drives a route source using a body that finishes void, and it drives
+each selected seat source using a body that returns bool. The filter must supply bool even on an
+upstream seat for which it makes **zero** downstream offers. Forwarding `bool` to the route source,
+or attaching a filter requiring Boolean feedback to a fare source expecting void, fails the
+contract under exact protocol matching. A separately authored adapter could supply the missing
+policy. The same `Visit` constructor applied to the proper indices gives the signatures on either
+side of that adapter.
+
+Two filters can nevertheless return opposite Boolean values for a skipped seat. Both satisfy this
+signature. Likewise, a body may return a value from its lexical supplier or throw, in which case
+the pending offer receives no `R`. Encoding an outward return as an ordinary reply such as
+`false` would change the caller's meaning. This candidate therefore relies on the language rules
+for bounded `here` invocation, checked failures and unwinding of live scopes. If an optimizer
+wants to exchange one implementation for another while preserving resource use, it also needs
+evidence about which inputs the stage drives, how it handles skipped offers and which cursors it
+opens. The kinds and synonym expansions alone do not provide that evidence.
 
 ## A closed traversal
 
-A producer offers an item by entering its consumer synchronously. If the consumer completes that
-handoff normally, it supplies the feedback type declared by the producer. A transformer accepts an
-upstream traversal and can offer items to a downstream consumer of its own. A traversal is *closed*
-here when every handoff returns or transfers control while the invocation that supplied the
-consumer is still active. This lets a worker search a live inventory cursor without first reading
-all the seats. Processing an event after the submitting call returns is a different lifetime problem
-studied in the [companion paper](OpenEventPipelines.md).
+Prices in the inventory are positive, so the booking procedure can reserve
+zero for an unsuccessful search. A seat source takes a Boolean reply at every normally completed
+handoff. True asks it to advance, while false finishes the current seat cursor. The route source
+takes void feedback. These are the contracts of the [CoD fare example](../design/ProducersAndTransformers.md#one-fare-search-three-spellings).
 
-Consider these contracts. `itineraries(day)` opens an ordered route cursor and offers route
-identifiers with void feedback. `fares_on(route)` opens that route's seat cursor. It offers a
-positive integer fare and accepts a Boolean after each normal handoff. In this application, true
-requests the next seat and false finishes the current seat cursor. Each successfully opened cursor
-logs and executes one close when its invocation ends. For this experiment, acquisition and cleanup
-succeed. The first-fare operation returns zero if it reaches the end without taking a fare.
+Here are finite producers for that example. Route IDs 1 and 2 stand for A and B. The four ordinary
+library procedures named `open_…` and `close_…` record a cursor acquisition or release and
+complete normally. The caller can observe their order. Each seat price is copied into a fresh
+scalar loop control.
 
-The explicit CoD loops give the operational reference. The single-brace `return` targets
-`first_affordable`. The `continue true` supplies feedback to the active seat cursor. The terminal
-consumer can qualify an offer and return without ever asking inventory for another seat.
-[Generator feedback](../design/RangedForAndGenerators.md#explicit-continue-feedback) ·
-[Lexical completion](../design/RangedForAndGenerators.md#lexical-scope-and-completion)
+```cod
+proc itineraries(day:u64) yields u64 {
+    open_routes(day)
+    try {
+        yield(1u64)
+        yield(2u64)
+    } finally { close_routes(day) }
+    return
+}
+
+proc fares_on(route:u64) yields u64 -> bool {
+    open_seats(route)
+    try {
+        if (route == 1u64) {
+            if (not yield(120u64)) { return }
+            if (not yield(80u64)) { return }
+            yield(80u64) : void
+        } else {
+            yield(90u64) : void
+        }
+    } finally { close_seats(route) }
+    return
+}
+```
+
+The source explicitly tests the feedback before each remaining seat on A. At the last seat there
+is no remaining work and it discards the normal reply. The generator's own final completion is
+void in both procedures. In the following reference search the single-brace consumer instead
+has permission to return a fare from `first_affordable`. [Independent handoff and final results](../design/RangedForAndGenerators.md#void-final-completion)
 
 ```cod
 proc first_affordable(day:u64) -> u64 {
     for val route <- itineraries(day) {
         for val fare <- fares_on(route) {
-            if (fare <= 100u64) { return fare; }
-            continue true;
+            if (fare <= 100u64) { return fare }
+            continue true
         }
     }
-    return 0u64;
+    return 0u64
 }
 ```
 
-The factorization gives each stage one decision. Expansion opens one seat cursor per route and
-forwards each seat's normal reply. The filter takes responsibility for the reply to a rejected
-seat. Each `yield` below invokes that stage's own downstream consumer.
+A *closed traversal* uses each supplied body while its enclosing invocation is still active. The
+same producers accept explicit single-brace calls. The receiving headers below select the same
+fresh scalar controls as the loops above. In particular, the inner `return` still belongs to
+the booking procedure. [Generalized loops](../design/RangedForAndGenerators.md#generalized-for-loops)
+· [Receiving headers in both forms](../design/RangedForAndGenerators.md#one-receiving-header-for-both-call-forms)
 
 ```cod
-proc fares_for(here routes() yields u64) yields u64 -> bool {
-    for val route <- routes() {
-        for val fare <- fares_on(route) {
-            continue yield(fare);
+proc first_by_call(day:u64) -> u64 {
+    itineraries(day) (val route <-) => {
+        fares_on(route) (val fare <-) => {
+            if (fare <= 100u64) { return fare }
+            continue true
         }
     }
+    return 0u64
+}
+```
+
+### Extracting the two stages in CoD
+
+Start with a stage whose source is known by name. `available_fares` expands each route into its
+seat offers. `affordable_fares` filters that sequence. Both are ordinary named generators that
+receive explicit data arguments. Each invocation of `yield` below refers to the consumer supplied
+to the lexically enclosing generator. [Lexical use of yield](../design/RangedForAndGenerators.md#a-generator-declaration-introduces-a-here-parameter-named-yield)
+
+```cod
+proc available_fares(day:u64) yields u64 -> bool {
+    for val route <- itineraries(day) {
+        for val fare <- fares_on(route) {
+            continue yield(fare)
+        }
+    }
+    return
 }
 
-proc affordable(here fares() yields u64 -> bool, limit:u64) yields u64 -> bool {
-    for val fare <- fares() {
-        if (fare > limit) { continue true; }
-        continue yield(fare);
+proc affordable_fares(day:u64, limit:u64) yields u64 -> bool {
+    for val fare <- available_fares(day) {
+        if (fare > limit) { continue true }
+        continue yield(fare)
     }
+    return
 }
 
 proc first_factored(day:u64) -> u64 {
-    for val fare <- itineraries(day) !> fares_for() |> affordable(100u64) {
-        return fare;
+    for val fare <- affordable_fares(day, 100u64) {
+        return fare
     }
-    return 0u64;
+    return 0u64
 }
 ```
 
-The second listing uses the fare study's **candidate** reusable producer declarations. The selected
-CoD composite contract covers a particular set of operand, binding, feedback and lifetime cases.
-General signatures and contextual producer binding await a language for named signatures. The result
-below concerns the behavior that such a factoring must preserve. It can be checked before choosing
-the general syntax. [Fare study](../design/ProducersAndTransformers.md#one-fare-search-three-spellings)
-· [Design scope](../design/ProducersAndTransformers.md#design-authority)
+The filtered branch contains the design choice. The filter has received 120 from its source.
+It owes a Boolean, even though the booking procedure never sees 120. Returning true here lets
+inventory reach the first 80. On an accepted seat the filter forwards the terminal consumer's
+normal reply. The expansion stage passes that reply to the particular seat cursor that offered
+the fare. When the terminal returns outward, the pending `yield(fare)` expressions never produce
+ordinary feedback. [Feedback on normal paths](../design/RangedForAndGenerators.md#non-void-feedback-checks-all-normal-exits)
 
 ## What an equivalence must preserve
 
-**Proposition.** Fix a finite ordered sequence of routes, a finite ordered sequence of seats for
-each route, a pure total price predicate and the same initial consumer state. Run the explicit loops and
-the factored traversal with the same terminal policy. On each accepted seat the policy may give
-ordinary Boolean feedback, return from the enclosing search, or raise a failure that escapes the
-body. With successful cleanup and stable, already prepared operands, the two runs have the same
-trace at the source and consumer boundaries, including the final control destination.
+For these procedures, observe the opens and closes, each seat offered by its route and position,
+each visit of an accepted fare, the feedback reaching its seat source, and the value or failure
+reaching the booking caller. An outside inventory service can observe the cursor operations.
+A source can distinguish true, false and an offer that never resumes. Price equality does not
+erase seat identity in those observations.
 
-The observation records cursor opens, route offers, seat offers with route and position, consumer
-visits, normal feedback received by each seat offer, normal resumption of a route offer, cursor
-closes and the outward outcome. A terminal policy may choose its next action using its prior
-visits. Its next action must be determined by that state and offer, or both runs must receive
-the same external answers in the same order. Record other visible terminal actions in that case. Internal calls between stages are hidden. Requiring their names or their
-stack depths to match would distinguish an extracted helper even in a pure mapping.
-
-**Argument.** At the start of a route, pair the two route cursors at the same position. At the start
-of each seat offer, the corresponding runs have opened the same cursors, advanced to the same
-seat, and produced the same observation prefix. The final consumer has the same state in both.
-There are four continuations.
-
-1. A seat fails the predicate. Both forms send true to the seat source without invoking the
-   terminal. They advance together.
-2. A seat passes and the terminal returns ordinary feedback. Both have visited it once. The
-   factored stages forward that feedback unchanged. True advances the same cursor. False closes
-   that cursor, completes the route offer normally and lets the route producer advance.
-3. A seat passes and the terminal returns from the enclosing search. Both leave the active seat
-   offer without a normal Boolean. They close the seat cursor and then the route cursor, and
-   deliver the same value to the search's caller.
-4. A terminal failure escapes. The same active cursors close in the same order. An ordinary catch
-   surrounding the handoff *inside a generator* cannot intercept this body-originated failure.
-   Handling resumes at the caller's traversal boundary. A handler explicitly installed in an
-   intermediate consuming body would change the program and must be present on both paths.
-   [Checked body failures and nested loops](../design/RangedForAndGenerators.md#execution-and-nested-loop-boundaries)
-
-An empty seat cursor opens and closes without a handoff. Exhausting the route source closes it
-before the caller's normal continuation. Those cases supply the base cases. On a path that
-continues, either a seat or a route advances. Induction over the remaining finite itinerary
-establishes equality of the stated observations. An implementation can use a different control
-representation while preserving these steps. The argument relies on real lexical destinations,
-exact forwarding of ordinary replies and one cleanup for every live cursor.
+Both searches open the route cursor, enter A and open its seat cursor. A offers 120. The explicit
+loop answers true in its final `continue`; in the factored program the filter answers true and
+expansion relays it. A offers its first 80. The explicit body returns from the search. In the
+factored program the same offer passes through both stages before the final body returns from
+its search. In each run A closes, the route cursor closes, then the caller receives 80. No Boolean
+reaches that second offer. Neither the second seat priced at 80 nor route B is visited.
 
 ### Three continuations at the first acceptable seat
 
-Route A has fares 120, 80, 80. Route B has one fare of 90. The common prefix opens the route cursor,
-offers A, opens A, offers 120 and receives true, then offers the first 80 to the terminal. The
-following suffixes start *after* that terminal visit. Seat positions make the two 80s distinct.
+The terminal can give ordinary Boolean feedback, return from the caller or raise an escaping
+failure. Change only that decision in the two programs. The table gives the
+rest of the paper derivation from the first accepted 80. An ordinary false below applies once.
+On later visits that consumer replies true.
 
-| Terminal action | Remaining source and consumer observations |
-| --- | --- |
-| Reply false once, then true | A receives false and closes. The route source resumes, offers B and opens its seat cursor. B offers 90, the terminal visits it and B receives true. B closes, the route source resumes and closes, and the caller finishes normally. |
-| Return the first fare | A closes, the route cursor closes, and the caller receives 80. There is no Boolean for that 80 and no offer of B. |
-| Raise an uncaught booking failure | A closes, the route cursor closes, and the same failure reaches the caller. There is no Boolean for that 80. |
+| Terminal decision | Seat cursor and route behavior | Observable result |
+| --- | --- | --- |
+| Always give ordinary true feedback | A offers its second 80, then closes. B opens, offers 90 and closes. The route cursor closes after B. | The terminal visits 80, 80, 90, preserving order and multiplicity. |
+| Give ordinary false feedback at the first 80 | A receives false and closes. The route body completes normally, so B still opens. Its only seat receives true. B and then the route cursor close. | The terminal visits 80, 90. |
+| Return 80 from the booking procedure | A's active offer receives no reply. A closes, then the route cursor closes. | The caller receives 80 after cleanup. |
+| Raise a checked failure that escapes the terminal | A's active offer receives no reply. Both cursor cleanups run. Assuming they complete normally, the failure reaches the supplying search's loop site. | A caller-side handler or a declared checked obligation is required. |
 
-A fourth control run always replies true. Its terminal sees 80, 80, 90 in that order. The first row
-instead sees 80, 90 because false stops only the current seat cursor. An implementation that caches
-the first result, drains B and eventually returns the cached 80 passes a result-only test. Its extra
-cursor open is observable. If opening B makes a billed request, that execution also incurs a charge.
+A generator catch enclosing a `yield` may handle a failure while preparing its own seat. A
+failure of the supplied body bypasses that generator's catch. An intervening handler written
+in a consuming body has its ordinary opportunity at its own loop site. The example has no such
+handler. If a close itself fails, apply the cleanup-failure rules before deciding what reaches
+the caller. [Nested failure boundaries](../design/RangedForAndGenerators.md#execution-and-nested-loop-boundaries)
+· [Cleanup at the loop boundary](../design/RangedForAndGenerators.md#cleanup-completion-at-the-for-boundary)
+
+**Paper result.** For finite ordered inventories, a fixed total price predicate, the same terminal
+policy and initial state, and successful cleanup, the displayed extraction preserves these
+observations. At the beginning of a seat offer the runs have the same live cursors, seat position,
+and history of terminal visits. A rejected fare elicits the same true reply. An accepted fare
+enters the same terminal once. On a normal reply the same seat source receives the same value and
+either advances or finishes. On an outward completion both runs leave the same live cursor scopes
+in the same order. Empty routes contribute an open and close without a seat offer. Exhaustion
+completes the final route and closes its parent. Applying these cases to the remaining seats and
+routes establishes the claim. Extra stage calls are internal to this observation. The argument
+assumes identical input evaluation and no extra effects in the stage procedures.
+
+Two small counterexamples show why the observation matters. With A offering 120 then 80, returning
+false for the rejected 120 makes the service miss A's affordable seat. A different faulty filter
+can cache the first 80, enumerate B and eventually return the cached fare. A caller comparing
+only the final number will accept that implementation even though it made an extra inventory call.
+
+## Distinguishing the two candidates
+
+Three workloads expose different demands on the type language.
+
+| Workload | What the carrier families express | Contract needed to decide the trace |
+| --- | --- | --- |
+| Filter every seat out | Candidate A connects equal item carriers. Candidate B additionally requires a Boolean on every normal seat handoff. | The filter's skip policy must keep this seat cursor open until its remaining offers have been examined. |
+| Take zero routes | Both can assign an endomorphism `F[Route] → F[Route]` to the stage. | A zero cap should leave the upstream body unopened while preserving effects from preparing its ordinary arguments. |
+| Merge two ordered sources | A binary transformer can require two independently typed inputs and produce one output. Candidate B can additionally state each input's normal feedback type. | Producing ordered output with bounded lookahead needs access to a retained head and a way to advance the corresponding source. |
+
+For the merge, a useful paper signature is
+`Merge[F, G, H, A] ≔ (F[A], G[A]) → H[A]`. The parentheses stand for two supplied arguments. They
+grant no permission to store either argument. Substitute `Visit[void]` on both sides of the input
+and ask for an ordered merge of 10, 30 on the left with 20, 40 on the right. After emitting 10 and
+20, the consumer needs 30 without losing the position preceding 40. The source protocol permits
+nested calls but offers no operation to resume a traversal that has returned. One-shot sources
+make restarting an observable operation. A library can distinguish a right-hand
+`Cursor[A]` with documented peek, advance and owner lifetime, or introduce a separate resumable
+protocol. Merely replacing `G` by a new name with the same kind adds no such capability.
+[CoD's ordered-journal case](../design/ProducersAndTransformers.md#replay-two-sorted-journals-in-order)
+
+### Binding arguments without entering the source
+
+The extraction already works because each stage names the operation it drives. A library author
+may also want to supply a fresh inventory traversal or a recorded traversal to the same filter.
+CoD's confirmed composite scope includes bounded lexical pipeline connections. For example,
+`here selected = src !> stages` prepares a compatible connection, and `selected $> report` drives
+it with a named terminal. Preparing a source's ordinary arguments and entering its body occur
+at different points. Its actual owners must stay live through use.
+[Confirmed composite scope](../design/ProducersAndTransformers.md#composite-implementation-target)
+· [Three bounded connection forms](../docs/IdiomaticCoD.md#name-reusable-pipeline-connections)
+
+The zero-cap case distinguishes two general binding choices even before the first seat is offered.
+Let `cap` be an already prepared processor that takes zero items, and let `select_day()` record
+one observable call. Drive the resulting traversal with a consumer. An explicit connection
+`itineraries(select_day()) !> cap` prepares the day once. Because the cap never asks for its input,
+the route cursor never opens and the consumer sees no item.
+
+Should a caller also be able to write `cap(itineraries(select_day()))`? Under contextual producer
+binding, the expected producer signature could retain the prepared day and give the same trace.
+Under a rule requiring the explicit connector, that nested spelling would reject in a context
+with no applicable ordinary value call. If both interpretations were viable, the rule would also
+need a way to select one. The distinguishing observations are the acceptance of the spelling,
+one day selection and zero cursor opens. Named, parameterized signatures and their general
+binding rules are a future language-design question. The independent chan endpoint workload
+adds a further requirement for higher-kinded type synonyms. Its local consumer feedback remains
+within its own traversal. [Deferred signature design](../docs/DesignTopics.md#named-signatures-and-pipelines)
+· [Independent chan endpoints](../design/ActorChannels.md#independent-chan-endpoints)
 
 ## Prior work and evaluation
 
-The Haskell 2010 Report translates a comprehension generator through `concatMap` and a guard through
-a conditional empty branch. For finite, pure inputs with full consumption, these rules give the
-ordered answers of the fare example, including the duplicate 80. They provide an independent
-answer-list oracle. That projection omits which source received feedback and when a live inventory
-cursor was closed. [Haskell 2010 Report, §3.11](https://www.haskell.org/onlinereport/haskell2010/haskellch3.html#x8-420003.11)
+The Haskell Report translates dependent list generators using `concatMap` and a failing guard
+using an empty branch. For a finite, pure, fully consumed inventory this predicts 80, 80, 90.
+Go's range-over-function protocol gives its iterator a Boolean continuation signal. CoD lets
+each producer declare the type and interpretation of its normal feedback. In this example,
+false ends one route's seat cursor and the route traversal can continue. Haskell's
+`Pipes.Core.respond` already represents an output and a separately typed reply. The additional
+comparison for CoD is where a lexical return goes and which active resource scopes it leaves.
+[Haskell 2010 Report, §3.11](https://www.haskell.org/onlinereport/haskell2010/haskellch3.html#x8-420003.11)
+· [Go specification, range clauses](https://go.dev/ref/spec#For_range)
+· [Pipes.Core](https://hackage-content.haskell.org/package/pipes-4.3.16/docs/Pipes-Core.html#v:respond)
 
-Go's range-over-function rule supplies a synthesized `yield`. When a loop body terminates, the
-function receives false and may issue no further yields. The booking example uses Boolean feedback
-at a *different* boundary. A terminal can feed false to A as an ordinary application reply and
-still go on to inspect B. A Go encoding can use separate iterator boundaries or an explicit
-protocol to preserve that distinction. The false-versus-return rows above test the encoding more
-precisely than a first-result example alone. [Go specification, range clauses](https://go.dev/ref/spec#For_range)
+<a id="validation-against-a-cod-implementation"></a>
 
-Haskell's `Pipes.Core.respond` already offers a value downstream and resumes with a reply whose type
-is a separate parameter. Its response-substitution operator can replace individual offers with a
-handler. Typed bidirectional handoff therefore has a direct precedent. A comparison with CoD must
-also account for the return destination of a consumer written in a lexical loop and for cleanup
-while transporting that exit. Strymonas, in turn, shows how staged filtering and nested flat-map
-can remove intermediate stream overhead. That work gives a meaningful performance comparator once
-candidate implementations agree on the trace. No performance result follows from our equivalence.
-[Pipes.Core](https://hackage-content.haskell.org/package/pipes-4.3.16/docs/Pipes-Core.html#v:respond)
-· [Kiselyov et al., *Stream Fusion, to Completeness*, POPL 2017](https://yanniss.github.io/streams-popl17.pdf)
+### Reviewing future source proposals
 
-### A bounded executable comparison
-
-We compared two Python models. The reference walks route and seat indices with ordinary nested
-loops and an explicit outward-exit flag. The second implementation passes consumers to sources,
-splits expansion from filtering, and unwinds an explicit control token. They share input data and
-an event vocabulary. Each computes its own effects and control transitions.
-
-There are seven possible seat sequences of length zero, one or two over prices 80 and 120. With
-zero, one or two routes, this gives `1 + 7 + 49 = 57` inventories. Seven terminal policies cover
-always-continue plus ordinary false, outward return or escaping failure at accepted visit one or
-two. For ordinary false the policy gives true on subsequent visits. The comparison found **zero
-trace differences in 399 cases**. Two independent changes to the factored model test what this
-observation can distinguish.
-
-| Change to the factored traversal | Differing cases | A shortest distinguishing input |
-| --- | ---: | --- |
-| Reply false to a filtered seat | 258 / 399 | One route, one fare of 120, always continue. Neither terminal sees a seat. The reference delivers true to the source and the changed version delivers false. |
-| Omit the seat close when a terminal exit escapes | 134 / 399 | One route, one fare of 80, return at the first visit. Both runs deliver 80. Only the reference closes the seat cursor. |
-
-Empty inputs take neither changed branch. The one-seat witnesses are therefore minimal by number of
-offered seats. The executable appendix reproduces the counts using only the Python standard library.
-The experiment checks model agreement on this domain. The case argument above covers longer finite
-inputs in the fragment.
-
-### Validation against a CoD implementation
-
-Derive each expected trace from the generator contract and record which operand forms the pinned
-seed or booter accepts. A disagreement between the two compilers is a diagnostic input. Use the
-first differing handoff and its governing clause to assess each implementation independently.
-Drive the two CoD spellings from independently instrumented table and cursor producers. Log at the
-source and terminal boundaries, before final delivery to the caller. First compare the four fare
-traces above. Add a catch for the same declared exception around a source's offer and outside the
-caller's loop. Inject one failure while preparing the fare and one in the terminal. The source
-catch should see the former, the caller the latter. Introduce a failing close in a separate run
-and use CoD's cleanup-failure rules as the oracle. Successful cleanup was an explicit premise of
-the proposition. [Failure phase and cleanup rules](../design/RangedForAndGenerators.md#cleanup-completion-at-the-for-boundary)
-
-Two further checks delimit the result. A source that requires Boolean feedback must reject a
-consumer path that completes normally without providing it. A stage that retains a borrowed offer
-beyond its proven owner must also reject. Then run a zero-input prefix stage with an observable
-source-argument preparation step. Argument preparation should occur once in written order even
-when the traversal never opens the source. These checks exercise typing, owner validity and
-preparation beyond the scalar, prebound model. Infinite search fairness, suspension and Actor
-delivery require their own observations. [Preparation and control](../design/ProducersAndTransformers.md#preparation-control-and-storage)
-
-<details>
-<summary>Executable appendix · Python 3 differential model</summary>
-
-Copy this block to a file and run it with Python 3. A failure outcome carries the fare as a stable
-test label. A normally exhausted traversal has outcome (return, 0) in both models, even for a consumer that
-visited every fare. The model uses a host exception as its private control token. Generator catches, native
-cleanup failures and CoD exception identity are checked separately by the validation plan above.
-
-```python
-from itertools import product
-
-
-def reference(routes, policy):
-    events = [("open", "routes")]
-    visits = 0
-    outcome = ("return", 0)
-    escaping = False
-    for r, seats in enumerate(routes):
-        events.extend([("route", r), ("open", r)])
-        for i, fare in enumerate(seats):
-            events.append(("offer", r, i, fare))
-            action = "more"
-            if fare <= 100:
-                visits += 1
-                events.append(("visit", fare))
-                if visits == policy[1]:
-                    action = policy[0]
-            if action in ("return", "fail"):
-                escaping = True
-                outcome = (action, fare)
-                break
-            events.append(("feedback", r, i, action == "more"))
-            if action == "end":
-                break
-        events.append(("close", r))
-        if escaping:
-            break
-        events.append(("resume-route", r))
-    events.extend([("close", "routes"), outcome])
-    return events
-
-
-class Escape(Exception):
-    pass
-
-
-def composed(routes, policy, mutant=None):
-    events = []
-    visits = 0
-
-    def route_source(k):
-        events.append(("open", "routes"))
-        try:
-            for r in range(len(routes)):
-                events.append(("route", r))
-                k(r)
-                events.append(("resume-route", r))
-        finally:
-            events.append(("close", "routes"))
-
-    def expand(consume):
-        def visit_route(r):
-            events.append(("open", r))
-            try:
-                for i, fare in enumerate(routes[r]):
-                    events.append(("offer", r, i, fare))
-                    reply = consume(fare)
-                    events.append(("feedback", r, i, reply))
-                    if not reply:
-                        break
-            except Escape:
-                if mutant != "leak":
-                    events.append(("close", r))
-                raise
-            events.append(("close", r))
-        route_source(visit_route)
-
-    def filter_price(consume):
-        def offer(fare):
-            if fare > 100:
-                return mutant != "stop-on-skip"
-            return consume(fare)
-        expand(offer)
-
-    def terminal(fare):
-        nonlocal visits
-        visits += 1
-        events.append(("visit", fare))
-        if visits != policy[1]:
-            return True
-        if policy[0] == "end":
-            return False
-        raise Escape(policy[0], fare)
-
-    try:
-        filter_price(terminal)
-        outcome = ("return", 0)
-    except Escape as transfer:
-        outcome = transfer.args
-    events.append(outcome)
-    return events
-
-
-seats = [s for n in range(3) for s in product((80, 120), repeat=n)]
-policies = [("more", 0)] + list(product(("end", "return", "fail"), (1, 2)))
-differences = dict.fromkeys((None, "stop-on-skip", "leak"), 0)
-cases = 0
-for n in range(3):
-    for routes in product(seats, repeat=n):
-        for policy in policies:
-            cases += 1
-            expected = reference(routes, policy)
-            for mutant in differences:
-                differences[mutant] += composed(routes, policy, mutant) != expected
-print(cases, differences)
-```
-
-</details>
+Future producer or transformer proposals can be reviewed directly against the CoD source above.
+Substitute an empty route, two equal fares, a filter rejection before a match, a terminal that
+answers false, and a caller that returns or fails. For each offer, identify the supplier of its
+feedback or the destination of its outward exit. For each acquired cursor, place its close in
+that same trace. For a proposed general binding, also record every preparation effect before
+opening a cursor. Under candidate A, the result of this review is a library contract for each
+family admitted as `F`. Candidate B moves the normal reply obligation into the type of the
+connection and leaves the stage's interpretation of that reply to the library. A proposal for
+more expressive types can be judged by which pair of filters, caps or merges it can distinguish
+and what the caller can consequently rely on.

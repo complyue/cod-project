@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-24 — Explore CoD language and library choices in the working papers
+
+**K-COD-DESIGN-PAPERS-20261124.** The [four papers](papers/README.md) develop CoD design cases on paper. A regional DCG can itself be the source edited by an AI-assisted CoD program. Replacing its actual owner bars subsequent uses of old views. The pipeline papers explore higher-kinded producer, transformer and consumer signatures for closed traversals and independent chan ends. A [Reflex-style fuel sale](papers/OpenEventPipelines.md#a-reflex-style-network-for-a-fuel-sale) compares timeline-indexed sampling and switching policies. Proposed notation and library contracts remain research choices under the [higher-kinded type synonym topic](docs/DesignTopics.md#higher-kinded-type-synonyms). This revision supersedes the working-paper framing at `5f8937a5dee62ab7458789f9b2af2501f3c86986`.
+
 ## 2026-11-24 — Reframe the four CoD working papers
 
 <a id="k-four-working-papers-20261124"></a>
