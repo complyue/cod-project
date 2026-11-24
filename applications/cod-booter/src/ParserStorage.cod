@@ -126,6 +126,7 @@ export data ExprPayload =
     | ProcedureTypeInput { previous:NodeLink; annotation:NodeId; }
     | ProcedureTypeAnnotation { type_name:NodeId; mode:FormalMode; readonly:bool; }
     | ScopedProcedureDefinition { header:NodeId; body:NodeId; }
+    | ProcedureActivation { name:NodeId; }
     | BooleanCasePattern { truth:bool; }
     | NullCasePattern {}
     | MemberCasePattern {}
@@ -1582,6 +1583,25 @@ export func inspect_scoped_procedure(nodes:const ExprNodes in N, revision:u64, u
         };
         (Vacant) -> { false };
     };
+}
+
+export func inspect_procedure_activation(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+                                         selected:u64 in R) -> bool where {const owner N, owner R} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        Occupied { val syntax <- node; } -> {
+            case syntax.payload of {
+                ProcedureActivation { val name <- name; } -> {
+                    if (!published_syntax_id(nodes, revision, at, name) ||
+                        name_syntax(nodes, at, name.index) != (SymbolicName:NameSyntax)) return false;
+                    selected <- name.index;
+                    true
+                };
+                _ -> false
+            }
+        };
+        Vacant -> false
+    }
 }
 
 export enum CallableSyntax:u8 {

@@ -20,7 +20,7 @@ using "./ParserStorage.cod" {
 using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid,
     ContinueValue, ContinueVoid, BreakValue, BreakVoid,
-    CallableDefinition, CallablePromise, ScopedProcedureDefinition, CProviderDeclaration,
+    CallableDefinition, CallablePromise, ScopedProcedureDefinition, ProcedureActivation, CProviderDeclaration,
         CEntryDefinition,
     ArgumentItem, NamedArgument, SymbolReference, SymbolicInvocation, HereInvocation, HereSupply, HereReceiver,
     RangeHeader, RangeLoop, Parenthesized, Transfer, AugmentedTransfer, Rebind,
@@ -1514,14 +1514,26 @@ func parse_effect(source:const SourceBytes in S, tokens:const Tokens in T,
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
+    val explicit_proc <- result.next < past && proc_word(source, tokens[result.next]);
+    if (explicit_proc) { (result.next <- result.next + 1u64):void };
     if (!parse_symbol(tokens, nodes, result, past)) return;
     val name <- result.root;
     val assignment <- result.next;
-    if (punct_at(source, tokens, assignment, past) == 40u8) {
+    val mark <- punct_at(source, tokens, assignment, past);
+    if (mark == 40u8) {
         parse_scoped_procedure(source, tokens, nodes, result, past, first, name);
         return;
     };
-    val bind <- punct_at(source, tokens, assignment, past) == 61u8;
+    if (explicit_proc) {
+        if (assignment < past && mark != 59u8 && mark != 125u8) {
+            result.diagnostic <- expected_block_separator();
+            return
+        };
+        append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, name),
+            make ProcedureActivation { name <- make NodeId { revision <- result.revision; index <- name } });
+        return
+    };
+    val bind <- mark == 61u8;
     if (!bind && !punct_pair_at(source, tokens, assignment, past, 60u8, 45u8)) {
         result.diagnostic <- expected_binding_operator();
         return;
