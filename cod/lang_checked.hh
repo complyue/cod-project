@@ -2754,6 +2754,49 @@ class ScalarChecker {
     return {mode.value_or(ArgumentMode::value), consistent_type ? type : std::nullopt, display_operand};
   }
 
+  void check_symbol_binding_name(const std::string &name, const Location &at) const {
+    const auto symbol = module_names().symbols.find(name);
+    if (symbol == module_names().symbols.end()) return;
+    const auto &defining = program_.symbols.at(symbol->second);
+    std::string message = "declaration conflicts with protected symbol name '" + name + "'";
+    if (defining.declaration)
+      message += " (canonical " + defining.declaration->filename() + "::@" + defining.name +
+          ", defined at " + location_text(*defining.declaration) + ")";
+    else if (defining.intrinsic_print)
+      message += " (canonical " COD_LANG_IO_MODULE "::@" + defining.name + ")";
+    fail(at, std::move(message));
+  }
+
+  void check_symbol_binding_header(const Form &form) const {
+    if (!form.symbolic && !form.operation) check_symbol_binding_name(form.name, form.at);
+    for (const auto &owner : form.owner_parameters) check_symbol_binding_name(owner.name, owner.at);
+    for (const auto &parameter : form.type_parameters) check_symbol_binding_name(parameter.name, parameter.at);
+    for (const auto &parameter : form.parameters) check_symbol_binding_name(parameter.name, parameter.at);
+  }
+
+  void check_symbol_binding_expression(const Expression &expr) const {
+    using K = Expression::Kind;
+    switch (expr.kind) {
+    case K::pointer:
+    case K::bare_ref_slot:
+    case K::alias:
+    case K::here_binding:
+    case K::region_binding:
+    case K::native_handle_binding:
+    case K::exception_binding:
+    case K::range_for:
+    case K::handler:
+      check_symbol_binding_name(expr.text, expr.at);
+      break;
+    default:
+      break;
+    }
+    if (expr.receiving)
+      for (const auto &item : expr.receiving->items)
+        if (item.operation.empty() || !item.declaration_kind.empty())
+          check_symbol_binding_name(item.name, item.at);
+  }
+
   LexicalState::Scope &declaration_scope(const std::string &name, const Location &at) {
     auto selected = lexical_.scopes.rbegin();
     while (!selected->declarations) {
@@ -2761,9 +2804,6 @@ class ScalarChecker {
       ++selected;
     }
     auto &scope = *selected;
-    if (!checking_instance_ && !scope.id && module_names().symbols.contains(name) &&
-        !program_.symbols[module_names().symbols.at(name)].intrinsic_print)
-      implementation_gap(at, "same-scope value and symbol declarations");
     if (scope.bindings.contains(name)) fail(at, "duplicate declaration of '" + name + "' in one lexical scope");
     return scope;
   }
@@ -2799,6 +2839,7 @@ class ScalarChecker {
   size_t bind(const std::string &name, const Type &type, const std::set<size_t> &targets,
               bool read_only, bool value_binding, bool fixed, const Location &at, std::optional<size_t> alias = {},
               bool source_declaration = true, LexicalState::InputFacts *callable_entry = nullptr) {
+    if (source_declaration) check_symbol_binding_name(name, at);
     auto &scope = declaration_scope(name, at);
     if (source_declaration) warn_shadow(name, at);
     const auto id = bindings_->size();
@@ -23873,7 +23914,8 @@ class ScalarChecker {
         if (form->explicit_value_symbol && form->symbol_owner)
           fail(form->at, "a value symbol cannot name an external storage owner");
         if (form->symbol_owner) implementation_gap(form->at, "regional symbol ownership contracts");
-        if (module_names().types.contains(form->name)) implementation_gap(form->at, "same-scope type and symbol declarations");
+        if (module_names().types.contains(form->name))
+          fail(form->at, "symbol declaration conflicts with type name '" + form->name + "'");
         auto type = resolve_type(*form->result_type);
         // Nominal layouts have completed before symbolic declarations are registered.
         if (form->explicit_value_symbol && !program_.bits_payload(type))
@@ -23902,22 +23944,30 @@ class ScalarChecker {
     std::map<const Form *, const Form *> parents;
     std::map<const Form *, size_t> method_ids;
     std::set<const Form *> installed_bodies;
-    const std::function<void(const Expression &, const Form *)> collect = [&](const Expression &expr, const Form *parent) {
+    const auto collect = [&](auto &&self, const Expression &expr, const Form *parent, bool register_methods) -> void {
+      check_symbol_binding_expression(expr);
       if (expr.kind == Expression::Kind::here_body && !expr.definition) {
-        if (!unsupported_here) unsupported_here = expr.at;
-        return;
+        if (register_methods && !unsupported_here) unsupported_here = expr.at;
+        register_methods = false;
       }
       if (expr.definition) {
-        if (expr.kind == Expression::Kind::procedure_effect) installed_bodies.insert(expr.definition.get());
-        else lexical_methods_.emplace(expr.definition.get(), 0);
-        if (parent) parents.emplace(expr.definition.get(), parent);
-        definitions.push_back(expr.definition.get());
-        if (expr.definition->body) collect(*expr.definition->body, expr.definition.get());
+        check_symbol_binding_header(*expr.definition);
+        if (register_methods) {
+          if (expr.kind == Expression::Kind::procedure_effect) installed_bodies.insert(expr.definition.get());
+          else lexical_methods_.emplace(expr.definition.get(), 0);
+          if (parent) parents.emplace(expr.definition.get(), parent);
+          definitions.push_back(expr.definition.get());
+        }
+        if (expr.definition->body) self(self, *expr.definition->body, expr.definition.get(), register_methods);
       }
-      for (const auto &child : expr.children) collect(*child, parent);
+      for (const auto &child : expr.children) self(self, *child, parent, register_methods);
     };
-    for (const auto &form : forms) if (form->body)
-      collect(*form->body, form->kind == Form::Kind::expression ? nullptr : form.get());
+    for (const auto &form : forms) {
+      if (form->kind == Form::Kind::function || form->kind == Form::Kind::procedure)
+        check_symbol_binding_header(*form);
+      if (form->body)
+        collect(collect, *form->body, form->kind == Form::Kind::expression ? nullptr : form.get(), true);
+    }
     for (const auto *form : definitions) {
       const auto constructor = regional_initializer(*form, lexical_methods_.contains(form));
       for (const auto &parameter : form->parameters)
@@ -24267,12 +24317,8 @@ class ScalarChecker {
       if (lexical) lexical_methods_[form] = id;
       else family.push_back(id);
     }
-    for (const auto &[name, id] : module_names().symbols)
-      if (module_names().callables.contains(name)) {
-        if (!program_.symbols[id].intrinsic_print)
-          implementation_gap(program_.families[module_names().callables.at(name)].at, "same-scope callable and symbol declarations");
-        fail(program_.families[module_names().callables.at(name)].at, "callable conflicts with symbol '" + name + "'");
-      }
+    for (const auto &[name, family] : module_names().callables)
+      check_symbol_binding_name(name, program_.families[family].at);
     for (const auto &[name, type] : module_names().types)
       if (module_names().symbols.contains(name) || module_names().callables.contains(name))
         implementation_gap({source.path.string()}, "same-scope type and callable/symbol bindings");

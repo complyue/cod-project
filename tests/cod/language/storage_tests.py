@@ -67,12 +67,14 @@ runner.CASES = {
     "duplicate_parameter": ('func f(x:u64)->const u64 {val x<-2u64;return x;} f(1u64);', 2, "", "duplicate declaration"),
     "initializer_lookup": ('val x<-x;', 2, "", "unknown scalar value"),
     "local_callable_shadow": ('func f()->void {} val f<-1u64; f();', 2, "", "nearest binding 'f' is not callable"),
-    "local_symbol_shadow": (PRELUDE + 'val print<-1u64; behave @print(1u64);', 2, "", "nearest binding 'print' is not a symbol"),
+    "local_symbol_shadow": (PRELUDE + 'val print<-1u64; behave @print(1u64);', 2, "",
+        "declaration conflicts with protected symbol name 'print'"),
     "narrow_store": ('val x:u8<-1u8; x<-256u64;', 2, "", "does not satisfy destination type"),
     "copy_type_mismatch": ('val x:u64<-true;', 2, "", "does not satisfy declared val type"),
     "generic_storage_error": ('func f(x:T)->const T where T {val y:T<-true;return y;} f(1u64);', 2, "", "does not satisfy declared val type"),
     "module_value_capture": ('val x<-1u64; func f()->const u64 {return x;} f();', 2, "", "module-local binding lookup and capture"),
-    "module_symbol_shadow": (PRELUDE + 'val print<-1u64; proc f()->void {behave @print(1u64);} f();', 2, "", "module-local binding lookup and capture"),
+    "module_symbol_shadow": (PRELUDE + 'val print<-1u64; proc f()->void {behave @print(1u64);} f();', 2, "",
+        "declaration conflicts with protected symbol name 'print'"),
     "lexical_product_initializer_order_and_borrow": (PRELUDE + PRODUCT +
         'proc mark(n:u64)->u64{behave @print(n);return n;}'
         'proc write(ref target:u64 in O) where {owner O}{defer (<-)(target,21u64);return;}'

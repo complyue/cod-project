@@ -64,7 +64,8 @@ runner.CASES = {
         'proc @f(x:T)->u64 throws StaticallyUnknownTypeException where T{return 7u64;}effect @f;', 2, '', 'callable view omits a required checked exception'),
     'unused_generic_body_checked': ('symbol @f:proc(u64)->u64;proc @f(x:u64)->u64{return 1u64;}proc @f(x:T)->u64 where T{return true;}effect @f;behave @f(1u64);', 2, '', 'return type'),
     'method_outside_slot_signature': (IO + F + 'proc @f(x:bool)->u64{return 8u64;}symbol @q:proc(bool)->u64;effect @q=f;behave @print(behave @q(true));', 0, '8\n', ''),
-    'nearest_source_binding': ('proc @f()->u64{return 1u64;}symbol @q:proc()->u64;proc go(f:u64)->void{effect @q=f;}go(1u64);', 2, '', 'effect value does not satisfy'),
+    'protected_implicit_symbol': ('proc @f()->u64{return 1u64;}proc unused(f:u64)->u64{return f;}',
+        2, '', "declaration conflicts with protected symbol name 'f'"),
     'bits_value_symbol_explicit': (bits_value_symbol('val '), 0, '3\n7\n3\n', ''),
     'bits_value_symbol_shorthand': (bits_value_symbol(''), 0, '3\n7\n3\n', ''),
     'bits_value_symbol_renamed_enum': ({
@@ -94,7 +95,6 @@ expect_source_rejections(runner, (
     'deferred_family_snapshot',
     'callee_before_argument_effect',
     'method_outside_slot_signature',
-    'nearest_source_binding',
 ), 'procedure symbols require definition activation')
 expect_source_rejections(runner, (
     'holder_and_forwarding',

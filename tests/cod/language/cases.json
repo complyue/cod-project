@@ -2963,79 +2963,78 @@
     "file": "symbol-lookup-read.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+    "stderr_contains": "declaration conflicts with protected symbol name 'gain'"
   },
   {
     "file": "symbol-lookup-effect.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+    "stderr_contains": "declaration conflicts with protected symbol name 'gain'"
   },
   {
     "file": "symbol-lookup-touch.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+    "stderr_contains": "declaration conflicts with protected symbol name 'gain'"
   },
   {
     "file": "symbol-lookup-perform.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "symbol access @task resolves to non-symbol lexical binding 'task'"
+    "stderr_contains": "declaration conflicts with protected symbol name 'task'"
   },
   {
     "file": "symbol-lookup-behave.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "symbol access @task resolves to non-symbol lexical binding 'task'"
+    "stderr_contains": "declaration conflicts with protected symbol name 'task'"
   },
   {
     "file": "symbol-lookup-defer.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "symbol access @task resolves to non-symbol lexical binding 'task'"
+    "stderr_contains": "declaration conflicts with protected symbol name 'task'"
   },
   {
     "file": "symbol-lookup-inline-effect.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "symbol access @task resolves to non-symbol lexical binding 'task'"
+    "stderr_contains": "declaration conflicts with protected symbol name 'task'"
   },
   {
     "file": "symbol-lookup-query.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "nearest binding 'gain' is not a symbol"
+    "stderr_contains": "declaration conflicts with protected symbol name 'gain'"
   },
   {
     "file": "symbol-lookup-capture.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "nearest binding 'gain' is not a symbol"
+    "stderr_contains": "declaration conflicts with protected symbol name 'gain'"
   },
   {
     "file": "symbol-lookup-loop.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+    "stderr_contains": "declaration conflicts with protected symbol name 'gain'"
   },
   {
     "file": "symbol-lookup.cod",
     "exit": 0,
-    "stdout": "10\n7\n7\n7\n99\n7\n",
-    "stderr_contains": "[-Wshadow]"
+    "stdout": "10\n7\n7\n7\n99\n7\n"
   },
   {
     "file": "symbol-lookup-owner.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "symbol access @O resolves to non-symbol lexical binding 'O'"
+    "stderr_contains": "declaration conflicts with protected symbol name 'O'"
   },
   {
     "file": "symbol-lookup-owner-capture.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "nearest binding 'O' is not a symbol"
+    "stderr_contains": "declaration conflicts with protected symbol name 'O'"
   },
   {
     "file": "owner-binding-rebind.cod",

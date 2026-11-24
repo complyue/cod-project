@@ -2,19 +2,19 @@ using symbol "std:io" @print;
 symbol @gain:u64;
 effect @gain <- 7u64;
 proc read()->const u64 {return @gain;}
-proc add(gain:u64)->const u64 {return gain + read();}
+proc add(delta:u64)->const u64 {return delta + read();}
 behave @print(add(3u64));
 {{
-  val gain:u64 <- @gain;
-  behave @print(gain);
+  val observed:u64 <- @gain;
+  behave @print(observed);
 }};
 behave @print(@gain);
 {{
   proc saved()->const u64 {return @gain;};
   {{
-    val gain:u64 <- 99u64;
+    val local_gain:u64 <- 99u64;
     behave @print(saved());
-    behave @print(gain);
+    behave @print(local_gain);
   }};
 }};
 behave @print(@gain);

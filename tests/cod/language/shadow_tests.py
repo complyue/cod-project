@@ -25,8 +25,6 @@ CASES = {
         'proc run()->void{func target(x:u64)->u64{return x+2u64;};behave @print(target(5u64));}run();', '7\n', ['target']),
     'initializer_before_binding': (IO + MODULE +
         'proc run()->void{func target=target;behave @print(target(6u64));}run();', '7\n', ['target']),
-    'module_symbol_parameter': (IO + 'symbol named:u64;'
-        'func f(named:u64)->u64{return named;}behave @print(f(7u64));', '7\n', ['named']),
     'module_type_parameter': (IO + NPE +
         'func f(NullPointerException:u64)->u64{return NullPointerException;}behave @print(f(7u64));', '7\n', ['NullPointerException']),
     'module_value_parameter': (IO + 'val outer<-1u64;'
@@ -53,8 +51,6 @@ CASES = {
     'shadow_self': (IO + 'proc run()->void{func recur(recur:u64)->u64{return recur;};behave @print(recur(7u64));}run();', '7\n', ['recur']),
     'shadow_enclosing_callable': (IO + 'proc run()->void{func outer()->u64{'
         'func inner(outer:u64)->u64{return outer;};return inner(7u64);};behave @print(outer());}run();', '7\n', ['outer']),
-    'owner_binding': (IO + 'symbol O:u64;'
-        'func f(ref x:u64 in O)->u64 where {owner O}{return x;}val x<-7u64;behave @print(f(x));', '7\n', ['O', 'x']),
     'loop_index': (IO + 'val i<-7;for(i in 0..2){behave @print(i);};behave @print(i);', '0\n1\n7\n', ['i']),
     'fold_index_and_accumulator': (IO + 'val i<-7,s<-9;behave @print(fold(i in 0..3,s=0){s+i});'
         'behave @print(i);behave @print(s);', '3\n7\n9\n', ['i', 's']),
@@ -93,8 +89,10 @@ ERRORS = {
                         "duplicate declaration of catch parameter 'e'"),
     'nearest_noncallable': (MODULE + 'func f(target:u64)->u64{return target(1u64);}f(2u64);',
                            "nearest binding 'target' is not callable"),
-    'nearest_nonsymbol': ('symbol p:u64;func f(p:u64)->u64{return @p;}f(1u64);',
-                         "nearest binding 'p' is not a symbol"),
+    'protected_symbol_parameter': ('symbol named:u64;func f(named:u64)->u64{return named;}',
+                                    "declaration conflicts with protected symbol name 'named'"),
+    'protected_symbol_owner': ('symbol O:u64;func f(ref x:u64 in O)->u64 where {owner O}{return x;}',
+                                "declaration conflicts with protected symbol name 'O'"),
 }
 
 
