@@ -2288,6 +2288,27 @@ func active_native_loan(nodes:const ExprNodes in N, names:const NameBindings in 
     return true
 }
 
+export func inspect_acquired_handle_loan(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W, input:u64, invocation:u64,
+    used:u64, revision:u64, contract:HandleContract in C) -> bool
+    where {const owner N, const owner B, const owner E, const owner W, owner C} {
+    val value <- ungrouped(nodes, revision, used, input);
+    if (value >= invocation || invocation >= used || name_syntax(nodes, used, value) != OrdinaryName ||
+        names[value].kind != handle_binding()) return false;
+    val holder <- names[value].declaration;
+    if (holder >= value || names[holder].scope != names[invocation].scope) return false;
+    ref local = make BoundHandleSites { binding <- no_node(); initializer <- no_node(); readonly <- false };
+    if (inspect_handle_binding(nodes, revision, used, holder, local) != OwnHandleBinding) return false;
+    ref loan = make HandleLoan { marker <- no_node(); owner <- no_node(); readonly <- false };
+    if (!active_native_loan(nodes, names, selected, work, value, loan, used, revision) ||
+        loan.owner != holder || loan.marker >= used || !native_handle_marker(names, selected, loan.marker))
+        return false;
+    contract.marker <- loan.marker;
+    contract.owner_site <- loan.owner;
+    contract.readonly <- loan.readonly;
+    return true
+}
+
 func remember_imported_native_operand(views:SuppliedViews in V, argument:u64, call:u64,
     revision:u64, position:u64, input:u64, owner_site:u64, row:const ModuleInterfaceRow in R)
     -> void where {owner V, const owner R} {

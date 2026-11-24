@@ -75,6 +75,7 @@ export data CompletionSite {
     retains_caught:u8;
     forwarded_operand:u8;
     in_delayed_body:u8;
+    in_supplied_body:bool;
     escaping_failure:u8;
     case_break:u8;
     case_scan:u8;
@@ -128,6 +129,7 @@ func initialize_site(sites:CompletionSites in X, at:u64) -> void where {owner X}
     sites[at].retains_caught <- 0u8;
     sites[at].forwarded_operand <- 0u8;
     sites[at].in_delayed_body <- 0u8;
+    sites[at].in_supplied_body <- false;
     sites[at].case_break <- 0u8;
     sites[at].case_scan <- 0u8;
     sites[at].guarded_by <- no_node();
@@ -153,6 +155,7 @@ func inherit_context(sites:CompletionSites in X, parent:u64, child:u64, guarded_
     sites[child].incoming_handler <- incoming_handler;
     sites[child].replacing_try <- replacing_try;
     sites[child].in_delayed_body <- sites[parent].in_delayed_body;
+    sites[child].in_supplied_body <- sites[parent].in_supplied_body;
     if (sites[parent].event == skipped_operand()) { (sites[child].event <- skipped_operand()):void; } else {};
     return;
 }
@@ -321,6 +324,7 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
     if (inspect_here_invocation(nodes, revision, used, at, supplied) == HereReady) {
         inherit_context(sites, at, supplied.call, guard, incoming, replacing);
         inherit_context(sites, at, supplied.body, guard, incoming, replacing);
+        sites[supplied.body].in_supplied_body <- true;
         return
     };
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
@@ -794,6 +798,9 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
         if (facts[at].text_intrinsic != 0u8) return 0u8;
     };
     if (facts[at].call_definition != no_node()) {
+        if (facts[at].loans_owning_handle && (sites[at].in_supplied_body ||
+            sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8))
+            return unproved_deferred_error();
         val declaration <- sites[facts[at].call_definition].throws_clause;
         if (declaration == no_node()) return 0u8;
         return check_call_completion(nodes, names, links, facts, sites, at,

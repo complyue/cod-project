@@ -1133,7 +1133,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         ref facts = make OperandFacts(capacity, make OperandFact {
             kind <- 0u8; reception <- 0u8; checked_exception <- 0u8; identity_module <- 0u64;
                 target_readonly <- 0u8; needs_target <- 0u8;
-            reaches_constructed_throw <- false;
+            reaches_constructed_throw <- false; loans_owning_handle <- false;
             target_presence <- 0u8; selection <- no_node(); discarded_result <- 0u8; arm_result <- 0u8;
             case_item <- 0u8; case_match <- 0u8; case_body <- 0u8; case_guard <- 0u8; case_resume <- 0u8;
             case_end <- 0u8; case_presence <- 0u8; case_selection <- no_node(); case_context <- no_node();
@@ -1151,7 +1151,8 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         });
         ref sites = make CompletionSites(capacity, make CompletionSite {
             event <- 0u8; presence <- 0u8; can_continue <- 0u8; local_return <- 0u8; retains_caught <- 0u8;
-            forwarded_operand <- 0u8; in_delayed_body <- 0u8; escaping_failure <- 0u8; case_break <- 0u8; case_scan <- 0u8;
+            forwarded_operand <- 0u8; in_delayed_body <- 0u8; in_supplied_body <- false;
+            escaping_failure <- 0u8; case_break <- 0u8; case_scan <- 0u8;
             guarded_by <- no_node(); incoming_handler <- no_node(); throws_clause <- no_node(); category <- 0u64;
             category_module <- 0u64;
             destination <- no_node(); cleanup_first <- no_node(); cleanup_stop <- no_node(); registration <- no_node();

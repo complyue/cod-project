@@ -104,6 +104,7 @@ using "./ExceptionPayload.cod" {
 };
 using "./NativeDeclarations.cod" {
     SuppliedViews, HereContract, inspect_here_contract, HandleContract, inspect_handle_contract,
+    inspect_acquired_handle_loan,
     prepared_here_formal, prepared_native_operation, source_call_scalar,
 };
 using "./NativeDeclarations.cod" SuppliedView {
@@ -120,6 +121,7 @@ export data OperandFact {
     checked_exception:u8;
     identity_module:u64;
     reaches_constructed_throw:bool;
+    loans_owning_handle:bool;
     target_readonly:u8;
     needs_target:u8;
     target_presence:u8;
@@ -277,6 +279,7 @@ func set_fact(facts:OperandFacts in F, at:u64, kind:u8, reception:u8,
     facts[at].checked_exception <- checked_exception;
     facts[at].identity_module <- 0u64;
     facts[at].reaches_constructed_throw <- false;
+    facts[at].loans_owning_handle <- false;
     facts[at].target_readonly <- 0u8;
     facts[at].writable_text_place <- 0u8;
     facts[at].selection <- no_node();
@@ -716,7 +719,8 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, fact
     if (declared_kind == 0u8 && type_name != no_node()) return unproved_operand();
     val identity <- if (type_name == no_node()) { (facts[initializer].identity) } else { nominal_identity(names, type_name) };
     if (declared_kind == scalar_enum() && facts[initializer].kind == scalar_enum() &&
-        identity != facts[initializer].identity) return incompatible_enum_type();
+        !compatible_operand_nominal(facts, initializer, declared_kind, identity, 0u64))
+        return incompatible_enum_type();
     if (facts[initializer].kind == never_result()) {
         ref construction = make ConstructionSites {
             requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
@@ -743,6 +747,7 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, fact
         val diagnostic <- require_typed_bits(nodes, facts, initializer, value_kind);
         if (diagnostic != 0u8) return diagnostic;
         set_fact(facts, at, value_kind, local_place(), names[at].scope, identity, 0u8);
+        facts[at].identity_module <- facts[initializer].identity_module;
         facts[at].target_readonly <- readonly;
         return 0u8;
     } else {};
@@ -1295,20 +1300,34 @@ func check_argument_operand(nodes:const ExprNodes in N, facts:OperandFacts in F,
     return 0u8;
 }
 
-func check_argument(nodes:const ExprNodes in N, facts:OperandFacts in F, owners:CallOwners in O,
-                    argument:u64, formal:u64, invocation:u64, used:u64, revision:u64) -> u8 where {const owner N, owner F, owner O} {
+func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, links:const NameWork in L,
+    facts:OperandFacts in F, owners:CallOwners in O, argument:u64, formal:u64,
+    invocation:u64, used:u64, revision:u64, allow_owned_loan:bool) -> u8
+    where {const owner N, const owner B, const owner E, const owner L, owner F, owner O} {
     if (facts[formal].writable_text_place != 0u8) return unsupported_text_operation();
     val kind <- facts[formal].kind;
     if (kind == source_array_loan() || kind == source_handle_loan()) {
         val actual <- ordinary_argument_value(nodes, used, revision, argument);
-        if (actual >= used || checked_ref_argument(nodes, argument) ||
-            facts[actual].kind != kind || facts[actual].identity != facts[formal].identity ||
+        if (actual >= used || checked_ref_argument(nodes, argument)) return wrong_operand_type();
+        if (allow_owned_loan && kind == source_handle_loan() && facts[actual].kind == 0u8) {
+            ref handle = make HandleContract { marker <- no_node(); owner_site <- no_node(); readonly <- false };
+            if (!inspect_acquired_handle_loan(nodes, names, selected, links, actual, invocation,
+                used, revision, handle)) return unproved_owner();
+            set_fact(facts, argument, source_handle_loan(), borrowed_ref(), handle.owner_site,
+                type_identity(names, selected, handle.marker), 0u8);
+            facts[argument].identity_module <- type_module(names, selected, handle.marker, 0u64);
+            facts[argument].target_readonly <- if (handle.readonly) { 1u8 } else { 0u8 };
+            facts[argument].loans_owning_handle <- true;
+            (actual <- argument):void
+        };
+        if (facts[actual].kind != kind || facts[actual].identity != facts[formal].identity ||
             facts[actual].identity_module != facts[formal].identity_module)
                 return wrong_operand_type();
         if (facts[actual].reception != borrowed_ref()) return unproved_owner();
         if (facts[actual].target_readonly != 0u8 && facts[formal].target_readonly == 0u8)
             return expected_writable_place();
-        copy_fact(facts, argument, actual);
+        if (actual != argument) { copy_fact(facts, argument, actual) };
         return record_owner_argument(nodes, facts, owners, formal, facts[actual].owner, argument,
             invocation)
     };
@@ -1568,6 +1587,11 @@ func check_direct_call(nodes:const ExprNodes in N, names:const NameBindings in B
     if (!callable_formals(nodes, revision, used, definition, source_only, formal) ||
         !first_sequence_entry(nodes, revision, used, arguments, ArgumentSequence, argument)) return invalid_operand_tree();
     val result_owner <- facts[definition].owner;
+    val allow_owned_loan <- source_only &&
+        (scalar_kind(facts[definition].kind) || facts[definition].kind == source_u32() ||
+            facts[definition].kind == void_result()) &&
+        facts[definition].reception != borrowed_ref();
+    val loans_owning_handle <- false;
     val diagnostic <- 0u8;
     for (unused in 0u64 .. used) {
         if (formal == no_node() || argument == no_node()) {
@@ -1578,10 +1602,13 @@ func check_direct_call(nodes:const ExprNodes in N, names:const NameBindings in B
                 (facts[at].owner <- owners[result_owner].actual_owner):void;
             };
             facts[at].call_definition <- definition;
+            facts[at].loans_owning_handle <- loans_owning_handle;
             return 0u8;
         } else {};
-        diagnostic <- check_argument(nodes, facts, owners, argument, formal, at, used, revision);
+        diagnostic <- check_argument(nodes, names, selected, links, facts, owners, argument,
+            formal, at, used, revision, allow_owned_loan);
         if (diagnostic != 0u8) return diagnostic;
+        loans_owning_handle <- loans_owning_handle || facts[argument].loans_owning_handle;
         formal <- links[formal].next;
         argument <- links[argument].next;
     };
