@@ -28,6 +28,7 @@ export data VisitObject =
 export data VisitSlot =
     Vacant {} |
     Visiting { key_first:u64; key_past:u64; revision:u64; } |
+    FailedVisit { key_first:u64; key_past:u64; revision:u64; rejection:u8; } |
     Checked {
         key_first:u64;
         key_past:u64;
@@ -68,6 +69,9 @@ export func find_visit(visits:const Visits in G, bytes:const SourceBytes in G, u
             (Vacant) -> {};
             (Visiting { val first <- key_first; val past <- key_past; }) -> {
                 if (same_key(bytes, first, past, canonical)) return id;
+            };
+            (FailedVisit { val first <- key_first; val past <- key_past; }) -> {
+                if (same_key(bytes, first, past, canonical)) return id
             };
             (Checked { val first <- key_first; val past <- key_past; }) -> {
                 if (same_key(bytes, first, past, canonical)) return id;
@@ -162,6 +166,27 @@ export func visit_has_membership(visits:const Visits in G, id:u64) -> bool where
         StructuralOnly -> true;
         _ -> false
     }
+}
+
+export func visit_rejection(visits:const Visits in G, id:u64) -> u8 where {const owner G} {
+    return case visits[id] of {
+        FailedVisit { val rejection <-; } -> rejection;
+        _ -> 0u8
+    }
+}
+
+export proc mark_failed_visit(visits:Visits in G, id:u64, code:u8) -> bool where {owner G} {
+    if (id >= intrinsic (len)(visits) || code == 0u8) return false;
+    case visits[id] of {
+        Visiting { val first <- key_first; val past <- key_past; val opening <- revision; } -> {
+            visits[id] <- make FailedVisit {
+                key_first <- first; key_past <- past; revision <- opening; rejection <- code
+            };
+            return true
+        };
+        _ -> {}
+    };
+    return false
 }
 
 export func structural_visit_dependency(visits:const Visits in G,

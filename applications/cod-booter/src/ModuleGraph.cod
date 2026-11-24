@@ -110,7 +110,7 @@ using "./NativeCommands.cod" {
     NativeLiteralRange, NativeLiteralRanges, text_literal,
 };
 using "./ModuleIndex.cod" {
-    Visits, KeyLookup, lookup_path, insert_visit, visit_has_membership, growth_capacity,
+    Visits, KeyLookup, lookup_path, insert_visit, visit_has_membership, visit_rejection, mark_failed_visit, growth_capacity,
         reserve_keys, mark_checked,
     earliest_profile_stop, mark_structural_only, VariadicProfileStop, structural_visit_dependency,
     VisitSlot { StructuralOnly }, ModuleSelectionRanges,
@@ -496,14 +496,11 @@ proc read_visit_frame(source:const SourceBytes in S, lines:const SourceLines in 
     val past <- 0u64;
     for (edge in 0u64 .. count) {
         past <- decode_dependency_path(source, edges[edge].first, edges[edge].past, decoded, first);
-        if (past == no_node()) {
-            report_rejection(source, lines, diagnostic, module_selection_failed(), 1u8,
-                             edges[edge].first, edges[edge].past, no_node());
-            return Rejected;
-        };
-        edges[edge].decoded_first <- first;
         edges[edge].decoded_past <- past;
-        first <- past;
+        if (past != no_node()) {
+            edges[edge].decoded_first <- first;
+            (first <- past):void
+        }
     };
     progress[0u64].used <- result.tree.used;
     progress[0u64].root <- result.tree.root;
@@ -1102,7 +1099,9 @@ proc reject_dependency(handle opened:SourceRevision in S, handle diagnostic:Diag
     if (code == package_delivery_failure()) return ScratchFailed;
     return with_source(opened) (source, lines) => {
         report_rejection(source, lines, diagnostic, module_selection_failed(), code, first, past, no_node());
-        continue if (code == 16u8) { FormUnsupported } else { Rejected };
+        continue if (code == 8u8) { ScratchFailed } else {
+            if (code == 16u8) { FormUnsupported } else { Rejected }
+        };
     };
 }
 
@@ -1245,11 +1244,18 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         };
         val edge_code <- 0u8;
         val dependency <- 0u64;
+        val rejected <- Complete;
+        val outcome <- Complete;
         for (edge in 0u64 .. progress[0u64].dependencies) {
             edge_code <- behave @followDependency(edge);
             if (edge_code != 0u8) {
-                failure <- edge_code;
-                return reject_dependency(opened, diagnostic, edge_code, edges[edge].first, edges[edge].past);
+                outcome <- reject_dependency(opened, diagnostic, edge_code, edges[edge].first, edges[edge].past);
+                if (outcome == ScratchFailed) return outcome;
+                if (rejected == Complete || (rejected == FormUnsupported && outcome != FormUnsupported)) {
+                    failure <- edge_code;
+                    (rejected <- outcome):void
+                };
+                continue
             };
             dependency <- selected[edges[edge].site].dependency_module;
             if (dependency > used) return ScratchFailed;
@@ -1258,6 +1264,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             }
         };
         if (progress[0u64].read_rejected) return Rejected;
+        if (rejected != Complete) return rejected;
         if (purpose == (NativeObject:GraphPurpose) &&
             (progress[0u64].used == 0u64 || progress[0u64].used >= no_node() - function_used))
             return ScratchFailed;
@@ -1444,6 +1451,7 @@ proc visit_child(handle parent_path:Path in P, handle entry:Path in A,
         owner G} {
     val first <- edges[edge].decoded_first;
     val past <- edges[edge].decoded_past;
+    if (past == no_node()) return 1u8;
     try {
         own handle owner_path:PathOwner <- make own handle PathOwner();
         val kind <- classify_module_path(decoded, first, past);
@@ -1468,6 +1476,8 @@ proc visit_child(handle parent_path:Path in P, handle entry:Path in A,
         lookup_path(owner_path, visits, keys, used, match_key);
         val child_id <- match_key.id;
         if (child_id < used) {
+            val rejection <- visit_rejection(visits, child_id);
+            if (rejection != 0u8) return rejection;
             if (!visit_has_membership(visits, child_id)) return 6u8;
         } else {
             if (depth >= 128u64) return 9u8;
@@ -1487,11 +1497,13 @@ proc visit_child(handle parent_path:Path in P, handle entry:Path in A,
                                                package_roots, package_paths,
                                                revision, child_id, key_first, key_used, depth, child_failure);
             if (compiled != Complete) {
-                if (child_failure == 6u8 || child_failure == 9u8 ||
-                    child_failure == package_issue() || child_failure == package_delivery_failure())
-                    return child_failure;
-                if (compiled == FormUnsupported) return 16u8;
-                return 7u8;
+                if (compiled == ScratchFailed) return 8u8;
+                val code <- if (child_failure == 6u8 || child_failure == 9u8 ||
+                    child_failure == package_issue()) { (child_failure) } else {
+                    if (compiled == FormUnsupported) { 16u8 } else { 7u8 }
+                };
+                if (!mark_failed_visit(visits, child_id, code)) return 8u8;
+                return code
             };
         };
         selected[edges[edge].site].dependency_module <- child_id + 1u64;
