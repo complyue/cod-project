@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 71 · Recorded: 2026-11-24 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 72 · Recorded: 2026-11-24 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+At r72 [D-22](DesignAuthorityRegistry.md#d-22) applies the [normal-completion decision](../CHANGELOG.md#h-normal-completion-20261124) to the no-payload row in result reception. [D-24](CallableResultInference.md#results-of-proc-func-and-here-bodies) governs the result and [D-17](ExceptionControl.md#return-state-inspection-and-replacement) governs its observation during cleanup.
 
 [Receiving specifications](#receiving-specifications) apply the [D-18 callable value kinds](CallableStorageAndHereAccess.md#callable-value-kinds) to structural results. Check that a capture-free function can supply a lexical function holder. [Editorial continuity](../CHANGELOG.md#k-design-scope-audit-20261124)
 
@@ -259,7 +261,7 @@ H-571 confirms one internal output model for all result forms: a **caller-provid
 | Complete callable result | A complete independent value under D-18's construction/result and borrowed-dependency rules. It is not a generic bits payload. |
 | Fresh non-bits compound, if admitted | Construction in the selected eligible destination, with field initialization and cleanup responsibilities. Returning an existing callee-local object cannot substitute implicit copying, moving or owner promotion. |
 | Owning region result | The ownership carrier and release responsibility delivered on successful completion; the regional graph is not moved into the result slot. |
-| Void completion | Completion state without a payload allocation; explicit return and ordinary fallthrough retain D-17's distinction. |
+| Void completion | Completion without a payload allocation. An explicit empty return and natural void fallthrough give the same normal-completion observation in the owning defer. |
 
 The callable's selected result contract determines the mode; receiver spelling cannot change a value result into a borrowed result or change overload selection to avoid an omitted field. Independent return-type inference remains D-24's contract. Caller-provided backing does not supply permission to allocate in an arbitrary owner, weaken same-owner fields, extend a capture dependency, or put a callable view in a region.
 

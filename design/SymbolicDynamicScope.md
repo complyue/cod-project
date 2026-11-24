@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 262 · Recorded: 2026-11-24 · Phase: language/application co-design.
+Design revision: 263 · Recorded: 2026-11-24 · Phase: language/application co-design.
 
 ## Design authority
+
+At r263 the [normal-completion decision](../CHANGELOG.md#h-normal-completion-20261124) applies [D-24-TAIL](DesignAuthorityRegistry.md#d-24-tail) to the owner-parameter reference-symbol example. Observe one target increment and restoration of the binding when both void procedures finish naturally.
 
 At r262 [D-10-FUNC-SYMBOL](DesignAuthorityRegistry.md#d-10-func-symbol) applies [the terminology and type distinction](CallableStorageAndHereAccess.md#function-value-and-functor-value) to [functor-valued symbols](#installing-a-functor-value). [Human confirmation](../CHANGELOG.md#h-functor-value-distinction-20261124) covers matching installations, rejection of both cross-kind installations and lifetime of the selected receiver under P-721/P-722.
 
@@ -112,7 +114,7 @@ The [module selector decision](../CHANGELOG.md#h-module-default-selector-substit
 
 - **Checked deferred coverage:** [H-550/H-551](../CHANGELOG.md#h-550)/[K-DEFER-CHECKED-COVERAGE-20261116](../CHANGELOG.md#k-defer-checked-coverage-20261116), [D-17-DEFER-DISPATCH](DesignAuthorityRegistry.md#d-17-defer-dispatch)/P-461–P-463, requires checked failures to be handled before their owning defer pass completes. A covering defer catch counts; enclosing throws alone cannot authorize residual checked members. Preserve actual registration/FIFO order, H-525 declared obligations, retained ordinary body_exception, owners and D-16. D-17r86 owns acceptance and conservative proof boundaries. Candidate C-36/C-44/C-63/C-65 and charter §§2/3.1–3.3/4.3/6.3/8/12 serve explicit recoverability and valid ordered cleanup. This dependency alignment continues unrelated contracts; it does not qualify the whole mechanism/value path or assert compiler support.
 
-- **Return-state dependency:** [D-17-RETURN-STATE](DesignAuthorityRegistry.md#d-17-return-state)/[H-542–H-547](../CHANGELOG.md#h-542), [H-548](../CHANGELOG.md#h-548)/[K-RETURNING-PROFILE-20261116](../CHANGELOG.md#k-returning-profile-20261116), aligns this revision’s lexical binding/context under P-484. Candidate C-54/C-63/C-65 and charter §§2/3.2–3.3/4.3/6.3/8/12 preserve author-controlled completion, result/owner validity and observable cleanup. D-17/D-23 own acceptance: scoped cancellation, explicit-return markers, ordinary binding grammar/copy/borrow lifetimes and owning inspection without capture. Module cleanup has no callable return target. Preserve unrelated qualified contracts, FIFO failures and D-16. The H-548 agent selections do not add implementation support or full value-path/physical qualification; owning capture and future pure-callable rules are excluded.
+- **Return-state dependency:** [D-17-RETURN-STATE](DesignAuthorityRegistry.md#d-17-return-state)/[H-542–H-547](../CHANGELOG.md#h-542), [H-548](../CHANGELOG.md#h-548)/[K-RETURNING-PROFILE-20261116](../CHANGELOG.md#k-returning-profile-20261116), aligns this revision’s lexical binding/context under P-484. Candidate C-54/C-63/C-65 and charter §§2/3.2–3.3/4.3/6.3/8/12 preserve author-controlled completion, result/owner validity and observable cleanup. D-17/D-23 own acceptance: scoped cancellation, unbound inspection under the [normal-completion decision](../CHANGELOG.md#h-normal-completion-20261124), ordinary binding grammar/copy/borrow lifetimes and owning inspection without capture. Module cleanup has no callable return target. Preserve unrelated qualified contracts, FIFO failures and D-16. The H-548 agent selections do not add implementation support or full value-path/physical qualification; owning capture and future pure-callable rules are excluded.
 
 - **FIFO cleanup dependency:** [H-541](../CHANGELOG.md#h-541)/[K-DEFER-FIFO-20261116](../CHANGELOG.md#k-defer-fifo-20261116) updates this revision’s module lifetime/context section under D-17-DEFER-DISPATCH/P-463. C-36/C-63/C-65 and charter §§2/3.3/4.3/6.3/12 require preserving observable FIFO handling, tail insertion, incoming-only visits and existing owner/context boundaries. D-17 owns acceptance and remaining policies; unchanged lookup, capture and native-coverage contracts continue. No new runtime support, whole-design qualification or D-16 change follows.
 
@@ -385,12 +387,12 @@ H-561 confirms the owner-parameter source form and staged sound acceptance after
 ref symbol @current:u64 in S where {owner S};
 
 proc bump() {
-    @current <- @current + 1u64;
+    @current <- @current + 1u64
 }
 
 proc increment(ref n:u64 in O) where {owner O} {
     effect @current = n;
-    bump();
+    bump()
 }
 
 proc run() -> u64 {
@@ -399,6 +401,8 @@ proc run() -> u64 {
     return n;  # 1; increment's effect was restored before it returned.
 }
 ```
+
+Both `bump` and `increment` infer void and finish naturally. The transfer in `bump` writes the target once and discards its readonly view. Finishing `increment` restores the previous binding before `run` reads `n`.
 
 The symbol identity is module-declared. S is a declaration-scoped owner parameter, instantiated from the single proved actual owner of the RHS at each installation. It is not a global owner, a newly allocated region, a new symbol or an ambient owner value visible in every procedure. A lexical target and an ordinarily held regional target can both supply that owner. No owning-region symbol needs to be installed first. The existing `in @arena` form adds an installation-time owner-selector constraint; the owner-parameter form omits that constraint, without weakening reference validity.
 
@@ -1209,7 +1213,7 @@ Conversion produces a value through an admitted conversion; assertion checks whe
 
 #### Void inference and explicit discard
 
-A callable can declare or infer void. A bare return supplies [void inference evidence](CallableResultInference.md#completion-without-a-value). A normally completing func or full-scope here with no result payload also supplies that evidence. A use can independently discard a typed result. For example, calling a u64 function for its effects leaves the function’s result contract u64. The surrounding callable can still infer void from its own exits. A throw or an outward return delivers no payload at the expression it leaves.
+A callable can declare or infer void. A bare return supplies [void inference evidence](CallableResultInference.md#completion-without-a-value). Natural completion of a proc, or a void tail in a func or full-scope here, also supplies that evidence when consistent with its result contract. A use can independently discard a typed result. For example, calling a u64 function for its effects leaves the function’s result contract u64. The surrounding callable can still infer void from its own exits. A throw or an outward return delivers no payload at the expression it leaves.
 
 **Cleanup survives every discard.** Ordinary evaluation and ownership rules determine which obligations exist and who carries them on each path. Discarding a fresh owning result requires its ordinary cleanup exactly once. Discarding a borrowed view adds no referent read and leaves the owner’s release responsibility with its existing holder. Producer, partial-construction and cleanup failures follow their own contracts. This applies equally to implicit discard, omitted result fields and explicit `: void`. [Discarded compound outputs](ConstructionAndAcquisition.md#receiving-specifications)
 
@@ -1218,12 +1222,11 @@ A callable can declare or infer void. A bare return supplies [void inference evi
 ```cod
 func sample() -> u64 { return 7u64; }
 proc tick() {
-    sample() : void;
-    return;
+    sample() : void
 }
 ```
 
-Here sample returns u64. The explicit bare return in tick supplies void result evidence. The call and its discard execute before that return. A receiver ignoring `sample()` likewise leaves sample’s signature intact. The operand must already be well typed: an outer discard cannot repair an unresolved overload, invalid owner or an incompatible normal-result join. Paths can explicitly discard at the point where their own results are established, as in `if (flag) { true : void } else { 17u64 : void }`. At a [loop body with no feedback](RangedForAndGenerators.md#loop-bodies-with-no-result-receiver), each terminal alternative can discard its own independently valid result. The loop therefore needs no common payload type for those alternatives.
+Here sample returns u64. The call and its explicit discard execute before `tick` completes naturally with a void result. A receiver ignoring `sample()` likewise leaves sample’s signature intact. The operand must already be well typed: an outer discard cannot repair an unresolved overload, invalid owner or an incompatible normal-result join. Paths can explicitly discard at the point where their own results are established, as in `if (flag) { true : void } else { 17u64 : void }`. At a [loop body with no feedback](RangedForAndGenerators.md#loop-bodies-with-no-result-receiver), each terminal alternative can discard its own independently valid result. The loop therefore needs no common payload type for those alternatives.
 
 #### Type membership and branch refinement
 

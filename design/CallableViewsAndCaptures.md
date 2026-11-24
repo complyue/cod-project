@@ -1,8 +1,10 @@
 # Function values, here callables and declared place aliases
 
-Design revision: 135 · Recorded: 2026-11-24 · Status: scoped callable contract; implementation boundaries recorded separately.
+Design revision: 136 · Recorded: 2026-11-24 · Status: scoped callable contract; implementation boundaries recorded separately.
 
 ## Design authority
+
+At r136 [D-18](DesignAuthorityRegistry.md#d-18) applies the [normal-completion decision](../CHANGELOG.md#h-normal-completion-20261124) to the result destination of a proc or here invocation. [D-24](CallableResultInference.md#results-of-proc-func-and-here-bodies) governs the result and [D-17](ExceptionControl.md#return-state-inspection-and-replacement) governs its observation during cleanup.
 
 At r135 the [functor-value decision](../CHANGELOG.md#h-functor-value-distinction-20261124) applies [the callable terminology](CallableStorageAndHereAccess.md#function-value-and-functor-value) to lexical holders, owner projection and bounded here use. A functor value retains a selected receiver and actual owner throughout every use. P-721/P-722 connect that lifetime to D-18-FUNCTOR-VALUE.
 
@@ -58,7 +60,7 @@ Unmodified/val fields store bits directly; ref/ptr fields store same-owner refer
 
 ## Callable completion
 
-The [callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies) require an explicit return for successful procedure completion. A func or full-scope here may supply a normal value tail. Return from deferred catch/finally targets the enclosing callable, replaces a pending completion and continues remaining cleanup. A deferred entry may inspect its owning callable’s prepared result under [D-17](ExceptionControl.md#return-state-inspection-and-replacement). H-363 records pure declarations with implicit body results while deferring purity implementation. Implementation availability for explicit returns, missing-return delivery and deferred execution is maintained in the source capability reference. These source changes preserve complete values, caller result storage and owner/access checks.
+The [callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies) allow a void procedure to finish naturally. A procedure returning a value still requires a value return. A func or full-scope here may supply a normal value tail. Return from deferred catch/finally targets the enclosing callable, replaces a pending completion and continues remaining cleanup. A deferred entry may inspect its owning callable’s prepared result under [D-17](ExceptionControl.md#return-state-inspection-and-replacement). H-363 records pure declarations with implicit body results while deferring purity implementation. Implementation availability for explicit returns, missing-return delivery and deferred execution is maintained in the source capability reference. These source changes preserve complete values, caller result storage and owner/access checks.
 
 ## Alias terminology
 

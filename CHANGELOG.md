@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Natural void completion and unbound return inspection
+
+<a id="h-normal-completion-20261124"></a>
+**H-NORMAL-COMPLETION-20261124.** The project user decided in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-24 (America/Los_Angeles) that “`if returning ()` 检查执行到该清理点时，本次调用是否正在正常完成” and “允许具名和匿名 void proc 自然走到过程体末尾”. [D-24r13](design/CallableResultInference.md#results-of-proc-func-and-here-bodies) and [D-17r151](design/ExceptionControl.md#return-state-inspection-and-replacement) supersede the explicit-proc-return and no-payload marker clauses of [H-CALLABLE-TAIL-20261119](#h-callable-tail-20261119) and the prior inspection profile at `6cc53adf6088a58be1436ecf8068ba4ef1d8a71b:design/ExceptionControl.md:1172`. Defer-only placement, typed patterns, value tails, missing required results and cleanup settlement retain their contracts. D-29r24 applies natural exhaustion without another yield. Guide r9 and formatter guideline r4 preserve return destinations and tail results. P-324/P-482–P-484/P-631–P-632/P-723 record the scoped relationships. Compiler coverage is tracked separately.
+
 ## 2026-11-24 — Frame effect composition and focused computation as language questions
 
 <a id="k-composition-presentation-20261124"></a>

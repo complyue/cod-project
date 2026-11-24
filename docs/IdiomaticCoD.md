@@ -12,7 +12,7 @@ dependencies are identified where needed.
 
 ## Design authority
 
-Guide revision 8 applies the [single-directive import](../CHANGELOG.md#h-proc-import-identity-20261124) and the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
+Guide revision 9 applies the [normal-completion rule](../CHANGELOG.md#h-normal-completion-20261124), the [single-directive import](../CHANGELOG.md#h-proc-import-identity-20261124) and the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
 [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics), P-694/P-695, and the
 [canonical source style](IdiomaticsGuideline.md#canonical-code-style). The
 [guide baseline](../CHANGELOG.md#k-idiomatic-cod-rewrite-20261123),
@@ -533,8 +533,9 @@ supplier's lexical control destinations. Double braces give the body its own cal
 Adding a scope therefore changes what an early return means.
 
 A function can use its final expression as its result, with explicit returns for early completion.
-An ordinary procedure needs an explicit return on every successful completion. A full-scope here
-invocation has its own final-expression result. Keep that result separate from the supplier's
+Let a void procedure finish after its last operation. It executes the operation and discards its
+result. Use a value return to deliver a non-void procedure result. A full-scope here invocation
+has its own final-expression result. Keep that result separate from the supplier's
 result and from feedback requested by a receiving operation.
 
 ```cod
@@ -561,6 +562,18 @@ Use `continue` to supply feedback, `break` to finish the receiving call, and `re
 supplier. A forwarding helper preserves these destinations. The value of a `continue` must satisfy
 the body signature; a `break` value must satisfy the original call's result contract. They need not
 have the same type. A generator's final result is void, so its traversal accepts bare `break`.
+
+For example, with a writable credit cell installed and an application operation `appended` for the
+samples sink, both procedures infer void:
+
+```cod
+proc charge() { @credit_cell <- @credit_cell - 2u64 }
+proc samples(n:u64) { @samples_sink <- appended(@samples_sink, n) }
+```
+
+The writes take effect and the readonly views produced by the transfers are discarded. An
+`if returning ()` in either procedure’s defer matches this natural exit just as it matches an
+explicit empty return. An escaping ordinary exception takes the other branch.
 
 A successful early exit still owes the cleanup and initialization guarantees of its destination.
 For example, a `break` cannot report successful completion if it skips an initialization that the
@@ -1006,6 +1019,11 @@ Break long signatures at their structural boundaries and keep related informatio
 Canonical style is an acceptance requirement. CoD's planned formatter is almost configuration-free.
 Automatic formatting in commit hooks, backed by
 independent formatting checks at submission or integration, is the recommended enforcement workflow.
+
+Omit a final empty return when falling through completes the same invocation with the same result
+and cleanup. Keep an early return and a single-brace callback’s outward return. In a function or
+full-scope here, check what becomes the tail before removing a return.
+[Formatter examples](IdiomaticsGuideline.md#canonical-code-style)
 
 Put spaces around an augmented transfer token, as in `stock <-:- 1u64`. The four characters
 together specify a read, arithmetic operation and transfer back to the selected place.

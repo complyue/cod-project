@@ -1,11 +1,11 @@
 # Idiomatics guideline
 
-Guideline revision: 3 · Updated: 2026-11-24
+Guideline revision: 4 · Updated: 2026-11-24
 
 ## Design authority
 
 [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics) covers this guideline at
-r3, applying the [single-directive procedure import](../CHANGELOG.md#h-proc-import-identity-20261124) to the contributor example. [D-10-FORMAT-POLICY](../design/DesignAuthorityRegistry.md#d-10-format-policy) covers its
+r4, including the [normal-completion formatting rule](../CHANGELOG.md#h-normal-completion-20261124) and applying the [single-directive procedure import](../CHANGELOG.md#h-proc-import-identity-20261124) to the contributor example. [D-10-FORMAT-POLICY](../design/DesignAuthorityRegistry.md#d-10-format-policy) covers its
 [canonical code style](#canonical-code-style). The project user's
 [quality-standard approval and formatting decisions](../CHANGELOG.md#h-idiomatics-guideline-20261123)
 establish both scopes, including the initial maximum of 100 source columns.
@@ -161,6 +161,23 @@ attachment, and preserve the distinction between grouping and a full scope. Foll
 [semicolon and whitespace rules](../design/SymbolicDynamicScope.md#semicolon-omission-and-syntax-ux).
 Canonical layout cannot replace an author's semantic choices about ownership, callable kind,
 dynamic context or control flow.
+
+A formatter may remove a trailing empty return when fallthrough completes the same invocation
+with the same result, scope exits, cleanup order and observable completion at every deferred
+entry. An `if returning ()` in that invocation’s defer observes both normal exits identically.
+Preserve early exits, value returns and returns from a single-brace supplied callback to its
+lexical caller. In a func or full-scope `{{ ... }}`, also check the tail that deletion would expose:
+
+```cod
+func set_count(ref n:u64 in O) where {owner O} {
+    n <- 1u64;
+    return
+}
+```
+
+Here the function infers void. Deletion would expose the transfer’s readonly destination view
+to result inference. Keep the return. The same check applies to `{{ n <- 1u64; return }}`.
+A semicolon alone does not discard a value tail.
 
 Use all other confirmed style rules consistently. Bring unconfirmed formatting details to design
 discussion when needed; do not invent extra options or exceptions to the 100-column limit. This

@@ -1,8 +1,10 @@
 # Pure functions, knot-tying and tail calls: deferred research plan
 
-Design revision: 5 · Recorded: 2026-11-19 · Status: deferred pre-research; no implementation scheduled.
+Design revision: 6 · Recorded: 2026-11-24 · Status: deferred pre-research; no implementation scheduled.
 
 ## Design authority
+
+At r6 [D-19](DesignAuthorityRegistry.md#d-19) applies the [normal-completion decision](../CHANGELOG.md#h-normal-completion-20261124) to the comparison with ordinary procedures. [D-24](CallableResultInference.md#results-of-proc-func-and-here-bodies) governs the result and [D-17](ExceptionControl.md#return-state-inspection-and-replacement) governs its observation during cleanup.
 
 [H-CALLABLE-TAIL-20261119](../CHANGELOG.md#h-callable-tail-20261119) updates the ordinary callable comparison at r5. D-19 retains the H-363 pure declaration and its deferred implementation scope.
 
@@ -27,7 +29,7 @@ Current development implements ordinary binding/target qualifiers under D-14 whi
 
 ## Declaration surface
 
-`pure f(...) -> T { ...; expression }` declares a const function with its final body expression as the result. Ordinary funcs and full-scope here invocations also admit final-expression results. Successful procedure completion requires a written return. Purity admission and tail-call optimization have their own criteria. This declaration spelling is recorded for future implementation; callable-type syntax, helper/callback admission and purity checking remain unimplemented.
+`pure f(...) -> T { ...; expression }` declares a const function with its final body expression as the result. Ordinary funcs and full-scope here invocations also admit final-expression results. A void procedure can finish naturally after executing its final item as a statement. A non-void procedure still needs a value return. Purity admission and tail-call optimization have their own criteria. This declaration spelling is recorded for future implementation; callable-type syntax, helper/callback admission and purity checking remain unimplemented.
 
 Binding const, target readonly access (including reference traversal) and result qualifiers follow [D-14](RegionalOwnership.md#independent-binding-and-target-qualifiers). None alone establishes a pure callable. A readonly callable holder can still invoke a body with separately permitted effects; pure is a behavioral boundary across the whole invocation.
 

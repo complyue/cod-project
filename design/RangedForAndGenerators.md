@@ -1,8 +1,10 @@
 # Ranged for-loops and synchronous generators
 
-Design revision: 23 · Recorded: 2026-11-23 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
+Design revision: 24 · Recorded: 2026-11-24 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
 
 ## Design authority
+
+At r24 the [normal-completion decision](../CHANGELOG.md#h-normal-completion-20261124) covers [natural exhaustion](#void-final-completion) under [D-29-SIGNATURE](DesignAuthorityRegistry.md#d-29-signature), P-528–P-530 and [D-24-TAIL](DesignAuthorityRegistry.md#d-24-tail). Count body invocations and observe generator cleanup independently of per-yield feedback.
 
 [H-DRAIN-HANDOFF-20261123](../CHANGELOG.md#h-drain-handoff-20261123) confirms [owning loop controls](#owning-loop-controls) under [D-29-HEADERS](DesignAuthorityRegistry.md#d-29-headers), P-540–P-542. Giving each successful overwrite and loop exit a defined cleanup point makes the lifetime observable across a producer handoff. Check a resumed producer, a failed next handoff and a control whose ownership has already transferred. General owning-yield signatures and transport remain open.
 
@@ -472,7 +474,15 @@ The explicit inner full scope makes the demonstrated cleanup borrow valid; the d
 
 ## Void final completion
 
-The bounded design fixes the generator's own normal result to **void**. A bare `return;` ends generation and runs required cleanup. A proc generator requires an explicit return for successful completion. A func generator may also finish on a void tail. Discard unused non-void feedback explicitly when it is the final expression of a void func generator or its callback-first equivalent. A value-producing return belonging to the generator rejects; it does not imply a final yield. A separately nested ordinary callable may still have its own value result.
+The bounded design fixes the generator's own normal result to **void**. A bare `return;` ends generation and runs required cleanup. A proc generator can also reach the end of its body. Both exits run generator cleanup with the same normal completion and yield no further item. A func generator may also finish on a void tail. Discard unused non-void feedback explicitly when it is the final expression of a void func generator or its callback-first equivalent. A value-producing return belonging to the generator rejects; it does not imply a final yield. A separately nested ordinary callable may still have its own value result.
+
+For example, this generator has zero or one body invocation. A consumer must supply bool feedback for the one actual yield. Either feedback value allows the generator to reach its end.
+
+```cod
+proc readings(available:bool) yields u64 -> bool {
+    if (available) { yield(7u64) : void }
+}
+```
 
 The whole `for` has no data result beyond void. There is no path-dependent result selected from the last yield, last feedback or a generator completion payload. Exceptional exits and a body return targeting an outer callable remain control completions, not values of the loop.
 
