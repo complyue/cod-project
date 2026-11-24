@@ -796,6 +796,22 @@ export func stage_module_selections(
     return true
 }
 
+export func defining_symbol_row(exports:const ModuleExports in E, first:u64, past:u64,
+    module:u64, identity:u64, spelling_used:u64) -> u64 where {const owner E} {
+    if (first >= past || past > intrinsic (len)(exports) || module == no_node() ||
+        identity == no_node()) return no_node();
+    val selected <- no_node();
+    for (at in first .. past) {
+        if (exports[at].kind == symbol_export() && exports[at].publishing_module == module &&
+            exports[at].origin_module == module && exports[at].identity == identity) {
+            if (selected != no_node() || exports[at].name_first >= exports[at].name_past ||
+                exports[at].name_past > spelling_used) return no_node();
+            (selected <- at):void
+        }
+    };
+    return selected
+}
+
 export func checked_lexical_selection_kind(selections:const CheckedSelections in F, used:u64,
     row:u64, revision:u64, syntax_used:u64) -> u8 where {const owner F} {
     if (row >= used || used > intrinsic (len)(selections)) return 0u8;

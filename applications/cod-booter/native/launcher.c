@@ -444,6 +444,22 @@ static void report_package(const cod_booter_package_diagnostic *diagnostic) {
     fputc('\n', stderr);
 }
 
+static void report_symbol(const cod_booter_symbol_diagnostic *diagnostic) {
+    const unsigned char *importer = diagnostic->bytes;
+    const unsigned char *spelling = importer + diagnostic->importer_size;
+    const unsigned char *module = spelling + diagnostic->spelling_size;
+    const unsigned char *definition = module + diagnostic->module_size;
+    write_path_bytes(importer, diagnostic->importer_size);
+    fprintf(stderr, ":%" PRIu64 ":%" PRIu64 ": error: declaration conflicts with a protected symbol name '",
+            diagnostic->location.first.line, diagnostic->location.first.column);
+    write_path_bytes(spelling, diagnostic->spelling_size);
+    fputs("' (canonical '", stderr);
+    write_path_bytes(module, diagnostic->module_size);
+    fputs("::@", stderr);
+    write_path_bytes(definition, diagnostic->definition_size);
+    fputs("')\n", stderr);
+}
+
 typedef cod_enum_CompilerStatusx2ecod_14_CompilerStatus compiler_status;
 
 static cod_native_DiagnosticDestination_borrow diagnostic_record(cod_booter_diagnostic_sink *diagnostic,
@@ -474,6 +490,12 @@ static int finish_command(const char *input, cod_native_status result, compiler_
             report_package(package);
             report_dependency_notes(event, 0);
             package_failure |= package->kind != package_shadow;
+        } else if (event->kind == cod_booter_symbol_report) {
+            const cod_booter_symbol_diagnostic *symbol = (const cod_booter_symbol_diagnostic *)event;
+            report_symbol(symbol);
+            report_dependency_notes(event, 0);
+            has_source_reports = true;
+            latest_source_stage = symbol->location.stage;
         } else {
             const cod_booter_source_diagnostics *batch = (const cod_booter_source_diagnostics *)event;
             const char *path = (const char *)(batch->reports + batch->count);

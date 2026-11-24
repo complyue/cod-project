@@ -249,6 +249,20 @@ export func checked_module_key(visits:const Visits in G, used:u64, key_used:u64,
     };
 }
 
+export func published_module_key(visits:const Visits in G, used:u64, key_used:u64, module:u64,
+    key:CanonicalKeyRange in K) -> bool where {const owner G, owner K} {
+    if (module == 0u64 || module > used || used > intrinsic (len)(visits)) return false;
+    return case visits[module - 1u64] of {
+        StructuralOnly { val first <- key_first; val past <- key_past; } -> {
+            if (first >= past || past > key_used) return false;
+            key.first <- first;
+            key.past <- past;
+            true
+        };
+        _ -> checked_module_key(visits, used, key_used, module, key)
+    }
+}
+
 func record_selection_ranges(ranges:ModuleSelectionRanges in R, export_used:u64, default_used:u64,
     first_export:u64, past_export:u64, first_default:u64, past_default:u64)
     -> bool where {owner R} {

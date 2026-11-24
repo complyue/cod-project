@@ -48,6 +48,7 @@ enum {
 typedef enum {
     cod_booter_source_reports,
     cod_booter_package_report,
+    cod_booter_symbol_report,
 } cod_booter_diagnostic_kind;
 
 typedef struct cod_booter_dependency_note {
@@ -84,6 +85,16 @@ typedef struct {
     size_t other_size;
     unsigned char bytes[];
 } cod_booter_package_diagnostic;
+
+typedef struct {
+    cod_booter_diagnostic_event event;
+    cod_booter_diagnostic location;
+    size_t importer_size;
+    size_t spelling_size;
+    size_t module_size;
+    size_t definition_size;
+    unsigned char bytes[];
+} cod_booter_symbol_diagnostic;
 
 typedef struct {
     cod_booter_diagnostic_event *first_event;

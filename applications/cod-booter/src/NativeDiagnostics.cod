@@ -42,6 +42,42 @@ proc "C" write_source_reports(handle diagnostic:DiagnosticDestination in D, rows
                              first_finding:u64) -> u8
     where {owner D, const owner R, const owner K};
 
+proc "C" append_symbol_diagnostic(handle diagnostic:DiagnosticDestination in D, stage:u8, code:u8,
+    first_line:u64, first_column:u64, past_line:u64, past_column:u64,
+    keys:const SourceBytes in K, key_first:u64, key_past:u64,
+    spelling:const SourceBytes in S, name_first:u64, name_past:u64,
+    module_key:const SourceBytes in M, module_first:u64, module_past:u64,
+    definition:const SourceBytes in N, definition_first:u64, definition_past:u64, finding:u64)
+    -> u8 where {owner D, const owner K, const owner S, const owner M, const owner N};
+
+export proc report_symbol_rejection(source:const SourceBytes in S, lines:const SourceLines in S,
+    handle diagnostic:DiagnosticDestination in D, stage:u8, code:u8, first:u64, past:u64,
+    keys:const SourceBytes in K, key_first:u64, key_past:u64,
+    module_key:const SourceBytes in M, module_first:u64, module_past:u64,
+    definition:const SourceBytes in N, definition_first:u64, definition_past:u64,
+    run:DiagnosticRuns in Q) -> CompilerStatus
+    where {const owner S, owner D, const owner K, const owner M, const owner N, owner Q} {
+    if (diagnostic_budget_full(run)) return DiagnosticsIncomplete;
+    const val finding <- run[0u64].retained;
+    if (finding == no_node() || first >= past || past > intrinsic (len)(source) ||
+        key_first >= key_past || key_past > intrinsic (len)(keys) ||
+        module_first >= module_past || module_past > intrinsic (len)(module_key) ||
+        definition_first >= definition_past || definition_past > intrinsic (len)(definition))
+        return ScratchFailed;
+    ref start = make SourcePosition { line <- 0u64; column <- 0u64; };
+    ref end = make SourcePosition { line <- 0u64; column <- 0u64; };
+    locate_source_position(source, lines, first, start);
+    locate_source_position(source, lines, past, end);
+    if (finding == 0u64 && write_diagnostic(diagnostic, stage, code, start.line, start.column,
+        end.line, end.column, 0u64, 0u64, 0u64) != 0u8) return ScratchFailed;
+    if (append_symbol_diagnostic(diagnostic, stage, code, start.line, start.column,
+        end.line, end.column, keys, key_first, key_past, source, first, past,
+        module_key, module_first, module_past, definition, definition_first, definition_past, finding) != 0u8)
+        return ScratchFailed;
+    run[0u64].retained <- finding + 1u64;
+    return Complete
+}
+
 proc "C" append_dependency_note(handle diagnostic:DiagnosticDestination in D, finding:u64,
     keys:const SourceBytes in K, first:u64, past:u64, first_line:u64, first_column:u64,
     past_line:u64, past_column:u64) -> u8 where {owner D, const owner K};

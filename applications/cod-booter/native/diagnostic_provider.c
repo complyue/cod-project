@@ -138,6 +138,63 @@ cod_native_status cod_native_append_package_diagnostic_impl(
     return COD_NATIVE_OK;
 }
 
+cod_native_status cod_native_append_symbol_diagnostic_impl(cod_native_DiagnosticDestination_borrow destination,
+    uint8_t stage, uint8_t code, uint64_t first_line, uint64_t first_column,
+    uint64_t past_line, uint64_t past_column,
+    cod_native_append_symbol_diagnostic_view7 keys, uint64_t key_first, uint64_t key_past,
+    cod_native_append_symbol_diagnostic_view10 spelling, uint64_t name_first, uint64_t name_past,
+    cod_native_append_symbol_diagnostic_view13 module_key, uint64_t module_first, uint64_t module_past,
+    cod_native_append_symbol_diagnostic_view16 definition, uint64_t definition_first, uint64_t definition_past,
+    uint64_t finding, uint8_t *status) {
+    cod_booter_diagnostic_sink *sink = snapshot_destination(destination);
+    diagnostic_bytes ranges[4];
+    if (!sink || !valid_finding_range(sink, finding, 1) || !stage || !code ||
+        !first_line || !first_column || !past_line || !past_column ||
+        past_line < first_line || (past_line == first_line && past_column <= first_column) ||
+        !diagnostic_range(keys.base, keys.count, key_first, key_past, &ranges[0]) ||
+        !diagnostic_range(spelling.base, spelling.count, name_first, name_past, &ranges[1]) ||
+        !diagnostic_range(module_key.base, module_key.count, module_first, module_past, &ranges[2]) ||
+        !diagnostic_range(definition.base, definition.count, definition_first, definition_past, &ranges[3]))
+        return COD_NATIVE_BOUNDARY_ERROR;
+
+    size_t size = sizeof(cod_booter_symbol_diagnostic);
+    for (size_t i = 0; i < sizeof(ranges) / sizeof(ranges[0]); ++i) {
+        if (!ranges[i].size) return COD_NATIVE_BOUNDARY_ERROR;
+        if (ranges[i].size > (size_t)PTRDIFF_MAX - size) {
+            sink->snapshot_failed = true;
+            *status = 1;
+            return COD_NATIVE_OK;
+        }
+        size += ranges[i].size;
+    }
+    cod_booter_symbol_diagnostic *retained = malloc(size);
+    if (!retained) {
+        sink->snapshot_failed = true;
+        *status = 1;
+        return COD_NATIVE_OK;
+    }
+    *retained = (cod_booter_symbol_diagnostic){
+        .event = {.kind = cod_booter_symbol_report, .first_finding = finding},
+        .location = {.stage = stage, .code = code, .first = {first_line, first_column},
+                     .past = {past_line, past_column}},
+        .importer_size = ranges[0].size,
+        .spelling_size = ranges[1].size,
+        .module_size = ranges[2].size,
+        .definition_size = ranges[3].size,
+    };
+    unsigned char *copied = retained->bytes;
+    for (size_t i = 0; i < sizeof(ranges) / sizeof(ranges[0]); ++i) {
+        memcpy(copied, ranges[i].bytes, ranges[i].size);
+        copied += ranges[i].size;
+    }
+    append_event(sink, &retained->event);
+    if (finding == 0 && sink->primary.stage == stage && sink->primary.code == code &&
+        sink->primary.first.line == first_line && sink->primary.first.column == first_column)
+        sink->primary_retained = true;
+    *status = 0;
+    return COD_NATIVE_OK;
+}
+
 cod_native_status cod_native_write_source_reports_impl(cod_native_DiagnosticDestination_borrow destination,
     cod_native_write_source_reports_view1 rows, uint64_t used,
     cod_native_write_source_reports_view3 path, uint64_t first, uint64_t past, uint8_t stage,

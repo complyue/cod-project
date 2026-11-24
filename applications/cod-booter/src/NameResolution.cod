@@ -133,6 +133,7 @@ export data NameWorkSlot {
     active:u64;
     module_selection:u64;
     selected_symbol:bool;
+    local_symbol_conflict:u64;
     case_schema_prepared:bool;
     enclosing_case_arm:u64;
     arm_case:u64;
@@ -287,7 +288,7 @@ func unsupported_callable_promise() -> u8 { return 131u8 }
 export func unprovided_callable_promise() -> u8 { return 132u8 }
 func unsupported_handle_rebind() -> u8 { return 133u8 }
 export func expected_value_binding() -> u8 { return 14u8; }
-func protected_symbol_name() -> u8 { return 142u8 }
+export func protected_symbol_name() -> u8 { return 142u8 }
 
 func reject_name(state:NameState in R, node:u64, diagnostic:u8) -> void where {owner R} {
     state.diagnostic <- diagnostic;
@@ -435,25 +436,42 @@ func lookup(source:const SourceBytes in S, nodes:const ExprNodes in N, work:cons
     return no_node();
 }
 
+func reject_protected_name(work:NameWork in W, state:NameState in R, name:u64, local:u64)
+    -> void where {owner W, owner R} {
+    work[name].local_symbol_conflict <- local;
+    reject_name(state, name, protected_symbol_name())
+}
+
 func declare_name(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                    work:NameWork in W, state:NameState in R, name:u64, declaration:u64, kind:u8,
                    duplicate:u8) -> void where {const owner S, const owner N, owner B, owner W, owner R} {
     val bound <- lookup(source, nodes, work, name, state.first, state.used);
     val introducing_symbol <- symbol_binding(kind);
     if (bound != no_node()) {
-        reject_name(state, name, if (introducing_symbol != symbol_binding(bindings[bound].kind)) {
-            protected_symbol_name()
-        } else { duplicate });
+        val previous_kind <- bindings[bound].kind;
+        if (introducing_symbol == symbol_binding(previous_kind)) {
+            reject_name(state, name, duplicate);
+            return
+        };
+        val same_scope_symbol <- if (introducing_symbol) {
+            if (kind != symbolic_selection()) { declaration } else { no_node() }
+        } else {
+            if (previous_kind != symbolic_selection()) { (bindings[bound].declaration) } else { no_node() }
+        };
+        reject_protected_name(work, state, name, same_scope_symbol);
         return
     };
     if (!introducing_symbol && work[name].selected_symbol) {
-        reject_name(state, name, protected_symbol_name());
+        reject_protected_name(work, state, name, no_node());
         return
     };
     if (!introducing_symbol && state.first != 0u64) {
         val module_name <- lookup(source, nodes, work, name, 0u64, state.module_names);
         if (module_name != no_node() && symbol_binding(bindings[module_name].kind)) {
-            reject_name(state, name, protected_symbol_name());
+            val module_symbol <- if (bindings[module_name].kind != symbolic_selection()) {
+                (bindings[module_name].declaration)
+            } else { no_node() };
+            reject_protected_name(work, state, name, module_symbol);
             return
         }
     };
@@ -467,8 +485,9 @@ func declare_module_name(source:const SourceBytes in S, nodes:const ExprNodes in
     name:u64, declaration:u64, kind:u8) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     if (state.module_candidates && work[name].module_selection != no_node()) {
-        reject_name(state, name, if (work[name].selected_symbol) { protected_symbol_name() }
-            else { unproved_module_binding() });
+        if (work[name].selected_symbol) {
+            reject_protected_name(work, state, name, no_node())
+        } else { reject_name(state, name, unproved_module_binding()) };
         return
     };
     declare_name(source, nodes, bindings, work, state, name, declaration, kind, duplicate_binding());
@@ -3198,6 +3217,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
         bindings[at].finalizer <- no_node();
         bindings[at].guarded_local_link <- no_node();
         bindings[at].handle_guard <- no_node();
+        work[at].local_symbol_conflict <- no_node();
     };
     if (!link_entries(nodes, work, tree.revision, tree.used)) return false;
     ref state = make NameState {

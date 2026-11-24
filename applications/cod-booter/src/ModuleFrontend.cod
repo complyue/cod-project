@@ -44,6 +44,7 @@ using "./ModuleExports.cod" {
     CheckedSelections, CheckedSelection { UnpublishedSelection },
 };
 using "./NameResolution.cod" {
+    protected_symbol_name,
     NameBindings, NameWork, NameResolutionResult, unsupported_module_declaration,
     unsupported_ordinary_construction,
     resolve_module_names_recovering, ProductTypeRecovery, apply_module_name_uses, text_type, is_lexical_builder, owner_binding, ordinary_selection, record_type,
@@ -74,6 +75,7 @@ export data ModuleBindingResult {
     stage:u8;
     diagnostic:u8;
     related_first:u64;
+    symbol_binder:u64;
 }
 
 export func module_read_failed() -> u8 { return 1u8; }
@@ -382,6 +384,7 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
         !apply_module_name_uses(selections, selected_used, result.frontend.tree, work, bindings,
             selected, interfaces, interface_used, names)) {
         binding_diagnostic(nodes, result, module_binding_failed(), names.diagnostic, names.node);
+        if (names.diagnostic == protected_symbol_name()) { (result.symbol_binder <- names.node):void };
         if (names.enclosing_defer != no_node()) { result.related_first <- syntax_first(nodes, result.frontend.tree.used, names.enclosing_defer); {}; } else {};
         return false;
     } else {};
