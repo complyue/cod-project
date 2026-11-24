@@ -42,8 +42,9 @@ Development mainline owns implementation, regression fixes, the compatibility ba
 
 ## Build and Command Execution
 
-- After code changes, compile exactly with `cmake --build ./build`. Use the current worktree's `build/` for development tools and a separate worktree for another host, container or OS. Keep build symlinks and directories in place.
-- The exact routine build may run without separate approval when the existing plan, including relevant nested plans, rules out a large-scale LLVM build. Incremental builtins and runtimes reached by this command follow the same rule. Dry-run an unfamiliar plan and the first build after client-profile, system-header or toolchain changes, for example `ninja -C build -n -d explain`. Check package/content evidence when timestamps suggest broad invalidation. Require explicit approval for a broad or still uncertain plan. An already authorized repair does not need repeated approval.
+- For incremental CoD work, use `cmake --build ./build` or select the CoD target needed for the change. For seed-only work, use `cmake --build ./build --target cod` when the default target would also run unrelated work. Use the current worktree's `build/` for development tools and a separate worktree for another host, container or OS. Keep build symlinks and directories in place.
+- Proceed without separate approval when the plan for the **target you will run**, including any nested builds it invokes, rules out a large-scale LLVM rebuild. For example, if `ninja -C build -n -v cod` shows only compilation of `cod/main.cc` and linking of `bin/cod` against existing LLVM libraries, proceed with the seed build. Incremental builtins and runtimes reached by a routine build follow the same rule.
+- Dry-run an unfamiliar plan and the first build after client-profile, system-header or toolchain changes. Use `ninja -C build -n -d explain` with the selected target to investigate unexpected invalidation. Check package/content evidence when timestamps suggest broad invalidation. Seek approval before running a plan that would rebuild LLVM on a large scale or whose impact remains uncertain after inspection. An already authorized repair does not need repeated approval.
 - Inspect top-level scripts with unclear effects and run them within the current authorization. Read build scripts, logs, caches and LLVM sources as needed. When asked about LLVM internals, verify and cite file/line evidence in the workspace's `llvm-project/`. If that tree is absent, state the limitation.
 
 ### Bootstrap and Build Configuration Safety
@@ -52,7 +53,7 @@ Require explicit human authorization before any of the following:
 
 - Bootstrap or configuration work that can fully or partly rebootstrap LLVM, Clang or CoD. This includes CMake configure/generate, presets, fresh caches, new `-D` options and regeneration of the main build files.
 - Editing toolchain/bootstrap definitions, including `do-build-cod.*`, `prepare-*`, CMake files and presets, LLVM patches and files in `llvm-project/`. The same rule applies to installing, updating, removing or switching toolchains and SDKs.
-- Cleaning, deleting, moving, renaming, recreating or bulk-editing build trees, their metadata or install trees. Direct install, clean, compiler, runtime or bootstrap stage targets also require it.
+- Cleaning, deleting, moving, renaming, recreating or bulk-editing build trees, their metadata or install trees. Direct install, clean, LLVM toolchain (such as `llvm`, `clang` or `lld`), runtime and bootstrap stage targets also require it. The CoD seed target `cod` follows the incremental build rule above.
 
 ## Tests
 
