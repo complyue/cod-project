@@ -674,7 +674,7 @@ struct CheckedMethod {
   size_t module = 0, interpretation = 0, definition = null_target;
   std::optional<SumConstructor> regional_initializer;
   std::optional<size_t> regional_initializer_fields;
-  std::optional<size_t> family;
+  std::optional<size_t> family, local_effect_symbol;
   std::vector<size_t> nested;
   std::vector<size_t> instances;
   std::vector<Type> parameters;
@@ -840,6 +840,7 @@ struct CheckedSymbol {
   std::optional<SymbolReference> reference = {};
   bool live_scope = false;
   std::optional<size_t> scoped_instance = {};
+  std::optional<Location> declaration = {};
 };
 // Borrowed symbol inputs occupy a separate range from scope and formal owner roles.
 inline constexpr size_t first_symbol_owner = null_target / 2;

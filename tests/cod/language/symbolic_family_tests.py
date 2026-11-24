@@ -31,8 +31,17 @@ runner.CASES = {
     'family_return': (IO + F + 'proc make_value()->proc(u64)->u64{effect @f;return @f;}proc held=make_value();behave @print(held(1u8));', 0, '7\n', ''),
     'recursive_dynamic_family': (IO + 'symbol @f:proc(u64)->u64;proc @f(x:u64)->u64{return if(x==0u64){1u64}else{x*behave @f(x-1u64)};}'
         'proc seed(x:u64)->u64{return x;}effect @f=seed;effect @f;behave @print(behave @f(5u64));', 0, '120\n', ''),
-    'combined_installs_whole_family': (IO + 'symbol @f:proc(u64)->u64;effect @f(x:u64)->u64{return 1u64;};proc @f(x:T)->u64 where T{return 7u64;}behave @print(behave @f(1u8));', 0, '7\n', ''),
-    'combined_implicit_symbol': (IO + 'effect @f()->u64{return 7u64;};behave @print(behave @f());', 0, '7\n', ''),
+    'named_activation_installs_whole_family': (IO + F + 'effect proc @f;behave @print(behave @f(1u8));', 0, '7\n', ''),
+    'local_installation_implicitly_declares_symbol': (IO + 'effect @f()->u64{return 7u64;};behave @print(behave @f());', 0, '7\n', ''),
+    'local_installation_preserves_lexical_family': (IO + F + 'effect proc @f;'
+        '{{effect proc @f(x:u64)->u64{return 2u64;};behave @print(@f(1u64));behave @print(behave @f(1u64));}};'
+        'behave @print(behave @f(1u64));', 0, '1\n2\n1\n', ''),
+    'local_installation_reports_original_symbol': ({
+        'base.cod': 'symbol @score:proc(u64)->u64;export proc @score;',
+        'facade.cod': 'export from "./base.cod" proc @score as @selected;',
+        'main.cod': 'using "./facade.cod" proc @selected as @score;\n'
+            'effect proc @score(input:bool)->u64{return 0u64;};',
+    }, 2, '', 'base.cod::@score): no applicable method'),
     'multiple_actual_arguments': (IO + 'symbol @f:proc(u64,u64)->u64;proc @f(x:T,y:T)->u64 where T{return 1u64;}proc @f(x:A,y:B)->u64 where {A,B}{return 7u64;}'
         'effect @f;behave @print(behave @f(1u8,2u32));behave @print(behave @f(1u8,2u8));', 0, '7\n1\n', ''),
     'scope_restores_complete_value': (IO + F + 'symbol @g:proc(u64)->u64;proc @g(x:T)->u64 where T{return 9u64;}effect @f;{{effect @f=g;behave @print(behave @f(1u8));}};behave @print(behave @f(1u8));', 0, '9\n7\n', ''),
@@ -54,6 +63,9 @@ runner.CASES = {
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {
     'deferred_argument_snapshot': ['x'],
+}
+runner.CASE_LOCATIONS = {
+    'local_installation_reports_original_symbol': (2, 1),
 }
 runner.EXTRA_SOURCES = [Path(__file__)]
 
