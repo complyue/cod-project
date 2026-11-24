@@ -128,7 +128,7 @@ runner.CASES = {
     }, 2, '', 'does not satisfy callable declaration'),
     'imported_declaration_supports_type_query_without_body': ({
         'base.cod': 'func operation(x:T)->const T where T;export operation;',
-        'main.cod': IO + 'import "./base.cod" operation as local;val x<-make local typeof(local(true)){true};behave @print(x);',
+        'main.cod': IO + 'import "./base.cod" operation as local;val x<-make typeof(local(true)){true};behave @print(x);',
     }, 0, 'true\n', ''),
     'imported_borrow_keeps_external_owner': ({
         'base.cod': 'func identity(ref x:i64 in O)->ref i64 in O where {owner O}{return x;}export identity;',
@@ -137,8 +137,9 @@ runner.CASES = {
     'source_symbols_and_complete_capture_survive_import': ({
         'base.cod': 'symbol @x:u64;proc read()->u64{return @x;}export var @x;export read;',
         'main.cod': IO + 'symbol from "./base.cod" @x as @source;import "./base.cod" read;symbol @x:u64,@p:proc()->u64;'
-            'effect @source<-1u64;effect @x<-99u64;proc held=read;effect @source<-7u64;'
-            'effect @p=held;behave @print(perform @p());behave @print(held());behave @print(read());behave @print(@x);',
+            'proc @p()->u64{return read();}effect @source <- 1u64;effect @x <- 99u64;'
+            'effect proc @p;effect @source <- 7u64;behave @print(perform @p());'
+            'behave @print(behave @p());behave @print(read());behave @print(@x);',
     }, 0, '1\n7\n7\n99\n', ''),
     'distinct_sibling_overloads_remain_available': ({
         'base.cod': 'func score(x:T)->u64 where T{return 1u64;}func twice(x:T) where T{return score(x)+score(x);}export score;export twice;',

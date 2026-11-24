@@ -120,16 +120,15 @@ runner.CASES = {
         'base.cod': FAMILY,
         'main.cod': IO + 'using symbol "./base.cod" @score;effect @score;behave @print(behave @score(1u8));behave @print(behave @score(1u64));',
     }, 0, '7\n1\n', ''),
-    'entry_extension_preserves_cancelled_operand_effects': ({
-        'base.cod': IO+FAMILY+'proc candidate(n:u64)->u64{return n;}'
-            'effect @score={behave @print(21u64);candidate};behave @print(22u64);',
-        'main.cod': ENTRY_EXTENSION+'effect @score;'+CALL_SCORE,
+    'dependency_initialization_precedes_receiver_activation': ({
+        'base.cod': IO+FAMILY+'behave @print(21u64);behave @print(22u64);',
+        'main.cod': ENTRY_EXTENSION+'effect proc @score;'+CALL_SCORE,
     }, 0, '21\n22\n9\n', ''),
-    'entry_extension_preserves_cancelled_operand_failure': ({
-        'base.cod': IO+FAMILY+'proc candidate(n:u64)->u64{return n;}'
-            'proc prepare(n:u64)->proc(u64)->u64{behave @print(21u64);behave @print(1u64/n);return candidate;}'
-            'effect @score=prepare(0u64);behave @print(22u64);',
-        'main.cod': ENTRY_EXTENSION+'effect @score;'+CALL_SCORE,
+    'dependency_initialization_failure_prevents_entry_execution': ({
+        'base.cod': IO+FAMILY+
+            'proc prepare(n:u64)->void{behave @print(21u64);behave @print(1u64/n);return;}'
+            'prepare(0u64);behave @print(22u64);',
+        'main.cod': ENTRY_EXTENSION+'effect proc @score;'+CALL_SCORE,
     }, 70, '21\n', 'division by zero'),
     'entry_extension_requires_installation_in_entry_scope': ({
         'base.cod': FAMILY+'effect @score;',
@@ -153,16 +152,25 @@ runner.CASES = {
             +CALL_SCORE+'behave @print(previous());'+CALL_SCORE,
     }, 0, '9\n1\n9\n', ''),
     'symbol_from_preserves_identity_and_semantics': ({
-        'base.cod': FAMILY,
+        'base.cod': 'symbol @score:proc(u64)->u64;'
+            'proc @score(x:T)->u64 where T{return 7u64;}export proc @score;',
         'main.cod': IO + 'symbol from "./base.cod" @score as @first;symbol from "./base.cod" @score as @second;'
-            'effect @first;behave @print(behave @second(1u8));{{proc f(x:u64)->u64{return 9u64;};effect @second=f;'
-            'behave @print(behave @first(1u8));}};behave @print(behave @second(1u8));',
+            'import "./base.cod" proc @score as @extend;proc @extend(x:u64)->u64{return 9u64;}'
+            'effect proc @first;behave @print(behave @second(1u64));'
+            '{{effect proc @extend;behave @print(behave @first(1u64));}};'
+            'behave @print(behave @second(1u64));',
     }, 0, '7\n9\n7\n', ''),
-    'family_source_context_and_distinct_destination': ({
-        'base.cod': 'func helper(x:u64)->u64{return 7u64;}proc @score(x:u64)->u64{return helper(x);}export proc @score;',
-        'main.cod': IO + 'using symbol "./base.cod" @score as @source;proc @score(x:u64)->u64{return 9u64;}'
-            'func helper(x:u64)->u64{return 11u64;}effect @score=source;behave @print(behave @score(1u8));',
+    'renamed_family_preserves_its_defining_helper': ({
+        'base.cod': 'func helper(x:u64)->u64{return 7u64;}symbol @score:proc(u64)->u64;'
+            'proc @score(x:u64)->u64{return helper(x);}export proc @score;',
+        'main.cod': IO + 'using "./base.cod" proc @score as @source;'
+            'func helper(x:u64)->u64{return 11u64;}effect proc @source;behave @print(behave @source(1u64));',
     }, 0, '7\n', ''),
+    'distinct_procedure_symbols_reject_assignment_installation': ({
+        'base.cod': FAMILY,
+        'main.cod': 'using "./base.cod" proc @score as @source;symbol @score:proc(u64)->u64;'
+            'proc @score(x:u64)->u64{return 9u64;}effect proc @source;effect proc @score;effect @score = @source;',
+    }, 2, '', 'procedure symbols require definition activation'),
     'cross_module_dynamic_capture': ({
         'base.cod': 'symbol @bias:u64;proc @score(x:u64)->u64{return @bias+x;}export var @bias;export proc @score;',
         'main.cod': IO + 'using symbol "./base.cod" @score;symbol from "./base.cod" @bias;'
@@ -226,7 +234,7 @@ runner.CASES = {
         'main.cod': IO + 'using "./base.cod" pick as other;func pick(x:T)->bool where T{return false;}behave @print(other(1u8));',
     }, 0, '7\n', ''),
     'source_symbol_type_query': ({
-        'base.cod': 'symbol @bias:u8;func value(){val x<-make local typeof(@bias){7u8};return x;}export value;',
+        'base.cod': 'symbol @bias:u8;func value(){val x<-make typeof(@bias){7u8};return x;}export value;',
         'main.cod': IO + 'symbol @bias:bool;using "./base.cod" value;behave @print(value());',
     }, 0, '7\n', ''),
     'source_callable_ignores_caller_lexical_shadow': ({
