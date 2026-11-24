@@ -249,20 +249,9 @@ export score;
                 'import "./regional-0.cod" shared_measure as chain;\n'
                 'function measure(node:Node in O) -> i64 where {owner O} { chain(node) }\nexport weight;\nexport measure;\n')
         (directory / 'regional-vocabulary.cod').write_text('using "./regional-types.cod" Node;\nsymbol @root : Node;\nexport var @root;\n')
-        (directory / 'regional-body.cod').write_text(
-            '''using "./regional-types.cod" Node;
-using "std:exceptions" NullPointerException;
-symbol from "./regional-vocabulary.cod" @root as @input;
-symbol @walk : proc() -> Node throws NullPointerException;
-function find(node:Node in O) -> Node throws NullPointerException where {owner O} { return node.next }
-procedure @walk() -> Node throws NullPointerException { return find(deref(@input)) }
-export proc @walk;
-''')
         for i in range(depth):
             body = ('using "std:exceptions" NullPointerException;\nusing "regional-types.cod" Node;\nusing "regional-interface.cod" Link as Root;\n'
                     f'using "./regional-interface-{i}.cod" Link;\n')
-            body += ('symbol from "./regional-vocabulary.cod" @root;\n'
-                     f'symbol @node{i} : Node;\neffect @node{i} = @root;\nsymbol @walk : proc() -> Node throws NullPointerException;\n')
             if i + 1 < depth:
                 body += f'using "./regional-{i+1}.cod" find as next;\nusing "regional-{i+1}.cod" retain as retain_next;\n'
                 body += f'using "./regional-{i+1}.cod" measure as measure_next;\n'
@@ -278,11 +267,7 @@ export proc @walk;
             body += 'function measure(node:Link in O) -> i64 where {owner O} { rank(node)' + (' + measure_next(node)' if i + 1 < depth else '') + ' }\n'
             body += 'function find(node:Node in O) -> Node throws NullPointerException where {owner O} { '
             body += ('next(deref(node.next))' if i + 1 < depth else 'node.next') + ' }\n'
-            source = f'regional-{i+1}.cod' if i + 1 < depth else 'regional-body.cod'
-            role = f'node{i+1}' if i + 1 < depth else 'input'
-            body += f'mixin "./{source}" proc @walk as @walk with {{ @node{i} as @{role}; }};\n'
-            body += 'export find;\nexport retain;\nexport measure;\nexport borrow;\nexport shared_measure;\nexport proc @walk;\n'
-            body += f'export var @node{i};\n'
+            body += 'export find;\nexport retain;\nexport measure;\nexport borrow;\nexport shared_measure;\n'
             (directory / f'regional-{i}.cod').write_text(body)
         entry = directory / 'regional-main.cod'
         entry.write_text('using symbol "std:io" @print;\nusing symbol "std:io" @assert;\nusing "std:exceptions" NullPointerException;\n'
@@ -293,10 +278,9 @@ export proc @walk;
                          'effect @tail = alloc @arena Node(11.0f32, null);\n'
                          f'effect @head = fold (i in 0u32 .. {depth}u32, node = @tail) {{\n'
                          '  alloc @arena Node(f32(i), node)\n};\n'
-                         'using "./regional-0.cod" find;\nusing "regional-0.cod" retain;\nusing symbol "regional-0.cod" @walk;\n'
+                         'using "./regional-0.cod" find;\nusing "regional-0.cod" retain;\n'
                          'behave @print(retain(deref(@head)).value);\n'
                          'using "./regional-0.cod" measure;\nbehave @print(measure(deref(@head)));\n'
-                         'symbol from "./regional-0.cod" @node0 as @selected;\n'
                          'try {behave @print(deref(find(deref(@head))).value)} catch(e:const NullPointerException){behave @assert(false)};\n'
                          'setfield(@tail, value, 29.0f32);\n'
                          'try {behave @print(deref(find(deref(@head))).value)} catch(e:const NullPointerException){behave @assert(false)};\n'
@@ -308,17 +292,15 @@ export proc @walk;
                          'behave @assert(used_bytes(borrowed) > initial);\n'
                          'behave @assert(used_bytes(original) == old_used);\n'
                          'setfield(@alternate, next, @alternate);\n'
-                         'effect @selected = @alternate;\n'
-                         'try {behave @print(deref(perform @walk()).value)} catch(e:const NullPointerException){behave @assert(false)};\n'
-                         'try {behave @print(deref(behave @walk()).value)} catch(e:const NullPointerException){behave @assert(false)};\n};\n'
+                         'behave @print(deref(deref(@alternate).next).value);\n};\n'
                          'using "./regional-rank-first.cod" measure as first;\n'
                          'using "./regional-rank-second.cod" measure as second;\n'
                          'using "./regional-0.cod" shared_measure;\n'
                          'behave @print(first(deref(@head)));\n'
                          'behave @print(second(deref(@head)));\n'
                          'behave @print(shared_measure(deref(@head)));\n')
-        results.append(run(executable, root, entry, f'95\n{sum(range(depth))}\n11\n29\n29\n47\n{2*depth}\n{3*depth}\n{-depth}\n',
-                           '96-level-regional-borrow-mixin-and-nominal-dispatch-chain'))
+        results.append(run(executable, root, entry, f'95\n{sum(range(depth))}\n11\n29\n47\n{2*depth}\n{3*depth}\n{-depth}\n',
+                           '96-level-regional-borrow-and-nominal-dispatch-chain'))
         # A same-alias union supplies both providers to an imported helper.
         # Separately used helpers retain their own implementation contexts.
         entry.write_text(entry.read_text() +

@@ -165,11 +165,6 @@
     "stdout": "1001\n401\n408\n"
   },
   {
-    "file": "import.cod",
-    "exit": 0,
-    "stdout": "1001\n907\n908\n"
-  },
-  {
     "file": "transitive.cod",
     "exit": 0,
     "stdout": "2\n9\n5\n"
@@ -293,53 +288,10 @@
     "stdout": "1001\n907\n908\n8\n"
   },
   {
-    "file": "import-default-identity.cod",
-    "exit": 0,
-    "stdout": "1001\n907\n908\n"
-  },
-  {
-    "file": "mapping-effects.cod",
-    "exit": 0,
-    "stdout": "60\n100\n9\n"
-  },
-  {
-    "file": "mapping-perform-call.cod",
-    "exit": 0,
-    "stdout": "3\n3\n"
-  },
-  {
-    "file": "reimport-mapping.cod",
-    "exit": 0,
-    "stdout": "1001\n302\n303\n"
-  },
-  {
-    "file": "mapped-behave-later.cod",
-    "exit": 0,
-    "stdout": "1001\n909\n"
-  },
-  {
     "file": "late-alias-destination.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "must be declared before using/import"
-  },
-  {
-    "file": "unknown-map-local.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "undeclared symbol @missing"
-  },
-  {
-    "file": "unknown-map-role.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "unknown source-body role @missing"
-  },
-  {
-    "file": "duplicate-map-role.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "duplicate source role @x"
   },
   {
     "file": "using-with-map.cod",
@@ -348,33 +300,10 @@
     "stderr_contains": "a symbol map requires a mixed-in procedure"
   },
   {
-    "file": "missing-default-alias.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "undeclared symbol @x"
-  },
-  {
     "file": "value-as-procedure.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "has no procedure value"
-  },
-  {
-    "file": "mapping-shared-identity.cod",
-    "exit": 0,
-    "stdout": "6\n"
-  },
-  {
-    "file": "mapping-split-identity.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "splitting one source symbol identity"
-  },
-  {
-    "file": "builtin-body-import.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "no mixin body"
   },
   {
     "file": "using-symbol-shared-identity.cod",
@@ -627,7 +556,7 @@
   {
     "file": "units-procedure.cod",
     "exit": 0,
-    "stdout": "7\n114\n1028\n12\n115\n1029\n"
+    "stdout": "7\n12\n"
   },
   {
     "file": "units-exact-overload.cod",
@@ -945,7 +874,7 @@
   {
     "file": "region-factory-import.cod",
     "exit": 0,
-    "stdout": "115\n206\n7\n9\n11\n"
+    "stdout": "206\n7\n9\n11\n"
   },
   {
     "file": "region-empty.cod",
@@ -1119,7 +1048,7 @@
   {
     "file": "module-selection.cod",
     "exit": 0,
-    "stdout": "1001\n401\n408\n907\n908\n1.25\n21\n11\n21\n26\n112\n122\n122\n"
+    "stdout": "1001\n907\n908\n1.25\n"
   },
   {
     "file": "import-body-map.cod",
@@ -1184,12 +1113,6 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "abstract type declarations have no body; use data for a representation"
-  },
-  {
-    "file": "mixin-type.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "mixin requires a procedure body, not a type definition"
   },
   {
     "file": "method-using-extension.cod",
@@ -1800,11 +1723,6 @@
     "file": "closures/closure-selection.cod",
     "exit": 0,
     "stdout": "11\n12\n13\n14\n3\n99\n4\ntrue\nfalse\ntrue\ntrue\n14\n14\n"
-  },
-  {
-    "file": "closures/closure-mixin.cod",
-    "exit": 0,
-    "stdout": "23\n24\n"
   },
   {
     "file": "closures/closure-frames.cod",
@@ -3100,12 +3018,6 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
-  },
-  {
-    "file": "symbol-lookup-mixin.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "symbol access @target resolves to non-symbol lexical binding 'target'"
   },
   {
     "file": "symbol-lookup.cod",
