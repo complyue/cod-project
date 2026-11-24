@@ -125,6 +125,7 @@ export data NameWorkSlot {
     active:u64;
     module_selection:u64;
     case_schema_prepared:bool;
+    sum_loan_formals:bool;
     # Reaching installation at expression entry. The syntax count denotes
     # a join with no single proven installation.
     native_installation:u64;
@@ -705,6 +706,7 @@ func link_entries(nodes:const ExprNodes in N, work:NameWork in W, revision:u64, 
         work[at].receiver_import <- NoReceiverCallables;
         work[at].next_method <- no_node();
         work[at].case_schema_prepared <- false;
+        work[at].sum_loan_formals <- false;
         work[at].imported_interface <- no_node();
         work[at].imported_type_module <- 0u64;
         work[at].imported_type_identity <- 0u64;

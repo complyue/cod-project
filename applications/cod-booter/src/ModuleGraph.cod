@@ -1135,6 +1135,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             receiver_import <- NoReceiverCallables;
             native_installation <- no_node();
             case_schema_prepared <- false;
+            sum_loan_formals <- false;
             active <- no_node(); module_selection <- no_node(); next <- no_node(); next_method <- no_node();
             imported_interface <- no_node(); imported_type_module <- 0u64; imported_type_identity <-
                 0u64;

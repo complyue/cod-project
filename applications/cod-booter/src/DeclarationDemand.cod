@@ -67,12 +67,13 @@ func local_body(nodes:const ExprNodes in N, revision:u64, used:u64, definition:u
     return form == ModuleCallable || form == LexicalCallable || form == CEntry
 }
 
-func family_declares_failure(links:const NameWork in W, demand:const DeclarationDemands in D,
-                             head:u64, used:u64) -> bool where {const owner W, const owner D} {
+func family_needs_checked_operands(links:const NameWork in W, demand:const DeclarationDemands in D,
+                                    head:u64, used:u64) -> bool where {const owner W, const owner D} {
     val definition <- head;
     for (unused in 0u64 .. used) {
         if (definition == no_node()) return false;
-        if (definition >= used || demand[definition].declared_failure != no_node()) return true;
+        if (definition >= used || demand[definition].declared_failure != no_node() ||
+            links[definition].sum_loan_formals) return true;
         (definition <- links[definition].next_method):void
     };
     return true
@@ -122,7 +123,7 @@ export func discover_declaration_demand(
                 return false
             };
             demand[site].declared_failure <- clause;
-            if ((clause != no_node() ||
+            if ((clause != no_node() || links[site].sum_loan_formals ||
                  source_handle_callable(nodes, names, selected, links, site, used, revision)) &&
                 !require_body(demand, site, count, used)) {
                 problem <- site;
@@ -162,7 +163,7 @@ export func discover_declaration_demand(
                 demand[site].next_call <- demand[scope].first_call;
                 (demand[scope].first_call <- site):void
             };
-            (checked_call <- family_declares_failure(links, demand, definition, used)):void
+            (checked_call <- family_needs_checked_operands(links, demand, definition, used)):void
         };
         if (links[site].case_schema_prepared || selects_caught_field(fields, site) || checked_call ||
             has_imported_native_loan(views, site) || read_acquisition_failure(views, site, failure) ||

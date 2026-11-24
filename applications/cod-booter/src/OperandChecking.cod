@@ -101,7 +101,8 @@ using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check, needs_si
 using "./DeclarationTypes.cod" { type_module, type_identity, DeclaredType };
 using "./CaseSchemas.cod" {
     ConstructorCaseFacts,
-    ConstructorCaseFact { IndexedCaseSubject, CaseConstructor, CaseFieldReceipt, CaseProductField }
+    ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, CaseSumFormal, CaseConstructor,
+        CaseFieldReceipt, CaseProductField }
 }
 using "./ExceptionPayload.cod" {
     CaughtFieldUses, CaughtFieldUse { CaughtField }, unknown_exception_field
@@ -464,9 +465,9 @@ func exception_annotation(nodes:const ExprNodes in N, names:const NameBindings i
 
 func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
                   views:const SuppliedViews in H, selected:const SelectedExports in E,
-                      source_only:bool,
+                  cases:const ConstructorCaseFacts in C, source_only:bool,
                   formal:u64, definition:u64, revision:u64, used:u64) -> u8
-    where {const owner N, const owner B, owner F, const owner H, const owner E} {
+    where {const owner N, const owner B, owner F, const owner H, const owner E, const owner C} {
     ref parameter = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
     ref binding = make BindingSites {
         name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
@@ -483,6 +484,21 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
     if (syntax != OrdinaryFormal ||
         inspect_binding(nodes, revision, used, parameter.binding, binding) != TypedBinding) return unproved_operand();
     val form <- parameter.mode;
+    if (source_only && formal < intrinsic (len)(cases)) {
+        case cases[formal] of {
+            CaseSumFormal { val bound <- definition; val owner_site <- owner_site; val readonly <- readonly;
+                            val type <- value_type; } -> {
+                if (bound != definition || form != ReferenceFormal || binding.readonly != readonly ||
+                    binding.owner_name >= used || names[binding.owner_name].declaration != owner_site ||
+                    !owner_parameter(nodes, owner_site)) return unproved_owner();
+                set_fact(facts, formal, source_sum_target(), borrowed_ref(), owner_site, type.identity, 0u8);
+                facts[formal].identity_module <- type.defining_module;
+                facts[formal].target_readonly <- if (readonly) { 1u8 } else { 0u8 };
+                return 0u8
+            };
+            _ -> {}
+        }
+    };
     if (form == HandleFormal) {
         ref handle = make HandleContract { marker <- no_node(); owner_site <- no_node(); readonly <-
             false };
@@ -560,11 +576,11 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
 
 func check_formals(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                    facts:OperandFacts in F, views:const SuppliedViews in H,
-                       selected:const SelectedExports in E,
+                   selected:const SelectedExports in E, cases:const ConstructorCaseFacts in C,
                    source_only:bool, report:OperandCheckResult in R,
                    definition:u64, tail:u64, used:u64, revision:u64) -> void
     where {const owner N, const owner B, const owner L, owner F, const owner H, const owner E,
-        owner R} {
+        const owner C, owner R} {
     ref formal = make u64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, tail, FormalSequence, formal)) {
         report.node <- definition;
@@ -573,7 +589,7 @@ func check_formals(nodes:const ExprNodes in N, names:const NameBindings in B, li
     };
     for (unused in 0u64 .. used) {
         if (formal == no_node()) return;
-        report.diagnostic <- check_formal(nodes, names, facts, views, selected, source_only, formal,
+        report.diagnostic <- check_formal(nodes, names, facts, views, selected, cases, source_only, formal,
             definition, revision, used);
         if (report.diagnostic != 0u8) { report.node <- formal; return; } else {};
         formal <- links[formal].next;
@@ -667,11 +683,11 @@ func check_signature_clauses(nodes:const ExprNodes in N, names:const NameBinding
 
 func check_signature(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                      facts:OperandFacts in F, views:const SuppliedViews in H,
-                         selected:const SelectedExports in E,
+                     selected:const SelectedExports in E, cases:const ConstructorCaseFacts in P,
                      source_only:bool, report:OperandCheckResult in R, definition:u64, used:u64,
                          revision:u64, callable:const CallableSites in C) -> void
     where {const owner N, const owner B, const owner L, owner F, const owner H, const owner E,
-        owner R, const owner C} {
+        const owner P, owner R, const owner C} {
     ref head = make u64 { no_node() };
     ref sites = make SignatureSites {
         previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false;
@@ -682,7 +698,7 @@ func check_signature(nodes:const ExprNodes in N, names:const NameBindings in B, 
         (report.diagnostic <- invalid_operand_tree()):void;
         return;
     };
-    check_formals(nodes, names, links, facts, views, selected, source_only, report, definition,
+    check_formals(nodes, names, links, facts, views, selected, cases, source_only, report, definition,
         sites.parameter_tail, used, revision);
     if (report.diagnostic != 0u8) return;
     check_signature_clauses(nodes, names, links, facts, selected, report, source_only, definition,
@@ -1315,7 +1331,7 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
     where {const owner N, const owner B, const owner E, const owner L, owner F, owner O} {
     if (facts[formal].writable_text_place != 0u8) return unsupported_text_operation();
     val kind <- facts[formal].kind;
-    if (kind == source_array_loan() || kind == source_handle_loan()) {
+    if (kind == source_array_loan() || kind == source_handle_loan() || kind == source_sum_target()) {
         val actual <- ordinary_argument_value(nodes, used, revision, argument);
         if (actual >= used || checked_ref_argument(nodes, argument)) return wrong_operand_type();
         if (allow_owned_loan && kind == source_handle_loan() && facts[actual].kind == 0u8) {
@@ -2619,6 +2635,17 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
                 coverage.total <- count;
                 (coverage.remaining <- count):void
             };
+            DirectCaseSubject { val expression <- expression; val formal <- formal; val count <- count; } -> {
+                if (expression != subject || formal >= subject || count == 0u64 ||
+                    names[subject].kind != formal_binding() || names[subject].declaration != formal ||
+                    facts[subject].reception != borrowed_ref() || facts[subject].target_readonly == 0u8 ||
+                    facts[subject].owner != facts[formal].owner ||
+                    facts[subject].identity_module != facts[formal].identity_module ||
+                    facts[subject].identity != facts[formal].identity)
+                    return operand_problem(report, at, invalid_operand_tree());
+                coverage.total <- count;
+                (coverage.remaining <- count):void
+            };
             _ -> { return operand_problem(report, at, invalid_operand_tree()) }
         }
     } else {
@@ -3689,7 +3716,7 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
         form <- inspect_callable(nodes, tree.revision, tree.used, at, callable);
         if (needs_signature_check(demand, at) && (form == ModuleCallable || (source_only &&
             (form == CEntry || form == LexicalCallable)))) {
-            check_signature(nodes, names, links, facts, views, selected, source_only,
+            check_signature(nodes, names, links, facts, views, selected, cases, source_only,
                             report, at, tree.used, tree.revision, callable);
             if (report.diagnostic != 0u8) return false;
             if (form == ModuleCallable &&
