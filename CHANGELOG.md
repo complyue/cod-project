@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review recovery between independent product schemas in the seed
+
+<a id="k-seed-product-diagnostic-recovery-20261124"></a>
+**K-SEED-PRODUCT-DIAGNOSTIC-RECOVERY-20261124.** [D-ARCH-REVIEW r97→r98](design/ImplementationArchitecture.md#recovering-between-product-declarations-in-the-seed) continues the [entry-world decision](#h-entry-world-diagnostics-20261124) and [collection review](#k-world-diagnostic-collection-20261124) under P-682/P-683. The cleared unit stages direct field checks for one reserved nominal product and tracks unavailable inline layouts separately from cycles. The inspected registration and layout path is at `eaadae7073f1d0285ae7ce19a749da189b706413:cod/lang_checked.hh`.
+
 ## 2026-11-24 — Review diagnostic collection across bootstrap module visits
 
 <a id="k-world-diagnostic-collection-20261124"></a>
