@@ -1640,15 +1640,17 @@ export func inspect_callable(nodes:const ExprNodes in N, revision:u64, used:u64,
         (Vacant) -> { InvalidCallable:CallableSyntax };
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of {
-                (CallableDefinition { val head <- header; val body <- body; val lexical <- lexical;
+                (CallableDefinition {
+                    val head <- header;
+                    val body <-;
+                    val lexical <-;
+                    val function_form <-;
                 }) -> {
-                    read_callable_definition(nodes, revision, at, head, body,
-                        callable_function_form(syntax.payload), sites,
-                                             if (lexical) { LexicalCallable:CallableSyntax } else { ModuleCallable:CallableSyntax })
+                    read_callable_definition(nodes, revision, at, head, body, function_form, sites,
+                        if (lexical) { LexicalCallable:CallableSyntax } else { ModuleCallable:CallableSyntax })
                 };
-                (CEntryDefinition { val head <- header; val body <- body; }) -> {
-                    read_callable_definition(nodes, revision, at, head, body,
-                        callable_function_form(syntax.payload), sites, CEntry:CallableSyntax)
+                (CEntryDefinition { val head <- header; val body <-; val function_form <-; }) -> {
+                    read_callable_definition(nodes, revision, at, head, body, function_form, sites, CEntry:CallableSyntax)
                 };
                 (CallablePromise { val head <- header; val function_form <-; }) -> {
                     if (!published_syntax_id(nodes, revision, at,
@@ -1658,11 +1660,11 @@ export func inspect_callable(nodes:const ExprNodes in N, revision:u64, used:u64,
                     sites.function_form <- function_form;
                     ModuleCallablePromise:CallableSyntax
                 };
-                (CProviderDeclaration { val head <- header; }) -> {
+                (CProviderDeclaration { val head <- header; val function_form <-; }) -> {
                     if (!published_syntax_id(nodes, revision, at, head)) return InvalidCallable:CallableSyntax;
                     sites.signature <- head.index;
                     sites.body <- no_node();
-                    sites.function_form <- callable_function_form(syntax.payload);
+                    sites.function_form <- function_form;
                     CProvider:CallableSyntax
                 };
                 (_) -> { OtherCallableSyntax:CallableSyntax };
