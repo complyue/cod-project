@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Make the regional HLVM and observable effect composition the paper subjects
+
+<a id="k-software-defined-hlvm-composition-20261124"></a>
+**K-SOFTWARE-DEFINED-HLVM-COMPOSITION-20261124.** The project user identified the central concept of [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) as a Software Defined HLVM whose instructions are relocatable functor objects. The revision develops the native executor, handler, reopen and cost hypotheses under the [regional platform charter](design/RegionalSemanticPlatformCharter.md), with graph editing as an authoring case. The user also distinguished invocation from composition in the [raster paper](papers/ComposingEffectsAndFocusedContexts.md#composing-retry-and-publication). [Three paper programs](papers/examples/ComposedTileReport.md) now compare the same retry and publication scopes in opposite orders. The traces are derived expectations. Both revisions concern research examples.
+
 ## 2026-11-24 — Install a local single-method family when an effect supplies a body
 
 <a id="h-local-proc-handler-body-20261124"></a>

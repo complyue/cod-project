@@ -15,8 +15,12 @@ offer a way to write a rule once and run it at different foci. We identify which
 obligations can disappear, which pairs still require a business decision, and the exact
 assumptions under which the two ways of computing a score agree. We give a conditional
 M + N source-size bound for transparent composition, locate the independent policy cost,
-and compare CoD, mtl and effectful on [matched programs](examples/ScopedTileAudit.md).
-All results below are paper derivations.
+and compare the same two compositions in CoD, mtl and effectful. A physical acquisition can
+fail validation, and a second acquisition can succeed. Should the approved tile's report
+contain the first acquisition's provisional flag? Changing just the nesting of retry and
+publication produces `[2]` or `[1, 2]`. The [three source listings](examples/ComposedTileReport.md)
+exhibit that difference; the [scoped audit](examples/ScopedTileAudit.md) isolates handler
+invocation. All results below are paper derivations.
 
 ## The inspection that both extensions must preserve
 
@@ -42,6 +46,53 @@ The warehouse policy paper can compare two handlers for a fixed operation. For t
 need authors who can independently add *kinds of operation* and *execution layers*, and an
 old rule that must still work on a newly focused part of a result. The inspection supplies all
 three. [Warehouse policy and its executor](AlgebraicEffectsIsAllYouNeed.md#two-entries-share-one-fallback)
+
+<a id="composing-retry-and-publication"></a>
+
+## Compose the inspection, retry and publication
+
+Two teams supply higher-order operations: `retry_once` may run its argument a second time
+after a rejection, while `stage` buffers the flags from its argument and publishes the
+batch only on acceptance. The tile team supplies `inspect`. Each acquisition receives a
+fresh physical ID, emits a provisional flag for that ID, then reports its validator's
+verdict. Neither wrapper calls the other. Their authors can settle their contracts before
+they meet. The application author chooses how the effects of all three are composed.
+
+Here are the two actual CoD expressions from the [complete comparison](examples/ComposedTileReport.md#cod),
+in the scope of the same `reject_through` input. The first opens one publication scope per
+acquisition. The second opens one scope around the entire tile.
+
+```cod
+retry_once() { stage() { inspect(reject_through) } }
+stage() { retry_once() { inspect(reject_through) } }
+```
+
+Let acquisition 1 fail and acquisition 2 pass. The first expression opens a private report,
+writes flag 1, discards it on rejection and tries again with a fresh report. It publishes
+`[2]`. The second writes flag 1 before the retry, then flag 2 in the same report and finally
+publishes `[1, 2]`. Both acquire twice and return acceptance. An observer who checks only
+the return value cannot distinguish the compositions. Both publish `[1]` on immediate
+acceptance and `[]` after two rejections. The acquisition source lives outside staging:
+if rejection rolled its position back, the second attempt could read the failed frame again.
+
+`mtl` can express these orders directly as `retryOnce (stage (inspect k))` and
+`stage (retryOnce (inspect k))`. Its stage eliminates a child `WriterT`, then appends the
+child's output to the parent conditional on acceptance. `effectful` uses the same two
+application expressions with a local writer interpreter over an open effect row. CoD's
+stage rebinds the nominal report to a private owner while calling its body. The inspector
+uses `behave @flag(id)` so its installed flag method writes to that report. The publication
+policy is written once in each encoding. This is a reason to compare their contracts and
+extension costs even where the Haskell composition expressions read more briefly.
+[All three implementations, controls and extension edits](examples/ComposedTileReport.md)
+
+Add an *unrelated* operation such as an acquisition probe. It must observe both physical
+attempts under either order, including the one whose flag is suppressed. Independently add
+a scope that supplies a lot number and restores it on exit. Freeze both previous wrappers.
+The [row and column experiment](examples/ComposedTileReport.md#what-changes-when-another-author-extends-the-program)
+identifies every new definition and the application wiring for CoD, and the comparable
+extension sites for the Haskell libraries. Staging is deliberately nontransparent to flag
+publication and transparent to the independent probe. Counting that difference is the
+connection to the `M × N` question.
 
 ## Where the M × N obligations arise
 
@@ -177,13 +228,7 @@ can cover a whole family. Charge its description once. For policies involving th
 components, charge the actual multi-party rules and their size. The number of semantic
 outcomes, test obligations, compiled specializations and dynamic calls have separate costs.
 
-A useful boundary involves retry. Let the body append one flag per attempt, fail the first
-time and succeed the second. A fresh staging buffer for each attempt publishes only the
-successful flag. A single staging buffer around the entire retry sees both appends and
-publishes both on success. Each component can still be written once. Both orders are
-expressible; declaring the expected trace tells an author which composition satisfies the
-business requirement. Likewise a transparent pass through a new symbol cannot make a
-previously released owner accessible.
+In the [two report compositions](#composing-retry-and-publication), retry and staging each have one definition. The business selects their order. This deliberate interaction sits outside the once-only transparent-body assumption in the bound. It adds an explicit choice at assembly. A transparent pass through a new symbol also cannot make a previously released owner accessible.
 
 ### What would constitute an advance?
 
@@ -212,18 +257,15 @@ generated inputs and any central dispatcher. A per-pair requirement hiding in an
 places defeats the additive claim for that fragment. A translation preserving accepted
 observations and the relevant rejections would go beyond a collection of passing examples.
 
-### What does the programmer actually write?
+### Control experiment: selecting the environment of one installed method
 
-The [matched CoD, mtl and effectful listings](examples/ScopedTileAudit.md) exercise both
-invocation modes on one audit operation. Install the audit at destination 1; rebind the
-caller to 9; inside a tile rebind to 2. The tile records one attempt before validation. With
-`perform @attempt()`, destination 1 receives it; with `behave @attempt()`, destination 2
-receives it. Both successful validation and a thrown fault observe 2. On leaving the tile the
-caller sees 9. The choice of 9 catches a plausible error: saving the destination at entry
-to the tile is too late. The examples show installation, both calls, exceptional restoration
-and an independent log. A short static-Reader control shows where the alternatives can be
-just as concise. This establishes the common observable behavior of this fixture by
-derivation. The general expressiveness and novelty claims remain research questions. A second [replaceable threshold policy](examples/ScopedTileAudit.md#adding-a-second-independently-installed-operation) takes seven nonblank lines in CoD, ten in mtl and fourteen in the nominal effectful encoding. Its two results agree for every score and pair of thresholds under the shared predicate contract.
+The [scoped audit and threshold programs](examples/ScopedTileAudit.md) isolate `perform`
+and `behave` on a single installed operation. An auditor installed at destination 1 runs
+under a caller at 9 and a tile at 2. The two choices record at 1 and 2 respectively, and
+the caller gets 9 back on return or checked failure. A short threshold variant isolates
+the same choice on a pure predicate. Their source counts describe just that protocol.
+The retry/publication programs above supply the separate evidence about composing
+independently authored effects.
 
 ## What named effects remove in CoD
 

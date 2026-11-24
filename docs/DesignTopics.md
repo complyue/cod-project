@@ -182,7 +182,7 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 | 开放管道。传感器提交读数后退出，worker 在稍后的调用中处理已入队事件。 | 签名要保留读取或转移载荷所需的 owner。把借用了 ingress 栈帧的 `here` 或局部引用排队应被拒绝。worker 的反馈只属于其本地调用。以回放 sink 和队列 sink 检验同一签名可采用的不同实现。[开放事件论文](../papers/OpenEventPipelines.md#a-dynamically-scoped-event-sink) |
 | 函数响应式编程（FRP）。提枪与改价同帧发生，挂枪与最后一升计量也在同一帧。 | 尝试固定一条本地时间线，再把事件、可采样值和带更新的状态用作不同的类型构造器。旧价启动、新量结账应得到 510 分。若换一个采样规则会收到 540 或 340 分，别名展开和库操作各自需要说明什么？[加油销售与 Reflex 风格的网络](../papers/OpenEventPipelines.md#a-reflex-style-network-for-a-fuel-sale) |
 
-仓储分配策略编辑器提供了一个管道以外的对照。论文以 `Program<Orders → Decisions>` 描述可编辑的程序图。给这个完整类型起简称时，普通别名就够用。若要让同一个编辑签名在多种程序表示之间复用，再给出必须把 `Program` 所在位置参数化的实际用例，并检查编辑程序图和执行它各自需要的权限。[程序编辑器论文](../papers/AlgebraicEffectsIsAllYouNeed.md#1-a-program-that-takes-a-program-as-its-input)
+仓储分配策略编辑器提供了一个管道以外的对照。论文以 `Program<Orders → Decisions>` 描述可编辑的程序图。给这个完整类型起简称时，普通别名就够用。若要让同一个编辑签名在多种程序表示之间复用，再给出必须把 `Program` 所在位置参数化的实际用例，并检查编辑程序图和执行它各自需要的权限。[HLVM 论文中的图编辑案例](../papers/AlgebraicEffectsIsAllYouNeed.md#1-a-program-that-takes-a-program-as-its-input)
 
 ### 待决定的问题与验收
 
@@ -218,7 +218,7 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 | 待讨论问题 | 用什么程序区分候选设计 |
 | --- | --- |
 | 新能力穿过无关作用域时，哪些配对可共用查找或转发，哪些需要单独的解释？ | 让两位库作者分别增加阈值标记和图块层。把兼容性检查、需要修改的声明与必须定制的行为分别列出。图块验证失败时，尝试审计与正式缺陷报告应有各自可检查的结果。 |
-| 能否把透明组合中作者需要提供的实现规模从逐对适配降为 M + N，并保住已承诺的行为？ | 用[同契约源码对照](../papers/examples/ScopedTileAudit.md)检查安装时回放、当前调用、正常及异常恢复。单列交互策略、中央分发器和生成器输入的成本；与已有模块化效果系统比较，并用 owner 替换检验拒绝条件。[命题与适用前提](../papers/ComposingEffectsAndFocusedContexts.md#additive-source-extension) |
+| 能否把透明组合中作者需要提供的实现规模从逐对适配降为 M + N，并保住已承诺的行为？ | 用[重试与发布的三份源码](../papers/examples/ComposedTileReport.md)交换两个独立作用域，检验报告 `[2]` 和 `[1, 2]`，再让独立探针在两次采集中都生效。[调用模式对照](../papers/examples/ScopedTileAudit.md)单独检查回放与恢复。单列交互策略、中央分发器和生成器输入的成本；与已有模块化效果系统比较，并用 owner 替换检验拒绝条件。[命题与适用前提](../papers/ComposingEffectsAndFocusedContexts.md#additive-source-extension) |
 | 在既有 callable 和 owner 规则下，能否给任意合格的只读局部计算提供可复用的重新聚焦接口？ | 固定输入图像和边界策略，比较按需北移、物化中间栅格、错误回放中心坐标。中心得分应分别为 15、15、0；换实际 owner 后旧视图的使用必须拒绝。 |
 | 读取能力、空间依赖范围和可见副作用应怎样分别表达？ | 改东北像素会改变中心结果，改西南像素不会。请求同一位置两次时，缓存与重算可以得到相同分数，但可能发出不同数量的标记。分别规定预取、诊断及提交所需的承诺。 |
 

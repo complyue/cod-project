@@ -1,5 +1,8 @@
 # One scoped audit, written three ways
 
+This control isolates how one installed method selects its environment. For independent
+policies whose nesting changes the public report, see [Composing retry and publication](ComposedTileReport.md).
+
 A tile records one inspection attempt before it is validated. A caller can request an
 audit addressed to the installation-time destination, or to the destination active in the
 tile. Either attempt remains observable if validation fails. This is the small source
@@ -21,7 +24,7 @@ Saving 9 at tile entry instead of 1 at installation fails the first row. Wrappin
 entire tile in the saved environment can get the log right but return or throw the wrong
 destination. Discarding the append on failure fails the last two audit observations.
 A fixed numerical answer per mode cannot pass an independent observation of the write.
-The CoD implementation uses a counter and last destination in an journal owned by the enclosing run.
+The CoD implementation uses a counter and last destination in a journal owned by the enclosing run.
 This represents the whole observable trace for this one-append protocol. The Haskell
 implementations return a list and check exact singleton equality; writer output outside the
 error handling survives both cases. The journal in CoD is held outside the tile for the
