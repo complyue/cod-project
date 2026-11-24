@@ -1884,17 +1884,39 @@ func valid_imported_failure(contracts:const ModuleInterfaces in I, published:u64
         else { schema == UncheckedExceptionSchema }
 }
 
-func scalar_source_call(contracts:const ModuleInterfaces in I,
+func scalar_source_parameter(contracts:const ModuleInterfaces in I, first:u64,
+    position:u64) -> bool where {const owner I} {
+    val row <- first + position;
+    val role <- contracts[row].owner_role;
+    val reception <- contracts[row].native_reception;
+    val constraint <- contracts[row].owner_readonly;
+    if (contracts[row].interface_kind != 0u8 || !native_scalar(contracts[row].value_kind) ||
+        contracts[row].target_readonly > 1u8 || constraint > 1u8 ||
+        contracts[row].native_passes_owner != 0u8) return false;
+    if (reception == local_place()) return role == no_node() && constraint == 0u8;
+    # Ordinary call roles name formal positions. Each role starts at its first loan.
+    if ((reception != borrowed_ref() && reception != nullable_ptr()) || role > position)
+        return false;
+    val anchor <- first + role;
+    return contracts[anchor].owner_role == role && contracts[anchor].owner_readonly == constraint
+}
+
+func scalar_source_call(contracts:const ModuleInterfaces in I, published:u64,
     header:u64) -> bool where {const owner I} {
+    if (header >= published || published > intrinsic (len)(contracts)) return false;
+    val arity <- contracts[header].entry_count;
     val result <- contracts[header].result_kind;
-    if ((!native_scalar(result) && result != void_result()) ||
+    if (contracts[header].interface_kind != callable_binding() || contracts[header].value_kind != 0u8 ||
+        contracts[header].defining_module == 0u64 || contracts[header].declaration == no_node() ||
+        contracts[header].native_function != no_node() || arity >= published - header ||
+        (!native_scalar(result) && result != void_result()) ||
         contracts[header].owner_role != no_node() ||
         contracts[header].owner_count != 0u64 || contracts[header].has_here != 0u8 ||
+        contracts[header].target_readonly != 0u8 ||
         contracts[header].callable_kind == NoCallableKind) return false;
-    for (row in header + 1u64 .. header + 1u64 + contracts[header].entry_count) {
-        if (contracts[row].interface_kind != 0u8 || !native_scalar(contracts[row].value_kind) ||
-            contracts[row].native_reception != local_place() ||
-                contracts[row].owner_role != no_node()) return false
+    val first <- header + 1u64;
+    for (position in 0u64 .. arity) {
+        if (!scalar_source_parameter(contracts, first, position)) return false
     };
     return true
 }
@@ -1969,7 +1991,7 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         if (links[at].expects_here != 1u8 || links[at].active == no_node())
             return operand_problem(report, at, unsupported_imported_call())
     } else {
-        if (source_only && !handles && !scalar_source_call(contracts, header))
+        if (source_only && !handles && !scalar_source_call(contracts, interface_count, header))
             return operand_problem(report, at, unsupported_imported_call());
         if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used,
             revision, handles))
@@ -2067,55 +2089,72 @@ export func first_declared_failure(nodes:const ExprNodes in N, used:u64,
     return no_node()
 }
 
+func publishes_checked_call(exports:const ModuleExports in E, count:u64, module_id:u64,
+    definition:u64) -> bool where {const owner E} {
+    for (row in 0u64 .. count) {
+        if (exports[row].origin_module == module_id && exports[row].identity == definition &&
+            exports[row].kind == callable_export() &&
+            exports[row].shape == ordinary_callable_shape() && exports[row].checked != 0u8)
+            return true
+    };
+    return false
+}
+
 export func append_callable_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B,
                                    links:const NameWork in L, facts:const OperandFacts in F,
+                                       exports:const ModuleExports in E, export_count:u64,
                                        used:u64, revision:u64,
                                    module_id:u64, base:u64, start:u64,
                                        contracts:ModuleInterfaces in I,
                                    report:OperandCheckResult in R) -> u64
-    where {const owner N, const owner B, const owner L, const owner F, owner I, owner R} {
-    if (start > intrinsic (len)(contracts)) return no_node();
+    where {const owner N, const owner B, const owner L, const owner F, const owner E,
+           owner I, owner R} {
+    if (start > intrinsic (len)(contracts) || export_count > intrinsic (len)(exports)) return no_node();
     val source_only <- base == no_node();
     val count <- start;
     val arity <- no_node();
     val formal <- no_node();
     val header <- no_node();
+    val past <- no_node();
     val staged_source_call <- false;
     ref first = make u64 { no_node() };
     ref failure = make u64 { no_node() };
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
     for (at in 0u64 .. used) {
         if (inspect_callable(nodes, revision, used, at,
-            callable) == ModuleCallable && names[at].declaration == at) {
+            callable) == ModuleCallable && names[at].declaration == at &&
+            (!source_only || publishes_checked_call(exports, export_count, module_id, at))) {
             if (!find_signature_clause(nodes, revision, used, callable.signature,
                 ThrowsSignatureClause, failure)) {
                 operand_problem(report, at, invalid_operand_tree());
                 return no_node()
             };
-            header <- if (source_only && failure != no_node()) {
+            if (source_only && failure == no_node()) {
+                operand_problem(report, at, unsupported_imported_call());
+                return no_node()
+            };
+            header <- if (source_only) {
                 find_interface(contracts, count, module_id, at)
             } else { no_node() };
             staged_source_call <- header != no_node() &&
                 contracts[header].interface_kind == callable_binding() &&
                 (contracts[header].has_here == 1u8 || source_handle_call(contracts, count, header));
-            if (!staged_source_call && (!source_only || failure != no_node()) &&
-                links[at].next_method == no_node()) {
+            if (!staged_source_call && links[at].next_method == no_node()) {
                 if (!callable_formals(nodes, revision, used, at, false, first)) return no_node();
                 arity <- native_callable_arity(nodes, links, facts, at, first, used, revision)
             } else { arity <- no_node() };
-            if (source_only && failure != no_node() && !staged_source_call && arity == no_node()) {
+            if (source_only && !staged_source_call && arity == no_node()) {
                 operand_problem(report, at, unsupported_imported_call());
                 return no_node()
             };
             if (arity != no_node()) {
-                if (arity + 1u64 > intrinsic (len)(contracts) - count) return no_node();
+                if (arity >= intrinsic (len)(contracts) - count) return no_node();
                 write_interface_header(contracts[count], module_id, at, callable_binding(), facts[at].kind, arity);
                 contracts[count].membership <- (FixedMethods:FamilyMembership);
                 if (!source_only) { (contracts[count].native_function <- base + at):void };
                 contracts[count].callable_kind <- if (callable.function_form) {
                     CheckedFunction:InterfaceCallableKind
                 } else { CheckedProcedure:InterfaceCallableKind };
-                if (!find_signature_clause(nodes, revision, used, callable.signature, ThrowsSignatureClause, failure)) return no_node();
                 # The root Exception has an identity of its own. Use an absent
                 # node for an ordinary callable with no declared failure.
                 contracts[count].failure_identity <- if (failure == no_node()) { no_node() } else { (facts[failure].identity) };
@@ -2133,11 +2172,12 @@ export func append_callable_interfaces(nodes:const ExprNodes in N, names:const N
                         contracts[row]);
                     (formal <- links[formal].next):void;
                 };
-                if (source_only && !scalar_source_call(contracts, count)) {
+                past <- count + 1u64 + arity;
+                if (source_only && !scalar_source_call(contracts, past, count)) {
                     operand_problem(report, at, unsupported_imported_call());
                     return no_node()
                 };
-                count <- count + 1u64 + arity
+                count <- past
             };
         };
     };

@@ -665,7 +665,8 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
         }
     };
     if (!executable && !discover_declaration_demand(
-        nodes, names, work, selected, fields, views, cases, demand, used, revision, operands.node)) {
+        nodes, names, work, selected, fields, views, cases, demand, result.frontend.tree.root,
+        used, revision, operands.node)) {
         binding_diagnostic(nodes, result, module_operands_failed(), 1u8, operands.node);
         return false
     };
@@ -894,8 +895,8 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     };
     if (interfaces != no_node() && (native || declared != no_node())) {
         val base <- if (native) { (progress[0u64].function_base) } else { no_node() };
-        (interfaces <- append_callable_interfaces(nodes, names, work, facts, used, revision,
-            publication.module_identity,
+        (interfaces <- append_callable_interfaces(nodes, names, work, facts, staged, count, used,
+            revision, publication.module_identity,
                                                   base, interfaces, staged_interfaces,
                                                       operands)):void;
         if (operands.diagnostic != 0u8) {

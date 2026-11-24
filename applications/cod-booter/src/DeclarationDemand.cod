@@ -2,6 +2,8 @@ using "./ParserStorage.cod" {
     ExprNodes, no_node, CallableSites, inspect_callable, find_signature_clause,
     DirectCallSites, direct_invocation, NamedThrowSites, inspect_named_throw,
     first_sequence_entry, inspect_sequence_entry, SequenceEntry, SequenceSyntax { ArgumentSequence },
+    module_tail, AssignmentSites, inspect_assignment,
+    AssignmentSyntax { PlaceTransfer, FieldTransfer, InvalidAssignment },
 };
 using "./ParserStorage.cod" CallableSyntax { ModuleCallable, LexicalCallable, CEntry };
 using "./ParserStorage.cod" SignatureSyntax { ThrowsSignatureClause };
@@ -54,12 +56,13 @@ func selects_caught_field(fields:const CaughtFieldUses in F, at:u64) -> bool whe
     }
 }
 
-func require_body(demand:DeclarationDemands in D, definition:u64, count:u64 in Q, used:u64) -> bool
+func require_body(demand:DeclarationDemands in D, definition:u64, count:u64 in Q, used:u64,
+                  signature:bool) -> bool
     where {owner D, owner Q} {
     if (definition >= used) return false;
     if (demand[definition].body) return true;
     if (count >= used) return false;
-    demand[definition].signature <- true;
+    demand[definition].signature <- signature;
     demand[definition].body <- true;
     demand[count].pending <- definition;
     count <- count + 1u64;
@@ -70,7 +73,7 @@ func require_receipt_body(demand:DeclarationDemands in D, definition:u64, body_c
     receipt_count:u64 in R, used:u64) -> bool where {owner D, owner B, owner R} {
     if (definition >= used) return false;
     if (demand[definition].receipt_body) return true;
-    if (receipt_count >= used || !require_body(demand, definition, body_count, used)) return false;
+    if (receipt_count >= used || !require_body(demand, definition, body_count, used, true)) return false;
     demand[definition].receipt_body <- true;
     demand[receipt_count].receipt_pending <- definition;
     receipt_count <- receipt_count + 1u64;
@@ -121,9 +124,22 @@ func passes_case_receipt(nodes:const ExprNodes in N, names:const NameBindings in
     return false
 }
 
-func require_called_contracts(nodes:const ExprNodes in N, demand:DeclarationDemands in D,
+func require_transfer_signatures(links:const NameWork in W, demand:DeclarationDemands in D,
+                                 head:u64, used:u64) -> bool where {const owner W, owner D} {
+    val definition <- head;
+    for (unused in 0u64 .. used) {
+        if (definition == no_node()) return true;
+        if (definition >= used) return false;
+        demand[definition].signature <- true;
+        (definition <- links[definition].next_method):void
+    };
+    return definition == no_node()
+}
+
+func require_called_contracts(nodes:const ExprNodes in N, names:const NameBindings in B,
+    links:const NameWork in W, demand:DeclarationDemands in D,
     scope:u64, revision:u64, used:u64, count:u64 in Q, receipt_count:u64 in R,
-    prove_loans:bool) -> u64 where {const owner N, owner D, owner Q, owner R} {
+    prove_loans:bool) -> u64 where {const owner N, const owner B, const owner W, owner D, owner Q, owner R} {
     ref sites = make CallableSites {
         signature <- no_node(); body <- no_node(); function_form <- false;
     };
@@ -137,10 +153,13 @@ func require_called_contracts(nodes:const ExprNodes in N, demand:DeclarationDema
         form <- inspect_callable(nodes, revision, used, definition, sites);
         if (form != ModuleCallable && form != LexicalCallable && form != CEntry) return call;
         demand[definition].signature <- true;
+        # Assignment and initializer policies bind the family on the use itself.
+        if (names[call].kind == callable_binding() &&
+            !require_transfer_signatures(links, demand, definition, used)) return call;
         if (prove_loans) {
             if (!require_receipt_body(demand, definition, count, receipt_count, used)) return call
         } else {
-            if (form == LexicalCallable && !require_body(demand, definition, count, used)) return call
+            if (form == LexicalCallable && !require_body(demand, definition, count, used, true)) return call
         };
         (call <- demand[call].next_call):void
     };
@@ -151,11 +170,17 @@ export func discover_declaration_demand(
     nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in W, selected:const SelectedExports in E,
     fields:const CaughtFieldUses in F, views:const SuppliedViews in V,
-    cases:const ConstructorCaseFacts in C, demand:DeclarationDemands in D, used:u64, revision:u64, problem:u64 in P) -> bool
+    cases:const ConstructorCaseFacts in C, demand:DeclarationDemands in D,
+    root:u64, used:u64, revision:u64, problem:u64 in P) -> bool
     where {const owner N, const owner B, const owner W, const owner E, const owner F, const owner V,
            const owner C, owner D, owner P} {
     if (used > intrinsic (len)(nodes) || used > intrinsic (len)(names) ||
         used > intrinsic (len)(links) || used > intrinsic (len)(demand)) return false;
+    ref tail = make u64 { no_node() };
+    if (used == 0u64 || root != used - 1u64 || !module_tail(nodes, revision, used, root, tail)) {
+        problem <- root;
+        return false
+    };
     ref callable = make CallableSites {
         signature <- no_node(); body <- no_node(); function_form <- false;
     };
@@ -172,13 +197,16 @@ export func discover_declaration_demand(
             demand[site].declared_failure <- clause;
             if ((clause != no_node() || links[site].sum_loan_formals ||
                  source_handle_callable(nodes, names, selected, links, site, used, revision)) &&
-                !require_body(demand, site, count, used)) {
+                !require_body(demand, site, count, used, true)) {
                 problem <- site;
                 return false
             }
         };
     };
     ref invocation = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
+    ref assignment = make AssignmentSites {
+        destination <- no_node(); input <- no_node(); operator_at <- no_node()
+    };
     ref construction = make NamedThrowSites {
         requested <- no_node(); fields <- no_node(); cause <- no_node();
     };
@@ -189,6 +217,8 @@ export func discover_declaration_demand(
     val definition <- no_node();
     val checked_call <- false;
     val shape <- InvalidInvocation;
+    val callee <- no_node();
+    val transfer <- InvalidAssignment;
     for (site in 0u64 .. used) {
         scope <- enclosing_callable(nodes, names, names[site].scope);
         demand[site].scope <- scope;
@@ -199,8 +229,13 @@ export func discover_declaration_demand(
             problem <- site;
             return false
         };
-        if (shape == DirectInvocationReady && names[invocation.callee].kind == callable_binding()) {
-            definition <- names[invocation.callee].declaration;
+        callee <- if (shape == DirectInvocationReady) { (invocation.callee) } else { no_node() };
+        if (names[site].kind == callable_binding()) {
+            transfer <- inspect_assignment(nodes, revision, used, site, assignment);
+            if (transfer == PlaceTransfer || transfer == FieldTransfer) { (callee <- site):void; };
+        };
+        if (callee < used && names[callee].kind == callable_binding()) {
+            definition <- names[callee].declaration;
             if (definition >= used) {
                 problem <- site;
                 return false
@@ -211,7 +246,8 @@ export func discover_declaration_demand(
                 (demand[scope].first_call <- site):void
             };
             checked_call <- family_needs_checked_operands(links, demand, definition, used);
-            if (passes_case_receipt(nodes, names, links, cases, invocation.arguments, used, revision)) {
+            if (shape == DirectInvocationReady &&
+                passes_case_receipt(nodes, names, links, cases, invocation.arguments, used, revision)) {
                 if (!require_receipt_body(demand, definition, count, receipt_count, used)) {
                     problem <- site;
                     return false
@@ -222,8 +258,8 @@ export func discover_declaration_demand(
         if (links[site].case_schema_prepared || selects_caught_field(fields, site) || checked_call ||
             has_imported_native_loan(views, site) || read_acquisition_failure(views, site, failure) ||
             inspect_named_throw(nodes, revision, used, site, construction)) {
-            if (scope >= used || !local_body(nodes, revision, used, scope, callable) ||
-                !require_body(demand, scope, count, used)) {
+            if (scope >= used || (scope != root && !local_body(nodes, revision, used, scope, callable)) ||
+                !require_body(demand, scope, count, used, scope != root)) {
                 problem <- site;
                 return false
             }
@@ -234,7 +270,7 @@ export func discover_declaration_demand(
     val failed <- no_node();
     for (item in 0u64 .. used) {
         if (item < receipt_count) {
-            failed <- require_called_contracts(nodes, demand, demand[item].receipt_pending, revision,
+            failed <- require_called_contracts(nodes, names, links, demand, demand[item].receipt_pending, revision,
                 used, count, receipt_count, true);
             if (failed != no_node()) {
                 problem <- failed;
@@ -244,7 +280,7 @@ export func discover_declaration_demand(
     };
     for (item in 0u64 .. used) {
         if (item >= count) return true;
-        failed <- require_called_contracts(nodes, demand, demand[item].pending, revision, used,
+        failed <- require_called_contracts(nodes, names, links, demand, demand[item].pending, revision, used,
             count, receipt_count, false);
         if (failed != no_node()) {
             problem <- failed;
