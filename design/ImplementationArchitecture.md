@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 92. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 93. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+
+The [r93 review](../CHANGELOG.md#k-booter-module-root-and-borrowed-signatures-20261124) covers [module-root demand, private method checking and public scalar ref/ptr signatures](../applications/cod-booter/docs/ModuleGraph.md#checking-module-initialization-and-publishing-borrowed-scalar-formals). The existing CoD binder, checker and completion path own the proof. P-682/P-683 apply to the compatibility repair.
 
 The [r92 fixture review](../CHANGELOG.md#k-module-context-fixture-scope-20261124) covers the seed’s [module-context and import checks](#module-context-and-import-fixtures) under the existing installation, capture and type-query contracts.
 

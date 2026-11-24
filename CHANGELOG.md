@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review booter module-root checking and borrowed source signatures
+
+<a id="k-booter-module-root-and-borrowed-signatures-20261124"></a>
+**K-BOOTER-MODULE-ROOT-AND-BORROWED-SIGNATURES-20261124.** [D-20-MODULE-GRAPH r72→r73](applications/cod-booter/docs/ModuleGraph.md#checking-module-initialization-and-publishing-borrowed-scalar-formals) and D-ARCH-REVIEW r92→r93 continue P-680–P-683, the [declared-failure check](#k-booter-imported-checked-call-20261123) and ordinary owner substitution. The six regressed inputs include `4d6f1d35fd14832566f52fdcd5cf790d626be093:applications/cod-booter/workloads/modules/fallible-count.cod`. The source repair covers module-level demand, private transfer policies and public scalar loans. Object lowering retains separate acceptance.
+
 ## 2026-11-24 — Open a design topic for higher-kinded type synonyms
 
 <a id="k-higher-kinded-type-synonym-topic-20261124"></a>
