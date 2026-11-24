@@ -1,0 +1,15 @@
+using "std:exceptions" Error;
+data Issue <: Error { first:u64; middle:u64; last:u64 }
+data Payload { first:u64; middle:u64; last:u64 }
+
+proc report() -> u64 {
+    try {
+        throw Issue { first <- ; middle <- 4u64; last <- ; }
+    } catch (issue:Issue) {};
+    return 7u64
+}
+
+proc build() -> u64 {
+    ref payload = make Payload { (first) <- ; middle <- 4u64; last <- ; };
+    return 7u64
+}

@@ -19,6 +19,17 @@
     ]
   },
   {
+    "file": "field-initializer-recovery-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "field-initializer-recovery-error.cod:7:32: expected an expression",
+      "field-initializer-recovery-error.cod:7:58: expected an expression",
+      "field-initializer-recovery-error.cod:13:45: expected an expression",
+      "field-initializer-recovery-error.cod:13:71: expected an expression"
+    ]
+  },
+  {
     "file": "named-array-owner.cod",
     "exit": 0,
     "stdout": "0\n5\n0\n0\n7\n7\n17\n29\n2\n11\n44\n12\n29\n"

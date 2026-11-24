@@ -804,11 +804,12 @@ class Parser {
     return result;
   }
 
-  Expr binding_initializer() {
+  Expr initializer_operand(HereAttachment attachment = HereAttachment::immediate,
+                           bool owner_projection = true, bool type_suffix = true) {
     const auto first = cursor_;
     const auto saved = controls_;
     try {
-      return expression();
+      return expression(0, attachment, owner_projection, type_suffix);
     } catch (const LocatedFailure &failure) {
       controls_ = saved;
       return recover_operand(first, failure.diagnostic, SyntaxRole::initializer);
@@ -818,7 +819,7 @@ class Parser {
   Expr predicate_assertion() {
     using K = Expression::Kind;
     auto assertion = make(K::predicate_assertion, expect("assert"));
-    assertion->children.push_back(binding_initializer());
+    assertion->children.push_back(initializer_operand());
     if (take(",")) {
       if (peek().kind != TokenKind::string)
         fail(peek().at, "expected a quoted assertion diagnostic");
@@ -874,7 +875,7 @@ class Parser {
       else { expect("="); expr->binding = "="; }
       if (mode == "val" && expr->binding != "<-") fail(expr->at, "val initialization requires '<-', not '='");
       if (mode == "ref" && expr->binding != "=") fail(expr->at, "ref initialization requires '='; use val for an independent copy");
-      expr->children.push_back(binding_initializer());
+      expr->children.push_back(initializer_operand());
       return finish(std::move(expr));
     } catch (const LocatedFailure &failure) {
       if (mode != "ref") throw;
@@ -1677,7 +1678,7 @@ class Parser {
       auto field = make(Expression::Kind::field, field_name());
       if (take("=")) field->binding = "=";
       else { expect("<-"); field->binding = "<-"; }
-      field->children.push_back(expression());
+      field->children.push_back(initializer_operand());
       expr.children.push_back(std::move(field));
       if (!is("}")) expect(";");
       else take(";");
@@ -2302,6 +2303,7 @@ class Parser {
   Expr expression_impl(int minimum, HereAttachment attachment, bool owner_projection, Expr prefix) {
     const bool attach = attachment == HereAttachment::immediate;
     const bool pipeline_operand = attachment == HereAttachment::pipeline_body;
+    const bool field_initializer = static_cast<bool>(prefix);
     auto left = prefix ? std::move(prefix) : primary(attachment, owner_projection);
     while (true) {
       if (attach && accepts_supplied_body(*left) && (is("{") || here_header())) {
@@ -2374,13 +2376,15 @@ class Parser {
     if (minimum == 0 && is("<-")) {
       auto transfer = make(Expression::Kind::transfer, expect("<-"));
       transfer->children.push_back(std::move(left));
-      transfer->children.push_back(expression(0, attachment, owner_projection, false));
+      transfer->children.push_back(field_initializer ? initializer_operand(attachment, owner_projection, false)
+                                                     : expression(0, attachment, owner_projection, false));
       return transfer;
     }
     if (minimum == 0 && is("=")) {
       auto rebind = make(Expression::Kind::rebind, expect("="));
       rebind->children.push_back(std::move(left));
-      rebind->children.push_back(expression(0, attachment, owner_projection, false));
+      rebind->children.push_back(field_initializer ? initializer_operand(attachment, owner_projection, false)
+                                                   : expression(0, attachment, owner_projection, false));
       return rebind;
     }
     return left;
