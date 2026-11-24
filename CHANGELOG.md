@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Qualify bootstrap compiler memory acceptance
+
+<a id="h-bootstrap-compiler-memory-20261124"></a>
+**H-BOOTSTRAP-COMPILER-MEMORY-20261124.** The project user in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) accepts a higher seed footprint if replacing `std::variant` would materially harm readability and maintainability, requires bounded concurrency, and states “务必保证 booter 的内存消耗合理”. [Roadmap r31](applications/cod-booter/README.md#compiler-memory-acceptance) extends D-20-BOOTSTRAP under P-642/P-643. This qualifies the earlier [seed RAM priority](#k-seed-drained-path-memory-20261124). Mainline measures the linked booter’s own workloads. No universal numeric limit or sum representation was selected. Previous roadmap at `b47abceb:applications/cod-booter/README.md`.
+
 ## 2026-11-24 — Review seed memory at checked scope exits
 
 <a id="k-seed-drained-path-memory-20261124"></a>

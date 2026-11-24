@@ -1,8 +1,10 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 30 · Recorded: 2026-11-24 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 31 · Recorded: 2026-11-24 · Phase: initial seed delivery through alternating booter and seed development.
 
 ## Design authority
+
+- Roadmap r31 adds [compiler memory acceptance](#compiler-memory-acceptance) to [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap) under P-642/P-643. The [project user’s decision](../../CHANGELOG.md#h-bootstrap-compiler-memory-20261124) permits a higher C++ seed footprint when reducing it would materially harm maintainability. Reasonable memory use by the linked CoD booter is a delivery requirement. The booter’s existing correctness and resource-lifetime requirements continue.
 
 - Roadmap r30 covers [entry-world diagnostic coverage](#diagnostic-coverage-of-the-entry-modules-fused-world) in the seed, booter and production compiler. [D-20-WORLD-DIAGNOSTICS](../../design/DesignAuthorityRegistry.md#d-20-world-diagnostics), P-713/P-714, records the [project user’s decision](../../CHANGELOG.md#h-entry-world-diagnostics-20261124). The entry determines the work and the invocation owns the optional diagnostic limit. Acceptance covers independent syntax and semantic errors across dependencies and safe publication on completion. The [r30 status review](../../CHANGELOG.md#k-seed-world-product-status-20261124) covers seed dependency traversal and independent direct product declarations.
 
@@ -61,6 +63,12 @@ Initial delivery requires the seed to reproducibly build and run the first CoD-w
 Representative source and invalid-input cases must behave as specified, and the booter source must pass the readability review. The booter's first self-build is a downstream milestone. DBMR persistence and broader LLVM binding coverage are separate from initial delivery.
 
 Build the initial booter with statically linked C providers generated from checked CoD declarations. The seed and booter derive equivalent C contracts, including native handle constructor and destructor stubs. Separate handwritten C supplies the operations and their resource protocols. Calls in both directions use synchronous here semantics. CoD scopes the ownership of source, scratch and LLVM resources. The object writer can install the LLVM session as an owning effect for procedures that need it. See the [native handle and C record rules](docs/LLVMInterop.md#native-handles-and-c-records) for borrowed values and by-value records.
+
+### Compiler memory acceptance
+
+Keep the C++ seed readable and maintainable. A smaller representation is worthwhile when its measured benefit justifies its complexity. If replacing a standard representation such as `std::variant` would materially obscure the implementation, a higher seed peak is acceptable. Schedule memory-heavy builds against available host memory and limit concurrency across build, verification and profiling jobs.
+
+Verify the linked `cod-booter` executable’s own peak resident memory through process exit on its normal declaration, provider and object commands. Record the executable, host, input size and reachable module count alongside the outcome. Include a small successful program, a larger supported workload, a graph with a shared dependency and a rejected input with its expected diagnostics and preserved output. Compare peaks as source size and graph size grow. Establish practical budgets from these measurements and investigate disproportionate growth, including temporary per-module storage retained across sibling visits. Record the seed’s cost to build the executable separately. A regional capacity alone does not establish the process peak. [Module graph storage and visits](docs/ModuleGraph.md)
 
 ### Exception syntax in both frontends
 
