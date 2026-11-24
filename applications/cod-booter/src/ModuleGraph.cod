@@ -19,7 +19,7 @@ using "./SourceAccess.cod" locate_source_position;
 using "./ParserStorage.cod" {
     Tokens, ExprNodes, no_node, syntax_first, syntax_past, ModuleSelectionSites, inspect_module_selection,
     BulkSelectionSites, inspect_bulk_selection, PublicView { DefaultPublic },
-    first_module_item, SequenceEntry, inspect_sequence_entry, CallableSites, inspect_callable, inspect_default_set,
+    first_module_item, module_tail, SequenceEntry, inspect_sequence_entry, CallableSites, inspect_callable, inspect_default_set,
     DeclarationSites, inspect_declaration, module_item_publication, SourceSpan,
 };
 using "./ParserStorage.cod" ModuleSelectionMode { UseResource, ReexportResource };
@@ -49,7 +49,7 @@ using "./ModuleExportStorage.cod" {
 using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
 using "./AggregateSchemas.cod" AggregateFacts;
 using "./ModuleExports.cod" {
-    SelectedExport, SelectedExports, next_module_dependency, module_selection_path,
+    SelectedExport, SelectedExports, file_dependency_path,
     prepare_module_dependencies, ExportResolutionResult,
     resolve_enum_selections, resolve_sum_selections, verify_aggregate_selections,
     invalid_export_tree, missing_module_export, wrong_export_kind, unproved_import_interpretation,
@@ -144,8 +144,10 @@ export array DependencyEdges [u64]:DependencyEdge;
 export func collect_dependency_edges(source:const SourceBytes in S, nodes:const ExprNodes in F,
                                      used:u64, revision:u64, edges:DependencyEdges in E)
     -> u64 where {const owner S, const owner F, owner E} {
+    ref item = make u64 { no_node() };
+    if (used == 0u64 || !module_tail(nodes, revision, used, used - 1u64, item)) return no_node();
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
     val count <- 0u64;
-    val site <- next_module_dependency(source, nodes, used, revision, 0u64);
     ref selection = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
         symbolic <- false; mode <- UseResource;
@@ -154,16 +156,38 @@ export func collect_dependency_edges(source:const SourceBytes in S, nodes:const 
     ref bulk = make BulkSelectionSites { path <- no_node(); mode <- UseResource; view <- DefaultPublic };
     val path <- no_node();
     for (scan in 0u64 .. used) {
-        if (site == no_node()) return count;
-        path <- module_selection_path(nodes, revision, used, site, selection, bulk);
-        if (count >= intrinsic (len)(edges) || path == no_node()) return no_node();
-        edges[count].site <- site;
-        edges[count].first <- syntax_first(nodes, used, path);
-        edges[count].past <- syntax_past(nodes, used, path);
-        count <- count + 1u64;
-        site <- next_module_dependency(source, nodes, used, revision, site + 1u64);
+        if (item != no_node()) {
+            if (inspect_sequence_entry(nodes, revision, used, item, entry) != ModuleSequence) return no_node();
+            path <- file_dependency_path(source, nodes, used, revision, entry.item, selection, bulk);
+            if (path != no_node()) {
+                if (count >= intrinsic (len)(edges)) return no_node();
+                edges[count].site <- entry.item;
+                edges[count].first <- syntax_first(nodes, used, path);
+                edges[count].past <- syntax_past(nodes, used, path);
+                (count <- count + 1u64):void
+            };
+            item <- entry.previous
+        }
     };
-    return count;
+    if (item != no_node()) return no_node();
+    # Module entries link backwards. Restore discovery order before resolving paths.
+    val right <- count;
+    val site <- no_node();
+    val first <- 0u64;
+    val past <- 0u64;
+    for (left in 0u64 .. count / 2u64) {
+        right <- right - 1u64;
+        site <- edges[left].site;
+        first <- edges[left].first;
+        past <- edges[left].past;
+        edges[left].site <- edges[right].site;
+        edges[left].first <- edges[right].first;
+        edges[left].past <- edges[right].past;
+        edges[right].site <- site;
+        edges[right].first <- first;
+        (edges[right].past <- past):void
+    };
+    return count
 }
 
 export func decode_dependency_path(source:const SourceBytes in S, first:u64, past:u64,
@@ -420,6 +444,7 @@ data ModuleProgress {
     root:u64;
     revision:u64;
     dependencies:u64;
+    read_rejected:bool;
     count:u64;
     default_count:u64;
     interface_count:u64;
@@ -450,15 +475,18 @@ proc read_visit_frame(source:const SourceBytes in S, lines:const SourceLines in 
         };
         diagnostic_first <- no_node(); diagnostic_past <- no_node();
     };
-    if (!read_module(source, tokens, nodes, result)) {
+    val source_ready <- read_module(source, tokens, nodes, result);
+    if (!source_ready) {
         if (result.tree.exhausted && (result.tree.diagnostic == 0u8 || result.tree.diagnostic == node_storage_exhausted())) {
             report_scratch_error(diagnostic, 1u32);
             return ScratchFailed
         };
         if (!report_parse_rejection(source, lines, diagnostic, nodes, result, keys, key_first, key_past,
-                                    module_read_failed(), progress[0u64].entry != 0u8)) return ScratchFailed;
-        return if (result.tree.exhausted) { ScratchFailed } else { Rejected }
+                                    module_read_failed(), false)) return ScratchFailed;
+        if (result.tree.exhausted) return ScratchFailed;
+        if (result.tree.root == no_node()) return Rejected
     };
+    progress[0u64].read_rejected <- !source_ready;
     val count <- collect_dependency_edges(source, nodes, result.tree.used, result.tree.revision, edges);
     if (count == no_node() || !prepare_module_dependencies(selected, result.tree.used)) {
         report_scratch_error(diagnostic, 1u32);
@@ -1189,6 +1217,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         ref decoded = make SourceBytes(workspaces[0u64].source_size, 0u8);
         ref progress = make ModuleProgressRows(1u64, make ModuleProgress {
             identity <- id + 1u64; used <- 0u64; root <- no_node(); revision <- revision; dependencies <- 0u64;
+            read_rejected <- false;
             count <- 0u64; default_count <- 0u64; interface_count <- 0u64;
             purpose <- purpose; entry <- if (depth == 0u64) { 1u8 } else { 0u8 };
             function_base <- 0u64; functions <- 0u64; command_count <- 0u64; primitive_namespace <- false;
@@ -1228,6 +1257,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
                 (progress[0u64].structural_dependency <- true):void
             }
         };
+        if (progress[0u64].read_rejected) return Rejected;
         if (purpose == (NativeObject:GraphPurpose) &&
             (progress[0u64].used == 0u64 || progress[0u64].used >= no_node() - function_used))
             return ScratchFailed;
