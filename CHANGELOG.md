@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Show the tile inspector's application code in both languages
+
+<a id="k-tile-application-comparison-20261124"></a>
+**K-TILE-APPLICATION-COMPARISON-20261124.** The [paper](papers/ComposingEffectsAndFocusedContexts.md#compare-the-operations-the-inspector-can-request) shows the CoD, `mtl` and labeled `effectful` expressions that compose retry and staging. The [worked example](papers/examples/ComposedTileReport.md#application-end-in-cod-and-haskell) checks the same twelve inputs and nine observations with each assembly. The previous presentation is at `bc720b26c06d4389f16cad7eb4f1975f094b81f1:papers/examples/ComposedTileReport.md`.
+
 ## 2026-11-24 — Check protected symbol names at declaration
 
 <a id="k-runtime-symbol-declaration-check-20261124"></a>

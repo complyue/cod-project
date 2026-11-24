@@ -4,8 +4,10 @@
 
 The [CoD inspector](#cod) and the [Haskell inspector with `Ports m`](#haskell-with-named-operations)
 request the same eight operations. Their implementations below show where the state lives
-and which two writer operations staging intercepts. The [direct transformer](#haskell-with-mtl)
-and [labeled effect](#haskell-with-effectful) listings expose the underlying routing.
+and which two writer operations staging intercepts. The [application comparison](#application-end-in-cod-and-haskell)
+shows both callers and checks the same observations on both Haskell backends and in CoD.
+The [direct transformer](#haskell-with-mtl) and [labeled effect](#haskell-with-effectful)
+listings expose the underlying routing.
 
 ## A scalar setting is enough for a small composition
 
@@ -236,11 +238,33 @@ to the public journals would incorrectly produce [7,1] and [8,3]. Change the out
 verdict to true with the same fresh inputs. Each entry should then reach the public
 journal exactly once, giving [7,1] and [8,3].
 
-Here is the application end of the comparison. Each state transition and each journal
-append is installed explicitly. The operation bodies can read and update live lexical
-variables in the activation of `check`. The observer encodes a journal as decimal
-digits, so `12` and `21` distinguish the two possible orders. Zero is the empty
-journal; all entries in the workload are in the range 1 through 9.
+The three state variables and five public journals are private to the caller. A `ref symbol`
+would also let the inspector address a selected cell directly. With `@charge` the caller
+exposes just the two-credit debit. The `ref` formals of `buffer` borrow two lexical slots
+for one call. Haskell's `Ports m` exposes the same eight operations to `inspect`.
+[Installing local procedure bodies](../../design/SymbolicDynamicScope.md#installing-a-local-procedure-body)
+· [Lexical access and invocation](../../design/SymbolicDynamicScope.md#captured-values-and-call-behavior)
+· [Synchronous callbacks](../../design/CallableStorageAndHereAccess.md#an-effect-in-a-here-callback)
+
+## Application end in CoD and Haskell
+
+Each application starts serial, credits and gain at `(0, 8, 3)` and the five journals
+empty. It can append a public prefix before entering either scope. Both callers below
+check the verdict, three final state values and five ordered journals for the same twelve
+inputs. For example, put a stage around each acquisition, reject the first acquisition
+and keep the prefix. These are the calls to the checkers defined below.
+
+| Application | Check at the call site |
+| --- | --- |
+| CoD | `check(true, 1u64, true, 72u64, 84u64)` |
+| Haskell with `mtl` | `check Mtl.run True 1 True [7,2] [8,4]` |
+| Haskell with `effectful` | `check Eff.run True 1 True [7,2] [8,4]` |
+
+### CoD installation and check
+
+`check` installs eight procedure bodies over its local storage. To make the small
+ordered journals visible in an assertion, it appends a digit `n` with `10 * log + n`.
+Thus `0` denotes an empty journal and `712` records the three entries `[7,1,2]`.
 
 ```cod
 proc check(per_acquisition:bool, reject_through:u64, prefix:bool,
@@ -248,11 +272,11 @@ proc check(per_acquisition:bool, reject_through:u64, prefix:bool,
     val serial <- 0u64
     val credits <- 8u64
     val gain <- 3u64
-    val acquired <- 0u64
-    val rejects <- 0u64
-    val passes <- 0u64
-    val defects <- 0u64
-    val samples <- 0u64
+    val acquired_log <- 0u64
+    val rejects_log <- 0u64
+    val passes_log <- 0u64
+    val defects_log <- 0u64
+    val samples_log <- 0u64
 
     effect proc @next_serial() -> u64 { serial <- serial + 1u64; return serial }
     effect proc @charge() -> void { credits <- credits - 2u64; return }
@@ -261,11 +285,26 @@ proc check(per_acquisition:bool, reject_through:u64, prefix:bool,
         gain <- previous + 1u64
         return previous
     }
-    effect proc @acquired(n:u64) -> void { acquired <- 10u64 * acquired + n; return }
-    effect proc @rejects(n:u64) -> void { rejects <- 10u64 * rejects + n; return }
-    effect proc @passes(n:u64) -> void { passes <- 10u64 * passes + n; return }
-    effect proc @defects(n:u64) -> void { defects <- 10u64 * defects + n; return }
-    effect proc @samples(n:u64) -> void { samples <- 10u64 * samples + n; return }
+    effect proc @acquired(n:u64) -> void {
+        acquired_log <- 10u64 * acquired_log + n
+        return
+    }
+    effect proc @rejects(n:u64) -> void {
+        rejects_log <- 10u64 * rejects_log + n
+        return
+    }
+    effect proc @passes(n:u64) -> void {
+        passes_log <- 10u64 * passes_log + n
+        return
+    }
+    effect proc @defects(n:u64) -> void {
+        defects_log <- 10u64 * defects_log + n
+        return
+    }
+    effect proc @samples(n:u64) -> void {
+        samples_log <- 10u64 * samples_log + n
+        return
+    }
 
     if (prefix) { behave @defects(7u64); behave @samples(8u64) }
     val accepted <- if (per_acquisition) {
@@ -275,40 +314,80 @@ proc check(per_acquisition:bool, reject_through:u64, prefix:bool,
     }
 
     assert accepted == (reject_through < 2u64)
-    assert defects == expected_defects
-    assert samples == expected_samples
+    assert defects_log == expected_defects
+    assert samples_log == expected_samples
     if (reject_through == 0u64) {
         assert serial == 1u64; assert credits == 6u64; assert gain == 4u64
-        assert acquired == 1u64; assert rejects == 0u64; assert passes == 1u64
+        assert acquired_log == 1u64; assert rejects_log == 0u64; assert passes_log == 1u64
     } else {
         assert serial == 2u64; assert credits == 4u64; assert gain == 5u64
-        assert acquired == 12u64
-        if (accepted) { assert rejects == 1u64; assert passes == 2u64 }
-        else { assert rejects == 12u64; assert passes == 0u64 }
+        assert acquired_log == 12u64
+        if (accepted) { assert rejects_log == 1u64; assert passes_log == 2u64 }
+        else { assert rejects_log == 12u64; assert passes_log == 0u64 }
     }
     return
 }
 
+check(true,  0u64, false,   1u64,   3u64)
+check(false, 0u64, false,   1u64,   3u64)
+check(true,  0u64, true,   71u64,  83u64)
+check(false, 0u64, true,   71u64,  83u64)
 check(true,  1u64, false,   2u64,   4u64)
 check(false, 1u64, false,  12u64,  34u64)
 check(true,  1u64, true,   72u64,  84u64)
 check(false, 1u64, true,  712u64, 834u64)
+check(true,  2u64, false,   0u64,   0u64)
+check(false, 2u64, false,   0u64,   0u64)
+check(true,  2u64, true,    7u64,   8u64)
 check(false, 2u64, true,    7u64,   8u64)
 ```
 
-A `ref symbol` would publish access to a selected mutable cell. The earlier version
-used this so that an assignment made by the inspector would survive a nested call.
-Here the inspector requests the operation. Its local procedure implementation owns
-the decision to mutate a cell. For example, the inspector can charge for an acquisition
-but has no operation for arbitrarily overwriting the credit balance. The ordinary
-`ref` formals of the private buffer helper borrow two lexical slots for one call.
-They introduce no symbolic access to storage. A product of named actions in Haskell
-and these named procedure slots expose the same eight requests to their users.
-[Installing local procedure bodies](../../design/SymbolicDynamicScope.md#installing-a-local-procedure-body)
-· [Lexical access and invocation](../../design/SymbolicDynamicScope.md#captured-values-and-call-behavior)
-· [Synchronous callbacks](../../design/CallableStorageAndHereAccess.md#an-effect-in-a-here-callback)
+### Haskell check with both backends
 
-## Supplying the Haskell operations
+`Mtl.run` and `Eff.run` each take the prefix flag, the staging choice and the rejection
+threshold. `check` accepts its arguments in the same order as CoD's `check` and unpacks
+the pairs returned by the five writer and three state runners. Each backend is checked
+against the expected report, including the acquisition, rejection and pass journals.
+
+```haskell
+module Main where
+
+import Control.Monad (forM_, unless)
+import qualified PortLabeled as Eff
+import qualified PortStacked as Mtl
+
+check run perAcquisition k prefix wantDefects wantSamples =
+  let ((((((((ok, ds), ss), as), rs), ps), serial), credits), gain) =
+        run prefix perAcquisition k
+      (wantOK, wantSerial, wantCredits, wantGain, wantAs, wantRs, wantPs) =
+        case k of
+          0 -> (True,  1, 6, 4, [1],   [],     [1])
+          1 -> (True,  2, 4, 5, [1,2], [1],    [2])
+          _ -> (False, 2, 4, 5, [1,2], [1,2],  [])
+  in (ok, serial, credits, gain, as, rs, ps, ds, ss) ==
+     (wantOK, wantSerial, wantCredits, wantGain, wantAs, wantRs, wantPs,
+      wantDefects, wantSamples)
+
+main :: IO ()
+main = do
+  let reports =
+        [ (True, 0, [1], [3]), (False, 0, [1],   [3])
+        , (True, 1, [2], [4]), (False, 1, [1,2], [3,4])
+        , (True, 2, [],  []),  (False, 2, [],    [])
+        ]
+  forM_ [("mtl", Mtl.run), ("effectful", Eff.run)] $ \(backend, run) ->
+    forM_ reports $ \(perAcquisition, k, ds, ss) ->
+      forM_ [False, True] $ \prefix -> do
+        let wantD = (if prefix then [7] else []) ++ ds
+            wantS = (if prefix then [8] else []) ++ ss
+        unless (check run perAcquisition k prefix wantD wantS) $
+          fail (backend ++ " failed for " ++ show (perAcquisition, k, prefix))
+```
+
+The adapters below give `inspect` its eight operations. Both use the same `Inspector`
+module, including its state transitions and business rule.
+
+<a id="supplying-the-haskell-operations"></a>
 
 ### Wiring Ports to the transformer stack
 

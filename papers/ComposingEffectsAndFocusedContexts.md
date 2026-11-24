@@ -100,6 +100,70 @@ interface lets its caller do.
 | Supply the operation implementations | Build `Ports Stack` with real lifts into three states and five writers, or supply ports backed by labeled `effectful` handlers. | Install a body for each proc. Those bodies can update the state and journals using direct access to live storage in their defining scope. |
 | Stage defect IDs and samples | In the grouped stack, filter the two provisional writer outputs together. In the labeled row, install two child writers and forward their accepted batches. | Temporarily install two writers that append to private batches. After their scope exits, an accepted stage sends entries to the restored enclosing writers. The other six installations stay in effect. |
 
+The application author chooses how much work a stage covers. Here is that decision
+inside CoD's `check`. The prefix, when requested, is already public when inspection starts.
+
+```cod
+if (prefix) { behave @defects(7u64); behave @samples(8u64) }
+val accepted <- if (per_acquisition) {
+    retry_once() { stage() { inspect(reject_through) } }
+} else {
+    stage() { retry_once() { inspect(reject_through) } }
+}
+```
+
+In Haskell the application supplies `inspect` with a `Ports Stack` value. This is its
+entire adapter for the `mtl` stack. The five outer layers are `WriterT` and the three
+inner layers are `StateT`. `charge` reaches the second state and `samples` the second
+writer. Their CoD counterparts are the installed `@charge` and `@samples` procedures.
+
+```haskell
+fromStates :: States a -> Stack a
+fromStates = lift . lift . lift . lift . lift
+
+ports :: Ports Stack
+ports = Ports
+  { nextSerial = state advance
+  , charge     = fromStates (lift (state pay))
+  , takeGain   = fromStates (lift (lift (state takeOld)))
+  , defects    = \n -> tell [n]
+  , samples    = \n -> lift (tell [n])
+  , acquired   = \n -> (lift . lift) (tell [n])
+  , rejects    = \n -> (lift . lift . lift) (tell [n])
+  , passes     = \n -> (lift . lift . lift . lift) (tell [n])
+  }
+```
+
+The Haskell application then makes the same scope choice. `runStack` initializes the
+three states and runs the five writers.
+
+```haskell
+run prefix perAcquisition k = runStack $ do
+  when prefix $ defects ports 7 >> samples ports 8
+  if perAcquisition then retryOnce (stage (inspect ports k))
+                    else stage (retryOnce (inspect ports k))
+```
+
+With labeled `effectful` handlers the same choice is made in `tile`. The type fixes the
+public row at the application boundary. Inside `stage`, `ports` can address the two
+private writers.
+
+```haskell
+tile :: Bool -> Bool -> N -> Eff Eight Bool
+tile prefix perAcquisition k = do
+  when prefix $ defects ports 7 >> samples ports 8
+  if perAcquisition then retryOnce (stage (inspect ports k))
+                    else stage (retryOnce (inspect ports k))
+
+run prefix perAcquisition k = runEight (tile prefix perAcquisition k)
+```
+
+Take `k = 1` and start with public entries `[7]` and `[8]`. The first acquisition fails
+at gain `3`, the second passes at gain `4`. A stage per acquisition publishes `[7,2]`
+and `[8,4]`. A stage around the entire retry publishes `[7,1,2]` and `[8,3,4]`.
+The [application checks in both languages](examples/ComposedTileReport.md#application-end-in-cod-and-haskell)
+also inspect the verdict, all three states and the other three journals for each order.
+
 [CoD procedure interface and handlers](examples/ComposedTileReport.md#cod) · [Haskell Ports and business rule](examples/ComposedTileReport.md#haskell-with-named-operations) · [Ports on the concrete transformer stack](examples/ComposedTileReport.md#wiring-ports-to-the-transformer-stack) · [Ports on the labeled effect row](examples/ComposedTileReport.md#wiring-ports-to-labeled-effectful-handlers)
 
 A comparison at the application boundary counts selecting and installing the CoD handlers
