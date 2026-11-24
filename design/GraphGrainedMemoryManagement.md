@@ -1,8 +1,10 @@
 # CoD Regional Memory Vision and Implementation Tracker
 
-Design revision 37 · 2026-11-23
+Design revision 38 · 2026-11-24
 
 ## Design authority
+
+At r38 the [human decision](../CHANGELOG.md#h-actor-region-transport-and-chan-ends-20261124) makes complete validated reception the publication boundary for the AKCP path. P-711 applies to private assembly, disposal and the [whole-region acceptance scenarios](ActorChannels.md#acceptance-scenarios). The send consumption point and fault owner follow their existing review.
 
 [D-10-ACTOR-CHAN](DesignAuthorityRegistry.md#d-10-actor-chan) constrains r37's [Actor transfer review](#actor-holding-and-transfer-review) and [systemic-fault recovery](#ownership-when-a-systemic-fault-is-reported). [H-ACTOR-CHAN-BOUNDARY-20261123](../CHANGELOG.md#h-actor-chan-boundary-20261123) selects fire-and-forget sending except for system faults likely to compromise subsequent sends. [K-ACTOR-CHAN-RESEARCH-20261123](../CHANGELOG.md#k-actor-chan-research-20261123) removes the earlier generic per-message result recommendation. H-262/H-263 and intrinsic owner carriers remain; no exact send-consumption point or fault owner outcome is selected. C-39/C-54 and existing candidate value paths retain their scope. [D-32](ActorChannels.md) supplies the research workloads and acceptance cases.
 
@@ -174,7 +176,7 @@ Current supported and missing behavior, implementation entry points and validati
 
 ### Local errors and source availability
 
-The current [Actor/chan contract](SymbolicDynamicScope.md#actor-concurrency-direction) refines H-168: report a systemic communication fault when subsequent sends are likely to fail; otherwise provide fire-and-forget sending. Ordinary loss supplies no individual outcome, receipt or returned packet. Physical UDP is not required, and a chosen transport's own retransmissions do not create a stronger language guarantee.
+The current [Actor/chan contract](SymbolicDynamicScope.md#actor-concurrency-direction) refines H-168: report a systemic communication fault when subsequent sends are likely to fail; otherwise provide fire-and-forget sending. Ordinary loss supplies no individual outcome, receipt or returned packet. The planned network path uses AKCP over UDP. The receiver holds incomplete input privately and publishes a region only after complete reception and validation. Abandonment releases private storage. Transport repair and backpressure preserve ordinary fire-and-forget sending. [Regional transport](ActorChannels.md#regional-transport-over-akcp)
 
 A reported systemic fault needs an explicit ownership postcondition. Whether send has already consumed the source, leaves ownership with the sender, returns an intrinsic owning carrier, or disposes of an accepted payload is not selected. These alternatives differ in source availability and cleanup. Reporting a system condition cannot leave ownership implicit.
 

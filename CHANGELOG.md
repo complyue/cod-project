@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-24 — Plan atomic region transport and independent chan endpoints
+
+<a id="h-actor-region-transport-and-chan-ends-20261124"></a>
+**H-ACTOR-REGION-TRANSPORT-AND-CHAN-ENDS-20261124.** The project user specified both planning scopes in the current CoD project conversation on 2026-11-24 (America/Los_Angeles). Their words are reproduced below. An exact message timestamp and durable conversation URL were unavailable.
+
+> 规划actor间通信，使用 udp 基础上的 akcp （[https://github.com/daowei2026/vnp](https://github.com/daowei2026/vnp)）流（允许漏洞）实现半可靠的任意长度region传输，region粒度原子成功或失败，支持队列和背压特性。
+>
+> chan 肯定要允许分开发送端与接收端独立建模，这个等 CoD 支持了 higher-kinded type synonym 后，通过形式化的 producer/transformer/consumer 类型语言去描述表达。
+
+[D-32-REGION-TRANSPORT](design/ActorChannels.md#regional-transport-over-akcp), r2/P-711, selects the inter-Actor network path, whole-region publication, queues and backpressure. [D-32-CHAN-ENDS](design/ActorChannels.md#independent-chan-endpoints), r2/P-712, selects independent endpoint modeling and the prerequisite for its formal type language. D-10-ACTOR-CHAN/P-702 continues to govern ordinary fire-and-forget and systemic-fault reporting. Admission waits, wire framing, closure, cardinality, fault ownership and type declarations await their respective decisions. D-31's general named-signature discussion and its synchronous composite contract retain their separate scopes.
+
+From the baseline `bc2f01bfe15f7db6423d967726519bbf6cbb6c6a:design/ActorChannels.md`, D-32 r1→2 adds whole-region and pressure acceptance cases using [VNP's AKCP contract](https://github.com/daowei2026/vnp/blob/315634cf92cfb322f91788e295cffefb0c65825b/docs/protocol/akcp-v1.md). D-07 r211→212, D-10 r253→254, D-12 r36→37 and D-13 r37→38 apply those boundaries to packet admission, runtime retention and disposal. D-31 r12→13 records the endpoint workload under the [earlier pipeline sequencing decision](#h-named-signatures-before-pipeline-protocols-20261123). Other scopes are continued from that baseline. The multi-record framing and private assembly approach are proposals for satisfying the decision.
+
 ## 2026-11-24 — Defer body-mixin templates
 
 <a id="h-mixin-template-deferral-20261124"></a>

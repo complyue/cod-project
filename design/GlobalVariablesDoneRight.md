@@ -2,9 +2,11 @@
 
 *显式组合，动态上下文 · Explicit composition and dynamic context*
 
-Design revision 36 · 2026-11-23
+Design revision 37 · 2026-11-24
 
 ## Design authority
+
+At r37 the [Actor readiness review](#actor-implementation-readiness) applies P-711/P-712 to the two endpoint roles and the queued AKCP path. Its acceptance cases cover a slow receiver and loss within a multi-record region. [Decision](../CHANGELOG.md#h-actor-region-transport-and-chan-ends-20261124) · [Transport and endpoints](ActorChannels.md#regional-transport-over-akcp)
 
 [D-10-ACTOR-CHAN](DesignAuthorityRegistry.md#d-10-actor-chan) governs r36's Actor-local binding terminology and [Actor planning](#actor-implementation-readiness). [H-ACTOR-CHAN-BOUNDARY-20261123](../CHANGELOG.md#h-actor-chan-boundary-20261123) selects dedicated-thread 1:1 execution, isolated context, statically typed chan and systemic-fault-only send feedback with ordinary fire-and-forget behavior. [K-ACTOR-CHAN-RESEARCH-20261123](../CHANGELOG.md#k-actor-chan-research-20261123) replaces the shared-worker candidate and links [D-32](ActorChannels.md). C-36/C-52 and P-702 carry the scoped boundary; P-131–P-135 and the remaining operational proposals retain their qualification. Preserve explicit lifetimes, owner responsibility and cleanup; no endpoint, transfer-on-fault or shutdown API is selected.
 
@@ -138,7 +140,8 @@ The execution mapping is settled: one Actor runs on one dedicated OS thread with
 | Established boundary | Consequence for an Actor increment |
 | --- | --- |
 | Actor identity, dedicated execution thread and isolated dynamic context | Actor entry must establish the intended bindings and owners; exit must account for them. No shared-worker context switch is needed for the selected model. |
-| Statically typed chan | Check the admitted message family at sending and receiving boundaries; external representations need validated conversion into that family. |
+| Independently modeled, statically typed chan ends | Check the message family and direction at each end. Model the formal pipeline roles once CoD has higher-kinded type synonyms. |
+| AKCP over UDP for remote regions | Admit a complete validated region to the receiver. Account for incomplete regions and apply backpressure as assembly or ready queues consume capacity. |
 | Fire-and-forget sending except for qualifying systemic faults | Ordinary loss needs runtime disposal, not a delivery receipt. Fault classification and its owner postcondition remain explicit design questions. |
 | Existing region and reference contracts | The handoff must preserve graph identity/sharing, actual owners, source consumption and valid access through every outcome. |
 | Scoped here and non-storable proc definitions | An Actor entry cannot be a queued escaping here body or ordinary proc value. Receiver-selected work needs its own admitted entry and resource contract. |
@@ -165,7 +168,7 @@ The [research questions](ActorChannels.md#decisions-to-discuss-next) are concret
 | Queue resources, waiting and close/drain | A slow receiver, bounded storage, late sends and Actor exit must have defined retention and release responsibilities. |
 | Actor entry, module lifetime and dynamic resources | Two Actors share semantic identities without sharing current bindings or implicitly duplicating module initialization. |
 | Failure, cancellation and shutdown | Distinguish a lost stop request, an observed response, completed cleanup and native failure of the hosting OS process. |
-| Network protocol and application reliability | The same typed work description runs locally and remotely, with application-defined replies, attempts and settlement. |
+| Region framing on AKCP and application reliability | The same typed request runs locally and remotely. Validate an entire multi-record region before remote publication and use application-defined replies, attempts and settlement. |
 
 H-180/H-181 preserves captured and hidden dynamic owners and prohibits extracting them. Message ownership is separate from effect replay. H-262 makes a transferred ordinary source statically unavailable without implicit null; H-263 preserves local views only while the new holder permits access. A returned packet, if admitted for systemic-fault recovery, would not automatically restore the original name or revoked views. The exact recovery contract remains open.
 

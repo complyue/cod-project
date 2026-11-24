@@ -56,6 +56,8 @@
 
 这些既定形式可以直接作为惯用法依据，不应整体重新置为待定。
 
+`chan` 两端是这套类型语言的具体用例。发送端和接收端已经确定可以独立建模。等 CoD 支持 higher-kinded type synonym 后，再正式表达发送侧的 consumer、接收侧的 producer，以及各自可组合的 transformer。[端点设计](../design/ActorChannels.md#independent-chan-endpoints)
+
 ### 命名的类型签名就绪后再讨论
 
 1. 用命名签名分别表达 producer 提供的数据、consumer 的反馈，以及 transformer 的上下游要求。用带借用的输入检验签名如何表达实际 owner 和访问权限。
@@ -173,9 +175,9 @@ Haskell，再按 CoD 的模块解释规则决定声明的可见性、优先级�
 
 语言概念统一为 Actor 和静态强类型的 `chan`。每个 Actor 对应一条专属 OS 线程，
 拥有独立执行栈和隔离的 TLS；语言不提供另一套线程并发模式。
-消息采用 UDP 式语义，不保证接收、不提供回执，应用自行建立流及其他可靠协议。
+基础发送采用 UDP 式语义，不保证接收、不提供回执。应用按需建立可靠流、重试和业务结算协议。
 当系统有依据判断后续发送大概率失败时，应向发送者报系统故障；
-其余情况提供“发后不管”的发送语义。具体物理传输不因此被限定为 UDP。
+其余情况提供“发后不管”的发送语义。
 [已确认边界](../design/SymbolicDynamicScope.md#actor-concurrency-direction)
 
 业务预研参考 [nedh 的网络通信](https://github.com/complyue/nedh) 和
@@ -183,7 +185,15 @@ Haskell，再按 CoD 的模块解释规则决定声明的可见性、优先级�
 多个 worker 汇流、资源征召、任务结算与取消。
 [预研与源码依据](../design/ActorChannels.md)
 
-接下来分别确定 chan 身份与端点权限、接收方数量、消息图的转移点、
-系统故障时的 owner 去向、队列资源与关闭、Actor 启动/退出及模块生命周期，
-以及网络类型/版本验证。不能把单条消息未收、业务拒绝或任务失败作为基础 send 的回执。
-本轮不重新讨论已经确定的术语、1:1 映射、静态类型和基础发送契约。
+跨网络的 Actor 通过 UDP 上的 AKCP 流传输任意长度的 region。流中允许有缺口，传输以整个 region 为单位原子地成功或失败。接收 Actor 只能看到完整且通过校验的 region。传输支持队列和背压，容量恢复时可以继续推进。[区域传输](../design/ActorChannels.md#regional-transport-over-akcp)
+
+发送端和接收端可独立建模。其正式类型表达等待 higher-kinded type synonym，再用 producer、transformer、consumer 描述。[类型语言讨论](#named-signatures-and-pipelines)
+
+| 待讨论问题 | 区分方案的用例 |
+| --- | --- |
+| 如何跨记录划分 region、识别缺口并回收残片？ | A 的首块、中间块或末块分别永久丢失，B 完整到达。A 的根不可见，B 可独立交付，A 的迟到片不能复活它。 |
+| 如何对组装和就绪队列计量、施加及解除背压？ | 接收 Actor 暂停后恢复。一个远大于传输窗口的 region 在资源充足时仍可完成。明确等待期间的 owner 及关闭后的释放责任。 |
+| 两端各有哪些权限，如何建连、关闭和传递回信端点？ | worker 只持发送端，collector 只持接收端。检验不相容的消息、方向和多接收者情形。 |
+| 系统故障如何报告，消息 owner 在哪里？ | 比较入队前、入队后和交接后发生故障。区分已消耗的发送者名字、接收端丢弃与应用结算。 |
+
+Actor 启动与退出、模块生命周期及外部表示的兼容性仍各有待决条款。[讨论清单与验收场景](../design/ActorChannels.md#decisions-to-discuss-next)

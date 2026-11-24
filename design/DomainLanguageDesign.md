@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 211
+Discussion revision: 212
 
 Recorded: 2026-11-23
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r212 the [human decision](../CHANGELOG.md#h-actor-region-transport-and-chan-ends-20261124) applies D-32 regional transport and P-711 to [DL-04](#dl-04). Verify that a gap within a multi-record region exposes no partial root and that an intact following region remains deliverable. H-352 governs root compatibility and application settlement. [Transport contract](ActorChannels.md#regional-transport-over-akcp)
 
 [Review backlog and status reconciliation](../CHANGELOG.md#h-review-backlog-duty-20261123) reconciles the scoped confirmations below with their registry records.
 
@@ -834,7 +836,7 @@ Lifecycle acceptance requires each selected short-circuit scope to release its l
 **Later direction:** consider compatibility checking across the layouts of all ADTs involved, with a checksum for fast matching. The layout description, dependency coverage, comparison rules and checksum choice remain to be designed. This direction neither introduces general RTTI nor establishes cross-architecture portability by itself.
 
 - Define total-length meaning, header encoding, occupied bytes versus reserved capacity, root location/type and dependency identification. Decide what is carried in the packet versus pinned in the connection context.
-- Define partial reception, frame boundaries, minimum structural checks and rejection behavior. Validation should establish the conditions needed for correct interpretation and application; its depth and cost belong in the protocol contract.
+- On the inter-Actor AKCP/UDP path, partial bytes stay private until the complete region passes admission. A failed transfer publishes no root. Define region framing across bounded records, recovery of the next boundary, structural validation and disposal of partial storage. [Whole-region transfer](ActorChannels.md#regional-transport-over-akcp)
 - Specify the layout/ABI agreement represented by the initial manual identifier, including byte order, field widths and alignment. Semantic/schema versions remain distinct from layout and ABI compatibility; builds on multiple architectures do not establish image compatibility.
 - Decide mutation rights during construction, after sending and after reception. Whole-region relocation preserves valid relative layouts; arbitrary truncation or object movement does not follow from that property.
 

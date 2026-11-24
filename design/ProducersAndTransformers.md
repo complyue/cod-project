@@ -1,8 +1,10 @@
 # Producers and Transformers for Nondeterministic Comprehensions
 
-Design revision: 12 · 2026-11-23
+Design revision: 13 · 2026-11-24
 
 ## Design authority
+
+At r13, D-32-CHAN-ENDS/P-712 adds a workload for the future formal type language. The sending end of a chan can consume typed input in one Actor's pipeline. The receiving end can produce admitted messages for another Actor's pipeline. A transformer can be composed locally on either side. Express these independent roles once CoD supports higher-kinded type synonyms. Acceptance must check the message type and the direction at each endpoint, with synchronous consumer feedback scoped to its local traversal. [Chan endpoint contract](ActorChannels.md#independent-chan-endpoints) · [Decision](../CHANGELOG.md#h-actor-region-transport-and-chan-ends-20261124)
 
 [D-31-COMPOSITE](DesignAuthorityRegistry.md#d-31-composite) is the confirmed implementation contract for the [operand-role rules](#resolving-the-role-of-a-name) and the [composite invoice-review workload](#composite-implementation-target), including their comparison and rejection cases. The user confirmed the r10 contract and directed mainline to proceed. That scope is recorded at r11. [Human decision](../CHANGELOG.md#h-pipeline-composite-contract-20261119)
 

@@ -1,8 +1,14 @@
 # Actors and typed chan: network and cluster research
 
-Research revision: 1 · 2026-11-23
+Design and research revision: 2 · 2026-11-24
 
 ## Design authority
+
+[Regional transport](DesignAuthorityRegistry.md#d-32-region-transport) and
+[chan endpoints](DesignAuthorityRegistry.md#d-32-chan-ends) record the two confirmed planning scopes
+at r2. P-711/P-712 link them to the packet and pipeline contracts. The acceptance cases below cover
+whole-region visibility under loss, capacity pressure and independent use of each endpoint.
+[Decision and continuity](../CHANGELOG.md#h-actor-region-transport-and-chan-ends-20261124)
 
 [D-32](DesignAuthorityRegistry.md#d-32) records this user-directed research.
 [D-10-ACTOR-CHAN](DesignAuthorityRegistry.md#d-10-actor-chan) owns the confirmed
@@ -19,8 +25,8 @@ typed workload that can be placed locally or on a cluster without hiding storage
 business completion behind a transport operation.
 
 Preserve actual owners, same-region stored edges, callable placement, scoped dynamic bindings and
-cleanup. This research selects no additional syntax, transport, reliability protocol, scheduler
-policy or implementation. Acceptance is the scenario matrix below. The
+cleanup. Consult the scenario matrix for acceptance and the open decisions for the remaining wire,
+queue, ownership and source-language choices. The
 [continuity record](../CHANGELOG.md#k-actor-chan-research-20261123) identifies the source baseline and
 the older execution and send-result candidates replaced by the new decisions.
 
@@ -36,7 +42,8 @@ implementation details.
 A chan has a **statically checked message type**. Sender and receiver code must satisfy that type's
 contract. A received wire representation still needs validation before it can become a typed value;
 an address, method name or structurally similar payload does not establish its CoD type identity.
-The spelling of the type constructor and the forms of sending and receiving endpoints remain open.
+A chan must allow each endpoint to be modeled independently. The endpoint declarations and carriers
+will be specified separately.
 
 **Ordinary sending is fire-and-forget.** The facility does not guarantee reception and supplies no
 delivery receipt or acknowledgement. The sender must receive a system-fault report when the system
@@ -44,11 +51,10 @@ has grounds to judge that subsequent sends are likely to fail. An individual los
 job or failed computation is not automatically such a systemic fault. The detection criteria,
 reporting point and error representation remain to be specified.
 
-Applications establish any stream, ordering, acknowledgement, retry, duplicate handling or other
-reliable protocol they require. A reply is another application message with its own delivery risk.
-This UDP-like semantic boundary does not mandate physical UDP or prohibit a selected transport from
-using TCP and its internal retransmissions. Physical transport cannot strengthen the portable chan
-contract into an implicit receipt or application-completion promise.
+The selected inter-Actor network path uses an AKCP stream over UDP for semi-reliable region
+transfer. Applications define any further ordering, acknowledgement, retry, duplicate handling or
+reliable stream their work requires. A reply travels as another application message with its own
+delivery risk.
 
 | Observation | Meaning at the confirmed boundary |
 | --- | --- |
@@ -58,12 +64,100 @@ contract into an implicit receipt or application-completion promise.
 | A worker sends a result, refusal or cancellation response | This is an application protocol message, not a chan-generated receipt. |
 | A connection closes | A transport observation. Its relation to an Actor, chan, in-flight work and system-fault reporting must be defined explicitly. |
 
+## Regional transport over AKCP
+
+The network transfer unit visible to the receiving Actor is one whole region. A sender may submit a
+region of any finite length that the peers can represent and have resources to handle. The carrier
+can make progress across many UDP datagrams, AKCP records and repair windows. Bytes can arrive,
+be repaired or become permanently unavailable while a region is in progress. The runtime may
+publish the typed region only after it has its complete extent and has validated the representation
+against the receiving endpoint. If the transfer fails, the Actor obtains no part of the region and
+its entry cannot run. Any private assembly storage still has an owner responsible for release.
+[D-07 packet length and compatibility](DomainLanguageDesign.md#dl-04)
+
+**What AKCP supplies.** VNP identifies bytes by direction, stream epoch and offset. Its receiver can
+repair a gap for a bounded time using retransmission and forward error correction. If the gap
+persists, it can skip affected frame records and resume at a verified record boundary. Late bytes
+cannot resurrect an abandoned record. The receiver distinguishes known missing data from an
+unobserved tail. The carrier offers complete frames to its delivery callback. It handles byte
+acknowledgement and capacity credit below that callback. VNP's session callback receives only a
+complete frame. A region adapter using that API needs enough metadata in surviving records to
+recognize missing pieces and to identify the next region.
+[VNP stream and gap rules](https://github.com/daowei2026/vnp/blob/315634cf92cfb322f91788e295cffefb0c65825b/docs/protocol/akcp-v1.md#L6-L31) ·
+[Record boundaries and recovery](https://github.com/daowei2026/vnp/blob/315634cf92cfb322f91788e295cffefb0c65825b/docs/protocol/akcp-v1.md#L111-L145) ·
+[VNP delivery callback](https://github.com/daowei2026/vnp/blob/315634cf92cfb322f91788e295cffefb0c65825b/internal/session/carrier.go#L696-L722)
+
+**What the CoD region protocol must supply.** VNP v1 admits Ethernet records of 14 to 65,535 bytes.
+Its sender also checks that one complete record fits in its TX ring. The region protocol therefore
+needs framing above those records or a distinct region framing profile on the AKCP stream. It must
+recover the next region boundary even when the first record of the damaged region was lost. It must
+also recognize a missing last piece before publication. The length in the CoD packet header and
+the manually assigned root compatibility identifier supply part of this agreement. The protocol must decide
+how to identify the transfer, establish complete byte coverage, validate the root and distinguish
+a fresh transfer from stale bytes. The current wire layout and encoding of those facts remain open.
+[VNP sender admission](https://github.com/daowei2026/vnp/blob/315634cf92cfb322f91788e295cffefb0c65825b/internal/transport/ring.go#L96-L115) ·
+[CoD packet contract](DomainLanguageDesign.md#dl-04)
+
+For example, suppose region A spans three records and region B follows. If repair recovers the
+middle record in time, A can pass validation and be published whole. If that record stays missing,
+A must be discarded in full. Once the receiver can establish B's boundary and validate B, it can
+offer B independently. A late piece of A must never complete B or reopen the discarded assembly.
+For a missing final record with no later traffic, the receiver may have insufficient evidence to
+identify a remote loss. Its retirement policy must eventually reclaim any retained partial assembly.
+The sending Actor obtains no delivery receipt in any of these cases. A result or durable business
+commit is observable only through an application protocol.
+
+### Queues and backpressure
+
+The transport must support queuing and backpressure. When a receiving Actor stops consuming
+complete regions, retained output consumes capacity. The transport must be able to slow further
+admission or transmission and resume when capacity becomes available. An application may still
+lose a region under the selected retention policy. A slow consumer and a stream hole need distinct
+accounting because capacity becoming available can resolve the former without repairing any bytes.
+
+The capacity budget must account for queued sends, transport repair windows, private region
+assembly and complete regions awaiting their receiving Actor. An implementation
+must be able to stage a region larger than a single transport window. Holding every byte of credit
+until the whole region is published would stall such a transfer. One candidate is to move validated
+pieces into separately budgeted, private region storage and advance transport credit as its slots
+are released. The assembly and ready queues then impose their own bounds. VNP uses a directional
+credit limit for available receive capacity. A credit update permits further sending and says
+nothing about which regions a receiving Actor observed.
+[VNP capacity and backpressure](https://github.com/daowei2026/vnp/blob/315634cf92cfb322f91788e295cffefb0c65825b/docs/protocol/relay-v2.md#L56-L72)
+
+The queue accounting unit, admission timing, behavior at capacity, expiry and recovery reporting
+need a policy. Temporary pressure does not by itself establish the continuing communication fault
+that requires reporting to a sending Actor. The send-side ownership and fault contract must define
+who holds a region while admission waits, after admission, and if a systemic fault is reported.
+[Ownership on a systemic fault](GraphGrainedMemoryManagement.md#ownership-when-a-systemic-fault-is-reported)
+
+## Independent chan endpoints
+
+A component can be modeled with only the statically typed sending end or only the receiving end.
+From the local pipeline's perspective the sending end plays the **consumer** role for its message
+type. The receiving end plays the **producer** role when it offers locally admitted messages.
+A **transformer** can adapt a local source before sending or adapt the received values before a
+local consumer sees them. For example, a worker can hold only the sending end of a result channel,
+while the collector uses only the receiving end. Neither operation needs to be modeled as owning
+the other end.
+
+CoD will express these roles in a formal producer/transformer/consumer type language once it supports
+**higher-kinded type synonyms**. For the endpoint workload the type language must let two components
+describe their own roles and let a caller check the message family at composition. The declarations,
+kind rules and concrete endpoint signatures are future work. In a local synchronous traversal,
+feedback belongs to that traversal. A remote reply is a separate application message. An async
+queue may retain admissible payloads and endpoint capabilities under their eventual ownership rules.
+It cannot retain a borrowed `here` activation.
+[Named signatures and pipelines](../docs/DesignTopics.md#named-signatures-and-pipelines) ·
+[Producer and transformer contracts](ProducersAndTransformers.md#design-authority)
+
 ## Reference baselines and method
 
-The project user selected two existing applications as business context:
+The project user selected nedh and sedh for their application workloads and VNP for its transport:
 
 | Repository | Inspected default-branch revision | Role in this study |
 | --- | --- | --- |
+| [VNP](https://github.com/daowei2026/vnp/tree/315634cf92cfb322f91788e295cffefb0c65825b) | `315634cf92cfb322f91788e295cffefb0c65825b` | AKCP over UDP, record recovery, queuing and receive capacity. |
 | [nedh](https://github.com/complyue/nedh/tree/04f5e0f62aabe656c21c3181edd9ba72c3f0c5b7) | `04f5e0f62aabe656c21c3181edd9ba72c3f0c5b7` | Network sessions, transport adapters, routed channels and request/reply workloads. |
 | [sedh](https://github.com/complyue/sedh/tree/2567b52ed58985d0edfa6312a3b883c5cf8b79ab) | `2567b52ed58985d0edfa6312a3b883c5cf8b79ab` | Work-source discovery, resource recruitment, worker management, batch execution and result settlement. |
 
@@ -256,7 +350,7 @@ builtin messages. Fields are design questions made concrete for review.
 | Job outcome | Job/attempt identity and a typed success or domain-failure payload | A received outcome needs application-defined settlement and duplicate handling. |
 | Session operation | Session identity, operation and response route | Stateful interactions need a lifetime and sequencing protocol above chan. |
 | Cancellation request / outcome | Job/attempt identity and the precisely reported stopping stage | Request receipt, stopped computation and completed cleanup are different observations. |
-| Optional reliable-flow message | Flow identity, sequence, acknowledgement or credit | Reliability and flow regulation belong to the chosen application protocol. |
+| Optional reliable-flow message | Flow identity, sequence, acknowledgement or credit | Each application selects additional sequencing, reliability or flow regulation above transport backpressure. |
 
 An outcome can use a domain sum to preserve alternative-specific payloads. Static typing must reject
 an unrelated payload at a sending endpoint and constrain receiving code to the declared family.
@@ -327,7 +421,8 @@ function cannot use dynamic lookup or a proc call to bypass its permissions.
 ## Decisions to discuss next
 
 The execution mapping, terminology, static message typing, absence of reception guarantees and the
-system-fault feedback boundary are settled. The remaining questions should be evaluated against the
+system-fault feedback boundary are settled. The network path, region atomicity, queue/backpressure
+support, endpoint separation and type-language prerequisite are also settled. The remaining questions should be evaluated against the
 same workloads rather than reopening those decisions.
 
 | Question | Candidate to examine first | Alternative or boundary that must be evaluated |
@@ -336,11 +431,11 @@ same workloads rather than reopening those decisions.
 | How does a request carry a reply endpoint? | A typed sending capability with explicit lifetime/revocation behavior. | A checked logical route plus response type may be enough; carrier placement and network authority must be specified. |
 | Who owns a message after a systemic send fault? | Compare the existing returned-owner proposal with a consuming-and-disposing operation and a pre-transfer rejection path. | Decide the exact transfer point, source availability, error surface and validity of prior views. No default is selected here. |
 | What faults justify reporting? | Classify persistent local endpoint/route/service failures using concrete evidence and scope the report to the affected facility. | Define whether and how remote observations contribute, when a recovered facility becomes usable, and how transient loss remains fire-and-forget. No probability threshold is implied. |
-| What bounds queued resources? | Explicit runtime resource accounting and a bounded retention policy. | Choose full-queue handling, local resource waits, ordering and message-size limits without adding reception acknowledgements. |
+| How does pressure reach the sender? | Budget queued regions, assembly, completed output and transport windows separately. | Decide when admission waits, expires or declines, how capacity resumes, and who owns each payload during a wait. |
 | Who can close a chan, and what does close do? | A distinct owner/close capability; account for queued data and blocked receivers. | Specify late sends, drain/discard, shared collectors and the relationship to Actor termination. |
 | How does an Actor stop? | Examine cooperative stopping and defined interruption points, with explicit cleanup and application cancellation messages. | Arbitrary native-thread termination, native faults and uninterruptible foreign calls need their own boundaries; sedh's subprocess SIGKILL is not that contract. |
 | How do Actor startup and shared modules interact? | Separate Actor-local dynamic context from module semantic identity and already established module lifetimes. | Decide module initialization, shared resources, Actor entry requirements and final OS-process shutdown without implicit per-Actor module duplication. |
-| What crosses a network boundary? | An admitted typed payload and checked route with explicit version/codec dependencies. | Decide byte format, authentication/capabilities, compatibility and size limits; zero-cost regional relocation does not choose a wire ABI. |
+| How are region boundaries recovered after a stream hole? | Compare region-aware framing over AKCP with a region envelope spanning existing records. | Decide how to identify transfers, detect a missing header/tail, validate complete coverage and root compatibility, and reclaim incomplete storage on expiry or epoch change. |
 
 The one-receiver candidate follows the REPL and result-collector workloads particularly well. It is
 a recommendation to investigate, not an approval of MPSC semantics or a chan API. Likewise,
@@ -357,6 +452,10 @@ These are design acceptance workloads, not a test suite or a claim of implemente
 | Static payload mismatch | An incompatible message is rejected by the source type contract; an invalid external representation never becomes an admitted typed value. |
 | A deliberately lost message | Ordinary send remains fire-and-forget; all retained payload storage is accounted for, without a synthesized receipt or sender-view revival. |
 | A continuing communication fault | The selected fault policy reports the system condition to the sender; the ownership outcome is derivable and a later recovery has defined behavior. |
+| A region larger than one AKCP record and one transport window | With sufficient assembly resources, a slow receiver can eventually obtain one complete valid region. Internal window credit can advance during assembly. |
+| Loss in A followed by complete B | Repeat for the first, middle and final piece of A. A repaired in time is eligible whole. On abandonment A contributes no visible root or prefix. B remains independently deliverable. Late pieces or pieces from another epoch cannot revive A. |
+| Receiver stops draining and later resumes | Pressure reaches admission or transmission within its budget. Resumption admits work as capacity frees. Check byte and region accounting through expiry, close and transfer failure. |
+| A worker holds only the sending end of a result channel | A compatible result enters that end, and a collector can consume received results with only the receiving end. Reject a mismatched type or an operation requiring the other direction. Verify local pipeline feedback stays within its traversal. |
 | A request carrying a reply route | The response type and sending authority are correct; the response endpoint can expire without retaining a caller frame. |
 | Two workers sharing a collector | One worker's connection or Actor termination cannot close a collector owned by another party without the chosen authority. |
 | A regional graph sent before sender scope exit | On the admitted delivery path, the receiver can use the graph after that scope ends; sharing/cycles survive and stale sender access rejects. |
