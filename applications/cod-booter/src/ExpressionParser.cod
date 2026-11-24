@@ -1215,11 +1215,13 @@ func at_braced_case_body(source:const SourceBytes in S, tokens:const Tokens in T
         punct_at(source, tokens, arrow + 1u64, past) != 123u8 ||
         closing_token(tokens, arrow + 1u64, past) == no_node()) return false;
     val at <- first;
+    val mark <- 0u8;
+    val close <- no_node();
     for (step in first .. arrow) {
         if (at == arrow) return true;
-        val mark <- punct_at(source, tokens, at, past);
+        mark <- punct_at(source, tokens, at, past);
         if (mark == 40u8 || mark == 91u8 || mark == 123u8) {
-            val close <- closing_token(tokens, at, past);
+            close <- closing_token(tokens, at, past);
             if (close == no_node() || close >= arrow) return false;
             (at <- close + 1u64):void
         } else {
