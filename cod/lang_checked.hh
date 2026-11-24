@@ -185,6 +185,7 @@ class ScalarChecker {
     };
     std::map<std::string, Resource> exports;
     std::vector<std::string> public_order, defaults;
+    bool publication_ready = false;
   };
   std::vector<ModuleNames> modules_;
   std::map<size_t, const Form *> entry_extensions_;
@@ -22936,10 +22937,12 @@ class ScalarChecker {
   void select_module_resource(const Form &form, size_t dependency,
                               const std::set<std::string_view> &fresh_symbols) {
     using Resource = ModuleNames::Resource;
+    const auto &publisher = modules_.at(dependency);
+    if (!publisher.publication_ready)
+      throw std::logic_error("selecting resources from an incomplete module");
     if (form.kind != Form::Kind::using_resource && form.kind != Form::Kind::symbol_from &&
         form.kind != Form::Kind::import_resource && form.kind != Form::Kind::export_from_resource)
       implementation_gap(form.at, "mixin body redefinition remains unproved");
-    const auto &publisher = modules_.at(dependency);
     if (form.selection != Form::Selection::named) {
       const auto &names = form.selection == Form::Selection::defaults ? publisher.defaults : publisher.public_order;
       if (form.selection == Form::Selection::defaults && names.empty())
@@ -23190,7 +23193,46 @@ class ScalarChecker {
     }
   }
 
-  void register_nominal_types(const SourceModule &source) {
+  void check_schema_fields(CheckedSchema &schema) {
+    if (schema.source->native_owner_type) {
+      const auto owner = resolve_type(*schema.source->native_owner_type);
+      if (owner.kind != Type::c_type_marker || program_.schemas.at(owner.identity).source->native_owner_type)
+        fail(schema.source->at, "a borrowed native handle requires a fieldless owning CType");
+      schema.native_owner = owner.identity;
+    }
+    std::set<std::string> names;
+    for (const auto &field : schema.source->parameters) {
+      if (!names.insert(field.name).second)
+        fail(field.at, "duplicate field '" + field.name + "' in '" + schema.source->name + "'");
+      const auto storage = place_kind(field.declaration_kind.empty() || field.declaration_kind == "val",
+                                      field.declaration_kind == "ref");
+      auto type = resolve_type(field.type);
+      require_ordinary_callable_type(type, field.at);
+      if (type.kind == Type::builder_storage) {
+        if (schema.source->kind != Form::Kind::data || schema.source->c_data || schema.source->parameters.size() != 1 ||
+            storage != PlaceKind::value || !schema.bits)
+          fail(field.at, "text builder storage requires the sole inline marker of a lexical product");
+        schema.lexical_builder = true;
+        schema.bits = false;
+        continue;
+      }
+      if (schema.source->c_data && storage != PlaceKind::value)
+        fail(field.at, "data \"C\" requires by-value bits fields");
+      schema.has_enum_storage |= type.kind == Type::enumeration;
+      reject_c_type_payload(type, field.at);
+      if (type.kind == Type::region_schema) fail(field.at, "a region schema does not name a field payload type");
+      const bool text_place = !schema.source->c_data && schema.source->kind == Form::Kind::data &&
+          storage == PlaceKind::value && type == Type::string;
+      if (!scalar_type(type) && type.kind != Type::product && type.kind != Type::sum && !text_place)
+        implementation_gap(field.at, "field representation for type '" + type_name(type) + "'");
+      if (type.kind == Type::sum && storage != PlaceKind::value)
+        implementation_gap(field.at, "stored sum reference fields");
+      schema.bits &= storage == PlaceKind::value && !text_place;
+      schema.fields.push_back({&field, std::move(type), storage});
+    }
+  }
+
+  bool register_nominal_types(const SourceModule &source, CompilationDiagnostics *diagnostics) {
     register_abstract_types(source);
     const auto first = program_.schemas.size();
     const auto first_array = program_.arrays.size();
@@ -23251,58 +23293,39 @@ class ScalarChecker {
       if (!scalar_type(array.element) && array.element.kind != Type::product && array.element.kind != Type::sum)
         implementation_gap(array.source->at, "array element type '" + type_name(array.element) + "'");
     }
-    auto schemas = std::span(program_.schemas).subspan(first);
-    for (auto &schema : schemas) {
-      if (schema.source->native_owner_type) {
-        const auto owner = resolve_type(*schema.source->native_owner_type);
-        if (owner.kind != Type::c_type_marker || program_.schemas.at(owner.identity).source->native_owner_type)
-          fail(schema.source->at, "a borrowed native handle requires a fieldless owning CType");
-        schema.native_owner = owner.identity;
-      }
-      std::set<std::string> names;
-      for (const auto &field : schema.source->parameters) {
-        if (!names.insert(field.name).second)
-          fail(field.at, "duplicate field '" + field.name + "' in '" + schema.source->name + "'");
-        const auto storage = place_kind(field.declaration_kind.empty() || field.declaration_kind == "val",
-                                        field.declaration_kind == "ref");
-        auto type = resolve_type(field.type);
-        require_ordinary_callable_type(type, field.at);
-        if (type.kind == Type::builder_storage) {
-          if (schema.source->kind != Form::Kind::data || schema.source->c_data || schema.source->parameters.size() != 1 ||
-              storage != PlaceKind::value || !schema.bits)
-            fail(field.at, "text builder storage requires the sole inline marker of a lexical product");
-          schema.lexical_builder = true;
-          schema.bits = false;
-          continue;
-        }
-        if (schema.source->c_data && storage != PlaceKind::value)
-          fail(field.at, "data \"C\" requires by-value bits fields");
-        schema.has_enum_storage |= type.kind == Type::enumeration;
-        reject_c_type_payload(type, field.at);
-        if (type.kind == Type::region_schema) fail(field.at, "a region schema does not name a field payload type");
-        const bool text_place = !schema.source->c_data && schema.source->kind == Form::Kind::data &&
-            storage == PlaceKind::value && type == Type::string;
-        if (!scalar_type(type) && type.kind != Type::product && type.kind != Type::sum && !text_place)
-          implementation_gap(field.at, "field representation for type '" + type_name(type) + "'");
-        if (type.kind == Type::sum && storage != PlaceKind::value)
-          implementation_gap(field.at, "stored sum reference fields");
-        schema.bits &= storage == PlaceKind::value && !text_place;
-        schema.fields.push_back({&field, std::move(type), storage});
+    std::set<size_t> incomplete;
+    for (size_t id = first; id < program_.schemas.size(); ++id) {
+      if (diagnostics && !diagnostics->continue_work()) return false;
+      auto staged = program_.schemas[id];
+      try {
+        check_schema_fields(staged);
+        program_.schemas[id] = std::move(staged);
+      } catch (const LocatedFailure &failure) {
+        const auto &form = *staged.source;
+        if (!diagnostics || form.kind != Form::Kind::data || form.c_data || form.parent_type ||
+            std::ranges::any_of(form.parameters, [](const auto &field) {
+              return field.type.target || !field.type.parameters.empty();
+            })) throw;
+        incomplete.insert(id);
+        diagnostics->append(failure.diagnostic);
       }
     }
 
-    check_nominal_layouts(first, first_sum);
+    if (!check_nominal_layouts(first, first_sum, incomplete, diagnostics) || !incomplete.empty()) return false;
     for (const auto &array : std::span(program_.arrays).subspan(first_array))
       if (program_.builder_type(array.element))
         implementation_gap(array.source->at, "storing a lexical text builder in an array");
+    return true;
   }
 
-  void check_nominal_layouts(size_t first_product, size_t first_sum) {
+  bool check_nominal_layouts(size_t first_product, size_t first_sum, const std::set<size_t> &incomplete,
+                             CompilationDiagnostics *diagnostics) {
     struct Layout {
       Type type;
       const Form *source;
       size_t pending = 0;
       std::vector<size_t> dependents = {};
+      bool blocked = false;
     };
     std::vector<Layout> layouts;
     for (size_t id = first_product; id < program_.schemas.size(); ++id)
@@ -23311,32 +23334,57 @@ class ScalarChecker {
     for (size_t id = first_sum; id < program_.sums.size(); ++id)
       layouts.push_back({Type{Type::sum, {}, id}, program_.sums[id].source});
 
-    for (const auto &schema : std::span(program_.schemas).subspan(first_product))
-      for (const auto &field : schema.fields) if (program_.builder_type(field.type))
-        implementation_gap(field.source->at, "storing a lexical text builder in a data field");
-
-    // Only inline fields need the child's layout. Stored referents can be recursive.
-    std::deque<size_t> ready;
+    const auto local_layout = [&](const Type &type) -> std::optional<size_t> {
+      if (type.kind == Type::product && type.identity >= first_product) return type.identity - first_product;
+      if (type.kind == Type::sum && type.identity >= first_sum) return sum_start + type.identity - first_sum;
+      return {};
+    };
+    // Only inline fields require the child's layout. Stored targets can be recursive.
     for (size_t i = 0; i < layouts.size(); ++i) {
       auto &layout = layouts[i];
       program_.visit_inline_fields(layout.type, [&](const auto &field) {
-        const auto &type = field.type;
-        std::optional<size_t> field_layout;
-        if (type.kind == Type::product) {
-          if (!program_.bits_payload(type)) {
-            if (layout.source->c_data) fail(field.source->at, "data \"C\" requires recursively bits-only fields");
-            implementation_gap(field.source->at, "inline field with a reference-bearing product");
-          }
-          if (type.identity >= first_product) field_layout = type.identity - first_product;
-        } else if (type.kind == Type::sum) {
-          if (!program_.bits_payload(type))
-            implementation_gap(field.source->at, "inline field with a reference-bearing sum");
-          if (type.identity >= first_sum) field_layout = sum_start + type.identity - first_sum;
-        }
-        if (field_layout) {
+        if (const auto dependency = local_layout(field.type)) {
           ++layout.pending;
-          layouts[*field_layout].dependents.push_back(i);
+          layouts[*dependency].dependents.push_back(i);
         }
+      });
+    }
+    std::deque<size_t> blocked;
+    for (const auto id : incomplete) {
+      const auto layout = id - first_product;
+      layouts[layout].blocked = true;
+      blocked.push_back(layout);
+    }
+    while (!blocked.empty()) {
+      const auto id = blocked.front();
+      blocked.pop_front();
+      for (const auto dependent : layouts[id].dependents) {
+        if (layouts[dependent].blocked) continue;
+        layouts[dependent].blocked = true;
+        blocked.push_back(dependent);
+      }
+    }
+    for (size_t i = 0; i < sum_start; ++i) if (!layouts[i].blocked) {
+      if (diagnostics && !diagnostics->continue_work()) return false;
+      for (const auto &field : program_.schemas[first_product + i].fields) {
+        const auto child = local_layout(field.type);
+        if ((!child || !layouts[*child].blocked) && program_.builder_type(field.type))
+          implementation_gap(field.source->at, "storing a lexical text builder in a data field");
+      }
+    }
+    std::deque<size_t> ready;
+    for (size_t i = 0; i < layouts.size(); ++i) {
+      const auto &layout = layouts[i];
+      if (layout.blocked) continue;
+      if (diagnostics && !diagnostics->continue_work()) return false;
+      program_.visit_inline_fields(layout.type, [&](const auto &field) {
+        const auto &type = field.type;
+        if (type.kind == Type::product && !program_.bits_payload(type)) {
+          if (layout.source->c_data) fail(field.source->at, "data \"C\" requires recursively bits-only fields");
+          implementation_gap(field.source->at, "inline field with a reference-bearing product");
+        }
+        if (type.kind == Type::sum && !program_.bits_payload(type))
+          implementation_gap(field.source->at, "inline field with a reference-bearing sum");
       });
       if (!layout.pending) ready.push_back(i);
     }
@@ -23360,10 +23408,11 @@ class ScalarChecker {
           implementation_gap(schema.source->at, "enumeration fields in a foreign record require a checked storage boundary");
       }
       for (const auto dependent : layout.dependents)
-        if (!--layouts[dependent].pending) ready.push_back(dependent);
+        if (!layouts[dependent].blocked && !--layouts[dependent].pending) ready.push_back(dependent);
     }
-    for (const auto &layout : layouts) if (layout.pending)
+    for (const auto &layout : layouts) if (!layout.blocked && layout.pending)
       fail(layout.source->at, "inline fields of '" + layout.source->name + "' have no finite layout");
+    return true;
   }
 
   void check_native_array(const Type &type, bool read_only, const Location &at) const {
@@ -23600,8 +23649,8 @@ class ScalarChecker {
 #undef COD_LANG_TEXT_KIND
     return {};
   }
-  void register_module(const SourceModule &source, std::optional<size_t> &print_symbol,
-                       std::optional<Location> &unsupported_here) {
+  bool register_module(const SourceModule &source, std::optional<size_t> &print_symbol,
+                       std::optional<Location> &unsupported_here, CompilationDiagnostics *diagnostics) {
     const auto &forms = source.forms;
     std::set<std::string_view> fresh_symbols;
     for (const auto &form : forms)
@@ -23650,7 +23699,7 @@ class ScalarChecker {
       }
       program_.exception_values = true;
     }
-    register_nominal_types(source);
+    if (!register_nominal_types(source, diagnostics)) return false;
     std::vector<const Form *> definitions;
     for (const auto &form : forms) {
       if (source.dependencies.contains(form.get())) continue;
@@ -24094,6 +24143,8 @@ class ScalarChecker {
       program_.warnings.push_back({Warning::multi_alias_extension, aliases.begin()->second, std::move(message)});
     }
     publish_module(source);
+    module_names().publication_ready = true;
+    return true;
   }
 
   static void require_implemented_source_forms(const Type &type, const Location &at, const char *holding_form) {
@@ -24139,16 +24190,41 @@ class ScalarChecker {
     visit(visit, *form.body);
   }
 
-  CheckedProgram check_program(const SourceProgram &source, bool definition_pass) {
+  std::optional<CheckedProgram> check_program(const SourceProgram &source, bool definition_pass,
+                                              CompilationDiagnostics *diagnostics) {
     definition_pass_ = definition_pass;
     modules_.resize(source.modules.size());
     std::optional<size_t> print_symbol;
     std::optional<Location> unsupported_here;
+    size_t reported_warnings = 0;
+    bool registered = source.ready_for_checking();
     for (const auto module : source.construction_order) {
+      const auto &input = source.modules[module];
+      if (input.read_state != SourceModule::ReadState::parsed || !input.failed_edges.empty() ||
+          std::ranges::any_of(input.dependencies, [&](const auto &edge) {
+            return !modules_[edge.second].publication_ready;
+          })) {
+        registered = false;
+        continue;
+      }
+      if (diagnostics && !diagnostics->continue_work()) return {};
       const ModuleLookup lookup(module_, module);
-      for (const auto &form : source.modules[module].forms) require_implemented_source_forms(*form);
-      register_module(source.modules[module], print_symbol, unsupported_here);
+      for (const auto &form : input.forms) require_implemented_source_forms(*form);
+      const auto first_finding = diagnostics ? diagnostics->size() : 0;
+      if (!register_module(input, print_symbol, unsupported_here, diagnostics)) registered = false;
+      if (diagnostics && diagnostics->size() != first_finding) {
+        for (const auto &requester : source.modules) for (const auto &form : requester.forms) {
+          const auto dependency = requester.dependencies.find(form.get());
+          if (dependency != requester.dependencies.end() && dependency->second == module)
+            diagnostics->relate_import(first_finding, diagnostics->size(), form->at);
+        }
+      }
+      if (diagnostics) while (reported_warnings < program_.warnings.size()) {
+        if (!diagnostics->append(program_.warnings[reported_warnings])) return {};
+        ++reported_warnings;
+      }
     }
+    if (!registered || (diagnostics && (diagnostics->has_error() || !diagnostics->continue_work()))) return {};
     check_native_type_names();
     for (auto &method : program_.methods)
       method.throws_categories = declared_exception_categories(method.throws_types);
@@ -24177,7 +24253,7 @@ class ScalarChecker {
     if (!definition_pass_ && !abstract_effect_inputs_.empty())
       // The definition graph is deliberately independent of the native graph.
       // A symbolic alternative may establish a source contract without creating an executable body.
-      definition_warnings = ScalarChecker{}.check_program(source, true).warnings;
+      definition_warnings = std::move(ScalarChecker{}.check_program(source, true, nullptr).value().warnings);
     plan_initialization(source);
     if (!program_.native_entries.empty() && !program_.initializers.empty())
       implementation_gap(program_.initializers.front().expression->at, "module initialization in a C entry library");
@@ -24286,11 +24362,14 @@ class ScalarChecker {
                 present.at.span.first == warning.at.span.first && present.message == warning.message;
           })) program_.warnings.push_back(std::move(warning));
     }
+    program_.warnings.erase(program_.warnings.begin(), program_.warnings.begin() + reported_warnings);
     return std::move(program_);
   }
 
 public:
-  CheckedProgram check(const SourceProgram &source) { return check_program(source, false); }
+  std::optional<CheckedProgram> check(const SourceProgram &source, CompilationDiagnostics &diagnostics) {
+    return check_program(source, false, &diagnostics);
+  }
 };
 
 } // namespace cod::language

@@ -42,25 +42,24 @@ public:
       auto source = ModuleLoader(std::move(inputs), diagnostics).load(entry);
       for (const auto &module : source.modules) if (module.source)
         result.scanned_modules.push_back(module.path.string());
-      // Until the checker can account for unavailable prerequisites, give it
-      // only a fully loaded input world.
-      if (diagnostics.has_error() || !source.ready_for_checking() || !diagnostics.continue_work()) return result;
-      auto checked = ScalarChecker{}.check(source);
-      for (auto &warning : checked.warnings) if (!diagnostics.append(std::move(warning))) return result;
+      if (!diagnostics.complete()) return result;
+      auto checked = ScalarChecker{}.check(source, diagnostics);
+      if (!checked) return result;
+      for (auto &warning : checked->warnings) if (!diagnostics.append(std::move(warning))) return result;
       if (std::ranges::any_of(diagnostics.findings(), [&](const auto &finding) {
             const auto *warning = std::get_if<WarningDiagnostic>(&finding.primary);
             return warning && warnings_.promotes(warning->kind);
           })) return result;
 
       LLVMEmission emission;
-      auto [text, bitcode] = emission.emit(checked, emit_text, emit_bitcode, specialize_, bounds_checks_);
-      for (const auto module : checked.execution_order)
+      auto [text, bitcode] = emission.emit(*checked, emit_text, emit_bitcode, specialize_, bounds_checks_);
+      for (const auto module : checked->execution_order)
         result.execution_order.push_back(source.modules[module].path.string());
       result.llvm_ir = std::move(text);
       result.bitcode = std::move(bitcode);
-      if (emit_providers) result.providers = emit_native_providers(checked, emission.provider_row_layouts(),
+      if (emit_providers) result.providers = emit_native_providers(*checked, emission.provider_row_layouts(),
                                                                    source.modules.front().path.generic_string());
-      result.native_library = !checked.native_entries.empty();
+      result.native_library = !checked->native_entries.empty();
       result.accepted = true;
     } catch (const LocatedFailure &failure) {
       try {
