@@ -5,3 +5,8 @@ using "./CompilerStatus.cod" CompilerStatus;
 export proc "C" source_use(here work(ref bytes:const SourceBytes in S, ref lines:const SourceLines in S) -> CompilerStatus,
                            handle revision:SourceRevision in S) -> CompilerStatus
     where {const owner S};
+
+export proc with_source(here work(bytes:const SourceBytes in S, lines:const SourceLines in S) -> CompilerStatus,
+                 handle opened:SourceRevision in S) -> CompilerStatus where {const owner S} {
+    return source_use(opened) (bytes, lines) => { continue work(bytes, lines); };
+}

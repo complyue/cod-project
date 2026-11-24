@@ -46,7 +46,7 @@ using "./ModuleExports.cod" {
 using "./NameResolution.cod" {
     NameBindings, NameWork, NameResolutionResult, unsupported_module_declaration,
     unsupported_ordinary_construction,
-    resolve_module_names, apply_module_name_uses, text_type, is_lexical_builder, owner_binding, ordinary_selection, record_type,
+    resolve_module_names_recovering, ProductTypeRecovery, apply_module_name_uses, text_type, is_lexical_builder, owner_binding, ordinary_selection, record_type,
 };
 using "./NativeDeclarations.cod" {
     NativeDeclarationResult, check_native_declarations, declared_exception_type, native_declaration_first, unsupported_owning_region_result,
@@ -357,10 +357,26 @@ export func bind_selected_module(source:const SourceBytes in S, nodes:const Expr
                                      emit_object:bool, allow_structural:bool, result:ModuleBindingResult in R) -> bool
     where {const owner S, const owner N, const owner C, owner X, owner Y, owner W, const owner I, owner F,
         owner H, owner R} {
+    ref recovery = make ProductTypeRecovery {
+        maximum <- 0u64; count <- 0u64; incomplete <- false; first_diagnostic <- 0u8; first_site <- no_node()
+    };
+    return bind_selected_module_recovering(source, nodes, selections, selected_used, selected, bindings,
+        work, interfaces, interface_used, facts, views, emit_object, allow_structural, result, recovery)
+}
+
+export func bind_selected_module_recovering(source:const SourceBytes in S, nodes:const ExprNodes in N,
+                                 selections:const CheckedSelections in C, selected_used:u64,
+                                 selected:SelectedExports in X, bindings:NameBindings in Y,
+                                 work:NameWork in W, interfaces:const ModuleInterfaces in I, interface_used:u64,
+                                 facts:AggregateFacts in F, views:SuppliedViews in H,
+                                     emit_object:bool, allow_structural:bool, result:ModuleBindingResult in R,
+                                     recovery:ProductTypeRecovery in P) -> bool
+    where {const owner S, const owner N, const owner C, owner X, owner Y, owner W, const owner I, owner F,
+        owner H, owner R, owner P} {
     ref names = make NameResolutionResult { diagnostic <- 0u8; node <- no_node(); enclosing_defer <- no_node(); };
-    if (!resolve_module_names(source, nodes, result.frontend.tree, selected, bindings, work,
+    if (!resolve_module_names_recovering(source, nodes, result.frontend.tree, selected, bindings, work,
         interfaces, interface_used,
-        !emit_object, allow_structural, selections, selected_used, names) ||
+        !emit_object, allow_structural, selections, selected_used, names, recovery) ||
         !apply_module_name_uses(selections, selected_used, result.frontend.tree, work, bindings,
             selected, interfaces, interface_used, names)) {
         binding_diagnostic(nodes, result, module_binding_failed(), names.diagnostic, names.node);

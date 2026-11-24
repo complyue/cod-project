@@ -18,12 +18,22 @@ static cod_booter_diagnostic_sink *snapshot_destination(cod_native_DiagnosticDes
     return (cod_booter_diagnostic_sink *)(uintptr_t)destination.owner;
 }
 
+cod_native_status cod_native_diagnostic_limit_impl(cod_native_DiagnosticDestination_borrow destination,
+    uint64_t *result) {
+    const cod_booter_diagnostic_sink *sink = snapshot_destination(destination);
+    if (!sink && (!destination.payload || destination.payload > UINTPTR_MAX ||
+                  destination.payload != destination.owner)) return COD_NATIVE_BOUNDARY_ERROR;
+    *result = sink ? sink->finding_limit : 0;
+    return COD_NATIVE_OK;
+}
+
 cod_native_status cod_native_write_diagnostic_impl(cod_native_DiagnosticDestination_borrow destination,
     uint8_t stage, uint32_t code, uint64_t first_line, uint64_t first_column, uint64_t past_line, uint64_t past_column,
     uint64_t related_line, uint64_t related_column, uint64_t os_error, uint8_t *status) {
     if (!destination.payload || destination.payload > UINTPTR_MAX) return COD_NATIVE_BOUNDARY_ERROR;
-    if (destination.payload != destination.owner && !snapshot_destination(destination))
-        return COD_NATIVE_BOUNDARY_ERROR;
+    cod_booter_diagnostic_sink *sink = snapshot_destination(destination);
+    if (destination.payload != destination.owner && !sink) return COD_NATIVE_BOUNDARY_ERROR;
+    if (sink) sink->primary_retained = false;
     cod_booter_diagnostic *record = (cod_booter_diagnostic *)(uintptr_t)destination.payload;
     *record = (cod_booter_diagnostic){
         .stage = stage,
@@ -53,6 +63,17 @@ static bool diagnostic_range(const uint8_t *base, uint64_t count, uint64_t first
     return memchr(bytes->bytes, 0, bytes->size) == NULL;
 }
 
+static uint64_t finding_count(const cod_booter_diagnostic_event *event) {
+    return event->kind == cod_booter_source_reports
+        ? ((const cod_booter_source_diagnostics *)event)->count : 1;
+}
+
+static bool valid_finding_range(const cod_booter_diagnostic_sink *sink, uint64_t first, uint64_t count) {
+    if (!count || count > UINT64_MAX - first) return false;
+    const cod_booter_diagnostic_event *last = sink->last_event;
+    return first == (last ? last->first_finding + finding_count(last) : 0);
+}
+
 static void append_event(cod_booter_diagnostic_sink *sink, cod_booter_diagnostic_event *event) {
     if (sink->last_event) sink->last_event->next = event;
     else sink->first_event = event;
@@ -65,10 +86,10 @@ cod_native_status cod_native_append_package_diagnostic_impl(
     cod_native_append_package_diagnostic_view7 importer, uint64_t import_first, uint64_t import_past,
     cod_native_append_package_diagnostic_view10 spelling, uint64_t first, uint64_t past,
     cod_native_append_package_diagnostic_view13 candidate, cod_native_append_package_diagnostic_view14 other,
-    uint8_t *status) {
+    uint64_t finding, uint8_t *status) {
     cod_booter_diagnostic_sink *sink = snapshot_destination(destination);
     diagnostic_bytes ranges[4];
-    if (!sink || !first_line || !first_column || !past_line || !past_column ||
+    if (!sink || !valid_finding_range(sink, finding, 1) || !first_line || !first_column || !past_line || !past_column ||
         past_line < first_line || (past_line == first_line && past_column < first_column) ||
         kind < package_shadow || kind > package_process_failure ||
         !diagnostic_range(importer.base, importer.count, import_first, import_past, &ranges[0]) ||
@@ -97,7 +118,7 @@ cod_native_status cod_native_append_package_diagnostic_impl(
         return COD_NATIVE_OK;
     }
     *report = (cod_booter_package_diagnostic){
-        .event = {.kind = cod_booter_package_report},
+        .event = {.kind = cod_booter_package_report, .first_finding = finding},
         .kind = kind,
         .os_error = os_error,
         .first = {first_line, first_column},
@@ -117,12 +138,14 @@ cod_native_status cod_native_append_package_diagnostic_impl(
     return COD_NATIVE_OK;
 }
 
-cod_native_status cod_native_write_parse_reports_impl(cod_native_DiagnosticDestination_borrow destination,
-    cod_native_write_parse_reports_view1 rows, uint64_t used,
-    cod_native_write_parse_reports_view3 path, uint64_t first, uint64_t past, uint8_t stage, uint8_t *status) {
+cod_native_status cod_native_write_source_reports_impl(cod_native_DiagnosticDestination_borrow destination,
+    cod_native_write_source_reports_view1 rows, uint64_t used,
+    cod_native_write_source_reports_view3 path, uint64_t first, uint64_t past, uint8_t stage,
+    uint64_t first_finding, uint8_t *status) {
     cod_booter_diagnostic_sink *sink = snapshot_destination(destination);
-    if (!sink || !rows.base || !used || used > rows.count ||
+    if (!sink || !rows.base || used > rows.count ||
         used > SIZE_MAX / sizeof(cod_booter_diagnostic) ||
+        !valid_finding_range(sink, first_finding, used) ||
         !path.base || first >= past || past > path.count || past > SIZE_MAX || past - first >= SIZE_MAX)
         return COD_NATIVE_BOUNDARY_ERROR;
 
@@ -138,10 +161,12 @@ cod_native_status cod_native_write_parse_reports_impl(cod_native_DiagnosticDesti
     const uint8_t *path_bytes = path.base + (size_t)first;
     if (memchr(path_bytes, '\0', path_size)) return COD_NATIVE_BOUNDARY_ERROR;
     for (size_t i = 0; i < (size_t)used; ++i) {
-        const cod_native_write_parse_reports_row1 *row = &rows.base[i];
-        if (!row->code || !row->first_line || !row->first_column || !row->past_line || !row->past_column ||
-            row->past_line < row->first_line ||
-            (row->past_line == row->first_line && row->past_column < row->first_column))
+        const cod_native_write_source_reports_row1 *row = &rows.base[i];
+        const bool located = row->first_line && row->first_column && row->past_line && row->past_column &&
+            (row->past_line > row->first_line ||
+                (row->past_line == row->first_line && row->past_column >= row->first_column));
+        const bool unlocated = !row->first_line && !row->first_column && !row->past_line && !row->past_column;
+        if (!row->code || (!located && !unlocated) || (!row->related_line != !row->related_column))
             return COD_NATIVE_BOUNDARY_ERROR;
     }
 
@@ -153,22 +178,72 @@ cod_native_status cod_native_write_parse_reports_impl(cod_native_DiagnosticDesti
         return COD_NATIVE_OK;
     }
     *batch = (cod_booter_source_diagnostics){
-        .event = {.kind = cod_booter_source_reports},
+        .event = {.kind = cod_booter_source_reports, .first_finding = first_finding},
         .count = (size_t)used,
     };
     char *copied_path = (char *)(batch->reports + batch->count);
     memcpy(copied_path, path_bytes, path_size);
     copied_path[path_size] = '\0';
     for (size_t i = 0; i < batch->count; ++i) {
-        const cod_native_write_parse_reports_row1 *row = &rows.base[i];
+        const cod_native_write_source_reports_row1 *row = &rows.base[i];
         batch->reports[i] = (cod_booter_diagnostic){
             .stage = stage,
             .code = row->code,
             .first = {row->first_line, row->first_column},
             .past = {row->past_line, row->past_column},
+            .related = {row->related_line, row->related_column},
         };
     }
     append_event(sink, &batch->event);
+    const cod_booter_diagnostic *first_report = &batch->reports[0];
+    if (first_finding == 0 && sink->primary.stage == first_report->stage && sink->primary.code == first_report->code &&
+        sink->primary.first.line == first_report->first.line && sink->primary.first.column == first_report->first.column)
+        sink->primary_retained = true;
+    *status = 0;
+    return COD_NATIVE_OK;
+}
+
+
+static cod_booter_diagnostic_event *retained_finding(cod_booter_diagnostic_sink *sink, uint64_t finding) {
+    if (finding == UINT64_MAX) return NULL;
+    for (cod_booter_diagnostic_event *event = sink->first_event; event; event = event->next) {
+        if (finding < event->first_finding) continue;
+        if (finding - event->first_finding < finding_count(event)) return event;
+    }
+    return NULL;
+}
+
+cod_native_status cod_native_append_dependency_note_impl(cod_native_DiagnosticDestination_borrow destination,
+    uint64_t finding, cod_native_append_dependency_note_view2 path, uint64_t first, uint64_t past,
+    uint64_t first_line, uint64_t first_column, uint64_t past_line, uint64_t past_column, uint8_t *status) {
+    cod_booter_diagnostic_sink *sink = snapshot_destination(destination);
+    if (!sink || !first_line || !first_column || !past_line || !past_column || past_line < first_line ||
+        (past_line == first_line && past_column < first_column)) return COD_NATIVE_BOUNDARY_ERROR;
+    diagnostic_bytes importer;
+    cod_booter_diagnostic_event *event = retained_finding(sink, finding);
+    if (!event || !diagnostic_range(path.base, path.count, first, past, &importer) || !importer.size)
+        return COD_NATIVE_BOUNDARY_ERROR;
+    if (importer.size >= (size_t)PTRDIFF_MAX - sizeof(cod_booter_dependency_note)) {
+        sink->snapshot_failed = true;
+        *status = 1;
+        return COD_NATIVE_OK;
+    }
+    cod_booter_dependency_note *note = malloc(sizeof(*note) + importer.size + 1);
+    if (!note) {
+        sink->snapshot_failed = true;
+        *status = 1;
+        return COD_NATIVE_OK;
+    }
+    *note = (cod_booter_dependency_note){
+        .finding = finding,
+        .first = {first_line, first_column},
+        .past = {past_line, past_column},
+    };
+    memcpy(note->path, importer.bytes, importer.size);
+    note->path[importer.size] = 0;
+    if (event->last_note) event->last_note->next = note;
+    else event->first_note = note;
+    event->last_note = note;
     *status = 0;
     return COD_NATIVE_OK;
 }

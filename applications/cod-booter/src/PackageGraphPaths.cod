@@ -1,4 +1,4 @@
-using "./CompilerStatus.cod" CompilerStatus { Complete, OpenFailed, Rejected, ScratchFailed };
+using "./CompilerStatus.cod" CompilerStatus { Complete, OpenFailed, Rejected, ScratchFailed, DiagnosticsIncomplete };
 using "std:exceptions" OutOfMemoryError;
 using "./NativeSource.cod" {
     Path, PathOwner, SourceRevision,
@@ -8,14 +8,14 @@ using "./NativeModuleInputs.cod" {
     probe_package_module, prepare_package_module,
 };
 using "./NativeDiagnostics.cod" {
-    DiagnosticDestination, PackageDiagnosticKind,
+    DiagnosticDestination, DiagnosticRuns, diagnostic_budget_full, PackageDiagnosticKind,
     PackageDiagnosticKind {
         PackageShadow, PackageAmbiguity, PackageMissing, PackageLookupFailure,
         PackageInputFailure, PackageProcessFailure, InvalidModulePath,
     },
 };
 using "./PackageDiagnostics.cod" {
-    report_package_path, package_issue, package_delivery_failure,
+    report_package_path, package_issue, package_delivery_failure, dependency_diagnostics_incomplete,
 };
 using "./SourceStorage.cod" SourceBytes;
 using "./PackageInputs.cod" PackageSourceRoots;
@@ -34,16 +34,23 @@ export data PackageEdge {
     importer_past:u64;
 }
 
+func package_rejection_code(status:CompilerStatus) -> u8 {
+    if (status == Complete) return package_issue();
+    return if (status == DiagnosticsIncomplete) {
+        dependency_diagnostics_incomplete()
+    } else { package_delivery_failure() }
+}
+
 export proc report_package_issue(
     handle opened:SourceRevision in S, handle diagnostic:DiagnosticDestination in D,
     kind:PackageDiagnosticKind, os_error:u64, keys:const SourceBytes in G,
-    spelling:const SourceBytes in F, edge:const PackageEdge in E)
-    -> u8 where {const owner S, owner D, const owner G, const owner F, const owner E} {
+    spelling:const SourceBytes in F, edge:const PackageEdge in E, run:DiagnosticRuns in G)
+    -> u8 where {const owner S, owner D, owner G, const owner F, const owner E} {
     ref empty = make SourceBytes(0u64, 0u8);
     val result <- report_package_path(opened, diagnostic, kind, os_error, edge.first, edge.past,
         keys, edge.importer_first, edge.importer_past,
-        spelling, edge.spelling_first, edge.spelling_past, empty, empty);
-    return if (result == Complete) { package_issue() } else { package_delivery_failure() }
+        spelling, edge.spelling_first, edge.spelling_past, empty, empty, run);
+    return package_rejection_code(result)
 }
 
 proc load_for_edge(
@@ -51,21 +58,21 @@ proc load_for_edge(
     handle diagnostic:DiagnosticDestination in D, keys:const SourceBytes in G,
     spelling:const SourceBytes in F, edge:const PackageEdge in E,
     ready:bool in G, ref var rows:PackageSourceRoots in G, ref var paths:SourceBytes in G,
-    row_count:u64 in G, path_used:u64 in G)
+    row_count:u64 in G, path_used:u64 in G, run:DiagnosticRuns in G)
     -> u8 where {const owner A, const owner S, owner D, owner G, const owner F, const owner E} {
     if (ready) return 0u8;
     ref process_status = make u64 { 0u64 };
     try {
         val result <- load_package_inputs(entry, rows, paths, row_count, path_used, process_status);
         if (result == OpenFailed) return report_package_issue(
-            opened, diagnostic, PackageProcessFailure, process_status, keys, spelling, edge);
+            opened, diagnostic, PackageProcessFailure, process_status, keys, spelling, edge, run);
         if (result != Complete) return report_package_issue(
-            opened, diagnostic, PackageInputFailure, 0u64, keys, spelling, edge);
+            opened, diagnostic, PackageInputFailure, 0u64, keys, spelling, edge, run);
         ready <- true;
         return 0u8
     } catch (error:const PackageCaptureException) {
         return report_package_issue(
-            opened, diagnostic, PackageInputFailure, error.os_error, keys, spelling, edge)
+            opened, diagnostic, PackageInputFailure, error.os_error, keys, spelling, edge, run)
     }
 }
 
@@ -105,8 +112,8 @@ proc report_claims(
     kind:PackageDiagnosticKind, keys:const SourceBytes in G,
     spelling:const SourceBytes in F, edge:const PackageEdge in E,
     left:const SourceBytes in L, left_first:u64, left_past:u64,
-    right:const SourceBytes in R, right_first:u64, right_past:u64)
-    -> CompilerStatus where {const owner S, owner D, const owner G, const owner F,
+    right:const SourceBytes in R, right_first:u64, right_past:u64, run:DiagnosticRuns in G)
+    -> CompilerStatus where {const owner S, owner D, owner G, const owner F,
                               const owner E, const owner L, const owner R} {
     val start <- edge.spelling_first;
     val end <- edge.spelling_past;
@@ -119,7 +126,7 @@ proc report_claims(
         write_claim(candidate, left, left_first, left_past, spelling, start, end);
         write_claim(other, right, right_first, right_past, spelling, start, end);
         return report_package_path(opened, diagnostic, kind, 0u64, edge.first, edge.past,
-            keys, edge.importer_first, edge.importer_past, spelling, start, end, candidate, other)
+            keys, edge.importer_first, edge.importer_past, spelling, start, end, candidate, other, run)
     } catch (error:const OutOfMemoryError) {
         return ScratchFailed
     }
@@ -127,6 +134,7 @@ proc report_claims(
 
 func lookup_failure(code:u8) -> CompilerStatus {
     if (code == package_delivery_failure()) return ScratchFailed;
+    if (code == dependency_diagnostics_incomplete()) return DiagnosticsIncomplete;
     return Rejected
 }
 
@@ -135,8 +143,8 @@ proc finish_package_lookup(
     handle destination:PathOwner in P, rows:const PackageSourceRoots in G,
     paths:const SourceBytes in G, keys:const SourceBytes in G,
     spelling:const SourceBytes in F, edge:const PackageEdge in E, root:u64, row_count:u64,
-    bundle:const SourceBytes in B)
-    -> CompilerStatus where {const owner S, owner D, owner P, const owner G, const owner F,
+    bundle:const SourceBytes in B, run:DiagnosticRuns in G)
+    -> CompilerStatus where {const owner S, owner D, owner P, owner G, const owner F,
                               const owner E, const owner B} {
     val start <- edge.spelling_first;
     val end <- edge.spelling_past;
@@ -144,25 +152,26 @@ proc finish_package_lookup(
     val probe <- probe_package_module(bundle, 0u64, length, spelling, start, end);
     if (probe != 0u64 && probe != absent_module())
         return lookup_failure(report_package_issue(
-            opened, diagnostic, PackageLookupFailure, probe, keys, spelling, edge));
+            opened, diagnostic, PackageLookupFailure, probe, keys, spelling, edge, run));
     val error <- 0u64;
     if (root < row_count) {
         val first <- rows[root].path_first;
         val past <- rows[root].path_past;
         if (probe == 0u64) {
             val shadow <- report_claims(opened, diagnostic, PackageShadow, keys, spelling, edge,
-                paths, first, past, bundle, 0u64, length);
-            if (shadow != Complete) return shadow
+                paths, first, past, bundle, 0u64, length, run);
+            if (shadow != Complete) return shadow;
+            if (diagnostic_budget_full(run)) return DiagnosticsIncomplete
         };
         error <- prepare_package_module(destination, paths, first, past, spelling, start, end)
     } else {
         if (probe == absent_module())
             return lookup_failure(report_package_issue(
-                opened, diagnostic, PackageMissing, 0u64, keys, spelling, edge));
+                opened, diagnostic, PackageMissing, 0u64, keys, spelling, edge, run));
         error <- prepare_package_module(destination, bundle, 0u64, length, spelling, start, end)
     };
     if (error != 0u64) return lookup_failure(report_package_issue(
-        opened, diagnostic, PackageLookupFailure, error, keys, spelling, edge));
+        opened, diagnostic, PackageLookupFailure, error, keys, spelling, edge, run));
     return Complete
 }
 
@@ -170,8 +179,8 @@ proc prepare_resolved_module(
     handle opened:SourceRevision in S, handle diagnostic:DiagnosticDestination in D,
     handle destination:PathOwner in P, rows:const PackageSourceRoots in G,
     paths:const SourceBytes in G, keys:const SourceBytes in G,
-    spelling:const SourceBytes in F, edge:const PackageEdge in E, val row_count:u64, path_used:u64)
-    -> u8 where {const owner S, owner D, owner P, const owner G, const owner F, const owner E} {
+    spelling:const SourceBytes in F, edge:const PackageEdge in E, val row_count:u64, path_used:u64,
+    run:DiagnosticRuns in G) -> u8 where {const owner S, owner D, owner P, owner G, const owner F, const owner E} {
     ref resolution = make PackageResolutions(1u64, make MissingModule {});
     probe_package_roots(rows, paths, row_count, path_used, spelling,
         edge.spelling_first, edge.spelling_past, resolution);
@@ -180,14 +189,12 @@ proc prepare_resolved_module(
         (MissingModule) -> {};
         (SearchFailed { val os_error <-; }) -> {
             return report_package_issue(
-                opened, diagnostic, PackageLookupFailure, os_error, keys, spelling, edge)
+                opened, diagnostic, PackageLookupFailure, os_error, keys, spelling, edge, run)
         };
         (AmbiguousModule { val first_root <-; val second_root <-; }) -> {
-            return if (report_claims(opened, diagnostic, PackageAmbiguity, keys, spelling, edge,
+            return package_rejection_code(report_claims(opened, diagnostic, PackageAmbiguity, keys, spelling, edge,
                 paths, rows[first_root].path_first, rows[first_root].path_past,
-                paths, rows[second_root].path_first, rows[second_root].path_past) == Complete) {
-                package_issue()
-            } else { package_delivery_failure() }
+                paths, rows[second_root].path_first, rows[second_root].path_past, run))
         };
         (PackageModule { val root <-; }) -> { (selected <- root):void };
     };
@@ -195,14 +202,15 @@ proc prepare_resolved_module(
         own handle directory:BundledDirectory <- make own handle BundledDirectory();
         val status <- bundled_directory_use(directory) (bundle) => {
             continue finish_package_lookup(opened, diagnostic, destination, rows, paths, keys,
-                spelling, edge, selected, row_count, bundle)
+                spelling, edge, selected, row_count, bundle, run)
         };
         if (status == Complete) return 0u8;
         if (status == ScratchFailed) return package_delivery_failure();
+        if (status == DiagnosticsIncomplete) return dependency_diagnostics_incomplete();
         return package_issue()
     } catch (error:const BundledDirectoryException) {
         return report_package_issue(
-            opened, diagnostic, PackageLookupFailure, error.os_error, keys, spelling, edge)
+            opened, diagnostic, PackageLookupFailure, error.os_error, keys, spelling, edge, run)
     }
 }
 
@@ -211,12 +219,12 @@ export proc prepare_logical_dependency(
     handle diagnostic:DiagnosticDestination in D, handle destination:PathOwner in P,
     keys:const SourceBytes in G, spelling:const SourceBytes in F, edge:const PackageEdge in E,
     ready:bool in G, ref var rows:PackageSourceRoots in G, ref var paths:SourceBytes in G,
-    row_count:u64 in G, path_used:u64 in G)
+    row_count:u64 in G, path_used:u64 in G, run:DiagnosticRuns in G)
     -> u8
     where {const owner A, const owner S, owner D, owner P, owner G, const owner F, const owner E} {
     val loaded <- load_for_edge(entry, opened, diagnostic, keys, spelling, edge, ready,
-        rows, paths, row_count, path_used);
+        rows, paths, row_count, path_used, run);
     if (loaded != 0u8) return loaded;
     return prepare_resolved_module(opened, diagnostic, destination, rows, paths, keys, spelling,
-        edge, row_count, path_used)
+        edge, row_count, path_used, run)
 }
