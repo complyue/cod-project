@@ -10,6 +10,15 @@
     "stdout": "6\n4\n"
   },
   {
+    "file": "argument-recovery-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "argument-recovery-error.cod:3:25: expected an argument expression",
+      "argument-recovery-error.cod:3:33: expected an argument expression"
+    ]
+  },
+  {
     "file": "named-array-owner.cod",
     "exit": 0,
     "stdout": "0\n5\n0\n0\n7\n7\n17\n29\n2\n11\n44\n12\n29\n"

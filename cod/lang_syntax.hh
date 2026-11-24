@@ -38,7 +38,8 @@ public:
   throw LocatedFailure(at, message);
 }
 
-enum class SyntaxRole { module_item, block_item, binding_name, type_annotation, initializer, ref_group_item };
+enum class SyntaxRole { module_item, block_item, binding_name, type_annotation, initializer, ref_group_item,
+                        argument_operand };
 struct SyntaxErrorReference {
   SyntaxRole role;
   size_t report;
@@ -780,7 +781,8 @@ class Parser {
     if (is(";") || is("}") || peek().kind == TokenKind::end) return true;
     if (role == SyntaxRole::module_item || role == SyntaxRole::block_item) return false;
     if (is(",") || is(")") || is("]")) return true;
-    if (role == SyntaxRole::initializer || role == SyntaxRole::ref_group_item) return false;
+    if (role == SyntaxRole::initializer || role == SyntaxRole::ref_group_item ||
+        role == SyntaxRole::argument_operand) return false;
     return is("<-") || is("=") || is("in") || (role == SyntaxRole::binding_name && is(":"));
   }
 
@@ -1171,6 +1173,27 @@ class Parser {
     return kind == TokenKind::identifier || kind == TokenKind::integer || kind == TokenKind::real ||
            kind == TokenKind::symbol || is("(", 2) || is("{", 2) || is("!", 2);
   }
+  Expr argument_operand(bool accepts_ref, bool named) {
+    const auto first = cursor_;
+    const auto saved = controls_;
+    try {
+      if (operand_boundary(SyntaxRole::argument_operand)) fail(peek().at, "expected an argument expression");
+      std::optional<Location> checked_ref;
+      if (accepts_ref && starts_checked_ref_argument()) {
+        checked_ref = expect("not").at;
+        expect("null");
+      }
+      auto operand = expression(0, HereAttachment::immediate, !named);
+      operand->checked_ref_argument = std::move(checked_ref);
+      operand->spread = take("...");
+      if (operand->checked_ref_argument && operand->spread)
+        fail(*operand->checked_ref_argument, "a checked ref selection supplies one ordinary argument");
+      return operand;
+    } catch (const LocatedFailure &failure) {
+      controls_ = saved;
+      return recover_operand(first, failure.diagnostic, SyntaxRole::argument_operand);
+    }
+  }
   void arguments(Expression &expr, bool allow_supplied_body = true) {
     const auto close = closing_delimiter_[cursor_];
     const bool follows_call = allow_supplied_body && close < tokens_.size() &&
@@ -1191,16 +1214,7 @@ class Parser {
           argument->span.past = expect("...").at.span.past;
           argument->spread = true;
         } else if (!named || !is("->")) {
-          std::optional<Location> checked_ref;
-          if (accepts_ref_argument && starts_checked_ref_argument()) {
-            checked_ref = expect("not").at;
-            expect("null");
-          }
-          argument = expression(0, HereAttachment::immediate, !named);
-          argument->checked_ref_argument = std::move(checked_ref);
-          argument->spread = take("...");
-          if (argument->checked_ref_argument && argument->spread)
-            fail(*argument->checked_ref_argument, "a checked ref selection supplies one ordinary argument");
+          argument = argument_operand(accepts_ref_argument, named);
         }
         if (named && take("->")) {
           const bool construction = expr.kind == Expression::Kind::make_object || expr.kind == Expression::Kind::make_exception;
@@ -1208,7 +1222,7 @@ class Parser {
           if (argument) selected->children.push_back(std::move(argument));
           else if (labelled_yield) fail(selected->at, "a labelled yield operand cannot request a default");
           argument = std::move(selected);
-        } else if (labelled_yield) {
+        } else if (labelled_yield && !argument->syntax_error) {
           fail(argument->at, "a labelled yield requires a label for every operand");
         }
         expr.children.push_back(std::move(argument));
