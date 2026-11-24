@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review the seed registrar and importer for empty procedure families
+
+<a id="k-seed-empty-procedure-import-20261124"></a>
+**K-SEED-EMPTY-PROCEDURE-IMPORT-20261124.** [D-ARCH-REVIEW r89→r90](design/ImplementationArchitecture.md#registering-and-importing-an-empty-procedure-family-in-the-seed) continues P-682/P-683 under the [declaration](#h-empty-procedure-family-20261124) and [import](#h-proc-import-identity-20261124) decisions. The registrar and resource binder share program-owned family indices. [D-15r73→r74](design/ModuleWorlds.md#selecting-a-symbolic-procedure-family) uses the seed-supported signed literal `7` in the provider example. The prior `ded2f1590c8336639843d22acdbd3ab6f11fd7ba:tests/cod/language/import-mapping.cod` exercises different-symbol body mapping. Preserve its separate acceptance while verifying same-symbol import, extension and explicit installation through the runner.
+
 ## 2026-11-24 — Let a procedure import bind the published symbol
 
 <a id="h-proc-import-identity-20261124"></a>

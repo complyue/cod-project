@@ -1,10 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 73 · Recorded: 2026-11-24 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 74 · Recorded: 2026-11-24 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
 
-[D-15-DEFAULT-EXPORTS](DesignAuthorityRegistry.md#d-15-default-exports) r73 covers [identity introduction by procedure import](#selecting-a-symbolic-procedure-family) under [H-PROC-IMPORT-IDENTITY-20261124](../CHANGELOG.md#h-proc-import-identity-20261124) and P-692/P-693. Verify the single directive on empty and populated families, optional explicit identity selection and a conflicting destination. The receiving interpretation and extension permission belong to the import.
+[D-15-DEFAULT-EXPORTS](DesignAuthorityRegistry.md#d-15-default-exports) r74 continues the [provider example](../CHANGELOG.md#k-seed-empty-procedure-import-20261124) for [identity introduction by procedure import](#selecting-a-symbolic-procedure-family) under [H-PROC-IMPORT-IDENTITY-20261124](../CHANGELOG.md#h-proc-import-identity-20261124) and P-692/P-693. Verify the single directive on empty and populated families, optional explicit identity selection and a conflicting destination. The receiving interpretation and extension permission belong to the import.
 
 [D-10-EMPTY-PROC-FAMILY](DesignAuthorityRegistry.md#d-10-empty-proc-family) at D-15r72 covers [selection before the first procedure method](#selecting-a-symbolic-procedure-family) under [the project user’s publication decision](../CHANGELOG.md#h-empty-procedure-family-20261124). P-709/P-710 retain H-374’s complete-family publication, destination identity and receiving-world permissions. Check a vocabulary with zero methods and an importer contributing the first one.
 
@@ -394,7 +394,7 @@ export proc @p;
 ```cod
 # provider.cod
 import "./vocabulary.cod" proc @p;
-proc @p() -> i64 { return 7i64 }
+proc @p() -> i64 { return 7 }
 ```
 
 The symbol declaration creates the empty family. Export publishes it under the symbol’s identity. In the provider, the single `import` both binds the vocabulary’s `@p` identity and grants permission to contribute the first method in the provider’s interpretation. Writing `symbol from "./vocabulary.cod" @p;` as well is valid. Both directives refer to the same symbol, and the import supplies the family and extension permission. Identity selection alone grants no extension. The vocabulary and an independent source-preserving `using` still see zero methods. A `using` can select the empty family into a free name but grants no extension permission. A different preselected identity still conflicts under its verb’s rules. Export, import and using can all occur before a handler is installed. Written, default-expanded and complete selections apply the same per-item checks. A body mixin still requires a body. [Procedure declarations](SymbolicDynamicScope.md#procedure-families-before-the-first-method)
