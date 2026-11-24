@@ -1435,6 +1435,10 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
             facts[operand].identity_module != facts[formal].identity_module ||
             facts[operand].reception != borrowed_ref() || facts[operand].owner == no_node() ||
             facts[operand].target_readonly == 0u8) return wrong_operand_type();
+        val receipt <- facts[operand].case_receipt;
+        if (receipt != no_node() && (facts[operand].selection != operand ||
+            !receipt_in_context(facts, invocation, receipt) || facts[operand].owner != facts[receipt].owner))
+            return unproved_owner();
         copy_fact(facts, argument, operand);
         facts[argument].loans_case_receipt <- true;
         return record_owner_argument(nodes, facts, owners, formal, facts[operand].owner, argument, invocation)
@@ -3416,10 +3420,43 @@ func check_inline_product_field(nodes:const ExprNodes in N, facts:OperandFacts i
         facts[at].target_readonly <- 1u8;
         return 0u8
     };
-    val result_kind <- source_scalar_kind(result.kind);
-    if (result_kind == 0u8) return unsupported_product_layout();
-    set_fact(facts, at, result_kind, independent_value(), no_node(), result.identity, 0u8);
+    val field_kind <- source_scalar_kind(result.kind);
+    if (field_kind == 0u8) return unsupported_product_layout();
+    set_fact(facts, at, field_kind, independent_value(), no_node(), result.identity, 0u8);
     facts[at].identity_module <- result.defining_module;
+    return 0u8
+}
+
+func check_case_product_field(nodes:const ExprNodes in N, names:const NameBindings in B,
+    facts:OperandFacts in F, at:u64, used:u64, revision:u64, receiver:u64, field:u64, ordinal:u64,
+    record:const DeclaredType in R, result:const DeclaredType in T, source_only:bool) -> u8
+    where {const owner N, const owner B, owner F, const owner R, const owner T} {
+    ref projection = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
+    if (!inspect_field_selection(nodes, revision, used, at, projection) ||
+        projection.receiver != receiver || projection.field != field || receiver >= at ||
+        ordinal == no_node() || record.kind != record_type()) return invalid_operand_tree();
+    val receipt <- facts[receiver].case_receipt;
+    val actual_owner <- facts[receiver].owner;
+    if (receipt >= receiver || actual_owner == no_node() || actual_owner != facts[receipt].owner ||
+        actual_owner != names[receipt].scope || facts[receipt].kind != received_product() ||
+        facts[receipt].reception != local_place() || facts[receipt].case_receipt != receipt ||
+        !receipt_in_context(facts, at, receipt) || facts[receiver].identity != record.identity ||
+        facts[receiver].identity_module != record.defining_module) return unsupported_product_layout();
+    if (facts[receiver].kind == received_product()) {
+        if (facts[receiver].reception != local_place() || names[receiver].kind != local_binding() ||
+            names[receiver].declaration != receipt) return unsupported_product_layout()
+    } else {
+        if (facts[receiver].kind != source_product_loan() || facts[receiver].reception != borrowed_ref() ||
+            facts[receiver].selection != receiver || facts[receiver].target_readonly == 0u8)
+            return unsupported_product_layout()
+    };
+    if (result.kind != record_type() || !source_only)
+        return receive_case_bits(facts, at, result, independent_value(), no_node());
+    set_fact(facts, at, source_product_loan(), borrowed_ref(), actual_owner, result.identity, 0u8);
+    facts[at].identity_module <- result.defining_module;
+    facts[at].case_receipt <- receipt;
+    facts[at].selection <- at;
+    facts[at].target_readonly <- 1u8;
     return 0u8
 }
 
@@ -3461,11 +3498,12 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                     return check_inline_product_field(nodes, facts, at, used, revision, receiver, field,
                         ordinal, record, schema)
             };
-            CaseProductField { val receiver <- receiver; val record <- record; val schema <- value_type; } -> {
-                if (receiver >= at || facts[receiver].kind != received_product() ||
-                    facts[receiver].identity != record.identity ||
-                    facts[receiver].identity_module != record.defining_module) return unsupported_product_layout();
-                return receive_case_bits(facts, at, schema, independent_value(), no_node())
+            CaseProductField {
+                val receiver <- receiver; val field <- field; val ordinal <- ordinal;
+                val record <- record; val schema <- value_type;
+            } -> {
+                return check_case_product_field(nodes, names, facts, at, used, revision, receiver, field,
+                    ordinal, record, schema, source_only)
             };
             _ -> {}
         }

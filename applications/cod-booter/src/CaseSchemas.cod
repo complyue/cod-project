@@ -41,7 +41,7 @@ export data ConstructorCaseFact =
     InlineProductField { receiver:u64; field:u64; ordinal:u64; record:DeclaredType; value_type:DeclaredType; } |
     CaseConstructor { case_site:u64; defining_module:u64; declaration:u64; ordinal:u64; representative:u64; } |
     CaseFieldReceipt { case_site:u64; arm:u64; pattern:u64; field:u64; value_type:DeclaredType; } |
-    CaseProductField { receiver:u64; record:DeclaredType; value_type:DeclaredType; } |
+    CaseProductField { receiver:u64; field:u64; ordinal:u64; record:DeclaredType; value_type:DeclaredType; } |
     CaseSumReceipt { receipt:u64; arm:u64; value_type:DeclaredType; } |
     CaseSumProjection { receiver:u64; field:u64; receipt:u64; arm:u64; record:DeclaredType; value_type:DeclaredType; };
 export array ConstructorCaseFacts[u64]:ConstructorCaseFact;
@@ -778,10 +778,11 @@ func describe_inline_product(facts:const ConstructorCaseFacts in F, site:u64,
 }
 
 func remember_case_projection(facts:ConstructorCaseFacts in F, site:u64, receiver:u64,
-    record:const DeclaredType in T, type:const DeclaredType in T)
+    field:u64, ordinal:u64, record:const DeclaredType in T, type:const DeclaredType in T)
     -> void where {owner F, const owner T} {
     facts[site] <- make CaseProductField {
-        receiver <- receiver; record <- record; value_type <- type
+        receiver <- receiver; field <- field; ordinal <- ordinal;
+        record <- record; value_type <- type
     };
     return
 }
@@ -833,13 +834,15 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
                 record.kind <- type.kind;
                 record.defining_module <- type.defining_module;
                 record.identity <- type.identity;
-                if (!describe_record_field(source, nodes, names, selected, work, spellings, spelling_used, interfaces,
-                        published, selection.field, used, revision, type))
+                ordinal <- no_node();
+                if (!case_bits_type(record, aggregate, interfaces, published) ||
+                    !describe_record_member(source, nodes, names, selected, work, spellings, spelling_used, interfaces,
+                        published, selection.field, used, revision, true, type, ordinal) || ordinal == no_node())
                     return case_problem(report, selection.field, unproved_case_field());
                 if (!native_scalar(type.kind) && type.kind != enum_type() &&
                     !case_bits_type(type, aggregate, interfaces, published))
                     return case_problem(report, selection.field, 94u8);
-                remember_case_projection(facts, site, selection.receiver, record, type)
+                remember_case_projection(facts, site, selection.receiver, selection.field, ordinal, record, type)
             }
         }
     };
