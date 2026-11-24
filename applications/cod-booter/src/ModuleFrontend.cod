@@ -4,7 +4,7 @@ using "./ParserStorage.cod" ExprPayload {
     IndexSelection, ArrayLength, DeferredClauses, LocalCallableSlot, CallableDefinition, RaiseWithCause,
     RethrowWithCause, NamedArgument, OwningHandleBinding, BorrowedHandleBinding, OwnHandleConstruction,
     BorrowHandleConstruction, HereInvocation, RegionDefinition, OwningRegionBinding, RegionConstruction, OwningRegionResult,
-    ConstructorCasePattern, ProcedureSymbol, ScopedProcedureDefinition, ProcedureActivation,
+    ConstructorCasePattern, ProcedureSymbol, ScopedProcedureDefinition, ProcedureActivation, ValueSymbol,
     BulkModuleSelection, DefaultPublicSet, ModuleItem, ModuleSelection, Publication,
     BareReferenceBinding, ReferenceBindingGroup, InitializeReservation, PredicateAssertion, ReferenceIdentity,
 };
@@ -265,6 +265,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64,
                     if (emit_object) { unsupported_constructor_case() } else { 0u8 }
                 };
                 (ProcedureSymbol) -> { unsupported_procedure_symbol() };
+                ValueSymbol -> unsupported_module_declaration();
                 (ScopedProcedureDefinition) -> { unsupported_scoped_procedure() };
                 (ProcedureActivation) -> { unsupported_scoped_procedure() };
                 (RegionDefinition) -> { unsupported_named_region() };
