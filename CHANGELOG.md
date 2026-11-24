@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review constructor field reception in the booter source checker
+
+<a id="k-booter-case-field-source-20261123"></a>
+**K-BOOTER-CASE-FIELD-SOURCE-20261123.** [D-20-MODULE-GRAPH r66→r67](applications/cod-booter/docs/ModuleGraph.md#checking-a-constructor-field-received-by-value) and D-ARCH-REVIEW r82→r83 continue P-680–P-683 under the [case contract](#h-case-contract-20261119) and [coverage rule](#h-case-coverage-20261119). At `831caad4ff65618201f763d1dfcce3f520912518:applications/cod-booter/src/ParserStorage.cod`, `syntax_boundary` requires the active constructor, a finite bits transfer into a fresh local and two ordinary nominal projections. Scope covers declaration and provider checking.
+
 ## 2026-11-23 — Review borrowing the graph owner at the ordinary writer call
 
 <a id="k-booter-owning-local-call-loan-20261123"></a>
