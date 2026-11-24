@@ -1,6 +1,7 @@
 using "./SourceStorage.cod" SourceBytes;
 using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
-using "./SourceAccess.cod" same_bytes;
+using "./ParserStorage.cod" { SourceSpan, BulkSelectionSites, inspect_bulk_selection,
+    PublicView { DefaultPublic } };
 using "./ParserStorage.cod" {
     ExprNodes, no_node,
     HereSites, inspect_here_invocation, DirectCallSites, direct_invocation,
@@ -48,7 +49,7 @@ using "./ParserStorage.cod" ExprPayload {
 };
 using "./ParserStorage.cod" NameSyntax { OrdinaryName, SymbolicName };
 using "./ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource, ReexportResource };
-using "./ParserStorage.cod" SelectionSyntax { SelectionReady };
+using "./ParserStorage.cod" SelectionSyntax { SelectionReady, InvalidSelection, OtherSelectionSyntax };
 using "./ParserStorage.cod" TextLiteralSyntax { NulFreeLiteral, InteriorNulLiteral };
 using "./ParserStorage.cod" text_literal_syntax;
 using "./ParserStorage.cod" BindingSyntax { BareBinding };
@@ -72,6 +73,8 @@ using "./ModuleExports.cod" {
     SelectedExports, ModuleExports, exception_type_export, exception_root_identity, error_root_identity,
     native_handle_export, record_export, array_export, nominal_exception_export, callable_export, enum_export, sum_export, ordinary_callable_shape,
     symbol_export, abstract_type_export, lexical_builder_export, aggregate_export_shape, numeric_record_shape,
+    CheckedSelections, StagedExportNames, SelectionSpelling { SourceSpelling, GraphSpelling },
+    checked_selection_site, project_public_import, same_selection_spelling,
 };
 using "./ModuleExportStorage.cod" FamilyMembership {
     UnprovedMembership, PromiseOnly, FixedMethods, VariadicMethod
@@ -1920,7 +1923,8 @@ export func check_native_declarations(nodes:const ExprNodes in N, names:NameBind
 
 export data ModulePublication {
     module_identity:u64;
-    source_first:u64;
+    selection_count:u64;
+    graph_spelling_count:u64;
 }
 
 func count_owner_clauses(nodes:const ExprNodes in N, tail:u64, used:u64, revision:u64) -> u64 where {const owner N} {
@@ -2263,15 +2267,21 @@ func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in
 # A re-export changes spelling and preserves the original definition.
 export func publish_module_exports(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                    names:const NameBindings in B, selected:const SelectedExports in E,
+                                   selections:const CheckedSelections in T,
+                                   catalog:const SourceBytes in K, graph:const SourceBytes in G,
                                    facts:const AggregateFacts in F,
                                    publication:const ModulePublication in P, used:u64, revision:u64, exports:ModuleExports in X,
+                                   spellings:StagedExportNames in X,
                                    count:u64 in C, conflict:u64 in C) -> bool
-    where {const owner S, const owner N, const owner B, const owner E, const owner F, const owner P, owner X, owner C} {
+    where {const owner S, const owner N, const owner B, const owner E, const owner T,
+           const owner K, const owner G, const owner F, const owner P, owner X, owner C} {
     conflict <- no_node();
     if (publication.module_identity == 0u64 || publication.module_identity == no_node() ||
         used > intrinsic (len)(nodes) ||
         used > intrinsic (len)(names) || used > intrinsic (len)(selected) || used > intrinsic (len)(facts) ||
-        count > intrinsic (len)(exports))
+        count > intrinsic (len)(exports) || intrinsic (len)(spellings) != intrinsic (len)(exports) ||
+        publication.selection_count > intrinsic (len)(selections) ||
+        publication.graph_spelling_count > intrinsic (len)(graph))
         return false;
     val next <- count;
     val name <- no_node();
@@ -2288,6 +2298,8 @@ export func publish_module_exports(source:const SourceBytes in S, nodes:const Ex
         symbolic <- false; mode <- UseResource; nature <- OrdinaryResource;
     };
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
+    ref bulk = make BulkSelectionSites { path <- no_node(); mode <- UseResource; view <- DefaultPublic };
+    val expanded <- OtherSelectionSyntax;
     for (at in 0u64 .. used) {
         name <- no_node();
         selection <- inspect_module_selection(nodes, revision, used, at, resource) == SelectionReady &&
@@ -2300,33 +2312,45 @@ export func publish_module_exports(source:const SourceBytes in S, nodes:const Ex
             } else {};
             if (module_item_publication(nodes, used, at)) {
                 if (inspect_sequence_entry(nodes, revision, used, at, entry) != ModuleSequence) return false;
-                (name <- if (inspect_module_selection(nodes, revision, used, entry.item, resource) == SelectionReady &&
-                             resource.mode == ImportResource) {
-                    resource.local
-                } else { definition_name(nodes, revision, used, entry.item) }):void;
+                expanded <- inspect_bulk_selection(nodes, revision, used, entry.item, bulk);
+                if (expanded == InvalidSelection) return false;
+                if (expanded == SelectionReady) {
+                    if (bulk.mode != ImportResource ||
+                        !append_public_imports(source, catalog, graph, selections, publication, revision,
+                                               entry.item, exports, spellings, count, next)) {
+                        conflict <- entry.item;
+                        return false
+                    }
+                } else {
+                    (name <- if (inspect_module_selection(nodes, revision, used, entry.item, resource) == SelectionReady &&
+                                 resource.mode == ImportResource) {
+                        resource.local
+                    } else { definition_name(nodes, revision, used, entry.item) }):void
+                }
             } else {};
         };
         if (name != no_node()) {
             past <- syntax_past(nodes, used, name);
-            if (next == intrinsic (len)(exports) || past > no_node() - publication.source_first)
-                return false;
+            if (next == intrinsic (len)(exports) || past > intrinsic (len)(source)) return false;
             if (selection) {
                 if (!publish_selection(selected, at, exports, next)) return false;
             } else {
                 if (!publish_declaration(nodes, names, selected, facts, publication, name, exports, next, used, revision)) return false;
             };
             first <- syntax_first(nodes, used, name) + if (name_syntax(nodes, used, name) == SymbolicName) { 1u64 } else { 0u64 };
-            prior <- previous_public_name(source, publication, exports, count, next, first, past);
-            if (prior != no_node() && (exports[prior].origin_module != exports[next].origin_module ||
-                exports[prior].kind != exports[next].kind || exports[prior].identity != exports[next].identity)) {
+            if (first >= past) return false;
+            remember_source_export_name(spellings, next, first, past);
+            prior <- previous_public_name(source, catalog, graph, publication.graph_spelling_count,
+                spellings, count, next);
+            if (prior != no_node() && !same_public_identity(exports, prior, next)) {
                 conflict <- name;
                 return false;
             } else {};
             exports[next].publishing_module <- publication.module_identity;
             exports[next].module_first <- 0u64;
             exports[next].module_past <- 0u64;
-            exports[next].name_first <- publication.source_first + first;
-            exports[next].name_past <- publication.source_first + past;
+            exports[next].name_first <- first;
+            exports[next].name_past <- past;
             if (prior == no_node()) { (next <- next + 1u64):void; } else {};
         } else {};
     };
@@ -2334,13 +2358,56 @@ export func publish_module_exports(source:const SourceBytes in S, nodes:const Ex
     return true;
 }
 
-func previous_public_name(source:const SourceBytes in S, publication:const ModulePublication in P,
-                          exports:const ModuleExports in E, start:u64, limit:u64, first:u64, past:u64)
-    -> u64 where {const owner S, const owner P, const owner E} {
-    val offset <- publication.source_first;
+func remember_source_export_name(spellings:StagedExportNames in R, at:u64, first:u64, past:u64)
+    -> void where {owner R} {
+    spellings[at] <- make SourceSpelling { span <- make SourceSpan { first <- first; past <- past } };
+    return
+}
+
+func remember_graph_export_name(spellings:StagedExportNames in R, at:u64, first:u64, past:u64)
+    -> void where {owner R} {
+    spellings[at] <- make GraphSpelling { span <- make SourceSpan { first <- first; past <- past } };
+    return
+}
+
+func same_public_identity(exports:const ModuleExports in E, before:u64, after:u64)
+    -> bool where {const owner E} {
+    return exports[before].origin_module == exports[after].origin_module &&
+        exports[before].kind == exports[after].kind && exports[before].identity == exports[after].identity
+}
+
+func previous_public_name(source:const SourceBytes in S, catalog:const SourceBytes in B,
+    graph:const SourceBytes in G, graph_used:u64, spellings:const StagedExportNames in E,
+    start:u64, limit:u64) -> u64 where {const owner S, const owner B, const owner G, const owner E} {
     for (at in start .. limit) {
-        if (same_bytes(source, first, past, source, exports[at].name_first - offset, exports[at].name_past - offset))
+        if (same_selection_spelling(spellings[at], spellings[limit], source, catalog, graph, graph_used))
             return at;
     };
     return no_node();
+}
+
+func append_public_imports(source:const SourceBytes in S, catalog:const SourceBytes in B,
+    graph:const SourceBytes in G, selections:const CheckedSelections in T,
+    publication:const ModulePublication in P, revision:u64, directive:u64,
+    exports:ModuleExports in X, spellings:StagedExportNames in X, start:u64, next:u64 in C)
+    -> bool where {const owner S, const owner B, const owner G, const owner T, const owner P,
+                   owner X, owner C} {
+    val previous <- no_node();
+    val site <- no_node();
+    for (row in 0u64 .. publication.selection_count) {
+        site <- checked_selection_site(selections, publication.selection_count, row, revision);
+        if (site == no_node()) return false;
+        if (site == directive) {
+            if (next >= intrinsic (len)(exports) ||
+                !project_public_import(selections, publication.selection_count, row, revision,
+                    directive, publication.graph_spelling_count, publication.module_identity,
+                    exports[next])) return false;
+            remember_graph_export_name(spellings, next, exports[next].name_first, exports[next].name_past);
+            previous <- previous_public_name(source, catalog, graph, publication.graph_spelling_count,
+                spellings, start, next);
+            if (previous != no_node() && !same_public_identity(exports, previous, next)) return false;
+            if (previous == no_node()) { (next <- next + 1u64):void }
+        }
+    };
+    return true
 }

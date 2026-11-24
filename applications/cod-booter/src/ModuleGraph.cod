@@ -20,9 +20,9 @@ using "./ParserStorage.cod" {
     Tokens, ExprNodes, no_node, syntax_first, syntax_past, ModuleSelectionSites, inspect_module_selection,
     BulkSelectionSites, inspect_bulk_selection, PublicView { DefaultPublic },
     first_module_item, SequenceEntry, inspect_sequence_entry, CallableSites, inspect_callable, inspect_default_set,
-    DeclarationSites, inspect_declaration,
+    DeclarationSites, inspect_declaration, module_item_publication, SourceSpan,
 };
-using "./ParserStorage.cod" ModuleSelectionMode { UseResource };
+using "./ParserStorage.cod" ModuleSelectionMode { UseResource, ReexportResource };
 using "./ParserStorage.cod" SelectionSyntax { SelectionReady };
 using "./ParserStorage.cod" SequenceSyntax { ModuleSequence };
 using "./ParserStorage.cod" CallableSyntax { ModuleCallable, ModuleCallablePromise };
@@ -49,6 +49,7 @@ using "./ModuleExports.cod" {
     resolve_enum_selections, resolve_sum_selections, verify_aggregate_selections,
     invalid_export_tree, missing_module_export, wrong_export_kind,
     CheckedSelections, CheckedSelection { UnpublishedSelection },
+    StagedExportNames, SelectionSpelling { SourceSpelling, GraphSpelling },
     measure_module_selections, stage_module_selections, project_written_selections,
 };
 using "./ModuleDefaults.cod" {
@@ -243,12 +244,44 @@ func add_span(size:u64, first:u64, past:u64, limit:u64) -> u64 {
     return size + (past - first);
 }
 
+func measure_written_publications(nodes:const ExprNodes in N, revision:u64, used:u64) -> u64
+    where {const owner N} {
+    ref resource = make ModuleSelectionSites {
+        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
+        symbolic <- false; mode <- UseResource; nature <- OrdinaryResource
+    };
+    ref bulk = make BulkSelectionSites { path <- no_node(); mode <- UseResource; view <- DefaultPublic };
+    ref declaration = make DeclarationSites {
+        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false
+    };
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    val count <- 0u64;
+    for (at in 0u64 .. used) {
+        if ((inspect_module_selection(nodes, revision, used, at, resource) == SelectionReady &&
+                resource.mode == ReexportResource) ||
+            inspect_declaration(nodes, revision, used, at, declaration) == LocalPublication) {
+            (count <- count + 1u64):void
+        } else {
+            if (module_item_publication(nodes, used, at)) {
+                if (inspect_sequence_entry(nodes, revision, used, at, entry) != ModuleSequence)
+                    return no_node();
+                if (inspect_bulk_selection(nodes, revision, used, entry.item, bulk) != SelectionReady)
+                    { (count <- count + 1u64):void }
+            }
+        }
+    };
+    return count
+}
+
 func measure_publication(source:const SourceBytes in S, exports:const ModuleExports in F,
+                         names:const StagedExportNames in F, graph_used:u64,
                          interfaces:const ModuleInterfaces in F, commands:const NativeCommands in F,
                          module:u64, export_count:u64, interface_count:u64, command_count:u64,
                          size:PublicationSize in M)
     -> bool where {const owner S, const owner F, owner M} {
-    if (export_count > intrinsic (len)(exports) || interface_count > intrinsic (len)(interfaces) ||
+    if (export_count > intrinsic (len)(exports) || export_count > intrinsic (len)(names) ||
+        interface_count > intrinsic (len)(interfaces) ||
         command_count > intrinsic (len)(commands)) return false;
     val limit <- intrinsic (len)(source);
     val spelling_bytes <- 0u64;
@@ -257,8 +290,19 @@ func measure_publication(source:const SourceBytes in S, exports:const ModuleExpo
     val remaining_members <- 0u64;
     for (i in 0u64 .. export_count) {
         if (exports[i].publishing_module != module) return false;
-        spelling_bytes <- add_span(spelling_bytes, exports[i].name_first, exports[i].name_past, limit);
-        if (spelling_bytes == no_node()) return false;
+        case names[i] of {
+            SourceSpelling { val range <- span; } -> {
+                if (range.first != exports[i].name_first || range.past != exports[i].name_past ||
+                    range.first >= range.past) return false;
+                spelling_bytes <- add_span(spelling_bytes, range.first, range.past, limit);
+                if (spelling_bytes == no_node()) return false
+            };
+            GraphSpelling { val range <- span; } -> {
+                if (range.first != exports[i].name_first || range.past != exports[i].name_past ||
+                    range.first >= range.past || range.past > graph_used) return false
+            };
+            _ -> { return false }
+        }
     };
     for (i in 0u64 .. interface_count) {
         if (remaining_members == 0u64) {
@@ -291,18 +335,24 @@ func copy_span(source:const SourceBytes in S, first:u64, past:u64,
     return start + (past - first);
 }
 
-func copy_publication(source:const SourceBytes in S, exports:const ModuleExports in F, interfaces:const ModuleInterfaces in F,
+func copy_publication(source:const SourceBytes in S, exports:const ModuleExports in F,
+                      names:const StagedExportNames in F, interfaces:const ModuleInterfaces in F,
                       published:ModuleExports in G, published_interfaces:ModuleInterfaces in G, spellings:SourceBytes in G,
                       export_count:u64, interface_count:u64, export_first:u64, interface_first:u64, spelling_first:u64)
     -> void where {const owner S, const owner F, owner G} {
     val start <- spelling_first;
     val past <- spelling_first;
     for (i in 0u64 .. export_count) {
-        past <- copy_span(source, exports[i].name_first, exports[i].name_past, spellings, start);
         published[export_first + i] <- exports[i];
-        published[export_first + i].name_first <- start;
-        published[export_first + i].name_past <- past;
-        start <- past;
+        case names[i] of {
+            SourceSpelling { val range <- span; } -> {
+                past <- copy_span(source, range.first, range.past, spellings, start);
+                published[export_first + i].name_first <- start;
+                published[export_first + i].name_past <- past;
+                (start <- past):void
+            };
+            _ -> {}
+        }
     };
     for (i in 0u64 .. interface_count) {
         past <- copy_span(source, interfaces[i].name_first, interfaces[i].name_past, spellings, start);
@@ -551,7 +601,8 @@ func locate_variadic_profile(source:const SourceBytes in S, lines:const SourceLi
 proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in S,
                        handle diagnostic:DiagnosticDestination in D, nodes:const ExprNodes in W,
                        selected:SelectedExports in W, names:NameBindings in W, work:NameWork in W,
-                       staged:ModuleExports in W, defaults:StagedDefaultExports in W,
+                       staged:ModuleExports in W, export_names:StagedExportNames in W,
+                       defaults:StagedDefaultExports in W, checked_selections:CheckedSelections in W,
                        progress:ModuleProgressRows in W,
                        catalog_spellings:const SourceBytes in B, catalog_exports:const ModuleExports in B,
                        spellings:const SourceBytes in G, published:const ModuleExports in G, spelling_size:u64, export_count:u64,
@@ -582,18 +633,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         if (native && rejected_unsupported_declaration(result)) return FormUnsupported;
         return Rejected
     };
-    val selection_capacity <- 0u64;
     ref selection_report = make ExportResolutionResult { diagnostic <- 0u8; node <- no_node() };
-    if (!measure_module_selections(nodes, result.frontend.tree, selected, visits, visit_count, published,
-        export_count, published_defaults, published_default_count, spelling_size,
-        selection_capacity, selection_report)) {
-        binding_diagnostic(nodes, result, module_selection_failed(), selection_report.diagnostic,
-            selection_report.node);
-        report_rejection(source, lines, diagnostic, result.stage, result.diagnostic,
-            result.frontend.diagnostic_first, result.frontend.diagnostic_past, result.related_first);
-        return Rejected
-    };
-    ref checked_selections = make CheckedSelections(selection_capacity, make UnpublishedSelection {});
     val checked_used <- 0u64;
     if (!stage_module_selections(source, nodes, result.frontend.tree, selected, catalog_spellings, catalog_exports,
         visits, visit_count, published, export_count, published_defaults, published_default_count, spellings,
@@ -641,11 +681,15 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
             return Rejected;
         };
     };
-    ref publication = make ModulePublication { module_identity <- progress[0u64].identity; source_first <- 0u64; };
+    ref publication = make ModulePublication {
+        module_identity <- progress[0u64].identity; selection_count <- checked_used;
+        graph_spelling_count <- spelling_size
+    };
     val count <- 0u64;
     val conflict <- no_node();
-    if (!publish_module_exports(source, nodes, names, selected, aggregate_facts,
-                                 publication, used, result.frontend.tree.revision, staged, count, conflict)) {
+    if (!publish_module_exports(source, nodes, names, selected, checked_selections,
+        catalog_spellings, spellings, aggregate_facts, publication, used, result.frontend.tree.revision,
+        staged, export_names, count, conflict)) {
         if (conflict != no_node()) {
             report_rejection(source, lines, diagnostic, module_binding_failed(), 75u8,
                              syntax_first(nodes, result.frontend.tree.used, conflict), syntax_past(nodes, result.frontend.tree.used, conflict), no_node());
@@ -657,8 +701,9 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     val default_count <- 0u64;
     val default_problem <- no_node();
     val default_result <- stage_module_defaults(
-        source, nodes, used, result.frontend.tree.revision, staged, publication.module_identity,
-        0u64, count, publication.source_first, defaults, default_count, default_problem);
+        source, nodes, used, result.frontend.tree.revision, staged, export_names,
+        catalog_spellings, spellings, spelling_size, publication.module_identity,
+        0u64, count, defaults, default_count, default_problem);
     if (default_result == DefaultStorageExhausted) {
         report_scratch_error(diagnostic, 1u32);
         return ScratchFailed
@@ -706,7 +751,8 @@ func write_unit_row(units:NativeUnitRows in G, at:u64, command_first:u64, comman
 }
 
 proc publish_visit(handle opened:SourceRevision in S, progress:const ModuleProgressRows in F,
-                   staged:const ModuleExports in F, staged_defaults:const StagedDefaultExports in F,
+                   staged:const ModuleExports in F, staged_names:const StagedExportNames in F,
+                   staged_defaults:const StagedDefaultExports in F,
                    staged_interfaces:const ModuleInterfaces in F,
                    staged_commands:const NativeCommands in F, visits:Visits in G,
                    ref var exports:ModuleExports in G, ref var defaults:DefaultExportRefs in G,
@@ -723,11 +769,12 @@ proc publish_visit(handle opened:SourceRevision in S, progress:const ModuleProgr
     val default_count <- progress[0u64].default_count;
     const val interface_count <- progress[0u64].interface_count;
     const val command_count <- progress[0u64].command_count;
+    const val spelling_first <- spelling_used;
     ref sizes = make PublicationSizes(1u64, make PublicationSize {
         source_bytes <- 0u64; spelling_bytes <- 0u64; literal_bytes <- 0u64; literals <- 0u64;
     });
     val measured <- with_source(opened) (source, lines) => {
-        if (!measure_publication(source, staged, staged_interfaces, staged_commands,
+        if (!measure_publication(source, staged, staged_names, spelling_first, staged_interfaces, staged_commands,
                                  module, export_count, interface_count, command_count, sizes[0u64]))
             { continue ScratchFailed; };
         continue Complete;
@@ -737,7 +784,6 @@ proc publish_visit(handle opened:SourceRevision in S, progress:const ModuleProgr
     const val export_first <- export_used;
     val default_first <- default_used;
     const val interface_first <- interface_used;
-    const val spelling_first <- spelling_used;
     const val command_first <- command_used;
     const val literal_first <- literal_used;
     val export_past <- add_span(export_first, 0u64, export_count, no_node());
@@ -766,7 +812,7 @@ proc publish_visit(handle opened:SourceRevision in S, progress:const ModuleProgr
         return ScratchFailed;
 
     with_source(opened) (source, lines) => {
-        copy_publication(source, staged, staged_interfaces, exports, interfaces, spellings,
+        copy_publication(source, staged, staged_names, staged_interfaces, exports, interfaces, spellings,
                          export_count, interface_count, export_first, interface_first, spelling_first);
         copy_unit_material(source, staged_commands, commands, literals, spellings, command_count,
                            command_first, literal_first, literal_start);
@@ -936,14 +982,6 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             };
             structural_dependency <- false;
         });
-        ref staged = make ModuleExports(capacity, make ModuleExport {
-            module_first <- 0u64; module_past <- 0u64; name_first <- 0u64; name_past <- 0u64;
-            identity <- 0u64; kind <- 0u8; checked <- 0u8; publishing_module <- 0u64; origin_module <- 0u64;
-            owner_module <- 0u64; owner_identity <- 0u64; shape <- 0u8;
-        });
-        ref staged_defaults = make StagedDefaultExports(capacity, make StagedDefaultExport {
-            local_row <- no_node(); nature <- OrdinaryResource
-        });
         ref staged_interfaces = make ModuleInterfaces(capacity, make ModuleInterfaceRow {
             defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
             interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
@@ -993,15 +1031,53 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         const val visit_count <- used;
         const val interface_count <- interface_used;
         const val spelling_size <- spelling_used;
+        ref parsed_tree = make ParseResult {
+            revision <- progress[0u64].revision; next <- 0u64; used <- progress[0u64].used;
+            root <- progress[0u64].root; diagnostic <- 0u8; supplied_here <- false; case_control <- false;
+            reports <- 0u64; lexical_reports <- 0u64; exhausted <- false
+        };
+        ref selection_report = make ExportResolutionResult { diagnostic <- 0u8; node <- no_node() };
+        val selection_count <- 0u64;
+        if (!measure_module_selections(nodes, parsed_tree, selected, visits, visit_count, exports,
+            export_count, defaults, default_count, spelling_size, selection_count, selection_report)) {
+            const val problem <- selection_report.node;
+            const val code <- selection_report.diagnostic;
+            const val first <- syntax_first(nodes, parsed_tree.used, problem);
+            const val past <- syntax_past(nodes, parsed_tree.used, problem);
+            return with_source(opened) (source, lines) => {
+                report_rejection(source, lines, diagnostic, module_selection_failed(), code,
+                    first, past, no_node());
+                continue Rejected
+            }
+        };
+        const val selection_capacity <- selection_count;
+        val written <- measure_written_publications(nodes, parsed_tree.revision, parsed_tree.used);
+        if (written == no_node()) return ScratchFailed;
+        val publication_capacity <- add_span(written, 0u64, selection_capacity, no_node());
+        if (publication_capacity == no_node()) return ScratchFailed;
+        allocating <- true;
+        ref checked_selections = make CheckedSelections(selection_capacity, make UnpublishedSelection {});
+        ref staged = make ModuleExports(publication_capacity, make ModuleExport {
+            module_first <- 0u64; module_past <- 0u64; name_first <- 0u64; name_past <- 0u64;
+            identity <- 0u64; kind <- 0u8; checked <- 0u8; publishing_module <- 0u64; origin_module <- 0u64;
+            owner_module <- 0u64; owner_identity <- 0u64; shape <- 0u8
+        });
+        ref export_names = make StagedExportNames(publication_capacity,
+            make SourceSpelling { span <- make SourceSpan { first <- 0u64; past <- 0u64 } });
+        ref staged_defaults = make StagedDefaultExports(publication_capacity, make StagedDefaultExport {
+            local_row <- no_node(); nature <- OrdinaryResource
+        });
+        allocating <- false;
         val bound <- with_source(opened) (source, lines) => {
             continue bind_graph_module(source, lines, diagnostic, nodes, selected, names, work,
-                staged, staged_defaults, progress, builtin_spellings, builtins, spellings, exports,
+                staged, export_names, staged_defaults, checked_selections, progress,
+                builtin_spellings, builtins, spellings, exports,
                 spelling_size, export_count, visits, visit_count, defaults, default_count,
                 staged_interfaces, interfaces, interface_count,
                 facts, owners, sites, staged_commands)
         };
         if (bound != Complete) return bound;
-        return publish_visit(opened, progress, staged, staged_defaults, staged_interfaces,
+        return publish_visit(opened, progress, staged, export_names, staged_defaults, staged_interfaces,
             staged_commands,
             visits, exports, defaults, interfaces, spellings, commands, units, literals,
                 export_used,

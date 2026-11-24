@@ -1,7 +1,8 @@
 using "./SourceStorage.cod" SourceBytes;
-using "./SourceAccess.cod" same_bytes;
 using "./ModuleExportStorage.cod" { ModuleExports, DefaultExportRef, DefaultExportRefs };
-using "./ModuleExports.cod" { symbol_export, matches_export_nature };
+using "./ModuleExports.cod" {
+    symbol_export, matches_export_nature, selected_spelling_matches, StagedExportNames
+};
 using "./ModuleIndex.cod" growth_capacity;
 using "./NameResolution.cod" definition_name;
 using "./ParserStorage.cod" {
@@ -27,8 +28,10 @@ array DefaultMarkOrder[u64]:u64;
 
 func default_public_row(
     source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, name:u64,
-    exports:const ModuleExports in E, module:u64, first_row:u64, past_row:u64, source_base:u64)
-    -> u64 where {const owner S, const owner N, const owner E} {
+    exports:const ModuleExports in E, names:const StagedExportNames in E,
+    catalog:const SourceBytes in B, graph:const SourceBytes in G, graph_used:u64,
+    module:u64, first_row:u64, past_row:u64)
+    -> u64 where {const owner S, const owner N, const owner E, const owner B, const owner G} {
     if (name == no_node()) return no_node();
     val first <- syntax_first(nodes, used, name) +
         if (name_syntax(nodes, used, name) == SymbolicName) { 1u64 } else { 0u64 };
@@ -36,11 +39,8 @@ func default_public_row(
     if (first >= past || past > intrinsic (len)(source)) return no_node();
     for (row in first_row .. past_row) {
         if (exports[row].kind != 0u8 && exports[row].publishing_module == module &&
-            exports[row].name_first >= source_base &&
-            exports[row].name_past >= exports[row].name_first &&
-            exports[row].name_past - source_base <= intrinsic (len)(source) &&
-            same_bytes(source, first, past, source, exports[row].name_first - source_base,
-                exports[row].name_past - source_base))
+            selected_spelling_matches(names[row], source, catalog, graph, graph_used,
+                                      source, first, past))
             return row
     };
     return no_node()
@@ -82,11 +82,15 @@ func read_default_marks(
 
 export func stage_module_defaults(
     source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64,
-    exports:const ModuleExports in E, module:u64, first_row:u64, past_row:u64, source_base:u64,
+    exports:const ModuleExports in E, names:const StagedExportNames in E,
+    catalog:const SourceBytes in B, graph:const SourceBytes in G, graph_used:u64,
+    module:u64, first_row:u64, past_row:u64,
     defaults:StagedDefaultExports in D, count:u64 in C, problem:u64 in C)
-    -> DefaultPublicationStatus where {const owner S, const owner N, const owner E, owner D, owner C} {
+    -> DefaultPublicationStatus
+    where {const owner S, const owner N, const owner E, const owner B, const owner G, owner D, owner C} {
     if (used > intrinsic (len)(nodes) || first_row > past_row ||
-        past_row > intrinsic (len)(exports) || count > intrinsic (len)(defaults))
+        past_row > intrinsic (len)(exports) || past_row > intrinsic (len)(names) ||
+        graph_used > intrinsic (len)(graph) || count > intrinsic (len)(defaults))
         return InvalidDefaultTree:DefaultPublicationStatus;
     ref marks = make DefaultMarkOrder(used, no_node());
     ref mark = make DefaultMarkSites {
@@ -117,7 +121,8 @@ export func stage_module_defaults(
                     return InvalidDefaultTree:DefaultPublicationStatus
                 };
                 row <- default_public_row(
-                    source, nodes, used, mark.name, exports, module, first_row, past_row, source_base);
+                    source, nodes, used, mark.name, exports, names, catalog, graph, graph_used,
+                    module, first_row, past_row);
                 if (row == no_node()) {
                     problem <- site;
                     return UnknownDefaultName:DefaultPublicationStatus
@@ -139,7 +144,8 @@ export func stage_module_defaults(
             };
             name <- definition_name(nodes, revision, used, item.item);
             row <- default_public_row(
-                source, nodes, used, name, exports, module, first_row, past_row, source_base);
+                source, nodes, used, name, exports, names, catalog, graph, graph_used,
+                module, first_row, past_row);
             if (row == no_node()) {
                 problem <- at;
                 return UnknownDefaultName:DefaultPublicationStatus

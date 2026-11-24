@@ -30,6 +30,8 @@ export data SelectionSpelling =
     CatalogSpelling { span:SourceSpan; } |
     GraphSpelling { span:SourceSpan; };
 
+export array StagedExportNames[u64]:SelectionSpelling;
+
 export data CheckedSelection =
     UnpublishedSelection {} |
     SelectedResource {
@@ -67,7 +69,7 @@ func bounded_selection_spelling(
     }
 }
 
-func selected_spelling_matches(
+export func selected_spelling_matches(
     spelling:const SelectionSpelling in L, source:const SourceBytes in S,
     catalog:const SourceBytes in B, graph:const SourceBytes in G, graph_used:u64,
     name:const SourceBytes in M, first:u64, past:u64)
@@ -119,7 +121,7 @@ export func find_selected_name(
     return no_node()
 }
 
-func same_selection_spelling(
+export func same_selection_spelling(
     left:const SelectionSpelling in L, right:const SelectionSpelling in R,
     source:const SourceBytes in S, catalog:const SourceBytes in B,
     graph:const SourceBytes in G, graph_used:u64)
@@ -794,6 +796,54 @@ export func project_checked_resource(selections:const CheckedSelections in F, us
             output.owner_module <- owner_module;
             output.owner_identity <- owner_identity;
             output.shape <- shape;
+            return true
+        };
+        UnpublishedSelection -> false
+    }
+}
+
+export func checked_selection_site(selections:const CheckedSelections in F, used:u64,
+    row:u64, revision:u64) -> u64 where {const owner F} {
+    if (row >= used || used > intrinsic (len)(selections)) return no_node();
+    return case selections[row] of {
+        SelectedResource { val origin <- revision; val directive <- site; } ->
+            if (origin == revision) { directive } else { no_node() };
+        UnpublishedSelection -> no_node()
+    }
+}
+
+export func project_public_import(selections:const CheckedSelections in F, used:u64,
+    row:u64, revision:u64, site:u64, graph_used:u64, facade:u64,
+    output:ModuleExport in R) -> bool
+    where {const owner F, owner R} {
+    if (row >= used || used > intrinsic (len)(selections) || facade == 0u64) return false;
+    return case selections[row] of {
+        SelectedResource {
+            val origin <- revision; val directive <- site; val verb <- mode; val local <- local;
+            val kind <- export_kind; val checked <- checked; val publisher <- publishing_module;
+            val definition <- defining_module; val identity <- identity;
+            val owner_module <- owner_module; val owner_identity <- owner_identity; val shape <- shape;
+        } -> {
+            if (origin != revision || directive != site || verb != ImportResource ||
+                publisher == 0u64 || publisher == facade || kind == 0u8) return false;
+            case local of {
+                GraphSpelling { val span <- span; } -> {
+                    if (span.first >= span.past || span.past > graph_used) return false;
+                    output.name_first <- span.first;
+                    (output.name_past <- span.past):void
+                };
+                _ -> { return false; }
+            };
+            output.publishing_module <- facade;
+            output.origin_module <- definition;
+            output.identity <- identity;
+            output.kind <- kind;
+            output.checked <- checked;
+            output.owner_module <- owner_module;
+            output.owner_identity <- owner_identity;
+            output.shape <- shape;
+            output.module_first <- 0u64;
+            output.module_past <- 0u64;
             return true
         };
         UnpublishedSelection -> false
