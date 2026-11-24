@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 74 · Recorded: 2026-11-24 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 75 · Recorded: 2026-11-24 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+[D-15](DesignAuthorityRegistry.md#d-15) r75 applies the [local handler decision](../CHANGELOG.md#h-local-proc-handler-body-20261124) under P-330. A local body can bind an exported symbol for a scope while its published family and the receiver’s extension permissions stay fixed. Compare lexical and dynamic calls in the [same-signature example](SymbolicDynamicScope.md#installing-a-local-procedure-body).
 
 [D-15-DEFAULT-EXPORTS](DesignAuthorityRegistry.md#d-15-default-exports) r74 continues the [provider example](../CHANGELOG.md#k-seed-empty-procedure-import-20261124) for [identity introduction by procedure import](#selecting-a-symbolic-procedure-family) under [H-PROC-IMPORT-IDENTITY-20261124](../CHANGELOG.md#h-proc-import-identity-20261124) and P-692/P-693. Verify the single directive on empty and populated families, optional explicit identity selection and a conflicting destination. The receiving interpretation and extension permission belong to the import.
 
@@ -112,7 +114,7 @@ These worlds do not model the same set of entities. The relevant connection is *
 
 Types, functions/procedures and their methods are the core entities in H-234. The additional rows locate existing language facilities; they do not add new categories of heap object or public syntax.
 
-A symbolic procedure definition registers or extends module-world method information during compilation; it does not install TLS or capture runtime bindings. Reaching the combined effect definition activates and installs its scoped handler. The installation retains the selected interpretation and required symbolic bindings.
+A symbolic procedure definition registers or extends module-world method information during compilation; it does not install TLS or capture runtime bindings. Reaching an effect with a body installs a fresh anonymous family containing its one local method. Name-only activation installs the selected lexical family. Each installation retains its defining interpretation and required symbolic bindings.
 
 Each receiver integrates exported information for identical identities in its own module world. The operation does not silently mutate the source worlds. Physical copying, sharing of immutable definitions and regional representation must preserve that independence; this inventory does not choose their implementation.
 
@@ -397,7 +399,7 @@ import "./vocabulary.cod" proc @p;
 proc @p() -> i64 { return 7 }
 ```
 
-The symbol declaration creates the empty family. Export publishes it under the symbol’s identity. In the provider, the single `import` both binds the vocabulary’s `@p` identity and grants permission to contribute the first method in the provider’s interpretation. Writing `symbol from "./vocabulary.cod" @p;` as well is valid. Both directives refer to the same symbol, and the import supplies the family and extension permission. Identity selection alone grants no extension. The vocabulary and an independent source-preserving `using` still see zero methods. A `using` can select the empty family into a free name but grants no extension permission. A different preselected identity still conflicts under its verb’s rules. Export, import and using can all occur before a handler is installed. Written, default-expanded and complete selections apply the same per-item checks. A body mixin still requires a body. [Procedure declarations](SymbolicDynamicScope.md#procedure-families-before-the-first-method)
+The symbol declaration creates the empty family. Export publishes it under the symbol’s identity. In the provider, the single `import` both binds the vocabulary’s `@p` identity and grants permission to contribute the first method in the provider’s interpretation. Writing `symbol from "./vocabulary.cod" @p;` as well is valid. Both directives refer to the same symbol, and the import supplies the family and extension permission. Identity selection alone grants no extension. The vocabulary and an independent source-preserving `using` still see zero methods. Either can install a local body for that symbol without publishing a method. A `using` can select the empty family into a free name but grants no extension permission. A different preselected identity still conflicts under its verb’s rules. Export, import and using can all occur before a handler is installed. Written, default-expanded and complete selections apply the same per-item checks. A body mixin still requires a body. [Procedure declarations](SymbolicDynamicScope.md#procedure-families-before-the-first-method)
 
 These excerpts belong to three separate modules. The tariff package publishes its methods under
 the billing vocabulary's `@quote` identity.
@@ -665,14 +667,14 @@ A declared symbol carries its identity and signature in the module world. H-381 
 | Operation | Compilation/integration | Runtime |
 | --- | --- | --- |
 | Declare or extend a symbolic procedure | Register the method under existing module permissions. | Registration alone installs nothing. |
-| `effect @sym(...) { ... }` | Check the definition in its selected family and interpretation. | Activate the definition, snapshot required bindings and install the scoped handler. |
+| `effect proc @sym(...) { ... }` or `effect @sym(...) { ... }` | Check one local method against the symbol contract. The module family gains no member. | Snapshot its required bindings and install its fresh anonymous family for the scope. |
 | `effect proc @sym;` | Resolve the lexical family under the ordinary selection rules. | Activate it and install the scoped handler. |
 | `@sym(args)` | Select the lexical family and apply ordinary argument dispatch. | Call under current dynamic bindings. |
 | `effect @sym = other` or `effect @sym = @other` for procedure symbols | Reject assignment installation. | |
 
-The installed handler retains its family and module interpretation. Several applicable methods participate in ordinary dispatch. Export, using/import/mixin and extension remain module construction; none implicitly installs a receiver TLS value. Dependency initialization still follows its once-only incorporation contract and can execute its own explicit effects.
+A family installation retains its selected interpretation and uses ordinary method dispatch. A local body installation invokes its single method. Export, using/import/mixin and extension remain module construction; none implicitly installs a receiver TLS value. Dependency initialization still follows its once-only incorporation contract and can execute its own explicit effects.
 
-Skipped runtime paths do not install; repeated runtime execution does not repeat method registration. Existing scope/declaration rules constrain where combined forms may occur. Whole-program compilation prepares admissible actual-type combinations and dispatch. Independent module interpretations remain fixed for that composition and can coexist; a new explicit integration stage is separate from invocation.
+A skipped effect installs nothing. Reentering a body site creates a new activation of its local method. Whole-program compilation prepares admissible actual-type combinations and dispatch. Independent module interpretations remain fixed for that composition and can coexist; a new explicit integration stage is separate from invocation.
 
 Entry-module composition additionally follows H-379: extending a dependency callable requires an explicit entry installation, and that installation cancels dependency installations of the callable. Module definitions and explicitly retained source interpretations remain available. CoD must expose unused installation roots to LLVM elimination; the [cancellation contract](AheadOfTimeExecutionPreparation.md#entry-installation-and-unused-dependency-code) preserves initialization operand effects and all procedure-local installations. Once-only dependency initialization does not override this rule.
 

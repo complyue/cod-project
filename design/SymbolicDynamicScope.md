@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 254 · Recorded: 2026-11-24 · Phase: language/application co-design.
+Design revision: 255 · Recorded: 2026-11-24 · Phase: language/application co-design.
 
 ## Design authority
+
+[D-10-HANDLER-INSTALL](DesignAuthorityRegistry.md#d-10-handler-install) r255 covers the [local single-method handler](#installing-a-local-procedure-body) under the [project user’s decision](../CHANGELOG.md#h-local-proc-handler-body-20261124). P-330/P-613/P-614 distinguish a scoped choice of behavior from module family membership under charter §§3.2 and 6.1. Verify a local override of a same-signature method, calls through both paths, source attribution and restoration on exit.
 
 At r254 the [Actor section](#actor-concurrency-direction) applies the [human decision](../CHANGELOG.md#h-actor-region-transport-and-chan-ends-20261124) on independent chan ends and whole-region transfer over AKCP. The [endpoint roles](ActorChannels.md#independent-chan-endpoints) and [regional transport](ActorChannels.md#regional-transport-over-akcp) scopes specify observable behavior and its acceptance cases under P-711/P-712.
 
@@ -391,7 +393,7 @@ Acceptance covers one overload-backed update, persistent content after the enclo
 
 ### Definition-installed effectful procedures
 
-A reached installation can activate the selected family by name or supply a definition such as `effect @quote() -> u64 { ... };`. Dynamic calls select its currently installed binding with `perform @quote()` or `behave @quote()`. Assigning a procedure into the slot, extracting the installed handler as a value, or adapting, returning or passing it through a callable type rejects. This applies even to a handler whose body returns a constant. A type-only use of a declared signature and compile-time imports of a symbol identity or its methods request no runtime handler. Independent bits, ref/ptr and owned-region effect bindings keep their respective installation rules.
+A reached installation can activate the lexical family by name or supply its own [single-method local family](#installing-a-local-procedure-body), as in `effect @quote() -> u64 { ... };`. Dynamic calls select its currently installed binding with `perform @quote()` or `behave @quote()`. Assigning a procedure into the slot, extracting the installed handler as a value, or adapting, returning or passing it through a callable type rejects. This applies even to a handler whose body returns a constant. A type-only use of a declared signature and compile-time imports of a symbol identity or its methods request no runtime handler. Independent bits, ref/ptr and owned-region effect bindings keep their respective installation rules.
 
 ```cod
 symbol @rate:u64;
@@ -422,13 +424,42 @@ A diagnostic can identify the named procedure and suggest a direct call. The two
 
 A standalone `{{ ... }}` is an immediate call to its own definition. A generator's `yield` has a dedicated handoff to the caller's lexical loop body. Both retain their existing effect and binding checks. The proposed unified here parameter lets a receiver, including a func, invoke a procedural literal explicitly supplied from a proc. Its own code retains the restrictions of its declared kind. [Here callback example](CallableStorageAndHereAccess.md#an-effect-in-a-here-callback)
 
+### Installing a local procedure body
+
+A body-bearing effect has two equivalent spellings, `effect proc @verb(...) { ... }` and `effect @verb(...) { ... }`. On each execution it installs a fresh anonymous family with exactly the written method under the resolved symbol. That method alone must satisfy the slot’s callable contract, including its arguments, result and checked failures. Check its required effects and live lexical captures at activation. Neither an earlier installation nor the named family supplies fallback methods. A local installation needs no family extension permission. A same-signature method in the named family remains available to bare `@verb(...)` calls.
+
+For a family whose ordinary method returns `1u64`, the three calls below distinguish the two targets and verify restoration:
+
+```cod
+using "./base.cod" proc @verb;
+
+proc check() -> void {
+    effect proc @verb;
+    {{
+        effect proc @verb() -> u64 { return 2u64 };
+        assert @verb() == 1u64;
+        assert behave @verb() == 2u64
+    }};
+    assert behave @verb() == 1u64
+}
+```
+
+Omitting `proc` from the installation with a body gives the same three results. A bare `proc @verb() -> u64 { ... }` declaration through the illustrated `using` still rejects as an unauthorized extension.
+
+An identity with a declared procedure signature and an empty family can also receive this local installation. A dynamic call then has a handler for the scope, while a direct family call still needs an applicable registered method. Each reached installation has its own activation. An inner scope restores its predecessor on normal and exceptional exit. Reading the installed procedure as a first-class value is unavailable.
+
+When a diagnostic identifies the anonymous procedure, label it `local proc @verb` using the spelling at its definition and locate the local body or failing use. With a renamed symbol, include its canonical qualified name under the [diagnostic naming rule](../applications/cod-booter/README.md#names-in-diagnostics). Separate body sites for one identity retain distinct source locations.
+
+The seed currently parses both spellings through the same body path and applies the module-family extension check. The booter’s grammar currently reads the short body spelling. The new same-signature behavior requires implementation in both. [Seed reader](../cod/lang_syntax.hh) · [Booter reader](../applications/cod-booter/src/ExpressionParser.cod)
+
 ### Lexical selection, installation and invocation
 
-`using "./base.cod" proc @score` brings the exported symbol identity and its source-preserving procedure family into a free receiving name. A prior selection of the same identity is compatible. A different identity with that spelling conflicts, even with identical signatures. Looking up a shadowing non-symbol fails at the use site. A procedure family selected by `using` grants no extension permission. A consumer’s inline `effect @score(x:u64) -> u64 { ... }` declares a method and therefore rejects under `using` alone, even in a nested full scope. Check that permission before duplicate-signature analysis. The installation `effect proc @score;` adds no method. [Module selectors](ModuleWorlds.md#default-and-complete-public-selections)
+`using "./base.cod" proc @score` brings the exported symbol identity and its source-preserving procedure family into a free receiving name. A prior selection of the same identity is compatible. A different identity with that spelling conflicts, even with identical signatures. Looking up a shadowing non-symbol fails at the use site. A procedure family selected by `using` grants no extension permission. A bare `proc @score(x:u64) -> u64 { ... }` contributes a method and requires extension permission. Either spelling of a body-bearing installation can use the selected identity under `using`. The name-only installation `effect proc @score;` activates the selected family. [Module selectors](ModuleWorlds.md#default-and-complete-public-selections)
 
 | Expression in a procedure context | Family and dynamic bindings |
 | --- | --- |
 | `@score(x)` | Select the family lexically at the call site. Apply ordinary method dispatch to the actual arguments. Its body uses current dynamic bindings. The call needs no installation for its own callee. |
+| `effect proc @score(x:u64) -> u64 { ... }` | Install the one local body under the selected symbol. Dynamic calls reach that body. |
 | `effect proc @score;` | Activate the lexically selected family and install its handler in the current dynamic scope. Snapshot the required symbolic bindings at activation. The expression yields void. |
 | `perform @score(x)` | Use the currently installed handler and replay its saved symbolic bindings. |
 | `behave @score(x)` | Use the currently installed handler with the dynamic bindings current at invocation. |
@@ -454,11 +485,11 @@ Normal and exceptional exits restore the preceding installation. A skipped insta
 
 ### Method registration and scoped installation
 
-A declaration can register or extend a symbol's module-world method family. Import and extension permissions, declaration promises, applicability and ambiguity govern that step. When execution reaches a combined definition, it activates the compatible family selected in the current module world and installs the resulting handler. A skipped branch installs nothing. Leaving the scope restores the prior installation on normal and exceptional exits. The result of installation is void.
+A declaration can register or extend a symbol's module-world method family. Import and extension permissions, declaration promises, applicability and ambiguity govern that step. When execution reaches an effect with a body, it installs the local family formed by that body alone. When execution reaches `effect proc @sym;`, it activates the lexically selected family. A skipped branch installs nothing. Leaving the scope restores the prior installation on normal and exceptional exits. The result of installation is void.
 
 An entry that extends a dependency family can install its resulting interpretation with `effect proc @p;`. Preserve the normal entry ordering and activation checks. [Entry installation](AheadOfTimeExecutionPreparation.md#entry-installation-and-unused-dependency-code)
 
-The name-only form is `effect proc @sym;`. The combined definition uses `effect @sym(...) { ... }`. A skipped runtime path installs nothing; repeated execution creates installations without repeatedly registering methods. Existing declaration/scope boundaries apply.
+To extend and install, declare the method with `proc @sym(...) { ... }` under ordinary extension permission and reach a separate `effect proc @sym;`. A temporary local handler does not discharge an entry’s obligation to install the extended family.
 
 H-379 requires the entry module to explicitly install a dependency callable that it extends; omission is a compile error. Correct entry installation cancels the applicable dependency installations so they do not retain unused world code. [D-21](AheadOfTimeExecutionPreparation.md#entry-installation-and-unused-dependency-code) owns initialization-only cancellation with operand evaluation preserved and LLVM reachability acceptance; identity/coverage and native mechanisms remain under review.
 
@@ -487,7 +518,7 @@ H-236 requires architecture before local lookup fixes. H-247/H-248 makes that ar
 | `@var_name` | Read the value under the declared symbol identity; WPO requires a supplied dynamic binding. |
 | `effect @s <- value` | Scoped ownership/bits transfer; bits symbols require this form. Restore the preceding binding on scope exit; result is void. |
 | `effect @s = value` | Scoped non-consuming reference rebinding under the symbol's declared owner constraint; H-561 admits lexical and ordinary regional owners for the owner-parameter form. Rejected for plain bits-valued symbols; explicit ref/ptr symbols may have bits targets. |
-| Activate a symbolic procedure definition | Select the family and establish the scoped handler with its required symbolic bindings. Module registration is static. |
+| Install a symbolic procedure | A written body supplies a fresh one-method family. A name-only installation selects the lexical family. Each activation establishes its required symbolic bindings. |
 | `perform @p` | Resolve the procedure, temporarily install its captured effect values in its execution scope, execute its body, and restore the caller's bindings. |
 | `behave @p` | Resolve and execute the procedure with its definition's lexical environment and the current dynamic bindings. Its stored dynamic captures are not installed. |
 | Function | Lexically defined; compute from explicit inputs to outputs, with no symbolic effect access, `perform` or `behave`. |
@@ -566,7 +597,7 @@ A symbol declaration registers an identity, declared TLS contract and local acce
 | --- | --- | --- |
 | Declare/select a symbol | Introduce or alias its identity and semantics. | None from selection alone. |
 | Define/extend a symbolic callable | Construct receiver-local method information under selection permissions. | None without effect. |
-| Combined effect definition | Select a compatible family in the current module interpretation. | Activate and install the scoped handler. |
+| Local body `effect proc @p(...) { ... }` or `effect @p(...) { ... }` | Check the single local method against the slot contract. | Install its anonymous family in the current scope. |
 | `effect proc @p;` | Activate the lexically selected compatible family. | Install it until scope exit. |
 | `effect @p = source;` or `effect @p = @source;` | Assignment installation of a symbolic procedure. | Reject. |
 
@@ -786,7 +817,7 @@ H-230’s base/extended/indirect `1,7,1` and H-232’s using/import interpretati
 
 H-197/H-198 establishes functions as lexical callables that may operate on explicit memory and explicit-argument system intrinsics without reading or writing dynamic bindings. Procedures may additionally use dynamic context. An ordinary function may write through explicit writable inputs. The [pure contract](ConstFunctionsAndTailCalls.md#boundary-of-a-const-function) has additional restrictions.
 
-A function definition binds a lexical name and cannot access dynamic effect variables. A procedure may have an ordinary lexical name or belong to a symbol-identified module family. A reached effect definition installs a scoped handler for its family. Both procedure forms may use effects; lexical naming does not make a procedure a function. A function cannot call either procedure form, directly or indirectly. Under [H-603's generator boundary](RangedForAndGenerators.md#callable-kind-and-supplied-body-effects), yield transfers control to the caller's lexical loop body; that body is not an ordinary call made by the generator. A procedure caller may therefore use procedure operations in the body of a for invoking a func generator. The generator's own statements, ordinary callees, yield operands and cleanup retain the function restriction.
+A function definition binds a lexical name and cannot access dynamic effect variables. A procedure may have an ordinary lexical name or belong to a symbol-identified module family. A reached effect with a body installs its own single-method handler. Both procedure forms may use effects; lexical naming does not make a procedure a function. A function cannot call either procedure form, directly or indirectly. Under [H-603's generator boundary](RangedForAndGenerators.md#callable-kind-and-supplied-body-effects), yield transfers control to the caller's lexical loop body; that body is not an ordinary call made by the generator. A procedure caller may therefore use procedure operations in the body of a for invoking a func generator. The generator's own statements, ordinary callees, yield operands and cleanup retain the function restriction.
 
 A lexical procedure keeps its definition context. A helper that reaches perform/behave can be invoked [by its definition](#definition-installed-effectful-procedures); invoking it through an ordinary callable value rejects. Assignment of a lexical procedure to an effect slot rejects. Procedure mixin redefines a source body in the receiving context.
 
@@ -1483,7 +1514,7 @@ behave @p(argument);
 
 The method declaration defines or extends the symbol’s module-world family without a runtime binding. If no symbol exists, its explicit signature can introduce the nominal identity and declared contract under the existing declaration rules; an existing/imported symbol retains its identity and permissions. Declaration promises and compatible view checks remain distinct from method addition.
 
-Bare p names the registered symbol. A procedure context can call the selected family with `@p(...)`, install it with `effect proc @p;`, or define and install with a combined definition. [Lexical and dynamic calls](#lexical-selection-installation-and-invocation)
+Bare p names the registered symbol. A procedure context can call the selected family with `@p(...)`, install it with `effect proc @p;`, or supply a temporary implementation with a body-bearing effect. [Lexical and dynamic calls](#lexical-selection-installation-and-invocation)
 
 A symbolic declaration’s `proc(T1, T2) -> RT` signature constrains handler invocation. Dispatch selects among the family’s methods by actual argument types in its module interpretation. [AOT execution preparation](AheadOfTimeExecutionPreparation.md) covers the required dispatch evidence.
 
@@ -1607,7 +1638,7 @@ Any admitted cross-module reference encountered during execution compilation tri
 
 For a bits global, a bits literal and a function call producing the required bits value are permitted initializer forms. A procedure invocation is not thereby a function-call initializer; top-level `perform`/`behave` remains a separate allowed expression form. Function initializers retain the no-dynamic-context contract, even though their evaluation belongs to module execution. This permits computed model constants without introducing scan-time user execution.
 
-Top-level `effect` establishes bindings in the module's execution scope, while `perform` and `behave` follow their ordinary capture/current-binding semantics there. Compiling these expressions places their behavior into the resulting program; it does not run them during dependency discovery. Bare symbolic method declarations contribute no implicit binding; combined effect declarations retain both stages. The registration/execution distinction applies to expressions as well as procedure declarations.
+Top-level `effect` establishes bindings in the module's execution scope, while `perform` and `behave` follow their ordinary capture/current-binding semantics there. Compiling these expressions places their behavior into the resulting program; it does not run them during dependency discovery. Bare symbolic method declarations contribute to their module family. A top-level effect body installs only its local method when module execution reaches it. The registration/execution distinction applies to expressions as well as procedure declarations.
 
 The exact literal grammar, global mutability/sharing and physical realization remain to be specified alongside H-99's storage boundary and H-197/H-198's function boundary. Permitting bits globals or effectful module execution does not by itself introduce native-heap user objects or ambient mutable global reads in functions.
 
@@ -1657,7 +1688,7 @@ A symbolic read is `@var_name`; a symbolic binding write requires `effect @var_n
 
 H-280 admits `=` for scoped rebinding alongside `<-` for scoped transfer; bare symbolic binding assignment remains invalid. H-281 requires `<-` for bits and `=` for object references, as specified in [the storage contract](#symbolic-storage-and-regional-provenance). H-204/H-205 additionally develops an ordinary ownership/bits transfer operator with the same glyph. Prefix effect retains scoped installation/restoration and its typed procedure-binding case; ordinary bits stores persist, and ordinary owner moves require a separate admitted owning destination. Captured replay remains non-consuming. The prototype supports `<-` in effect bindings, fresh owning declarations and make root initializers; parameter conversion-route arrows retain their independent grammar. General transfer overloads, owner reassignment and reference-assignment migration remain unimplemented.
 
-Every effect expression evaluates to void. Read `@x` explicitly after `effect @x <- 3` when the value is needed. This applies equally to one binding, a grouped binding and combined callable installation; it supplies no implicit tuple, last-value result or chain of transfers. Binding lifetime follows the enclosing scope, not merely evaluation of the effect expression. Ordinary assignment/transfer overloads retain their separate destination-view result contract.
+Every effect expression evaluates to void. Read `@x` explicitly after `effect @x <- 3` when the value is needed. This applies equally to one binding, a grouped binding and body-bearing handler installation; it supplies no implicit tuple, last-value result or chain of transfers. Binding lifetime follows the enclosing scope, not merely evaluation of the effect expression. Ordinary assignment/transfer overloads retain their separate destination-view result contract.
 
 H-148 specifies callable argument order: evaluate an argument exactly once and finish its selected automatic conversions before evaluating the next argument. A failed conversion prevents later argument effects. Functions, procedures and overloaded operator spellings share this rule; compile-time method/route selection does not execute those effects. The callable body begins after all arguments and conversions finish. [D-11](ScalarUnitsAndIndexTypes.md#argument-evaluation-and-automatic-conversions) records the conversion-specific scope. Other open expression conventions are not settled by this decision.
 

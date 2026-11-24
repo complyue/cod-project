@@ -4,6 +4,8 @@ Design revision: 133 · Recorded: 2026-11-23 · Status: design draft with scoped
 
 ## Design authority
 
+The [local handler decision](../CHANGELOG.md#h-local-proc-handler-body-20261124) applies existing owner and capture lifetimes to a body-bearing installation’s single local method.
+
 [Confirmed symbolic procedure forms](../CHANGELOG.md#h-lexical-symbolic-proc-20261123) applies D-10-HANDLER-INSTALL to the separation of scoped procedure activation and regional ownership. [Lexical and dynamic calls](SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
 
 [D-10-ACTOR-CHAN](DesignAuthorityRegistry.md#d-10-actor-chan) supplies r132's [post-send feedback boundary](#post-send-state-without-implicit-null-dereferences). [H-ACTOR-CHAN-BOUNDARY-20261123](../CHANGELOG.md#h-actor-chan-boundary-20261123) requires fire-and-forget sending except for systemic faults likely to compromise subsequent sends. [K-ACTOR-CHAN-RESEARCH-20261123](../CHANGELOG.md#k-actor-chan-research-20261123) continues the existing H-262/H-263 source/view rules while removing the unselected per-message result example. C-54/C-65 and established owner/access invariants remain; the exact send-consumption point, fault result and revived-view policy are still pending. [D-32](ActorChannels.md) records the research workload.
@@ -1244,7 +1246,7 @@ A val/unmodified scalar field and a dense numeric array slot use <- for their di
 
 Symbolic bindings are separate from ordinary pointer destinations: `effect @x <- rhs` transfers bits/ownership, while `effect @x = rhs` rebinds a regional object reference. Bits symbols reject the `=` form. Both forms restore the preceding binding on scope exit. Its bits case installs a value; its owned-region case consumes an admitted owner into the dynamic scope. A previous binding/owner remains hidden and alive, then becomes reachable on scope exit. Ordinary bits stores are not rolled back on scope exit. Captured perform is a non-consuming replay path. Bare symbolic binding assignment remains forbidden. The proposed `@object <- rhs` edits its regional referent through an overload; it provides no second way to rebind @x.
 
-For a symbolic procedure, `effect proc @p;` installs the lexically selected family without extension. The combined definition can also install a handler. Activation snapshots required bindings and preserves their actual owners through the scope. Assignment installation and extracting a procedure value reject. [Handler contract](SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
+For a symbolic procedure, `effect proc @p;` installs the lexically selected family without extension. A body-bearing effect installs an anonymous family containing only its local method. Activation snapshots required bindings and preserves their actual owners through the scope. Assignment installation and extracting a procedure value reject. [Handler contract](SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
 
 Ordinary owning assignment follows these boundaries.
 

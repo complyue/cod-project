@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-24 — Install a local single-method family when an effect supplies a body
+
+<a id="h-local-proc-handler-body-20261124"></a>
+**H-LOCAL-PROC-HANDLER-BODY-20261124.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user specified diagnostics naming `@verb` as a local proc and confirmed “保留短写法，心智模型就是可以省略 `proc` 关键词就好，是同一种语法。 只要是 effect installation 语义带body的，就是新匿名family，而不是扩展已有family”. [D-10r255 / D-15r75](design/SymbolicDynamicScope.md#installing-a-local-procedure-body) supersedes [H-372](#h-372) and the [r244 application of the extension check](#h-review-backlog-duty-20261123) for body-bearing effects under P-330/P-613/P-614. Ordinary extension permissions, name-only family activation, contract coverage, owner validity and restoration remain in force. The previous contract is at `e803e4cc6e5020c502c80c5e7c31fd5133ecb9ec:design/SymbolicDynamicScope.md`.
+
+<a id="k-local-proc-handler-review-20261124"></a>
+**K-LOCAL-PROC-HANDLER-REVIEW-20261124.** [D-ARCH-REVIEW r99](design/ImplementationArchitecture.md#checking-an-anonymous-handler-installation) and [module graph r76](applications/cod-booter/docs/ModuleGraph.md#dependency-handler-activation) clear the shared source form, private method, capture-free seed execution and migration of the existing live graph handler. Multiple possible live-frame layouts require a separate transport proof. The seed registration path is at `e803e4cc6e5020c502c80c5e7c31fd5133ecb9ec:cod/lang_checked.hh`.
+
 ## 2026-11-24 — Record the seed’s independent product diagnostics
 
 <a id="k-seed-world-product-status-20261124"></a>

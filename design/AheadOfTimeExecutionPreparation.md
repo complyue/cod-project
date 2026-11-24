@@ -1,6 +1,6 @@
 # Ahead-of-time execution preparation and runtime micro-dispatch
 
-Design revision: 32 · Recorded: 2026-11-18 America/Los_Angeles · Status: AOT execution-preparation behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
+Design revision: 33 · Recorded: 2026-11-24 America/Los_Angeles · Status: AOT execution-preparation behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
 
 During AOT compilation, CoD checks the required behavior and prepares native implementations, semantic method selectors and local micro-dispatch paths. Proven call-site facts can resolve selections, demand or reuse specializations and permit direct-call emission. Preparing selection code does not execute that selection or the source program’s runtime effects. At runtime, execution follows the prepared code and performs remaining selections using actual runtime evidence.
 
@@ -9,6 +9,8 @@ Semantic method selection uses actual argument types, declared conformance and t
 Function preparation selects code under a static signature. Here invocation resolves live access to the actual defining activation. Maintain current owner-plus-locator resolution across nested calls and backing growth. Internal symbolic handler replay data and borrowed activation references have separate lifetime and cleanup responsibilities.
 
 ## Design authority
+
+D-21 r33 applies the [local handler decision](../CHANGELOG.md#h-local-proc-handler-body-20261124) under P-330/P-337. Entry installation must select the extended family. Validate the independent scoped override and the ordinary name-only entry activation. See [local procedure bodies](SymbolicDynamicScope.md#installing-a-local-procedure-body).
 
 [Confirmed symbolic procedure forms](../CHANGELOG.md#h-lexical-symbolic-proc-20261123) applies D-10-HANDLER-INSTALL to the explicit installation required by H-379. Check installation ordering and the selected family in the entry module. [Lexical and dynamic calls](SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
 
@@ -281,13 +283,13 @@ TLS slots, explicit machine arguments, registers and elimination are physical ch
 
 ## Definition, publication and installation
 
-Selecting a symbol or publishing its method family has no runtime installation effect. Reaching a combined definition activates and installs the compatible family. Assignment-installing a separate definition, lexical callable or active handler rejects. The symbol remains available for static family selection and type checking. An entry can execute `effect proc @p;` to activate its composed definitions. A direct lexical `@p(...)` leaves the entry’s installation obligation intact. [Definition-installed effectful procedures](SymbolicDynamicScope.md#definition-installed-effectful-procedures)
+Selecting a symbol or publishing its method family has no runtime installation effect. A body-bearing effect activates its own anonymous family containing one method. Its lexical dependencies and checked calling contract come from the written body. Assignment-installing a separate definition, lexical callable or active handler rejects. The symbol remains available for static family selection and type checking. An entry can execute `effect proc @p;` to activate its composed definitions. A direct lexical `@p(...)` leaves the entry’s installation obligation intact. [Definition-installed effectful procedures](SymbolicDynamicScope.md#definition-installed-effectful-procedures)
 
 Export publishes the whole method set. A skipped branch installs nothing. Repeated execution creates distinct activations without registering methods again. Selecting a dependency retains its required once-only initialization.
 
 ### Entry installation and unused dependency code
 
-An entry module extending a dependency's callable must explicitly install it; omission is a compile-time error. With the required entry installation, suppress only affected dependency-module-initialization TLS writes. Retain operand evaluation, callable construction, effects, failures and temporary cleanup in their normal order. Suppressed writes create no installation/restoration event. Procedure-local definition installations and permitted dependency calls remain usable.
+An entry module extending a dependency’s callable must explicitly install the extended family with `effect proc @p;`. A local body at the same symbol supplies a different family and cannot discharge that obligation. With the required entry installation, suppress only affected dependency-module-initialization TLS writes. Retain operand evaluation, callable construction, effects, failures and temporary cleanup in their normal order. Suppressed writes create no installation/restoration event. Procedure-local definition installations and permitted dependency calls remain usable.
 
 CoD must expose correct roots to LLVM so genuinely unused dependency-world code can be excluded from the final image. Removing a write alone does not prove code elimination. Operand effects or retained source views can keep code reachable. Native reachability/linkage and final-image verification remain production work; the fixture checks the installation boundary, not a complete module composer/linker implementation.
 
