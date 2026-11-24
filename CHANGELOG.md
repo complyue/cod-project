@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review a directly borrowed sum in the booter case checker
+
+<a id="k-booter-direct-sum-subject-20261123"></a>
+**K-BOOTER-DIRECT-SUM-SUBJECT-20261123.** [D-20-MODULE-GRAPH r69→r70](applications/cod-booter/docs/ModuleGraph.md#checking-a-directly-borrowed-sum-subject) and D-ARCH-REVIEW r85→r86 continue [constructor field reception](#k-booter-case-field-source-20261123) under P-680–P-683, [ordinary ref preparation](#h-owner-ref-argument-20261121) and [case matching](#h-case-contract-20261119). At `1db226ea703dddc82a3c4e08c1d2c68beb2b4593:applications/cod-booter/src/ParserStorage.cod`, `inspect_here_receivers` tests a borrowed `NodeLink` and receives a `NodeId`. Scope covers source checking in declarations and providers.
+
 ## 2026-11-23 — Select the incoming exception for a compatible owning destination
 
 <a id="h-typed-catch-owner-handoff-20261123"></a>
