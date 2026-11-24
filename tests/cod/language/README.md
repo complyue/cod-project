@@ -1,8 +1,10 @@
 # CoD source compiler validation
 
-Reference revision: 477 · Recorded: 2026-11-24 America/Los_Angeles.
+Reference revision: 478 · Recorded: 2026-11-24 America/Los_Angeles.
 
 ## Design authority
+
+The [D-18 callable contract](../../../design/CallableStorageAndHereAccess.md#callable-value-kinds) governs the distinction between an installed procedure handler and a lexical function value. [Scope reconciliation](../../../CHANGELOG.md#k-design-scope-audit-20261124)
 
 At r477 the [bits value declaration decision](../../../CHANGELOG.md#h-bits-value-symbol-spelling-20261124) governs the [two-compiler coverage table](#bits-value-symbol-coverage). D-10-BITS-SYMBOL and P-248 supply the storage and restoration contract. Compare both spellings on the same input and retain a writable reference control.
 
@@ -421,7 +423,7 @@ Symbol access follows the nearest lexical binding, including owner parameters an
 
 In the seed, supported bits symbols (primitive scalars and intrinsic exceptions) support `effect @x <- value`, runtime `@x` reads and `touch @x` dependencies in module execution and procedures. Each identity has thread-local payload storage; bits installation uses the existing value-preparation relation and returns void. Intrinsic exceptions retain their payload, actual failure category and immutable execution-local cause handle. A concrete exception can enter a common `Exception` slot; unrelated concrete categories cannot be interchanged. Reads retain the declared type’s possible exception categories, so a subsequent throw still requires the applicable catch or throws contract. Effect-equals and bare writes reject. Reads and installation cannot bypass a nearer non-symbol binding, and functions cannot access dynamic bindings. Declaration-only/type-only uses create no native TLS slot.
 
-Direct procedure calls and `behave @p(...)` use current bindings. The checker propagates required symbol identities through the call graph and deferred-completion equations, independently of operand storage and initialization summaries. A read, touch, value materialization or current-context invocation without a proved supplying binding rejects before execution. Creating a procedure value retains its required bits and complete-callable bindings in its complete image, including dependencies established by `touch`. Lexical captures retain their existing independent frame roles. Functions may copy an existing procedure value but cannot construct a new value requiring dynamic capture.
+Direct procedure calls and `behave @p(...)` use current bindings. The checker propagates required symbol identities through the call graph and deferred-completion equations, independently of operand storage and initialization summaries. A read, touch or current-context invocation requires a proved supplying binding. Installing a procedure handler retains its required bindings, including dependencies established by `touch`, for replay by `perform`. A lexical function holder may receive a compatible capture-free function. A procedure name supplied to that holder is a source error.
 
 `effect proc @p;` activates the lexically selected procedure family and installs its handler for the scope. The seed rejects `effect @p = value` and a standalone `@p` value expression for a procedure symbol. `@p(...)` calls the lexical family under current dynamic bindings and needs no installation of `@p`. Both `perform @p(...)` and `behave @p(...)` select a live installed handler. `perform` prepares it before operands, replays its activation bindings during invocation, and restores the caller on every completion. `behave` uses the current bindings. Plain deferred symbolic calls retain the selected callee at registration. Delayed blocks resolve it at execution.
 

@@ -1,6 +1,6 @@
 # Steady recurrent SNN: application design
 
-Document-set baseline: 220 · Document revision: 220 · Recorded: 2026-11-07 · Phase: coordinated language/SNN design and development planning.
+Document-set baseline: 220 · Document revision: 221 · Recorded: 2026-11-24 · Phase: coordinated language/SNN design and development planning.
 
 ## Design authority
 
@@ -8,8 +8,8 @@ Document-set baseline: 220 · Document revision: 220 · Recorded: 2026-11-07 · 
 
 - **Capture/resource clarification:** [H-180/K-300](../../../CHANGELOG.md#h-180) reaffirms definition-time dynamic-value capture for perform and current-binding behave. Temporary regional-resource shadows preserve both owners and do not copy or freeze the graph. Packet transport and effect-resource construction are distinct. Existing captured/current traces remain relevant; ordinary owners and the full allowed-type/root interfaces remain incomplete. No neural model, layout or training choice changes.
 
-- **Syntax and resource-context review:** [K-296](../../../CHANGELOG.md#k-296) applies H-172’s `effect @name <- rhs` spelling. H-173’s owner/bits/procedure-only dynamic context is a proposal; frame-view and target-view bindings below remain subject to that discussion. No neural-model change or new borrow/root-access syntax is selected.
-- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), document revision 220, all sections; `pending-human`. There is no qualified application implementation baseline.
+- **Symbolic reference dependency.** H-482 and H-561 admit explicit ref/ptr symbols with a proved live actual owner, including interior targets. A captured frame or target view requires its own owner, access and lifetime proof. Recursive carrier admission and the application’s concrete frame schema retain their own scope. [Reference symbol contract](../../../design/SymbolicDynamicScope.md#owner-parameter-reference-symbols-and-implementation-cost) · [Continuity](../../../CHANGELOG.md#k-design-scope-audit-20261124)
+- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), document revision 221, all sections; `pending-human`. There is no qualified application implementation baseline.
 - **Confirmed local scope:** [H-93](../../../CHANGELOG.md#h-93) confirms continuous source-neuron dynamics; [H-94](../../../CHANGELOG.md#h-94) confirms target-owned incoming pull from immutable frame A into frame B, followed by complete-frame publication. C-29/P-69/P-70 and C-34/P-82/P-83 track the scope and dependencies. [K-209](../../../CHANGELOG.md#k-209) records this execution boundary. Acceptance: reads do not advance source state, all targets see the same source-time view, and single-/multi-frame AP output uses this architecture. Equations, state layout, curve normalization and extra delays remain open; the complete document is not thereby qualified.
 - **Value lineage:** P-25 derives this document set from application C-12; P-22 connects the application to C-01 and V-01/V-02 through explicit semantic behavior. C-13/P-26 serves bounded storage, C-14/P-27 contextual semantic encoding, C-15/P-29 learning, C-17/P-34 activity support, and C-26—C-29 useful context, numerical evolution and consistent frame execution. Dependencies do not grant authority.
 - **Invariants / non-goals:** one resident CC per region; fixed semantic roles and individual contextual identities; regional relocation/lifetime rules; static SoA connections and no heap topology. No physical-distance prior, explicit inhibitory synapses, complete neural transition, final language syntax, full application implementation or measured performance is selected.

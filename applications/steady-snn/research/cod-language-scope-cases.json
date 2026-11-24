@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "status": "specified_with_current_implementation_coverage_tracked_separately",
-  "recorded_date": "2026-11-13",
+  "recorded_date": "2026-11-24",
   "design_authority": {
     "registry": "../../../design/DesignAuthorityRegistry.md#d-08",
-    "revision": 220,
+    "revision": 221,
     "scope": "This 25-case catalog and its evidence map; the complete design contract remains pending-human.",
     "parents": [
       "C-38/P-87: application-driven language value",
@@ -12,11 +12,11 @@
       "P-93: dependency on D-10 language semantics"
     ],
     "rationale": "Concrete application cases make scoped language behavior and its native evidence reviewable without selecting neuron dynamics.",
-    "invariants_and_non_goals": "Preserve symbol identity, definition-time dynamic-value capture for perform, current-binding behave, owner-preserving resource shadowing, regional lifetimes and once-only post-scan module incorporation. Packet transfer and effect-resource construction are distinct. Full capture-category/interior-pointer rules remain under review; no neuron law, concurrency protocol or persistent ABI is selected.",
+    "invariants_and_non_goals": "Preserve symbol identity, definition-time dynamic-value capture for perform, current-binding behave, owner-preserving resource shadowing, regional lifetimes and once-only post-scan module incorporation. Packet transfer and effect-resource construction are distinct. Explicit ref/ptr symbols require a proved live actual owner under H-482/H-561. Recursive carrier admission remains open; no neuron law, concurrency protocol or persistent ABI is selected.",
     "acceptance": "Keep confirmed local semantics distinct from open proposals; distinguish acceptance targets from current implementation coverage.",
     "human_baseline": "H-96–H-121 supplies local symbols/callables/modules; H-123 limits application-driven increments to language/runtime support. Current supersession, capture, owner, module and conversion scope is maintained by D-08/D-10/D-14/D-15/D-18 in the authority registry; the complete application contract remains pending-human.",
     "assessment": "../../../CHANGELOG.md#k-305",
-    "continuity": "K-632: editorial evidence consolidation; catalog cases and their design qualification are unchanged."
+    "continuity": "K-DESIGN-SCOPE-AUDIT-20261124 applies the confirmed explicit borrowed-symbol scope to CS-09."
   },
   "design_documents": [
     "../../../design/SymbolicDynamicScope.md",
@@ -262,7 +262,7 @@
     },
     {
       "id": "CS-09",
-      "status": "pending_capture_category_review",
+      "status": "explicit_reference_scope_confirmed_recursive_carriers_open",
       "topic": "carriers and captures",
       "allowed_capture_categories": [
         "bits",
@@ -278,8 +278,8 @@
         "H-99",
         "H-100"
       ],
-      "note": "Cross-region references remain a placeholder under H-101; no encoding or exception to the two capture forms is selected.",
-      "current_contract_notice": "H-180 reaffirms capture of permitted dynamic values and preservation of captured/hidden regional owners. H-173/H-175’s narrower allowed-type/interior-pointer proposal is still under review, so the earlier category list below does not settle that boundary. No implicit heap closure or regional-object copy/move is permitted."
+      "note": "Physical cross-region encoding remains separately scoped. These cases exercise independent bits and owner-tracked reference views.",
+      "current_contract_notice": "H-482/H-561 admit explicitly declared ref/ptr symbols, including interior targets, with a proved live owner through installation, capture and restoration. The complete recursive carrier inventory remains open. A captured reference preserves the target and its owner dependency."
     },
     {
       "id": "CS-10",

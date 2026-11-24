@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 70 · Recorded: 2026-11-23 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 71 · Recorded: 2026-11-24 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+[Receiving specifications](#receiving-specifications) apply the [D-18 callable value kinds](CallableStorageAndHereAccess.md#callable-value-kinds) to structural results. Check that a capture-free function can supply a lexical function holder. [Editorial continuity](../CHANGELOG.md#k-design-scope-audit-20261124)
 
 [Editorial continuity](../CHANGELOG.md#k-hygiene-index-20261123) covers the native-output reference in D-22’s init-destinations section.
 
@@ -412,8 +414,8 @@ Every specification entry requires an explicit `=` or `<-`. A declaration keywor
 | `selected = node;` | Apply ordinary `=` to the existing reference slot selected. |
 | `selected =;` | Rebind existing selected from field selected. |
 | `selected <- count;` | Write through existing selected to its scalar target using count. |
-| `proc action = callback;` | Introduce a complete callable value using its ordinary declaration contract. |
-| `action <- callback;` | Replace an existing callable value under its dedicated contract. |
+| `func action = callback;` | Initialize the lexical function holder from a compatible function-valued result field. |
+| `action <- callback;` | Replace the value in an existing writable function holder under its function contract. |
 
 The bounded standalone grammar is:
 

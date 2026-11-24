@@ -1,6 +1,6 @@
 # SNN-driven CoD language development and validation
 
-Document-set baseline: 220 · Document revision: 220 · Recorded: 2026-11-07.
+Document-set baseline: 220 · Document revision: 221 · Recorded: 2026-11-24.
 
 ## Design authority
 
@@ -8,8 +8,8 @@ Document-set baseline: 220 · Document revision: 220 · Recorded: 2026-11-07.
 
 - **Capture/resource clarification:** [H-180/K-300](../../../CHANGELOG.md#h-180) reaffirms definition-time dynamic-value capture for perform and current-binding behave. Temporary regional-resource shadows preserve both owners and do not copy or freeze the graph. Packet transport and effect-resource construction are distinct. Existing captured/current traces remain relevant; ordinary owners and the full allowed-type/root interfaces remain incomplete. No neural model, layout or training choice changes.
 
-- **Syntax and resource-context review:** [K-296](../../../CHANGELOG.md#k-296) applies H-172’s `effect @name <- rhs` spelling. H-173’s owner/bits/procedure-only dynamic context is a proposal; frame-view and target-view bindings below remain subject to that discussion. No neural-model change or new borrow/root-access syntax is selected.
-- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), this document revision 220, all sections; complete implementation contract `pending-human`.
+- **Symbolic reference dependency.** H-482 and H-561 admit explicit ref/ptr symbols with a proved live actual owner, including interior targets. A captured frame or target view requires its own owner, access and lifetime proof. Recursive carrier admission and the application’s concrete frame schema retain their own scope. [Reference symbol contract](../../../design/SymbolicDynamicScope.md#owner-parameter-reference-symbols-and-implementation-cost) · [Continuity](../../../CHANGELOG.md#k-design-scope-audit-20261124)
+- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), this document revision 221, all sections; complete implementation contract `pending-human`.
 - **Value lineage:** C-38/P-87 uses a real SNN workload to develop useful language features and assess their cost. P-25/P-22 connect the application to the charter's typed semantic programs. P-91 depends on the confirmed C-29 pull architecture; P-93 depends on the separately specified [D-10 language contract](../../../design/SymbolicDynamicScope.md). Dependencies do not grant qualification.
 - **Human baseline:** H-93/H-94 govern continuous source state and target-owned two-frame pull; H-95 ties model mechanisms to learning/generalization. H-96 requests joint development. The individually scoped H-97–H-121 records specify capture, purity, storage, demand-checked module/call behavior and symbol selectors/import maps. H-123 limits the current increment to programming facilities and runtime support. H-140 makes module incorporation once-only after scanning; H-143–H-145 require one LLVM path, focused tests and simplification. H-148 requires each argument’s conversion to finish before the next argument is evaluated.
 - **Invariants / non-goals:** retain regional lifetimes, static SoA connectivity, non-consuming source reads and common source-time views. No user heap lifetime or implicit heap closure is introduced. No push queue, new neuron equation, selected training rule, frame rate or auxiliary per-edge state follows from language development.

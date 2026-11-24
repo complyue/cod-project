@@ -1,8 +1,10 @@
 # CoD Regional Memory Vision and Implementation Tracker
 
-Design revision 38 · 2026-11-24
+Design revision 39 · 2026-11-24
 
 ## Design authority
+
+[D-10’s explicit reference symbols](SymbolicDynamicScope.md#owner-parameter-reference-symbols-and-implementation-cost) require valid target access through the actual owner during installation, capture and restoration. The [scope reconciliation](../CHANGELOG.md#k-design-scope-audit-20261124) applies this dependency to the whole-region holder comparison.
 
 At r38 the [human decision](../CHANGELOG.md#h-actor-region-transport-and-chan-ends-20261124) makes complete validated reception the publication boundary for the AKCP path. P-711 applies to private assembly, disposal and the [whole-region acceptance scenarios](ActorChannels.md#acceptance-scenarios). The send consumption point and fault owner follow their existing review.
 
@@ -149,7 +151,7 @@ Three kinds of information must stay separate:
 | Kind | Meaning and proposed checking |
 | --- | --- |
 | Whole-region owning variable or effect binding | Responsible for holding/releasing a region. Ordinary holders transfer it under D-17 E4/E5; dynamic resource bindings cannot be consumed under H-181. The prototype rejects `effect @b <- @a`. H-179 ordinary-to-dynamic installation is implemented by consuming the ordinary holder. Captured replay performs no move. An `effect` creates a new binding frame even when its destination has the same symbol identity as its source. |
-| Interior regional reference | Non-owning access to an object, associated with its region instance. It may be a local traversal view or explicit function input, but using it requires that instance to remain accessible. The prototype supports owner-tracked interior-reference bindings/captures; H-175’s proposed restriction remains unselected. A reference cannot prolong lifetime or manufacture a second whole-region owner. |
+| Interior regional reference | Non-owning access to an object, associated with its region instance. It may be a local traversal view or explicit function input, but using it requires that instance to remain accessible. H-482 and H-561 admit explicit ref/ptr symbol bindings to an interior target. Installation, capture and restoration require its actual owner to stay live. A reference cannot prolong lifetime or manufacture a second whole-region owner. |
 | Intrinsic runtime holder | Holds a message between consumption and receipt/disposal, when no user variable owns it. This belongs to system runtime machinery and does not expose a second user storage carrier. Receipt establishes an ordinary packet owner; constructing/installing an effect resource is not an implicit receive operation. |
 
 A lexical owner handle is a stack/local resource value, while the objects it owns remain region allocated. Moving that handle transfers release responsibility without copying the graph. Procedure metadata records symbol identities and captured values; a captured resource does not acquire a second independent owner. The same rule must apply to owner-valued expression results, parameters and returns; exact lexical move syntax and aggregate/result forms remain design work. H-177 does not permit arbitrary owner fields inside regional graphs, extend module-global declaration categories or change the independent function context rule.
@@ -220,7 +222,7 @@ H-563 forbids regional storage of callable-view values, including through compou
 
 Module method registration and bare symbol lookup create no runtime capture or TLS binding. Explicit materialization/installation and invocation retain the actual owners of captured or referenced resources. Family-dispatch evidence under H-375/H-376 must survive the applicable regional relocation and reference lifetime without making module definitions into resource owners. The physical evidence/ABI is a separate D-21 design task; no graph edge, allocator or owner protocol is changed by stage separation.
 
-H-277–H-281 permits bits stored directly in TLS and non-bits references into regions supplied by region symbols. Bits transfer uses `effect @x <- rhs`; object-reference rebinding uses `effect @x = rhs`, with scoped restoration in both cases. Rebinding may select a different live region. Whole-region ownership and statically selected procedure values retain their separate contracts.
+H-277–H-281 permits bits stored directly in TLS and non-bits references into regions supplied by region symbols. Bits transfer uses `effect @x <- rhs`; object-reference rebinding uses `effect @x = rhs`, with scoped restoration in both cases. Rebinding may select a different live region. Whole-region ownership and scoped procedure handlers have their own contracts.
 
 ### What makes the reference valid
 

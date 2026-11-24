@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Reconcile design exclusions with their confirmed scopes
+
+<a id="k-design-scope-audit-20261124"></a>
+**K-DESIGN-SCOPE-AUDIT-20261124.** Editorial continuity from `bc28b3af4d4154bf9fff6788c41d6fbdc9e6396d`: D-10 r257→258 applies the [grouped selector decision](#h-using-symbolic-variable-identity-20261123) to its selection summary. D-22 r70→71 and the source reference r477→478 apply [D-18’s callable kinds](#h-callable-model-20261118) to receiving and handler capture. D-14 r134→135 and D-16 r7→8 distinguish [scalar target initialization](#h-regional-ref-field-initialization-20261123), [nullable target initialization](#h-regional-ptr-field-initialization-20261123) and [finite cyclic placement](#h-placement-init-20261123) from deferred pure knot-tying. D-13 r38→39, D-08’s language notes r220→221 and P-95/P-148 distinguish [explicit interior](#h-482) and [owner-parameter](#h-561) reference symbols from the open recursive-carrier question. Original examples and exclusions are at that revision in `design/ConstructionAndAcquisition.md:415`, `design/SymbolicDynamicScope.md:759`, `design/RegionalOwnership.md:230` and `applications/steady-snn/research/cod-language-scope-cases.json:282`. Each whole-document qualification and existing value relationship retains its scope.
+
 ## 2026-11-24 — Model shared read-only access to a large, rarely revised ontology
 
 <a id="k-facsimile-ontology-20261124"></a>
