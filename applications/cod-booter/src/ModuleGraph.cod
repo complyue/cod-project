@@ -135,6 +135,8 @@ export data DependencyEdge {
     finding:u64;
     owns_finding:bool;
     site:u64;
+    path:u64;
+    mode:ModuleSelectionMode;
     first:u64;
     past:u64;
     decoded_first:u64;
@@ -159,10 +161,13 @@ export func collect_dependency_edges(source:const SourceBytes in S, nodes:const 
     for (scan in 0u64 .. used) {
         if (item != no_node()) {
             if (inspect_sequence_entry(nodes, revision, used, item, entry) != ModuleSequence) return no_node();
+            selection.path <- no_node();
             path <- file_dependency_path(source, nodes, used, revision, entry.item, selection, bulk);
             if (path != no_node()) {
                 if (count >= intrinsic (len)(edges)) return no_node();
                 edges[count].site <- entry.item;
+                edges[count].path <- path;
+                edges[count].mode <- if (selection.path == path) { (selection.mode) } else { (bulk.mode) };
                 edges[count].first <- syntax_first(nodes, used, path);
                 edges[count].past <- syntax_past(nodes, used, path);
                 (count <- count + 1u64):void
@@ -174,21 +179,35 @@ export func collect_dependency_edges(source:const SourceBytes in S, nodes:const 
     # Module entries link backwards. Restore discovery order before resolving paths.
     val right <- count;
     val site <- no_node();
+    val mode <- UseResource;
     val first <- 0u64;
     val past <- 0u64;
     for (left in 0u64 .. count / 2u64) {
         right <- right - 1u64;
         site <- edges[left].site;
+        path <- edges[left].path;
+        mode <- edges[left].mode;
         first <- edges[left].first;
         past <- edges[left].past;
         edges[left].site <- edges[right].site;
+        edges[left].path <- edges[right].path;
+        edges[left].mode <- edges[right].mode;
         edges[left].first <- edges[right].first;
         edges[left].past <- edges[right].past;
         edges[right].site <- site;
+        edges[right].path <- path;
+        edges[right].mode <- mode;
         edges[right].first <- first;
         (edges[right].past <- past):void
     };
     return count
+}
+
+func same_dependency_occurrence(edges:const DependencyEdges in E, edge:u64) -> bool
+    where {const owner E} {
+    if (edge == 0u64 || edges[edge].path == no_node()) return false;
+    return edges[edge].path == edges[edge - 1u64].path &&
+        edges[edge].mode == edges[edge - 1u64].mode
 }
 
 export func decode_dependency_path(source:const SourceBytes in S, first:u64, past:u64,
@@ -495,15 +514,18 @@ proc read_visit_frame(source:const SourceBytes in S, lines:const SourceLines in 
         report_scratch_error(diagnostic, 1u32);
         return ScratchFailed;
     };
+    val next_decoded <- 0u64;
     val first <- 0u64;
-    val past <- 0u64;
+    val past <- no_node();
     for (edge in 0u64 .. count) {
-        past <- decode_dependency_path(source, edges[edge].first, edges[edge].past, decoded, first);
-        edges[edge].decoded_past <- past;
-        if (past != no_node()) {
-            edges[edge].decoded_first <- first;
-            (first <- past):void
-        }
+        # The parser shares a path node among the consecutive items of one directive.
+        if (!same_dependency_occurrence(edges, edge)) {
+            first <- next_decoded;
+            past <- decode_dependency_path(source, edges[edge].first, edges[edge].past, decoded, first);
+            if (past != no_node()) { (next_decoded <- past):void }
+        };
+        edges[edge].decoded_first <- first;
+        (edges[edge].decoded_past <- past):void
     };
     progress[0u64].used <- result.tree.used;
     progress[0u64].root <- result.tree.root;
@@ -1369,7 +1391,8 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         });
         ref edges = make DependencyEdges(capacity, make DependencyEdge {
             finding <- no_node(); owns_finding <- false;
-            site <- 0u64; first <- 0u64; past <- 0u64; decoded_first <- 0u64; decoded_past <- 0u64;
+            site <- 0u64; path <- no_node(); mode <- UseResource;
+            first <- 0u64; past <- 0u64; decoded_first <- 0u64; decoded_past <- 0u64;
         });
         ref decoded = make SourceBytes(workspaces[0u64].source_size, 0u8);
         ref progress = make ModuleProgressRows(1u64, make ModuleProgress {
@@ -1408,30 +1431,36 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         val outcome <- Complete;
         val edge_finding <- no_node();
         val report_start <- no_node();
+        val blocked <- false;
         for (edge in 0u64 .. progress[0u64].dependencies) {
-            if (diagnostic_budget_full(run)) return DiagnosticsIncomplete;
-            edge_code <- behave @followDependency(edge);
-            if (edge_code != 0u8) {
-                report_start <- run[0u64].retained;
-                edge_finding <- edges[edge].finding;
-                outcome <- reject_dependency(opened, diagnostic, edge_code, edges[edge].first, edges[edge].past,
-                    edge_finding, edges[edge].owns_finding, keys, key_first, key_past, run);
-                if (failure.finding == no_node()) {
-                    if (edge_finding != no_node()) { (failure.finding <- edge_finding):void }
-                    else {
-                        if (run[0u64].retained > report_start) { (failure.finding <- report_start):void }
+            # A failed path blocks the remaining items before receiver selection.
+            if (!blocked || !same_dependency_occurrence(edges, edge)) {
+                blocked <- false;
+                if (diagnostic_budget_full(run)) return DiagnosticsIncomplete;
+                edge_code <- behave @followDependency(edge);
+                if (edge_code != 0u8) {
+                    report_start <- run[0u64].retained;
+                    edge_finding <- edges[edge].finding;
+                    outcome <- reject_dependency(opened, diagnostic, edge_code, edges[edge].first, edges[edge].past,
+                        edge_finding, edges[edge].owns_finding, keys, key_first, key_past, run);
+                    if (failure.finding == no_node()) {
+                        if (edge_finding != no_node()) { (failure.finding <- edge_finding):void }
+                        else {
+                            if (run[0u64].retained > report_start) { (failure.finding <- report_start):void }
+                        }
+                    };
+                    if (outcome == ScratchFailed || outcome == DiagnosticsIncomplete) return outcome;
+                    blocked <- edge_finding < run[0u64].retained || run[0u64].retained > report_start;
+                    if (rejected == Complete || (rejected == FormUnsupported && outcome != FormUnsupported)) {
+                        failure.rejection <- edge_code;
+                        (rejected <- outcome):void
+                    };
+                } else {
+                    dependency <- selected[edges[edge].site].dependency_module;
+                    if (dependency > used) return ScratchFailed;
+                    if (dependency != 0u64 && structural_visit_dependency(visits, dependency - 1u64)) {
+                        (progress[0u64].structural_dependency <- true):void
                     }
-                };
-                if (outcome == ScratchFailed || outcome == DiagnosticsIncomplete) return outcome;
-                if (rejected == Complete || (rejected == FormUnsupported && outcome != FormUnsupported)) {
-                    failure.rejection <- edge_code;
-                    (rejected <- outcome):void
-                };
-            } else {
-                dependency <- selected[edges[edge].site].dependency_module;
-                if (dependency > used) return ScratchFailed;
-                if (dependency != 0u64 && structural_visit_dependency(visits, dependency - 1u64)) {
-                    (progress[0u64].structural_dependency <- true):void
                 }
             };
         };
