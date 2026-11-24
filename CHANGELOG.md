@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review diagnostic collection across bootstrap module visits
+
+<a id="k-world-diagnostic-collection-20261124"></a>
+**K-WORLD-DIAGNOSTIC-COLLECTION-20261124.** [D-ARCH-REVIEW r96→r97](design/ImplementationArchitecture.md#collecting-diagnostics-across-the-entry-world) continues the [entry-world decision](#h-entry-world-diagnostics-20261124) under P-682/P-683 and P-713/P-714. The design review clears loader continuation, invocation-owned findings, the shared cap and terminal gating in both bootstrap compilers. Independent semantic recovery still requires review at its mutable proof boundaries. The prior architecture is at `0504ef3db56140d46800ce30ab595dda5c43771e:design/ImplementationArchitecture.md`.
+
 ## 2026-11-24 — Cover the entry module’s fused world in all compilers
 
 <a id="h-entry-world-diagnostics-20261124"></a>
