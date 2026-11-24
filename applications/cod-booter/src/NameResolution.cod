@@ -442,6 +442,14 @@ func reject_protected_name(work:NameWork in W, state:NameState in R, name:u64, l
     reject_name(state, name, protected_symbol_name())
 }
 
+func append_declared_name(bindings:NameBindings in B, work:NameWork in W, state:NameState in R,
+                          name:u64, declaration:u64, kind:u8)
+    -> void where {owner B, owner W, owner R} {
+    remember(bindings, name, declaration, kind);
+    work[state.used].active <- name;
+    (state.used <- state.used + 1u64):void
+}
+
 func declare_name(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                    work:NameWork in W, state:NameState in R, name:u64, declaration:u64, kind:u8,
                    duplicate:u8) -> void where {const owner S, const owner N, owner B, owner W, owner R} {
@@ -475,9 +483,7 @@ func declare_name(source:const SourceBytes in S, nodes:const ExprNodes in N, bin
             return
         }
     };
-    remember(bindings, name, declaration, kind);
-    work[state.used].active <- name;
-    (state.used <- state.used + 1u64):void;
+    append_declared_name(bindings, work, state, name, declaration, kind)
 }
 
 func declare_module_name(source:const SourceBytes in S, nodes:const ExprNodes in N,
@@ -566,7 +572,7 @@ func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
 }
 
 func resolve_owner(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
-                    work:const NameWork in W, state:NameState in R, name:u64) -> void
+                    work:const NameWork in W, state:NameState in R, name:u64, owner_past:u64) -> void
     where {const owner S, const owner N, owner B, const owner W, owner R} {
     val first <- syntax_first(nodes, syntax_len(nodes), name);
     # The explicit lexical owner 'here' denotes this full scope.
@@ -575,7 +581,7 @@ func resolve_owner(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
         remember(bindings, name, state.scope_node, lexical_owner());
         return;
     } else {};
-    val found <- lookup(source, nodes, work, name, 0u64, state.used);
+    val found <- lookup(source, nodes, work, name, 0u64, owner_past);
     if (found == no_node()) { reject_name(state, name, unresolved_name()); return; } else {};
     if (bindings[found].kind != owner_binding()) { reject_name(state, name, expected_owner_binding()); return; } else {};
     remember(bindings, name, bindings[found].declaration, owner_binding());
@@ -708,7 +714,7 @@ func resolve_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N
 }
 
 func resolve_type_annotation(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
-                              work:const NameWork in W, state:NameState in R, annotation:u64) -> void
+                              work:const NameWork in W, state:NameState in R, annotation:u64, owner_past:u64) -> void
     where {const owner S, const owner N, owner B, const owner W, owner R} {
     ref sites = make BindingSites {
         name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
@@ -719,7 +725,7 @@ func resolve_type_annotation(source:const SourceBytes in S, nodes:const ExprNode
     };
     resolve_type_name(source, nodes, bindings, work, state, sites.target_type);
     if (state.diagnostic == 0u8 && sites.owner_name != no_node()) {
-        resolve_owner(source, nodes, bindings, work, state, sites.owner_name);
+        resolve_owner(source, nodes, bindings, work, state, sites.owner_name, owner_past);
     };
 }
 
@@ -732,7 +738,7 @@ func resolve_annotation(source:const SourceBytes in S, nodes:const ExprNodes in 
     val shape <- inspect_binding(nodes, state.syntax_revision, state.syntax_used, binding, sites);
     if (shape == InvalidBindingSyntax) { reject_name(state, binding, invalid_module_tree()); return; };
     if (shape == TypedBinding) {
-        resolve_type_annotation(source, nodes, bindings, work, state, sites.annotation);
+        resolve_type_annotation(source, nodes, bindings, work, state, sites.annotation, state.used);
     };
 }
 
@@ -1373,7 +1379,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
     if (state.diagnostic != 0u8) return;
     val owner_name <- construction.placement;
     if (owner_name != no_node()) {
-        resolve_owner(source, nodes, bindings, work, state, owner_name);
+        resolve_owner(source, nodes, bindings, work, state, owner_name, state.used);
         if (state.diagnostic != 0u8) return;
     } else {};
     if (shape == PositionalConstruction || text_initializer || builder_initializer) {
@@ -1941,7 +1947,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                             if (!published_syntax_id(nodes, state.syntax_revision, at, name)) {
                                 reject_name(state, at, invalid_module_tree()); return;
                             };
-                            resolve_owner(source, nodes, bindings, work, state, name.index);
+                            resolve_owner(source, nodes, bindings, work, state, name.index, state.used);
                         };
                     };
                     return;
@@ -2509,7 +2515,7 @@ func resolve_header_types(source:const SourceBytes in S, nodes:const ExprNodes i
         shape <- inspect_signature(nodes, state.syntax_revision, state.syntax_used, clause, signature);
         if (shape == ValueResultClause || shape == BorrowedResultClause ||
             shape == ThrowsSignatureClause || shape == ExceptionResultClause) {
-            resolve_type_annotation(source, nodes, bindings, work, state, signature.annotation);
+            resolve_type_annotation(source, nodes, bindings, work, state, signature.annotation, state.used);
             if (state.diagnostic != 0u8) return;
         } else {
             if (shape != OwnerSignatureClause && shape != TypeSignatureClause) {
@@ -2521,22 +2527,35 @@ func resolve_header_types(source:const SourceBytes in S, nodes:const ExprNodes i
     };
 }
 
+enum FormalNameRole:u8 { CallableParameters; AggregateFields; }
+
 func resolve_ordinary_formal(source:const SourceBytes in S, nodes:const ExprNodes in N,
     bindings:NameBindings in B, work:NameWork in W, state:NameState in R, parameter:u64,
-    formal:const FormalSites in F, binding:const BindingSites in F) -> void
+    formal:const FormalSites in F, binding:const BindingSites in F, names:FormalNameRole) -> void
     where {const owner S, const owner N, owner B, owner W, owner R, const owner F} {
-    resolve_type_annotation(source, nodes, bindings, work, state, binding.annotation);
+    # Field labels share a duplicate-check extent. An annotation borrows the
+    # enclosing namespace, ending before the first label.
+    val owner_past <- if (names == (AggregateFields:FormalNameRole)) { (state.first) } else { (state.used) };
+    resolve_type_annotation(source, nodes, bindings, work, state, binding.annotation, owner_past);
     if (state.diagnostic != 0u8) return;
     if ((formal.mode == PlaceFormal || formal.mode == InitializingPlaceFormal) &&
         (binding.readonly || bindings[binding.target_type].kind != builtin_string())) {
         reject_name(state, parameter, invalid_direct_string_place());
         return
     };
+    if (names == (AggregateFields:FormalNameRole)) {
+        if (lookup(source, nodes, work, binding.name, state.first, state.used) != no_node()) {
+            reject_name(state, binding.name, duplicate_binding());
+            return
+        };
+        append_declared_name(bindings, work, state, binding.name, parameter, formal_binding());
+        return
+    };
     declare_name(source, nodes, bindings, work, state, binding.name, parameter, formal_binding(), duplicate_binding())
 }
 
 func resolve_formals(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
-                     work:NameWork in W, state:NameState in R, tail:u64) -> void
+                     work:NameWork in W, state:NameState in R, tail:u64, names:FormalNameRole) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     ref parameter = make u64 { no_node() };
     if (!first_sequence_entry(nodes, state.syntax_revision, state.syntax_used, tail, FormalSequence, parameter)) {
@@ -2551,7 +2570,7 @@ func resolve_formals(source:const SourceBytes in S, nodes:const ExprNodes in N, 
     for (unused in 0u64 .. state.syntax_used) {
         if (parameter == no_node()) return;
         shape <- inspect_formal(nodes, state.syntax_revision, state.syntax_used, parameter, formal);
-        if (shape == HereFormalSyntax) {
+        if (shape == HereFormalSyntax && names == (CallableParameters:FormalNameRole)) {
             resolve_here_formal(source, nodes, bindings, work, state, parameter, formal.signature);
         } else {
             if (shape != OrdinaryFormal ||
@@ -2559,7 +2578,7 @@ func resolve_formals(source:const SourceBytes in S, nodes:const ExprNodes in N, 
                 reject_name(state, parameter, invalid_module_tree());
                 return;
             };
-            resolve_ordinary_formal(source, nodes, bindings, work, state, parameter, formal, binding)
+            resolve_ordinary_formal(source, nodes, bindings, work, state, parameter, formal, binding, names)
         };
         if (state.diagnostic != 0u8) return;
         parameter <- work[parameter].next;
@@ -2583,7 +2602,7 @@ func resolve_here_formal(source:const SourceBytes in S, nodes:const ExprNodes in
     state.first <- enclosing_used;
     resolve_header_types(source, nodes, bindings, work, state, callback);
     if (state.diagnostic != 0u8) return;
-    resolve_formals(source, nodes, bindings, work, state, header.parameter_tail);
+    resolve_formals(source, nodes, bindings, work, state, header.parameter_tail, CallableParameters:FormalNameRole);
     if (state.diagnostic != 0u8) return;
     state.first <- enclosing_first;
     state.used <- enclosing_used;
@@ -2711,7 +2730,7 @@ func resolve_callable_body(source:const SourceBytes in S, nodes:const ExprNodes 
     if (state.diagnostic != 0u8) return;
     resolve_header_types(source, nodes, bindings, work, state, head);
     if (state.diagnostic != 0u8) return;
-    resolve_formals(source, nodes, bindings, work, state, header.parameter_tail);
+    resolve_formals(source, nodes, bindings, work, state, header.parameter_tail, CallableParameters:FormalNameRole);
     if (state.diagnostic != 0u8) return;
     if (callable.body != no_node()) {
         resolve_expression(source, nodes, bindings, work, state, callable.body);
@@ -2901,7 +2920,7 @@ func resolve_sum_fields(source:const SourceBytes in S, nodes:const ExprNodes in 
             reject_name(state, arm, invalid_module_tree());
             return;
         };
-        resolve_formals(source, nodes, bindings, work, state, sites.fields);
+        resolve_formals(source, nodes, bindings, work, state, sites.fields, AggregateFields:FormalNameRole);
         state.used <- state.module_names;
         if (state.diagnostic != 0u8) return;
         arm <- sites.previous;
@@ -2941,7 +2960,7 @@ func resolve_plain_product(source:const SourceBytes in S, nodes:const ExprNodes 
             return false
         };
         marker <- field.target_type;
-        resolve_ordinary_formal(source, nodes, bindings, work, state, parameter, formal, field);
+        resolve_ordinary_formal(source, nodes, bindings, work, state, parameter, formal, field, AggregateFields:FormalNameRole);
         if (state.diagnostic == 0u8 && bindings[marker].module_use == (SelectedType:ModuleNameUse)) {
             projected.kind <- 0u8;
             problem <- project_bound_name_use(selections, selected_used, state.syntax_revision, state.syntax_used,
@@ -3007,7 +3026,7 @@ func resolve_module_types(source:const SourceBytes in S, nodes:const ExprNodes i
                     (recovered <- resolve_plain_product(source, nodes, bindings, work, state, selections,
                         selected_used, interfaces, published, declaration.entries)):void
                 } else {
-                    resolve_formals(source, nodes, bindings, work, state, declaration.entries)
+                    resolve_formals(source, nodes, bindings, work, state, declaration.entries, AggregateFields:FormalNameRole)
                 };
                 state.used <- state.module_names;
                 state.first <- floor;
