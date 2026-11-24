@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 87. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 88. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+
+The [r88 review](../CHANGELOG.md#k-booter-direct-holder-flow-20261124) assigns [direct exception custody checks](../applications/cod-booter/docs/ModuleGraph.md#checking-direct-exception-custody-through-a-source-call) to the booter’s existing name, operand and completion passes under P-682/P-683. The visit frame retains the evidence for each reachable call and handler path.
 
 The [r87 review](../CHANGELOG.md#k-direct-exception-holder-review-20261123) covers [owning locals, direct call entry and normal return for an unwrapped exception](#transferring-a-directly-caught-exception-through-an-ordinary-call). P-682/P-683 govern the seed execution path and the booter’s declaration and provider checks under D-17-CATCH-HANDOFF.
 

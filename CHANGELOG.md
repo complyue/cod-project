@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review custody through a direct booter source call
+
+<a id="k-booter-direct-holder-flow-20261124"></a>
+**K-BOOTER-DIRECT-HOLDER-FLOW-20261124.** [D-20-MODULE-GRAPH r70→r71](applications/cod-booter/docs/ModuleGraph.md#checking-direct-exception-custody-through-a-source-call) and D-ARCH-REVIEW r87→r88 continue [direct holder reception](#k-direct-exception-holder-review-20261123) under P-680–P-683. At `ffdfd94b29d7aef7eab4376c1def3f24a4748917:applications/cod-booter/src/CompletionChecking.cod`, `record_exit` keeps one routed category per site. The declaration and provider proof must distinguish failures before and after call entry even when both reach one handler with the same category.
+
 ## 2026-11-23 — Review direct owning exception reception and return
 
 <a id="k-direct-exception-holder-review-20261123"></a>
