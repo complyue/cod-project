@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review recovery between plain products in the CoD name resolver
+
+<a id="k-booter-product-name-recovery-20261124"></a>
+**K-BOOTER-PRODUCT-NAME-RECOVERY-20261124.** Under [the entry-world decision](#h-entry-world-diagnostics-20261124) and [delegated review](#h-project-architecture-review-20261122), D-ARCH-REVIEW r100→r101 and [module graph r77→r78](applications/cod-booter/docs/ModuleGraph.md#recovering-field-type-names-between-plain-products) clear independent field type-name diagnostics after successful module registration, under P-680–P-683 and P-713/P-714. The booter must also check deferred selected-name kinds at the actual field, preserve the registered module prefix and count each retained finding once. The split lookup and selection checks are at `e0bde669e3e96c710f6cd8bf0b604e6d1046ea7e:applications/cod-booter/src/NameResolution.cod:292`. Broader semantic recovery and release evidence have separate scope.
+
 ## 2026-11-24 — Check readonly loans of inline parser fields
 
 <a id="k-booter-nested-product-loan-20261124"></a>

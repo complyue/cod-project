@@ -2,10 +2,12 @@
 
 ## Design authority
 
+The [r101 review](../CHANGELOG.md#k-booter-product-name-recovery-20261124) covers [independent field type-name failures between plain booter products](../applications/cod-booter/docs/ModuleGraph.md#recovering-field-type-names-between-plain-products) under P-682/P-683. The frame owns uncommitted field evidence. The invocation owns diagnostic order, retention, counting and the terminal output decision.
+
 The [r100 review](../CHANGELOG.md#k-booter-nested-product-loan-20261124) clears [source checking of readonly nested product loans](../applications/cod-booter/docs/ModuleGraph.md#lending-inline-fields-of-a-readonly-product) under P-682/P-683. Validate the actual helper calls, each field selection and loan duration before publication.
 The [r99 review](../CHANGELOG.md#k-local-proc-handler-review-20261124) clears the [two source spellings, private method and bounded activation paths](#checking-an-anonymous-handler-installation) under P-682/P-683 and D-10-HANDLER-INSTALL. The checked representation for multiple live capture layouts retains its own review.
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 100. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 101. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
 
 The [r98 review](../CHANGELOG.md#k-seed-product-diagnostic-recovery-20261124) covers [recovery between direct product schemas in the seed](#recovering-between-product-declarations-in-the-seed) under P-682/P-683 and the entry-world coverage contract.
 
