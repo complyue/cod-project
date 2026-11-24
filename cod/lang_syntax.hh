@@ -39,7 +39,7 @@ public:
 }
 
 enum class SyntaxRole { module_item, module_selection_item, block_item, binding_name, type_annotation,
-                        initializer, ref_group_item, argument_operand };
+                        initializer, ref_group_item, argument_operand, condition };
 struct SyntaxErrorReference {
   SyntaxRole role;
   size_t report;
@@ -794,14 +794,18 @@ class Parser {
     }
   }
 
-  Expr recover_operand(size_t first, const SyntaxDiagnostic &fault, SyntaxRole role) {
+  Expr report_operand_error(size_t first, const SyntaxDiagnostic &fault, SyntaxRole role) {
     const auto report = record_fault(fault);
-    synchronize_operand(first, role);
     Location location = tokens_[first].at;
     location.span.past = peek().at.span.first;
     auto result = make(Expression::Kind::syntax_error, {TokenKind::invalid, {}, std::move(location)});
     result->syntax_error = SyntaxErrorReference{role, report};
     return result;
+  }
+
+  Expr recover_operand(size_t first, const SyntaxDiagnostic &fault, SyntaxRole role) {
+    synchronize_operand(first, role);
+    return report_operand_error(first, fault, role);
   }
 
   Expr initializer_operand(HereAttachment attachment = HereAttachment::immediate,
@@ -1644,6 +1648,26 @@ class Parser {
     return finish(std::move(expr));
   }
 
+  Expr conditional_predicate() {
+    const auto opening = cursor_;
+    expect("(");
+    const auto first = cursor_;
+    const auto closing = closing_delimiter_[opening];
+    const auto saved = controls_;
+    try {
+      auto condition = expression();
+      expect(")");
+      return condition;
+    } catch (const LocatedFailure &failure) {
+      if (closing >= tokens_.size() || cursor_ > closing) throw;
+      controls_ = saved;
+      cursor_ = closing;
+      auto condition = report_operand_error(first, failure.diagnostic, SyntaxRole::condition);
+      expect(")");
+      return condition;
+    }
+  }
+
   Expr return_conditional(const Token &opening_if) {
     using K = Expression::Kind;
     const ParseEntry entry(recursion_, opening_if.at, "a return-state conditional");
@@ -2157,9 +2181,7 @@ class Parser {
       if (is("returning")) return return_conditional(token);
       using K = Expression::Kind;
       auto expr = make(K::conditional, token);
-      expect("(");
-      expr->children.push_back(expression());
-      expect(")");
+      expr->children.push_back(conditional_predicate());
       const bool single_return = is("return");
       expr->children.push_back(single_return ? return_expression(expect("return"), true) : block());
       if (single_return && is(";") && is("else", 1)) expect(";");

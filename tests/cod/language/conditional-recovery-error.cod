@@ -1,0 +1,16 @@
+proc branch() -> u64 {
+    if () {
+        val first <- ;
+        first
+    } else {
+        val second <- ;
+        second
+    };
+    if (true and ) {
+        val third <- ;
+        third
+    } else {
+        19u64
+    };
+    return 42u64
+}

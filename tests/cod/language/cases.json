@@ -41,6 +41,18 @@
     ]
   },
   {
+    "file": "conditional-recovery-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "conditional-recovery-error.cod:2:9: expected an expression",
+      "conditional-recovery-error.cod:3:22: expected an expression",
+      "conditional-recovery-error.cod:6:23: expected an expression",
+      "conditional-recovery-error.cod:9:18: expected an expression",
+      "conditional-recovery-error.cod:10:22: expected an expression"
+    ]
+  },
+  {
     "file": "named-array-owner.cod",
     "exit": 0,
     "stdout": "0\n5\n0\n0\n7\n7\n17\n29\n2\n11\n44\n12\n29\n"
