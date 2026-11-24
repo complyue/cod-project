@@ -18,7 +18,9 @@ using "./ParserStorage.cod" ExprPayload {
 using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
 using "./ParserStorage.cod" SequenceSyntax {
     OtherSequenceSyntax, InvalidSequence, ModuleSequence, BlockSequence, ArgumentSequence, HereReceiverSequence, FormalSequence, ClauseSequence, EnumSequence, SumSequence,
+    CaseReceiverSequence,
 };
+using "./ParserStorage.cod" CasePatternSyntax { NamedCaseMember, ConstructorCaseTarget };
 using "./ParserStorage.cod" DeclarationSyntax {
     OtherDeclaration, InvalidDeclaration, NominalRecord, NativeRecord, HandleTypeDeclaration, ArrayTypeDeclaration,
     EnumTypeDeclaration, AbstractTypeDeclaration, NativeSymbolDeclaration, ReferenceSymbolDeclaration, LocalPublication, NominalSum,
@@ -62,6 +64,7 @@ using "./ParserStorage.cod" {
     BindingSites, inspect_binding, inspect_type_annotation, FormalSites, inspect_formal, is_scope_block,
     LocalBindingSites, inspect_local_binding,
     DirectCallSites, direct_invocation, CaseSites, CaseArmSites, inspect_case, inspect_case_arm,
+    ConstructorCaseSites, inspect_constructor_case, case_pattern,
     BoundHandleSites, HandleConstructionSites, inspect_handle_binding, inspect_handle_construction, inspect_group,
     ProtectedSites, inspect_protected, GuardClauseSites, inspect_guard_clause, CatchSites, inspect_catch_binding,
     HandlerSites, inspect_handler, EnumMemberSites, inspect_enum_member, EnumIntegerSyntax, inspect_enum_integer, completion_syntax, syntax_first, syntax_past, published_syntax_id,
@@ -121,6 +124,7 @@ export data NameWorkSlot {
     receiver_import:ReceiverImportCheck;
     active:u64;
     module_selection:u64;
+    case_schema_prepared:bool;
     # Reaching installation at expression entry. The syntax count denotes
     # a join with no single proven installation.
     native_installation:u64;
@@ -700,6 +704,7 @@ func link_entries(nodes:const ExprNodes in N, work:NameWork in W, revision:u64, 
         work[at].next <- no_node();
         work[at].receiver_import <- NoReceiverCallables;
         work[at].next_method <- no_node();
+        work[at].case_schema_prepared <- false;
         work[at].imported_interface <- no_node();
         work[at].imported_type_module <- 0u64;
         work[at].imported_type_identity <- 0u64;
@@ -743,8 +748,14 @@ export func find_record_field(source:const SourceBytes in S, nodes:const ExprNod
     };
     val shape <- inspect_declaration(nodes, revision, used, record, declaration);
     if (shape != NominalRecord && shape != NativeRecord) return no_node();
+    return find_named_field(source, nodes, work, declaration.entries, name, revision, used)
+}
+
+export func find_named_field(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    work:const NameWork in W, tail:u64, name:u64, revision:u64, used:u64)
+    -> u64 where {const owner S, const owner N, const owner W} {
     ref field = make u64 { no_node() };
-    if (!first_sequence_entry(nodes, revision, used, declaration.entries, FormalSequence, field)) return no_node();
+    if (!first_sequence_entry(nodes, revision, used, tail, FormalSequence, field)) return no_node();
     ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
     ref binding = make BindingSites {
         name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
@@ -1464,7 +1475,34 @@ func resolve_case(source:const SourceBytes in S, nodes:const ExprNodes in N, bin
     (state.guard <- guard):void;
 }
 
-func resolve_case_arm(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+func register_case_receivers(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    bindings:NameBindings in B, work:NameWork in W, state:NameState in R, tail:u64)
+    -> void where {const owner S, const owner N, owner B, owner W, owner R} {
+    ref receipt = make u64 { no_node() };
+    if (!first_sequence_entry(nodes, state.syntax_revision, state.syntax_used, tail,
+        CaseReceiverSequence, receipt)) {
+        reject_name(state, tail, invalid_module_tree());
+        return
+    };
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    for (unused in 0u64 .. state.syntax_used) {
+        if (receipt == no_node()) return;
+        if (inspect_sequence_entry(nodes, state.syntax_revision, state.syntax_used, receipt,
+            entry) != CaseReceiverSequence) {
+            reject_name(state, receipt, invalid_module_tree());
+            return
+        };
+        declare_name(source, nodes, bindings, work, state, entry.item, receipt, local_binding(),
+                     duplicate_binding());
+        if (state.diagnostic != 0u8) return;
+        bindings[receipt].scope <- state.scope_node;
+        if (receipt == tail) return;
+        (receipt <- work[receipt].next):void
+    };
+    reject_name(state, tail, invalid_module_tree());
+}
+
+func resolve_case_arm_body(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                       work:NameWork in W, state:NameState in R, at:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     ref arm = make CaseArmSites { pattern <- no_node(); guard <- no_node(); body <- no_node(); arrow <- 0u64; };
@@ -1472,7 +1510,25 @@ func resolve_case_arm(source:const SourceBytes in S, nodes:const ExprNodes in N,
         reject_name(state, at, invalid_module_tree());
         return;
     };
-    # Pattern names use the subject's type and never enter ordinary lookup.
+    val mode <- case_pattern(nodes, state.syntax_used, arm.pattern);
+    val constructor <- arm.pattern;
+    if (mode == ConstructorCaseTarget) {
+        ref pattern = make ConstructorCaseSites { constructor <- no_node(); receiver_tail <- no_node() };
+        if (!inspect_constructor_case(nodes, state.syntax_revision, state.syntax_used, arm.pattern, pattern)) {
+            reject_name(state, arm.pattern, invalid_module_tree());
+            return
+        };
+        constructor <- pattern.constructor;
+        register_case_receivers(source, nodes, bindings, work, state, pattern.receiver_tail);
+        if (state.diagnostic != 0u8) return
+    };
+    # A constructor uses module selection. An enum member still uses only its subject's type.
+    if (mode == NamedCaseMember || mode == ConstructorCaseTarget) {
+        val found <- lookup(source, nodes, work, constructor, 0u64, state.module_names);
+        if (found != no_node() && bindings[found].kind == constructor_type()) {
+            remember(bindings, constructor, bindings[found].declaration, constructor_type())
+        }
+    };
     val incoming <- state.native_installation;
     resolve_expression(source, nodes, bindings, work, state, arm.guard);
     if (state.diagnostic != 0u8) return;
@@ -1488,6 +1544,18 @@ func resolve_case_arm(source:const SourceBytes in S, nodes:const ExprNodes in N,
     resolve_expression(source, nodes, bindings, work, state, body);
     join_native_installation(state, incoming);
     (state.case_arm <- enclosing):void;
+}
+
+func resolve_case_arm(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+    work:NameWork in W, state:NameState in R, at:u64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    val first <- state.first;
+    val used <- state.used;
+    state.first <- used;
+    resolve_case_arm_body(source, nodes, bindings, work, state, at);
+    state.first <- first;
+    state.used <- used;
+    return
 }
 
 func resolve_control_completion(source:const SourceBytes in S, nodes:const ExprNodes in N,

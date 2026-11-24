@@ -1,0 +1,517 @@
+using "./SourceStorage.cod" SourceBytes;
+using "./SourceAccess.cod" same_bytes;
+using "./ParserStorage.cod" {
+    ExprNodes, no_node, syntax_first, syntax_past, DeclarationSites, inspect_declaration,
+    SumArmSites, inspect_sum_arm, first_sequence_entry, FormalSites, inspect_formal,
+    BindingSites, inspect_binding, DeclarationSyntax { ArrayTypeDeclaration, NominalSum },
+    SequenceSyntax { SumSequence }, FormalMode { ValueFormal, ExplicitValueFormal, ReferenceFormal },
+    FormalSyntax { OrdinaryFormal }, BindingSyntax { TypedBinding },
+    IndexSites, inspect_index_selection, owner_constraint_syntax,
+    OwnerConstraintSyntax { ReadonlyOwnerConstraint },
+    CaseSites, inspect_case, CaseArmSites, inspect_case_arm, case_pattern,
+    CasePatternSyntax { NamedCaseMember, ConstructorCaseTarget, AnyCaseTarget },
+    ConstructorCaseSites, inspect_constructor_case, CaseReceiverSites, inspect_case_value_receiver,
+    SequenceEntry, inspect_sequence_entry, SequenceSyntax { BlockSequence, CaseReceiverSequence },
+    FieldSelectionSites, inspect_field_selection
+};
+using "./NameResolution.cod" {
+    NameBindings, NameWork, builtin_u64, record_type, find_named_field, array_type, formal_binding,
+    owner_binding, local_binding, native_scalar
+};
+using "./ModuleExports.cod" SelectedExports;
+using "./DeclarationTypes.cod" { DeclaredType, DeclaredExpressionResult, describe_type, describe_record_field };
+using "./AggregateSchemas.cod" AggregateFacts;
+using "./ModuleExportStorage.cod" {
+    ModuleInterfaces, find_interface, sum_type, enum_type, constructor_type, checked_sum_constructor, checked_aggregate_storage,
+    AggregateStorage, AggregateStorage { CoDBitsAggregate, CLayoutBitsRecord },
+    SumInterfacePayload { ConstructorField }
+};
+
+export data ConstructorCaseFact =
+    NoConstructorCase {} |
+    IndexedCaseSubject {
+        expression:u64; array_site:u64; index:u64; owner_site:u64; array_type:u64; value_type:DeclaredType; count:u64;
+    } |
+    CaseConstructor { case_site:u64; defining_module:u64; declaration:u64; ordinal:u64; representative:u64; } |
+    CaseFieldReceipt { case_site:u64; pattern:u64; field:u64; value_type:DeclaredType; } |
+    CaseProductField { receiver:u64; record:DeclaredType; value_type:DeclaredType; };
+export array ConstructorCaseFacts[u64]:ConstructorCaseFact;
+
+data IndexedCaseLoan {
+    expression:u64;
+    array:u64;
+    index:u64;
+    owner_site:u64;
+    array_type:u64;
+}
+
+func describe_case_array_element(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, array_declaration:u64, used:u64, revision:u64,
+    element:DeclaredType in T) -> bool where {const owner N, const owner B, const owner E, owner T} {
+    ref array_shape = make DeclarationSites {
+        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false
+    };
+    return inspect_declaration(nodes, revision, used, array_declaration, array_shape) == ArrayTypeDeclaration &&
+        names[array_shape.index_type].kind == builtin_u64() &&
+        describe_type(nodes, names, selected, array_shape.value_type, 0u64, revision, used, element) &&
+        element.kind == sum_type()
+}
+
+func describe_indexed_case_loan(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, expression:u64, used:u64, revision:u64,
+    loan:IndexedCaseLoan in L, element:DeclaredType in L) -> bool
+    where {const owner N, const owner B, const owner E, owner L} {
+    ref indexed = make IndexSites { target <- no_node(); index <- no_node() };
+    if (!inspect_index_selection(nodes, revision, used, expression, indexed) ||
+        names[indexed.target].kind != formal_binding()) return false;
+    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
+    };
+    if (inspect_formal(nodes, revision, used, names[indexed.target].declaration, formal) != OrdinaryFormal ||
+        formal.mode != ReferenceFormal ||
+        inspect_binding(nodes, revision, used, formal.binding, binding) != TypedBinding ||
+        binding.owner_name >= used || names[binding.owner_name].kind != owner_binding()) return false;
+    val owner_site <- names[binding.owner_name].declaration;
+    val marker <- binding.target_type;
+    if (owner_site >= used || marker >= used || names[marker].kind != array_type() ||
+        (!binding.readonly && owner_constraint_syntax(nodes, owner_site) != ReadonlyOwnerConstraint))
+        return false;
+    if (!describe_case_array_element(nodes, names, selected, names[marker].declaration, used, revision, element))
+        return false;
+    loan.expression <- expression;
+    loan.array <- indexed.target;
+    loan.index <- indexed.index;
+    loan.owner_site <- owner_site;
+    loan.array_type <- names[marker].declaration;
+    return true
+}
+
+func case_bits_type(type:const DeclaredType in T, aggregate:const AggregateFacts in F,
+    interfaces:const ModuleInterfaces in I, published:u64) -> bool
+    where {const owner T, const owner F, const owner I} {
+    val kind <- type.kind;
+    if (kind != record_type() && kind != sum_type()) return false;
+    val storage <- if (type.defining_module == 0u64) {
+        if (type.identity >= intrinsic (len)(aggregate)) return false;
+        (aggregate[type.identity])
+    } else {
+        checked_aggregate_storage(interfaces, published, type.defining_module, type.identity, kind)
+    };
+    return storage == (CoDBitsAggregate:AggregateStorage) || storage == (CLayoutBitsRecord:AggregateStorage)
+}
+
+func local_case_constructor(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, sum:u64, spelling:u64, used:u64, revision:u64,
+    count:u64 in C, ordinal:u64 in C) -> u64 where {const owner N, const owner B, const owner W, owner C} {
+    ref shape = make DeclarationSites {
+        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false
+    };
+    if (inspect_declaration(nodes, revision, used, sum, shape) != NominalSum ||
+        spelling >= used || names[spelling].kind != constructor_type()) return no_node();
+    val chosen <- names[spelling].declaration;
+    ref first = make u64 { no_node() };
+    if (!first_sequence_entry(nodes, revision, used, shape.entries, SumSequence, first)) return no_node();
+    ref sites = make SumArmSites { previous <- no_node(); name <- no_node(); fields <- no_node() };
+    val arm <- first;
+    val selected_arm <- no_node();
+    for (index in 0u64 .. used) {
+        if (!inspect_sum_arm(nodes, revision, used, arm, sites)) return no_node();
+        if (arm == chosen) {
+            selected_arm <- arm;
+            (ordinal <- index):void
+        };
+        if (arm == shape.entries) {
+            count <- index + 1u64;
+            return selected_arm
+        };
+        arm <- work[arm].next
+    };
+    return no_node()
+}
+
+func published_case_constructor(selected:const SelectedExports in E,
+    interfaces:const ModuleInterfaces in I, published:u64, sum:const DeclaredType in T,
+    spelling:u64, count:u64 in C, ordinal:u64 in C) -> u64
+    where {const owner E, const owner I, const owner T, owner C} {
+    if (spelling >= intrinsic (len)(selected)) return no_node();
+    val site <- selected[spelling].constructor_selection;
+    if (site >= intrinsic (len)(selected)) return no_node();
+    val head <- find_interface(interfaces, published, sum.defining_module, sum.identity);
+    if (head == no_node() || selected[site].sum_head != head) return no_node();
+    val chosen <- selected[spelling].constructor_row;
+    if (chosen >= published) return no_node();
+    for (entry in head + 1u64 .. head + 1u64 + interfaces[head].entry_count) {
+        if (checked_sum_constructor(interfaces, published, head, entry) == chosen) {
+            count <- interfaces[head].entry_count;
+            ordinal <- entry - head - 1u64;
+            return chosen
+        }
+    };
+    return no_node()
+}
+
+func local_case_field(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
+    constructor:u64, selector:u64, used:u64, revision:u64, type:DeclaredType in T) -> u64
+    where {const owner S, const owner N, const owner B, const owner E, const owner W, owner T} {
+    ref arm = make SumArmSites { previous <- no_node(); name <- no_node(); fields <- no_node() };
+    if (!inspect_sum_arm(nodes, revision, used, constructor, arm)) return no_node();
+    val field <- find_named_field(source, nodes, work, arm.fields, selector, revision, used);
+    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
+    };
+    if (inspect_formal(nodes, revision, used, field, formal) != OrdinaryFormal ||
+        (formal.mode != ValueFormal && formal.mode != ExplicitValueFormal) ||
+        inspect_binding(nodes, revision, used, formal.binding, binding) != TypedBinding ||
+        !describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type))
+        return no_node();
+    return field
+}
+
+func published_case_field(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    spellings:const SourceBytes in G, spelling_used:u64, interfaces:const ModuleInterfaces in G,
+    published:u64, constructor:u64, selector:u64, used:u64, type:DeclaredType in T)
+    -> u64 where {const owner S, const owner N, const owner G, owner T} {
+    if (published > intrinsic (len)(interfaces) || constructor >= published ||
+        interfaces[constructor].interface_kind != constructor_type() ||
+        interfaces[constructor].entry_count >= published - constructor ||
+        spelling_used > intrinsic (len)(spellings)) return no_node();
+    val first <- syntax_first(nodes, used, selector);
+    val past <- syntax_past(nodes, used, selector);
+    if (first >= past || past > intrinsic (len)(source)) return no_node();
+    for (field in constructor + 1u64 .. constructor + 1u64 + interfaces[constructor].entry_count) {
+        if (interfaces[field].name_first >= interfaces[field].name_past ||
+            interfaces[field].name_past > spelling_used) return no_node();
+        if (same_bytes(source, first, past, spellings, interfaces[field].name_first, interfaces[field].name_past)) {
+            case interfaces[field].sum_payload of {
+                ConstructorField {
+                    val kind <- field_kind; val module <- field_module; val identity <- field_identity;
+                    val mode <- mode;
+                } -> {
+                    if (kind == 0u8 || (mode != ValueFormal && mode != ExplicitValueFormal)) return no_node();
+                    type.kind <- kind;
+                    type.defining_module <- module;
+                    type.identity <- identity;
+                    return field
+                };
+                _ -> { return no_node() }
+            }
+        }
+    };
+    return no_node()
+}
+
+func case_problem(report:DeclaredExpressionResult in R, node:u64, diagnostic:u8)
+    -> bool where {owner R} {
+    report.node <- node;
+    report.diagnostic <- diagnostic;
+    return false
+}
+
+func remember_case_subject(facts:ConstructorCaseFacts in F, at:u64,
+    loan:const IndexedCaseLoan in R, type:const DeclaredType in R, count:u64)
+    -> void where {owner F, const owner R} {
+    facts[at] <- make IndexedCaseSubject {
+        expression <- loan.expression; array_site <- loan.array; index <- loan.index;
+        owner_site <- loan.owner_site; array_type <- loan.array_type; value_type <- type; count <- count
+    };
+    facts[loan.expression] <- make IndexedCaseSubject {
+        expression <- loan.expression; array_site <- loan.array; index <- loan.index;
+        owner_site <- loan.owner_site; array_type <- loan.array_type; value_type <- type; count <- count
+    };
+    return
+}
+
+func remember_case_constructor(facts:ConstructorCaseFacts in F, pattern:u64, choice:u64,
+    first:u64, module:u64, definition:u64, ordinal:u64)
+    -> void where {owner F} {
+    val representative <- pattern;
+    for (prior in first .. pattern) {
+        case facts[prior] of {
+            CaseConstructor {
+                val case_site <- case_site; val origin <- defining_module;
+                val identity <- declaration; val tag <- ordinal; val site <- representative;
+            } -> {
+                if (case_site == choice && origin == module && identity == definition && tag == ordinal) {
+                    representative <- site;
+                    break
+                }
+            };
+            _ -> {}
+        }
+    };
+    facts[pattern] <- make CaseConstructor {
+        case_site <- choice; defining_module <- module; declaration <- definition; ordinal <- ordinal;
+        representative <- representative
+    };
+    return
+}
+
+func remember_case_field(facts:ConstructorCaseFacts in F, receipt:u64, choice:u64, pattern:u64,
+    field:u64, type:const DeclaredType in T)
+    -> void where {owner F, const owner T} {
+    facts[receipt] <- make CaseFieldReceipt {
+        case_site <- choice; pattern <- pattern; field <- field; value_type <- type
+    };
+    return
+}
+
+func prepare_case_fields(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
+    spellings:const SourceBytes in G, spelling_used:u64, interfaces:const ModuleInterfaces in G,
+    published:u64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
+    choice:u64, pattern:u64, tail:u64, module:u64, constructor:u64, used:u64, revision:u64,
+    report:DeclaredExpressionResult in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, const owner W,
+           const owner G, const owner A, owner F, owner R} {
+    ref item = make u64 { no_node() };
+    if (!first_sequence_entry(nodes, revision, used, tail, CaseReceiverSequence, item))
+        return case_problem(report, pattern, 94u8);
+    ref receive = make CaseReceiverSites {
+        previous <- no_node(); destination <- no_node(); selected_field <- no_node(); transfer_at <- 0u64
+    };
+    ref received = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
+    val selector <- no_node();
+    val field <- no_node();
+    for (unused in 0u64 .. used) {
+        if (item == no_node()) return true;
+        if (!inspect_case_value_receiver(nodes, revision, used, item, receive))
+            return case_problem(report, item, 94u8);
+        selector <- if (receive.selected_field == no_node()) { (receive.destination) }
+                    else { (receive.selected_field) };
+        field <- if (module == 0u64) {
+            local_case_field(source, nodes, names, selected, work, constructor, selector,
+                used, revision, received)
+        } else {
+            published_case_field(source, nodes, spellings, spelling_used, interfaces, published,
+                constructor, selector, used, received)
+        };
+        if (field == no_node()) return case_problem(report, selector, 95u8);
+        if (!native_scalar(received.kind) && received.kind != enum_type() &&
+            !case_bits_type(received, aggregate, interfaces, published))
+            return case_problem(report, selector, 94u8);
+        remember_case_field(facts, item, choice, pattern, field, received);
+        if (item == tail) return true;
+        (item <- work[item].next):void
+    };
+    return case_problem(report, pattern, 94u8)
+}
+
+func prepare_case_arms(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
+    spellings:const SourceBytes in G, spelling_used:u64, interfaces:const ModuleInterfaces in G,
+    published:u64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
+    choice:u64, subject:u64, tail:u64, sum:const DeclaredType in T, used:u64, revision:u64, count:u64 in C,
+    report:DeclaredExpressionResult in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, const owner W,
+           const owner G, const owner A, owner F, const owner T, owner C, owner R} {
+    ref item = make u64 { no_node() };
+    if (!first_sequence_entry(nodes, revision, used, tail, BlockSequence, item))
+        return case_problem(report, choice, 94u8);
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    ref arm = make CaseArmSites { pattern <- no_node(); guard <- no_node(); body <- no_node(); arrow <- 0u64 };
+    ref pattern = make ConstructorCaseSites { constructor <- no_node(); receiver_tail <- no_node() };
+    ref ordinal = make u64 { no_node() };
+    ref extent = make u64 { 0u64 };
+    val spelling <- no_node();
+    val receipts <- no_node();
+    val selected_constructor <- no_node();
+    val definition <- no_node();
+    val mode <- AnyCaseTarget;
+    val module <- sum.defining_module;
+    for (unused in 0u64 .. used) {
+        if (item == no_node()) return true;
+        if (inspect_sequence_entry(nodes, revision, used, item, entry) != BlockSequence)
+            return case_problem(report, choice, 94u8);
+        if (inspect_case_arm(nodes, revision, used, entry.item, arm)) {
+            mode <- case_pattern(nodes, used, arm.pattern);
+            if (mode != AnyCaseTarget) {
+                spelling <- arm.pattern;
+                receipts <- no_node();
+                if (mode == ConstructorCaseTarget) {
+                    if (!inspect_constructor_case(nodes, revision, used, arm.pattern, pattern))
+                        return case_problem(report, arm.pattern, 94u8);
+                    spelling <- pattern.constructor;
+                    (receipts <- pattern.receiver_tail):void
+                } else {
+                    if (mode != NamedCaseMember) return case_problem(report, arm.pattern, 94u8);
+                };
+                selected_constructor <- if (module == 0u64) {
+                    local_case_constructor(nodes, names, work, sum.identity, spelling, used, revision,
+                                           extent, ordinal)
+                } else {
+                    published_case_constructor(selected, interfaces, published, sum, spelling, extent,
+                                               ordinal)
+                };
+                if (selected_constructor == no_node() || ordinal >= extent ||
+                    (count != 0u64 && count != extent)) return case_problem(report, spelling, 95u8);
+                count <- extent;
+                definition <- if (module == 0u64) { selected_constructor }
+                              else { (interfaces[selected_constructor].declaration) };
+                remember_case_constructor(facts, arm.pattern, choice, subject + 1u64,
+                    module, definition, ordinal);
+                if (!prepare_case_fields(source, nodes, names, selected, work, spellings, spelling_used,
+                    interfaces, published, aggregate, facts, choice, arm.pattern, receipts, module,
+                    selected_constructor, used, revision, report)) return false
+            }
+        };
+        (item <- work[item].next):void
+    };
+    return case_problem(report, choice, 94u8)
+}
+
+func prepare_indexed_sum_case(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
+    spellings:const SourceBytes in G, spelling_used:u64, interfaces:const ModuleInterfaces in G,
+    published:u64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
+    at:u64, used:u64, revision:u64, report:DeclaredExpressionResult in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, const owner W,
+           const owner G, const owner A, owner F, owner R} {
+    if (at >= intrinsic (len)(facts)) return false;
+    ref subject = make CaseSites { subject <- no_node(); items <- no_node() };
+    if (!inspect_case(nodes, revision, used, at, subject)) return false;
+    ref loan = make IndexedCaseLoan {
+        expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node();
+        array_type <- no_node()
+    };
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
+    if (!describe_indexed_case_loan(nodes, names, selected, subject.subject, used, revision,
+        loan, type) || !case_bits_type(type, aggregate, interfaces, published))
+        return case_problem(report, subject.subject, 93u8);
+    ref count = make u64 { 0u64 };
+    if (!prepare_case_arms(source, nodes, names, selected, work, spellings, spelling_used,
+        interfaces, published, aggregate, facts, at, subject.subject, subject.items, type,
+        used, revision, count, report))
+        return false;
+    if (count == 0u64) return case_problem(report, at, 93u8);
+    remember_case_subject(facts, at, loan, type, count);
+    return true
+}
+
+func has_case_head(nodes:const ExprNodes in N, work:const NameWork in W, tail:u64, used:u64,
+    revision:u64, receptions_only:bool) -> bool where {const owner N, const owner W} {
+    ref item = make u64 { no_node() };
+    if (!first_sequence_entry(nodes, revision, used, tail, BlockSequence, item)) return false;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    ref arm = make CaseArmSites { pattern <- no_node(); guard <- no_node(); body <- no_node(); arrow <- 0u64 };
+    val mode <- AnyCaseTarget;
+    for (unused in 0u64 .. used) {
+        if (item == no_node() ||
+            inspect_sequence_entry(nodes, revision, used, item, entry) != BlockSequence) return false;
+        if (inspect_case_arm(nodes, revision, used, entry.item, arm)) {
+            mode <- case_pattern(nodes, used, arm.pattern);
+            if (mode == ConstructorCaseTarget || (!receptions_only && mode == NamedCaseMember)) return true
+        };
+        (item <- work[item].next):void
+    };
+    return false
+}
+
+func describe_received_product(facts:const ConstructorCaseFacts in F, site:u64,
+    type:DeclaredType in T) -> bool where {const owner F, owner T} {
+    return case facts[site] of {
+        CaseFieldReceipt { val received <- value_type; } -> {
+            type.kind <- received.kind;
+            type.defining_module <- received.defining_module;
+            type.identity <- received.identity;
+            true
+        };
+        CaseProductField { val received <- value_type; } -> {
+            type.kind <- received.kind;
+            type.defining_module <- received.defining_module;
+            type.identity <- received.identity;
+            true
+        };
+        _ -> false
+    }
+}
+
+func remember_case_projection(facts:ConstructorCaseFacts in F, site:u64, receiver:u64,
+    record:const DeclaredType in T, type:const DeclaredType in T)
+    -> void where {owner F, const owner T} {
+    facts[site] <- make CaseProductField {
+        receiver <- receiver; record <- record; value_type <- type
+    };
+    return
+}
+
+func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
+    spellings:const SourceBytes in G, interfaces:const ModuleInterfaces in G,
+    published:u64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
+    used:u64, revision:u64, report:DeclaredExpressionResult in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, const owner W,
+           const owner G, const owner A, owner F, owner R} {
+    ref selection = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
+    ref record = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
+    val origin <- no_node();
+    for (site in 0u64 .. used) {
+        if (inspect_field_selection(nodes, revision, used, site, selection)) {
+            origin <- if (names[selection.receiver].kind == local_binding()) {
+                (names[selection.receiver].declaration)
+            } else { (selection.receiver) };
+            if (origin < site && describe_received_product(facts, origin, type)) {
+                if (type.kind != record_type()) return case_problem(report, selection.field, 95u8);
+                record.kind <- type.kind;
+                record.defining_module <- type.defining_module;
+                record.identity <- type.identity;
+                if (!describe_record_field(source, nodes, names, selected, work, spellings, interfaces,
+                        published, selection.field, used, revision, type))
+                    return case_problem(report, selection.field, 95u8);
+                if (!native_scalar(type.kind) && type.kind != enum_type() &&
+                    !case_bits_type(type, aggregate, interfaces, published))
+                    return case_problem(report, selection.field, 94u8);
+                remember_case_projection(facts, site, selection.receiver, record, type)
+            }
+        }
+    };
+    return true
+}
+
+export func needs_constructor_case_plan(nodes:const ExprNodes in N, used:u64, revision:u64)
+    -> bool where {const owner N} {
+    ref indexed = make IndexSites { target <- no_node(); index <- no_node() };
+    ref choice = make CaseSites { subject <- no_node(); items <- no_node() };
+    for (at in 0u64 .. used) {
+        if (case_pattern(nodes, used, at) == ConstructorCaseTarget ||
+            (inspect_case(nodes, revision, used, at, choice) &&
+             inspect_index_selection(nodes, revision, used, choice.subject, indexed))) return true
+    };
+    return false
+}
+
+export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, selected:const SelectedExports in E, work:NameWork in W,
+    spellings:const SourceBytes in G, spelling_used:u64, interfaces:const ModuleInterfaces in G,
+    published:u64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
+    used:u64, revision:u64, first:u64 in P, report:DeclaredExpressionResult in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, owner W,
+           const owner G, const owner A, owner F, owner P, owner R} {
+    if (intrinsic (len)(facts) == 0u64) return true;
+    if (used > intrinsic (len)(facts)) return case_problem(report, no_node(), 93u8);
+    ref choice = make CaseSites { subject <- no_node(); items <- no_node() };
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
+    ref loan = make IndexedCaseLoan {
+        expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node();
+        array_type <- no_node()
+    };
+    for (at in 0u64 .. used) {
+        if (inspect_case(nodes, revision, used, at, choice) &&
+            (has_case_head(nodes, work, choice.items, used, revision, true) ||
+             (describe_indexed_case_loan(nodes, names, selected, choice.subject, used, revision, loan, type) &&
+              has_case_head(nodes, work, choice.items, used, revision, false)))) {
+            if (!prepare_indexed_sum_case(source, nodes, names, selected, work, spellings,
+                spelling_used, interfaces, published, aggregate, facts, at, used, revision, report))
+                return false;
+            work[at].case_schema_prepared <- true;
+            if (first == no_node()) { (first <- at):void }
+        }
+    };
+    return first == no_node() || prepare_received_fields(source, nodes, names, selected, work,
+        spellings, interfaces, published, aggregate, facts, used, revision, report)
+}

@@ -71,7 +71,7 @@ export func type_identity(names:const NameBindings in B, selected:const Selected
     return declaration;
 }
 
-data DeclaredType {
+export data DeclaredType {
     kind:u8;
     defining_module:u64;
     identity:u64;
@@ -96,7 +96,7 @@ func invalid_string_operand() -> u8 { return 102u8; }
 func readonly_string_owner() -> u8 { return 103u8; }
 func invalid_string_installation() -> u8 { return 110u8; }
 
-func describe_type(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
+export func describe_type(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
                    annotation:u64, current_module:u64, revision:u64, used:u64, result:DeclaredType in R) -> bool
     where {const owner N, const owner B, const owner E, owner R} {
     ref parsed = make BindingSites {
@@ -161,6 +161,19 @@ func imported_member_type(source:const SourceBytes in S, nodes:const ExprNodes i
         } else {};
     };
     return false;
+}
+
+export func describe_record_field(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
+    spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:u64,
+    name:u64, used:u64, revision:u64, result:DeclaredType in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, const owner W,
+           const owner P, const owner I, owner R} {
+    if (result.kind != record_type()) return false;
+    if (result.defining_module == 0u64)
+        return local_member_type(source, nodes, names, selected, work, name, revision, used, result);
+    return imported_member_type(source, nodes, spellings, interfaces, interface_count, name,
+        used, result)
 }
 
 # Follow only syntax and bound declarations here. The result carries the
@@ -260,9 +273,8 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     if (inspect_field_selection(nodes, revision, used, at, selection)) {
         if (!trace_type(source, nodes, names, selected, work, spellings, interfaces, interface_count, selection.receiver, used, revision, result) ||
             result.kind != record_type()) return false;
-        if (result.defining_module == 0u64)
-            return local_member_type(source, nodes, names, selected, work, selection.field, revision, used, result);
-        return imported_member_type(source, nodes, spellings, interfaces, interface_count, selection.field, used, result);
+        return describe_record_field(source, nodes, names, selected, work, spellings, interfaces,
+            interface_count, selection.field, used, revision, result)
     };
     if (name_syntax(nodes, used, at) != OrdinaryName) return false;
     val binding <- names[at].kind;
@@ -531,7 +543,7 @@ export func check_declared_expressions(source:const SourceBytes in S, nodes:cons
                                      construction.contents, construction.placement, used, revision, report)) return false;
         if (inspect_type_assertion(nodes, revision, used, at, assertion) &&
             !check_type_assertion(source, nodes, names, selected, work, spellings, interfaces, interface_count, at, used, revision, assertion, report)) return false;
-        if (inspect_case(nodes, revision, used, at, choice) &&
+        if (!work[at].case_schema_prepared && inspect_case(nodes, revision, used, at, choice) &&
             !check_case_declaration(source, nodes, names, selected, work, spellings, interfaces, interface_count, at, used, revision, choice, report)) return false;
         place_operation <- inspect_assignment(nodes, revision, used, at, assignment);
         if (place_operation == PlaceRebind &&

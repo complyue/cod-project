@@ -26,6 +26,7 @@ using "./ParserStorage.cod" LocalMode { ExceptionLocal };
 using "./ParserStorage.cod" FormalMode {
     ValueFormal, ExceptionFormal, HandleFormal, RetainedHandleFormal, ReferenceSlotFormal, IdentityOnlyRefFormal,
 };
+using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { NoConstructorCase } }
 using "./ParserStorage.cod" {
     ExprNodes, Tokens, no_node, ConstructionSites, inspect_construction, syntax_first, syntax_past,
     first_module_item, SequenceEntry, inspect_sequence_entry, module_item_publication,
@@ -260,7 +261,9 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64,
                     0u8
                 };
                 (SumDefinition) -> { if (emit_object) { unsupported_nominal_sum() } else { 0u8 } };
-                (ConstructorCasePattern) -> { unsupported_constructor_case() };
+                (ConstructorCasePattern) -> {
+                    if (emit_object) { unsupported_constructor_case() } else { 0u8 }
+                };
                 (ProcedureSymbol) -> { unsupported_procedure_symbol() };
                 (ScopedProcedureDefinition) -> { unsupported_scoped_procedure() };
                 (RegionDefinition) -> { unsupported_named_region() };
@@ -503,13 +506,14 @@ export func analyze_bound_operands(source:const SourceBytes in S, nodes:const Ex
     ref operands = make OperandCheckResult { diagnostic <- 0u8; node <- no_node(); };
     ref fields = make CaughtFieldUses(0u64, make NoCaughtField {});
     ref no_native_loans = make SuppliedViews(0u64, make NoSuppliedView {});
+    ref no_constructor_cases = make ConstructorCaseFacts(0u64, make NoConstructorCase {});
     ref executable = make DeclarationDemands(0u64, make DeclarationDemand {
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
         pending <- no_node(); declared_failure <- no_node(); signature <- false; body <- false;
     });
     if (!check_module_operands(source, nodes, result.frontend.tree, bindings, work, selected, 1u64,
         facts, owners,
-                               fields, no_native_loans, executable, operands)) {
+                               fields, no_native_loans, no_constructor_cases, executable, operands)) {
         binding_diagnostic(nodes, result, module_operands_failed(), operands.diagnostic, operands.node);
         return false;
     } else {};

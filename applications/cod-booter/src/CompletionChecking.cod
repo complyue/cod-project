@@ -32,6 +32,7 @@ using "./ParserStorage.cod" {
     first_sequence_entry, inspect_sequence_entry, SequenceEntry, inspect_case, inspect_case_arm, CaseSites, CaseArmSites,
     inspect_callable, CallableSites, find_signature_clause, module_tail, block_tail, is_scope_block,
     inspect_conditional, ConditionalSites, inspect_defer, DeferSites, inspect_binary, BinarySites,
+    IndexSites, inspect_index_selection,
     inspect_local_binding, LocalBindingSites, inspect_invocation, DirectCallSites, inspect_field_selection, FieldSelectionSites,
     published_syntax_id, completion_syntax, completion_operand, name_syntax, ungrouped,
 };
@@ -536,6 +537,9 @@ func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSit
     if (mode == PlaceTransfer || mode == PlaceRebind || mode == FieldTransfer ||
         mode == FieldRebind || mode == AugmentedPlaceTransfer)
         return can_continue(sites, assignment.destination) && can_continue(sites, assignment.input);
+    ref index = make IndexSites { target <- no_node(); index <- no_node() };
+    if (inspect_index_selection(nodes, revision, used, at, index))
+        return can_continue(sites, index.target) && can_continue(sites, index.index);
     ref inner = make u64 { no_node() };
     if (inspect_group(nodes, revision, used, at, inner) == ParenthesizedExpression) return can_continue(sites, inner);
     ref construction = make ConstructionSites {
@@ -771,6 +775,9 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
         sites[binding.initializer].presence != present_target()) return unproved_nonnull_binding();
     if (facts[at].text_assertion != 0u8)
         return route_failure(nodes, names, links, facts, sites, at, used, revision, type_assertion_failed_identity(), 0u8, possible_failure());
+    if (facts[at].checks_array_bounds)
+        return route_failure(nodes, names, links, facts, sites, at, used, revision,
+            index_out_of_bounds_identity(), 0u8, possible_failure());
     if (facts[at].allocation_owner != no_node())
         return route_failure(nodes, names, links, facts, sites, at, used, revision, out_of_memory_identity(), 0u8, possible_failure());
     ref failure = make ExceptionType {

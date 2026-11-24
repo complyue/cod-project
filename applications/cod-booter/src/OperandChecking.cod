@@ -27,7 +27,7 @@ using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid, RangeHeader, RangeLoop, Parenthesized,
     BooleanLiteral, TextLiteral, NullLiteral, DiscardedExpression, BreakValue, BreakVoid, CaseFallthrough,
-    CaseFailure, RaiseValue, RaisePending, NamedThrow,
+    CaseFailure, RaiseValue, RaisePending, NamedThrow, ArrayLength,
 };
 using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
 using "./ParserStorage.cod" CallableSyntax { InvalidCallable };
@@ -35,7 +35,7 @@ using "./ParserStorage.cod" DeferSyntax { InvalidDefer, DeferCall };
 using "./ParserStorage.cod" InvocationSyntax { InvalidCallSyntax };
 using "./ParserStorage.cod" GuardClauseSyntax { HandlerClause, CleanupClause, InvalidGuardClause };
 using "./ParserStorage.cod" CasePatternSyntax {
-    AnyCaseTarget, NullCaseTarget, FalseCaseTarget, TrueCaseTarget, NamedCaseMember
+    AnyCaseTarget, NullCaseTarget, FalseCaseTarget, TrueCaseTarget, NamedCaseMember, ConstructorCaseTarget
 };
 using "./ParserStorage.cod" SequenceSyntax {
     ModuleSequence, ClauseSequence, EnumSequence, InvalidSequence
@@ -98,7 +98,11 @@ using "./ModuleExportStorage.cod" {
 };
 using "./ExceptionTypes.cod" { ExceptionType, resolve_exception_type };
 using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check, needs_signature_check };
-using "./DeclarationTypes.cod" { type_module, type_identity };
+using "./DeclarationTypes.cod" { type_module, type_identity, DeclaredType };
+using "./CaseSchemas.cod" {
+    ConstructorCaseFacts,
+    ConstructorCaseFact { IndexedCaseSubject, CaseConstructor, CaseFieldReceipt, CaseProductField }
+}
 using "./ExceptionPayload.cod" {
     CaughtFieldUses, CaughtFieldUse { CaughtField }, unknown_exception_field
 };
@@ -122,6 +126,7 @@ export data OperandFact {
     identity_module:u64;
     reaches_constructed_throw:bool;
     loans_owning_handle:bool;
+    checks_array_bounds:bool;
     target_readonly:u8;
     needs_target:u8;
     target_presence:u8;
@@ -193,6 +198,8 @@ func scalar_u8() -> u8 { return 11u8; }
 func source_array_loan() -> u8 { return 12u8 }
 func source_handle_loan() -> u8 { return 13u8 }
 func source_u32() -> u8 { return 14u8 }
+func source_sum_target() -> u8 { return 15u8 }
+func received_product() -> u8 { return 16u8 }
 
 export func immutable_text_kind(kind:u8) -> bool {
     return kind == string_kind() || kind == c_string_kind();
@@ -280,6 +287,7 @@ func set_fact(facts:OperandFacts in F, at:u64, kind:u8, reception:u8,
     facts[at].identity_module <- 0u64;
     facts[at].reaches_constructed_throw <- false;
     facts[at].loans_owning_handle <- false;
+    facts[at].checks_array_bounds <- false;
     facts[at].target_readonly <- 0u8;
     facts[at].writable_text_place <- 0u8;
     facts[at].selection <- no_node();
@@ -2433,13 +2441,27 @@ func prepare_case_arm(nodes:const ExprNodes in N, names:const NameBindings in B,
 
 func prepare_case_pattern(source:const SourceBytes in S, nodes:const ExprNodes in N,
                           names:const NameBindings in B, links:const NameWork in L, facts:OperandFacts in F,
+                          cases:const ConstructorCaseFacts in C,
                           at:u64, subject:u64, pattern:u64, mode:CasePatternSyntax, member:u64 in M,
                           used:u64, revision:u64) -> u8
-    where {const owner S, const owner N, const owner B, const owner L, owner F, owner M} {
+    where {const owner S, const owner N, const owner B, const owner L, owner F, const owner C, owner M} {
     member <- no_node();
     if (mode == AnyCaseTarget || mode == NullCaseTarget) return 0u8;
     val kind <- facts[subject].kind;
     if (kind == never_result()) return 0u8;
+    if (kind == source_sum_target()) {
+        if ((mode != NamedCaseMember && mode != ConstructorCaseTarget) ||
+            pattern >= intrinsic (len)(cases)) return unsupported_case_pattern();
+        return case cases[pattern] of {
+            CaseConstructor { val choice <- case_site; val representative <- representative; } -> {
+                if (choice != at || representative <= subject || representative > pattern)
+                    return invalid_operand_tree();
+                member <- representative;
+                0u8
+            };
+            _ -> unsupported_case_pattern()
+        }
+    };
     if (kind == scalar_bool()) {
         if (mode != FalseCaseTarget && mode != TrueCaseTarget) return unsupported_case_pattern();
         member <- if (mode == TrueCaseTarget) { at } else { subject };
@@ -2569,16 +2591,18 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
                 links:const NameWork in L, selected:const SelectedExports in E, facts:OperandFacts in F,
                 owners:CallOwners in O, fields:const CaughtFieldUses in X,
                     views:const SuppliedViews in H,
+                cases:const ConstructorCaseFacts in C,
                 demand:const DeclarationDemands in D,
                 report:OperandCheckResult in R, at:u64, used:u64, revision:u64, outer:u64) -> bool
     where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F,
-           owner O, const owner X, const owner H, const owner D, owner R} {
+           owner O, const owner X, const owner H, const owner C, const owner D, owner R} {
     ref selection = make CaseSites { subject <- no_node(); items <- no_node(); };
     if (!inspect_case(nodes, revision, used, at, selection)) return operand_problem(report, at, invalid_operand_tree());
     val subject <- selection.subject;
     val kind <- facts[subject].kind;
     val completed <- kind != never_result();
-    if (completed && kind != scalar_bool() && kind != scalar_enum() && kind != null_literal())
+    if (completed && kind != scalar_bool() && kind != scalar_enum() &&
+        kind != null_literal() && kind != source_sum_target())
         return operand_problem(report, at, unsupported_case_subject());
     if (kind == scalar_enum() && facts[subject].identity_module != 0u64)
         return operand_problem(report, at, unsupported_case_subject());
@@ -2586,8 +2610,21 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     ref coverage = make CaseCoverage {
         total <- 0u64; remaining <- 0u64; absent <- false; only <- no_node(); generation <- at; exclusions <- no_node();
     };
-    if (!initialize_case_coverage(nodes, names, links, facts, at, subject, coverage, used, revision))
-        return operand_problem(report, at, invalid_operand_tree());
+    if (kind == source_sum_target()) {
+        if (at >= intrinsic (len)(cases)) return operand_problem(report, at, invalid_operand_tree());
+        case cases[at] of {
+            IndexedCaseSubject { val expression <- expression; val count <- count; } -> {
+                if (expression != subject || count == 0u64)
+                    return operand_problem(report, at, invalid_operand_tree());
+                coverage.total <- count;
+                (coverage.remaining <- count):void
+            };
+            _ -> { return operand_problem(report, at, invalid_operand_tree()) }
+        }
+    } else {
+        if (!initialize_case_coverage(nodes, names, links, facts, at, subject, coverage, used, revision))
+            return operand_problem(report, at, invalid_operand_tree())
+    };
     ref item = make u64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, selection.items, BlockSequence, item))
         return operand_problem(report, at, invalid_operand_tree());
@@ -2621,12 +2658,13 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
         if (!reached) { (facts[item].case_item <- unreachable_case_item()):void; } else {};
         if (inspect_case_arm(nodes, revision, used, expression, arm)) {
             mode <- case_pattern(nodes, used, arm.pattern);
-            diagnostic <- prepare_case_pattern(source, nodes, names, links, facts, at, subject, arm.pattern, mode, member, used, revision);
+            diagnostic <- prepare_case_pattern(source, nodes, names, links, facts, cases,
+                at, subject, arm.pattern, mode, member, used, revision);
             if (diagnostic != 0u8) return operand_problem(report, at, diagnostic);
             if (reached) { match_case_arm(facts, coverage, subject, expression, member, mode); } else {};
             context <- enter_case_context(facts, outer, expression);
             if (!check_operand_range(source, nodes, names, links, selected, facts, owners, fields,
-                views, demand, report,
+                views, cases, demand, report,
                                      cursor, item, used, revision, context)) return false;
             diagnostic <- finish_case_arm(nodes, links, facts, coverage, at, expression, member, borrowed, used, revision, arm, mode);
             if (diagnostic != 0u8) return operand_problem(report, at, diagnostic);
@@ -2642,7 +2680,7 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
             } else {};
             context <- enter_case_context(facts, outer, item);
             if (!check_operand_range(source, nodes, names, links, selected, facts, owners, fields,
-                views, demand, report,
+                views, cases, demand, report,
                                      cursor, item, used, revision, context)) return false;
             diagnostic <- merge_case_breaks(nodes, names, facts, last_exit, at, expression, reached, used, revision);
             if (reached) {
@@ -3062,14 +3100,73 @@ func check_here_continue(nodes:const ExprNodes in N, names:const NameBindings in
     return 0u8
 }
 
+func receive_case_bits(facts:OperandFacts in F, at:u64, type:const DeclaredType in T,
+    reception:u8, owner_site:u64) -> u8 where {owner F, const owner T} {
+    val kind <- if (type.kind == record_type()) { received_product() }
+                else { source_scalar_kind(type.kind) };
+    if (kind == 0u8) return unsupported_case_pattern();
+    set_fact(facts, at, kind, reception, owner_site, type.identity, 0u8);
+    facts[at].identity_module <- type.defining_module;
+    return 0u8
+}
+
+func check_indexed_case_subject(nodes:const ExprNodes in N, facts:OperandFacts in F,
+    at:u64, expression:u64, array_site:u64, index:u64, owner_site:u64, declared_array:u64,
+    schema:const DeclaredType in T) -> u8 where {const owner N, owner F, const owner T} {
+    if (expression != at || array_site >= at || index >= at) return invalid_operand_tree();
+    if (facts[array_site].kind == never_result() || facts[index].kind == never_result()) {
+        set_result(facts, at, never_result());
+        return 0u8
+    };
+    if (facts[array_site].kind != source_array_loan() || facts[array_site].reception != borrowed_ref() ||
+        facts[array_site].owner != owner_site || facts[array_site].identity_module != 0u64 ||
+        facts[array_site].identity != declared_array || facts[array_site].target_readonly == 0u8)
+        return unsupported_case_subject();
+    val diagnostic <- require_typed_bits(nodes, facts, index, scalar_u64());
+    if (diagnostic != 0u8) return diagnostic;
+    set_fact(facts, at, source_sum_target(), borrowed_ref(), owner_site, schema.identity, 0u8);
+    facts[at].identity_module <- schema.defining_module;
+    facts[at].target_readonly <- 1u8;
+    facts[at].checks_array_bounds <- true;
+    return 0u8
+}
+
+func check_case_receipt(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
+    at:u64, used:u64, revision:u64, pattern:u64, schema:const DeclaredType in T) -> u8
+    where {const owner N, const owner B, owner F, const owner T} {
+    ref arm = make CaseArmSites { pattern <- no_node(); guard <- no_node(); body <- no_node(); arrow <- 0u64 };
+    if (!inspect_case_arm(nodes, revision, used, facts[at].case_context, arm) ||
+        arm.pattern != pattern || names[at].scope == no_node()) return invalid_operand_tree();
+    return receive_case_bits(facts, at, schema, local_place(), names[at].scope)
+}
+
 func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                    selected:const SelectedExports in E, facts:OperandFacts in F, owners:CallOwners in O,
                    fields:const CaughtFieldUses in X, views:const SuppliedViews in H,
+                   cases:const ConstructorCaseFacts in C,
                        source_only:bool,
                    at:u64, used:u64, revision:u64) -> u8
     where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F,
-        owner O, const owner X, const owner H} {
+        owner O, const owner X, const owner H, const owner C} {
     if (at >= used) return invalid_operand_tree();
+    if (at < intrinsic (len)(cases)) {
+        case cases[at] of {
+            IndexedCaseSubject {
+                val expression <- expression; val array_site <- array_site; val index <- index;
+                val owner_site <- owner_site; val declared_array <- array_type; val schema <- value_type;
+            } -> { return check_indexed_case_subject(nodes, facts, at, expression, array_site,
+                index, owner_site, declared_array, schema) };
+            CaseFieldReceipt { val pattern <- pattern; val schema <- value_type; } ->
+                { return check_case_receipt(nodes, names, facts, at, used, revision, pattern, schema) };
+            CaseProductField { val receiver <- receiver; val record <- record; val schema <- value_type; } -> {
+                if (receiver >= at || facts[receiver].kind != received_product() ||
+                    facts[receiver].identity != record.identity ||
+                    facts[receiver].identity_module != record.defining_module) return unsupported_product_layout();
+                return receive_case_bits(facts, at, schema, independent_value(), no_node())
+            };
+            _ -> {}
+        }
+    };
     ref installed_expression = make u64 { no_node() };
     if (source_only && native_installation_input(nodes, revision, used, at, installed_expression)) {
         val selected_acquisition <- ungrouped(nodes, revision, used, installed_expression);
@@ -3089,6 +3186,17 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                     return check_group(nodes, facts, at, expression.index);
                 };
                 (NameReference) -> { return check_bound_name(names, links, facts, views, at, source_only); };
+                (ArrayLength { val target <- target; }) -> {
+                    if (!published_syntax_id(nodes, revision, at, target)) return invalid_operand_tree();
+                    if (facts[target.index].kind == never_result()) {
+                        set_result(facts, at, never_result());
+                        return 0u8
+                    };
+                    if (!source_only || facts[target.index].kind != source_array_loan())
+                        return unproved_operand();
+                    scalar_fact(facts, at, independent_value(), no_node());
+                    return 0u8
+                };
                 (RangeHeader) -> { return check_range_header(nodes, facts, at, used, revision); };
                 (RangeLoop) -> { return check_range_result(nodes, facts, at, used, revision); };
                 (BooleanLiteral) -> {
@@ -3306,11 +3414,12 @@ func check_operand_range(source:const SourceBytes in S, nodes:const ExprNodes in
                          links:const NameWork in L, selected:const SelectedExports in E, facts:OperandFacts in F,
                          owners:CallOwners in O, fields:const CaughtFieldUses in X,
                              views:const SuppliedViews in H,
+                         cases:const ConstructorCaseFacts in C,
                 demand:const DeclarationDemands in D,
                          report:OperandCheckResult in R, first:u64, past:u64, used:u64,
                              revision:u64, context:u64) -> bool
     where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F,
-        owner O, const owner X, const owner H, const owner D, owner R} {
+        owner O, const owner X, const owner H, const owner C, const owner D, owner R} {
     val at <- first;
     val diagnostic <- 0u8;
     val enclosing_case <- no_node();
@@ -3320,11 +3429,11 @@ func check_operand_range(source:const SourceBytes in S, nodes:const ExprNodes in
             if (at != context) { (facts[at].case_context <- context):void; };
             if (at == enclosing_case) {
                 if (!check_case(source, nodes, names, links, selected, facts, owners, fields, views,
-                    demand, report,
+                    cases, demand, report,
                                 at, used, revision, context)) return false;
             } else {
                 diagnostic <- check_operand(source, nodes, names, links, selected, facts, owners,
-                    fields, views, intrinsic (len)(demand) != 0u64, at, used, revision);
+                    fields, views, cases, intrinsic (len)(demand) != 0u64, at, used, revision);
                 if (diagnostic != 0u8) return operand_problem(report, at, diagnostic)
             }
         };
@@ -3485,11 +3594,12 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
                                       facts:OperandFacts in F,
                                   owners:CallOwners in O, fields:const CaughtFieldUses in X,
                                       views:const SuppliedViews in H,
+                                  cases:const ConstructorCaseFacts in C,
                                   demand:const DeclarationDemands in D,
                                       report:OperandCheckResult in R) -> bool
     where {const owner S, const owner N, const owner T, const owner B, const owner L, const owner E,
         owner F,
-           owner O, const owner X, const owner H, const owner D, owner R} {
+           owner O, const owner X, const owner H, const owner C, const owner D, owner R} {
     report.node <- no_node();
     report.diagnostic <- invalid_operand_tree();
     ref tail = make u64 { no_node() };
@@ -3497,7 +3607,8 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
         tree.root != tree.used - 1u64 || !module_tail(nodes, tree.revision, tree.used, tree.root, tail)) return false;
     if (intrinsic (len)(names) < tree.used || intrinsic (len)(links) < tree.used ||
         intrinsic (len)(selected) < tree.used || intrinsic (len)(facts) < tree.used ||
-        intrinsic (len)(owners) < tree.used) {
+        intrinsic (len)(owners) < tree.used ||
+        (intrinsic (len)(cases) != 0u64 && intrinsic (len)(cases) < tree.used)) {
         report.diagnostic <- operand_storage_exhausted();
         return false;
     } else {};
@@ -3607,7 +3718,7 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
         } else {};
     };
     if (!check_operand_range(source, nodes, names, links, selected, facts, owners, fields, views,
-        demand, report,
+        cases, demand, report,
                              0u64, tree.used, tree.used, tree.revision, no_node())) return false;
     close_allocation_owners(facts, owners, tree.used);
     # Number reserved allocation-chain words after the syntax-indexed words.

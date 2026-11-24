@@ -332,6 +332,7 @@ export enum SequenceSyntax:u8 {
     SumSequence;
     ProcedureTypeSequence;
     ReferenceGroupSequence;
+    CaseReceiverSequence;
 }
 
 export data SequenceEntry { previous:u64; item:u64; }
@@ -359,6 +360,11 @@ export func inspect_sequence_entry(nodes:const ExprNodes in N, revision:u64, use
         (Vacant) -> { (InvalidSequence:SequenceSyntax) };
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of {
+                (CaseValueReceiver { val previous <- previous; val destination <- destination; }) -> {
+                    return if (read_sequence_links(nodes, revision, at, previous, destination, entry)) {
+                        CaseReceiverSequence:SequenceSyntax
+                    } else { InvalidSequence:SequenceSyntax }
+                };
                 (ModuleItem { val previous <- previous; val form <- form; }) -> {
                     return if (read_sequence_links(nodes, revision, at, previous, form, entry)) {
                         (ModuleSequence:SequenceSyntax)
@@ -2427,7 +2433,32 @@ export func inspect_defer(nodes:const ExprNodes in N, revision:u64, used:u64, at
     };
 }
 
-export enum CasePatternSyntax:u8 { InvalidCasePattern; AnyCaseTarget; NullCaseTarget; FalseCaseTarget; TrueCaseTarget; NamedCaseMember; }
+export data IndexSites { target:u64; index:u64; }
+
+export func inspect_index_selection(nodes:const ExprNodes in N, revision:u64, used:u64,
+    at:u64, sites:IndexSites in R) -> bool where {const owner N, owner R} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        Occupied { val syntax <- node; } -> {
+            case syntax.payload of {
+                IndexSelection { val target <- target; val index <- index; } -> {
+                    if (!published_syntax_id(nodes, revision, at, target) ||
+                        !published_syntax_id(nodes, revision, at, index)) return false;
+                    sites.target <- target.index;
+                    sites.index <- index.index;
+                    true
+                };
+                _ -> false
+            }
+        };
+        _ -> false
+    }
+}
+
+export enum CasePatternSyntax:u8 {
+    InvalidCasePattern; AnyCaseTarget; NullCaseTarget; FalseCaseTarget; TrueCaseTarget;
+    NamedCaseMember; ConstructorCaseTarget;
+}
 
 export func case_pattern(nodes:const ExprNodes in N, used:u64, at:u64) -> CasePatternSyntax where {const owner N} {
     if (at == no_node()) return AnyCaseTarget:CasePatternSyntax;
@@ -2441,6 +2472,7 @@ export func case_pattern(nodes:const ExprNodes in N, used:u64, at:u64) -> CasePa
                     if (truth) { TrueCaseTarget:CasePatternSyntax } else { FalseCaseTarget:CasePatternSyntax }
                 };
                 (MemberCasePattern) -> { NamedCaseMember:CasePatternSyntax };
+                (ConstructorCasePattern) -> { ConstructorCaseTarget:CasePatternSyntax };
                 (_) -> { InvalidCasePattern:CasePatternSyntax };
             }
         };

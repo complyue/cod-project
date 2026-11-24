@@ -71,6 +71,10 @@ using "./ModuleFrontend.cod" {
 using "./DeclarationDemand.cod" {
     DeclarationDemand, DeclarationDemands, discover_declaration_demand
 };
+using "./CaseSchemas.cod" {
+    ConstructorCaseFacts, ConstructorCaseFact { NoConstructorCase },
+    needs_constructor_case_plan, prepare_constructor_cases
+}
 using "./NameResolution.cod" {
     NameBinding, NameBindings, NameWorkSlot, NameWork, record_type, project_module_selection_candidates,
     ModuleNameUse { LexicalName }, first_module_variadic_formal
@@ -495,7 +499,7 @@ func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
                       checked_selections:const CheckedSelections in C, checked_used:u64,
                       interfaces:const ModuleInterfaces in G, interface_count:u64, selected:SelectedExports in W,
                       names:NameBindings in W, work:NameWork in W, facts:AggregateFacts in F,
-                          views:SuppliedViews in H,
+                      views:SuppliedViews in H, cases:ConstructorCaseFacts in R, first_case:u64 in R,
                       result:ModuleBindingResult in R, native:bool, allow_structural:bool) -> bool
     where {const owner S, owner W, const owner G, const owner C, owner F, owner H, owner R} {
     ref members = make ExportResolutionResult { diagnostic <- 0u8; node <- no_node(); };
@@ -526,6 +530,12 @@ func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
         return false;
     } else {};
     ref expressions = make DeclaredExpressionResult { diagnostic <- 0u8; node <- no_node(); };
+    if (!prepare_constructor_cases(source, nodes, names, selected, work, spellings, spelling_size,
+        interfaces, interface_count, facts, cases, used, result.frontend.tree.revision,
+        first_case, expressions)) {
+        binding_diagnostic(nodes, result, module_binding_failed(), expressions.diagnostic, expressions.node);
+        return false
+    };
     if (!check_declared_expressions(source, nodes, names, selected, work, spellings, interfaces,
                                     interface_count, used, result.frontend.tree.revision, expressions)) {
         binding_diagnostic(nodes, result, module_binding_failed(), expressions.diagnostic, expressions.node);
@@ -627,11 +637,11 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
                                 spellings:const SourceBytes in G, spelling_used:u64,
                                     interfaces:const ModuleInterfaces in G,
                                 interface_count:u64, aggregate_facts:const AggregateFacts in A,
-                                    views:const SuppliedViews in H,
+                                views:const SuppliedViews in H, cases:const ConstructorCaseFacts in C,
                                 module:u64, first:u64, caught_field:u64, executable:bool,
                                 facts:OperandFacts in W, owners:CallOwners in W,
                                     sites:CompletionSites in W, result:ModuleBindingResult in R)
-    -> bool where {const owner S, owner W, const owner G, const owner A, const owner H, owner R} {
+    -> bool where {const owner S, owner W, const owner G, const owner A, const owner H, const owner C, owner R} {
     ref operands = make OperandCheckResult { diagnostic <- 0u8; node <- no_node(); };
     val used <- result.frontend.tree.used;
     val revision <- result.frontend.tree.revision;
@@ -659,7 +669,7 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
         return false
     };
     if (!check_module_operands(source, nodes, result.frontend.tree, names, work, selected, module,
-        facts, owners, fields, views, demand, operands)) {
+        facts, owners, fields, views, cases, demand, operands)) {
         binding_diagnostic(nodes, result, module_operands_failed(), operands.diagnostic,
             operands.node);
         return false
@@ -742,9 +752,14 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     };
     ref aggregate_facts = make AggregateFacts(result.frontend.tree.used, UnprovedAggregate);
     ref views = make SuppliedViews(result.frontend.tree.used, make NoSuppliedView {});
+    val case_capacity <- if (!native && needs_constructor_case_plan(nodes, used, result.frontend.tree.revision)) {
+        used
+    } else { 0u64 };
+    ref cases = make ConstructorCaseFacts(case_capacity, make NoConstructorCase {});
+    ref first_case = make u64 { no_node() };
     if (!bind_graph_names(source, nodes, spellings, spelling_size, checked_selections, checked_used,
                           published_interfaces, interface_count, selected, names, work,
-                          aggregate_facts, views, result, native, structural)) {
+                          aggregate_facts, views, cases, first_case, result, native, structural)) {
         val code <- if (result.stage == module_read_failed()) { result.frontend.tree.diagnostic } else { result.diagnostic };
         report_rejection(source, lines, diagnostic, result.stage, code,
                          result.frontend.diagnostic_first, result.frontend.diagnostic_past, result.related_first);
@@ -801,12 +816,12 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         }
     };
     if (constructed != no_node() || caught_field != no_node() ||
-        (!native && (declared != no_node() || required != no_node() || source_helper != no_node() ||
+        (!native && (first_case != no_node() || declared != no_node() || required != no_node() || source_helper != no_node() ||
                      native_body_evidence != no_node()))) {
         if (!check_graph_exception_body(source, nodes, selected, names, work, spellings,
             spelling_size,
                                         published_interfaces, interface_count, aggregate_facts,
-                                            views, progress[0u64].identity,
+                                            views, cases, progress[0u64].identity,
                                         constructed, caught_field, native, facts, owners, sites,
                                             result)) {
             report_rejection(source, lines, diagnostic, result.stage, result.diagnostic,
@@ -1119,6 +1134,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         ref work = make NameWork(capacity, make NameWorkSlot {
             receiver_import <- NoReceiverCallables;
             native_installation <- no_node();
+            case_schema_prepared <- false;
             active <- no_node(); module_selection <- no_node(); next <- no_node(); next_method <- no_node();
             imported_interface <- no_node(); imported_type_module <- 0u64; imported_type_identity <-
                 0u64;
@@ -1133,7 +1149,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         ref facts = make OperandFacts(capacity, make OperandFact {
             kind <- 0u8; reception <- 0u8; checked_exception <- 0u8; identity_module <- 0u64;
                 target_readonly <- 0u8; needs_target <- 0u8;
-            reaches_constructed_throw <- false; loans_owning_handle <- false;
+            reaches_constructed_throw <- false; loans_owning_handle <- false; checks_array_bounds <- false;
             target_presence <- 0u8; selection <- no_node(); discarded_result <- 0u8; arm_result <- 0u8;
             case_item <- 0u8; case_match <- 0u8; case_body <- 0u8; case_guard <- 0u8; case_resume <- 0u8;
             case_end <- 0u8; case_presence <- 0u8; case_selection <- no_node(); case_context <- no_node();

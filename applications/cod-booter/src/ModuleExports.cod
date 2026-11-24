@@ -7,8 +7,9 @@ using "./ParserStorage.cod" {
     ExprNodes, len as syntax_len, no_node, selected_resource_name,
     ModuleSelectionSites, inspect_module_selection, BulkSelectionSites, inspect_bulk_selection,
     first_module_item, syntax_first, syntax_past,
-    NameSyntax, name_syntax, SequenceEntry, inspect_sequence_entry, inspect_member_selector,
+    NameSyntax, name_syntax, SequenceEntry, inspect_sequence_entry, inspect_member_selector, case_pattern,
 };
+using "./ParserStorage.cod" CasePatternSyntax { NamedCaseMember };
 using "./ParserStorage.cod" NameSyntax { NotAName, SymbolicName };
 using "./ParserStorage.cod" SequenceSyntax { MemberSequence };
 using "./ParserStorage.cod" MemberSelectionSyntax { InvalidMemberSelector, AllSelectedMembers };
@@ -1277,7 +1278,8 @@ export func resolve_sum_selections(source:const SourceBytes in S, nodes:const Ex
     val past <- 0u64;
     ref constructor = make u64 { no_node() };
     for (at in 0u64 .. used) {
-        if (name_syntax(nodes, used, at) != NotAName && name_syntax(nodes, used, at) != SymbolicName) {
+        if ((name_syntax(nodes, used, at) != NotAName && name_syntax(nodes, used, at) != SymbolicName) ||
+            case_pattern(nodes, used, at) == NamedCaseMember) {
             first <- syntax_first(nodes, used, at);
             past <- syntax_past(nodes, used, at);
             site <- first_constructor_selection(source, nodes, used, revision, spellings, limit, interfaces, published,

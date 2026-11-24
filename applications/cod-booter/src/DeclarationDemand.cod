@@ -164,7 +164,7 @@ export func discover_declaration_demand(
             };
             (checked_call <- family_declares_failure(links, demand, definition, used)):void
         };
-        if (selects_caught_field(fields, site) || checked_call ||
+        if (links[site].case_schema_prepared || selects_caught_field(fields, site) || checked_call ||
             has_imported_native_loan(views, site) || read_acquisition_failure(views, site, failure) ||
             inspect_named_throw(nodes, revision, used, site, construction)) {
             if (scope >= used || !local_body(nodes, revision, used, scope, callable) ||
