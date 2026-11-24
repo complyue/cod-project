@@ -1,67 +1,50 @@
-# Algebraic Effects Is All You Need
+<a id="algebraic-effects-is-all-you-need"></a>
 
-Working paper for author review · revised 21 November 2026
+# Do Source and Graph Edits Agree on an Effectful Policy?
+
+*CoD research proposal · revised 24 November 2026*
 
 ## Abstract
 
-In CoD, the source data, the program that processes it, and the resulting data can each be a disk-backed memory region (DBMR). The interesting case occurs when the input is itself a program and the result can be executed. We call this *semantic homoiconicity*: ordinary CoD programs can inspect, construct and transform the typed program graphs that CoD checks and executes. A programmer can express the original computation with procedures, branches and functional composition. A second programmer can change the same computation through a typed graph edit. Algebraic effects give a published program operations whose answers determine its control flow and whose interpretation can change between runs. The architecture separates long-lived data type packages, a moderately stable native DSL executor and its authoring tools, and frequently revised application graphs. A DSL designer can encode a business invariant in the type of the persistent program itself, so a generator, a graph editor and an executor share the same rule. The appendix expresses this cycle in planned CoD source. An editor redirects an inventory policy's fallback branch, the same session executes the published successor, and an independent client queries its decisions. The CoD research agenda is to give the full cycle a checked source correspondence, approach native throughput in steady execution, and approach the edit-to-result latency of interactive languages. Relocatable storage makes the graphs shareable across processes.
+A fulfillment planner wants to remove a backup warehouse from an inventory policy. One editor deletes a branch in ordinary source. Another edits an edge in the published, typed program graph. Can an independent reader reopen either revision and establish that the two edits changed exactly the same behavior, even when a reservation may alter external state? We define the observations for a small request–reply language, derive a three-order example, and give a counterexample in which a duplicated graph node survives execution tests but changes the meaning of a later edit. The example also admits a conventional implementation with a persisted tagged graph and an explicit reservation service. Comparing it with CoD would identify what checked source projection, regional storage and dynamically installed effects each contribute. The appendix supplies planned CoD and its expected traces. The source-to-graph correspondence, prototype measurements and any relative engineering advantage remain research work.
 
 ## 1. A program that takes a program as its input
 
-A distribution center reports that its backup warehouse is unavailable. The fulfillment planner wants an answer before publishing a policy change: *which orders would we backorder if we stopped trying that warehouse?* The planner has yesterday's program, today's orders and a starting inventory snapshot. The useful edit changes one branch of the program. Changing today's inventory to zero at the backup gives a different answer to an operational question: the program would still contact the warehouse. If the warehouse is offline, that distinction can mean a timeout on every affected order.
+Warehouse B will be offline tomorrow. The planner asks which orders the company would backorder if its program stopped contacting B. Setting B's stock to zero still contacts the warehouse and may wait for a timeout. The distinction is visible at the service boundary even when the fulfillment decisions agree.
 
-Consider four invocations in one running session. The notation below describes artifacts and execution; it introduces no CoD API. `P₀`, `E`, `P₁` and `Q` are program DBMRs. `D` is an input DBMR holding orders and starting inventory. `R₀`, `R₁` and `S₁` are result DBMRs.
+A disk-backed memory region (DBMR) can hold the typed policy, order data or decisions. In the example, the allocation executor accepts a policy and an order batch. A different executor accepts an edit instruction and a policy. A reporting client knows only the decisions schema. The proposed workflow is:
 
-```text
-R₀ = run_allocation(P₀, D)       fulfill under the published policy
-P₁ = run_edit(E, P₀)             revise the policy's decline branch
-R₁ = run_allocation(P₁, D)       fulfill under the revised policy
-S₁ = run_reporting(Q, R₁)        count backorders in the decisions
-```
+~~~text
+R₀ = allocate(P₀, D)       fulfillment decisions under the published policy
+P₁ = edit(E, P₀)           successor policy produced by an ordinary program
+R₁ = allocate(P₁, D)       decisions on the same orders with fresh private inventory
+S₁ = report(Q, R₁)         backorder count produced by an independent client
+~~~
 
-The second line is the decisive one. A result produced as data becomes the executable operand of the next invocation after checking. The fourth line exercises the other direction: a result becomes input to further business processing. Orders, decisions and programs have different schemas. All three use the same regional facilities for allocation, graph access, inspection, checked editing and publication. A file extension or common serializer alone would establish none of these operations on the program's control flow.
-
-The subscripts identify the executor required by each application graph. The editor understands the policy's published program schema. A reporting executor needs only the decisions schema to read the allocation output.
-
-At the level of types, `P₀` and `P₁` have the business contract `Orders → Decisions` under a reservation effect. The editor has the metaprogram contract `Program<Orders → Decisions> → Program<Orders → Decisions>`; the query has the contract `Decisions → Summary`. These are explanatory signatures. In particular, producing a well-typed program graph and having authority to execute it against live inventory are distinct capabilities.
+The research question concerns the second and third lines together. Can a policy published in one tool be inspected and edited by another, then executed with the control flow and effect requirements a source reviewer would infer? We call this form of program-as-data *semantic homoiconicity*. The evidence required here is a working correspondence over a stated fragment. A common file format for orders and programs establishes only the storage part. [CoD typed program and domain vocabulary design](../design/SymbolicDynamicScope.md#typed-dbmr-programs-and-domain-vocabularies)
 
 ## 2. One executor, one DSL
 
-The architecture assigns artifacts different expected rates of change. These are design expectations about ownership and reuse.
-
-| Artifact | Typical change | Who can use it |
-| --- | --- | --- |
-| CoD type packages for source and result data | Longest lived. Order records and allocation decisions must remain useful across applications and versions. | Any CoD program that depends on the compatible defining package can read these values and write them under ordinary authority and publication rules. The source and result schemas may belong to different packages. |
-| CoD executor binary, its DSL contract and companion generators | Medium lived. A new vocabulary, interpretation, optimization or capability may merit a release. | The DSL designer implements an executor for a typed vocabulary and supplies tools that generate valid app DBMRs for it. One binary runs many such applications. A compatible rebuild can preserve a DSL version. |
-| Application DBMR | Ordinarily changes fastest. The merchant can revise warehouse preference or fallback while retaining a compatible executor. | A domain author generates it, writes CoD that constructs it, or edits an existing program graph. The executor checks compatibility and runs it. |
-
-For example, an Orders package defines the input root and a Decisions package defines the result root. An independent reporting program can import Decisions, read R₁ and publish a summary. A correction tool authorized to produce decisions can also write a successor decisions image using that package. Neither tool needs the allocation binary, app graph or reservation handler. Updating a published read-only DBMR means constructing and publishing a new revision. Package compatibility, ownership and access still apply.
-
-**An executor is a language implementation.** The allocation executor defines the meanings of conditional reservation, terminal decisions and the other operations its DSL admits. The companion tool can expose a `primary |> backup` constructor, an interactive form, or a textual domain syntax. All can generate the same typed app DBMR. Adding a third warehouse using existing operations changes the app. Adding an operation that waits for replenishment changes the DSL and can require an executor and generator release. Changing the public structure of a decision affects its defining type package and potentially every reader. This division explains why DSL design and use could become routine: the DSL author supplies the vocabulary, its interpretation and useful constructors; CoD supplies common data access, checking and publication facilities.
+Three artifacts have different consumers. The data packages define orders and decisions for generators, executors and reporting clients. The allocation DSL defines an instruction vocabulary and the executor that interprets it. A merchant's policy is an instance of that vocabulary. A change of fallback warehouse can alter just the policy. A new instruction to wait for replenishment can require a new executor. A change to the meaning of a published decision field can affect independent readers as well. These differences determine what an editor must validate and which binaries a proposed revision can reuse.
 
 ### Making invalid states unrepresentable in the stored program
 
-Suppose the fulfillment team adopts one rule: **an order may ship only from the warehouse that just accepted its reservation**. In the general graph below, `Ask(A, ShipFrom(B), Backorder)` is well-typed. Its author supplied both continuations and named a shipping warehouse, so the graph can express a reservation at A followed by shipment from B. Giving the merchant's form a dropdown that hides B would leave a graph editor free to write this policy.
+Suppose shipping must use the warehouse that just accepted the reservation. The DSL author can encode that rule in the vocabulary:
 
-The DSL designer can instead publish the following sum type as the root vocabulary of the app DBMR. This is algebraic notation. The decline field is a required reference to another policy node in the same region.
-
-```text
-Policy = Backorder
-       | TryWarehouse(warehouse: WarehouseId, on_decline: Policy)
+~~~text
+Policy = Backorder | TryWarehouse(warehouse: WarehouseId, on_decline: Policy)
 
 P₀ = TryWarehouse(A, TryWarehouse(B, Backorder))
 P₁ = TryWarehouse(A, Backorder)
-```
+~~~
 
-On acceptance, the executor emits a shipment from the current node's warehouse. On decline, it follows the edge. The only other constructor produces a backorder. Every shipment in a successful execution therefore uses the warehouse from the immediately preceding successful reservation, assuming the handler reports the reservation truthfully and the executor implements the operation as specified. The successful destination occupies **no field** in the app DBMR. Even an editor with permission to rewrite every field of a well-formed policy has nowhere to put a conflicting B. To suspend the backup it changes just A's decline edge. That edit still preserves the rule.
+On acceptance, the executor ships from the warehouse in the current node. There is no separate success destination to disagree with it. On decline, the executor follows a required reference in the same region. Every generator and graph editor producing a well-formed value inherits this restriction. Execution also requires an interpreter that follows the rule and a reservation handler that reports its answer faithfully. A cycle of declines remains expressible. If termination is part of this DSL's contract, the validator needs an additional check.
 
-The cost advantage comes from where the type lives. A form, a batch generator and a program that edits a published DBMR all construct the same `Policy`. Each can offer a different authoring interface. Encoding the rule once in the persistent vocabulary saves each tool from implementing a cross-field consistency check. The narrower vocabulary deliberately gives up routing a successful reservation through an arbitrary action. A domain that needs that freedom can choose the general operation graph used in §§3–5 and in the appendix.
-
-The guarantee applies to well-formed values of the declared type. At the file boundary, an unknown constructor tag or a dangling edge still requires rejection before exposing a typed root. A cycle of declines is expressible with same-region references and needs a separate check if the DSL promises termination. Whether A currently has stock is answered when the handler runs. A DSL designer can therefore adopt “make invalid states unrepresentable” one business rule at a time and name exactly which rules the representation enforces. [Yaron Minsky, *Effective ML Revisited*](https://blog.janestreet.com/effective-ml-revisited/)
+The appendix uses the more general `Ask(w, yes, no) | Finish(destination)` vocabulary. It deliberately admits `Ask(A, Finish(B), Backorder)`. This gives an experiment two distinct questions. Can the editor preserve the behavior of the policy actually written? Can the chosen vocabulary preclude a forbidden policy altogether? An ordinary typed DSL can also enforce the narrower rule. Any claimed advantage for CoD must survive giving the comparison implementation that same type.
 
 ## 3. What the business programmer writes
 
-The program prefers warehouse A (1) over B (2). Zero denotes backorder. A direct procedure expresses both the ordering and the fact that a failed request, rather than a successful one, reaches the second branch.
+The source policy uses a dynamically installed reservation operation. Warehouse identifiers 1 and 2 stand for A and B, and destination 0 means backorder.
 
 ```cod
 symbol @reserve_one:proc(order_id:u64, sku:u64, warehouse:u64)->bool;
@@ -73,7 +56,7 @@ proc route(order_id:u64, sku:u64) -> u64 {
 }
 ```
 
-The same application can use functional composition for the incoming orders and ordinary procedural calls for effects and output. For example, an application with a deadline filter and a priority-order processor can write the following batch body under CoD's proposed pipeline notation. The example below assumes those processors preserve the order of the three orders used here.
+The normal successors of each call become explicit in the general program graph. The accepted edge of A leads to `Finish(A)`, and its declined edge leads to the request at B. B's respective successors are `Finish(B)` and `Finish(0)`. A batch driver can apply the policy to each order in an established sequence. For example, the following body assumes two application processors whose filters and ordering preserve the three orders in the fixture.
 
 ```cod
 for { val id <- order_id; val sku <-; } := orders !> due_today |> by_priority {
@@ -81,22 +64,11 @@ for { val id <- order_id; val sku <-; } := orders !> due_today |> by_priority {
 }
 ```
 
-The human-facing language has names, function and procedure declarations, branches, composition and lexical scopes. The persistent representation exposes the meaning of these constructs to another program. For the first procedure, its five reachable operations reduce to the graph below. The enclosing batch driver applies its root to each order. Lines in source and byte offsets in an image are both unsuitable as public identities for an edit.
-
-| Operation | Successor on success | Successor on decline |
-| --- | --- | --- |
-| Reserve one unit at A | Return A | Reserve one unit at B |
-| Reserve one unit at B | Return B | Return backorder |
-
-This paper proposes that ordinary CoD text and a graph editor can address the **same checked business computation**. A source projection should recover a readable equivalent procedure, with an exchange representation capable of preserving semantically relevant sharing, binding and dependencies. Acceptance is behavioral and structural. For example, parsing the projection must preserve the condition on the request to B. Reproducing a particular indentation style is a separate tooling property.
-
-A library has another way to produce a publishable program. An overload of processor composition can construct a nominal `RoutingPolicy` functor in an explicit writable region, with a same-region edge to the root of the operation graph. Its type supplies the call operator in the compatible executable. When an overload snapshots the configured warehouse identifiers, that decision belongs to its contract. An open pipeline that still borrows a live callback or cursor remains a bounded lexical value. The language must preserve this distinction even when optimization inlines every call. The functor idiom is one entry into the regional program representation; the broader language goal includes lowering ordinary procedural and functional source into inspectable graphs.
+The source fragment under study has a typed reservation request, branches on its normal reply, terminal decisions and a finite, acyclic reachable policy graph. Data order is fixed. Helpers that perform additional I/O, unbounded recursion and concurrent inventory changes would need further observations. The bounded rules for composing a traversal still apply to the batch driver. A lexical pipeline retaining a live callback or cursor must respect its owner. A library can instead construct a regional policy functor whose durable fields contain only admissible data and same-region edges. [Composite pipeline contract](../design/ProducersAndTransformers.md#composite-implementation-target) · [Callable storage and direct lexical access](../design/CallableStorageAndHereAccess.md#what-an-invocation-needs)
 
 ## 4. The program edit and the business result
 
-The editor `E` selects the reservation at A and redirects its *decline* edge to the existing backorder outcome. An operator editing text could instead remove the second `if` from `route`. In each case, the important review question is the same: *does A's success still return A, and is B now unreachable after A declines?* A text edit may omit the unreachable B node entirely. A graph edit may preserve that node and its identity for other uses. The two root computations still agree on which requests they can make.
-
-The single-purpose editor below receives the private draft after the caller has transferred the graph from the published base. Both lookups search that same writable region. The [stored editor](#the-stored-editor) takes its lookup keys from an edit-program DBMR and shows where transfer and validation occur.
+In source, remove the second `if`. In the graph, redirect the decline edge of the unique A request to the existing backorder terminal. The editor operates on a private successor whose graph transfer preserves sharing. Both selected nodes must belong to that draft.
 
 ```cod
 proc suspend_backup(region draft:RouteProgram) throws Exception {
@@ -108,67 +80,74 @@ proc suspend_backup(region draft:RouteProgram) throws Exception {
 }
 ```
 
-A publisher checks the candidate graph's root schema, edges, owner relationships, effect contracts, required dependencies and base version before exposing the revision. A selector with two matching primary reservations needs a more precise identity. A draft edge into the old mapping violates the same-owner rule. Neither edit should become the next executable policy. Editing and previewing a policy use editing authority; they perform zero inventory reservations.
-
-Give `D` three orders for SKU 7 and one unit at each warehouse. Run each policy against a **fresh private handler state initialized from the same D**. Otherwise the first run will consume the inventory needed for the comparison.
+Give both policies orders 41, 42 and 43 for SKU 7, with one unit at each warehouse. For each run, start the handler from a fresh copy of the same stock counts. In each table cell the requests run from left to right.
 
 | Order | Original policy P₀ | Revised policy P₁ |
 | --- | --- | --- |
-| 41 | A accepts → ship from A | A accepts → ship from A |
-| 42 | A declines, B accepts → ship from B | A declines → backorder |
-| 43 | A declines, B declines → backorder | A declines → backorder |
-| Backorders in the result | **1** | **2** |
+| 41 | A accepts. Ship from A. | A accepts. Ship from A. |
+| 42 | A declines, B accepts. Ship from B. | A declines. Backorder. |
+| 43 | A declines, B declines. Backorder. | A declines. Backorder. |
+| Total | Five requests, one backorder | Three requests, two backorders |
 
-A query over the two decision images can identify order 42 as the order whose disposition changes. The effect traces show a second benefit of the edit: it suppresses both requests to B, including the unsuccessful one for order 43. Counting only changed outputs would miss that fact.
+Order 43 is a useful witness. Its decision is identical in the two results, yet only the old policy contacts B. The report needs the decision images to identify order 42's changed outcome. Reviewing the service calls requires the ordered traces as well. The [appendix](#appendix-the-warehouse-revision-in-cod) specifies both observations, including the exact stock replies. These numbers are derived expectations.
 
 ## 5. Why algebraic effects belong in this account
 
-The graph records the business question and the continuations for its possible replies. A handler supplies an answer and can update execution-local or external state. In this fragment, a reservation has two ordinary replies and two successor edges. For a fixed order and SKU, its interpretation satisfies
+A reservation operation names a question. The policy gives the remaining computation for each normal answer. An installed handler interprets the question using an inventory table, a service, or a deterministic replay script. For fixed order and SKU, the normal case has the following small semantics. Here `s` is handler state.
 
-```text
-eval_H(ShipFrom(w), s)   = (Ship(w), s)
-eval_H(Backorder, s)     = (Backorder, s)
-eval_H(Ask(w, y, n), s)  = let (reply, s′) = H.reserve(order, sku, w, s)
-                           in eval_H(if reply then y else n, s′)
-```
+~~~text
+eval_H(Finish(d), s)   = (d, s)
+eval_H(Ask(w,y,n), s)  = let (reply, s′) = H.reserve(order, sku, w, s)
+                          in eval_H(if reply then y else n, s′)
+~~~
 
-Production can install an inventory-service handler. A simulation can decrement a private table. A trace-checking handler can validate each request and return its recorded reply. Reaching one graph node twice performs the operation twice. A timeout supplies no Boolean reply and therefore takes neither edge. Treating a timeout as a decline could reserve an order twice after a lost acknowledgment. Retry and idempotency policy remain obligations of the operation and its interpreter.
+Record the operation, its arguments, its reply or failure, and the final decision or exceptional exit. Record handler state where the fixture provides an observation of it. A reservation is executed for each visit, even if two paths name the same operation. A handler failure before a normal reply takes neither successor. A service might have committed before its reply was lost. The real stock change may then be unknown to the executor. A test for this case can use a simulated service that records the commit independently. This extended fixture must declare any checked service failure in the operation and caller contracts. The appendix's Boolean handler covers the normal paths.
 
-The title's “all” is a hypothesis about the interface to the outside world. In this request–reply fragment, the business computation can express all its interactions as typed operations. Homoiconicity gives another CoD program access to the questions and their branches. Handlers give those questions an execution-time meaning. Changing the decline edge changes the stored policy. Changing the handler lets the same policy run against a snapshot or a live service. The title adopts a familiar research-paper joke. The account of operations and handlers draws on Plotkin and Pretnar. [Prabhu and Teehan's title collection](https://github.com/vinayprabhu/X-is-all-you-need) · [Vaswani et al.](https://arxiv.org/abs/1706.03762) · [Plotkin and Pretnar](https://arxiv.org/abs/1312.1399)
+Give an ordinary tagged-graph interpreter an explicitly passed `reserve` service. Both the CoD version and the explicit version can record the same requests, swap a simulator for a live service and execute a revised graph. The handler in this example returns a Boolean to ordinary control flow. It exercises a restricted interpretation of operations, with no need for a user handler to capture, discard or resume an arbitrary continuation. Plotkin and Pretnar give a more general account of operations and handlers. CoD's `behave` uses the current dynamic bindings for its scoped call. How much that binding discipline buys over passing a typed service is an empirical question. [Plotkin and Pretnar, *Handling Algebraic Effects*](https://arxiv.org/abs/1312.1399) · [CoD symbolic procedure selection and invocation](../design/SymbolicDynamicScope.md#definition-installed-effectful-procedures)
+
+Let two entry branches point to one shared fallback node. A source projection can print two identical fallback clauses. Rebuilding that text into two distinct nodes preserves each present-day decision and request sequence. An editor that later modifies the shared fallback once will change both paths in the first image and one path in the second, or its unique-node selector will become ambiguous. A tool promising round-trip *editing* must preserve declared edit targets and relevant sharing, provide a checked correspondence for them, or reject this fragment. Execution equivalence alone warrants a smaller claim.
 
 ## 6. Native execution and interactive revision
 
-“Compiled or interpreted?” becomes a staging decision for the executor. One policy revision can first run through already compiled generic handlers, then run as a specialized native path. A tool can compile a known policy ahead of deployment, while an interactive session can execute a newly checked branch immediately. These executions must realize the same DSL operations in the same observable order. If this works, domain authors can stop choosing a language paradigm on the basis of that binary distinction. Compilation cost, dispatch cost and the conditions for reusing native code remain measurable engineering choices.
+The generic evaluator and a specialized native version can use the same reference trace. The edit protocol pins the input revision, builds and validates a private successor, and publishes it under a fresh name. A reader that already holds the old mapping can finish with it. Another reader can open the completed successor. The CoD DBMR contract governs shared readonly access and complete fresh-name publication, including a competing publisher. Atomic fresh-name installation alone does not compare an edit's expected base revision with a separately managed “latest” pointer. A tool claiming stale-edit protection must supply that precondition in its edit request or repository protocol. The appendix passes an explicit pinned base. [DBMR modes and publication](../design/ConstructionAndAcquisition.md#publishing-a-newly-created-dbmr)
 
-A semantic graph can stay authoritative while execution uses derived native code. The proposed path is to resolve the program's types, operation identities and compatible module world, then execute with native handlers or specialize stable graph fragments using LLVM. A native artifact depends on the graph revision and the assumptions made about layouts, operation contracts, handler bindings and target. Reusing specialized code requires those assumptions to hold. A specialization that always selects A would fail immediately against the trace for order 42.
-
-After publishing `P₁`, the same session can request a checked run of that revision. A run already pinned to `P₀` finishes under its original interpretation. The order schema, inventory operation signature and output writer are candidates for reuse across the edit; the branch and code that inlined it need revalidation. A change to a public type or the fused module world can invalidate a much larger set. A fresh checked world can be activated for new work. This supplies a precise meaning for interactive updates without assuming mutable type relationships within an executing world.
-
-Relocatability supports this workflow by letting multiple workers map a published graph without rewriting its internal edges for each base address. For a finite graph, if resolving each reachable locator gives the same node and successor locators under two mappings, equal request histories and equal handler replies inductively lead to equal decisions. This lemma pays for a **storage** guarantee. The central language test remains the edit cycle: CoD itself must be able to read a program as typed data, publish a valid changed program and execute it.
+Replacing a graph edge and changing an installed handler are independent tests. First change the handler while retaining the graph revision. Then change only the decline edge while keeping handler semantics fixed. Any native artifact that depends on a specific edge, selected method, operation signature, layout or handler assumption needs corresponding validity evidence. The experiment may use a generic evaluator throughout. Specialization adds a second obligation to preserve the trace under revision or rebinding. Julia's world-age work supplies a comparison for stable running calls in the presence of new code. CoD's checked module worlds and published region revisions have their own rules. [Belyakova et al., *World Age in Julia*](https://arxiv.org/abs/2010.07516) · [CoD module worlds](../design/ModuleWorlds.md)
 
 ## 7. What we can show, and what to measure
 
-The [CoD listing](#appendix-the-warehouse-revision-in-cod) specifies the expected result for the three orders in §4. Order 42 alone changes destination. Starting both runs from the same inventory gives one backorder under the original policy and two under the revision. Reservation requests fall from five to three. A separate client reads the revised decisions and publishes orders 42 and 43 for the backorder desk. These are acceptance expectations derived from the program. Source correspondence, DBMR execution and performance still need validation on the CoD toolchain.
+Start with a **semantic comparison** that can fail on a small input. Implement a direct source interpreter and the generic graph evaluator for the fragment in §3. Export source to a typed graph, reopen it at a different address, apply the graph edit, project it back to source and check that source. Separately apply the corresponding textual edit and export that result. For each small graph, generate every Boolean reply path up to its longest reachable sequence of requests. Include failures at each reached operation, empty order batches, repeated warehouse IDs and shared tails. Drive all four paths from the same initial inventory or independently reset replay state. Compare ordered requests, replies, decision or failure, and observable state. A single mismatch defeats the claimed correspondence for that input. For the finite acyclic language, induction over the reachable successors can supplement these tests once the source, exporter, projection and edit relations are specified.
 
-**Semantic acceptance for CoD.** Start from the ordinary source in §3. Export its checked program DBMR, inspect the reachable operations using CoD, apply the edit from §4 and execute both revisions. Independently edit the text and compare the resulting reachable operations, decisions and ordered effect traces. Check both Boolean outcomes, a handler failure, empty orders, a shared successor and reopening at another mapping base. Reject a stale-base edit and a result with the wrong program root. A failed edit must leave the previous policy executable. Changing the inventory handler alone must retain the policy identity.
+| Check | Discriminating observation |
+| --- | --- |
+| Wrong edge, changed request order or stale specialization | All final destinations can match while a warehouse observes an extra reservation. Ordered traces must distinguish it. |
+| Shared target versus identical text | Apply a *second* edit using the published selector. Compare the targets found and then execute both previously separate entrance paths. |
+| Installation, retirement and failure | Two handlers implement the same operation under distinct scopes. Check current binding and restoration on ordinary and exceptional exit. Compare an explicitly passed service with the same lifetime and behavior. |
+| Invalid draft, wrong root and occupied output name | Reject before execution or publication as appropriate. The old published policy remains readable. Test stale-base protection separately by supplying an independently known expected base. |
+| Independent reader and mapping | A process with only the compatible Decisions schema opens the result at a different address. It must recover both backorders and must need no authority to reserve inventory. |
 
-**Two performance claims require two measurements.** For steady throughput compare a direct native branch implementation, the CoD regional graph with native specialization, a graph interpreter, and an equivalent interpreter-based application such as CPython. Include Julia as a compiled interactive baseline. Run identical ordered inputs, policies and in-process effect responses. Verify equal traces before timing. Report orders per second, CPU time per order, warm-up, and separate end-to-end measurements that include reading and publishing DBMRs. External service latency deserves its own experiment. It can dominate every language comparison.
+For a single supported edit, write `L` for source-to-graph export, `e_s` for deleting the fallback
+in source and `e_g` for redirecting its graph edge. The executable claim is equality of the observed
+runs of `L(e_s(S))` and `e_g(L(S))`, for each admitted program `S` and independently reset
+handler/input pair. Couple any external responses by the same per-request script and compare the
+requests as they occur. For editable round trips, also compare the resolution of the *next* public
+edit selector and the runs after applying it. This allows, for example, physically different
+addresses and unreachable nodes while detecting loss of a shared editable target.
 
-For interactivity measure elapsed time **from submitting an edit until the first checked result visibly reflects it**, in an already running session. Include publication, invalidation, checking, compilation as needed and first execution. Report median and p95 for a constant edit, a branch edit, and a public signature change, plus a cold start. Compare with editing and running the same policy in Python and Julia, reporting data I/O both separately and under equivalent durability requirements. Throughput cannot establish responsive editing; a fast prompt cannot establish fast execution. A result showing high native throughput but multi-second pauses for a two-edge edit would satisfy only half the design ambition.
+**Compare one mechanism at a time.** Implement the tagged graph, editable sharing, typed schemas, compatibility checks, immutable revision publication and trace logger in the comparison system too. Run CoD first with explicitly supplied service operations and then with its dynamically installed operation. Keep graph bytes, revision checks, kernel work, persistence guarantees and operation outcomes matched wherever the two modes admit this. Separately compare a handwritten source-to-plan adapter against the proposed checked CoD projection. Disclose formatter, validator and adapter work for both. If an explicit service and a conventional typed serializer provide the same checks and ease of independent edits at similar cost, the warehouse experiment supports the common approach and leaves a CoD-specific advantage unestablished.
 
-**Cost of building and changing a DSL.** Give two teams the same Orders and Decisions packages. Ask each to build an allocation vocabulary, an app generator and a reporting client. Then request three changes: add a third warehouse using existing operations, introduce a new inventory operation, and extend the decisions schema. Report which packages, generators, binaries and app images changed, how much adapter code the teams wrote, and whether an independently built reporting client can still read a compatible result. For the reservation rule in §2, attempt the A-reserves/B-ships policy through both a generator and an independent typed graph editor. Record whether the policy can be constructed, whether a later validator rejects it, and how many tools implement a special check for it. Give the comparison embedded DSL the same sum types and count the additional work each system needs to preserve the rule across persistent editing and reopening. This tests the claim of lower engineering cost directly.
+**Measure a planner's wait and an executor's work separately.** In paired, fresh fixtures, time from submitting a branch edit to the first visibly correct checked result. Include checking, publication, invalidation and any compilation. Record individual stages as well as the median, p95 and uncertainty across independent runs. Test a value change, our branch edit, a public signature change and a cold start, reporting warm and cold cache states separately. For bulk execution, compare the direct native branch, tagged-graph interpreter and optional specialization on identical ordered inputs with the same in-process service. Vary batch size, graph size and proportion of edits between runs. Report requests per order, CPU time per order, data bytes read or copied, and end-to-end elapsed time. External service latency belongs in a separate run. Report which paths the pinned compiler and exporter support. For a disagreement, use the stipulated request trace, edit targets and publication contract to locate the first divergence. A reference evaluator can exercise the fragment before the exporter covers it. Predeclare practical latency and throughput targets with the intended users. A throughput gain does not compensate for an edit that fails its agreed latency budget.
+
+Estimate authoring cost on three changes. First add a warehouse using existing instructions, then introduce a new operation, then extend the Decisions schema while an independently built reporter remains installed. Record which artifacts each change touches, who writes compatibility checks, whether independently produced valid graphs reopen, and which invalid edits reach an executor. A table of touched components can be reproduced without treating small differences in lines of code as general evidence of programmer productivity.
 
 ## 8. Related work and the scope of the claim
 
-Lisp established that programs can operate on representations of their own programs. Julia demonstrates that familiar function and control syntax can coexist with programmatically manipulated expressions. Lisp implementations also include native compilers, so surface syntax is a poor guide to execution speed. CoD locates its proposed point of uniformity at the **typed, persistent semantic graph**. Imperative and functional text are projections and constructors of that representation. The relevant comparison concerns what survives checking, publication and reopening, and which changes an ordinary program can make after reopening. [McCarthy, *Recursive Functions of Symbolic Expressions*](https://www-formal.stanford.edu/jmc/recursive/recursive.html) · [Julia metaprogramming](https://docs.julialang.org/en/v1/manual/metaprogramming/) · [Steel Bank Common Lisp](https://www.sbcl.org/)
+Hyper-code already proposed a common presentation for persistent source, executable code and data, including operations to edit and evaluate programs. The closest comparison preserves links into a persistent store and lets a user revisit the program through another tool. CoD's candidate contribution is a checked correspondence between a source edit and a graph edit over the admitted effectful fragment, with independently readable, typed results. A successful experiment would establish which observations and later edits survive that correspondence. [Zirintsis, Kirby and Morrison, *Hyper-code revisited*](https://research-portal.st-andrews.ac.uk/en/publications/hyper-code-revisited-unifying-program-source-executable-and-data/)
 
-Persistent hyper-programming is a particularly close precedent. The St Andrews work describes type-safe links between programs and objects in a persistent store, and its hyper-code work explicitly investigates a common presentation for source, executable code and data. Julia's world-age work explains how interactive code introduction can coexist with optimization and stable dispatch for existing executions. A defensible CoD contribution would demonstrate **the combination** of a checked DBMR-to-DBMR program transformation, effect rebinding, conventional source projection and measured native execution with low edit latency. The individual ingredients all have prior art. [Persistent hyper-programming](https://research-portal.st-andrews.ac.uk/en/publications/a-persistent-hyper-programming-system/) · [Hyper-code revisited](https://research-portal.st-andrews.ac.uk/en/publications/hyper-code-revisited-unifying-program-source-executable-and-data/) · [Belyakova et al., *World Age in Julia*](https://arxiv.org/abs/2010.07516)
+Defunctionalization helps explain why tagged first-order constructors and an evaluator can represent control. Substrait provides a working comparison for typed, serializable domain plans with multiple consumers. Neither precedent requires a novelty claim for the existence of a program graph. The distinguishing burden falls on checked editing correspondence, handler composition, and the measured cost of preserving both across revisions. [Danvy and Nielsen, *Defunctionalization at Work*](https://tidsskrift.dk/brics/article/view/21684) · [Substrait specification](https://substrait.io/)
 
-Tagged instructions with executable interpretation have precedents in defunctionalization. Relative pointers have established in-place encodings, and Substrait provides a cross-language vocabulary for serializable computational plans. A stored domain-specific plan is consequently a useful baseline. The harder demonstration for CoD is to write the editor in the same human-facing language, inspect its program image with the same facilities, and use its checked output in the existing session. [Danvy and Nielsen](https://tidsskrift.dk/brics/article/view/21684) · [Cap’n Proto encoding](https://capnproto.org/encoding.html) · [Substrait](https://substrait.io/)
+<a id="conclusion"></a>
 
-## Conclusion
-
-The merchant changes a business rule by running a program whose input **and output are programs**. The merchant then applies the result to the original orders. The backorder desk uses the same Decisions package to publish its own batch. The policy author needs a new app revision, the desk needs its data types, and the executor can serve both policy revisions. This is what persistent program-as-data buys the people doing the work. If one checked app revision can run immediately after an edit and specialize for repeated execution, “compiled or interpreted?” becomes a question about when to compile that revision. The answer can change during the life of a single application.
+Trace preservation without preserved edit targets justifies a read-and-execute projection. Preserved targets and traces with equal conventional engineering cost justify a portable editing contract. A claim about convenient scoped handlers or faster checked revision requires its own comparison. Each outcome tells the planner what can safely be reviewed and changed before the next warehouse call.
 
 ## Appendix. The warehouse revision in CoD
 
@@ -215,7 +194,7 @@ proc evaluate(n:const RouteNode in P, id:u64, sku:u64) -> u64
 }
 ```
 
-`original_policy()` constructs the graph explicitly. The source-correspondence check in §7 starts separately from the ordinary `route` procedure in §3 and compares its exported graph with this one. Only `evaluate` invokes the reservation effect. If the handler throws, the call unwinds before either continuation runs.
+`original_policy()` constructs the graph explicitly. The source-correspondence check in §7 starts separately from the ordinary `route` procedure in §3 and compares its exported graph with this one. In this example, `evaluate` invokes the reservation effect. The appendix uses its declared normal Boolean reply. The failure experiment in §5 requires the separately declared throwing variant.
 
 ### The stored editor
 
@@ -238,7 +217,7 @@ proc edit(region instruction:const RedirectDecline, region base:const RouteProgr
 }
 ```
 
-`fork_route` uses explicit graph transfer from the pinned base into a fresh writable owner and preserves sharing. Both lookups search the draft and require exactly one matching node. Both returned references belong to the draft. The single `=` changes the decline edge there. Validation checks the expected base revision, root, edges, effect contract and dependencies before the result is eligible for publication. A failed lookup or validation exits without returning the draft to the publisher. The original policy remains available.
+`fork_route` uses explicit graph transfer from the pinned base into a fresh writable owner and preserves sharing. Both lookups search the draft and require exactly one matching node. Both returned references belong to the draft. The single `=` changes the decline edge there. Validation checks the draft against the explicitly pinned base, root schema, edges, effect contract and dependencies before the result is eligible for publication. The instruction carries only two selectors. Rejecting a request prepared against a different base additionally requires the caller or revision store to supply the expected revision identity, as discussed in §6. A failed lookup or validation exits without returning the draft to the publisher. The original policy remains available.
 
 ### Allocation and independent reporting
 

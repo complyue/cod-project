@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Reframe the four CoD working papers
+
+<a id="k-four-working-papers-20261124"></a>
+**K-FOUR-WORKING-PAPERS-20261124.** At the project user's request, the [working papers](papers/README.md) revisit the drafts at `c7396294fb9d16e892cbd96599b82bc4c83a42fd:papers/`. The research questions concern correspondence under successive program edits, owner and target identity under relocation, feedback and cleanup during synchronous enumeration, and preservation of routing and progress decisions across asynchronous submission. Each paper gives a competing account or negative control and the observations that distinguish it. The two Python appendices report bounded model comparisons. The other figures are derived examples or planned measurements. As the user requested, compiler observations are version-specific evidence checked against the declared contracts and independent expectations. These are research revisions and confer no language design or implementation clearance.
+
 ## 2026-11-24 — Make the bootstrap grammar readable in CoD
 
 <a id="h-booter-readable-grammar-20261124"></a>
