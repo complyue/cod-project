@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review final validation of independent checked throws
+
+<a id="k-seed-terminal-body-coverage-20261124"></a>
+**K-SEED-TERMINAL-BODY-COVERAGE-20261124.** D-ARCH-REVIEW r109→110 continues [entry-world coverage](#h-entry-world-diagnostics-20261124) under P-682/P-683. The [review](design/ImplementationArchitecture.md#reporting-uncovered-checked-exceptions-from-independent-bodies) clears independent final-replay findings for uncovered concrete checked exceptions. A failed method supplies no checked body to its caller. The seed’s final replay begins at `bd77ebf419276a46336f3045948f4e33c1f6c98d:cod/lang_checked.hh:24551`. That revision ships the [independent layout-cycle correction](#k-seed-inline-layout-cycles-20261124). Earlier return-type failures in effect solving remain open.
+
 ## 2026-11-24 — Review independent inline layout diagnostics
 
 <a id="k-seed-inline-layout-cycles-20261124"></a>
