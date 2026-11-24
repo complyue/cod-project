@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise nominal construction and case reception through native execution."""
+"""Exercise nominal layout checks, construction and case reception."""
 from pathlib import Path
 import subprocess
 import tempfile
@@ -46,6 +46,13 @@ proc inspect() -> u64 {
 }
 """
 
+INLINE_CYCLES = """\
+data SumFirst = Cycle { next:SumFirst; } | End {};
+data Leaf { next:Leaf; }
+data LinkedCycle { prior:Leaf; next:LinkedCycle; }
+data Dependent { only:LinkedCycle; }
+"""
+
 
 def main():
     with tempfile.TemporaryDirectory(prefix="cod-nominal-sum-") as directory:
@@ -56,6 +63,8 @@ def main():
         accepted.write_text(SAVED_SUBJECT)
         rejected = scratch / "rejected.cod"
         rejected.write_text(FOREIGN_CONSTRUCTOR)
+        cycles = scratch / "cycles.cod"
+        cycles.write_text(INLINE_CYCLES)
         artifact = scratch / "existing.ll"
         for mode, flags in (("specialized", ()), ("shared", ("--no-specialize",))):
             actual, _ = checked([COD, *flags, "--no-cache", "--run", accepted], ROOT)
@@ -68,6 +77,23 @@ def main():
             assert result.returncode == 2 and result.stdout == "", result
             assert "'Call' is not a selected data constructor of 'SyntaxPayload'" in result.stderr, result
             assert artifact.read_text() == "existing output\n"
+            cycle_names = ("SumFirst", "Leaf", "LinkedCycle")
+            expected = [
+                f"{cycles}:{line}:1: inline fields of '{name}' have no finite layout"
+                for line, name in enumerate(cycle_names, 1)
+            ]
+            for limit in (2, 3):
+                result = subprocess.run(
+                    [COD, *flags, "--no-cache", "--check", cycles, "--max-diagnostics", str(limit),
+                     "--emit-llvm", artifact],
+                    cwd=ROOT, capture_output=True, text=True, timeout=90,
+                )
+                actual_reports = result.stderr.splitlines()
+                if limit < len(expected):
+                    assert actual_reports.pop() == "CoD diagnostic limit reached. Coverage is incomplete.", result
+                assert result.returncode == 2 and result.stdout == "", result
+                assert actual_reports == expected[:limit], result
+                assert artifact.read_text() == "existing output\n"
             print(f"PASS {mode}", flush=True)
     return 0
 

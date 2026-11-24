@@ -23475,6 +23475,7 @@ class ScalarChecker {
       const Form *source;
       size_t pending = 0;
       std::vector<size_t> dependents = {};
+      bool shape_ready = true;
       bool blocked = false;
     };
     std::vector<Layout> layouts;
@@ -23511,8 +23512,10 @@ class ScalarChecker {
         for (const auto dependent : layout.dependents) blocked.push_back(dependent);
       }
     };
+    for (auto &layout : layouts)
+      layout.shape_ready = !unavailable.contains({layout.type.kind, layout.type.identity});
     for (size_t i = 0; i < layouts.size(); ++i)
-      if (unavailable.contains({layouts[i].type.kind, layouts[i].type.identity})) block_layout(i);
+      if (!layouts[i].shape_ready) block_layout(i);
 
     std::deque<size_t> ready;
     for (size_t i = 0; i < layouts.size(); ++i)
@@ -23582,28 +23585,72 @@ class ScalarChecker {
       for (const auto dependent : layout.dependents)
         if (!layouts[dependent].blocked && !--layouts[dependent].pending) ready.push_back(dependent);
     }
+    const auto unfinished_shape = [](const Layout &layout) { return layout.shape_ready && layout.pending; };
+    if (std::ranges::none_of(layouts, unfinished_shape)) return true;
+
+    // Find components using both directions of the checked inline edges.
+    // A blocked layout can still prove a cycle through its own fields.
+    struct Visit {
+      size_t id;
+      size_t next_dependent = 0;
+    };
+    std::vector<bool> visited(layouts.size());
+    std::vector<size_t> finished;
+    std::vector<Visit> visits;
     for (size_t i = 0; i < layouts.size(); ++i) {
-      if (layouts[i].blocked || !layouts[i].pending) continue;
-      // Every pending layout has an unfinished, unblocked inline dependency.
-      // Follow those edges to a cycle before recording its cause.
-      std::set<size_t> path;
-      size_t current = i;
-      while (path.insert(current).second) {
-        std::optional<size_t> child;
-        program_.visit_inline_fields(layouts[current].type, [&](const auto &field) {
-          const auto candidate = local_layout(field.type);
-          if (!child && candidate && layouts[*candidate].pending && !layouts[*candidate].blocked)
-            child = candidate;
-        });
-        if (!child) throw std::logic_error("a pending nominal layout has no unfinished inline dependency");
-        current = *child;
+      if (visited[i] || !unfinished_shape(layouts[i])) continue;
+      visited[i] = true;
+      visits.push_back({i});
+      while (!visits.empty()) {
+        auto &visit = visits.back();
+        const auto &dependents = layouts[visit.id].dependents;
+        if (visit.next_dependent == dependents.size()) {
+          finished.push_back(visit.id);
+          visits.pop_back();
+          continue;
+        }
+        const auto next = dependents[visit.next_dependent++];
+        if (visited[next] || !unfinished_shape(layouts[next])) continue;
+        visited[next] = true;
+        visits.push_back({next});
       }
-      const auto &cycle = *layouts[current].source;
+    }
+
+    const auto earlier = [&](size_t left, size_t right) {
+      return layouts[left].source->at.span.first < layouts[right].source->at.span.first;
+    };
+    std::fill(visited.begin(), visited.end(), false);
+    std::vector<size_t> members, cycles;
+    for (auto it = finished.rbegin(); it != finished.rend(); ++it) {
+      if (visited[*it]) continue;
+      visited[*it] = true;
+      members.push_back(*it);
+      size_t first = *it, count = 0;
+      bool self_edge = false;
+      while (!members.empty()) {
+        const auto current = members.back();
+        members.pop_back();
+        ++count;
+        if (earlier(current, first)) first = current;
+        program_.visit_inline_fields(layouts[current].type, [&](const auto &field) {
+          const auto next = local_layout(field.type);
+          if (!next || !unfinished_shape(layouts[*next])) return;
+          self_edge |= *next == current;
+          if (visited[*next]) return;
+          visited[*next] = true;
+          members.push_back(*next);
+        });
+      }
+      if (count > 1 || self_edge) cycles.push_back(first);
+    }
+    std::ranges::sort(cycles, earlier);
+    for (const auto first : cycles) {
+      const auto &cycle = *layouts[first].source;
       check_schema_part(diagnostics, [&] {
         fail(cycle.at, "inline fields of '" + cycle.name + "' have no finite layout");
       });
       if (diagnostics && !diagnostics->complete()) return false;
-      block_layout(current);
+      block_layout(first);
     }
     return true;
   }
