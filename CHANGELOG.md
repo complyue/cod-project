@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review local sum construction in the package resolver
+
+<a id="k-booter-local-sum-transfer-20261124"></a>
+**K-BOOTER-LOCAL-SUM-TRANSFER-20261124.** D-ARCH-REVIEW r112→113 and D-20-MODULE-GRAPH r80→81, continued under P-680–P-683. The [source-checking review](applications/cod-booter/docs/ModuleGraph.md#checking-a-local-sum-constructor-in-an-indexed-transfer) applies the [named constructor decision](#h-dctor-source-20261118) and D-22-TRANSFER to `acd9e453:applications/cod-booter/src/PackageModuleResolution.cod:21`. The linked source commands reject the local sum constructor at name lookup and accept the corresponding record control. Implementation and executable lowering have separate evidence requirements.
+
 ## 2026-11-24 — Review one failed dependency shared by grouped selectors
 
 <a id="k-grouped-dependency-failure-20261124"></a>
