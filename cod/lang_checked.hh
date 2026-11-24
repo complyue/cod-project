@@ -23208,27 +23208,74 @@ class ScalarChecker {
     return constructor;
   }
 
-  void resolve_sum_fields(CheckedSum &sum) {
-    if (sum.source->parent_type)
-      implementation_gap(sum.source->at, "sum conformance to a parent type");
-    const auto &nominal = module_names().types.at(sum.source->name);
-    for (auto &alternative : sum.alternatives) {
-      std::set<std::string> names;
-      for (const auto &field : alternative.source->fields) {
-        if (!names.insert(field.name).second)
-          fail(field.at, "duplicate field '" + field.name + "' in '" + alternative.source->name.text + "'");
-        const auto type = resolve_type(field.type);
-        const bool self_edge = field.declaration_kind == "ref" && type == nominal;
-        if (!self_edge && ((!field.declaration_kind.empty() && field.declaration_kind != "val") ||
-            (!scalar_type(type) && type.kind != Type::product && type.kind != Type::sum)))
-          implementation_gap(field.at, "sum payload fields outside direct bits and same-sum regional refs");
-        sum.regional_only |= self_edge;
-        alternative.fields.push_back({&field, type, self_edge ? PlaceKind::reference : PlaceKind::value});
-      }
+  template <typename Check>
+  static bool check_schema_part(CompilationDiagnostics *diagnostics, const Check &check) {
+    if (diagnostics && !diagnostics->continue_work()) return false;
+    try {
+      check();
+      return true;
+    } catch (const LocatedFailure &failure) {
+      if (!diagnostics) throw;
+      diagnostics->append(failure.diagnostic);
+      return false;
     }
   }
 
-  void check_schema_fields(CheckedSchema &schema) {
+  bool resolve_sum_fields(CheckedSum &sum, CompilationDiagnostics *diagnostics) {
+    if (sum.source->parent_type)
+      implementation_gap(sum.source->at, "sum conformance to a parent type");
+    const auto &nominal = module_names().types.at(sum.source->name);
+    bool valid = true;
+    for (auto &alternative : sum.alternatives) {
+      std::set<std::string> names;
+      for (const auto &field : alternative.source->fields) {
+        const auto checked = check_schema_part(diagnostics, [&] {
+          if (!names.insert(field.name).second)
+            fail(field.at, "duplicate field '" + field.name + "' in '" + alternative.source->name.text + "'");
+          auto type = resolve_type(field.type);
+          const bool self_edge = field.declaration_kind == "ref" && type == nominal;
+          if (!self_edge && ((!field.declaration_kind.empty() && field.declaration_kind != "val") ||
+              (!scalar_type(type) && type.kind != Type::product && type.kind != Type::sum)))
+            implementation_gap(field.at, "sum payload fields outside direct bits and same-sum regional refs");
+          alternative.fields.push_back({&field, std::move(type), self_edge ? PlaceKind::reference : PlaceKind::value});
+          sum.regional_only |= self_edge;
+        });
+        valid &= checked;
+        if (diagnostics && !diagnostics->complete()) return false;
+      }
+    }
+    return valid;
+  }
+
+  void check_schema_field(CheckedSchema &schema, const Parameter &field) {
+    const auto storage = place_kind(field.declaration_kind.empty() || field.declaration_kind == "val",
+                                    field.declaration_kind == "ref");
+    auto type = resolve_type(field.type);
+    require_ordinary_callable_type(type, field.at);
+    if (type.kind == Type::builder_storage) {
+      if (schema.source->kind != Form::Kind::data || schema.source->c_data || schema.source->parameters.size() != 1 ||
+          storage != PlaceKind::value || !schema.bits)
+        fail(field.at, "text builder storage requires the sole inline marker of a lexical product");
+      schema.lexical_builder = true;
+      schema.bits = false;
+      return;
+    }
+    if (schema.source->c_data && storage != PlaceKind::value)
+      fail(field.at, "data \"C\" requires by-value bits fields");
+    reject_c_type_payload(type, field.at);
+    if (type.kind == Type::region_schema) fail(field.at, "a region schema does not name a field payload type");
+    const bool text_place = !schema.source->c_data && schema.source->kind == Form::Kind::data &&
+        storage == PlaceKind::value && type == Type::string;
+    if (!scalar_type(type) && type.kind != Type::product && type.kind != Type::sum && !text_place)
+      implementation_gap(field.at, "field representation for type '" + type_name(type) + "'");
+    if (type.kind == Type::sum && storage != PlaceKind::value)
+      implementation_gap(field.at, "stored sum reference fields");
+    schema.has_enum_storage |= type.kind == Type::enumeration;
+    schema.bits &= storage == PlaceKind::value && !text_place;
+    schema.fields.push_back({&field, std::move(type), storage});
+  }
+
+  bool check_schema_fields(CheckedSchema &schema, CompilationDiagnostics *diagnostics) {
     if (schema.source->native_owner_type) {
       const auto owner = resolve_type(*schema.source->native_owner_type);
       if (owner.kind != Type::c_type_marker || program_.schemas.at(owner.identity).source->native_owner_type)
@@ -23236,36 +23283,20 @@ class ScalarChecker {
       schema.native_owner = owner.identity;
     }
     std::set<std::string> names;
+    bool valid = true;
     for (const auto &field : schema.source->parameters) {
-      if (!names.insert(field.name).second)
-        fail(field.at, "duplicate field '" + field.name + "' in '" + schema.source->name + "'");
-      const auto storage = place_kind(field.declaration_kind.empty() || field.declaration_kind == "val",
-                                      field.declaration_kind == "ref");
-      auto type = resolve_type(field.type);
-      require_ordinary_callable_type(type, field.at);
-      if (type.kind == Type::builder_storage) {
-        if (schema.source->kind != Form::Kind::data || schema.source->c_data || schema.source->parameters.size() != 1 ||
-            storage != PlaceKind::value || !schema.bits)
-          fail(field.at, "text builder storage requires the sole inline marker of a lexical product");
-        schema.lexical_builder = true;
-        schema.bits = false;
-        continue;
-      }
-      if (schema.source->c_data && storage != PlaceKind::value)
-        fail(field.at, "data \"C\" requires by-value bits fields");
-      schema.has_enum_storage |= type.kind == Type::enumeration;
-      reject_c_type_payload(type, field.at);
-      if (type.kind == Type::region_schema) fail(field.at, "a region schema does not name a field payload type");
-      const bool text_place = !schema.source->c_data && schema.source->kind == Form::Kind::data &&
-          storage == PlaceKind::value && type == Type::string;
-      if (!scalar_type(type) && type.kind != Type::product && type.kind != Type::sum && !text_place)
-        implementation_gap(field.at, "field representation for type '" + type_name(type) + "'");
-      if (type.kind == Type::sum && storage != PlaceKind::value)
-        implementation_gap(field.at, "stored sum reference fields");
-      schema.bits &= storage == PlaceKind::value && !text_place;
-      schema.fields.push_back({&field, std::move(type), storage});
+      const auto checked = check_schema_part(diagnostics, [&] {
+        if (!names.insert(field.name).second)
+          fail(field.at, "duplicate field '" + field.name + "' in '" + schema.source->name + "'");
+        check_schema_field(schema, field);
+      });
+      valid &= checked;
+      if (diagnostics && !diagnostics->complete()) return false;
     }
+    return valid;
   }
+
+  using UnavailableLayouts = std::set<std::pair<Type::Kind, size_t>>;
 
   bool register_nominal_types(const SourceModule &source, CompilationDiagnostics *diagnostics) {
     register_abstract_types(source);
@@ -23313,47 +23344,72 @@ class ScalarChecker {
         program_.schemas.back().abstract_parent = abstract_parent;
       }
     }
-    for (auto &sum : std::span(program_.sums).subspan(first_sum)) resolve_sum_fields(sum);
-    for (auto &array : std::span(program_.arrays).subspan(first_array)) {
-      array.index = resolve_type(std::move(array.index));
-      array.element = resolve_type(std::move(array.element));
-      reject_c_type_payload(array.index, array.source->at);
-      reject_c_type_payload(array.element, array.source->at);
-      if (!integral(array.index))
-        implementation_gap(array.source->at, "array index domain '" + type_name(array.index) + "'");
-      if (array.element.kind == Type::procedure)
-        fail(array.source->at, "callable views require lexical storage and cannot be array elements");
-      if (array.element.kind == Type::sum && !program_.bits_payload(array.element))
-        implementation_gap(array.source->at, "regional reference-bearing sum array elements");
-      if (!scalar_type(array.element) && array.element.kind != Type::product && array.element.kind != Type::sum)
-        implementation_gap(array.source->at, "array element type '" + type_name(array.element) + "'");
+    UnavailableLayouts unavailable;
+    for (size_t id = first_sum; id < program_.sums.size(); ++id) {
+      auto staged = program_.sums[id];
+      if (resolve_sum_fields(staged, diagnostics)) program_.sums[id] = std::move(staged);
+      else unavailable.emplace(Type::sum, id);
+      if (diagnostics && !diagnostics->complete()) return false;
     }
-    std::set<size_t> incomplete;
+    struct ArrayDraft {
+      CheckedArray definition;
+      bool index_ready;
+      bool element_ready;
+    };
+    std::vector<ArrayDraft> arrays;
+    for (const auto &array : std::span(program_.arrays).subspan(first_array)) {
+      auto &draft = arrays.emplace_back(ArrayDraft{array, false, false});
+      draft.index_ready = check_schema_part(diagnostics, [&] {
+        auto index = resolve_type(array.index);
+        reject_c_type_payload(index, array.source->at);
+        if (!integral(index))
+          implementation_gap(array.source->at, "array index domain '" + type_name(index) + "'");
+        draft.definition.index = std::move(index);
+      });
+      if (diagnostics && !diagnostics->complete()) return false;
+      draft.element_ready = check_schema_part(diagnostics, [&] {
+        auto element = resolve_type(array.element);
+        reject_c_type_payload(element, array.source->at);
+        if (element.kind == Type::procedure)
+          fail(array.source->at, "callable views require lexical storage and cannot be array elements");
+        if (!scalar_type(element) && element.kind != Type::product && element.kind != Type::sum)
+          implementation_gap(array.source->at, "array element type '" + type_name(element) + "'");
+        draft.definition.element = std::move(element);
+      });
+      if (diagnostics && !diagnostics->complete()) return false;
+    }
     for (size_t id = first; id < program_.schemas.size(); ++id) {
-      if (diagnostics && !diagnostics->continue_work()) return false;
       auto staged = program_.schemas[id];
-      try {
-        check_schema_fields(staged);
-        program_.schemas[id] = std::move(staged);
-      } catch (const LocatedFailure &failure) {
-        const auto &form = *staged.source;
-        if (!diagnostics || form.kind != Form::Kind::data || form.c_data || form.parent_type ||
-            std::ranges::any_of(form.parameters, [](const auto &field) {
-              return field.type.target || !field.type.parameters.empty();
-            })) throw;
-        incomplete.insert(id);
-        diagnostics->append(failure.diagnostic);
-      }
+      const auto &form = *staged.source;
+      const bool recoverable = form.kind == Form::Kind::data && !form.c_data && !form.parent_type;
+      if (!recoverable && diagnostics && !diagnostics->continue_work()) return false;
+      if (check_schema_fields(staged, recoverable ? diagnostics : nullptr)) program_.schemas[id] = std::move(staged);
+      else unavailable.emplace(Type::product, id);
+      if (diagnostics && !diagnostics->complete()) return false;
     }
-
-    if (!check_nominal_layouts(first, first_sum, incomplete, diagnostics) || !incomplete.empty()) return false;
-    for (const auto &array : std::span(program_.arrays).subspan(first_array))
-      if (program_.builder_type(array.element))
-        implementation_gap(array.source->at, "storing a lexical text builder in an array");
-    return true;
+    if (!check_nominal_layouts(first, first_sum, unavailable, diagnostics)) return false;
+    bool valid = unavailable.empty();
+    for (size_t offset = 0; offset < arrays.size(); ++offset) {
+      auto &draft = arrays[offset];
+      const auto &element = draft.definition.element;
+      if (draft.element_ready && !unavailable.contains({element.kind, element.identity}) &&
+          (element.kind == Type::product || element.kind == Type::sum)) {
+        draft.element_ready = check_schema_part(diagnostics, [&] {
+          if (element.kind == Type::sum && !program_.bits_payload(element))
+            implementation_gap(draft.definition.source->at, "regional reference-bearing sum array elements");
+          if (program_.builder_type(element))
+            implementation_gap(draft.definition.source->at, "storing a lexical text builder in an array");
+        });
+        if (diagnostics && !diagnostics->complete()) return false;
+      }
+      if (draft.index_ready && draft.element_ready && !unavailable.contains({element.kind, element.identity}))
+        program_.arrays[first_array + offset] = std::move(draft.definition);
+      else valid = false;
+    }
+    return valid;
   }
 
-  bool check_nominal_layouts(size_t first_product, size_t first_sum, const std::set<size_t> &incomplete,
+  bool check_nominal_layouts(size_t first_product, size_t first_sum, UnavailableLayouts &unavailable,
                              CompilationDiagnostics *diagnostics) {
     struct Layout {
       Type type;
@@ -23384,69 +23440,112 @@ class ScalarChecker {
         }
       });
     }
-    std::deque<size_t> blocked;
-    for (const auto id : incomplete) {
-      const auto layout = id - first_product;
-      layouts[layout].blocked = true;
-      blocked.push_back(layout);
-    }
-    while (!blocked.empty()) {
-      const auto id = blocked.front();
-      blocked.pop_front();
-      for (const auto dependent : layouts[id].dependents) {
-        if (layouts[dependent].blocked) continue;
-        layouts[dependent].blocked = true;
-        blocked.push_back(dependent);
+    const auto block_layout = [&](size_t first) {
+      std::deque<size_t> blocked{first};
+      while (!blocked.empty()) {
+        const auto id = blocked.front();
+        blocked.pop_front();
+        auto &layout = layouts[id];
+        if (layout.blocked) continue;
+        layout.blocked = true;
+        unavailable.emplace(layout.type.kind, layout.type.identity);
+        for (const auto dependent : layout.dependents) blocked.push_back(dependent);
       }
-    }
-    for (size_t i = 0; i < sum_start; ++i) if (!layouts[i].blocked) {
-      if (diagnostics && !diagnostics->continue_work()) return false;
-      for (const auto &field : program_.schemas[first_product + i].fields) {
-        const auto child = local_layout(field.type);
-        if ((!child || !layouts[*child].blocked) && program_.builder_type(field.type))
-          implementation_gap(field.source->at, "storing a lexical text builder in a data field");
-      }
-    }
+    };
+    for (size_t i = 0; i < layouts.size(); ++i)
+      if (unavailable.contains({layouts[i].type.kind, layouts[i].type.identity})) block_layout(i);
+
     std::deque<size_t> ready;
-    for (size_t i = 0; i < layouts.size(); ++i) {
-      const auto &layout = layouts[i];
-      if (layout.blocked) continue;
-      if (diagnostics && !diagnostics->continue_work()) return false;
-      program_.visit_inline_fields(layout.type, [&](const auto &field) {
-        const auto &type = field.type;
-        if (type.kind == Type::product && !program_.bits_payload(type)) {
-          if (layout.source->c_data) fail(field.source->at, "data \"C\" requires recursively bits-only fields");
-          implementation_gap(field.source->at, "inline field with a reference-bearing product");
-        }
-        if (type.kind == Type::sum && !program_.bits_payload(type))
-          implementation_gap(field.source->at, "inline field with a reference-bearing sum");
-      });
-      if (!layout.pending) ready.push_back(i);
-    }
+    for (size_t i = 0; i < layouts.size(); ++i)
+      if (!layouts[i].blocked && !layouts[i].pending) ready.push_back(i);
     while (!ready.empty()) {
       const auto next = ready.front();
       ready.pop_front();
       const auto &layout = layouts[next];
+      if (layout.blocked) continue;
+      bool valid = true;
+      program_.visit_inline_fields(layout.type, [&](const auto &field) {
+        const auto &type = field.type;
+        if (type.kind != Type::product && type.kind != Type::sum) return;
+        valid &= check_schema_part(diagnostics, [&] {
+          if (program_.builder_type(type))
+            implementation_gap(field.source->at, "storing a lexical text builder in a data field");
+          if (program_.bits_payload(type)) return;
+          if (type.kind == Type::product) {
+            if (layout.source->c_data) fail(field.source->at, "data \"C\" requires recursively bits-only fields");
+            implementation_gap(field.source->at, "inline field with a reference-bearing product");
+          }
+          implementation_gap(field.source->at, "inline field with a reference-bearing sum");
+        });
+      });
+      if (diagnostics && !diagnostics->complete()) return false;
       if (layout.type.kind == Type::product) {
         auto &schema = program_.schemas[layout.type.identity];
-        program_.visit_inline_fields(layout.type, [&](const auto &field) {
-          if (field.type.kind == Type::sum) schema.has_sum_storage = true;
-          if (field.type.kind == Type::product) {
-            const auto &nested = program_.schemas.at(field.type.identity);
-            schema.has_sum_storage |= nested.has_sum_storage;
-            schema.has_enum_storage |= nested.has_enum_storage;
+        for (const auto &field : schema.fields) {
+          if (!field.stores_target() || field.type.kind != Type::product) continue;
+          const auto child = local_layout(field.type);
+          if (child && layouts[*child].blocked) continue;
+          valid &= check_schema_part(diagnostics, [&] {
+            if (program_.builder_type(field.type))
+              implementation_gap(field.source->at, "storing a lexical text builder in a data field");
+          });
+          if (diagnostics && !diagnostics->complete()) return false;
+        }
+        if (valid) {
+          bool has_sum = schema.has_sum_storage;
+          bool has_enum = schema.has_enum_storage;
+          program_.visit_inline_fields(layout.type, [&](const auto &field) {
+            if (field.type.kind == Type::sum) has_sum = true;
+            if (field.type.kind == Type::product) {
+              const auto &nested = program_.schemas.at(field.type.identity);
+              has_sum |= nested.has_sum_storage;
+              has_enum |= nested.has_enum_storage;
+            }
+          });
+          if (schema.source->c_data && (has_sum || has_enum)) {
+            valid = check_schema_part(diagnostics, [&] {
+              if (has_sum)
+                implementation_gap(schema.source->at, "sum fields in a foreign record require a checked storage boundary");
+              implementation_gap(schema.source->at, "enumeration fields in a foreign record require a checked storage boundary");
+            });
           }
-        });
-        if (schema.source->c_data && schema.has_sum_storage)
-          implementation_gap(schema.source->at, "sum fields in a foreign record require a checked storage boundary");
-        if (schema.source->c_data && schema.has_enum_storage)
-          implementation_gap(schema.source->at, "enumeration fields in a foreign record require a checked storage boundary");
+          if (valid) {
+            schema.has_sum_storage = has_sum;
+            schema.has_enum_storage = has_enum;
+          }
+        }
+      }
+      if (diagnostics && !diagnostics->complete()) return false;
+      if (!valid) {
+        block_layout(next);
+        continue;
       }
       for (const auto dependent : layout.dependents)
         if (!layouts[dependent].blocked && !--layouts[dependent].pending) ready.push_back(dependent);
     }
-    for (const auto &layout : layouts) if (!layout.blocked && layout.pending)
-      fail(layout.source->at, "inline fields of '" + layout.source->name + "' have no finite layout");
+    for (size_t i = 0; i < layouts.size(); ++i) {
+      if (layouts[i].blocked || !layouts[i].pending) continue;
+      // Every pending layout has an unfinished, unblocked inline dependency.
+      // Follow those edges to a cycle before recording its cause.
+      std::set<size_t> path;
+      size_t current = i;
+      while (path.insert(current).second) {
+        std::optional<size_t> child;
+        program_.visit_inline_fields(layouts[current].type, [&](const auto &field) {
+          const auto candidate = local_layout(field.type);
+          if (!child && candidate && layouts[*candidate].pending && !layouts[*candidate].blocked)
+            child = candidate;
+        });
+        if (!child) throw std::logic_error("a pending nominal layout has no unfinished inline dependency");
+        current = *child;
+      }
+      const auto &cycle = *layouts[current].source;
+      check_schema_part(diagnostics, [&] {
+        fail(cycle.at, "inline fields of '" + cycle.name + "' have no finite layout");
+      });
+      if (diagnostics && !diagnostics->complete()) return false;
+      block_layout(current);
+    }
     return true;
   }
 
