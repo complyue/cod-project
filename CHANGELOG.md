@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Retain the defining symbol name on a binder collision
+
+<a id="k-booter-protected-symbol-diagnostic-20261124"></a>
+**K-BOOTER-PROTECTED-SYMBOL-DIAGNOSTIC-20261124.** D-ARCH-REVIEW r104→105 continues [the declaration check](#k-runtime-symbol-declaration-check-20261124) under [H-DIAGNOSTIC-NAMES-20261122](#h-diagnostic-names-20261122). The [review](design/ImplementationArchitecture.md#reporting-the-symbol-behind-a-conflicting-binder) covers origin-preserving symbol publication and names on an invocation-owned finding under P-682/P-683. The existing export representation is at `0d7cd74f2d7ea08dfee5aa1119d60748d23cb11c:applications/cod-booter/src/ModuleExportStorage.cod`. Mainline owns compiler integration and linked verification.
+
 ## 2026-11-24 — Check an inline field loan at the receiving case arm
 
 <a id="k-booter-arm-local-inline-loan-20261124"></a>
