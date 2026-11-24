@@ -90,7 +90,7 @@ using "./ModuleExports.cod" {
         callable_export, ordinary_callable_shape, enum_export, array_export,
 };
 using "./ModuleExportStorage.cod" {
-    enum_type, ModuleExports, ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header,
+    enum_type, sum_type, ModuleExports, ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header,
     CallableUseProofs, matches_object_call,
     FamilyMembership { FixedMethods },
     InterfaceCallableKind { NoCallableKind, CheckedFunction, CheckedProcedure },
@@ -101,8 +101,8 @@ using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check, needs_si
 using "./DeclarationTypes.cod" { type_module, type_identity, DeclaredType };
 using "./CaseSchemas.cod" {
     ConstructorCaseFacts,
-    ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, CaseSumFormal, CaseConstructor,
-        CaseFieldReceipt, CaseProductField }
+    ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, ProjectedCaseSubject, CaseSumFormal,
+        CaseConstructor, CaseFieldReceipt, CaseProductField, CaseSumProjection }
 }
 using "./ExceptionPayload.cod" {
     CaughtFieldUses, CaughtFieldUse { CaughtField }, unknown_exception_field
@@ -127,6 +127,8 @@ export data OperandFact {
     identity_module:u64;
     reaches_constructed_throw:bool;
     loans_owning_handle:bool;
+    loans_case_receipt:bool;
+    case_receipt:u64;
     checks_array_bounds:bool;
     target_readonly:u8;
     needs_target:u8;
@@ -159,6 +161,7 @@ export data OperandFact {
     identity:u64;
     reservation:u64;
     product_words:u64;
+    bits_product:bool;
     word_offset:u64;
     last_initializer:u64;
     writable_text_place:u8;
@@ -201,6 +204,7 @@ func source_handle_loan() -> u8 { return 13u8 }
 func source_u32() -> u8 { return 14u8 }
 func source_sum_target() -> u8 { return 15u8 }
 func received_product() -> u8 { return 16u8 }
+func received_sum() -> u8 { return 17u8 }
 
 export func immutable_text_kind(kind:u8) -> bool {
     return kind == string_kind() || kind == c_string_kind();
@@ -288,6 +292,8 @@ func set_fact(facts:OperandFacts in F, at:u64, kind:u8, reception:u8,
     facts[at].identity_module <- 0u64;
     facts[at].reaches_constructed_throw <- false;
     facts[at].loans_owning_handle <- false;
+    facts[at].loans_case_receipt <- false;
+    facts[at].case_receipt <- no_node();
     facts[at].checks_array_bounds <- false;
     facts[at].target_readonly <- 0u8;
     facts[at].writable_text_place <- 0u8;
@@ -317,6 +323,7 @@ func copy_fact(facts:OperandFacts in F, destination:u64, source:u64) -> void whe
     set_fact(facts, destination, facts[source].kind, facts[source].reception, facts[source].owner,
              facts[source].identity, facts[source].checked_exception);
     facts[destination].identity_module <- facts[source].identity_module;
+    facts[destination].case_receipt <- facts[source].case_receipt;
     facts[destination].reservation <- facts[source].reservation;
     facts[destination].target_readonly <- facts[source].target_readonly;
     facts[destination].target_presence <- facts[source].target_presence;
@@ -423,9 +430,11 @@ func prepare_product_layout(nodes:const ExprNodes in N, names:const NameBindings
     };
     val words <- 0u64;
     val kind <- 0u8;
+    val bits <- true;
     for (unused in 0u64 .. used) {
         if (field == no_node()) {
             facts[record].product_words <- words;
+            facts[record].bits_product <- bits;
             return;
         };
         if (inspect_formal(nodes, revision, used, field, formal) != OrdinaryFormal ||
@@ -433,6 +442,7 @@ func prepare_product_layout(nodes:const ExprNodes in N, names:const NameBindings
             inspect_binding(nodes, revision, used, formal.binding, binding) != TypedBinding) return;
         kind <- names[binding.annotation].kind;
         if (declared_scalar(kind) == 0u8 && kind != builtin_string()) return;
+        bits <- bits && kind != builtin_string();
         facts[field].word_offset <- words;
         words <- words + 1u64;
         field <- links[field].next;
@@ -1324,13 +1334,82 @@ func check_argument_operand(nodes:const ExprNodes in N, facts:OperandFacts in F,
     return 0u8;
 }
 
+func receipt_loan_signature(nodes:const ExprNodes in N, links:const NameWork in L,
+    facts:const OperandFacts in F, definition:u64, first:u64, used:u64, revision:u64) -> bool
+    where {const owner N, const owner L, const owner F} {
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    if (inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable ||
+        !callable.function_form || callable.body == no_node()) return false;
+    val result <- facts[definition].kind;
+    if (result != void_result() && !scalar_kind(result) && result != source_u32()) return false;
+    if (facts[definition].reception == borrowed_ref()) return false;
+    val parameter <- first;
+    val kind <- 0u8;
+    val reception <- 0u8;
+    val product <- no_node();
+    for (unused in 0u64 .. used) {
+        if (parameter == no_node()) return true;
+        if (parameter >= used) return false;
+        kind <- facts[parameter].kind;
+        reception <- facts[parameter].reception;
+        if (kind == product_kind()) {
+            product <- facts[parameter].identity;
+            if (reception != borrowed_ref() || facts[parameter].identity_module != 0u64 ||
+                product >= used || !facts[product].bits_product) return false
+        } else {
+            if (scalar_kind(kind) || kind == source_u32()) {
+                if (reception != local_place() && reception != borrowed_ref()) return false
+            } else {
+                if ((kind != source_array_loan() && kind != source_sum_target()) ||
+                    reception != borrowed_ref() || facts[parameter].target_readonly == 0u8 ||
+                    owner_constraint_syntax(nodes, facts[parameter].owner) != ReadonlyOwnerConstraint)
+                    return false
+            }
+        };
+        (parameter <- links[parameter].next):void
+    };
+    return false
+}
+
+func check_receipt_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
+    facts:OperandFacts in F, owners:CallOwners in O, argument:u64, actual:u64, formal:u64,
+    invocation:u64) -> u8 where {const owner N, const owner B, owner F, owner O} {
+    val receipt <- facts[actual].case_receipt;
+    val kind <- facts[formal].kind;
+    if (receipt >= actual || names[actual].kind != local_binding() ||
+        names[actual].declaration != receipt || !receipt_in_context(facts, actual, receipt) ||
+        facts[actual].reception != local_place() || facts[formal].reception != borrowed_ref() ||
+        facts[formal].target_readonly == 0u8 ||
+        owner_constraint_syntax(nodes, facts[formal].owner) != ReadonlyOwnerConstraint ||
+        (kind != product_kind() && kind != source_sum_target()) ||
+        ((kind == product_kind()) != (facts[actual].kind == received_product())) ||
+        facts[actual].identity != facts[formal].identity ||
+        facts[actual].identity_module != facts[formal].identity_module)
+        return wrong_operand_type();
+    set_fact(facts, argument, kind, borrowed_ref(), facts[actual].owner, facts[actual].identity, 0u8);
+    facts[argument].identity_module <- facts[actual].identity_module;
+    facts[argument].case_receipt <- receipt;
+    facts[argument].target_readonly <- 1u8;
+    facts[argument].loans_case_receipt <- true;
+    return record_owner_argument(nodes, facts, owners, formal, facts[actual].owner, argument, invocation)
+}
+
 func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, links:const NameWork in L,
     facts:OperandFacts in F, owners:CallOwners in O, argument:u64, formal:u64,
-    invocation:u64, used:u64, revision:u64, allow_owned_loan:bool) -> u8
+    invocation:u64, used:u64, revision:u64, allow_owned_loan:bool,
+    definition:u64, first:u64, source_only:bool) -> u8
     where {const owner N, const owner B, const owner E, const owner L, owner F, owner O} {
     if (facts[formal].writable_text_place != 0u8) return unsupported_text_operation();
     val kind <- facts[formal].kind;
+    val operand <- ordinary_argument_value(nodes, used, revision, argument);
+    if (operand < used &&
+        (facts[operand].kind == received_sum() || facts[operand].kind == received_product())) {
+        if (!source_only || checked_ref_argument(nodes, argument) ||
+            !receipt_loan_signature(nodes, links, facts, definition, first, used, revision))
+            return unproved_owner();
+        return check_receipt_argument(nodes, names, facts, owners, argument, operand, formal, invocation)
+    };
     if (kind == source_array_loan() || kind == source_handle_loan() || kind == source_sum_target()) {
         val actual <- ordinary_argument_value(nodes, used, revision, argument);
         if (actual >= used || checked_ref_argument(nodes, argument)) return wrong_operand_type();
@@ -1611,11 +1690,13 @@ func check_direct_call(nodes:const ExprNodes in N, names:const NameBindings in B
     if (!callable_formals(nodes, revision, used, definition, source_only, formal) ||
         !first_sequence_entry(nodes, revision, used, arguments, ArgumentSequence, argument)) return invalid_operand_tree();
     val result_owner <- facts[definition].owner;
+    val first_formal <- formal;
     val allow_owned_loan <- source_only &&
         (scalar_kind(facts[definition].kind) || facts[definition].kind == source_u32() ||
             facts[definition].kind == void_result()) &&
         facts[definition].reception != borrowed_ref();
     val loans_owning_handle <- false;
+    val loans_case_receipt <- false;
     val diagnostic <- 0u8;
     for (unused in 0u64 .. used) {
         if (formal == no_node() || argument == no_node()) {
@@ -1627,12 +1708,14 @@ func check_direct_call(nodes:const ExprNodes in N, names:const NameBindings in B
             };
             facts[at].call_definition <- definition;
             facts[at].loans_owning_handle <- loans_owning_handle;
+            facts[at].loans_case_receipt <- loans_case_receipt;
             return 0u8;
         } else {};
         diagnostic <- check_argument(nodes, names, selected, links, facts, owners, argument,
-            formal, at, used, revision, allow_owned_loan);
+            formal, at, used, revision, allow_owned_loan, definition, first_formal, source_only);
         if (diagnostic != 0u8) return diagnostic;
         loans_owning_handle <- loans_owning_handle || facts[argument].loans_owning_handle;
+        loans_case_receipt <- loans_case_receipt || facts[argument].loans_case_receipt;
         formal <- links[formal].next;
         argument <- links[argument].next;
     };
@@ -2249,6 +2332,24 @@ export func selected_target_presence(facts:const OperandFacts in F, at:u64) -> u
     return presence;
 }
 
+func receipt_in_context(facts:const OperandFacts in F, use:u64, receipt:u64) -> bool
+    where {const owner F} {
+    val extent <- intrinsic (len)(facts);
+    if (receipt >= use || use >= extent) return false;
+    val owning_arm <- facts[receipt].case_context;
+    if (owning_arm >= extent) return false;
+    val context <- facts[use].case_context;
+    val parent <- no_node();
+    for (unused in 0u64 .. extent) {
+        if (context >= extent) return false;
+        if (context == owning_arm) return true;
+        parent <- facts[context].case_context;
+        if (parent <= context) return false;
+        (context <- parent):void
+    };
+    return false
+}
+
 func enter_case_context(facts:OperandFacts in F, outer:u64, header:u64) -> u64 where {owner F} {
     facts[header].case_context <- outer;
     return header;
@@ -2642,6 +2743,18 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
                     facts[subject].owner != facts[formal].owner ||
                     facts[subject].identity_module != facts[formal].identity_module ||
                     facts[subject].identity != facts[formal].identity)
+                    return operand_problem(report, at, invalid_operand_tree());
+                coverage.total <- count;
+                (coverage.remaining <- count):void
+            };
+            ProjectedCaseSubject {
+                val expression <- expression; val receipt <- receipt; val arm <- arm; val count <- count;
+            } -> {
+                if (expression != subject || count == 0u64 || receipt >= subject ||
+                    facts[subject].case_receipt != receipt || facts[receipt].case_context != arm ||
+                    !receipt_in_context(facts, subject, receipt) ||
+                    facts[subject].owner != facts[receipt].owner ||
+                    facts[subject].reception != borrowed_ref() || facts[subject].target_readonly == 0u8)
                     return operand_problem(report, at, invalid_operand_tree());
                 coverage.total <- count;
                 (coverage.remaining <- count):void
@@ -3159,12 +3272,41 @@ func check_indexed_case_subject(nodes:const ExprNodes in N, facts:OperandFacts i
 }
 
 func check_case_receipt(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
-    at:u64, used:u64, revision:u64, pattern:u64, schema:const DeclaredType in T) -> u8
+    at:u64, used:u64, revision:u64, header:u64, pattern:u64, schema:const DeclaredType in T) -> u8
     where {const owner N, const owner B, owner F, const owner T} {
     ref arm = make CaseArmSites { pattern <- no_node(); guard <- no_node(); body <- no_node(); arrow <- 0u64 };
-    if (!inspect_case_arm(nodes, revision, used, facts[at].case_context, arm) ||
+    if (facts[at].case_context != header || !inspect_case_arm(nodes, revision, used, header, arm) ||
         arm.pattern != pattern || names[at].scope == no_node()) return invalid_operand_tree();
-    return receive_case_bits(facts, at, schema, local_place(), names[at].scope)
+    if (schema.kind == sum_type()) {
+        set_fact(facts, at, received_sum(), local_place(), names[at].scope, schema.identity, 0u8);
+        facts[at].identity_module <- schema.defining_module;
+        facts[at].case_receipt <- at;
+        return 0u8
+    };
+    val diagnostic <- receive_case_bits(facts, at, schema, local_place(), names[at].scope);
+    if (diagnostic == 0u8 && schema.kind == record_type()) { (facts[at].case_receipt <- at):void };
+    return diagnostic
+}
+
+func check_case_projection(nodes:const ExprNodes in N, names:const NameBindings in B,
+    facts:OperandFacts in F, at:u64, used:u64, revision:u64, receiver:u64, field:u64,
+    receipt:u64, arm:u64, record:const DeclaredType in R, sum:const DeclaredType in S) -> u8
+    where {const owner N, const owner B, owner F, const owner R, const owner S} {
+    ref projection = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
+    if (!inspect_field_selection(nodes, revision, used, at, projection) ||
+        projection.receiver != receiver || projection.field != field ||
+        receiver >= at || receipt >= receiver || names[receiver].kind != local_binding() ||
+        names[receiver].declaration != receipt || facts[receiver].case_receipt != receipt ||
+        facts[receiver].kind != received_product() || facts[receiver].reception != local_place() ||
+        facts[receiver].identity != record.identity ||
+        facts[receiver].identity_module != record.defining_module ||
+        facts[receipt].case_context != arm || !receipt_in_context(facts, at, receipt))
+        return unsupported_case_subject();
+    set_fact(facts, at, source_sum_target(), borrowed_ref(), facts[receiver].owner, sum.identity, 0u8);
+    facts[at].identity_module <- sum.defining_module;
+    facts[at].case_receipt <- receipt;
+    facts[at].target_readonly <- 1u8;
+    return 0u8
 }
 
 func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
@@ -3183,8 +3325,15 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                 val owner_site <- owner_site; val declared_array <- array_type; val schema <- value_type;
             } -> { return check_indexed_case_subject(nodes, facts, at, expression, array_site,
                 index, owner_site, declared_array, schema) };
-            CaseFieldReceipt { val pattern <- pattern; val schema <- value_type; } ->
-                { return check_case_receipt(nodes, names, facts, at, used, revision, pattern, schema) };
+            CaseFieldReceipt { val header <- arm; val pattern <- pattern; val schema <- value_type; } ->
+                { return check_case_receipt(nodes, names, facts, at, used, revision, header, pattern, schema) };
+            CaseSumProjection {
+                val receiver <- receiver; val field <- field; val receipt <- receipt; val arm <- arm;
+                val record <- record; val sum <- value_type;
+            } -> {
+                return check_case_projection(nodes, names, facts, at, used, revision,
+                    receiver, field, receipt, arm, record, sum)
+            };
             CaseProductField { val receiver <- receiver; val record <- record; val schema <- value_type; } -> {
                 if (receiver >= at || facts[receiver].kind != received_product() ||
                     facts[receiver].identity != record.identity ||
@@ -3662,6 +3811,7 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
         facts[at].case_exit_link <- no_node();
         facts[at].case_exit_tail <- no_node();
         facts[at].product_words <- 0u64;
+        facts[at].bits_product <- false;
         facts[at].word_offset <- 0u64;
         facts[at].last_initializer <- no_node();
         facts[at].call_definition <- no_node();

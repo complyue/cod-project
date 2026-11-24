@@ -145,14 +145,18 @@ func local_member_type(source:const SourceBytes in S, nodes:const ExprNodes in N
         describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, result);
 }
 
-func imported_member_type(source:const SourceBytes in S, nodes:const ExprNodes in N, spellings:const SourceBytes in P,
+func imported_member_type(source:const SourceBytes in S, nodes:const ExprNodes in N,
+                          spellings:const SourceBytes in P, spelling_used:u64,
                           interfaces:const ModuleInterfaces in I, interface_count:u64, name:u64, used:u64, result:DeclaredType in R) -> bool
     where {const owner S, const owner N, const owner P, const owner I, owner R} {
     val head <- find_interface(interfaces, interface_count, result.defining_module, result.identity);
-    if (head == no_node() || interfaces[head].interface_kind != record_type()) return false;
+    if (head == no_node() || interfaces[head].interface_kind != record_type() ||
+        spelling_used > intrinsic (len)(spellings)) return false;
     val first <- syntax_first(nodes, used, name);
     val past <- syntax_past(nodes, used, name);
     for (row in head + 1u64 .. head + 1u64 + interfaces[head].entry_count) {
+        if (interfaces[row].name_first >= interfaces[row].name_past ||
+            interfaces[row].name_past > spelling_used) return false;
         if (same_bytes(source, first, past, spellings, interfaces[row].name_first, interfaces[row].name_past)) {
             result.kind <- interfaces[row].value_kind;
             result.defining_module <- interfaces[row].type_module;
@@ -165,14 +169,15 @@ func imported_member_type(source:const SourceBytes in S, nodes:const ExprNodes i
 
 export func describe_record_field(source:const SourceBytes in S, nodes:const ExprNodes in N,
     names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
-    spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:u64,
+    spellings:const SourceBytes in P, spelling_used:u64,
+    interfaces:const ModuleInterfaces in I, interface_count:u64,
     name:u64, used:u64, revision:u64, result:DeclaredType in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner W,
            const owner P, const owner I, owner R} {
     if (result.kind != record_type()) return false;
     if (result.defining_module == 0u64)
         return local_member_type(source, nodes, names, selected, work, name, revision, used, result);
-    return imported_member_type(source, nodes, spellings, interfaces, interface_count, name,
+    return imported_member_type(source, nodes, spellings, spelling_used, interfaces, interface_count, name,
         used, result)
 }
 
@@ -273,7 +278,7 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     if (inspect_field_selection(nodes, revision, used, at, selection)) {
         if (!trace_type(source, nodes, names, selected, work, spellings, interfaces, interface_count, selection.receiver, used, revision, result) ||
             result.kind != record_type()) return false;
-        return describe_record_field(source, nodes, names, selected, work, spellings, interfaces,
+        return describe_record_field(source, nodes, names, selected, work, spellings, intrinsic (len)(spellings), interfaces,
             interface_count, selection.field, used, revision, result)
     };
     if (name_syntax(nodes, used, at) != OrdinaryName) return false;

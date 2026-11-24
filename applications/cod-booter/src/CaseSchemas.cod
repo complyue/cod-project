@@ -35,10 +35,12 @@ export data ConstructorCaseFact =
         expression:u64; array_site:u64; index:u64; owner_site:u64; array_type:u64; value_type:DeclaredType; count:u64;
     } |
     DirectCaseSubject { expression:u64; formal:u64; count:u64; } |
+    ProjectedCaseSubject { expression:u64; receipt:u64; arm:u64; count:u64; } |
     CaseSumFormal { definition:u64; owner_site:u64; readonly:bool; value_type:DeclaredType; } |
     CaseConstructor { case_site:u64; defining_module:u64; declaration:u64; ordinal:u64; representative:u64; } |
-    CaseFieldReceipt { case_site:u64; pattern:u64; field:u64; value_type:DeclaredType; } |
-    CaseProductField { receiver:u64; record:DeclaredType; value_type:DeclaredType; };
+    CaseFieldReceipt { case_site:u64; arm:u64; pattern:u64; field:u64; value_type:DeclaredType; } |
+    CaseProductField { receiver:u64; record:DeclaredType; value_type:DeclaredType; } |
+    CaseSumProjection { receiver:u64; field:u64; receipt:u64; arm:u64; record:DeclaredType; value_type:DeclaredType; };
 export array ConstructorCaseFacts[u64]:ConstructorCaseFact;
 
 data IndexedCaseLoan {
@@ -335,11 +337,11 @@ func remember_case_constructor(facts:ConstructorCaseFacts in F, pattern:u64, cho
     return
 }
 
-func remember_case_field(facts:ConstructorCaseFacts in F, receipt:u64, choice:u64, pattern:u64,
+func remember_case_field(facts:ConstructorCaseFacts in F, receipt:u64, choice:u64, arm:u64, pattern:u64,
     field:u64, type:const DeclaredType in T)
     -> void where {owner F, const owner T} {
     facts[receipt] <- make CaseFieldReceipt {
-        case_site <- choice; pattern <- pattern; field <- field; value_type <- type
+        case_site <- choice; arm <- arm; pattern <- pattern; field <- field; value_type <- type
     };
     return
 }
@@ -348,7 +350,7 @@ func prepare_case_fields(source:const SourceBytes in S, nodes:const ExprNodes in
     names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
     spellings:const SourceBytes in G, spelling_used:u64, interfaces:const ModuleInterfaces in G,
     published:u64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
-    choice:u64, pattern:u64, tail:u64, module:u64, constructor:u64, used:u64, revision:u64,
+    choice:u64, arm:u64, pattern:u64, tail:u64, module:u64, constructor:u64, used:u64, revision:u64,
     report:DeclaredExpressionResult in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner W,
            const owner G, const owner A, owner F, owner R} {
@@ -363,7 +365,8 @@ func prepare_case_fields(source:const SourceBytes in S, nodes:const ExprNodes in
     val field <- no_node();
     for (unused in 0u64 .. used) {
         if (item == no_node()) return true;
-        if (!inspect_case_value_receiver(nodes, revision, used, item, receive))
+        if (!inspect_case_value_receiver(nodes, revision, used, item, receive) ||
+            work[item].enclosing_case_arm != arm)
             return case_problem(report, item, 94u8);
         selector <- if (receive.selected_field == no_node()) { (receive.destination) }
                     else { (receive.selected_field) };
@@ -378,7 +381,7 @@ func prepare_case_fields(source:const SourceBytes in S, nodes:const ExprNodes in
         if (!native_scalar(received.kind) && received.kind != enum_type() &&
             !case_bits_type(received, aggregate, interfaces, published))
             return case_problem(report, selector, 94u8);
-        remember_case_field(facts, item, choice, pattern, field, received);
+        remember_case_field(facts, item, choice, arm, pattern, field, received);
         if (item == tail) return true;
         (item <- work[item].next):void
     };
@@ -440,7 +443,7 @@ func prepare_case_arms(source:const SourceBytes in S, nodes:const ExprNodes in N
                 remember_case_constructor(facts, arm.pattern, choice, subject + 1u64,
                     module, definition, ordinal);
                 if (!prepare_case_fields(source, nodes, names, selected, work, spellings, spelling_used,
-                    interfaces, published, aggregate, facts, choice, arm.pattern, receipts, module,
+                    interfaces, published, aggregate, facts, choice, entry.item, arm.pattern, receipts, module,
                     selected_constructor, used, revision, report)) return false
             }
         };
@@ -525,6 +528,138 @@ func has_case_head(nodes:const ExprNodes in N, work:const NameWork in W, tail:u6
     return false
 }
 
+func reaches_receipt_arm(nodes:const ExprNodes in N, work:const NameWork in W,
+    at:u64, required:u64, used:u64, revision:u64) -> bool where {const owner N, const owner W} {
+    val parent <- work[at].enclosing_case_arm;
+    val child <- at;
+    val container <- no_node();
+    ref arm = make CaseArmSites { pattern <- no_node(); guard <- no_node(); body <- no_node(); arrow <- 0u64 };
+    for (unused in 0u64 .. used) {
+        if (parent >= used || parent <= child ||
+            !inspect_case_arm(nodes, revision, used, parent, arm)) return false;
+        container <- if (child <= arm.guard && arm.guard != no_node()) { arm.guard } else { arm.body };
+        if (child > container ||
+            syntax_first(nodes, used, child) < syntax_first(nodes, used, container) ||
+            syntax_past(nodes, used, child) > syntax_past(nodes, used, container)) return false;
+        if (parent == required) return true;
+        child <- parent;
+        (parent <- work[parent].enclosing_case_arm):void
+    };
+    return false
+}
+
+func owning_case_contains_arm(nodes:const ExprNodes in N, work:const NameWork in W,
+    outer:u64, arm:u64, used:u64, revision:u64) -> bool where {const owner N, const owner W} {
+    if (arm >= outer || outer >= used) return false;
+    ref shape = make CaseSites { subject <- no_node(); items <- no_node() };
+    ref child = make u64 { no_node() };
+    if (!inspect_case(nodes, revision, used, outer, shape) ||
+        !first_sequence_entry(nodes, revision, used, shape.items, BlockSequence, child)) return false;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    for (unused in 0u64 .. used) {
+        if (child >= outer || inspect_sequence_entry(nodes, revision, used, child, entry) != BlockSequence)
+            return false;
+        if (entry.item == arm) return true;
+        if (child == shape.items || work[child].next <= child) return false;
+        (child <- work[child].next):void
+    };
+    return false
+}
+
+func prepare_projected_sum_case(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, selected:const SelectedExports in E, work:NameWork in W,
+    spellings:const SourceBytes in G, spelling_used:u64, interfaces:const ModuleInterfaces in G,
+    published:u64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
+    at:u64, choice:const CaseSites in C, used:u64, revision:u64, report:DeclaredExpressionResult in R)
+    -> bool where {const owner S, const owner N, const owner B, const owner E, owner W,
+           const owner G, const owner A, owner F, const owner C, owner R} {
+    val subject <- choice.subject;
+    ref projection = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
+    if (!inspect_field_selection(nodes, revision, used, subject, projection) ||
+        name_syntax(nodes, used, projection.receiver) != OrdinaryName ||
+        names[projection.receiver].kind != local_binding()) return true;
+    val receipt <- names[projection.receiver].declaration;
+    if (receipt >= projection.receiver) return case_problem(report, subject, unproved_sum_subject());
+    val arm <- work[receipt].enclosing_case_arm;
+    if (arm == no_node()) return true;
+    if (arm >= used || !reaches_receipt_arm(nodes, work, at, arm, used, revision))
+        return case_problem(report, subject, unproved_sum_subject());
+    val outer <- work[arm].arm_case;
+    if (outer <= at || !owning_case_contains_arm(nodes, work, outer, arm, used, revision))
+        return case_problem(report, subject, unproved_sum_subject());
+    if (!prepare_sum_case(source, nodes, names, selected, work, spellings, spelling_used,
+        interfaces, published, aggregate, facts, outer, used, revision, report)) return false;
+    ref record = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
+    ref sum = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
+    case facts[receipt] of {
+        CaseFieldReceipt {
+            val producer <- case_site; val selected_arm <- arm; val value <- value_type;
+        } -> {
+            if (producer != outer || selected_arm != arm || value.kind != record_type())
+                return case_problem(report, subject, unproved_sum_subject());
+            record.kind <- value.kind;
+            record.defining_module <- value.defining_module;
+            record.identity <- value.identity;
+            sum.kind <- value.kind;
+            sum.defining_module <- value.defining_module;
+            (sum.identity <- value.identity):void
+        };
+        _ -> { return case_problem(report, subject, unproved_sum_subject()) }
+    };
+    if (!case_bits_type(record, aggregate, interfaces, published) ||
+        !describe_record_field(source, nodes, names, selected, work, spellings, spelling_used, interfaces,
+            published, projection.field, used, revision, sum))
+        return case_problem(report, projection.field, unproved_case_field());
+    if (sum.kind != sum_type()) return true;
+    if (!case_bits_type(sum, aggregate, interfaces, published))
+        return case_problem(report, projection.field, unproved_case_field());
+    ref count = make u64 { sum_case_extent(nodes, work, interfaces, published, sum, used, revision) };
+    if (count == 0u64) return case_problem(report, subject, unproved_sum_subject());
+    if (!prepare_case_arms(source, nodes, names, selected, work, spellings, spelling_used,
+        interfaces, published, aggregate, facts, at, subject, choice.items, sum, used,
+        revision, count, report)) return false;
+    facts[subject] <- make CaseSumProjection {
+        receiver <- projection.receiver; field <- projection.field; receipt <- receipt; arm <- arm;
+        record <- record; value_type <- sum
+    };
+    facts[at] <- make ProjectedCaseSubject {
+        expression <- subject; receipt <- receipt; arm <- arm; count <- count
+    };
+    work[at].case_schema_prepared <- true;
+    return true
+}
+
+func prepare_sum_case(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, selected:const SelectedExports in E, work:NameWork in W,
+    spellings:const SourceBytes in G, spelling_used:u64, interfaces:const ModuleInterfaces in G,
+    published:u64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
+    at:u64, used:u64, revision:u64, report:DeclaredExpressionResult in R)
+    -> bool where {const owner S, const owner N, const owner B, const owner E, owner W,
+           const owner G, const owner A, owner F, owner R} {
+    if (work[at].case_schema_prepared) return true;
+    ref choice = make CaseSites { subject <- no_node(); items <- no_node() };
+    if (!inspect_case(nodes, revision, used, at, choice)) return true;
+    if (!prepare_direct_sum_case(source, nodes, names, selected, work, spellings, spelling_used,
+        interfaces, published, aggregate, facts, at, choice, used, revision, report)) return false;
+    if (work[at].case_schema_prepared) return true;
+    if (!prepare_projected_sum_case(source, nodes, names, selected, work, spellings, spelling_used,
+        interfaces, published, aggregate, facts, at, choice, used, revision, report)) return false;
+    if (work[at].case_schema_prepared) return true;
+    ref loan = make IndexedCaseLoan {
+        expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node();
+        array_type <- no_node()
+    };
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
+    if (has_case_head(nodes, work, choice.items, used, revision, true) ||
+        (describe_indexed_case_loan(nodes, names, selected, choice.subject, used, revision, loan, type) &&
+         has_case_head(nodes, work, choice.items, used, revision, false))) {
+        if (!prepare_indexed_sum_case(source, nodes, names, selected, work, spellings, spelling_used,
+            interfaces, published, aggregate, facts, at, used, revision, report)) return false;
+        (work[at].case_schema_prepared <- true):void
+    };
+    return true
+}
+
 func describe_received_product(facts:const ConstructorCaseFacts in F, site:u64,
     type:DeclaredType in T) -> bool where {const owner F, owner T} {
     return case facts[site] of {
@@ -555,7 +690,7 @@ func remember_case_projection(facts:ConstructorCaseFacts in F, site:u64, receive
 
 func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNodes in N,
     names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
-    spellings:const SourceBytes in G, interfaces:const ModuleInterfaces in G,
+    spellings:const SourceBytes in G, spelling_used:u64, interfaces:const ModuleInterfaces in G,
     published:u64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
     used:u64, revision:u64, report:DeclaredExpressionResult in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner W,
@@ -565,7 +700,8 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
     ref record = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
     val origin <- no_node();
     for (site in 0u64 .. used) {
-        if (inspect_field_selection(nodes, revision, used, site, selection)) {
+        if (inspect_field_selection(nodes, revision, used, site, selection) &&
+            (case facts[site] of { CaseSumProjection -> false; _ -> true })) {
             origin <- if (names[selection.receiver].kind == local_binding()) {
                 (names[selection.receiver].declaration)
             } else { (selection.receiver) };
@@ -574,7 +710,7 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
                 record.kind <- type.kind;
                 record.defining_module <- type.defining_module;
                 record.identity <- type.identity;
-                if (!describe_record_field(source, nodes, names, selected, work, spellings, interfaces,
+                if (!describe_record_field(source, nodes, names, selected, work, spellings, spelling_used, interfaces,
                         published, selection.field, used, revision, type))
                     return case_problem(report, selection.field, unproved_case_field());
                 if (!native_scalar(type.kind) && type.kind != enum_type() &&
@@ -609,12 +745,6 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
            const owner G, const owner A, owner F, owner P, owner R} {
     if (intrinsic (len)(facts) == 0u64) return true;
     if (used > intrinsic (len)(facts)) return case_problem(report, no_node(), unproved_sum_subject());
-    ref choice = make CaseSites { subject <- no_node(); items <- no_node() };
-    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
-    ref loan = make IndexedCaseLoan {
-        expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node();
-        array_type <- no_node()
-    };
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
     val mode <- ModuleCallable;
     for (at in 0u64 .. used) {
@@ -626,21 +756,10 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
         }
     };
     for (at in 0u64 .. used) {
-        if (inspect_case(nodes, revision, used, at, choice)) {
-            if (!prepare_direct_sum_case(source, nodes, names, selected, work, spellings, spelling_used,
-                interfaces, published, aggregate, facts, at, choice, used, revision, report))
-                return false;
-            if (!work[at].case_schema_prepared && (has_case_head(nodes, work, choice.items, used, revision, true) ||
-             (describe_indexed_case_loan(nodes, names, selected, choice.subject, used, revision, loan, type) &&
-              has_case_head(nodes, work, choice.items, used, revision, false)))) {
-                if (!prepare_indexed_sum_case(source, nodes, names, selected, work, spellings,
-                    spelling_used, interfaces, published, aggregate, facts, at, used, revision, report))
-                    return false;
-                work[at].case_schema_prepared <- true
-            };
-            if (work[at].case_schema_prepared && first == no_node()) { (first <- at):void }
-        }
+        if (!prepare_sum_case(source, nodes, names, selected, work, spellings, spelling_used,
+            interfaces, published, aggregate, facts, at, used, revision, report)) return false;
+        if (work[at].case_schema_prepared && first == no_node()) { (first <- at):void }
     };
     return first == no_node() || prepare_received_fields(source, nodes, names, selected, work,
-        spellings, interfaces, published, aggregate, facts, used, revision, report)
+        spellings, spelling_used, interfaces, published, aggregate, facts, used, revision, report)
 }

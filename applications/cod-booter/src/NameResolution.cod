@@ -125,6 +125,8 @@ export data NameWorkSlot {
     active:u64;
     module_selection:u64;
     case_schema_prepared:bool;
+    enclosing_case_arm:u64;
+    arm_case:u64;
     sum_loan_formals:bool;
     # Reaching installation at expression entry. The syntax count denotes
     # a join with no single proven installation.
@@ -180,6 +182,7 @@ data NameState {
     handoff:u64;
     case_target:u64;
     case_arm:u64;
+    receiving_arm:u64;
     diagnostic:u8;
     failed_node:u64;
     enclosing_defer:u64;
@@ -706,6 +709,8 @@ func link_entries(nodes:const ExprNodes in N, work:NameWork in W, revision:u64, 
         work[at].receiver_import <- NoReceiverCallables;
         work[at].next_method <- no_node();
         work[at].case_schema_prepared <- false;
+        work[at].enclosing_case_arm <- no_node();
+        work[at].arm_case <- no_node();
         work[at].sum_loan_formals <- false;
         work[at].imported_interface <- no_node();
         work[at].imported_type_module <- 0u64;
@@ -1460,6 +1465,7 @@ func resolve_case(source:const SourceBytes in S, nodes:const ExprNodes in N, bin
         reject_name(state, at, invalid_module_tree());
         return;
     };
+    work[at].enclosing_case_arm <- state.receiving_arm;
     resolve_expression(source, nodes, bindings, work, state, choice.subject);
     if (state.diagnostic != 0u8) return;
     val handoff <- state.handoff;
@@ -1498,6 +1504,7 @@ func register_case_receivers(source:const SourceBytes in S, nodes:const ExprNode
                      duplicate_binding());
         if (state.diagnostic != 0u8) return;
         bindings[receipt].scope <- state.scope_node;
+        work[receipt].enclosing_case_arm <- state.receiving_arm;
         if (receipt == tail) return;
         (receipt <- work[receipt].next):void
     };
@@ -1553,8 +1560,13 @@ func resolve_case_arm(source:const SourceBytes in S, nodes:const ExprNodes in N,
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val first <- state.first;
     val used <- state.used;
+    val enclosing <- state.receiving_arm;
+    work[at].enclosing_case_arm <- enclosing;
+    work[at].arm_case <- state.case_target;
+    state.receiving_arm <- at;
     state.first <- used;
     resolve_case_arm_body(source, nodes, bindings, work, state, at);
+    state.receiving_arm <- enclosing;
     state.first <- first;
     state.used <- used;
     return
@@ -2675,7 +2687,8 @@ func resolve_lexical_callable(source:const SourceBytes in S, nodes:const ExprNod
         runtime_floor <- if (is_function(nodes, definition)) { mark } else { (state.runtime_floor) };
         transfer_binding <- no_node(); transfer_resolved <- false; native_installation <- no_node();
         delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
-        here_group <- false; handoff <- no_node(); case_target <- no_node(); case_arm <- no_node(); diagnostic <- 0u8;
+        here_group <- false; handoff <- no_node(); case_target <- no_node(); case_arm <- no_node();
+        receiving_arm <- no_node(); diagnostic <- 0u8;
         failed_node <- no_node(); enclosing_defer <- no_node();
     };
     resolve_callable_body(source, nodes, bindings, work, body, definition);
@@ -3030,7 +3043,8 @@ export func resolve_module_names(source:const SourceBytes in S, nodes:const Expr
         module_candidates <- selected_used != 0u64;
         transfer_binding <- no_node(); transfer_resolved <- false; native_installation <- no_node();
         delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
-        here_group <- false; handoff <- no_node(); case_target <- no_node(); case_arm <- no_node(); diagnostic <- 0u8;
+        here_group <- false; handoff <- no_node(); case_target <- no_node(); case_arm <- no_node();
+        receiving_arm <- no_node(); diagnostic <- 0u8;
         failed_node <- no_node(); enclosing_defer <- no_node();
     };
 

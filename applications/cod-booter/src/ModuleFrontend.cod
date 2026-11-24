@@ -509,7 +509,8 @@ export func analyze_bound_operands(source:const SourceBytes in S, nodes:const Ex
     ref no_constructor_cases = make ConstructorCaseFacts(0u64, make NoConstructorCase {});
     ref executable = make DeclarationDemands(0u64, make DeclarationDemand {
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
-        pending <- no_node(); declared_failure <- no_node(); signature <- false; body <- false;
+        pending <- no_node(); receipt_pending <- no_node(); declared_failure <- no_node();
+        receipt_body <- false; signature <- false; body <- false;
     });
     if (!check_module_operands(source, nodes, result.frontend.tree, bindings, work, selected, 1u64,
         facts, owners,
@@ -538,7 +539,8 @@ export func analyze_bound_completion(nodes:const ExprNodes in N, bindings:const 
     where {const owner N, const owner Y, const owner W, const owner F, owner C, owner R} {
     ref executable = make DeclarationDemands(0u64, make DeclarationDemand {
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
-        pending <- no_node(); declared_failure <- no_node(); signature <- false; body <- false;
+        pending <- no_node(); receipt_pending <- no_node(); declared_failure <- no_node();
+        receipt_body <- false; signature <- false; body <- false;
     });
     ref no_native_loans = make SuppliedViews(0u64, make NoSuppliedView {});
     return analyze_bound_declaration_completion(
