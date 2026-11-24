@@ -6,12 +6,90 @@ import foundation_tests as runner
 IO = 'using symbol "std:io" @print;'
 BASE = 'func score(x:T)->u64 where T{return 1u64;}func relay(x:u64){return score(x);}export score;export relay;'
 FAMILY = 'symbol @score:proc(u64)->u64;proc @score(x:T)->u64 where T{return 1u64;}proc @score(x:u8)->u64{return 7u64;}export proc @score;'
+EMPTY_FAMILY = 'symbol @score:proc(u64)->u64;export proc @score;'
+FAMILY_IMPORT = 'import "./vocab.cod" proc @score;'
+IDENTITY_SELECTION = 'symbol from "./vocab.cod" @score;'
+FIRST_METHOD = ('proc @score(x:u64)->u64{return x+6u64;}effect proc @score;'
+                'behave @print(@score(1u64));behave @print(behave @score(2u64));')
 ENTRY_EXTENSION = (IO+'symbol from "./base.cod" @score;import "./base.cod" proc @score;'
                    'proc @score(x:u64)->u64{return 9u64;}')
 CALL_SCORE = 'behave @print(behave @score(1u64));'
 GATED_INSTALLATION = 'symbol @gate:bool;effect @gate<-true;'
 
 runner.CASES = {
+    'empty_procedure_family_first_method': ({
+        'vocab.cod': EMPTY_FAMILY,
+        'main.cod': IO + FAMILY_IMPORT + FIRST_METHOD,
+    }, 0, '7\n8\n', ''),
+    'empty_procedure_family_identity_before_import': ({
+        'vocab.cod': EMPTY_FAMILY,
+        'main.cod': IO + IDENTITY_SELECTION + FAMILY_IMPORT + FIRST_METHOD,
+    }, 0, '7\n8\n', ''),
+    'empty_procedure_family_identity_after_import': ({
+        'vocab.cod': EMPTY_FAMILY,
+        'main.cod': IO + FAMILY_IMPORT + IDENTITY_SELECTION + FIRST_METHOD,
+    }, 0, '7\n8\n', ''),
+    'empty_procedure_family_substituted_imports': ({
+        'vocab.cod': EMPTY_FAMILY + 'default {proc @score};',
+        'main.cod': IO + 'import "./vocab.cod";import "./vocab.cod" {..};' + FAMILY_IMPORT + FIRST_METHOD,
+    }, 0, '7\n8\n', ''),
+    'bodyless_proc_header_keeps_later_method': ({
+        'vocab.cod': 'proc declared(x:u64)->u64;export declared;',
+        'provider.cod': ('import "./vocab.cod" declared;proc declared(x:u64)->u64{return x+6u64;}'
+                         'proc declared(x:u64)->u64;export declared;'),
+        'main.cod': IO + 'using "./provider.cod" declared;behave @print(declared(1u64));',
+    }, 0, '7\n', ''),
+    'empty_procedure_family_call_needs_body': ({
+        'vocab.cod': EMPTY_FAMILY,
+        'main.cod': 'using "./vocab.cod" proc @score;@score(1u64);',
+    }, 2, '', 'callable family has no applicable implementation'),
+    'empty_procedure_family_install_needs_body': ({
+        'vocab.cod': EMPTY_FAMILY,
+        'main.cod': 'using "./vocab.cod" proc @score;effect proc @score;',
+    }, 2, '', 'callable family has no applicable implementation'),
+    'empty_procedure_family_can_use_dynamic_handler': ({
+        'vocab.cod': EMPTY_FAMILY,
+        'reader.cod': ('using "./vocab.cod" proc @score;'
+                       'proc read(x:u64)->u64{return behave @score(x);}export read;'),
+        'main.cod': IO + 'using "./reader.cod" read;' + FAMILY_IMPORT
+            + 'proc @score(x:u64)->u64{return x+6u64;}effect proc @score;behave @print(read(2u64));',
+    }, 0, '8\n', ''),
+    'procedure_family_import_kind_mismatch': ({
+        'vocab.cod': EMPTY_FAMILY,
+        'main.cod': 'import "./vocab.cod" var @score;',
+    }, 2, '', 'symbolic resource kind does not match'),
+    'procedure_family_import_pending_identity_conflict': ({
+        'vocab.cod': EMPTY_FAMILY,
+        'main.cod': FAMILY_IMPORT + 'symbol @score:proc(u64)->u64;',
+    }, 2, '', 'conflicting symbol identity'),
+    'procedure_family_import_selected_identity_conflict': ({
+        'vocab.cod': EMPTY_FAMILY, 'other.cod': EMPTY_FAMILY,
+        'main.cod': 'symbol from "./other.cod" @score;' + FAMILY_IMPORT,
+    }, 2, '', 'conflicting symbol identity'),
+    'procedure_family_using_spelling_has_no_import_grant': ({
+        'vocab.cod': EMPTY_FAMILY,
+        'main.cod': ('import "./vocab.cod" proc @score as @extend;using "./vocab.cod" proc @score as @read;'
+                     'proc @read(x:u64)->u64{return x;}'),
+    }, 2, '', 'do not grant callable extension'),
+    'procedure_family_identity_spelling_has_no_import_grant': ({
+        'vocab.cod': EMPTY_FAMILY,
+        'main.cod': ('import "./vocab.cod" proc @score as @extend;symbol from "./vocab.cod" @score as @read;'
+                     'proc @read(x:u64)->u64{return x;}'),
+    }, 2, '', 'do not grant callable extension'),
+    'procedure_family_selected_spelling_preserves_interpretation': ({
+        'base.cod': FAMILY,
+        'facade.cod': 'symbol from "./base.cod" @score as @published;export proc @published;',
+        'main.cod': IO + 'using "./facade.cod" proc @published as @read;'
+            'import "./base.cod" proc @score as @extend;import "./base.cod" proc @score as @repeat;'
+            'proc @extend(x:u64)->u64{return 9u64;}effect proc @extend;'
+            'behave @print(@read(1u64));behave @print(@extend(1u64));'
+            'behave @print(@repeat(1u64));behave @print(behave @read(1u64));',
+    }, 0, '1\n9\n9\n9\n', ''),
+    'procedure_family_identity_view_explicit_installation': ({
+        'base.cod': FAMILY,
+        'main.cod': IO + 'symbol from "./base.cod" @score as @first;symbol from "./base.cod" @score as @second;'
+            'effect proc @first;behave @print(behave @second(1u8));',
+    }, 0, '7\n', ''),
     'empty_regular_source': ('', 0, '', ''),
     'lexical_error_uses_byte_column_after_crlf': (
         '# first line\r\n\t~', 2, '', 'unsupported character in CoD source'),

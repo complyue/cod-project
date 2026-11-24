@@ -161,7 +161,12 @@ class ScalarChecker {
     std::map<size_t, std::map<std::string, Location>> extensions;
     std::map<std::string, size_t> symbols;
     std::map<size_t, size_t> families;
-    std::set<size_t> selected_symbols;
+    struct SelectedSymbol {
+      std::optional<size_t> family;
+      bool grants_extension = false;
+      bool identity_only = true;
+    };
+    std::map<std::string, SelectedSymbol> selected_symbols;
     std::set<std::string> selected_callables, values;
     std::map<std::string, Type> types;
     std::map<std::string, EnumValue> enum_members;
@@ -2526,13 +2531,17 @@ class ScalarChecker {
       implementation_gap(expr.at, "a lexical symbolic call requiring an unproved defining activation");
     return symbol;
   }
-  static std::optional<size_t> module_call_family(const ModuleNames &names, const Expression &expr) {
-    if (expr.lexical_symbol_call) {
-      const auto symbol = names.symbols.find(expr.text);
-      if (symbol == names.symbols.end()) return {};
+  static std::optional<size_t> symbol_family(const ModuleNames &names, const std::string &name) {
+    if (const auto selected = names.selected_symbols.find(name); selected != names.selected_symbols.end())
+      return selected->second.family;
+    if (const auto symbol = names.symbols.find(name); symbol != names.symbols.end())
       if (const auto family = names.families.find(symbol->second); family != names.families.end())
         return family->second;
-    } else if (const auto family = names.callables.find(expr.text); family != names.callables.end()) {
+    return {};
+  }
+  static std::optional<size_t> module_call_family(const ModuleNames &names, const Expression &expr) {
+    if (expr.lexical_symbol_call) return symbol_family(names, expr.text);
+    if (const auto family = names.callables.find(expr.text); family != names.callables.end()) {
       return family->second;
     }
     return {};
@@ -7187,11 +7196,15 @@ class ScalarChecker {
     // Deferred execution observes the binding at cleanup, after registration.
     return !delayed_ && &expr != prepared_call_ ? lexical_.abstract_symbol_targets : unknown;
   }
+  [[noreturn]] void missing_callable(const Expression &expr) const {
+    if (expr.lexical_symbol_call) fail(expr.at, "callable family has no applicable implementation");
+    fail(expr.at, has_declarations(expr.text)
+        ? "no applicable implementation for declared callable '" + expr.text + "'" : "unknown callable '" + expr.text + "'");
+  }
   size_t select(const Expression &expr, const std::vector<Type> &arguments, const Access &access, const Owners &owners) {
     const auto family = named_family(expr);
     if (family.definition) check_query_binding(expr.text, expr.at);
-    if (family.methods.empty()) fail(expr.at, has_declarations(expr.text)
-        ? "no applicable implementation for declared callable '" + expr.text + "'" : "unknown callable '" + expr.text + "'");
+    if (family.methods.empty()) missing_callable(expr);
     const auto method = select_method(family.methods, arguments, expr.at, expr.text, family.retained_types(), access, owners);
     return demand_named(expr, family, method, arguments);
   }
@@ -11844,7 +11857,7 @@ class ScalarChecker {
     const bool live_lexical = has_lexical_places(family);
     if (((family.context || family.definition) && !live_lexical) || &expr == prepared_call_)
       implementation_gap(expr.at, "a named argument list for a lexical or deferred callable");
-    if (family.methods.empty()) fail(expr.at, "unknown callable '" + expr.text + "'");
+    if (family.methods.empty()) missing_callable(expr);
     const auto binding = bind_written_call(expr, family, expr.children, std::nullopt);
     const auto count = binding.slots.size();
     auto &operands = operation.argument_sources.emplace(count);
@@ -15507,12 +15520,12 @@ class ScalarChecker {
   CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at, bool definition_site = false) {
     return materialize_definition(NamedFamily{family}, expected, at, definition_site);
   }
-  CheckedOperation materialize_symbol(size_t symbol, const Type &view, const Location &at) {
+  CheckedOperation materialize_symbol(const std::string &name, const Type &view, const Location &at) {
     if (view.kind != Type::procedure || view.pure_callable)
       fail(at, "a symbolic procedure family requires a procedure view");
-    const auto selected = module_names().families.find(symbol);
-    if (selected == module_names().families.end()) fail(at, "callable family has no applicable implementation");
-    return materialize_family(selected->second, view, at);
+    const auto selected = symbol_family(module_names(), name);
+    if (!selected) fail(at, "callable family has no applicable implementation");
+    return materialize_family(*selected, view, at);
   }
   CheckedOperation materialize_family(size_t family_id, const Type &view, const Location &at) {
     const auto &family = program_.families[family_id].methods;
@@ -15986,7 +15999,10 @@ class ScalarChecker {
         !checking_method_->type_parameters.empty() || !checking_method_->retained_types.empty())
       implementation_gap(expr.at, "scoped procedure installation outside one visit activation");
     const auto &symbol = program_.symbols.at(symbol_id);
-    const auto base = program_.families.at(module_names().families.at(symbol_id)).methods.front();
+    const auto selected_family = symbol_family(module_names(), expr.text);
+    if (!selected_family || program_.families.at(*selected_family).methods.empty())
+      fail(expr.at, "callable family has no applicable implementation");
+    const auto base = program_.families.at(*selected_family).methods.front();
     const auto base_method = program_.methods.at(base);
     const auto &contract = *symbol.type;
     const auto explicit_parameters = base_method.input_parameters();
@@ -20189,7 +20205,7 @@ class ScalarChecker {
           }
           if (!preparation.type && !builtin_signature) {
             if (!eager && !expr.intrinsic && named_family(expr).methods.empty())
-              fail(expr.at, "unknown callable '" + expr.text + "'");
+              missing_callable(expr);
             implementation_gap(expr.children[i]->at, "cannot establish a parameter type for an abruptly completing operand");
           }
           // A known method signature supplies a checking type; a builtin needs no
@@ -20295,7 +20311,7 @@ class ScalarChecker {
             }
             break;
           }
-          operation = materialize_symbol(id, *symbol.type, expr.at);
+          operation = materialize_symbol(expr.text, *symbol.type, expr.at);
           if (site != scoped_symbol_sites_.end()) {
             for (const auto target : program_.callables[*operation.callable].implementations())
               for (const auto dependency : read_effects(target).symbols)
@@ -22637,6 +22653,12 @@ class ScalarChecker {
     return id;
   }
 
+  size_t register_family(std::optional<size_t> symbol, const Location &at, const std::string &operation) {
+    const auto id = program_.families.size();
+    program_.families.push_back({symbol, module_, id, at, {}, {}, {}, operation});
+    return id;
+  }
+
   size_t import_family(size_t source, const Location &at) {
     if (const auto found = module_names().imports.find(source); found != module_names().imports.end()) return found->second;
     const auto &original = program_.families[source];
@@ -22825,8 +22847,8 @@ class ScalarChecker {
         ? Form::ResourceNature::procedure : Form::ResourceNature::variable;
   }
 
-  void check_using_procedure_identity(const Form &form, const std::string &local,
-                                     size_t symbol, const std::set<std::string_view> &fresh_symbols) {
+  void check_procedure_selection_identity(const Form &form, const std::string &local,
+                                          size_t symbol, const std::set<std::string_view> &fresh_symbols) {
     const auto destination = module_names().symbols.find(local);
     if (fresh_symbols.contains(local) ||
         (destination != module_names().symbols.end() && destination->second != symbol))
@@ -22851,38 +22873,48 @@ class ScalarChecker {
       return;
     }
     if (resource.kind == Resource::Kind::symbol) {
-      // A qualified using selects the published procedure policy. The
-      // installation and the extension grant use their own operations.
+      // Selection introduces the identity. Only an import grants extension
+      // through that spelling, and installation is a separate operation.
       // See ModuleWorlds.md#selecting-a-symbolic-procedure-family.
-      if (form.kind == Form::Kind::using_resource && !form.using_symbol &&
-          nature == Form::ResourceNature::procedure)
-        check_using_procedure_identity(form, local, resource.symbol, fresh_symbols);
+      const bool procedure_selection = nature == Form::ResourceNature::procedure &&
+          (importing || (form.kind == Form::Kind::using_resource && !form.using_symbol));
+      if (procedure_selection)
+        check_procedure_selection_identity(form, local, resource.symbol, fresh_symbols);
       if (importing) {
-        const auto destination = module_names().symbols.find(local);
-        if (destination == module_names().symbols.end())
-          fail(form.at, "select the destination symbol identity before importing its callable family");
-        if (destination->second != resource.symbol)
-          implementation_gap(form.at, "callable import into a different symbol identity; use explicit effect installation for a value");
+        if (!procedure_selection) {
+          const auto destination = module_names().symbols.find(local);
+          if (destination == module_names().symbols.end())
+            fail(form.at, "select the destination symbol identity before importing its callable family");
+          if (destination->second != resource.symbol)
+            implementation_gap(form.at, "callable import into a different symbol identity; use explicit effect installation for a value");
+        }
         if (!resource.family) fail(form.at, "symbol does not export a callable family");
       }
       const auto [alias, inserted] = module_names().symbols.emplace(local, resource.symbol);
       if (!inserted && alias->second != resource.symbol) fail(form.at, "conflicting symbol alias '" + local + "'");
-      bool receiver_import = false;
-      if (resource.family) {
+      const auto [binding, fresh] = module_names().selected_symbols.try_emplace(local);
+      auto &selection = binding->second;
+      if (form.kind == Form::Kind::symbol_from) {
+        if (fresh) selection.family = resource.family;
+      } else if (resource.family) {
         const auto source = *resource.family;
-        const auto family = module_names().families.try_emplace(resource.symbol, source).first;
         const auto previous = module_names().imports.find(source);
-        receiver_import = previous != module_names().imports.end() && previous->second == family->second;
-        if (family->second != source && !receiver_import)
+        const auto receiver = previous == module_names().imports.end() ? std::nullopt : std::optional{previous->second};
+        if (!selection.identity_only && selection.family != source && selection.family != receiver)
           implementation_gap(form.at, "composition of distinct selected interpretations for one symbol");
         if (importing) {
+          const auto family = module_names().families.find(resource.symbol);
+          if (family != module_names().families.end() && family->second != receiver)
+            implementation_gap(form.at, "composition of distinct selected interpretations for one symbol");
           resource.family = import_family(source, form.at);
-          family->second = *resource.family;
-          receiver_import = true;
+          module_names().families.try_emplace(resource.symbol, *resource.family);
+          selection.grants_extension = true;
+          selection.family = resource.family;
+        } else if (!selection.grants_extension) {
+          selection.family = source;
         }
+        selection.identity_only = false;
       }
-      if (receiver_import) module_names().selected_symbols.erase(resource.symbol);
-      else module_names().selected_symbols.insert(resource.symbol);
     } else if (resource.kind == Resource::Kind::native_operation) {
       const auto [binding, inserted] = module_names().native_operations.emplace(local, *resource.native_operation);
       if (!inserted && binding->second != *resource.native_operation)
@@ -22942,7 +22974,7 @@ class ScalarChecker {
         const auto found = module_names().symbols.find(form->name);
         if (found == module_names().symbols.end()) fail(form->at, "unknown exported symbol '" + form->name + "'");
         resource.kind = Resource::Kind::symbol; resource.symbol = found->second;
-        if (const auto family = module_names().families.find(resource.symbol); family != module_names().families.end()) resource.family = family->second;
+        resource.family = symbol_family(module_names(), form->name);
       } else if (const auto found = module_names().callables.find(form->name); found != module_names().callables.end()) {
         resource.kind = Resource::Kind::callable; resource.family = found->second;
       } else if (const auto found = module_names().types.find(form->name); found != module_names().types.end()) {
@@ -23647,7 +23679,7 @@ class ScalarChecker {
           program_.symbols.push_back({{}, true, COD_LANG_PRINT_NAME});
         }
         if (form->resource_nature == Form::ResourceNature::procedure) {
-          check_using_procedure_identity(*form, form->alias, *print_symbol, fresh_symbols);
+          check_procedure_selection_identity(*form, form->alias, *print_symbol, fresh_symbols);
           module_names().symbols.try_emplace(form->alias, *print_symbol);
           continue;
         }
@@ -23666,9 +23698,12 @@ class ScalarChecker {
           CheckedMethod contract; contract.source = form.get();
           signature_type(contract, type, form->at, false, form->symbol_reference.has_value());
         }
-        if (!module_names().symbols.emplace(form->name, program_.symbols.size()).second)
+        const auto symbol = program_.symbols.size();
+        if (!module_names().symbols.emplace(form->name, symbol).second)
           fail(form->at, "duplicate symbol binding '" + form->name + "'");
         program_.symbols.push_back({type, false, form->name, form->symbol_reference});
+        if (type.kind == Type::procedure && !type.pure_callable && !form->symbol_reference)
+          module_names().families.emplace(symbol, register_family(symbol, form->at, {}));
         continue;
       }
       if (form->kind != Form::Kind::function && form->kind != Form::Kind::procedure)
@@ -23956,17 +23991,16 @@ class ScalarChecker {
       }
       const bool lexical = lexical_methods_.contains(form);
       if (form->body) prepared.definition = program_.methods.size();
-      if (symbol && module_names().selected_symbols.contains(*symbol))
-        fail(form->at, "using and symbol selection do not grant callable extension permission");
+      if (symbol) {
+        const auto selection = module_names().selected_symbols.find(form->name);
+        if (selection != module_names().selected_symbols.end() && !selection->second.grants_extension)
+          fail(form->at, "using and symbol selection do not grant callable extension permission");
+      }
       if (!symbol && !lexical && module_names().selected_callables.contains(form->name))
         fail(form->at, "using does not grant callable extension permission");
-      const auto new_family = [&] {
-        const auto family = program_.families.size();
-        program_.families.push_back({symbol, module_, family, form->at, {}, {}, {}, operation});
-        return family;
-      };
       if (symbol) {
-        if (!module_names().families.contains(*symbol)) module_names().families.emplace(*symbol, new_family());
+        if (!module_names().families.contains(*symbol))
+          module_names().families.emplace(*symbol, register_family(symbol, form->at, operation));
         prepared.family = module_names().families.at(*symbol);
         const auto &family = program_.families[*prepared.family];
         if (form->body) check_variadic_family_member(family.methods, prepared, form->at);
@@ -23981,7 +24015,8 @@ class ScalarChecker {
           if (!module_) entry_extensions_.try_emplace(*symbol, form);
         }
       } else if (!lexical) {
-        if (!module_names().callables.contains(form->name)) module_names().callables.emplace(form->name, new_family());
+        if (!module_names().callables.contains(form->name))
+          module_names().callables.emplace(form->name, register_family({}, form->at, operation));
         prepared.family = module_names().callables.at(form->name);
         if (form->body) check_variadic_family_member(program_.families[*prepared.family].methods, prepared, form->at);
         if (module_names().imported_aliases.contains(form->name))
