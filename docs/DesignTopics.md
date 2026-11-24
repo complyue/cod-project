@@ -56,7 +56,7 @@
 
 这些既定形式可以直接作为惯用法依据，不应整体重新置为待定。
 
-`chan` 两端是这套类型语言的具体用例。发送端和接收端已经确定可以独立建模。等 CoD 支持 higher-kinded type synonym 后，再正式表达发送侧的 consumer、接收侧的 producer，以及各自可组合的 transformer。[端点设计](../design/ActorChannels.md#independent-chan-endpoints)
+`chan` 两端是这套类型语言的具体用例。发送端和接收端已经确定可以独立建模。等 CoD 支持 higher-kinded type synonym 后，再正式表达发送侧的 consumer、接收侧的 producer，以及各自可组合的 transformer。[高阶类型别名议题](#higher-kinded-type-synonyms) · [端点设计](../design/ActorChannels.md#independent-chan-endpoints)
 
 ### 命名的类型签名就绪后再讨论
 
@@ -156,6 +156,41 @@ Haskell，再按 CoD 的模块解释规则决定声明的可见性、优先级�
 
 一个待讨论的例子是，模板原本声明两个独立的 symbol，先向 `@output` 写入 9，再读取 `@input`。若接收方显式写 `with { @cell as @output; @cell as @input; }`，是否应接受并读到 9，还是要求这两个角色在接收方也保持独立？这个选择留待用例检验。
 
+<a id="higher-kinded-type-synonyms"></a>
+
+## 6. Higher-kinded type synonym
+
+已确定的用途是用形式化的 producer、transformer、consumer 类型语言分别描述 `chan` 的发送端和接收端。这个议题讨论类型构造器如何进入别名的参数和结果，以及编译器怎样检查每次应用。通用管道的绑定与组合另有讨论入口。[命名签名与管道](#named-signatures-and-pipelines) · [chan 端点契约](../design/ActorChannels.md#independent-chan-endpoints)
+
+### 用一个例子区分两种能力
+
+在 `Producer<Invoice>` 中，库作者写定了 `Producer`，传入的是完整的消息类型 `Invoice`。现在反过来固定消息类型，让使用者选择签名族本身。下面只用数学记法描述候选行为，`≔` 表示示例定义，`≡` 表示预期展开结果。
+
+```text
+ForInvoice<F>        ≔ F<Invoice>
+ForInvoice<Producer> ≡ Producer<Invoice>
+ForInvoice<Consumer> ≡ Consumer<Invoice>
+```
+
+要使这三行成立，`F` 必须能接受一个消息类型，并产生可用于该位置的签名。若传入完整类型 `Invoice`，展开会要求 `Invoice<Invoice>`，应在类型应用处指出 kind 不匹配。两个合法实参仍会产生方向不同的签名。持有发送端的 worker 可以向其提交发票，持有接收端的 collector 可以从中取得发票。两端分别做静态检查。
+
+### 用论文中的程序检验候选规则
+
+| 研究用例 | 展开别名后应当能够观察到什么 |
+| --- | --- |
+| 闭合遍历。票价依次为 120、80、80，筛选器跳过 120，调用方取首个可接受票价。 | 拒绝 120 时，筛选器仍须向要求布尔反馈的上游回答是否继续。在第一个 80 向外层返回时，已进入的遍历依次清理。比较命名签名与显式签名时，应对照反馈归属、退出目标和清理顺序。[枚举选择论文](../papers/ComposingEnumerativeChoice.md#what-an-equivalence-must-preserve) |
+| 开放管道。传感器提交读数后退出，worker 在稍后的调用中处理已入队事件。 | 签名要保留读取或转移载荷所需的 owner。把借用了 ingress 栈帧的 `here` 或局部引用排队应被拒绝。worker 的反馈只属于其本地调用。以回放 sink 和队列 sink 检验同一签名可采用的不同实现。[开放事件论文](../papers/OpenEventPipelines.md#a-dynamically-scoped-event-sink) |
+
+仓储分配策略编辑器提供了一个管道以外的对照。论文以 `Program<Orders → Decisions>` 描述可编辑的程序图。给这个完整类型起简称时，普通别名就够用。若要让同一个编辑签名在多种程序表示之间复用，再给出必须把 `Program` 所在位置参数化的实际用例，并检查编辑程序图和执行它各自需要的权限。[程序编辑器论文](../papers/AlgebraicEffectsIsAllYouNeed.md#1-a-program-that-takes-a-program-as-its-input)
+
+### 待决定的问题与验收
+
+1. **允许传入什么。** 首批是否接受未填入参数的具名别名？例如用 `FromReading<B> ≔ Transformer<Reading, B>` 固定输入，`ForInvoice<FromReading>` 能否展开为 `Transformer<Reading, Invoice>`？再决定是否还需要直接传入部分应用的二元构造器。
+2. **怎样表达和检查 kind。** 哪些参数位置接受完整类型、哪些接受构造器，结果位置能否接收签名？哪些信息可由使用推断，哪些须在声明处写出？要求错误能定位到传错构造器或实参的那一处。
+3. **展开后保留什么。** 确定别名与展开式在类型匹配和模块重导出时的相等规则。用一对带 owner 的输入检查访问权限、目标身份及生命周期，用发送端和接收端互换检查错误方向。[owner 与目标身份](../papers/CoarseGrainedOwnership.md#owner-identity-target-identity-and-representation)
+
+形成可评审提案时，给出示例的完整声明、两种合法实例化和 kind 不匹配诊断，再用上述同步与异步用例列出应接受和应拒绝的调用。声明拼写、kind 推断、部分应用及展开规则都在本议题中待定。
+
 ## 按实际用例重启的小议题
 
 | 议题 | 何时值得讨论、需要确定什么 |
@@ -187,7 +222,7 @@ Haskell，再按 CoD 的模块解释规则决定声明的可见性、优先级�
 
 跨网络的 Actor 通过 UDP 上的 AKCP 流传输任意长度的 region。流中允许有缺口，传输以整个 region 为单位原子地成功或失败。接收 Actor 只能看到完整且通过校验的 region。传输支持队列和背压，容量恢复时可以继续推进。[区域传输](../design/ActorChannels.md#regional-transport-over-akcp)
 
-发送端和接收端可独立建模。其正式类型表达等待 higher-kinded type synonym，再用 producer、transformer、consumer 描述。[类型语言讨论](#named-signatures-and-pipelines)
+发送端和接收端可独立建模。其正式类型表达等待 higher-kinded type synonym，再用 producer、transformer、consumer 描述。[高阶类型别名议题](#higher-kinded-type-synonyms) · [管道类型语言讨论](#named-signatures-and-pipelines)
 
 | 待讨论问题 | 区分方案的用例 |
 | --- | --- |

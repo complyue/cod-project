@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Open a design topic for higher-kinded type synonyms
+
+<a id="k-higher-kinded-type-synonym-topic-20261124"></a>
+**K-HIGHER-KINDED-TYPE-SYNONYM-TOPIC-20261124.** In the current CoD project conversation the project user requested a separate [higher-kinded type synonym topic](docs/DesignTopics.md#higher-kinded-type-synonyms) grounded in the research planned in `papers/`. The topic gives a candidate constructor argument, an invalid application and observable cases from closed traversals and open event pipelines. Its type rules and declarations await discussion. The [named-signature discussion order](#h-named-signatures-before-pipeline-protocols-20261123) and [independent endpoint prerequisite](#h-actor-region-transport-and-chan-ends-20261124) continue from `52f74d7ae302cb1d3244c20cd5149c55e850417c:docs/DesignTopics.md`. Registry r1177 links D-31 and D-32-CHAN-ENDS to the topic.
+
 ## 2026-11-24 — Distinguish dependency initialization from installation cancellation in seed fixtures
 
 <a id="k-module-context-fixture-scope-20261124"></a>
