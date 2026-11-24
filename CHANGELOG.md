@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Recover independent seed schema payload checks
+
+<a id="k-seed-payload-diagnostic-recovery-20261124"></a>
+**K-SEED-PAYLOAD-DIAGNOSTIC-RECOVERY-20261124.** D-ARCH-REVIEW r105→106 continues [the product registration review](#k-seed-product-diagnostic-recovery-20261124) and [entry-world coverage](#h-entry-world-diagnostics-20261124) under P-682/P-683. The [review](design/ImplementationArchitecture.md#recovering-independent-schema-payload-checks) covers independent product and sum fields and named-array index and element checks. The registrar and nominal layout walk are at `41c4f2232a29fb52398e09e4b8217070501207d8:cod/lang_checked.hh:23235`. Mainline owns implementation and compatibility verification.
+
 ## 2026-11-24 — Distinguish function values and functor values
 
 <a id="h-functor-value-distinction-20261124"></a>
