@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review the graph collection call in the object-writer compatibility input
+
+<a id="k-booter-mixed-native-loans-20261123"></a>
+**K-BOOTER-MIXED-NATIVE-LOANS-20261123.** [D-20-MODULE-GRAPH r64→r65](applications/cod-booter/docs/ModuleGraph.md#checking-handles-and-readonly-array-loans-in-one-native-call) and D-ARCH-REVIEW r80→r81 continue P-680–P-683. The [native loan](#h-booter-c-handles-20261120) and [typed enum](#h-typed-enum-20261121) contracts establish per-argument owner and type checks. The source-checking structure at `b55749b6b9fd8d20507264ca6db13f6b548d3f05:applications/cod-booter/docs/ModuleGraph.md` extends to the two array arguments sharing B and the imported enum result. The C transport and graph implementation retain their existing boundaries.
+
 ## 2026-11-23 — Review direct named-region checking in the CoD booter
 
 <a id="k-booter-direct-region-check-20261123"></a>

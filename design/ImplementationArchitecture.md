@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 80. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 81. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+
+The [r81 review](../CHANGELOG.md#k-booter-mixed-native-loans-20261123) extends the booter’s imported native call proof to [three handles, two array loans and a nominal enum result](../applications/cod-booter/docs/ModuleGraph.md#checking-handles-and-readonly-array-loans-in-one-native-call). P-682/P-683 govern the checked evidence for each argument position and the completed call.
 
 The [r80 review](../CHANGELOG.md#k-booter-direct-region-check-20261123) clears [the booter’s direct named-region source checker](../applications/cod-booter/docs/ModuleGraph.md#checking-a-direct-named-region-acquisition) under P-682/P-683. Its first workloads are the local `Graph` acquisition and the production graph factory’s root initializers.
 
