@@ -102,7 +102,8 @@ using "./DeclarationTypes.cod" { type_module, type_identity, DeclaredType };
 using "./CaseSchemas.cod" {
     ConstructorCaseFacts,
     ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, ReceiptCaseSubject, CaseSumFormal,
-        CaseConstructor, CaseFieldReceipt, CaseProductField, CaseSumReceipt, CaseSumProjection }
+        CaseConstructor, CaseFieldReceipt, CaseProductField, CaseSumReceipt, CaseSumProjection,
+        InlineProductFormal, InlineProductField }
 }
 using "./ExceptionPayload.cod" {
     CaughtFieldUses, CaughtFieldUse { CaughtField }, unknown_exception_field
@@ -205,6 +206,7 @@ func source_u32() -> u8 { return 14u8 }
 func source_sum_target() -> u8 { return 15u8 }
 func received_product() -> u8 { return 16u8 }
 func received_sum() -> u8 { return 17u8 }
+func source_product_loan() -> u8 { return 18u8 }
 
 export func immutable_text_kind(kind:u8) -> bool {
     return kind == string_kind() || kind == c_string_kind();
@@ -505,6 +507,18 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
                 facts[formal].identity_module <- type.defining_module;
                 facts[formal].target_readonly <- if (readonly) { 1u8 } else { 0u8 };
                 return 0u8
+            };
+            InlineProductFormal { val bound <- definition; val owner_site <- owner_site; val type <- value_type; } -> {
+                if (bound != definition || form != ReferenceFormal || !binding.readonly ||
+                    binding.owner_name >= used || names[binding.owner_name].declaration != owner_site ||
+                    owner_constraint_syntax(nodes, owner_site) != ReadonlyOwnerConstraint) return unproved_owner();
+                if (type.defining_module != 0u64 || type.identity >= used ||
+                    !facts[type.identity].bits_product || facts[type.identity].product_words == 0u64) {
+                    set_fact(facts, formal, source_product_loan(), borrowed_ref(), owner_site, type.identity, 0u8);
+                    facts[formal].identity_module <- type.defining_module;
+                    facts[formal].target_readonly <- 1u8;
+                    return 0u8
+                }
             };
             _ -> {}
         }
@@ -1360,7 +1374,7 @@ func receipt_loan_signature(nodes:const ExprNodes in N, links:const NameWork in 
             if (scalar_kind(kind) || kind == source_u32()) {
                 if (reception != local_place() && reception != borrowed_ref()) return false
             } else {
-                if ((kind != source_array_loan() && kind != source_sum_target()) ||
+                if ((kind != source_array_loan() && kind != source_sum_target() && kind != source_product_loan()) ||
                     reception != borrowed_ref() || facts[parameter].target_readonly == 0u8 ||
                     owner_constraint_syntax(nodes, facts[parameter].owner) != ReadonlyOwnerConstraint)
                     return false
@@ -1381,8 +1395,8 @@ func check_receipt_argument(nodes:const ExprNodes in N, names:const NameBindings
         facts[actual].reception != local_place() || facts[formal].reception != borrowed_ref() ||
         facts[formal].target_readonly == 0u8 ||
         owner_constraint_syntax(nodes, facts[formal].owner) != ReadonlyOwnerConstraint ||
-        (kind != product_kind() && kind != source_sum_target()) ||
-        ((kind == product_kind()) != (facts[actual].kind == received_product())) ||
+        (kind != product_kind() && kind != source_sum_target() && kind != source_product_loan()) ||
+        ((kind != source_sum_target()) != (facts[actual].kind == received_product())) ||
         facts[actual].identity != facts[formal].identity ||
         facts[actual].identity_module != facts[formal].identity_module)
         return wrong_operand_type();
@@ -1409,6 +1423,21 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
             !receipt_loan_signature(nodes, links, facts, definition, first, used, revision))
             return unproved_owner();
         return check_receipt_argument(nodes, names, facts, owners, argument, operand, formal, invocation)
+    };
+    if (operand < used && facts[operand].kind == source_product_loan()) {
+        if (!source_only || checked_ref_argument(nodes, argument) ||
+            !receipt_loan_signature(nodes, links, facts, definition, first, used, revision))
+            return unproved_owner();
+        if ((kind != source_product_loan() && kind != product_kind()) ||
+            facts[formal].reception != borrowed_ref() || facts[formal].target_readonly == 0u8 ||
+            owner_constraint_syntax(nodes, facts[formal].owner) != ReadonlyOwnerConstraint ||
+            facts[operand].identity != facts[formal].identity ||
+            facts[operand].identity_module != facts[formal].identity_module ||
+            facts[operand].reception != borrowed_ref() || facts[operand].owner == no_node() ||
+            facts[operand].target_readonly == 0u8) return wrong_operand_type();
+        copy_fact(facts, argument, operand);
+        facts[argument].loans_case_receipt <- true;
+        return record_owner_argument(nodes, facts, owners, formal, facts[operand].owner, argument, invocation)
     };
     if (kind == source_array_loan() || kind == source_handle_loan() || kind == source_sum_target()) {
         val actual <- ordinary_argument_value(nodes, used, revision, argument);
@@ -3367,6 +3396,33 @@ func check_case_projection(nodes:const ExprNodes in N, names:const NameBindings 
     return 0u8
 }
 
+func check_inline_product_field(nodes:const ExprNodes in N, facts:OperandFacts in F,
+    at:u64, used:u64, revision:u64, receiver:u64, field:u64, ordinal:u64,
+    record:const DeclaredType in R, result:const DeclaredType in T) -> u8
+    where {const owner N, owner F, const owner R, const owner T} {
+    ref projection = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
+    if (!inspect_field_selection(nodes, revision, used, at, projection) ||
+        projection.receiver != receiver || projection.field != field || receiver >= at ||
+        ordinal == no_node() || record.kind != record_type()) return invalid_operand_tree();
+    val kind <- facts[receiver].kind;
+    if ((kind != source_product_loan() && kind != product_kind()) ||
+        facts[receiver].reception != borrowed_ref() || facts[receiver].owner == no_node() ||
+        facts[receiver].target_readonly == 0u8 ||
+        facts[receiver].identity != record.identity ||
+        facts[receiver].identity_module != record.defining_module) return unsupported_product_layout();
+    if (result.kind == record_type()) {
+        set_fact(facts, at, source_product_loan(), borrowed_ref(), facts[receiver].owner, result.identity, 0u8);
+        facts[at].identity_module <- result.defining_module;
+        facts[at].target_readonly <- 1u8;
+        return 0u8
+    };
+    val result_kind <- source_scalar_kind(result.kind);
+    if (result_kind == 0u8) return unsupported_product_layout();
+    set_fact(facts, at, result_kind, independent_value(), no_node(), result.identity, 0u8);
+    facts[at].identity_module <- result.defining_module;
+    return 0u8
+}
+
 func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                    selected:const SelectedExports in E, facts:OperandFacts in F, owners:CallOwners in O,
                    fields:const CaughtFieldUses in X, views:const SuppliedViews in H,
@@ -3394,6 +3450,16 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
             } -> {
                 return check_case_projection(nodes, names, facts, at, used, revision,
                     receiver, field, receipt, arm, record, sum)
+            };
+            InlineProductField {
+                val receiver <- receiver; val field <- field; val ordinal <- ordinal;
+                val record <- record; val schema <- value_type;
+            } -> {
+                if (!source_only) return unsupported_product_layout();
+                if (receiver >= at) return invalid_operand_tree();
+                if (facts[receiver].kind == source_product_loan())
+                    return check_inline_product_field(nodes, facts, at, used, revision, receiver, field,
+                        ordinal, record, schema)
             };
             CaseProductField { val receiver <- receiver; val record <- record; val schema <- value_type; } -> {
                 if (receiver >= at || facts[receiver].kind != received_product() ||

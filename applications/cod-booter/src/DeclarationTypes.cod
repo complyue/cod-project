@@ -1,7 +1,7 @@
 using "./ParserStorage.cod" DeclarationSyntax {
     NominalRecord, NativeRecord, EnumTypeDeclaration, NominalSum
 };
-using "./ParserStorage.cod" FormalMode { ValueFormal, PlaceFormal, InitializingPlaceFormal };
+using "./ParserStorage.cod" FormalMode { ValueFormal, ExplicitValueFormal, PlaceFormal, InitializingPlaceFormal };
 using "./ParserStorage.cod" FormalSyntax { OrdinaryFormal };
 using "./ParserStorage.cod" BindingSyntax { TypedBinding };
 using "./ParserStorage.cod" LocalMode { ValueLocal, ExceptionLocal };
@@ -42,7 +42,7 @@ using "./ParserStorage.cod" {
     EnumMemberSites, inspect_enum_member, SumArmSites, inspect_sum_arm,
 };
 using "./NameResolution.cod" {
-    NameBindings, NameWork, find_record_field, formal_binding, local_binding,
+    NameBindings, NameWork, locate_record_field, formal_binding, local_binding,
     ordinary_selection, record_type, native_scalar, enum_value, find_enum_member,
     is_lexical_builder, lexical_builder_record, lexical_builder_type,
     builtin_u64, builtin_u32, builtin_u8, builtin_bool, builtin_string, builtin_c_string, text_type, owner_binding,
@@ -133,22 +133,27 @@ export func describe_type(nodes:const ExprNodes in N, names:const NameBindings i
 }
 
 func local_member_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
-                       selected:const SelectedExports in E, work:const NameWork in W, name:u64, revision:u64, used:u64, result:DeclaredType in R) -> bool
-    where {const owner S, const owner N, const owner B, const owner E, const owner W, owner R} {
-    val field <- find_record_field(source, nodes, work, result.identity, name, revision, used);
+                       selected:const SelectedExports in E, work:const NameWork in W,
+                       name:u64, revision:u64, used:u64, inline_only:bool,
+                       result:DeclaredType in T, ordinal:u64 in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, const owner W, owner T, owner R} {
+    val field <- locate_record_field(source, nodes, work, result.identity, name, revision, used, ordinal);
     ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
     ref binding = make BindingSites {
         name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
     };
     return inspect_formal(nodes, revision, used, field, formal) == OrdinaryFormal &&
+        (!inline_only || formal.mode == ValueFormal || formal.mode == ExplicitValueFormal) &&
         inspect_binding(nodes, revision, used, formal.binding, binding) == TypedBinding &&
         describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, result);
 }
 
 func imported_member_type(source:const SourceBytes in S, nodes:const ExprNodes in N,
                           spellings:const SourceBytes in P, spelling_used:u64,
-                          interfaces:const ModuleInterfaces in I, interface_count:u64, name:u64, used:u64, result:DeclaredType in R) -> bool
-    where {const owner S, const owner N, const owner P, const owner I, owner R} {
+                          interfaces:const ModuleInterfaces in I, interface_count:u64,
+                          name:u64, used:u64, inline_only:bool, result:DeclaredType in T,
+                          ordinal:u64 in R) -> bool
+    where {const owner S, const owner N, const owner P, const owner I, owner T, owner R} {
     val head <- find_interface(interfaces, interface_count, result.defining_module, result.identity);
     if (head == no_node() || interfaces[head].interface_kind != record_type() ||
         spelling_used > intrinsic (len)(spellings)) return false;
@@ -158,6 +163,9 @@ func imported_member_type(source:const SourceBytes in S, nodes:const ExprNodes i
         if (interfaces[row].name_first >= interfaces[row].name_past ||
             interfaces[row].name_past > spelling_used) return false;
         if (same_bytes(source, first, past, spellings, interfaces[row].name_first, interfaces[row].name_past)) {
+            if (inline_only && interfaces[row].field_mode != ValueFormal &&
+                interfaces[row].field_mode != ExplicitValueFormal) return false;
+            ordinal <- row - head - 1u64;
             result.kind <- interfaces[row].value_kind;
             result.defining_module <- interfaces[row].type_module;
             result.identity <- interfaces[row].type_identity;
@@ -174,11 +182,24 @@ export func describe_record_field(source:const SourceBytes in S, nodes:const Exp
     name:u64, used:u64, revision:u64, result:DeclaredType in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner W,
            const owner P, const owner I, owner R} {
+    ref ordinal = make u64 { no_node() };
+    return describe_record_member(source, nodes, names, selected, work, spellings, spelling_used, interfaces,
+        interface_count, name, used, revision, false, result, ordinal)
+}
+
+export func describe_record_member(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
+    spellings:const SourceBytes in P, spelling_used:u64,
+    interfaces:const ModuleInterfaces in I, interface_count:u64,
+    name:u64, used:u64, revision:u64, inline_only:bool, result:DeclaredType in T, ordinal:u64 in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, const owner W,
+           const owner P, const owner I, owner T, owner R} {
     if (result.kind != record_type()) return false;
     if (result.defining_module == 0u64)
-        return local_member_type(source, nodes, names, selected, work, name, revision, used, result);
+        return local_member_type(source, nodes, names, selected, work, name, revision, used, inline_only,
+            result, ordinal);
     return imported_member_type(source, nodes, spellings, spelling_used, interfaces, interface_count, name,
-        used, result)
+        used, inline_only, result, ordinal)
 }
 
 # Follow only syntax and bound declarations here. The result carries the

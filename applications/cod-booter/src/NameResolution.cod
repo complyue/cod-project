@@ -754,28 +754,45 @@ func link_entries(nodes:const ExprNodes in N, work:NameWork in W, revision:u64, 
 export func find_record_field(source:const SourceBytes in S, nodes:const ExprNodes in N,
                               work:const NameWork in W, record:u64, name:u64, revision:u64, used:u64) -> u64
     where {const owner S, const owner N, const owner W} {
+    ref ordinal = make u64 { no_node() };
+    return locate_record_field(source, nodes, work, record, name, revision, used, ordinal)
+}
+
+export func locate_record_field(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    work:const NameWork in W, record:u64, name:u64, revision:u64, used:u64, ordinal:u64 in O)
+    -> u64 where {const owner S, const owner N, const owner W, owner O} {
     ref declaration = make DeclarationSites {
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
         index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
     };
     val shape <- inspect_declaration(nodes, revision, used, record, declaration);
     if (shape != NominalRecord && shape != NativeRecord) return no_node();
-    return find_named_field(source, nodes, work, declaration.entries, name, revision, used)
+    return locate_named_field(source, nodes, work, declaration.entries, name, revision, used, ordinal)
 }
 
 export func find_named_field(source:const SourceBytes in S, nodes:const ExprNodes in N,
     work:const NameWork in W, tail:u64, name:u64, revision:u64, used:u64)
     -> u64 where {const owner S, const owner N, const owner W} {
+    ref ordinal = make u64 { no_node() };
+    return locate_named_field(source, nodes, work, tail, name, revision, used, ordinal)
+}
+
+func locate_named_field(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    work:const NameWork in W, tail:u64, name:u64, revision:u64, used:u64, ordinal:u64 in O)
+    -> u64 where {const owner S, const owner N, const owner W, owner O} {
     ref field = make u64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, tail, FormalSequence, field)) return no_node();
     ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
     ref binding = make BindingSites {
         name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
     };
-    for (unused in 0u64 .. used) {
+    for (index in 0u64 .. used) {
         if (inspect_formal(nodes, revision, used, field, formal) != OrdinaryFormal ||
             inspect_binding(nodes, revision, used, formal.binding, binding) != TypedBinding) return no_node();
-        if (same_name(source, nodes, name, binding.name)) return field;
+        if (same_name(source, nodes, name, binding.name)) {
+            ordinal <- index;
+            return field
+        };
         field <- work[field].next;
     };
     return no_node();
