@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Check an inline field loan at the receiving case arm
+
+<a id="k-booter-arm-local-inline-loan-20261124"></a>
+**K-BOOTER-ARM-LOCAL-INLINE-LOAN-20261124.** D-ARCH-REVIEW r104 and D-20-MODULE-GRAPH r80 continue [the readonly product-loan review](#k-booter-nested-product-loan-20261124) for [the two direct arm-local fields](applications/cod-booter/docs/ModuleGraph.md#lending-an-inline-field-directly-from-a-case-receipt). P-680–P-683 govern pre-code review. The source at `7a9ba7b38ac97d390da45ddfbc0f2f6c1b22dfcd:applications/cod-booter/src/ParserStorage.cod:1117` checks both IDs before writing its result. Mainline owns implementation and verification.
+
 ## 2026-11-24 — Call a symbol according to its declared callable kind
 
 <a id="h-function-valued-symbol-20261124"></a>
