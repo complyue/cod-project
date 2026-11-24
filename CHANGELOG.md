@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review direct owning exception reception and return
+
+<a id="k-direct-exception-holder-review-20261123"></a>
+**K-DIRECT-EXCEPTION-HOLDER-REVIEW-20261123.** [D-ARCH-REVIEW r86→r87](design/ImplementationArchitecture.md#transferring-a-directly-caught-exception-through-an-ordinary-call) continues P-682/P-683 for the direct arrival in [D-17r149](#h-typed-catch-owner-handoff-20261123). The caught-owner cleanup in `055264454f115cfa922e7739f4cbe801f3da5c96:cod/lang_llvm.hh` supplies the seed starting point. Scope covers caller custody until entry, independent normal-result delivery after cleanup, and the booter’s source proof. Distinct wrapper and matched targets retain their separate acceptance.
+
 ## 2026-11-23 — Review a directly borrowed sum in the booter case checker
 
 <a id="k-booter-direct-sum-subject-20261123"></a>
