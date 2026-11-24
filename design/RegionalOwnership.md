@@ -1,10 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 133 · Recorded: 2026-11-23 · Status: design draft with scoped confirmed requirements.
+Design revision: 134 · Recorded: 2026-11-24 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
 
-The [local handler decision](../CHANGELOG.md#h-local-proc-handler-body-20261124) applies existing owner and capture lifetimes to a body-bearing installation’s single local method.
+At r134 the [grouped installation decision](../CHANGELOG.md#h-grouped-local-proc-install-20261124) applies existing capture lifetimes to the installed family and owner substitution to each invocation. Verify calls from two distinct live owners under the same [handler header](SymbolicDynamicScope.md#installing-a-local-family-with-several-methods).
 
 [Confirmed symbolic procedure forms](../CHANGELOG.md#h-lexical-symbolic-proc-20261123) applies D-10-HANDLER-INSTALL to the separation of scoped procedure activation and regional ownership. [Lexical and dynamic calls](SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
 
@@ -1246,7 +1246,7 @@ A val/unmodified scalar field and a dense numeric array slot use <- for their di
 
 Symbolic bindings are separate from ordinary pointer destinations: `effect @x <- rhs` transfers bits/ownership, while `effect @x = rhs` rebinds a regional object reference. Bits symbols reject the `=` form. Both forms restore the preceding binding on scope exit. Its bits case installs a value; its owned-region case consumes an admitted owner into the dynamic scope. A previous binding/owner remains hidden and alive, then becomes reachable on scope exit. Ordinary bits stores are not rolled back on scope exit. Captured perform is a non-consuming replay path. Bare symbolic binding assignment remains forbidden. The proposed `@object <- rhs` edits its regional referent through an overload; it provides no second way to rebind @x.
 
-For a symbolic procedure, `effect proc @p;` installs the lexically selected family without extension. A body-bearing effect installs an anonymous family containing only its local method. Activation snapshots required bindings and preserves their actual owners through the scope. Assignment installation and extracting a procedure value reject. [Handler contract](SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
+For a symbolic procedure, `effect proc @p;` installs the lexically selected family without extension. A body-bearing effect installs an anonymous family containing exactly its written methods. Activation snapshots required bindings and preserves their actual owners through the scope. Assignment installation and extracting a procedure value reject. [Handler contract](SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
 
 Ordinary owning assignment follows these boundaries.
 

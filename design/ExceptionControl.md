@@ -1,10 +1,10 @@
 # CoD exception control and regional cleanup
 
-Design revision: 149 · Recorded: 2026-11-23 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
+Design revision: 150 · Recorded: 2026-11-24 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
 
-The [local handler decision](../CHANGELOG.md#h-local-proc-handler-body-20261124) applies the existing scoped restoration obligation to each anonymous procedure installation.
+At r150 the [grouped installation decision](../CHANGELOG.md#h-grouped-local-proc-install-20261124) applies the existing scoped restoration obligation to each complete anonymous installation. Verify that a failed preparation preserves the previous handler and a checked throw through a method restores it on scope exit. [Handler contract](SymbolicDynamicScope.md#installing-a-local-family-with-several-methods)
 
 [D-17-CATCH-HANDOFF](DesignAuthorityRegistry.md#d-17-catch-handoff), r149, governs [owning reception from a catch binding](#choosing-the-target-of-an-owning-catch-handoff). [H-TYPED-CATCH-OWNER-HANDOFF-20261123](../CHANGELOG.md#h-typed-catch-owner-handoff-20261123) confirms tip-first reception under the receiving type and delegates the fallback. P-707/P-708 preserve exception identity and a single release obligation under the catch and owner contracts. Acceptance distinguishes broad and narrow destinations, including failure before handoff. Physical transport and broader wrapper implementation retain their own review.
 
@@ -1262,7 +1262,7 @@ Prepared values retain their independent snapshots; borrowed arguments retain th
 
 H-380 cancels only affected dependency initialization TLS writes. Operand evaluation and callable construction retain their ordinary effects and exceptional exits; a produced value that is not installed follows existing temporary cleanup. No canceled binding is published or later restored. Procedure-local installations retain normal scoped cleanup. This supplies no permission to erase observable allocation failures or unrelated effects merely to shrink the final image.
 
-H-372–H-376 distinguishes compile-time family registration from runtime callable materialization, TLS installation and invocation. A module definition is not a runtime resource acquisition to release during cleanup. Each execution of a body-bearing effect installs its own anonymous one-method family and creates a separate scoped restoration obligation. Those events retain the existing preparation/publication boundary, restoration on every exit, captured-owner validity and exact release requirements.
+H-372–H-376 distinguishes compile-time family registration from runtime callable materialization, TLS installation and invocation. A module definition is not a runtime resource acquisition to release during cleanup. Each execution of a body-bearing effect installs its complete anonymous family and creates one scoped restoration obligation for that activation. Those events retain the existing preparation/publication boundary, restoration on every exit, captured-owner validity and exact release requirements.
 
 Deferred calls retain the selected callable view and prepared operands; a family view must preserve its source interpretation and later actual-type dispatch. Deferred bodies remain delayed, with explicit nested scopes for declarations/effect installation. New abstract evidence and family dispatch must preserve checked NPE, pending normal/return/error completion and explicit causes. Missing/ambiguous method behavior not covered by existing static diagnostics needs its own decision; no new exception category follows from the AOT vision. [D-21](AheadOfTimeExecutionPreparation.md) tracks that architecture work while the bounded defer implementation continues.
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Install a local method family with a shared contract
+
+<a id="h-grouped-local-proc-install-20261124"></a>
+**H-GROUPED-LOCAL-PROC-INSTALL-20261124.** On 2026-11-24 (America/Los_Angeles), the project user proposed moving `-> u64 where {const owner S}` to the header and confirmed the resulting design with “满意，按此决定落实。” in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). [D-10r256](design/SymbolicDynamicScope.md#installing-a-local-family-with-several-methods) adds a nonempty list of local methods to the [single-method contract](#h-local-proc-handler-body-20261124) at `50febe89cfc61a17647d1f7b5a9502f71ed4d392:design/SymbolicDynamicScope.md`. P-330/P-613/P-614 cover one scoped installation, per-call owner substitution, full symbol coverage and ordinary most-specific dispatch. D-07r214, D-14r134, D-15r76, D-17r150, D-18-HERE-STORAGE r18 and D-21r34 continue their existing module, lifetime, restoration and dispatch rules for this form. The [r99 engineering clearance](#k-local-proc-handler-review-20261124) covers the single-method implementation.
+
 ## 2026-11-24 — Make the regional HLVM and observable effect composition the paper subjects
 
 <a id="k-software-defined-hlvm-composition-20261124"></a>
