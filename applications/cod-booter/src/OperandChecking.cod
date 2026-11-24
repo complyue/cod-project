@@ -101,8 +101,8 @@ using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check, needs_si
 using "./DeclarationTypes.cod" { type_module, type_identity, DeclaredType };
 using "./CaseSchemas.cod" {
     ConstructorCaseFacts,
-    ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, ProjectedCaseSubject, CaseSumFormal,
-        CaseConstructor, CaseFieldReceipt, CaseProductField, CaseSumProjection }
+    ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, ReceiptCaseSubject, CaseSumFormal,
+        CaseConstructor, CaseFieldReceipt, CaseProductField, CaseSumReceipt, CaseSumProjection }
 }
 using "./ExceptionPayload.cod" {
     CaughtFieldUses, CaughtFieldUse { CaughtField }, unknown_exception_field
@@ -2787,7 +2787,7 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
                 coverage.total <- count;
                 (coverage.remaining <- count):void
             };
-            ProjectedCaseSubject {
+            ReceiptCaseSubject {
                 val expression <- expression; val receipt <- receipt; val arm <- arm; val count <- count;
             } -> {
                 if (expression != subject || count == 0u64 || receipt >= subject ||
@@ -3328,6 +3328,24 @@ func check_case_receipt(nodes:const ExprNodes in N, names:const NameBindings in 
     return diagnostic
 }
 
+func select_received_case_subject(names:const NameBindings in B, facts:OperandFacts in F,
+    at:u64, receipt:u64, arm:u64, schema:const DeclaredType in T) -> u8
+    where {const owner B, owner F, const owner T} {
+    if (receipt >= at || names[at].kind != local_binding() || names[at].declaration != receipt ||
+        facts[receipt].case_context != arm || !receipt_in_context(facts, at, receipt) ||
+        facts[receipt].kind != received_sum() || facts[receipt].reception != local_place() ||
+        facts[receipt].case_receipt != receipt || facts[receipt].owner == no_node() ||
+        facts[receipt].owner != names[receipt].scope || schema.kind != sum_type() ||
+        facts[receipt].identity_module != schema.defining_module || facts[receipt].identity != schema.identity)
+        return unsupported_case_subject();
+
+    set_fact(facts, at, source_sum_target(), borrowed_ref(), facts[receipt].owner, schema.identity, 0u8);
+    facts[at].identity_module <- schema.defining_module;
+    facts[at].case_receipt <- receipt;
+    facts[at].target_readonly <- 1u8;
+    return 0u8
+}
+
 func check_case_projection(nodes:const ExprNodes in N, names:const NameBindings in B,
     facts:OperandFacts in F, at:u64, used:u64, revision:u64, receiver:u64, field:u64,
     receipt:u64, arm:u64, record:const DeclaredType in R, sum:const DeclaredType in S) -> u8
@@ -3367,6 +3385,9 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                 index, owner_site, declared_array, schema) };
             CaseFieldReceipt { val header <- arm; val pattern <- pattern; val schema <- value_type; } ->
                 { return check_case_receipt(nodes, names, facts, at, used, revision, header, pattern, schema) };
+            CaseSumReceipt { val receipt <- receipt; val arm <- arm; val schema <- value_type; } -> {
+                return select_received_case_subject(names, facts, at, receipt, arm, schema)
+            };
             CaseSumProjection {
                 val receiver <- receiver; val field <- field; val receipt <- receipt; val arm <- arm;
                 val record <- record; val sum <- value_type;
