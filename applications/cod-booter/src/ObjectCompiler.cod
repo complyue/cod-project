@@ -38,12 +38,15 @@ using "./ProviderRenderer.cod" {
 using "./CompilerStatus.cod" CompilerStatus {
     Complete, Rejected, OpenFailed, LoweringFailed, FinishFailed, ScratchFailed
 };
+using "./ModuleExportStorage.cod" { DefaultExportRef, DefaultExportRefs };
+using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 
 region GraphRoot {
     used:u64;
     key_used:u64;
     next_revision:u64;
     export_used:u64;
+    default_used:u64;
     interface_used:u64;
     spelling_used:u64;
     command_used:u64;
@@ -124,7 +127,7 @@ func fresh_graph() -> own region :GraphRoot {
     const val graph_budget <- 64u64 * 1024u64 * 1024u64;
     return make region GraphRoot(graph_budget -> capacity) {
         used <- 0u64; key_used <- 0u64; next_revision <- 1u64;
-        export_used <- 0u64; interface_used <- 0u64; spelling_used <- 0u64;
+        export_used <- 0u64; default_used <- 0u64; interface_used <- 0u64; spelling_used <- 0u64;
         command_used <- 0u64; unit_used <- 0u64; literal_used <- 0u64; function_used <- 0u64;
         package_ready <- false; package_rows <- 0u64; package_bytes <- 0u64;
     };
@@ -138,7 +141,7 @@ proc traverse_graph(here finish(commands:const NativeCommands in G, units:const 
                     handle input:Path in A, handle diagnostic:DiagnosticDestination in D, purpose:GraphPurpose,
                     builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B,
                     initial_keys:SourceBytes in G, used:u64 in G, key_used:u64 in G, next_revision:u64 in G,
-                    export_used:u64 in G, interface_used:u64 in G, spelling_used:u64 in G,
+                    export_used:u64 in G, default_used:u64 in G, interface_used:u64 in G, spelling_used:u64 in G,
                     command_used:u64 in G, unit_used:u64 in G, literal_used:u64 in G,
                         function_used:u64 in G,
                     package_ready:bool in G, package_rows:u64 in G, package_bytes:u64 in G)
@@ -150,6 +153,9 @@ proc traverse_graph(here finish(commands:const NativeCommands in G, units:const 
         module_first <- 0u64; module_past <- 0u64; name_first <- 0u64; name_past <- 0u64;
         identity <- 0u64; kind <- 0u8; checked <- 0u8; publishing_module <- 0u64; origin_module <- 0u64;
         owner_module <- 0u64; owner_identity <- 0u64; shape <- 0u8;
+    }) in G;
+    ref defaults = make DefaultExportRefs(0u64, make DefaultExportRef {
+        public_row <- no_node(); nature <- OrdinaryResource
     }) in G;
     ref interfaces = make ModuleInterfaces(0u64, make ModuleInterfaceRow {
         defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
@@ -171,8 +177,8 @@ proc traverse_graph(here finish(commands:const NativeCommands in G, units:const 
     }) in G;
     ref literals = make NativeLiteralRanges(0u64, make NativeLiteralRange { first <- 0u64; past <- 0u64; }) in G;
     val compiled <- compile_graph(input, diagnostic, purpose, builtin_spellings, builtins, visits, keys,
-                                  used, key_used, next_revision, exports, interfaces, spellings, commands, units, literals,
-                                  export_used, interface_used, spelling_used, command_used,
+                                  used, key_used, next_revision, exports, defaults, interfaces, spellings, commands, units, literals,
+                                  export_used, default_used, interface_used, spelling_used, command_used,
                                       unit_used,
                                   literal_used, function_used, package_ready, package_rows,
                                       package_bytes);
@@ -190,7 +196,7 @@ proc check_graph(handle input:Path in A, handle diagnostic:DiagnosticDestination
     ref keys = make SourceBytes(0u64, 0u8) in graph;
     return traverse_graph(input, diagnostic, Declarations, builtin_spellings, builtins,
                           keys, graph.used, graph.key_used, graph.next_revision,
-                          graph.export_used, graph.interface_used, graph.spelling_used,
+                          graph.export_used, graph.default_used, graph.interface_used, graph.spelling_used,
                           graph.command_used, graph.unit_used, graph.literal_used,
                               graph.function_used,
                           graph.package_ready, graph.package_rows, graph.package_bytes)
@@ -221,7 +227,7 @@ export proc compile_object(handle input:Path in A, output:const String in A,
         ref keys = make SourceBytes(0u64, 0u8) in graph;
         return traverse_graph(input, diagnostic, NativeObject, builtin_spellings, builtins,
                               keys, graph.used, graph.key_used, graph.next_revision,
-                              graph.export_used, graph.interface_used, graph.spelling_used,
+                              graph.export_used, graph.default_used, graph.interface_used, graph.spelling_used,
                               graph.command_used, graph.unit_used, graph.literal_used,
                                   graph.function_used,
                               graph.package_ready, graph.package_rows, graph.package_bytes)
@@ -247,7 +253,7 @@ export proc compile_providers(handle input:Path in A, handle directory:Path in P
         ref keys = make SourceBytes(0u64, 0u8) in graph;
         return traverse_graph(input, diagnostic, Declarations, builtin_spellings, builtins,
                               keys, graph.used, graph.key_used, graph.next_revision,
-                              graph.export_used, graph.interface_used, graph.spelling_used,
+                              graph.export_used, graph.default_used, graph.interface_used, graph.spelling_used,
                               graph.command_used, graph.unit_used, graph.literal_used,
                                   graph.function_used,
                               graph.package_ready, graph.package_rows, graph.package_bytes)

@@ -1,0 +1,196 @@
+using "./SourceStorage.cod" SourceBytes;
+using "./SourceAccess.cod" same_bytes;
+using "./ModuleExportStorage.cod" { ModuleExports, DefaultExportRef, DefaultExportRefs };
+using "./ModuleExports.cod" { symbol_export, matches_export_nature };
+using "./ModuleIndex.cod" growth_capacity;
+using "./NameResolution.cod" definition_name;
+using "./ParserStorage.cod" {
+    ExprNodes, no_node, syntax_first, syntax_past, name_syntax, NameSyntax { SymbolicName },
+    SelectionSyntax { OtherSelectionSyntax, InvalidSelection, SelectionReady },
+    ResourceNature, ResourceNature { OrdinaryResource, VariableResource, ProcedureResource },
+    SequenceEntry, inspect_sequence_entry, SequenceSyntax { ModuleSequence },
+    DefaultMarkSites, inspect_default_mark, inspect_default_set, module_item_defaulted,
+};
+
+export data StagedDefaultExport { local_row:u64; nature:ResourceNature; }
+export array StagedDefaultExports[u64]:StagedDefaultExport;
+
+export enum DefaultPublicationStatus:u8 {
+    DefaultsReady;
+    InvalidDefaultTree;
+    UnknownDefaultName;
+    WrongDefaultKind;
+    DefaultStorageExhausted;
+}
+
+array DefaultMarkOrder[u64]:u64;
+
+func default_public_row(
+    source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, name:u64,
+    exports:const ModuleExports in E, module:u64, first_row:u64, past_row:u64, source_base:u64)
+    -> u64 where {const owner S, const owner N, const owner E} {
+    if (name == no_node()) return no_node();
+    val first <- syntax_first(nodes, used, name) +
+        if (name_syntax(nodes, used, name) == SymbolicName) { 1u64 } else { 0u64 };
+    val past <- syntax_past(nodes, used, name);
+    if (first >= past || past > intrinsic (len)(source)) return no_node();
+    for (row in first_row .. past_row) {
+        if (exports[row].kind != 0u8 && exports[row].publishing_module == module &&
+            exports[row].name_first >= source_base &&
+            exports[row].name_past >= exports[row].name_first &&
+            exports[row].name_past - source_base <= intrinsic (len)(source) &&
+            same_bytes(source, first, past, source, exports[row].name_first - source_base,
+                exports[row].name_past - source_base))
+            return row
+    };
+    return no_node()
+}
+
+func stage_default(
+    defaults:StagedDefaultExports in D, first:u64, next:u64 in C, row:u64, nature:ResourceNature)
+    -> bool where {owner D, owner C} {
+    for (at in first .. next) {
+        if (defaults[at].local_row == row) return true
+    };
+    if (next >= intrinsic (len)(defaults)) return false;
+    defaults[next].local_row <- row;
+    defaults[next].nature <- nature;
+    next <- next + 1u64;
+    return true
+}
+
+func read_default_marks(
+    nodes:const ExprNodes in N, used:u64, revision:u64, tail:u64, marks:DefaultMarkOrder in M,
+    problem:u64 in P) -> u64 where {const owner N, owner M, owner P} {
+    ref mark = make DefaultMarkSites {
+        previous <- no_node(); name <- no_node(); nature <- OrdinaryResource;
+    };
+    val cursor <- tail;
+    for (at in 0u64 .. used) {
+        if (cursor == no_node()) return at;
+        if (!inspect_default_mark(nodes, revision, used, cursor, mark)) {
+            problem <- cursor;
+            return no_node()
+        };
+        marks[at] <- cursor;
+        cursor <- mark.previous
+    };
+    if (cursor == no_node()) return used;
+    problem <- cursor;
+    return no_node()
+}
+
+export func stage_module_defaults(
+    source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64,
+    exports:const ModuleExports in E, module:u64, first_row:u64, past_row:u64, source_base:u64,
+    defaults:StagedDefaultExports in D, count:u64 in C, problem:u64 in C)
+    -> DefaultPublicationStatus where {const owner S, const owner N, const owner E, owner D, owner C} {
+    if (used > intrinsic (len)(nodes) || first_row > past_row ||
+        past_row > intrinsic (len)(exports) || count > intrinsic (len)(defaults))
+        return InvalidDefaultTree:DefaultPublicationStatus;
+    ref marks = make DefaultMarkOrder(used, no_node());
+    ref mark = make DefaultMarkSites {
+        previous <- no_node(); name <- no_node(); nature <- OrdinaryResource;
+    };
+    ref item = make SequenceEntry { previous <- no_node(); item <- no_node(); };
+    ref tail = make u64 { no_node() };
+    ref next = make u64 { count };
+    val mark_count <- 0u64;
+    val site <- no_node();
+    val name <- no_node();
+    val row <- no_node();
+    val status <- OtherSelectionSyntax;
+    val kind <- OrdinaryResource;
+    for (at in 0u64 .. used) {
+        status <- inspect_default_set(nodes, revision, used, at, tail);
+        if (status == InvalidSelection) {
+            problem <- at;
+            return InvalidDefaultTree:DefaultPublicationStatus
+        };
+        if (status == SelectionReady) {
+            mark_count <- read_default_marks(nodes, used, revision, tail, marks, problem);
+            if (mark_count == no_node()) return InvalidDefaultTree:DefaultPublicationStatus;
+            for (i in 0u64 .. mark_count) {
+                site <- marks[mark_count - i - 1u64];
+                if (!inspect_default_mark(nodes, revision, used, site, mark)) {
+                    problem <- site;
+                    return InvalidDefaultTree:DefaultPublicationStatus
+                };
+                row <- default_public_row(
+                    source, nodes, used, mark.name, exports, module, first_row, past_row, source_base);
+                if (row == no_node()) {
+                    problem <- site;
+                    return UnknownDefaultName:DefaultPublicationStatus
+                };
+                if (!matches_export_nature(exports, row, mark.nature)) {
+                    problem <- site;
+                    return WrongDefaultKind:DefaultPublicationStatus
+                };
+                if (!stage_default(defaults, count, next, row, mark.nature)) {
+                    problem <- site;
+                    return DefaultStorageExhausted:DefaultPublicationStatus
+                }
+            }
+        };
+        if (module_item_defaulted(nodes, used, at)) {
+            if (inspect_sequence_entry(nodes, revision, used, at, item) != ModuleSequence) {
+                problem <- at;
+                return InvalidDefaultTree:DefaultPublicationStatus
+            };
+            name <- definition_name(nodes, revision, used, item.item);
+            row <- default_public_row(
+                source, nodes, used, name, exports, module, first_row, past_row, source_base);
+            if (row == no_node()) {
+                problem <- at;
+                return UnknownDefaultName:DefaultPublicationStatus
+            };
+            kind <- if (exports[row].kind == symbol_export()) {
+                if (matches_export_nature(exports, row, VariableResource)) { VariableResource }
+                else { ProcedureResource }
+            } else { OrdinaryResource };
+            if (!matches_export_nature(exports, row, kind)) {
+                problem <- at;
+                return WrongDefaultKind:DefaultPublicationStatus
+            };
+            if (!stage_default(defaults, count, next, row, kind)) {
+                problem <- at;
+                return DefaultStorageExhausted:DefaultPublicationStatus
+            }
+        }
+    };
+    count <- next;
+    problem <- no_node();
+    return DefaultsReady:DefaultPublicationStatus
+}
+
+export proc reserve_defaults(ref var defaults:DefaultExportRefs in G, used:u64, required:u64)
+    -> void where {owner G} {
+    val current <- intrinsic (len)(defaults);
+    if (required <= current) return;
+    ref replacement = make DefaultExportRefs(growth_capacity(current, required), make DefaultExportRef {
+        public_row <- no_node(); nature <- OrdinaryResource
+    }) in G;
+    for (at in 0u64 .. used) { replacement[at] <- defaults[at] };
+    defaults = replacement;
+    return
+}
+
+export func copy_module_defaults(
+    staged:const StagedDefaultExports in F, staged_exports:const ModuleExports in F,
+    module:u64, export_first:u64, export_past:u64, count:u64,
+    defaults:DefaultExportRefs in G, first:u64, past:u64)
+    -> bool where {const owner F, owner G} {
+    if (module == 0u64 || export_first > export_past || export_past == no_node() ||
+        export_past - export_first > intrinsic (len)(staged_exports) ||
+        first > past || past > intrinsic (len)(defaults) || past - first != count ||
+        count > intrinsic (len)(staged)) return false;
+    val row <- no_node();
+    for (offset in 0u64 .. count) {
+        row <- staged[offset].local_row;
+        if (row >= export_past - export_first || staged_exports[row].publishing_module != module ||
+            !matches_export_nature(staged_exports, row, staged[offset].nature)) return false;
+        defaults[first + offset].public_row <- export_first + row;
+        defaults[first + offset].nature <- staged[offset].nature
+    };
+    return true
+}

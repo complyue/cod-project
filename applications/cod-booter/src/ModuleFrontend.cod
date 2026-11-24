@@ -11,9 +11,7 @@ using "./ParserStorage.cod" ExprPayload {
 using "./ParserStorage.cod" ConstructionSyntax {
     OtherConstruction, InvalidConstruction, ExceptionConstructionSyntax, PositionalConstruction,
 };
-using "./ParserStorage.cod" DeclarationSyntax {
-    NominalRecord, LocalPublication, EnumTypeDeclaration, OtherDeclaration
-};
+using "./ParserStorage.cod" DeclarationSyntax { NominalRecord, LocalPublication, EnumTypeDeclaration, OtherDeclaration };
 using "./ParserStorage.cod" CallableSyntax { ModuleCallable, CProvider, CEntry };
 using "./ModuleExportStorage.cod" FamilyMembership { UnprovedMembership };
 using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
@@ -40,11 +38,12 @@ using "./ParserInput.cod" ParseResult;
 using "./ModuleExports.cod" {
     ModuleExports, SelectedExports, ExportResolutionResult, resolve_module_exports,
     prepare_module_dependencies, export_storage_exhausted, exception_type_export, error_root_identity,
+    CheckedSelections, CheckedSelection { UnpublishedSelection },
 };
 using "./NameResolution.cod" {
     NameBindings, NameWork, NameResolutionResult, unsupported_module_declaration,
     unsupported_ordinary_construction,
-    resolve_module_names, text_type, is_lexical_builder, owner_binding, ordinary_selection, record_type,
+    resolve_module_names, apply_module_name_uses, text_type, is_lexical_builder, owner_binding, ordinary_selection, record_type,
 };
 using "./NativeDeclarations.cod" {
     NativeDeclarationResult, check_native_declarations, declared_exception_type, native_declaration_first, unsupported_owning_region_result,
@@ -199,7 +198,8 @@ func construction_query_supported(nodes:const ExprNodes in N, operand:u64) -> bo
 }
 
 # Declaration checking can resolve projection operands without emitting an address.
-func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, emit_object:bool) -> u8
+func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+    emit_object:bool, publish_defaults:bool) -> u8
     where {const owner N} {
     ref construction = make ConstructionSites {
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
@@ -220,11 +220,13 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64,
         (Vacant) -> { unsupported_module_declaration() };
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of {
-                (BulkModuleSelection) -> { unsupported_module_declaration() };
-                (DefaultPublicSet) -> { unsupported_module_declaration() };
+                (BulkModuleSelection) -> {
+                    if (publish_defaults) { 0u8 } else { unsupported_module_declaration() }
+                };
+                (DefaultPublicSet) -> { if (publish_defaults) { 0u8 } else { unsupported_module_declaration() } };
                 (ModuleSelection { val mode <- mode; val nature <- nature; }) -> {
-                    if (mode == MixinResource || mode == IdentityResource ||
-                        nature != OrdinaryResource) {
+                    if (!publish_defaults && (mode == MixinResource || mode == IdentityResource ||
+                        nature != OrdinaryResource)) {
                         unsupported_module_declaration()
                     } else { 0u8 }
                 };
@@ -233,7 +235,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64,
                         else { 0u8 }
                 };
                 (ModuleItem { val defaulted <- defaulted; }) -> {
-                    if (defaulted) { unsupported_module_declaration() } else { 0u8 }
+                    if (defaulted && !publish_defaults) { unsupported_module_declaration() } else { 0u8 }
                 };
                 (LocalBinding { val mode <- mode; val declaration_const <- declaration_const; }) -> {
                     if (declaration_const) return unsupported_const_local();
@@ -280,14 +282,16 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64,
 
 # Find the first unsupported source form by byte position, including headers
 # and enclosing constructs whose syntax is stored after their operands.
-func check_source_profile(nodes:const ExprNodes in N, used:u64, emit_object:bool, result:ModuleBindingResult in R) -> bool
+func check_source_profile(nodes:const ExprNodes in N, used:u64, emit_object:bool,
+    publish_defaults:bool, result:ModuleBindingResult in R) -> bool
     where {const owner N, owner R} {
     if (used > intrinsic (len)(nodes)) return true;
     val first <- no_node();
     val cause <- 0u8;
     val next <- 0u8;
     for (at in 0u64 .. used) {
-        next <- unsupported_source_form(nodes, result.frontend.tree.revision, used, at, emit_object);
+        next <- unsupported_source_form(nodes, result.frontend.tree.revision, used, at, emit_object,
+            publish_defaults);
         if (next != 0u8 && (first == no_node() || syntax_first(nodes, used, at) < syntax_first(nodes, used, first))) {
             cause <- next;
             (first <- at):void;
@@ -300,6 +304,14 @@ func check_source_profile(nodes:const ExprNodes in N, used:u64, emit_object:bool
     return true;
 }
 
+export func check_parsed_module_profile(nodes:const ExprNodes in N, emit_object:bool, publish_defaults:bool,
+    result:ModuleBindingResult in R) -> bool where {const owner N, owner R} {
+    result.stage <- 0u8;
+    result.diagnostic <- 0u8;
+    result.related_first <- no_node();
+    return check_source_profile(nodes, result.frontend.tree.used, emit_object, publish_defaults, result)
+}
+
 # Resolve resource selections in the retained syntax against its discovered dependencies.
 export func select_parsed_module(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                 builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in E,
@@ -307,10 +319,7 @@ export func select_parsed_module(source:const SourceBytes in S, nodes:const Expr
                                 spelling_size:u64, export_count:u64,
                                 selected:SelectedExports in X, emit_object:bool, result:ModuleBindingResult in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner G, const owner H, owner X, owner R} {
-    result.stage <- 0u8;
-    result.diagnostic <- 0u8;
-    result.related_first <- no_node();
-    if (!check_source_profile(nodes, result.frontend.tree.used, emit_object, result)) return false;
+    if (!check_parsed_module_profile(nodes, emit_object, false, result)) return false;
     ref publication = make ExportResolutionResult { diagnostic <- 0u8; node <- no_node(); };
     if (!resolve_module_exports(source, nodes, result.frontend.tree, builtin_spellings, builtins,
                                 graph_spellings, graph_exports, spelling_size, export_count, selected, !emit_object, publication)) {
@@ -321,14 +330,17 @@ export func select_parsed_module(source:const SourceBytes in S, nodes:const Expr
 }
 
 export func bind_selected_module(source:const SourceBytes in S, nodes:const ExprNodes in N,
-                                 selected:const SelectedExports in X, bindings:NameBindings in Y,
+                                 selections:const CheckedSelections in C, selected_used:u64,
+                                 selected:SelectedExports in X, bindings:NameBindings in Y,
                                  work:NameWork in W, interfaces:const ModuleInterfaces in I, interface_used:u64,
-                                 facts:AggregateFacts in F, emit_object:bool, allow_structural:bool,
-                                     result:ModuleBindingResult in R) -> bool
-    where {const owner S, const owner N, const owner X, owner Y, owner W, const owner I, owner F, owner R} {
+                                 facts:AggregateFacts in F, emit_object:bool, allow_structural:bool, result:ModuleBindingResult in R) -> bool
+    where {const owner S, const owner N, const owner C, owner X, owner Y, owner W, const owner I, owner F, owner R} {
     ref names = make NameResolutionResult { diagnostic <- 0u8; node <- no_node(); enclosing_defer <- no_node(); };
     if (!resolve_module_names(source, nodes, result.frontend.tree, selected, bindings, work,
-                              interfaces, interface_used, !emit_object, allow_structural, names)) {
+        interfaces, interface_used,
+        !emit_object, allow_structural, selections, selected_used, names) ||
+        !apply_module_name_uses(selections, selected_used, result.frontend.tree, work, bindings,
+            selected, interfaces, interface_used, names)) {
         binding_diagnostic(nodes, result, module_binding_failed(), names.diagnostic, names.node);
         if (names.enclosing_defer != no_node()) { result.related_first <- syntax_first(nodes, result.frontend.tree.used, names.enclosing_defer); {}; } else {};
         return false;
@@ -426,8 +438,9 @@ export func bind_module(source:const SourceBytes in S, tokens:Tokens in T, nodes
         aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal;
     });
     ref facts = make AggregateFacts(result.frontend.tree.used, UnprovedAggregate);
-    return bind_selected_module(source, nodes, selected, bindings, work, interfaces, 0u64, facts,
-        true, false, result);
+    ref no_selections = make CheckedSelections(0u64, make UnpublishedSelection {});
+    return bind_selected_module(source, nodes, no_selections, 0u64, selected, bindings, work,
+        interfaces, 0u64, facts, true, false, result);
 }
 
 # A successful operand analysis supplies the facts for checking completion.

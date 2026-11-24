@@ -754,8 +754,10 @@ func symbolic_source_byte(byte:u8) -> bool {
         (byte >= 60u8 && byte <= 62u8) || byte == 124u8
 }
 
-func operator_past(source:const SourceBytes in S, first:u64, past:u64) -> u64
+export func operator_past(source:const SourceBytes in S, first:u64, past:u64) -> u64
     where {const owner S} {
+    if (first >= past || past > intrinsic (len)(source) || !symbolic_source_byte(source[first]))
+        return first;
     for (at in first + 1u64 .. past) {
         if (!symbolic_source_byte(source[at])) return at
     };

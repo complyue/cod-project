@@ -1,21 +1,225 @@
-using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
+using "./ParserStorage.cod" {
+    ResourceNature, ResourceNature { OrdinaryResource, VariableResource, ProcedureResource },
+};
 using "./SourceStorage.cod" SourceBytes;
 using "./SourceAccess.cod" same_bytes;
 using "./ParserStorage.cod" {
     ExprNodes, len as syntax_len, no_node, selected_resource_name,
-    ModuleSelectionSites, inspect_module_selection, first_module_item, syntax_first, syntax_past,
+    ModuleSelectionSites, inspect_module_selection, BulkSelectionSites, inspect_bulk_selection,
+    first_module_item, syntax_first, syntax_past,
     NameSyntax, name_syntax, SequenceEntry, inspect_sequence_entry, inspect_member_selector,
 };
 using "./ParserStorage.cod" NameSyntax { NotAName, SymbolicName };
 using "./ParserStorage.cod" SequenceSyntax { MemberSequence };
 using "./ParserStorage.cod" MemberSelectionSyntax { InvalidMemberSelector, AllSelectedMembers };
 using "./ParserStorage.cod" SelectionSyntax { SelectionReady, InvalidSelection };
-using "./ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource };
+using "./ParserStorage.cod" ModuleSelectionMode {
+    UseResource, ImportResource, ReexportResource, MixinResource, IdentityResource
+};
 using "./ParserInput.cod" ParseResult;
 using "./ModuleExportStorage.cod" {
-    ModuleExport, ModuleExports, ModuleInterfaces, find_interface, enum_type, sum_type, checked_sum_constructor,
-    checked_aggregate_storage, AggregateStorage { CLayoutBitsRecord, CoDBitsAggregate, NonBitsAggregate },
+    ModuleExport, ModuleExports, ModuleInterfaces, DefaultExportRefs, find_interface,
+    enum_type, sum_type, checked_sum_constructor, checked_aggregate_storage,
+    AggregateStorage { CLayoutBitsRecord, CoDBitsAggregate, NonBitsAggregate },
 };
+using "./ModuleIndex.cod" { Visits, ModuleSelectionRanges, checked_module_selections };
+using "./ParserStorage.cod" { SourceSpan, PublicView, PublicView { DefaultPublic } };
+
+export data SelectionSpelling =
+    SourceSpelling { span:SourceSpan; } |
+    CatalogSpelling { span:SourceSpan; } |
+    GraphSpelling { span:SourceSpan; };
+
+export data CheckedSelection =
+    UnpublishedSelection {} |
+    SelectedResource {
+        revision:u64;
+        site:u64;
+        mode:ModuleSelectionMode;
+        nature:ResourceNature;
+        members:u64;
+        local:SelectionSpelling;
+        published:SelectionSpelling;
+        export_kind:u8;
+        checked:u8;
+        publishing_module:u64;
+        defining_module:u64;
+        identity:u64;
+        owner_module:u64;
+        owner_identity:u64;
+        shape:u8;
+    };
+export array CheckedSelections[u64]:CheckedSelection;
+export enum SelectionComparison:u8 {
+    DistinctSpelling;
+    RepeatedSelection;
+    ConflictingSelection;
+    UnprovedSelection;
+}
+
+func bounded_selection_spelling(
+    spelling:const SelectionSpelling in L, source_size:u64, catalog_size:u64, graph_used:u64)
+    -> bool where {const owner L} {
+    return case spelling of {
+        SourceSpelling { val range <- span; } -> range.first < range.past && range.past <= source_size;
+        CatalogSpelling { val range <- span; } -> range.first < range.past && range.past <= catalog_size;
+        GraphSpelling { val range <- span; } -> range.first < range.past && range.past <= graph_used
+    }
+}
+
+func selected_spelling_matches(
+    spelling:const SelectionSpelling in L, source:const SourceBytes in S,
+    catalog:const SourceBytes in B, graph:const SourceBytes in G, graph_used:u64,
+    name:const SourceBytes in M, first:u64, past:u64)
+    -> bool where {const owner L, const owner S, const owner B, const owner G, const owner M} {
+    if (first >= past || past > intrinsic (len)(name) || graph_used > intrinsic (len)(graph))
+        return false;
+    return case spelling of {
+        (SourceSpelling { val range <- span; }) -> {
+            range.first < range.past && range.past <= intrinsic (len)(source) &&
+                same_bytes(source, range.first, range.past, name, first, past)
+        };
+        (CatalogSpelling { val range <- span; }) -> {
+            range.first < range.past && range.past <= intrinsic (len)(catalog) &&
+                same_bytes(catalog, range.first, range.past, name, first, past)
+        };
+        (GraphSpelling { val range <- span; }) -> {
+            range.first < range.past && range.past <= graph_used &&
+                same_bytes(graph, range.first, range.past, name, first, past)
+        };
+    }
+}
+
+export func selected_name_matches(
+    selections:const CheckedSelections in F, used:u64, index:u64, revision:u64,
+    source:const SourceBytes in S, catalog:const SourceBytes in B, graph:const SourceBytes in G,
+    graph_used:u64, first:u64, past:u64)
+    -> bool where {const owner F, const owner S, const owner B, const owner G} {
+    if (index >= used || used > intrinsic (len)(selections)) return false;
+    return case selections[index] of {
+        (SelectedResource { val origin <- revision; val spelling <- local; val verb <- mode; }) -> {
+            origin == revision && verb != ReexportResource &&
+                selected_spelling_matches(spelling, source, catalog, graph, graph_used,
+                                          source, first, past)
+        };
+        UnpublishedSelection -> false
+    }
+}
+
+export func find_selected_name(
+    selections:const CheckedSelections in F, used:u64, revision:u64,
+    source:const SourceBytes in S, catalog:const SourceBytes in B, graph:const SourceBytes in G,
+    graph_used:u64, first:u64, past:u64)
+    -> u64 where {const owner F, const owner S, const owner B, const owner G} {
+    if (used > intrinsic (len)(selections)) return no_node();
+    for (index in 0u64 .. used) {
+        if (selected_name_matches(selections, used, index, revision, source,
+            catalog, graph, graph_used, first, past)) return index
+    };
+    return no_node()
+}
+
+func same_selection_spelling(
+    left:const SelectionSpelling in L, right:const SelectionSpelling in R,
+    source:const SourceBytes in S, catalog:const SourceBytes in B,
+    graph:const SourceBytes in G, graph_used:u64)
+    -> bool where {const owner L, const owner R, const owner S, const owner B, const owner G} {
+    return case left of {
+        (SourceSpelling { val range <- span; }) -> {
+            selected_spelling_matches(right, source, catalog, graph, graph_used,
+                                      source, range.first, range.past)
+        };
+        (CatalogSpelling { val range <- span; }) -> {
+            selected_spelling_matches(right, source, catalog, graph, graph_used,
+                                      catalog, range.first, range.past)
+        };
+        (GraphSpelling { val range <- span; }) -> {
+            range.past <= graph_used &&
+                selected_spelling_matches(right, source, catalog, graph, graph_used,
+                                          graph, range.first, range.past)
+        };
+    }
+}
+
+export func compare_selected_bindings(
+    selections:const CheckedSelections in F, used:u64, revision:u64, before:u64, after:u64,
+    source:const SourceBytes in S, catalog:const SourceBytes in B,
+    graph:const SourceBytes in G, graph_used:u64)
+    -> SelectionComparison where {const owner F, const owner S, const owner B, const owner G} {
+    if (before >= used || after >= used || used > intrinsic (len)(selections) ||
+        graph_used > intrinsic (len)(graph))
+        return UnprovedSelection:SelectionComparison;
+    return case selections[before] of {
+        (SelectedResource {
+            val old_revision <- revision; val old_name <- local; val old_kind <- export_kind;
+            val old_mode <- mode; val old_context <- publishing_module;
+            val old_origin <- defining_module; val old_identity <- identity;
+        }) -> {
+            case selections[after] of {
+                (SelectedResource {
+                    val new_revision <- revision; val new_name <- local; val new_kind <- export_kind;
+                    val new_mode <- mode; val new_context <- publishing_module;
+                    val new_origin <- defining_module; val new_identity <- identity;
+                }) -> {
+                    if (old_revision != revision || new_revision != revision ||
+                        !bounded_selection_spelling(old_name, intrinsic (len)(source),
+                            intrinsic (len)(catalog), graph_used) ||
+                        !bounded_selection_spelling(new_name, intrinsic (len)(source),
+                            intrinsic (len)(catalog), graph_used))
+                        return UnprovedSelection:SelectionComparison;
+                    if (old_mode == ReexportResource || new_mode == ReexportResource ||
+                        !same_selection_spelling(old_name, new_name, source, catalog, graph, graph_used))
+                        return DistinctSpelling:SelectionComparison;
+                    if (old_kind != new_kind || old_origin != new_origin ||
+                        old_identity != new_identity ||
+                        (old_kind == callable_export() &&
+                         (old_mode != new_mode || old_context != new_context)))
+                        return ConflictingSelection:SelectionComparison;
+                    RepeatedSelection:SelectionComparison
+                };
+                UnpublishedSelection -> UnprovedSelection:SelectionComparison
+            }
+        };
+        UnpublishedSelection -> UnprovedSelection:SelectionComparison
+    }
+}
+
+func validate_checked_selections(
+    selections:const CheckedSelections in F, used:u64, tree:const ParseResult in T,
+    source:const SourceBytes in S, catalog:const SourceBytes in B, graph:const SourceBytes in G,
+    graph_used:u64, report:ExportResolutionResult in R)
+    -> bool where {const owner F, const owner T, const owner S, const owner B, const owner G, owner R} {
+    if (used > intrinsic (len)(selections) || graph_used > intrinsic (len)(graph)) return false;
+    val source_size <- intrinsic (len)(source);
+    val catalog_size <- intrinsic (len)(catalog);
+    val comparison <- DistinctSpelling:SelectionComparison;
+    for (after in 0u64 .. used) {
+        report.node <- case selections[after] of {
+            (SelectedResource { val revision <- revision; val site <- site;
+                val local <- local; val published <- published; }) -> {
+                if (revision == tree.revision &&
+                    bounded_selection_spelling(local, source_size, catalog_size, graph_used) &&
+                    bounded_selection_spelling(published, source_size, catalog_size, graph_used)) { (site) }
+                else { no_node() }
+            };
+            UnpublishedSelection -> no_node()
+        };
+        if (report.node >= tree.used) {
+            report.diagnostic <- invalid_export_tree();
+            return false
+        };
+        for (before in 0u64 .. after) {
+            comparison <- compare_selected_bindings(selections, used, tree.revision, before, after,
+                source, catalog, graph, graph_used);
+            if (comparison == (ConflictingSelection:SelectionComparison) ||
+                comparison == (UnprovedSelection:SelectionComparison)) {
+                report.diagnostic <- unproved_module_exports();
+                return false
+            }
+        }
+    };
+    return true
+}
 
 export data SelectedExport {
     # Input from dependency discovery. Zero selects the builtin namespace.
@@ -52,6 +256,13 @@ export func text_byte_export() -> u8 { return 16u8; }
 # The canonical catalog occupies the lower half, including builtin meanings
 # carried by a re-export. The remaining meanings belong only to source rows.
 func first_source_export_kind() -> u8 { return 128u8; }
+func valid_builtin_catalog(exports:const ModuleExports in B) -> bool where {const owner B} {
+    for (at in 0u64 .. intrinsic (len)(exports)) {
+        if (exports[at].kind == 0u8 || exports[at].kind >= first_source_export_kind())
+            return false
+    };
+    return true
+}
 export func sum_export() -> u8 { return first_source_export_kind(); }
 export func native_handle_export() -> u8 { return 129u8; }
 export func record_export() -> u8 { return 130u8; }
@@ -73,6 +284,30 @@ export func aggregate_export_shape(storage:AggregateStorage, numeric:bool) -> u8
 }
 
 export func print_export_identity() -> u64 { return 0u64; }
+
+func export_nature(exports:const ModuleExports in E, row:u64, nature:ResourceNature in R)
+    -> bool where {const owner E, owner R} {
+    if (row >= intrinsic (len)(exports) || exports[row].kind == 0u8) return false;
+    if (exports[row].kind != symbol_export()) {
+        nature <- OrdinaryResource;
+        return true
+    };
+    if (exports[row].origin_module == 0u64 && exports[row].identity == print_export_identity()) {
+        nature <- ProcedureResource;
+        return true
+    };
+    val shape <- exports[row].shape;
+    if (shape != 1u8 && (shape < 3u8 || shape > 6u8)) return false;
+    nature <- VariableResource;
+    return true
+}
+
+export func matches_export_nature(exports:const ModuleExports in E, row:u64,
+                                  nature:ResourceNature) -> bool where {const owner E} {
+    ref actual = make ResourceNature { OrdinaryResource };
+    return export_nature(exports, row, actual) && actual == nature
+}
+
 export func exception_root_identity() -> u64 { return 0u64; }
 export func error_root_identity() -> u64 { return 11u64; }
 export func null_pointer_identity() -> u64 { return 4u64; }
@@ -93,6 +328,118 @@ func missing_enum_member() -> u8 { return 14u8; }
 func conflicting_enum_members() -> u8 { return 15u8; }
 func missing_sum_constructor() -> u8 { return 17u8; }
 func conflicting_sum_constructors() -> u8 { return 18u8; }
+
+func selection_profile(mode:ModuleSelectionMode, kind:u8, shape:u8, members:u64,
+                       declarations_only:bool) -> u8 {
+    if (mode == MixinResource) return unproved_import_interpretation();
+    if (mode == IdentityResource && kind != symbol_export()) return wrong_export_kind();
+    if (mode == ImportResource && kind != enum_export() && kind != sum_export() &&
+        !(declarations_only && kind == callable_export() && shape == ordinary_callable_shape()))
+        return unproved_import_interpretation();
+    if (members != no_node() && kind != enum_export() && kind != sum_export())
+        return invalid_member_selection();
+    return 0u8
+}
+
+func valid_graph_public_row(
+    exports:const ModuleExports in G, first:u64, past:u64, row:u64, module:u64, spelling_used:u64)
+    -> bool where {const owner G} {
+    return row >= first && row < past && row < intrinsic (len)(exports) &&
+        exports[row].publishing_module == module && exports[row].kind != 0u8 &&
+        exports[row].name_first < exports[row].name_past && exports[row].name_past <= spelling_used
+}
+
+func selected_bulk_row(defaults:const DefaultExportRefs in G, view:PublicView, at:u64)
+    -> u64 where {const owner G} {
+    if (view == DefaultPublic) return defaults[at].public_row;
+    return at
+}
+
+export func measure_bulk_selection(
+    exports:const ModuleExports in G, defaults:const DefaultExportRefs in G,
+    ranges:const ModuleSelectionRanges in R, view:PublicView, module:u64, spelling_used:u64,
+    count:u64 in C) -> u8 where {const owner G, const owner R, owner C} {
+    if (module == 0u64 || ranges.exports_first > ranges.exports_past ||
+        ranges.exports_past > intrinsic (len)(exports) ||
+        ranges.defaults_first > ranges.defaults_past ||
+        ranges.defaults_past > intrinsic (len)(defaults)) return unproved_module_exports();
+    if (view == DefaultPublic && ranges.defaults_first == ranges.defaults_past)
+        return missing_module_export();
+    val first <- if (view == DefaultPublic) { (ranges.defaults_first) } else { (ranges.exports_first) };
+    val past <- if (view == DefaultPublic) { (ranges.defaults_past) } else { (ranges.exports_past) };
+    if (past - first >= no_node() - count) return export_storage_exhausted();
+    ref nature = make ResourceNature { OrdinaryResource };
+    val row <- no_node();
+    for (at in first .. past) {
+        row <- selected_bulk_row(defaults, view, at);
+        if (!valid_graph_public_row(exports, ranges.exports_first, ranges.exports_past,
+                                    row, module, spelling_used)) return unproved_module_exports();
+        if (!export_nature(exports, row, nature)) return wrong_export_kind();
+        if (view == DefaultPublic && defaults[at].nature != nature) return wrong_export_kind()
+    };
+    count <- count + (past - first);
+    return 0u8
+}
+
+func stage_selection(
+    exports:const ModuleExports in G, row:u64, mode:ModuleSelectionMode, nature:ResourceNature,
+    revision:u64, site:u64, members:u64,
+    local:const SelectionSpelling in L,
+    published:const SelectionSpelling in L, selected:CheckedSelections in F, at:u64)
+    -> void where {const owner G, const owner L, owner F} {
+    selected[at] <- make SelectedResource {
+        revision <- revision; site <- site; mode <- mode; nature <- nature;
+        members <- members; local <- local; published <- published;
+        export_kind <- exports[row].kind; checked <- exports[row].checked;
+        publishing_module <- exports[row].publishing_module;
+        defining_module <- exports[row].origin_module;
+        identity <- exports[row].identity; owner_module <- exports[row].owner_module;
+        owner_identity <- exports[row].owner_identity; shape <- exports[row].shape
+    };
+    return
+}
+
+func stage_graph_selection(
+    exports:const ModuleExports in G, row:u64, mode:ModuleSelectionMode, nature:ResourceNature,
+    revision:u64, site:u64, selected:CheckedSelections in F, at:u64)
+    -> void where {const owner G, owner F} {
+    ref spelling = make GraphSpelling { span <- make SourceSpan {
+        first <- exports[row].name_first; past <- exports[row].name_past
+    } };
+    stage_selection(exports, row, mode, nature,
+                    revision, site, no_node(), spelling, spelling,
+                    selected, at);
+    return
+}
+
+export func append_bulk_selections(
+    exports:const ModuleExports in G, defaults:const DefaultExportRefs in G,
+    ranges:const ModuleSelectionRanges in R, view:PublicView, module:u64, spelling_used:u64,
+    mode:ModuleSelectionMode, revision:u64, site:u64, declarations_only:bool,
+    selected:CheckedSelections in F, used:u64 in C)
+    -> u8 where {const owner G, const owner R, owner F, owner C} {
+    ref past = make u64 { used };
+    val measured <- measure_bulk_selection(exports, defaults, ranges, view, module,
+                                           spelling_used, past);
+    if (measured != 0u8) return measured;
+    if (past > intrinsic (len)(selected)) return export_storage_exhausted();
+    val first <- if (view == DefaultPublic) { (ranges.defaults_first) } else { (ranges.exports_first) };
+    val row <- no_node();
+    val diagnostic <- 0u8;
+    ref nature = make ResourceNature { OrdinaryResource };
+    val next <- used;
+    for (ordinal in first .. first + (past - used)) {
+        row <- selected_bulk_row(defaults, view, ordinal);
+        diagnostic <- selection_profile(mode, exports[row].kind, exports[row].shape,
+                                        no_node(), declarations_only);
+        if (diagnostic != 0u8) return diagnostic;
+        if (!export_nature(exports, row, nature)) return wrong_export_kind();
+        stage_graph_selection(exports, row, mode, nature, revision, site, selected, next);
+        (next <- next + 1u64):void
+    };
+    used <- next;
+    return 0u8
+}
 
 func same_module_path(source:const SourceBytes in S, first:u64, past:u64,
                       spellings:const SourceBytes in B, module_first:u64, module_past:u64) -> bool
@@ -117,7 +464,19 @@ func builtin_path(source:const SourceBytes in S, first:u64, past:u64) -> bool wh
         source[first + 3u64] == 100u8 && source[first + 4u64] == 58u8;
 }
 
-export func next_module_dependency(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64, start:u64) -> u64
+export func module_selection_path(
+    nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+    named:ModuleSelectionSites in M, bulk:BulkSelectionSites in M)
+    -> u64 where {const owner N, owner M} {
+    if (inspect_module_selection(nodes, revision, used, at, named) == SelectionReady)
+        return named.path;
+    if (inspect_bulk_selection(nodes, revision, used, at, bulk) == SelectionReady)
+        return bulk.path;
+    return no_node()
+}
+
+export func next_module_dependency(source:const SourceBytes in S, nodes:const ExprNodes in N,
+                                   used:u64, revision:u64, start:u64) -> u64
     where {const owner S, const owner N} {
     if (used > syntax_len(nodes) || start >= used) return no_node();
     ref selection = make ModuleSelectionSites {
@@ -125,9 +484,13 @@ export func next_module_dependency(source:const SourceBytes in S, nodes:const Ex
         symbolic <- false; mode <- UseResource;
         nature <- OrdinaryResource;
     };
+    ref bulk = make BulkSelectionSites { path <- no_node(); mode <- UseResource; view <- DefaultPublic };
+    val path <- no_node();
     for (at in start .. used) {
-        if (inspect_module_selection(nodes, revision, used, at, selection) == SelectionReady &&
-            !builtin_path(source, syntax_first(nodes, used, selection.path), syntax_past(nodes, used, selection.path))) return at;
+        path <- module_selection_path(nodes, revision, used, at, selection, bulk);
+        if (path != no_node() &&
+            !builtin_path(source, syntax_first(nodes, used, path), syntax_past(nodes, used, path)))
+            return at
     };
     return no_node();
 }
@@ -167,20 +530,27 @@ func select_export(exports:const ModuleExports in E, row:u64, selected:SelectedE
     (selected[at].shape <- exports[row].shape):void;
 }
 
-func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, site:u64, syntax:const ModuleSelectionSites in M,
-                       spellings:const SourceBytes in B, exports:const ModuleExports in E, spelling_size:u64,
-                       export_count:u64, selected:SelectedExports in R, declarations_only:bool) -> u8
+func resolve_selection_row(
+    source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64,
+    syntax:const ModuleSelectionSites in M, spellings:const SourceBytes in B,
+    exports:const ModuleExports in E, spelling_size:u64,
+    export_first:u64, export_past:u64, dependency:u64,
+    declarations_only:bool, row:u64 in R) -> u8
     where {const owner S, const owner N, const owner M, const owner B, const owner E, owner R} {
-    val name_first <- syntax_first(nodes, used, syntax.resource) + if (syntax.symbolic) { 1u64 } else { 0u64 };
+    val name_first <- syntax_first(nodes, used, syntax.resource) +
+        if (syntax.symbolic) { 1u64 } else { 0u64 };
     val name_past <- syntax_past(nodes, used, syntax.resource);
     val path_first <- syntax_first(nodes, used, syntax.path);
     val path_past <- syntax_past(nodes, used, syntax.path);
-    val dependency <- selected[site].dependency_module;
+    if (spelling_size > intrinsic (len)(spellings) || export_first > export_past ||
+        export_past > intrinsic (len)(exports))
+        return unproved_module_exports();
     val intrinsic_path <- builtin_path(source, path_first, path_past);
     if ((dependency == 0u64 && !intrinsic_path) || dependency == no_node() ||
         (dependency != 0u64 && intrinsic_path)) return unproved_module_exports();
     val diagnostic <- if (dependency == 0u64) { unproved_module_exports() } else { missing_module_export() };
-    for (at in 0u64 .. export_count) {
+    val profile <- 0u8;
+    for (at in export_first .. export_past) {
         if (exports[at].kind != 0u8 && exports[at].publishing_module == dependency &&
             exports[at].name_first <= exports[at].name_past && exports[at].name_past <= spelling_size &&
             (dependency != 0u64 ||
@@ -188,13 +558,13 @@ func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N
               same_module_path(source, path_first, path_past, spellings, exports[at].module_first, exports[at].module_past)))) {
             if (same_bytes(source, name_first, name_past, spellings, exports[at].name_first, exports[at].name_past)) {
                 if (syntax.symbolic == (exports[at].kind == symbol_export())) {
-                    if (syntax.mode == ImportResource && exports[at].kind != enum_export() && exports[at].kind != sum_export() &&
-                        !(declarations_only && exports[at].kind == callable_export() &&
-                          exports[at].shape == ordinary_callable_shape()))
-                        return unproved_import_interpretation();
-                    if (syntax.members != no_node() && exports[at].kind != enum_export() && exports[at].kind != sum_export())
-                        return invalid_member_selection();
-                    select_export(exports, at, selected, site);
+                    if (syntax.nature != OrdinaryResource &&
+                        !matches_export_nature(exports, at, syntax.nature)) return wrong_export_kind();
+                    profile <- selection_profile(
+                        syntax.mode, exports[at].kind, exports[at].shape, syntax.members,
+                        declarations_only);
+                    if (profile != 0u8) return profile;
+                    row <- at;
                     return 0u8;
                 } else {};
                 (diagnostic <- wrong_export_kind()):void;
@@ -204,6 +574,283 @@ func resolve_selection(source:const SourceBytes in S, nodes:const ExprNodes in N
         } else {};
     };
     return diagnostic;
+}
+
+func resolve_selection(
+    source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, site:u64,
+    syntax:const ModuleSelectionSites in M, spellings:const SourceBytes in B,
+    exports:const ModuleExports in E, spelling_size:u64, export_count:u64,
+    selected:SelectedExports in R, declarations_only:bool) -> u8
+    where {const owner S, const owner N, const owner M, const owner B, const owner E, owner R} {
+    ref row = make u64 { no_node() };
+    val result <- resolve_selection_row(source, nodes, used, syntax, spellings, exports,
+                                        spelling_size, 0u64, export_count,
+                                        selected[site].dependency_module, declarations_only, row);
+    if (result != 0u8) return result;
+    select_export(exports, row, selected, site);
+    return 0u8
+}
+
+export func append_named_selection(
+    source:const SourceBytes in S, nodes:const ExprNodes in N, revision:u64, used:u64, site:u64,
+    syntax:const ModuleSelectionSites in M, spellings:const SourceBytes in B,
+    exports:const ModuleExports in E, spelling_size:u64,
+    export_first:u64, export_past:u64, dependency:u64,
+    declarations_only:bool, selected:CheckedSelections in F, next:u64 in C)
+    -> u8 where {const owner S, const owner N, const owner M, const owner B, const owner E,
+                 owner F, owner C} {
+    if (next >= intrinsic (len)(selected)) return export_storage_exhausted();
+    ref row = make u64 { no_node() };
+    val result <- resolve_selection_row(source, nodes, used, syntax, spellings, exports,
+                                        spelling_size, export_first, export_past,
+                                        dependency, declarations_only, row);
+    if (result != 0u8) return result;
+    ref nature = make ResourceNature { OrdinaryResource };
+    if (!export_nature(exports, row, nature)) return wrong_export_kind();
+    if (syntax.local >= used) return invalid_export_tree();
+    val local_first <- syntax_first(nodes, used, syntax.local) +
+        if (syntax.symbolic) { 1u64 } else { 0u64 };
+    val local_past <- syntax_past(nodes, used, syntax.local);
+    if (local_first >= local_past || local_past > intrinsic (len)(source)) return invalid_export_tree();
+    ref local = make SourceSpelling { span <- make SourceSpan {
+        first <- local_first; past <- local_past
+    } };
+    # A qualified procedure selection introduces its published family.
+    # Installation and extension have their own checks.
+    if (dependency == 0u64) {
+        ref catalog_name = make CatalogSpelling { span <- make SourceSpan {
+            first <- exports[row].name_first; past <- exports[row].name_past
+        } };
+        stage_selection(exports, row, syntax.mode, nature, revision, site,
+                        syntax.members, local, catalog_name, selected, next)
+    } else {
+        ref graph_name = make GraphSpelling { span <- make SourceSpan {
+            first <- exports[row].name_first; past <- exports[row].name_past
+        } };
+        stage_selection(exports, row, syntax.mode, nature, revision, site,
+                        syntax.members, local, graph_name, selected, next)
+    };
+    next <- next + 1u64;
+    return 0u8
+}
+
+export func measure_module_selections(
+    nodes:const ExprNodes in N, tree:const ParseResult in T, dependencies:const SelectedExports in D,
+    visits:const Visits in G, visit_used:u64, exports:const ModuleExports in G, export_used:u64,
+    defaults:const DefaultExportRefs in G, default_used:u64, spelling_used:u64,
+    count:u64 in C, report:ExportResolutionResult in R)
+    -> bool where {const owner N, const owner T, const owner D, const owner G, owner C, owner R} {
+    report.node <- no_node();
+    report.diagnostic <- invalid_export_tree();
+    if (tree.diagnostic != 0u8 || tree.used > syntax_len(nodes) ||
+        tree.used > intrinsic (len)(dependencies) || tree.used == 0u64 ||
+        export_used > intrinsic (len)(exports) || default_used > intrinsic (len)(defaults))
+        return false;
+    ref named = make ModuleSelectionSites {
+        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
+        symbolic <- false; mode <- UseResource; nature <- OrdinaryResource
+    };
+    ref bulk = make BulkSelectionSites { path <- no_node(); mode <- UseResource; view <- DefaultPublic };
+    ref ranges = make ModuleSelectionRanges {
+        exports_first <- 0u64; exports_past <- 0u64; defaults_first <- 0u64; defaults_past <- 0u64
+    };
+    ref measured = make u64 { 0u64 };
+    val shape <- InvalidSelection;
+    val module <- 0u64;
+    for (at in 0u64 .. tree.used) {
+        report.node <- at;
+        shape <- inspect_module_selection(nodes, tree.revision, tree.used, at, named);
+        if (shape == InvalidSelection) return false;
+        if (shape == SelectionReady) {
+            if (measured == no_node() - 1u64) {
+                report.diagnostic <- export_storage_exhausted();
+                return false
+            };
+            (measured <- measured + 1u64):void
+        } else {
+            shape <- inspect_bulk_selection(nodes, tree.revision, tree.used, at, bulk);
+            if (shape == InvalidSelection) return false;
+            if (shape == SelectionReady) {
+                module <- dependencies[at].dependency_module;
+                if (!checked_module_selections(visits, visit_used, module, export_used,
+                                               default_used, ranges)) {
+                    report.node <- bulk.path;
+                    report.diagnostic <- unproved_module_exports();
+                    return false
+                };
+                report.diagnostic <- measure_bulk_selection(
+                    exports, defaults, ranges, bulk.view, module, spelling_used, measured);
+                if (report.diagnostic != 0u8) return false;
+                (report.diagnostic <- invalid_export_tree()):void
+            }
+        }
+    };
+    count <- measured;
+    report.node <- no_node();
+    report.diagnostic <- 0u8;
+    return true
+}
+
+export func stage_module_selections(
+    source:const SourceBytes in S, nodes:const ExprNodes in N, tree:const ParseResult in T,
+    dependencies:const SelectedExports in D, catalog:const SourceBytes in B,
+    builtins:const ModuleExports in B, visits:const Visits in G, visit_used:u64,
+    exports:const ModuleExports in G, export_used:u64, defaults:const DefaultExportRefs in G,
+    default_used:u64, spellings:const SourceBytes in G, spelling_used:u64,
+    declarations_only:bool, selections:CheckedSelections in F, used:u64 in C,
+    report:ExportResolutionResult in R)
+    -> bool where {const owner S, const owner N, const owner T, const owner D, const owner B,
+                   const owner G, owner F, owner C, owner R} {
+    report.node <- no_node();
+    report.diagnostic <- invalid_export_tree();
+    if (tree.diagnostic != 0u8 || tree.used > syntax_len(nodes) ||
+        tree.used > intrinsic (len)(dependencies) || tree.used == 0u64 ||
+        spelling_used > intrinsic (len)(spellings) ||
+        export_used > intrinsic (len)(exports) || default_used > intrinsic (len)(defaults))
+        return false;
+    if (!valid_builtin_catalog(builtins)) {
+        report.diagnostic <- unproved_module_exports();
+        return false
+    };
+    ref named = make ModuleSelectionSites {
+        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
+        symbolic <- false; mode <- UseResource; nature <- OrdinaryResource
+    };
+    ref bulk = make BulkSelectionSites { path <- no_node(); mode <- UseResource; view <- DefaultPublic };
+    ref ranges = make ModuleSelectionRanges {
+        exports_first <- 0u64; exports_past <- 0u64; defaults_first <- 0u64; defaults_past <- 0u64
+    };
+    ref next = make u64 { 0u64 };
+    val module <- 0u64;
+    val shape <- InvalidSelection;
+    val result <- 0u8;
+    for (at in 0u64 .. tree.used) {
+        report.node <- at;
+        shape <- inspect_module_selection(nodes, tree.revision, tree.used, at, named);
+        if (shape == InvalidSelection) return false;
+        module <- dependencies[at].dependency_module;
+        if (shape == SelectionReady) {
+            if (module == 0u64) {
+                (result <- append_named_selection(source, nodes, tree.revision, tree.used, at,
+                    named, catalog, builtins, intrinsic (len)(catalog), 0u64,
+                    intrinsic (len)(builtins), module, declarations_only, selections, next)):void
+            } else {
+                if (!checked_module_selections(visits, visit_used, module, export_used,
+                                               default_used, ranges)) {
+                    report.node <- named.path;
+                    report.diagnostic <- unproved_module_exports();
+                    return false
+                };
+                (result <- append_named_selection(source, nodes, tree.revision, tree.used, at,
+                    named, spellings, exports, spelling_used, ranges.exports_first,
+                    ranges.exports_past, module, declarations_only, selections, next)):void
+            }
+        } else {
+            shape <- inspect_bulk_selection(nodes, tree.revision, tree.used, at, bulk);
+            if (shape == InvalidSelection) return false;
+            if (shape == SelectionReady) {
+                if (!checked_module_selections(visits, visit_used, module, export_used,
+                                               default_used, ranges)) {
+                    report.node <- bulk.path;
+                    report.diagnostic <- unproved_module_exports();
+                    return false
+                };
+                (result <- append_bulk_selections(exports, defaults, ranges, bulk.view, module,
+                    spelling_used, bulk.mode, tree.revision, at, declarations_only,
+                    selections, next)):void
+            }
+        };
+        if (result != 0u8) {
+            report.diagnostic <- result;
+            return false
+        }
+    };
+    if (!validate_checked_selections(selections, next, tree, source, catalog, spellings, spelling_used,
+        report)) return false;
+    used <- next;
+    report.node <- no_node();
+    report.diagnostic <- 0u8;
+    return true
+}
+
+export func project_checked_resource(selections:const CheckedSelections in F, used:u64,
+    row:u64, revision:u64, syntax_used:u64, lexical_use:bool, output:SelectedExport in R) -> bool
+    where {const owner F, owner R} {
+    if (row >= used || used > intrinsic (len)(selections)) return false;
+    return case selections[row] of {
+        SelectedResource {
+            val origin <- revision; val directive <- site; val kind <- export_kind; val verb <- mode;
+            val identity <- identity; val defining <- defining_module; val publisher <- publishing_module;
+            val checked <- checked; val owner_module <- owner_module; val owner_identity <- owner_identity;
+            val shape <- shape;
+        } -> {
+            if (origin != revision || directive >= syntax_used || kind == 0u8 ||
+                (lexical_use && verb == ReexportResource)) return false;
+            output.dependency_module <- publisher;
+            output.identity <- identity;
+            output.kind <- kind;
+            output.checked <- checked;
+            output.origin_module <- defining;
+            output.owner_module <- owner_module;
+            output.owner_identity <- owner_identity;
+            output.shape <- shape;
+            return true
+        };
+        UnpublishedSelection -> false
+    }
+}
+
+export func permits_module_family_extension(selections:const CheckedSelections in F, used:u64,
+    row:u64, revision:u64) -> bool where {const owner F} {
+    if (row >= used || used > intrinsic (len)(selections)) return false;
+    return case selections[row] of {
+        SelectedResource {
+            val origin <- revision; val verb <- mode; val kind <- export_kind;
+            val shape <- shape; val nature <- nature;
+        } -> origin == revision && verb == ImportResource && nature == OrdinaryResource &&
+            kind == callable_export() && shape == ordinary_callable_shape();
+        UnpublishedSelection -> false
+    }
+}
+
+# Written sites still supply member-list and publication readers.
+export func project_written_selections(
+    nodes:const ExprNodes in N, tree:const ParseResult in T, selections:const CheckedSelections in F,
+    used:u64, sites:SelectedExports in D, report:ExportResolutionResult in R)
+    -> bool where {const owner N, const owner T, const owner F, owner D, owner R} {
+    report.node <- no_node();
+    report.diagnostic <- invalid_export_tree();
+    if (tree.used > syntax_len(nodes) || tree.used > intrinsic (len)(sites) ||
+        used > intrinsic (len)(selections)) return false;
+    for (site in 0u64 .. tree.used) { clear_selection(sites, site) };
+    ref named = make ModuleSelectionSites {
+        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
+        symbolic <- false; mode <- UseResource; nature <- OrdinaryResource;
+    };
+    val selection <- InvalidSelection;
+    for (index in 0u64 .. used) {
+        case selections[index] of {
+            (SelectedResource {
+                val revision <- revision; val site <- site; val publisher <- publishing_module;
+                val verb <- mode; val member_list <- members;
+            }) -> {
+                report.node <- site;
+                if (revision != tree.revision || site >= tree.used) return false;
+                selection <- inspect_module_selection(nodes, revision, tree.used, site, named);
+                if (selection == InvalidSelection) return false;
+                if (selection == SelectionReady) {
+                    if (sites[site].kind != 0u8 || sites[site].dependency_module != publisher ||
+                        named.mode != verb || named.members != member_list ||
+                        !project_checked_resource(selections, used, index, revision, tree.used, false,
+                            sites[site])) return false
+                }
+            };
+            UnpublishedSelection -> { return false }
+        }
+    };
+    report.node <- no_node();
+    report.diagnostic <- 0u8;
+    return true
 }
 
 # Consume a successful parse and the supplied dependency targets. The
@@ -227,11 +874,9 @@ export func resolve_module_exports(source:const SourceBytes in S, nodes:const Ex
         report.diagnostic <- export_storage_exhausted();
         return false;
     } else {};
-    for (at in 0u64 .. intrinsic (len)(builtins)) {
-        if (builtins[at].kind == 0u8 || builtins[at].kind >= first_source_export_kind()) {
-            report.diagnostic <- unproved_module_exports();
-            return false;
-        };
+    if (!valid_builtin_catalog(builtins)) {
+        report.diagnostic <- unproved_module_exports();
+        return false
     };
     ref syntax = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();

@@ -10,15 +10,29 @@ export data VariadicProfileStop {
     past:SourcePosition;
 }
 
+export data ModuleSelectionRanges {
+    exports_first:u64;
+    exports_past:u64;
+    defaults_first:u64;
+    defaults_past:u64;
+}
+
 export data VisitSlot =
     Vacant {} |
     Visiting { key_first:u64; key_past:u64; revision:u64; } |
     Checked {
-        key_first:u64; key_past:u64; revision:u64; exports_first:u64; exports_past:u64;
+        key_first:u64;
+        key_past:u64;
+        revision:u64;
+        exports_first:u64;
+        exports_past:u64;
+        defaults_first:u64;
+        defaults_past:u64;
         inherited_structural:bool;
     } |
     StructuralOnly {
         key_first:u64; key_past:u64; revision:u64; exports_first:u64; exports_past:u64;
+        defaults_first:u64; defaults_past:u64;
         interfaces_first:u64; interfaces_past:u64; stop:VariadicProfileStop;
     };
 
@@ -190,25 +204,62 @@ export func checked_module_key(visits:const Visits in G, used:u64, key_used:u64,
     };
 }
 
+func record_selection_ranges(ranges:ModuleSelectionRanges in R, export_used:u64, default_used:u64,
+    first_export:u64, past_export:u64, first_default:u64, past_default:u64)
+    -> bool where {owner R} {
+    if (first_export > past_export || past_export > export_used ||
+        first_default > past_default || past_default > default_used) return false;
+    ranges.exports_first <- first_export;
+    ranges.exports_past <- past_export;
+    ranges.defaults_first <- first_default;
+    ranges.defaults_past <- past_default;
+    return true
+}
+
+export func checked_module_selections(
+    visits:const Visits in G, used:u64, module:u64, export_used:u64, default_used:u64,
+    ranges:ModuleSelectionRanges in R) -> bool where {const owner G, owner R} {
+    if (module == 0u64 || module > used || used > intrinsic (len)(visits)) return false;
+    return case visits[module - 1u64] of {
+        (Checked {
+            val first_export <- exports_first;
+            val past_export <- exports_past;
+            val first_default <- defaults_first;
+            val past_default <- defaults_past;
+        }) -> { record_selection_ranges(ranges, export_used, default_used,
+                                        first_export, past_export, first_default, past_default) };
+        StructuralOnly {
+            val first_export <- exports_first; val past_export <- exports_past;
+            val first_default <- defaults_first; val past_default <- defaults_past;
+        } -> {
+            record_selection_ranges(ranges, export_used, default_used,
+                                    first_export, past_export, first_default, past_default)
+        };
+        _ -> false
+    }
+}
+
 export proc mark_visiting(visits:Visits in G, id:u64, first:u64, past:u64, revision:u64)
     -> void where {owner G} {
     visits[id] <- make Visiting { key_first <- first; key_past <- past; revision <- revision; };
     return;
 }
 
-export proc mark_checked(visits:Visits in G, id:u64, exports_first:u64, exports_past:u64,
-    inherited:bool)
-    -> bool where {owner G} {
-    if (exports_first > exports_past) return false;
+export proc mark_checked(visits:Visits in G, id:u64, ranges:const ModuleSelectionRanges in R, inherited:bool)
+    -> bool where {owner G, const owner R} {
+    if (id >= intrinsic (len)(visits) || ranges.exports_first > ranges.exports_past ||
+        ranges.defaults_first > ranges.defaults_past) return false;
     case visits[id] of {
         (Visiting { val first <- key_first; val past <- key_past; val opening <- revision; }) -> {
             visits[id] <- make Checked {
                 key_first <- first;
                 key_past <- past;
                 revision <- opening;
-                exports_first <- exports_first;
-                exports_past <- exports_past;
-                inherited_structural <- inherited;
+                exports_first <- ranges.exports_first;
+                exports_past <- ranges.exports_past;
+                defaults_first <- ranges.defaults_first;
+                defaults_past <- ranges.defaults_past;
+                inherited_structural <- inherited
             };
             return true;
         };
@@ -217,18 +268,20 @@ export proc mark_checked(visits:Visits in G, id:u64, exports_first:u64, exports_
     return false;
 }
 
-export proc mark_structural_only(visits:Visits in G, id:u64, exports_first:u64, exports_past:u64,
+export proc mark_structural_only(visits:Visits in G, id:u64, ranges:const ModuleSelectionRanges in R,
                                  interfaces_first:u64, interfaces_past:u64,
                                      stop:const VariadicProfileStop in F)
-    -> bool where {owner G, const owner F} {
-    if (id >= intrinsic (len)(visits) || exports_first > exports_past ||
+    -> bool where {owner G, const owner F, const owner R} {
+    if (id >= intrinsic (len)(visits) || ranges.exports_first > ranges.exports_past ||
+        ranges.defaults_first > ranges.defaults_past ||
         interfaces_first >= interfaces_past ||
         stop.first_byte >= stop.past_byte || stop.first.line == 0u64) return false;
     case visits[id] of {
         (Visiting { val first <- key_first; val past <- key_past; val opening <- revision; }) -> {
             visits[id] <- make StructuralOnly {
                 key_first <- first; key_past <- past; revision <- opening;
-                exports_first <- exports_first; exports_past <- exports_past;
+                exports_first <- ranges.exports_first; exports_past <- ranges.exports_past;
+                defaults_first <- ranges.defaults_first; defaults_past <- ranges.defaults_past;
                 interfaces_first <- interfaces_first; interfaces_past <- interfaces_past;
                 stop <- stop
             };

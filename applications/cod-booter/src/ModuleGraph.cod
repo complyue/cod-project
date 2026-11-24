@@ -18,7 +18,8 @@ using "./SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition, Token };
 using "./SourceAccess.cod" locate_source_position;
 using "./ParserStorage.cod" {
     Tokens, ExprNodes, no_node, syntax_first, syntax_past, ModuleSelectionSites, inspect_module_selection,
-    first_module_item, SequenceEntry, inspect_sequence_entry, CallableSites, inspect_callable,
+    BulkSelectionSites, inspect_bulk_selection, PublicView { DefaultPublic },
+    first_module_item, SequenceEntry, inspect_sequence_entry, CallableSites, inspect_callable, inspect_default_set,
     DeclarationSites, inspect_declaration,
 };
 using "./ParserStorage.cod" ModuleSelectionMode { UseResource };
@@ -34,7 +35,7 @@ using "./ParserInput.cod" { ParseResult, node_storage_exhausted };
 using "./Frontend.cod" { FrontendResult, read_module };
 using "./ModuleExportStorage.cod" FamilyMembership { UnprovedMembership };
 using "./ModuleExportStorage.cod" {
-    ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces
+    ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces, DefaultExportRefs
 };
 using "./ParserStorage.cod" FormalMode { ValueFormal };
 using "./ModuleExportStorage.cod" {
@@ -43,15 +44,26 @@ using "./ModuleExportStorage.cod" {
 using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
 using "./AggregateSchemas.cod" AggregateFacts;
 using "./ModuleExports.cod" {
-    SelectedExport, SelectedExports, next_module_dependency, prepare_module_dependencies, ExportResolutionResult,
+    SelectedExport, SelectedExports, next_module_dependency, module_selection_path,
+    prepare_module_dependencies, ExportResolutionResult,
     resolve_enum_selections, resolve_sum_selections, verify_aggregate_selections,
+    invalid_export_tree, missing_module_export, wrong_export_kind,
+    CheckedSelections, CheckedSelection { UnpublishedSelection },
+    measure_module_selections, stage_module_selections, project_written_selections,
+};
+using "./ModuleDefaults.cod" {
+    StagedDefaultExport, StagedDefaultExports, stage_module_defaults, reserve_defaults,
+        copy_module_defaults,
+    DefaultPublicationStatus { DefaultsReady, UnknownDefaultName, WrongDefaultKind,
+        DefaultStorageExhausted },
 };
 using "./ModuleFrontend.cod" {
-    ModuleBindingResult, select_parsed_module, bind_selected_module, module_read_failed, module_binding_failed,
+    ModuleBindingResult, check_parsed_module_profile, bind_selected_module, module_read_failed, module_binding_failed,
     module_selection_failed, module_operands_failed, binding_diagnostic, rejected_unsupported_declaration,
 };
 using "./NameResolution.cod" {
-    NameBinding, NameBindings, NameWorkSlot, NameWork, record_type, first_module_variadic_formal
+    NameBinding, NameBindings, NameWorkSlot, NameWork, record_type, project_module_selection_candidates,
+    ModuleNameUse { LexicalName }, first_module_variadic_formal
 };
 using "./NativeDeclarations.cod" {
     ModulePublication, NativeDeclarationResult, prepare_module_calls, check_module_interfaces, publish_interfaces,
@@ -76,7 +88,7 @@ using "./ModuleIndex.cod" {
     Visits, KeyLookup, lookup_path, insert_visit, visit_has_membership, growth_capacity,
         reserve_keys, mark_checked,
     earliest_profile_stop, mark_structural_only, VariadicProfileStop, structural_visit_dependency,
-    VisitSlot { StructuralOnly },
+    VisitSlot { StructuralOnly }, ModuleSelectionRanges,
 };
 using "./ModuleLowering.cod" native_unsupported;
 using "./CompilerStatus.cod" CompilerStatus {
@@ -109,14 +121,15 @@ export func collect_dependency_edges(source:const SourceBytes in S, nodes:const 
         symbolic <- false; mode <- UseResource;
         nature <- OrdinaryResource;
     };
+    ref bulk = make BulkSelectionSites { path <- no_node(); mode <- UseResource; view <- DefaultPublic };
+    val path <- no_node();
     for (scan in 0u64 .. used) {
         if (site == no_node()) return count;
-        if (count >= intrinsic (len)(edges) ||
-            inspect_module_selection(nodes, revision, used, site, selection) != SelectionReady)
-            return no_node();
+        path <- module_selection_path(nodes, revision, used, site, selection, bulk);
+        if (count >= intrinsic (len)(edges) || path == no_node()) return no_node();
         edges[count].site <- site;
-        edges[count].first <- syntax_first(nodes, used, selection.path);
-        edges[count].past <- syntax_past(nodes, used, selection.path);
+        edges[count].first <- syntax_first(nodes, used, path);
+        edges[count].past <- syntax_past(nodes, used, path);
         count <- count + 1u64;
         site <- next_module_dependency(source, nodes, used, revision, site + 1u64);
     };
@@ -327,6 +340,7 @@ data ModuleProgress {
     revision:u64;
     dependencies:u64;
     count:u64;
+    default_count:u64;
     interface_count:u64;
     purpose:GraphPurpose;
     entry:u8;
@@ -399,14 +413,12 @@ proc read_opened_frame(handle opened:SourceRevision in S, handle diagnostic:Diag
 }
 
 func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
-                      catalog_spellings:const SourceBytes in B, catalog_exports:const ModuleExports in B,
-                      spellings:const SourceBytes in G, published:const ModuleExports in G, spelling_size:u64,
-                      export_count:u64, interfaces:const ModuleInterfaces in G, interface_count:u64, selected:SelectedExports in W,
+                      spellings:const SourceBytes in G, spelling_size:u64,
+                      checked_selections:const CheckedSelections in C, checked_used:u64,
+                      interfaces:const ModuleInterfaces in G, interface_count:u64, selected:SelectedExports in W,
                       names:NameBindings in W, work:NameWork in W, facts:AggregateFacts in F,
                       result:ModuleBindingResult in R, native:bool, allow_structural:bool) -> bool
-    where {const owner S, owner W, const owner B, const owner G, owner F, owner R} {
-    if (!select_parsed_module(source, nodes, catalog_spellings, catalog_exports, spellings, published,
-                             spelling_size, export_count, selected, native, result)) return false;
+    where {const owner S, owner W, const owner G, const owner C, owner F, owner R} {
     ref members = make ExportResolutionResult { diagnostic <- 0u8; node <- no_node(); };
     if (!resolve_enum_selections(source, nodes, result.frontend.tree.used, result.frontend.tree.revision,
                                  spellings, interfaces, interface_count, selected, members)) {
@@ -423,8 +435,8 @@ func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
         binding_diagnostic(nodes, result, module_selection_failed(), members.diagnostic, members.node);
         return false;
     };
-    if (!bind_selected_module(source, nodes, selected, names, work, interfaces, interface_count,
-        facts, native, allow_structural, result))
+    if (!bind_selected_module(source, nodes, checked_selections, checked_used, selected, names,
+        work, interfaces, interface_count, facts, native, allow_structural, result))
         return false;
     if (native) return true;
     val used <- result.frontend.tree.used;
@@ -464,6 +476,11 @@ func library_declaration(nodes:const ExprNodes in N, tree:const ParseResult in T
         nature <- OrdinaryResource;
     };
     if (inspect_module_selection(nodes, tree.revision, tree.used, at, selection) == SelectionReady) return true;
+    ref bulk = make BulkSelectionSites { path <- no_node(); mode <- UseResource; view <- DefaultPublic };
+    if (inspect_bulk_selection(nodes, tree.revision, tree.used, at, bulk) == SelectionReady) return true;
+    ref default_marks = make u64 { no_node() };
+    if (inspect_default_set(nodes, tree.revision, tree.used, at, default_marks) == SelectionReady)
+        return true;
     ref callable_site = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
     val form <- inspect_callable(nodes, tree.revision, tree.used, at, callable_site);
     if (form == ModuleCallable || form == ModuleCallablePromise) return true;
@@ -534,9 +551,12 @@ func locate_variadic_profile(source:const SourceBytes in S, lines:const SourceLi
 proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in S,
                        handle diagnostic:DiagnosticDestination in D, nodes:const ExprNodes in W,
                        selected:SelectedExports in W, names:NameBindings in W, work:NameWork in W,
-                       staged:ModuleExports in W, progress:ModuleProgressRows in W,
+                       staged:ModuleExports in W, defaults:StagedDefaultExports in W,
+                       progress:ModuleProgressRows in W,
                        catalog_spellings:const SourceBytes in B, catalog_exports:const ModuleExports in B,
                        spellings:const SourceBytes in G, published:const ModuleExports in G, spelling_size:u64, export_count:u64,
+                       visits:const Visits in G, visit_count:u64,
+                       published_defaults:const DefaultExportRefs in G, published_default_count:u64,
                        staged_interfaces:ModuleInterfaces in W, published_interfaces:const ModuleInterfaces in G, interface_count:u64,
                        facts:OperandFacts in W, owners:CallOwners in W, sites:CompletionSites in W,
                        commands:NativeCommands in W) -> CompilerStatus
@@ -556,9 +576,45 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     val formal <- first_module_variadic_formal(nodes, result.frontend.tree.revision, used);
     val structural <- formal != no_node() || progress[0u64].structural_dependency;
     val native <- !structural && progress[0u64].purpose == (NativeObject:GraphPurpose);
+    if (!check_parsed_module_profile(nodes, native, true, result)) {
+        report_rejection(source, lines, diagnostic, result.stage, result.diagnostic,
+            result.frontend.diagnostic_first, result.frontend.diagnostic_past, result.related_first);
+        if (native && rejected_unsupported_declaration(result)) return FormUnsupported;
+        return Rejected
+    };
+    val selection_capacity <- 0u64;
+    ref selection_report = make ExportResolutionResult { diagnostic <- 0u8; node <- no_node() };
+    if (!measure_module_selections(nodes, result.frontend.tree, selected, visits, visit_count, published,
+        export_count, published_defaults, published_default_count, spelling_size,
+        selection_capacity, selection_report)) {
+        binding_diagnostic(nodes, result, module_selection_failed(), selection_report.diagnostic,
+            selection_report.node);
+        report_rejection(source, lines, diagnostic, result.stage, result.diagnostic,
+            result.frontend.diagnostic_first, result.frontend.diagnostic_past, result.related_first);
+        return Rejected
+    };
+    ref checked_selections = make CheckedSelections(selection_capacity, make UnpublishedSelection {});
+    val checked_used <- 0u64;
+    if (!stage_module_selections(source, nodes, result.frontend.tree, selected, catalog_spellings, catalog_exports,
+        visits, visit_count, published, export_count, published_defaults, published_default_count, spellings,
+        spelling_size, !native, checked_selections, checked_used, selection_report) ||
+        !project_written_selections(nodes, result.frontend.tree, checked_selections, checked_used,
+            selected, selection_report)) {
+        binding_diagnostic(nodes, result, module_selection_failed(), selection_report.diagnostic,
+            selection_report.node);
+        report_rejection(source, lines, diagnostic, result.stage, result.diagnostic,
+            result.frontend.diagnostic_first, result.frontend.diagnostic_past, result.related_first);
+        return Rejected
+    };
+    if (!project_module_selection_candidates(source, nodes, catalog_spellings, spellings, spelling_size,
+        checked_selections, checked_used, result.frontend.tree, work)) {
+        report_rejection(source, lines, diagnostic, module_selection_failed(), invalid_export_tree(),
+            0u64, 0u64, no_node());
+        return Rejected
+    };
     ref aggregate_facts = make AggregateFacts(result.frontend.tree.used, UnprovedAggregate);
-    if (!bind_graph_names(source, nodes, catalog_spellings, catalog_exports, spellings, published, spelling_size,
-                          export_count, published_interfaces, interface_count, selected, names, work,
+    if (!bind_graph_names(source, nodes, spellings, spelling_size, checked_selections, checked_used,
+                          published_interfaces, interface_count, selected, names, work,
                           aggregate_facts, result, native, structural)) {
         val code <- if (result.stage == module_read_failed()) { result.frontend.tree.diagnostic } else { result.diagnostic };
         report_rejection(source, lines, diagnostic, result.stage, code,
@@ -598,6 +654,24 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         report_scratch_error(diagnostic, 1u32);
         return ScratchFailed;
     } else {};
+    val default_count <- 0u64;
+    val default_problem <- no_node();
+    val default_result <- stage_module_defaults(
+        source, nodes, used, result.frontend.tree.revision, staged, publication.module_identity,
+        0u64, count, publication.source_first, defaults, default_count, default_problem);
+    if (default_result == DefaultStorageExhausted) {
+        report_scratch_error(diagnostic, 1u32);
+        return ScratchFailed
+    };
+    if (default_result != DefaultsReady) {
+        val default_code <- if (default_result == UnknownDefaultName) { missing_module_export() }
+            else { if (default_result == WrongDefaultKind) { wrong_export_kind() }
+                   else { invalid_export_tree() } };
+        report_rejection(source, lines, diagnostic, module_selection_failed(), default_code,
+                         syntax_first(nodes, used, default_problem),
+                         syntax_past(nodes, used, default_problem), no_node());
+        return Rejected
+    };
     val interfaces <- if (native) {
         publish_native_interfaces(nodes, names, work, facts, used, result.frontend.tree.revision, publication.module_identity,
                                   progress[0u64].function_base, staged_interfaces)
@@ -611,6 +685,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         return ScratchFailed;
     } else {};
     progress[0u64].count <- count;
+    progress[0u64].default_count <- default_count;
     progress[0u64].interface_count <- interfaces;
     return Complete;
 }
@@ -631,17 +706,21 @@ func write_unit_row(units:NativeUnitRows in G, at:u64, command_first:u64, comman
 }
 
 proc publish_visit(handle opened:SourceRevision in S, progress:const ModuleProgressRows in F,
-                   staged:const ModuleExports in F, staged_interfaces:const ModuleInterfaces in F,
+                   staged:const ModuleExports in F, staged_defaults:const StagedDefaultExports in F,
+                   staged_interfaces:const ModuleInterfaces in F,
                    staged_commands:const NativeCommands in F, visits:Visits in G,
-                   ref var exports:ModuleExports in G, ref var interfaces:ModuleInterfaces in G,
+                   ref var exports:ModuleExports in G, ref var defaults:DefaultExportRefs in G,
+                   ref var interfaces:ModuleInterfaces in G,
                    ref var spellings:SourceBytes in G, ref var commands:NativeCommands in G,
                    ref var units:NativeUnitRows in G, ref var literals:NativeLiteralRanges in G,
-                   export_used:u64 in G, interface_used:u64 in G, spelling_used:u64 in G,
+                   export_used:u64 in G, default_used:u64 in G,
+                   interface_used:u64 in G, spelling_used:u64 in G,
                    command_used:u64 in G, unit_used:u64 in G, literal_used:u64 in G, function_used:u64 in G,
                    const val key_first:u64, const val key_past:u64)
     -> CompilerStatus where {const owner S, const owner F, owner G} {
     const val module <- progress[0u64].identity;
     const val export_count <- progress[0u64].count;
+    val default_count <- progress[0u64].default_count;
     const val interface_count <- progress[0u64].interface_count;
     const val command_count <- progress[0u64].command_count;
     ref sizes = make PublicationSizes(1u64, make PublicationSize {
@@ -656,11 +735,13 @@ proc publish_visit(handle opened:SourceRevision in S, progress:const ModuleProgr
     if (measured != Complete) return measured;
 
     const val export_first <- export_used;
+    val default_first <- default_used;
     const val interface_first <- interface_used;
     const val spelling_first <- spelling_used;
     const val command_first <- command_used;
     const val literal_first <- literal_used;
     val export_past <- add_span(export_first, 0u64, export_count, no_node());
+    val default_past <- add_span(default_first, 0u64, default_count, no_node());
     val interface_past <- add_span(interface_first, 0u64, interface_count, no_node());
     const val literal_start <- add_span(spelling_first, 0u64, sizes[0u64].spelling_bytes, no_node());
     val spelling_past <- add_span(literal_start, 0u64, sizes[0u64].literal_bytes, no_node());
@@ -669,15 +750,20 @@ proc publish_visit(handle opened:SourceRevision in S, progress:const ModuleProgr
     val has_commands <- command_count != 0u64;
     val unit_past <- add_span(unit_used, 0u64, if (has_commands) { 1u64 } else { 0u64 }, no_node());
     val function_past <- add_span(progress[0u64].function_base, 0u64, progress[0u64].functions, no_node());
-    if (export_past == no_node() || interface_past == no_node() || spelling_past == no_node() ||
+    if (export_past == no_node() || default_past == no_node() ||
+        interface_past == no_node() || spelling_past == no_node() ||
         command_past == no_node() || literal_past == no_node() || unit_past == no_node() ||
         function_past == no_node() || module == 0u64) return ScratchFailed;
     reserve_exports(exports, export_first, export_past);
+    reserve_defaults(defaults, default_first, default_past);
     reserve_interfaces(interfaces, interface_first, interface_past);
     reserve_keys(spellings, spelling_first, spelling_past);
     reserve_commands(commands, command_first, command_past);
     reserve_literals(literals, literal_first, literal_past);
     reserve_units(units, unit_used, unit_past);
+    if (!copy_module_defaults(staged_defaults, staged, module, export_first, export_past,
+                              default_count, defaults, default_first, default_past))
+        return ScratchFailed;
 
     with_source(opened) (source, lines) => {
         copy_publication(source, staged, staged_interfaces, exports, interfaces, spellings,
@@ -690,16 +776,21 @@ proc publish_visit(handle opened:SourceRevision in S, progress:const ModuleProgr
         write_unit_row(units, unit_used, command_first, command_past, literal_first, literal_past, key_first, key_past,
                        sizes[0u64].source_bytes, progress[0u64].labels, progress[0u64].slots);
     };
+    ref selections = make ModuleSelectionRanges {
+        exports_first <- export_first; exports_past <- export_past;
+        defaults_first <- default_first; defaults_past <- default_past
+    };
     if (progress[0u64].variadic_stop.first.line != 0u64) {
         if (has_commands || progress[0u64].functions != 0u64 ||
-            !mark_structural_only(visits, module - 1u64, export_first, export_past,
+            !mark_structural_only(visits, module - 1u64, selections,
                                   interface_first, interface_past,
                                       progress[0u64].variadic_stop)) return ScratchFailed
     } else {
-        if (!mark_checked(visits, module - 1u64, export_first, export_past,
+        if (!mark_checked(visits, module - 1u64, selections,
                           progress[0u64].structural_dependency)) return ScratchFailed
     };
     export_used <- export_past;
+    default_used <- default_past;
     interface_used <- interface_past;
     spelling_used <- spelling_past;
     command_used <- command_past;
@@ -745,10 +836,13 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
                          builtins:const ModuleExports in B,
                          ref var visits:Visits in G, ref var keys:SourceBytes in G,
                          const used:u64 in G, const key_used:u64 in G, const next_revision:u64 in G,
-                         ref var exports:ModuleExports in G, ref var interfaces:ModuleInterfaces in G,
+                         ref var exports:ModuleExports in G,
+                             ref var defaults:DefaultExportRefs in G,
+                         ref var interfaces:ModuleInterfaces in G,
                          ref var spellings:SourceBytes in G, ref var commands:NativeCommands in G,
                          ref var units:NativeUnitRows in G, ref var literals:NativeLiteralRanges in G,
-                         const export_used:u64 in G, const interface_used:u64 in G,
+                         const export_used:u64 in G, const default_used:u64 in G,
+                         const interface_used:u64 in G,
                          const spelling_used:u64 in G, const command_used:u64 in G, const unit_used:u64 in G,
                          const literal_used:u64 in G, const function_used:u64 in G,
                          const package_ready:bool in G, const package_rows:u64 in G,
@@ -786,10 +880,11 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         });
         ref names = make NameBindings(capacity, make NameBinding {
             kind <- 0u8; imported_kind <- 0u8; guarded_local <- 0u8; declaration <- no_node();
+            module_use <- LexicalName;
             scope <- no_node(); finalizer <- no_node(); guarded_local_link <- no_node(); handle_guard <- no_node();
         });
         ref work = make NameWork(capacity, make NameWorkSlot {
-            active <- no_node(); next <- no_node(); next_method <- no_node();
+            active <- no_node(); module_selection <- no_node(); next <- no_node(); next_method <- no_node();
             imported_function <- no_node(); imported_owner_argument <- no_node(); imported_failure <- 0u64;
             imported_kind <- 0u8; imported_callable_kind <- NoCallableKind;
             imported_reception <- 0u8;
@@ -831,7 +926,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         ref decoded = make SourceBytes(workspaces[0u64].source_size, 0u8);
         ref progress = make ModuleProgressRows(1u64, make ModuleProgress {
             identity <- id + 1u64; used <- 0u64; root <- no_node(); revision <- revision; dependencies <- 0u64;
-            count <- 0u64; interface_count <- 0u64;
+            count <- 0u64; default_count <- 0u64; interface_count <- 0u64;
             purpose <- purpose; entry <- if (depth == 0u64) { 1u8 } else { 0u8 };
             function_base <- 0u64; functions <- 0u64; command_count <- 0u64; labels <- 0u64; slots <- 0u64;
             variadic_stop <- make VariadicProfileStop {
@@ -845,6 +940,9 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             module_first <- 0u64; module_past <- 0u64; name_first <- 0u64; name_past <- 0u64;
             identity <- 0u64; kind <- 0u8; checked <- 0u8; publishing_module <- 0u64; origin_module <- 0u64;
             owner_module <- 0u64; owner_identity <- 0u64; shape <- 0u8;
+        });
+        ref staged_defaults = make StagedDefaultExports(capacity, make StagedDefaultExport {
+            local_row <- no_node(); nature <- OrdinaryResource
         });
         ref staged_interfaces = make ModuleInterfaces(capacity, make ModuleInterfaceRow {
             defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
@@ -867,8 +965,8 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             return visit_child(path, entry, opened, diagnostic, purpose, builtin_spellings,
                 builtins,
                 edges, decoded, selected, edge, child_depth, visits, keys, used, key_used,
-                next_revision, exports, interfaces, spellings, commands, units, literals,
-                export_used, interface_used, spelling_used, command_used, unit_used, literal_used,
+                next_revision, exports, defaults, interfaces, spellings, commands, units, literals,
+                export_used, default_used, interface_used, spelling_used, command_used, unit_used, literal_used,
                 function_used, package_ready, package_rows, package_bytes, package_roots,
                 package_paths, key_first, key_past)
         };
@@ -891,18 +989,24 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             return ScratchFailed;
         progress[0u64].function_base <- function_used;
         const val export_count <- export_used;
+        const val default_count <- default_used;
+        const val visit_count <- used;
         const val interface_count <- interface_used;
         const val spelling_size <- spelling_used;
         val bound <- with_source(opened) (source, lines) => {
-            continue bind_graph_module(source, lines, diagnostic, nodes, selected, names, work, staged, progress,
-                                       builtin_spellings, builtins, spellings, exports, spelling_size, export_count,
-                                       staged_interfaces, interfaces, interface_count, facts,
-                                           owners, sites, staged_commands);
+            continue bind_graph_module(source, lines, diagnostic, nodes, selected, names, work,
+                staged, staged_defaults, progress, builtin_spellings, builtins, spellings, exports,
+                spelling_size, export_count, visits, visit_count, defaults, default_count,
+                staged_interfaces, interfaces, interface_count,
+                facts, owners, sites, staged_commands)
         };
         if (bound != Complete) return bound;
-        return publish_visit(opened, progress, staged, staged_interfaces, staged_commands, visits, exports, interfaces,
-                             spellings, commands, units, literals, export_used, interface_used, spelling_used,
-                             command_used, unit_used, literal_used, function_used, key_first, key_past);
+        return publish_visit(opened, progress, staged, staged_defaults, staged_interfaces,
+            staged_commands,
+            visits, exports, defaults, interfaces, spellings, commands, units, literals,
+                export_used,
+            default_used, interface_used, spelling_used, command_used, unit_used, literal_used,
+            function_used, key_first, key_past)
     } catch (error:const OutOfMemoryError) {
         if (!allocating) { throw; };
         report_scratch_error(diagnostic, 3u32);
@@ -934,10 +1038,12 @@ export proc compile_graph(handle input:Path in A, handle diagnostic:DiagnosticDe
                           builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B,
                           ref var visits:Visits in G, ref var keys:SourceBytes in G,
                           used:u64 in G, key_used:u64 in G, next_revision:u64 in G,
-                          ref var exports:ModuleExports in G, ref var interfaces:ModuleInterfaces in G,
+                          ref var exports:ModuleExports in G,
+                              ref var defaults:DefaultExportRefs in G,
+                          ref var interfaces:ModuleInterfaces in G,
                           ref var spellings:SourceBytes in G, ref var commands:NativeCommands in G,
                           ref var units:NativeUnitRows in G, ref var literals:NativeLiteralRanges in G,
-                          export_used:u64 in G, interface_used:u64 in G, spelling_used:u64 in G,
+                          export_used:u64 in G, default_used:u64 in G, interface_used:u64 in G, spelling_used:u64 in G,
                           command_used:u64 in G, unit_used:u64 in G, literal_used:u64 in G,
                           function_used:u64 in G, package_ready:bool in G,
                           package_rows:u64 in G, package_bytes:u64 in G)
@@ -965,8 +1071,8 @@ export proc compile_graph(handle input:Path in A, handle diagnostic:DiagnosticDe
         ref failure = make u8 { 0u8 };
         return visit_open_revision(opened, path, input, diagnostic, purpose, builtin_spellings,
             builtins,
-                                   visits, keys, used, key_used, next_revision, exports, interfaces, spellings,
-                                   commands, units, literals, export_used, interface_used, spelling_used,
+                                   visits, keys, used, key_used, next_revision, exports, defaults, interfaces, spellings,
+                                   commands, units, literals, export_used, default_used, interface_used, spelling_used,
                                    command_used, unit_used, literal_used, function_used,
                                    package_ready, package_rows, package_bytes, package_roots,
                                    package_paths, revision, root, first, key_used, 0u64, failure)
@@ -990,10 +1096,11 @@ proc visit_child(handle parent_path:Path in P, handle entry:Path in A,
                  edge:u64, depth:u64,
                  ref var visits:Visits in G, ref var keys:SourceBytes in G,
                  used:u64 in G, key_used:u64 in G, next_revision:u64 in G,
-                 ref var exports:ModuleExports in G, ref var interfaces:ModuleInterfaces in G,
+                 ref var exports:ModuleExports in G, ref var defaults:DefaultExportRefs in G,
+                 ref var interfaces:ModuleInterfaces in G,
                  ref var spellings:SourceBytes in G, ref var commands:NativeCommands in G,
                  ref var units:NativeUnitRows in G, ref var literals:NativeLiteralRanges in G,
-                 export_used:u64 in G, interface_used:u64 in G, spelling_used:u64 in G, command_used:u64 in G,
+                 export_used:u64 in G, default_used:u64 in G, interface_used:u64 in G, spelling_used:u64 in G, command_used:u64 in G,
                  unit_used:u64 in G, literal_used:u64 in G, function_used:u64 in G,
                  package_ready:bool in G, package_rows:u64 in G, package_bytes:u64 in G,
                  ref var package_roots:PackageSourceRoots in G,
@@ -1038,8 +1145,8 @@ proc visit_child(handle parent_path:Path in P, handle entry:Path in A,
             ref child_failure = make u8 { 0u8 };
             val compiled <- visit_open_revision(child_source, child_path, entry, diagnostic,
                                                purpose, builtin_spellings, builtins,
-                                               visits, keys, used, key_used, next_revision, exports, interfaces, spellings,
-                                               commands, units, literals, export_used, interface_used, spelling_used,
+                                               visits, keys, used, key_used, next_revision, exports, defaults, interfaces, spellings,
+                                               commands, units, literals, export_used, default_used, interface_used, spelling_used,
                                                command_used, unit_used, literal_used, function_used,
                                                package_ready, package_rows, package_bytes,
                                                package_roots, package_paths,
