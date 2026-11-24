@@ -53,6 +53,16 @@
     ]
   },
   {
+    "file": "case-guard-recovery-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "case-guard-recovery-error.cod:3:25: expected an expression",
+      "case-guard-recovery-error.cod:4:27: expected an expression",
+      "case-guard-recovery-error.cod:8:25: expected an expression"
+    ]
+  },
+  {
     "file": "named-array-owner.cod",
     "exit": 0,
     "stdout": "0\n5\n0\n0\n7\n7\n17\n29\n2\n11\n44\n12\n29\n"

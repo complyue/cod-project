@@ -39,7 +39,7 @@ public:
 }
 
 enum class SyntaxRole { module_item, module_selection_item, block_item, binding_name, type_annotation,
-                        initializer, ref_group_item, argument_operand, condition };
+                        initializer, ref_group_item, argument_operand, condition, case_guard };
 struct SyntaxErrorReference {
   SyntaxRole role;
   size_t report;
@@ -1816,6 +1816,35 @@ class Parser {
     }
     arm.receiving = std::make_shared<ReceivingHeader>(std::move(reception));
   }
+  bool at_braced_case_body(size_t guard_first) const {
+    if (!is("->") || !is("{", 1) || closing_delimiter_[cursor_ + 1] >= tokens_.size()) return false;
+    // A matched group can contain a separate arrow, for example a call's named argument.
+    for (auto at = guard_first; at < cursor_; ++at) {
+      const auto &token = tokens_[at];
+      if (token.kind != TokenKind::punctuation) continue;
+      if (token.text == "(" || token.text == "[" || token.text == "{") {
+        const auto close = closing_delimiter_[at];
+        if (close >= cursor_) return false;
+        at = close;
+      } else if (token.text == ")" || token.text == "]" || token.text == "}") {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Expr case_guard_operand() {
+    const auto first = cursor_;
+    const auto saved = controls_;
+    try {
+      return expression(0, HereAttachment::immediate, false);
+    } catch (const LocatedFailure &failure) {
+      if (!at_braced_case_body(first)) throw;
+      controls_ = saved;
+      return report_operand_error(first, failure.diagnostic, SyntaxRole::case_guard);
+    }
+  }
+
   Expr read_case_arm(bool short_head) {
     using K = Expression::Kind;
     auto arm = make(K::case_arm, short_head ? peek() : expect("("));
@@ -1831,7 +1860,7 @@ class Parser {
       if (is("{")) case_reception(*arm);
     }
     if (!short_head) expect(")");
-    if (take("|") && !is("->")) arm->children.push_back(expression(0, HereAttachment::immediate, false));
+    if (take("|") && !is("->")) arm->children.push_back(case_guard_operand());
     expect("->");
     if (is("throw")) {
       if (arm->text != "_" || arm->receiving || !arm->children.empty())
