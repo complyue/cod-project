@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Make the bootstrap grammar readable in CoD
+
+<a id="h-booter-readable-grammar-20261124"></a>
+**H-BOOTER-READABLE-GRAMMAR-20261124.** On 2026-11-24 (America/Los_Angeles) the project user in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) requested “保留现有递归下降、固定操作符优先级和整文件错误恢复，让维护者能直接从 CoD 源码读出词法拼写、产生式选择和表达式分组规则”. [D-ARCH-REVIEW r93→r94](design/ImplementationArchitecture.md#reading-the-bootstrap-grammar-in-cod) continues P-682/P-683 and [D-20-PARSE-RECOVERY](design/DesignAuthorityRegistry.md#d-20-parse-recovery). It covers a bounded String word matcher, named block-item choice with nested control contexts, and readonly fixed-infix classification. The baseline is `ad43e2666f8c8b013de048ccbbb685883cb25d73:applications/cod-booter/src/ExpressionParser.cod`. The [production parser direction](#h-production-parser-direction-20261124) keeps its separate scope.
+
 ## 2026-11-24 — Plan CoD parser combinators for the production compiler
 
 <a id="h-production-parser-direction-20261124"></a>
