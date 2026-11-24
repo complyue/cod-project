@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review independent inline layout diagnostics
+
+<a id="k-seed-inline-layout-cycles-20261124"></a>
+**K-SEED-INLINE-LAYOUT-CYCLES-20261124.** D-ARCH-REVIEW r108→109 continues [seed schema recovery](#k-seed-payload-diagnostic-recovery-20261124) under [entry-world coverage](#h-entry-world-diagnostics-20261124) and P-682/P-683. The [seed review](design/ImplementationArchitecture.md#reporting-independent-inline-layout-cycles) preserves a completed field-shape proof across transitive storage failure. The previous residual walk is at `d954a7f12c6ff8ba02fc343106e503ec3cbec9c9:cod/lang_checked.hh:23587`. Callable solver recovery remains separate.
+
 ## 2026-11-24 — Review declared void fallthrough in booter objects
 
 <a id="k-booter-declared-void-completion-20261124"></a>
