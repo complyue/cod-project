@@ -13,7 +13,7 @@ using "./ParserStorage.cod" ExprPayload {
 using "./ParserStorage.cod" AstSlot { Occupied };
 using "./ParserStorage.cod" {
     SyntaxRole { InitializerRole, ExpressionRole, BlockItemRole, BindingNameRole, ReferenceGroupEntryRole,
-        TypeAnnotationRole }, ExprPayload { ParseReport, ErrorReport }
+        TypeAnnotationRole, ArgumentOperandRole }, ExprPayload { ParseReport, ErrorReport }
 };
 using "./SourceStorage.cod" { SourceBytes, DelimiterLink { MatchedDelimiter } };
 
@@ -309,7 +309,7 @@ func is_recovery_separator(mark:u8, role:SyntaxRole) -> bool {
     if (role == BindingNameRole && mark == 58u8) return true;
     if ((role == BindingNameRole || role == TypeAnnotationRole) && mark == 61u8) return true;
     return (role == InitializerRole || role == ExpressionRole || role == BindingNameRole ||
-            role == TypeAnnotationRole || role == ReferenceGroupEntryRole) &&
+            role == TypeAnnotationRole || role == ReferenceGroupEntryRole || role == ArgumentOperandRole) &&
         (mark == 44u8 || mark == 41u8 || mark == 93u8)
 }
 

@@ -58,7 +58,9 @@ using "./Lexer.cod" {
     break_word, else_word, true_word, false_word, c_linkage, not_word, case_word, of_word, fallthrough_word, effect_word,
     quoted_text, multiline_text, punctuation, init_word, assert_word, is_word,
 };
-using "./ParserStorage.cod" SyntaxRole { InitializerRole, BlockItemRole, ExpressionRole, ReferenceGroupEntryRole };
+using "./ParserStorage.cod" SyntaxRole {
+    InitializerRole, BlockItemRole, ExpressionRole, ReferenceGroupEntryRole, ArgumentOperandRole
+};
 using "./SourceStorage.cod" { SourceBytes, Token };
 
 func expected_operand() -> u8 { return 1u8; }
@@ -1697,8 +1699,15 @@ func parse_argument(source:const SourceBytes in S, tokens:const Tokens in T,
     val checked <- named && !field_labels && begins_checked_ref_argument(source, tokens, start, past);
     if (checked) { (result.next <- start + 2u64):void; } else {};
     if (!named || !punct_pair_at(source, tokens, result.next, past, 45u8, 62u8)) {
+        val in_here <- result.supplied_here;
+        val in_case <- result.case_control;
         parse_expression_at(source, tokens, nodes, result, past, 1u8);
-        if (result.diagnostic != 0u8) return false;
+        if (result.diagnostic != 0u8) {
+            result.supplied_here <- in_here;
+            result.case_control <- in_case;
+            if (!recover_syntax(source, tokens, nodes, result, start, past, ArgumentOperandRole))
+                return false
+        };
         (argument <- result.root):void;
     } else {};
     if (named && punct_pair_at(source, tokens, result.next, past, 45u8, 62u8)) {

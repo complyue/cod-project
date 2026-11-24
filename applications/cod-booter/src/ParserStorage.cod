@@ -28,7 +28,7 @@ export enum FormalMode:u8 {
 
 export enum SyntaxRole:u8 {
     ModuleItemRole; BlockItemRole; InitializerRole; ExpressionRole; BindingNameRole; TypeAnnotationRole;
-    ReferenceGroupEntryRole;
+    ReferenceGroupEntryRole; ArgumentOperandRole;
 }
 
 export enum LocalMode:u8 { ValueLocal; ReferenceLocal; PointerLocal; ExceptionLocal; }
@@ -393,9 +393,21 @@ export func inspect_sequence_entry(nodes:const ExprNodes in N, revision:u64, use
                     }
                 };
                 (ArgumentItem { val previous <- previous; val operand <- operand; }) -> {
-                    return if (read_sequence_links(nodes, revision, at, previous, operand, entry)) {
-                        (ArgumentSequence:SequenceSyntax)
-                    } else { (InvalidSequence:SequenceSyntax) };
+                    if (!read_sequence_links(nodes, revision, at, previous, operand, entry))
+                        return InvalidSequence:SequenceSyntax;
+                    return case nodes[entry.item] of {
+                        Occupied { val child <- node; } -> {
+                            case child.payload of {
+                                ErrorReport -> {
+                                    if (has_error_role(nodes, revision, at, entry.item, ArgumentOperandRole:SyntaxRole))
+                                        { ArgumentSequence:SequenceSyntax }
+                                    else { InvalidSequence:SequenceSyntax }
+                                };
+                                _ -> ArgumentSequence:SequenceSyntax
+                            }
+                        };
+                        _ -> InvalidSequence:SequenceSyntax
+                    }
                 };
                 (HereReceiver { val previous <- previous; val binding <- binding; }) -> {
                     return if (read_sequence_links(nodes, revision, at, previous, binding, entry)) {
