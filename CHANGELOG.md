@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review the booter’s nested case and its two helper loans
+
+<a id="k-booter-projected-case-helper-20261124"></a>
+**K-BOOTER-PROJECTED-CASE-HELPER-20261124.** [D-20-MODULE-GRAPH r71→r72](applications/cod-booter/docs/ModuleGraph.md#matching-a-sum-field-of-an-arm-local-product) and D-ARCH-REVIEW r88→r89 continue [constructor field reception](#k-booter-case-field-source-20261123) and [direct sum loans](#k-booter-direct-sum-subject-20261123) under P-680–P-683. In `6ca1050404b3ca8841599aeb4e4b64b178315875:applications/cod-booter/src/ParserStorage.cod`, `inspect_here_supply` matches an embedded sum and lends two arm-local values to ordinary helpers. Scope covers both declaration commands.
+
 ## 2026-11-24 — Review custody through a direct booter source call
 
 <a id="k-booter-direct-holder-flow-20261124"></a>
