@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Check readonly loans of inline parser fields
+
+<a id="k-booter-nested-product-loan-20261124"></a>
+**K-BOOTER-NESTED-PRODUCT-LOAN-20261124.** Under [the delegated review](#h-project-architecture-review-20261122), D-ARCH-REVIEW r99→r100 and [module graph r76→r77](applications/cod-booter/docs/ModuleGraph.md#lending-inline-fields-of-a-readonly-product) clear the source proof for the two distinct `NodeId` fields lent by `checked_assignment_sites`. P-680–P-683 and D-14-REF-ARGUMENT preserve nominal identity, field selection, owner and loan duration under both source commands. The actual caller is at `434f0cfc31ebd9b3207e27d5cb2948befab6d65f:applications/cod-booter/src/ParserStorage.cod:1132`. Object layout and execution have separate acceptance.
+
 ## 2026-11-24 — Install a local method family with a shared contract
 
 <a id="h-grouped-local-proc-install-20261124"></a>
