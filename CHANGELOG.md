@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Model shared read-only access to a large, rarely revised ontology
+
+<a id="k-facsimile-ontology-20261124"></a>
+**K-FACSIMILE-ONTOLOGY-20261124.** The [HLVM paper](papers/AlgebraicEffectsIsAllYouNeed.md#shared-ontology-packages-and-dbmr-databases) now uses an edition-level historical facsimile catalog. Independent fulfillment and editorial machines repeatedly query the same published DBMR while stock and proofs change in their own databases. The paper follows the [shared readonly acquisition contract](design/ConstructionAndAcquisition.md#dbmr-modes) and gives separate controls for an ordinary operational change, a rare bibliographic correction and a reader still pinned to the prior image.
+
 ## 2026-11-24 — Declare bits value symbols explicitly or by shorthand
 
 <a id="h-bits-value-symbol-spelling-20261124"></a>

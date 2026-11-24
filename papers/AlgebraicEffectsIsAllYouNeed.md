@@ -21,7 +21,8 @@ operation. Its operands and regional edges travel with the program. Its domain-d
 method executes in a compatible machine and can request effects supplied by the current
 environment. This separation lets many teams define Software Defined HLVMs on shared CoD
 infrastructure. Their authors can publish common ontology types in a CoD package, consult
-one shared DBMR database, and retain types and databases specific to each domain. The
+one large, rarely revised ontology through shared read-only DBMR opens, and retain types
+and operational databases specific to each domain. The
 research question is what each new DSL costs its *language author* to
 build, what it costs a *domain user* to author and safely revise one business program, and
 how that program performs. We derive example traces and give separate tests for all three.
@@ -256,55 +257,69 @@ and consult the same published facts when they serve one business.
 
 ## Shared ontology packages and DBMR databases
 
-Suppose the warehouse ships print editions for the publisher. Both teams need the same
-answer to a business question: on what day may this edition go on sale in this market?
-They agree to use one CoD package, `edition-ontology`, which defines the nominal
-`EditionId`, `MarketId`, the release-calendar fact relating them to a business day, and
-the catalog root type. The two HLVMs import those definitions. The catalog steward
-publishes the facts once in a shared DBMR database. Each team can additionally define
-its own types in its own CoD package and keep its business facts in its own DBMR database.
+Consider a publisher that issues facsimiles from a closed, national-scale collection
+of historical print. A series of atlases is one small part of the collection. A warehouse
+planner assembles sets of reproduced sheets. An editor approves the proofs for those same sets. Both
+ask a bibliographic question before proceeding: **which pieces constitute this edition?**
+A foldout bound between two plates can be essential even when it carries no page number.
+Two editions with the same short title can require different sets.
 
-| Scope | CoD package supplies | DBMR databases used in this example |
+The application authors import a common CoD package, `facsimile-ontology`. It defines
+the identities of works, editions, volumes, sheets and plates, the relations between
+them, and the catalog root type. The shared database instantiates that vocabulary with
+canonical identities, historical title aliases, ordered constituents and provenance for
+the cataloger's assertions. Billions of page occurrences, their links to volumes and
+editions, and indexes for title and constituent queries give this workload its scale.
+The large body of knowledge is the set of facts and relations. A small vocabulary can
+describe it. A real point of reference is HathiTrust Research Center's Extracted Features
+2.0 snapshot of February 2020, covering 17,123,746 volumes and 6,221,631,336 pages.
+Those figures document the scale of a historical corpus. The facsimile ontology, sheet
+requirements and CoD representation here are a proposed workload.
+[HTRC dataset documentation and counts](https://htrc.atlassian.net/wiki/spaces/COM/pages/43295914)
+
+| Who uses it | Package and persistent data | When its facts change |
 | --- | --- | --- |
-| Shared by the two machines | `edition-ontology` defines edition, market and release-calendar types. | Both open the same published `edition-catalog` revision, with the same record for edition E42 in market M. |
-| Fulfillment team | Its package defines warehouse IDs, stock records, route nodes and shipping decisions. | Its inventory database contains stock for E42. Its routing program is a separate DBMR. |
-| Publishing team | Its package defines revision IDs, approval records, release nodes and publication receipts. | Its editorial database relates private revision 17 to E42 and records the approvals. Its editorial program is another DBMR. |
+| Both machines | `facsimile-ontology` and the same published `facsimile-catalog` DBMR. Each program resolves an edition key to the catalog's list of required sheets. | The project pins a scholarly edition for a multi-year publishing series. An independently verified bibliographic correction can justify a new edition of the catalog. |
+| Fulfillment HLVM | Its own types package, routing-program DBMR and private stock database record sheet lots, orders and reservations. | A shipment or reservation changes operational stock. The approved catalog continues to describe the same complete set. |
+| Editorial HLVM | Its own types package, approval-program DBMR and private editorial database record proofs, sign-offs and publication receipts. | A new scan, approval or release changes the editorial record. It uses the same catalog to check the next set. |
 
-Package identity and database selection solve different problems. Sharing the package
-lets both readers ask the same typed question. They could still open a production catalog
-and an independently built rehearsal catalog with identical schemas and different facts.
-To use the common database, select the same catalog identity and published revision in
-both executions. A program node can carry an edition key. The reader resolves it in the
-selected catalog after checking the expected root, representation compatibility and read
-access. Any resulting view is valid under the actual catalog owner of that opening. The
-policy graph retains its own internal edges; it has no stored physical pointer into the
-catalog or either team's private database. Replacing a catalog owner requires a fresh
-resolution before accessing the replacement. [Domain integration and regional boundaries](../design/RegionalSemanticPlatformCharter.md#4-多-domain多-region-的即时集成) · [Identity and version selection](../design/DomainLanguageDesign.md#dl-08) · [Validity of views across owner transfer](../design/RegionalOwnership.md#local-view-validity-after-ownership-transfer)
+**Shared read-only open is the normal CoD path for consuming a published DBMR.** Each
+service validates and maps the selected image read-only, keeps its acquisition live,
+and serves many queries before releasing it. Multiple processes can open the same image
+at different addresses. Each acquisition has its own mapping and actual owner. Opening
+and releasing the catalog write no files, including reader metadata. Each consumer
+checks the expected root, compatibility and read access. Its program graph carries a
+domain key and resolves it against the selected catalog. A view obtained this way is
+valid under the actual owner of that opening. A replacement acquisition requires a new
+lookup before using a view into the replacement. [DBMR modes](../design/ConstructionAndAcquisition.md#dbmr-modes) · [Domain integration](../design/RegionalSemanticPlatformCharter.md#4-多-domain多-region-的即时集成) · [Validity of views across owner transfer](../design/RegionalOwnership.md#local-view-validity-after-ownership-transfer)
 
-Each team gives its user a domain instruction for applying the calendar. The warehouse
-planner can place a street-date check before inventory reservation. The editor-in-chief
-can place a release-date check before the existing approval and publication steps. The
-shared fact has one meaning; each program decides what to do with the answer. For this
-fixture, the eligible day is inclusive and the run receives business day 25 as input.
-Private inventory can satisfy the order, and both private approvals for revision 17
-are granted. Hold the two programs and these private facts fixed.
+For an order of one E42 facsimile, the approved catalog lists plates A and B and foldout
+F. The warehouse policy checks the private lot for each required piece before issuing a
+reservation for the set. The editorial policy checks that the proof for each required
+piece has been approved before requesting publication. Both use the same E42 record.
 
-| Catalog selected by both executions | Fulfillment result | Editorial result |
+| Private facts; same catalog image in both runs | Fulfillment result | Editorial result |
 | --- | --- | --- |
-| Catalog revision 12 gives day 24 for (E42, M) | Pass the date check and issue the reservation. On acceptance return the warehouse decision. | Pass the date check, consult the two approvals and issue one publication request. |
-| Catalog revision 13 gives day 26 for (E42, M) | Hold until day 26 with zero reservations. | Hold until day 26 with zero approval or publication requests. |
+| A, B and F are in stock. Only A and B have approved proofs. | Request one complete A/B/F set reservation. | Report the missing proof for F. Issue no publication request. |
+| F is out of stock. All three proofs have now been approved. | Report a shortage of F. Issue no reservation. | Request publication once. |
 
-The steward builds revision 13 privately and publishes it under a fresh name. Readers
-that keep revision 12 selected can still obtain the first row. Starting only the editorial
-machine on revision 13 intentionally produces observations from different rows; a workflow
-promising the same view to both must select a common revision. Include that mixed-version
-run and the same-schema rehearsal catalog as controls. Record which image each reader
-actually opened. A missing or incompatible catalog must take the agreed lookup or
-binding failure path before either gated service call. A shared read capability supplies
-neither inventory-reservation nor edition-publication authority. Reads of this catalog
-also give no transaction spanning the two private databases. The two business languages
-remain independently ownable and can agree on additional ontology packages or databases
-as needed. [Shared readonly open and publication](../design/ConstructionAndAcquisition.md#dbmr-modes) · [Building and maintaining DBMR versions](../design/ConstructionAndAcquisition.md#building-and-maintaining-dbmr-versions)
+Both changes in the second row are everyday work. They cause **zero catalog publications**.
+Only a rare change to the bibliographic facts merits a new image. Suppose an authenticated
+collation establishes that E42 also included an unnumbered key sheet K. A short-lived
+builder opens the previous catalog read-only, constructs and validates the corrected
+successor privately, then publishes it under a fresh name. Keep stock and approved
+proofs fixed at A/B/F for this test. Readers pinned to the old edition still see a complete
+set. Readers selecting the corrected edition must identify missing K before either
+service call. Existing readers can keep using their original image throughout. This
+example gives the shared ontology an edition cycle measured in years and operational
+databases a cycle measured in orders and proofs. [DBMR version construction and publication](../design/ConstructionAndAcquisition.md#building-and-maintaining-dbmr-versions)
+
+Importing the same type package also permits a rehearsal catalog with different contents.
+Record the catalog identity and revision each machine opened. Run one consumer on each
+edition to demonstrate the effect of mixed selection. An application that promises the
+same knowledge to both selects the same published revision. Authority to read that
+catalog grants neither stock-reservation nor publication authority.
+[Typed identity and version selection](../design/DomainLanguageDesign.md#dl-08)
 
 ## A second instruction set with a cycle
 
@@ -367,9 +382,14 @@ Before timing any program, ask a second application team to supply the
 Record the node schemas, effect signatures, methods, editor and checker code they supply,
 what platform code they can reuse, and any central runtime changes the team requests.
 Include the cost of the native methods implementing the instructions in each domain.
-For the [shared catalog](#shared-ontology-packages-and-dbmr-databases), charge the common
-package and publication once; measure integration and schema-upgrade work for each consumer.
-A calendar data change tests whether a new shared revision can serve both existing programs.
+For the [historical facsimile catalog](#shared-ontology-packages-and-dbmr-databases),
+charge ontology construction, indexing and publication once per catalog edition. Count
+copied or rebuilt data and any integration work in each consumer. Measure cold validation
+and open, first indexed lookup, and repeated lookups through a live mapping separately.
+Vary the number of concurrent read-only consumers. Report the actual resident memory,
+I/O and working set. A large image's mapped extent alone cannot predict those costs.
+Compare a normal day of orders and proof approvals, with no catalog publication, against
+the exceptional cost of issuing and adopting a corrected edition.
 Then give practitioners unfamiliar with the implementations the same new-program
 and change requests in each language. Record time to first correct policy, wrong-scope
 edits accepted or caught, and which traces the user could explain. Count AI-assisted
