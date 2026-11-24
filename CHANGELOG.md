@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Record the seed’s independent product diagnostics
+
+<a id="k-seed-world-product-status-20261124"></a>
+**K-SEED-WORLD-PRODUCT-STATUS-20261124.** [Roadmap r29→r30](applications/cod-booter/README.md#diagnostic-coverage-of-the-entry-modules-fused-world) continues the [entry-world decision](#h-entry-world-diagnostics-20261124) under P-713/P-714. The [reviewed direct product scope](#k-seed-product-diagnostic-recovery-20261124) shipped at `6645621c4fc7ebc1d9e924d6a0fc46543428c1f9:cod/lang_checked.hh`. Both seed modes report all five entry findings, or four with incomplete coverage at a limit of four.
+
 ## 2026-11-24 — Test the additive source-extension claim on matched effect programs
 
 <a id="k-additive-effect-sources-20261124"></a>
