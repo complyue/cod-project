@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review the bootstrap normal-completion paths
+
+<a id="k-normal-completion-review-20261124"></a>
+**K-NORMAL-COMPLETION-REVIEW-20261124.** D-ARCH-REVIEW r106→107 applies [the normal-completion decision](#h-normal-completion-20261124) to the [seed invocation exit and the booter empty-pattern reader](design/ImplementationArchitecture.md#entering-cleanup-on-natural-void-completion) under P-682/P-683. Seed inference, checking and emission share the resolved invocation boundary. The staged booter reader retains a located prepublication stop pending checked destination evidence. [Compiler coverage](tests/cod/language/README.md#normal-completion-coverage)
+
 ## 2026-11-24 — Natural void completion and unbound return inspection
 
 <a id="h-normal-completion-20261124"></a>
