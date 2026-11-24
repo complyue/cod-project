@@ -19,7 +19,7 @@ and compare retry and selective publication on a stack of **three State and five
 instances**. With the same rejected acquisition followed by an accepted one, two of five
 journals change when the scopes exchange places. All three states and the other three
 journals must agree. The [eight-role programs](examples/ComposedTileReport.md) give the
-observable contract, the concrete `mtl` stack and a labeled `effectful` comparison. A
+observable contract, two concrete transformer layouts and a labeled `effectful` comparison. A
 [one-handler control](examples/ScopedTileAudit.md) isolates invocation. All results below
 are paper derivations.
 
@@ -82,12 +82,16 @@ a distinguishable result even if the tile was ultimately accepted. The
 [worked example](examples/ComposedTileReport.md) also gives immediate-success, exhausted-retry
 and routing controls.
 
-The `mtl` case really stacks five `WriterT`s on three `StateT`s. The application's adapter
-names the routes to the separate layers. A plain `tell [n]` selects the nearest writer.
-A scalar type alone cannot tell `state` which of three counters the author means. Peeling
-both provisional writers at the stage boundary handles them together; the base states
-and the other journals continue through the body. A labeled `effectful` row gives the
-eight roles names even with identical payloads. In CoD the source gives the roles nominal
+The first Haskell inspector calls `state`, `tell` and `lift` directly on five `WriterT`s
+above three `StateT`s. A bare `tell [n]` appends to the outermost writer. Selecting a deeper
+writer of the same type takes the appropriate lifts at the call. A
+[second transformer layout](examples/ComposedTileReport.md#an-interleaved-stack-using-transformers-directly)
+puts the acquisition serial between the defect and sample writers. Its stage unwraps
+writer, state and writer, keeps the **new serial on rejection**, and discards the two
+provisional batches together. A third inspector selects the eight handlers of the
+`effectful` row by their labels. Thus each leaf exposes how it finds the intended
+instance. Nested pairs in the transformer results arise when the native runners return
+the state or output alongside the computation result. In CoD the source gives the roles nominal
 symbol identities. A scoped value such as a threshold can use `val symbol`. Independently
 mutable cells that must retain writes across calls can be local lexical storage selected
 by reference symbols; temporarily selecting private cells stages just the chosen outputs.
@@ -98,7 +102,7 @@ make errors in naming and routing visible; their product, fifteen, counts no obl
 in this experiment. The size argument below has different axes: independently extensible
 interfaces and layer forms. Freeze the two wrappers, add a separately named observation
 which must survive rejection, then add an independent scope which passes the other effects
-through. Record what changes in the old inspector, the adapters, the handler assembly and
+through. Record what changes in the old inspector, its direct layer selections, the handler assembly and
 the observers. Compare this with deliberately extending the publication contract to a third
 staged output, which requires a change to the stage's policy.
 [Same-typed instances and extension](examples/ComposedTileReport.md#what-changes-when-another-author-extends-the-program)
@@ -278,9 +282,10 @@ independently authored effects.
 
 ## What named effects remove in CoD
 
-The listings spell an independent bits binding `val symbol @x:T`, making its value role
-explicit. The current design specifies the same scoped value as `symbol @x:T`. The examples
-assume that established save-and-restore rule. [Symbol categories](../design/SymbolicDynamicScope.md#explicit-ref-and-ptr-symbols-backed-by-a-region-symbol)
+For a bits type `T`, `val symbol @x:T` explicitly declares a value symbol, and
+`symbol @x:T` is its abbreviated form. In either spelling, installing a new value
+saves its predecessor and restores it on scope exit. The examples use the explicit form
+where the storage category matters. [Symbolic binding and restoration](../design/SymbolicDynamicScope.md#scoped-bindings-versus-object-transfer)
 
 Consider a tile scope that binds only its tile identity. An inspection procedure directly
 calls an installed `@flag` operation with `behave`. Provided the required outer flag handler

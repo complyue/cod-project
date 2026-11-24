@@ -20,7 +20,9 @@ regions. An instruction is a functor in the C++ sense: a data object with a call
 operation. Its operands and regional edges travel with the program. Its domain-defined
 method executes in a compatible machine and can request effects supplied by the current
 environment. This separation lets many teams define Software Defined HLVMs on shared CoD
-infrastructure. The research question is what each new DSL costs its *language author* to
+infrastructure. Their authors can publish common ontology types in a CoD package, consult
+one shared DBMR database, and retain types and databases specific to each domain. The
+research question is what each new DSL costs its *language author* to
 build, what it costs a *domain user* to author and safely revise one business program, and
 how that program performs. We derive example traces and give separate tests for all three.
 
@@ -249,8 +251,60 @@ step without changing the language. A requirement to schedule a release for a ti
 only at run time would need a new source of information and possibly a new instruction.
 The fulfillment team's nodes, reservation handler and executor need no change in either
 case. A platform implementation that requires the two teams to coordinate a global opcode
-switch would fail the independence test. The BASIC loop below exercises a different
-property, execution of a back edge after reopening a program.
+switch would fail the independence test. These teams can still agree on an ontology package
+and consult the same published facts when they serve one business.
+
+## Shared ontology packages and DBMR databases
+
+Suppose the warehouse ships print editions for the publisher. Both teams need the same
+answer to a business question: on what day may this edition go on sale in this market?
+They agree to use one CoD package, `edition-ontology`, which defines the nominal
+`EditionId`, `MarketId`, the release-calendar fact relating them to a business day, and
+the catalog root type. The two HLVMs import those definitions. The catalog steward
+publishes the facts once in a shared DBMR database. Each team can additionally define
+its own types in its own CoD package and keep its business facts in its own DBMR database.
+
+| Scope | CoD package supplies | DBMR databases used in this example |
+| --- | --- | --- |
+| Shared by the two machines | `edition-ontology` defines edition, market and release-calendar types. | Both open the same published `edition-catalog` revision, with the same record for edition E42 in market M. |
+| Fulfillment team | Its package defines warehouse IDs, stock records, route nodes and shipping decisions. | Its inventory database contains stock for E42. Its routing program is a separate DBMR. |
+| Publishing team | Its package defines revision IDs, approval records, release nodes and publication receipts. | Its editorial database relates private revision 17 to E42 and records the approvals. Its editorial program is another DBMR. |
+
+Package identity and database selection solve different problems. Sharing the package
+lets both readers ask the same typed question. They could still open a production catalog
+and an independently built rehearsal catalog with identical schemas and different facts.
+To use the common database, select the same catalog identity and published revision in
+both executions. A program node can carry an edition key. The reader resolves it in the
+selected catalog after checking the expected root, representation compatibility and read
+access. Any resulting view is valid under the actual catalog owner of that opening. The
+policy graph retains its own internal edges; it has no stored physical pointer into the
+catalog or either team's private database. Replacing a catalog owner requires a fresh
+resolution before accessing the replacement. [Domain integration and regional boundaries](../design/RegionalSemanticPlatformCharter.md#4-多-domain多-region-的即时集成) · [Identity and version selection](../design/DomainLanguageDesign.md#dl-08) · [Validity of views across owner transfer](../design/RegionalOwnership.md#local-view-validity-after-ownership-transfer)
+
+Each team gives its user a domain instruction for applying the calendar. The warehouse
+planner can place a street-date check before inventory reservation. The editor-in-chief
+can place a release-date check before the existing approval and publication steps. The
+shared fact has one meaning; each program decides what to do with the answer. For this
+fixture, the eligible day is inclusive and the run receives business day 25 as input.
+Private inventory can satisfy the order, and both private approvals for revision 17
+are granted. Hold the two programs and these private facts fixed.
+
+| Catalog selected by both executions | Fulfillment result | Editorial result |
+| --- | --- | --- |
+| Catalog revision 12 gives day 24 for (E42, M) | Pass the date check and issue the reservation. On acceptance return the warehouse decision. | Pass the date check, consult the two approvals and issue one publication request. |
+| Catalog revision 13 gives day 26 for (E42, M) | Hold until day 26 with zero reservations. | Hold until day 26 with zero approval or publication requests. |
+
+The steward builds revision 13 privately and publishes it under a fresh name. Readers
+that keep revision 12 selected can still obtain the first row. Starting only the editorial
+machine on revision 13 intentionally produces observations from different rows; a workflow
+promising the same view to both must select a common revision. Include that mixed-version
+run and the same-schema rehearsal catalog as controls. Record which image each reader
+actually opened. A missing or incompatible catalog must take the agreed lookup or
+binding failure path before either gated service call. A shared read capability supplies
+neither inventory-reservation nor edition-publication authority. Reads of this catalog
+also give no transaction spanning the two private databases. The two business languages
+remain independently ownable and can agree on additional ontology packages or databases
+as needed. [Shared readonly open and publication](../design/ConstructionAndAcquisition.md#dbmr-modes) · [Building and maintaining DBMR versions](../design/ConstructionAndAcquisition.md#building-and-maintaining-dbmr-versions)
 
 ## A second instruction set with a cycle
 
@@ -313,6 +367,9 @@ Before timing any program, ask a second application team to supply the
 Record the node schemas, effect signatures, methods, editor and checker code they supply,
 what platform code they can reuse, and any central runtime changes the team requests.
 Include the cost of the native methods implementing the instructions in each domain.
+For the [shared catalog](#shared-ontology-packages-and-dbmr-databases), charge the common
+package and publication once; measure integration and schema-upgrade work for each consumer.
+A calendar data change tests whether a new shared revision can serve both existing programs.
 Then give practitioners unfamiliar with the implementations the same new-program
 and change requests in each language. Record time to first correct policy, wrong-scope
 edits accepted or caught, and which traces the user could explain. Count AI-assisted

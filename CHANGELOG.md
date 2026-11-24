@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Expose effect-layer selection and exercise shared ontology data across HLVMs
+
+<a id="k-direct-effects-shared-ontology-20261124"></a>
+**K-DIRECT-EFFECTS-SHARED-ONTOLOGY-20261124.** The [tile comparison](papers/examples/ComposedTileReport.md#haskell-with-mtl) now shows selection at each operation in two eight-layer transformer layouts and in a native labeled effect row. The papers use the user's confirmed bits value-symbol abbreviation. The [HLVM study](papers/AlgebraicEffectsIsAllYouNeed.md#shared-ontology-packages-and-dbmr-databases) follows two independently authored machines sharing one CoD ontology package and the same catalog DBMR while retaining their own packages, programs and fact databases. All traces in these papers are derived observations.
+
 ## 2026-11-24 — Compare same-typed effect instances and independent domain HLVM authors
 
 <a id="k-paper-eight-roles-domain-hlvms-20261124"></a>

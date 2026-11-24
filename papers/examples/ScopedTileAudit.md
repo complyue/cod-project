@@ -30,8 +30,8 @@ writer outside the error handler produced exactly the expected singleton list.
 
 ## CoD
 
-The destination is a scalar. We use the explicit paper spelling `val symbol` for the
-independent bits binding that the current design text spells `symbol @destination:u64`.
+The destination has a bits type. `val symbol @destination:u64` declares its value
+symbol explicitly. `symbol @destination:u64` abbreviates the same declaration.
 Installing the procedure with a body gives it access to two live locals in `check`.
 Both invocation modes write to these same locals. Only the choice of destination changes.
 A checked failure occurs after the write, which lets the observer distinguish a restored

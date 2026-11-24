@@ -7,9 +7,9 @@
 Two calibration policies modify the cutoff for work carried out in their scope. One
 adds a margin of four. The other doubles the cutoff. A reading of 12 clears a cutoff
 of 10 but misses a cutoff of 14. One scoped scalar suffices to express the difference.
-The listings use the project's requested explicit `val symbol` spelling for a bits
-binding. The current design text spells this same binding `symbol @cutoff:u64`.
-Both spellings here mean a copied value with scoped installation and restoration.
+For a bits payload, `val symbol @cutoff:u64` declares a value symbol explicitly.
+`symbol @cutoff:u64` is its abbreviated form. Both install a scoped copy of the bits and
+restore the previous value on exit.
 [Symbolic storage contract](../../design/SymbolicDynamicScope.md#symbolic-storage-and-regional-provenance)
 
 ```cod
@@ -202,103 +202,51 @@ After two rejections both must still contain the original (7, 8).
 This detects a commit that accidentally replaces an existing report with only the
 latest acquisition.
 
-## Haskell business code shared by both libraries
-
-The two Haskell programs use the same inspector. Its ports give each of the eight roles
-a name. Only the adapter for a library knows how to reach its chosen layer. The observer
-names every returned state and journal, including the ones that survive a rejection.
-
-```haskell
-module Inspector where
-
-import Data.Word (Word64)
-
-type N = Word64
-type Trace = [N]
-
-data Ports m = Ports
-  { nextSerial :: m N
-  , charge :: m ()
-  , takeGain :: m N
-  , acquired, rejects, defects, samples, passes :: N -> m ()
-  }
-
-inspect :: Monad m => Ports m -> N -> m Bool
-inspect p rejectThrough = do
-  n <- nextSerial p
-  charge p
-  g <- takeGain p
-  acquired p n
-  defects p n
-  samples p g
-  let ok = n > rejectThrough
-  if ok then passes p n else rejects p n
-  pure ok
-
-advance, takeOld :: N -> (N, N)
-advance n = (n + 1, n + 1)
-takeOld g = (g, g + 1)
-
-pay :: N -> ((), N)
-pay c = ((), c - 2)
-
-retryOnce :: Monad m => m Bool -> m Bool
-retryOnce body = do
-  ok <- body
-  if ok then pure True else body
-
-data Observation = Observation
-  { accepted :: Bool
-  , serialCreditsGain :: (N, N, N)
-  , acquiredRejectedPassesDefectsSamples :: (Trace, Trace, Trace, Trace, Trace)
-  } deriving (Eq, Show)
-
--- Each of the eight eliminators below returns a pair with its own output.
-observe ((((((((ok, ds), ss), as), rs), ps), n), c), g) =
-  Observation ok (n, c, g) (as, rs, ps, ds, ss)
-```
-
+<a id="haskell-business-code-shared-by-both-libraries"></a>
 <a id="haskell-with-mtl"></a>
 
 ## Three StateT layers and five WriterT layers
 
-Here is a concrete `mtl` stack. From outside in, the writers collect **defects, samples,
-acquired, rejects, passes**. The states then hold **serial, credits, gain**. All three
-states store the same scalar type. All five writers append to the same list type. An
-unqualified `tell [n]` at the top chooses defects. Its argument cannot identify any of
-the other four journals. Similarly, `mtl` can lift an unqualified state operation through
-the writers to the serial state. Accessing the two further state instances needs a route
-past that first instance.
+Read the concrete stack from outside in. The five strict writers are defects, samples,
+acquired, rejects and passes. The three strict states are serial, credits and gain.
+The inspector performs each operation directly in this stack. In particular, the three
+states all hold `Word64`, and every writer outputs `[Word64]`. Reaching the wrong
+layer can therefore type-check.
 
 ```haskell
 module Stacked where
 
 import Control.Monad (when)
-import Control.Monad.State.Strict (StateT, runStateT, state)
+import Control.Monad.State.Strict (StateT, modify', runStateT, state)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Writer.Strict (WriterT(..), tell)
 import Data.Functor.Identity (Identity, runIdentity)
-import Inspector
+import Data.Word (Word64)
 
-type W = WriterT Trace
-type S = StateT N
-type States = S (S (S Identity))
-type Stack = W (W (W (W (W States))))
+type Entries = [Word64]
+type States  = StateT Word64 (StateT Word64 (StateT Word64 Identity))
+type Stack   = WriterT Entries (WriterT Entries (WriterT Entries
+                 (WriterT Entries (WriterT Entries States))))
 
-fromStates :: States a -> Stack a
-fromStates = lift . lift . lift . lift . lift
+inspect :: Word64 -> Stack Bool
+inspect rejectThrough = do
+  n <- state (\s -> (s + 1, s + 1))                  -- serial, through all five writers
+  (lift . lift . lift . lift . lift . lift) $        -- credits, past serial
+    modify' (subtract 2)
+  g <- (lift . lift . lift . lift . lift . lift . lift) $
+    state (\s -> (s, s + 1))                         -- gain, past serial and credits
+  (lift . lift) (tell [n])                           -- acquired
+  tell [n]                                           -- defects
+  lift (tell [g])                                    -- samples
+  let ok = n > rejectThrough
+  if ok then (lift . lift . lift . lift) (tell [n])  -- passes
+        else (lift . lift . lift) (tell [n])         -- rejects
+  pure ok
 
-ports :: Ports Stack
-ports = Ports
-  { nextSerial = state advance
-  , charge     = fromStates (lift (state pay))
-  , takeGain   = fromStates (lift (lift (state takeOld)))
-  , defects    = \n -> tell [n]
-  , samples    = \n -> lift (tell [n])
-  , acquired   = \n -> (lift . lift) (tell [n])
-  , rejects    = \n -> (lift . lift . lift) (tell [n])
-  , passes     = \n -> (lift . lift . lift . lift) (tell [n])
-  }
+retryOnce :: Monad m => m Bool -> m Bool
+retryOnce body = do
+  ok <- body
+  if ok then pure True else body
 
 stage :: Stack Bool -> Stack Bool
 stage body = WriterT $ WriterT $ do
@@ -306,147 +254,232 @@ stage body = WriterT $ WriterT $ do
   let keep xs = if ok then xs else []
   pure ((ok, keep ds), keep ss)
 
-run :: Bool -> N -> Observation
-run = runWithPrefix False
-
-runWithPrefix :: Bool -> Bool -> N -> Observation
-runWithPrefix prefix perAcquisition k = observe $ runIdentity
+run prefix perAcquisition k = runIdentity
   $ flip runStateT 3 $ flip runStateT 8 $ flip runStateT 0
   $ runWriterT $ runWriterT $ runWriterT $ runWriterT $ runWriterT
   $ do
-    when prefix $ defects ports 7 >> samples ports 8
-    if perAcquisition then retryOnce (stage (inspect ports k))
-                      else stage (retryOnce (inspect ports k))
+      when prefix $ do
+        tell [7]
+        lift (tell [8])
+      if perAcquisition then retryOnce (stage (inspect k))
+                        else stage (retryOnce (inspect k))
 ```
 
-`stage` handles only the outer two writer outputs. Reading their complete batches and
-retaining both or neither preserves earlier output in the enclosing scopes. The other
-six operations run in the underlying stack throughout. Grouping the selected writers at
-the top is a favorable layout for this policy. With the same underlying journal type,
-interchanging positions can preserve type correctness and change the report. Keeping
-the lift paths in `ports` confines that maintenance to the adapter. This fixture requires
-no new `mtl` instances. An application needing just one combined state and output can
-put three fields in one state and five fields in a product monoid; the eight-layer
-workload here additionally asks how independently installed, same-typed layers are named
-and selectively interpreted. [mtl state instances](https://hackage-content.haskell.org/package/mtl-2.3.1/docs/Control-Monad-State-Strict.html) · [mtl writer instances](https://hackage-content.haskell.org/package/mtl-2.3.1/docs/Control-Monad-Writer-Strict.html)
+At the first line of `inspect`, the stock `MonadState` instance for `WriterT` forwards
+the action through all five writers to serial. The six explicit lifts for credits cross
+those writers and the first `StateT`. Gains sit one layer deeper. The writer operations
+use zero through four explicit lifts. The two `runWriterT` calls in `stage` expose just
+the two provisional outputs of this action. Its Boolean verdict filters both. The other
+three writers and all states execute in the underlying six-layer stack. Earlier parent
+output has already accumulated outside the filtered action. This program takes the
+favorable layout in which both provisional writers are outermost. It defines no new
+typeclass instance. [mtl strict state](https://hackage-content.haskell.org/package/mtl-2.3.1/docs/Control-Monad-State-Strict.html) · [mtl strict writer](https://hackage-content.haskell.org/package/mtl-2.3.1/docs/Control-Monad-Writer-Strict.html)
 
-<a id="haskell-with-effectful"></a>
+## An interleaved stack using transformers directly
 
-## The same inspector with labeled effectful handlers
-
-`effectful-core` already supports multiple instances of one effect through `Labeled`.
-A concrete label selects a service even when its payload matches every other service.
-Here the stage accepts an action with two fresh labeled writers in front of an open
-tail. It runs both child interpreters and forwards their output to the outer writers
-of the corresponding names only on acceptance. The other handlers stay live.
+Keep the same business protocol and move serial state **between** the two writers that
+stage must control. This second physical stack uses the primitive `StateT` and `WriterT`
+operations from `transformers`. From the outside in its slots are defects, serial,
+samples, credits, acquired, gain, rejects, passes. Each `lift` crosses one actual layer.
+With this layout the publication function must return the new serial even when it
+discards both writer outputs. Returning the incoming serial on rejection would cause
+the next acquisition to reuse an ID.
 
 ```haskell
-{-# LANGUAGE AllowAmbiguousTypes, ConstraintKinds, DataKinds, FlexibleContexts #-}
-{-# LANGUAGE KindSignatures, ScopedTypeVariables, TypeApplications, TypeOperators #-}
-module LabeledInspector where
+module Interleaved where
 
 import Control.Monad (when)
+import Control.Monad.Trans.Class (lift)
+import qualified Control.Monad.Trans.State.Strict as S
+import qualified Control.Monad.Trans.Writer.Strict as W
+import Data.Functor.Identity (Identity, runIdentity)
+import Data.Word (Word64)
+
+type N = Word64
+type Journal = W.WriterT [N]
+type Cell = S.StateT N
+type Stack = Journal (Cell (Journal (Cell (Journal (Cell (Journal (Journal Identity)))))))
+
+inspect :: N -> Stack Bool
+inspect rejectThrough = do
+  n <- lift $ S.state (\s -> (s + 1, s + 1))                    -- serial
+  (lift . lift . lift) $ S.modify' (subtract 2)                 -- credits
+  g <- (lift . lift . lift . lift . lift) $ S.state (\x -> (x, x + 1)) -- gain
+  (lift . lift . lift . lift) $ W.tell [n]                      -- acquired
+  W.tell [n]                                                    -- defects
+  (lift . lift) $ W.tell [g]                                    -- samples
+  let ok = n > rejectThrough
+  if ok then (lift . lift . lift . lift . lift . lift . lift) (W.tell [n]) -- passes
+        else (lift . lift . lift . lift . lift . lift) (W.tell [n])        -- rejects
+  pure ok
+
+retryOnce :: Monad m => m Bool -> m Bool
+retryOnce body = do
+  ok <- body
+  if ok then pure True else body
+
+stage :: Stack Bool -> Stack Bool
+stage body = W.WriterT $ S.StateT $ \serialIn -> W.WriterT $ do
+  (((ok, ds), serialOut), ss) <- W.runWriterT (S.runStateT (W.runWriterT body) serialIn)
+  let publish xs = if ok then xs else []
+  pure (((ok, publish ds), serialOut), publish ss)
+
+run prefix perAcquisition k = runIdentity
+  $ W.runWriterT                 -- passes
+  $ W.runWriterT                 -- rejects
+  $ flip S.runStateT 3           -- gain
+  $ W.runWriterT                 -- acquired
+  $ flip S.runStateT 8           -- credits
+  $ W.runWriterT                 -- samples
+  $ flip S.runStateT 0           -- serial
+  $ W.runWriterT                 -- defects
+  $ do
+    when prefix $ do
+      W.tell [7]
+      (lift . lift) $ W.tell [8]
+    if perAcquisition then retryOnce (stage (inspect k))
+                      else stage (retryOnce (inspect k))
+```
+
+For `run False True 1` the eight native runners successively expose acceptance, defects
+`[2]`, serial `2`, samples `[4]`, credits `4`, acquired `[1,2]`, gain `5`, rejects `[1]`
+and passes `[2]`. For `run False False 1` only defects and samples change, to `[1,2]` and
+`[3,4]`. An observer must decode each result pair in this stack's own order. The predicate,
+retry and publication contract are the same as in the grouped stack. The altered source
+of `stage` and the changed paths to `tell` show exactly where this layout costs the author.
+[StateT operations](https://hackage-content.haskell.org/package/transformers-0.6.2.0/docs/Control-Monad-Trans-State-Strict.html) · [WriterT operations](https://hackage-content.haskell.org/package/transformers-0.6.2.0/docs/Control-Monad-Trans-Writer-Strict.html)
+
+<a id="haskell-with-effectful"></a>
+<a id="the-same-inspector-with-labeled-effectful-handlers"></a>
+
+## Direct operations on a labeled effectful row
+
+Here is a separate implementation for `effectful-core` 2.7.1.2. `Eff Eight` has an
+effect row. Each of its three labeled state handlers and five labeled writer handlers
+has its own installation. Type-level strings distinguish equal payload types. The
+inspector invokes the library's `labeled`, `state`, `modify` and `tell` at their actual
+use sites. Its constraints also admit temporary writers ahead of the outer handlers.
+
+```haskell
+{-# LANGUAGE DataKinds, FlexibleContexts, KindSignatures, TypeApplications, TypeOperators #-}
+module Labeled where
+
+import Control.Monad (when)
+import Data.Word (Word64)
 import Effectful
 import Effectful.Labeled (Labeled, labeled, runLabeled)
 import qualified Effectful.State.Static.Local as S
 import qualified Effectful.Writer.Static.Local as W
 import GHC.TypeLits (Symbol)
-import Inspector
 
-type Cell name = Labeled (name :: Symbol) (S.State N)
-type Log name = Labeled (name :: Symbol) (W.Writer Trace)
+type Entries = [Word64]
+type StateRole (name :: Symbol) = Labeled name (S.State Word64)
+type Journal   (name :: Symbol) = Labeled name (W.Writer Entries)
+type Eight = '[Journal "defects", Journal "samples", Journal "acquired",
+               Journal "rejects", Journal "passes",
+               StateRole "serial", StateRole "credits", StateRole "gain"]
 
-update :: forall name es a. Cell name :> es => (N -> (a, N)) -> Eff es a
-update f = labeled @name @(S.State N) (S.state f)
-
-emit :: forall name es. Log name :> es => Trace -> Eff es ()
-emit ns = labeled @name @(W.Writer Trace) (W.tell ns)
-
-type Roles es =
-  (Cell "serial" :> es, Cell "credits" :> es, Cell "gain" :> es,
-   Log "acquired" :> es, Log "rejects" :> es, Log "defects" :> es,
-   Log "samples" :> es, Log "passes" :> es)
-
-ports :: Roles es => Ports (Eff es)
-ports = Ports
-  { nextSerial = update @"serial" advance
-  , charge     = update @"credits" pay
-  , takeGain   = update @"gain" takeOld
-  , acquired   = \n -> emit @"acquired" [n]
-  , rejects    = \n -> emit @"rejects" [n]
-  , defects    = \n -> emit @"defects" [n]
-  , samples    = \n -> emit @"samples" [n]
-  , passes     = \n -> emit @"passes" [n]
-  }
-
-stage :: (Log "defects" :> es, Log "samples" :> es)
-      => Eff (Log "defects" ': Log "samples" ': es) Bool -> Eff es Bool
-stage body = do
-  ((ok, ds), ss) <- runLabeled @"samples" (W.runWriter @Trace)
-                  $ runLabeled @"defects" (W.runWriter @Trace) body
-  when ok $ do
-    emit @"defects" ds
-    emit @"samples" ss
+inspect :: (StateRole "serial" :> es, StateRole "credits" :> es, StateRole "gain" :> es,
+            Journal "acquired" :> es, Journal "defects" :> es, Journal "samples" :> es,
+            Journal "rejects" :> es, Journal "passes" :> es)
+        => Word64 -> Eff es Bool
+inspect rejectThrough = do
+  n <- labeled @"serial" @(S.State Word64) $ S.state @Word64 (\s -> (s + 1, s + 1))
+  labeled @"credits" @(S.State Word64) $ S.modify @Word64 (subtract 2)
+  g <- labeled @"gain" @(S.State Word64) $ S.state @Word64 (\s -> (s, s + 1))
+  labeled @"acquired" @(W.Writer Entries) $ W.tell [n]
+  labeled @"defects"  @(W.Writer Entries) $ W.tell [n]
+  labeled @"samples"  @(W.Writer Entries) $ W.tell [g]
+  let ok = n > rejectThrough
+  if ok then labeled @"passes" @(W.Writer Entries) (W.tell [n])
+        else labeled @"rejects" @(W.Writer Entries) (W.tell [n])
   pure ok
 
-run :: Bool -> N -> Observation
-run = runWithPrefix False
+retryOnce :: Monad m => m Bool -> m Bool
+retryOnce body = do
+  ok <- body
+  if ok then pure True else body
 
-runWithPrefix :: Bool -> Bool -> N -> Observation
-runWithPrefix prefix perAcquisition k = observe $ runPureEff
-  $ runLabeled @"gain"    (S.runState (3 :: N))
-  $ runLabeled @"credits" (S.runState (8 :: N))
-  $ runLabeled @"serial"  (S.runState (0 :: N))
-  $ runLabeled @"passes"   (W.runWriter @Trace)
-  $ runLabeled @"rejects"  (W.runWriter @Trace)
-  $ runLabeled @"acquired" (W.runWriter @Trace)
-  $ runLabeled @"samples"  (W.runWriter @Trace)
-  $ runLabeled @"defects"  (W.runWriter @Trace)
-  $ do
-    when prefix $ defects ports 7 >> samples ports 8
-    if perAcquisition then retryOnce (stage (inspect ports k))
-                      else stage (retryOnce (inspect ports k))
+stage :: (Journal "defects" :> es, Journal "samples" :> es)
+      => Eff (Journal "defects" ': Journal "samples" ': es) Bool -> Eff es Bool
+stage body = do
+  ((ok, ds), ss) <- runLabeled @"samples" (W.runWriter @Entries)
+                  $ runLabeled @"defects" (W.runWriter @Entries) body
+  when ok $ do
+    labeled @"defects" @(W.Writer Entries) (W.tell ds)
+    labeled @"samples" @(W.Writer Entries) (W.tell ss)
+  pure ok
+
+tile :: Bool -> Bool -> Word64 -> Eff Eight Bool
+tile prefix perAcquisition k = do
+  when prefix $ do
+    labeled @"defects" @(W.Writer Entries) (W.tell ([7] :: Entries))
+    labeled @"samples" @(W.Writer Entries) (W.tell ([8] :: Entries))
+  if perAcquisition then retryOnce (stage (inspect k))
+                    else stage (retryOnce (inspect k))
+
+run prefix perAcquisition k = runPureEff
+  $ runLabeled @"gain"    (S.runState (3 :: Word64))
+  $ runLabeled @"credits" (S.runState (8 :: Word64))
+  $ runLabeled @"serial"  (S.runState (0 :: Word64))
+  $ runLabeled @"passes"   (W.runWriter @Entries)
+  $ runLabeled @"rejects"  (W.runWriter @Entries)
+  $ runLabeled @"acquired" (W.runWriter @Entries)
+  $ runLabeled @"samples"  (W.runWriter @Entries)
+  $ runLabeled @"defects"  (W.runWriter @Entries)
+  $ tile prefix perAcquisition k
 ```
 
-For both Haskell modules, `run True 1` gives
-`Observation True (2,4,5) ([1,2],[1],[2],[2],[4])`.
-`run False 1` gives `Observation True (2,4,5) ([1,2],[1],[2],[1,2],[3,4])`.
-Labeling already removes the positional lift paths in the transformer adapter. The
-business code and its two short compositions are shared. The remaining source-level
-comparison concerns how a role is declared, activated, rebound and checked. The cost
-of implementing reusable library machinery is charged once.
+During `stage`, two fresh local writer handlers temporarily shadow the public defects
+and samples handlers of the same labels. After eliminating the locals, the two final
+`tell` operations address the public handlers. The local static writer supplies
+`runWriter` and `tell` and deliberately omits `pass` and `censor`. The code uses the
+library's actual API to express selective publication. Each public state is still
+handled once by its own `runState` and each public journal once by its own `runWriter`.
 [effectful labels](https://hackage-content.haskell.org/package/effectful-core-2.7.1.2/docs/Effectful-Labeled.html) · [local state](https://hackage-content.haskell.org/package/effectful-core-2.7.1.2/docs/Effectful-State-Static-Local.html) · [local writer](https://hackage-content.haskell.org/package/effectful-core-2.7.1.2/docs/Effectful-Writer-Static-Local.html)
 
 <a id="what-changes-when-another-author-extends-the-program"></a>
+<a id="a-pre-existing-report-and-an-independently-added-journal"></a>
 
-### A pre-existing report and an independently added journal
+### Observing a routed write and testing an extension
 
-Start with defects `[7]` and samples `[8]` in the enclosing report. Call
-`runWithPrefix True True 1` in either Haskell module. Its two staged outputs are
-`[7,2]` and `[8,4]`. With `runWithPrefix True False 2`, both attempts fail and the
-outputs remain `[7]` and `[8]`. A handler that clears the parent journals on rejection
-fails this test even if it passes every empty-report case.
+In `Stacked` and `Labeled`, every writer runner returns its result and its own output.
+Every state runner returns its result and its own final state. The natural nesting gives
+the following results, in elimination order (verdict, defects, samples, acquired, rejects,
+passes, serial, credits, gain). These are the return values of the eight eliminations.
+The acquisition itself communicates through the individual effects shown above.
 
-Now freeze the inspector and both policy bodies. Insert an independently authored
-telemetry writer between acquired and rejects in the concrete stack. A new instrumented
-client can emit telemetry and call the old inspector. The writer order in `Stack`, the
-paths to rejects, passes and the inner states, and the runner/observer for the extra
-output need attention. Changing the shared `fromStates` helper updates its clients together. The two staged writers stay adjacent at the top so the existing
-publication body still works. With a fresh label in `effectful`, the existing eight
-label selections and the old stage keep their meanings. The application installs the
-ninth handler and extracts its output. Charge both versions for new wiring and include
-an old trace as a control against accidentally rerouting a same-typed journal.
+```haskell
+-- Empty report. Reject the first acquisition, accept the second.
+run False True  1 == ((((((((True,[2]),[4]),[1,2]),[1]),[2]),2),4),5)
+run False False 1 == ((((((((True,[1,2]),[3,4]),[1,2]),[1]),[2]),2),4),5)
 
-In CoD, a ninth telemetry role can have its own reference symbol and lexical cell, with its
-installation at the run boundary. An instrumented leaf calls the existing inspector and
-writes telemetry for both acquisitions. Neither retry nor stage reads that symbol. A
-different request, to admit telemetry to the jointly published evidence, would require
-changing the stage's policy in every version. The unrelated-lot scope provides a second
-axis: bind a fresh scalar lot number while invoking the unchanged composition; a lot-aware
-leaf must see the temporary lot and the caller must recover its previous lot on return.
+-- An earlier defect 7 has a matching sample 8.
+run True True  1 == ((((((((True,[7,2]),[8,4]),[1,2]),[1]),[2]),2),4),5)
+run True False 2 == ((((((((False,[7]),[8]),[1,2]),[1,2]),[]),2),4),5)
+```
 
-This extension exercises repeated *instances* of two effect families and the cost of
-selecting them by identity. The paper's [three-by-three matrix](../ComposingEffectsAndFocusedContexts.md#where-the-m--n-obligations-arise)
-studies a different extension: adding an interface and a transformer constructor to
-independently authored vocabularies. Five writer instances and three state instances
-alone do not establish fifteen required adapters or an asymptotic lower bound.
+For all twelve inputs, combine both values of `prefix` and `perAcquisition` with
+`k = 0, 1, 2`. The [table above](#which-report-is-correct) gives all eight observations
+for empty prefixes. With prefixes, prepend 7 to defects and 8 to samples for each
+corresponding result. Try a wrong route that still type-checks: use three lifts for the
+acquired append in `Stacked`, or change just its label to `"rejects"` in `Labeled`. For
+`k = 1` both still accept with state (2,4,5); acquired becomes empty, and rejects
+records [1,1,2]. Checking the role-specific outputs catches the error.
+
+Freeze the old business requirement and insert a ninth telemetry writer between acquired
+and rejects in the concrete stack. A wrapped inspector can record the new event. The
+positional routes to rejects, passes, credits and gain each cross an additional layer;
+the stock state lifting to serial still works. The application must also eliminate the
+new writer. With a fresh label in the effectful row, the old operation sites keep their
+labels and the application still owes a handler and an observer for the ninth output.
+In CoD a separate symbol and lexical cell can supply the extra journal while the two
+publication scopes retain their definitions. An independent lot-number binding tests the
+other axis by enclosing the unchanged acquisition in a new scope. If the business later
+includes telemetry in the provisional evidence, the stage must also implement its new
+publication contract.
+
+These are costs of routing repeated instances of two effect families. The paper's
+[interface/transformer matrix](../ComposingEffectsAndFocusedContexts.md#where-the-m--n-obligations-arise)
+counts independently extensible *interfaces and layer constructors*. Three states and
+five writers by themselves establish neither fifteen adapters nor an asymptotic bound.
