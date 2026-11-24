@@ -866,17 +866,16 @@ proc publish_visit(handle opened:SourceRevision in S, progress:const ModuleProgr
             !mark_structural_only(visits, module - 1u64, selections,
                                   interface_first, interface_past,
                                       progress[0u64].variadic_stop)) return ScratchFailed
-    } else if (has_commands) {
-        ref completed_object = make CompletedVisitObject {
-            unit_index <- unit_used; functions_first <- progress[0u64].function_base; functions_past <- function_past
+    } else {
+        ref checked_object:VisitObject = make NoVisitObject {};
+        if (has_commands) {
+            checked_object = make CompletedVisitObject {
+                unit_index <- unit_used; functions_first <- progress[0u64].function_base; functions_past <- function_past
+            };
+            {}
         };
         if (!mark_checked(visits, module - 1u64, selections, interface_first, interface_past,
-            progress[0u64].structural_dependency, progress[0u64].primitive_namespace, completed_object))
-            return ScratchFailed
-    } else {
-        ref no_object = make NoVisitObject {};
-        if (!mark_checked(visits, module - 1u64, selections, interface_first, interface_past,
-            progress[0u64].structural_dependency, progress[0u64].primitive_namespace, no_object))
+            progress[0u64].structural_dependency, progress[0u64].primitive_namespace, checked_object))
             return ScratchFailed
     };
     export_used <- export_past;
