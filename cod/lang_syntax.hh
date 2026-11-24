@@ -205,7 +205,7 @@ inline std::vector<Token> tokenize(const std::shared_ptr<const IndexedSource> &r
   return tokens;
 }
 
-enum class ArgumentMode { value, borrowed_read, borrowed_ref, borrowed_ptr, borrowed_handle };
+enum class ArgumentMode { value, borrowed_read, borrowed_ref, borrowed_ptr, borrowed_handle, owning_exception };
 
 struct Type {
   enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64,

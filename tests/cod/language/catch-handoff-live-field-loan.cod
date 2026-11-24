@@ -1,0 +1,12 @@
+using symbol "std:io" @print;
+using "std:exceptions" Exception;
+data UploadInterrupted <: Exception { upload_id:u64 }
+
+proc consume(exception x:Exception) -> void { return; }
+
+try { throw UploadInterrupted { upload_id <- 42u64 }; }
+catch (e:UploadInterrupted) {
+    ref saved:u64 = e.upload_id;
+    consume(e);
+    behave @print(saved)
+};

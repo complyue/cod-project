@@ -58,6 +58,7 @@ struct CheckedArgument {
   bool operator==(const CheckedArgument &) const = default;
 };
 inline ArgumentMode argument_mode(const Parameter &parameter) {
+  if (parameter.type.kind == Type::exception_holder) return ArgumentMode::owning_exception;
   if (parameter.selects_caller_ref_slot()) return ArgumentMode::borrowed_ref;
   if (parameter.selects_caller_place()) return ArgumentMode::borrowed_ptr;
   if (parameter.owner.empty()) return ArgumentMode::value;
@@ -131,6 +132,7 @@ struct CheckedOperation {
   std::optional<size_t> place;
   std::optional<size_t> product_field;
   std::optional<size_t> exception_owner;
+  bool owns_exception_result = false;
   std::optional<size_t> region_holder;
   // Regional product rows contain relative field locators. The lexical
   // controller identifies the actual live region used for projection.
@@ -487,6 +489,8 @@ struct CallEffects {
   std::set<size_t> array_allocations;
   // Possible failures on completed paths, including conservative bounds for unresolved calls.
   std::set<size_t> escaping_failures;
+  // Every observed arrival of these escaping categories keeps the direct owned object.
+  std::set<size_t> direct_owned_failures;
   // Checked obligations of an immediate scope after local completion. Zero
   // represents the declared Exception root independently of payload evidence.
   std::set<size_t> scope_checked_failures;
@@ -555,7 +559,7 @@ struct QueryBinding {
   std::optional<EvidenceOwner> owner_binding = {};
   bool operator==(const QueryBinding &) const = default;
 };
-enum class ResultMode { value, borrowed_ref, borrowed_ptr, borrowed_handle, owned_region };
+enum class ResultMode { value, borrowed_ref, borrowed_ptr, borrowed_handle, owned_region, owned_exception };
 struct ResultContract {
   std::optional<Type> type;
   ResultMode mode = ResultMode::value;
@@ -565,6 +569,7 @@ struct ResultContract {
   bool nullable() const { return mode == ResultMode::borrowed_ptr; }
   bool native_borrow() const { return mode == ResultMode::borrowed_handle; }
   bool owns_region() const { return mode == ResultMode::owned_region; }
+  bool owns_exception() const { return mode == ResultMode::owned_exception; }
   bool operator==(const ResultContract &) const = default;
 };
 // Declaration evidence has no runtime payload or authority to access retained storage.

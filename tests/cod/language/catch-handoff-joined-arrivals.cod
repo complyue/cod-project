@@ -1,0 +1,32 @@
+using symbol "std:io" @print;
+using "std:exceptions" Exception;
+data UploadInterrupted <: Exception { upload_id:u64 }
+data ReportFailed <: Exception { report_id:u64 }
+
+proc choose(upload:bool) -> exception :Exception {
+    try {
+        if (upload) { throw UploadInterrupted { upload_id <- 42u64 }; }
+        else { throw ReportFailed { report_id <- 37u64 }; }
+    } catch (e:UploadInterrupted) {
+        return e
+    } catch (e:ReportFailed) {
+        return e
+    };
+}
+
+proc observe(upload:bool) -> void {
+    try {
+        exception saved:Exception <- choose(upload);
+        throw saved
+    } catch (e:UploadInterrupted) {
+        behave @print(e.upload_id)
+    } catch (e:ReportFailed) {
+        behave @print(e.report_id)
+    } catch (other:const Exception) {
+        behave @print(999u64)
+    };
+    return;
+}
+
+observe(true);
+observe(false);

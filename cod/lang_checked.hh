@@ -38,6 +38,9 @@ struct LexicalState {
   SymbolBorrows borrowed_symbol_owners;
   AbstractSymbolTargets abstract_symbol_targets;
   std::set<size_t> bindings_available, available, initialized, present;
+  std::set<size_t> live_exception_holders;
+  // Until a payload loan's full duration is proved, retain its exposure on all reaching paths.
+  std::set<size_t> exposed_exception_payloads;
   std::set<size_t> started_initializers;
   struct InputFacts {
     std::set<size_t> initialized;
@@ -108,6 +111,11 @@ class ScalarChecker {
     for (size_t category = 1; category < program_.exception_types.size(); ++category)
       if (matches_failure(program_.exception_types, category, type.identity)) result.insert(category);
     return result;
+  }
+  std::set<size_t> direct_exception_categories(const Type &type) const {
+    auto categories = exception_possibilities(type);
+    std::erase_if(categories, [](size_t category) { return !nominal_failure(category); });
+    return categories;
   }
   static std::set<size_t> exception_value_categories(const Type &type) {
     // Until owned exception lowering is available, ordinary exception value slots are intrinsic packets.
@@ -366,6 +374,7 @@ class ScalarChecker {
     PayloadWrites writes;
     std::map<size_t, CleanupEquations::Initialization> initialized = {};
     std::map<size_t, CleanupEquations::Targets> header_targets = {};
+    std::set<size_t> exposed_exception_payloads = {};
   };
   std::map<const Expression *, LoopState> loop_states_;
   bool loop_evidence_changed_ = false;
@@ -386,6 +395,7 @@ class ScalarChecker {
   std::optional<size_t> caught_;
   std::set<size_t> catch_bindings_;
   std::map<size_t, const AbruptFlow *> owned_catches_;
+  std::set<size_t> direct_exception_holders_;
   std::map<size_t, std::map<size_t, CompletionInputs>> caught_inputs_;
   const CheckedMethod *checking_method_ = nullptr;
   const CheckedInstance *checking_instance_ = nullptr;
@@ -399,6 +409,7 @@ class ScalarChecker {
   size_t cleanup_scope_ = 0;
   const Expression *prepared_call_ = nullptr;
   const Expression *region_result_initializer_ = nullptr;
+  const Expression *exception_result_initializer_ = nullptr;
   const Expression *abstract_operand_ = nullptr;
   std::set<size_t> abstract_input_bindings_;
   std::set<size_t> initializing_reference_fields_;
@@ -1874,6 +1885,7 @@ class ScalarChecker {
       std::optional<TargetEvidence> borrowed;
     } observed_return;
     const ResultContract *borrowed_return = nullptr;
+    bool owning_exception_return = false;
     bool tracks_target_places() const { return checks_initialization() || borrowed_return; }
     bool supplied_invocation_result = false;
     std::optional<size_t> method;
@@ -4545,7 +4557,7 @@ class ScalarChecker {
     }
   }
   void prepare_borrow(const CheckedOperation &view, ArgumentMode mode, const Location &at) {
-    if (mode == ArgumentMode::value) return;
+    if (mode == ArgumentMode::value || mode == ArgumentMode::owning_exception) return;
     if (!view.view || view.mixed_view) implementation_gap(at, "borrowed arguments require existing target views");
     if (mode == ArgumentMode::borrowed_read) read_view(view, at, "borrowed argument");
     if (mode == ArgumentMode::borrowed_ref && proving_ && validating_ && lexical_.live && view.targets.contains(null_target))
@@ -4935,7 +4947,11 @@ class ScalarChecker {
       operation.array_allocator_arguments = std::move(forwarded);
     }
     operation.type = *contract.target;
-    if (operation.type.kind == Type::exception)
+    if (operation.owns_exception_result) {
+      operation.exceptions = summary.returned.value.substitute(exception_inputs);
+      if (operation.exceptions.empty())
+        operation.exceptions = ExceptionFacts::direct_owned(direct_exception_categories(operation.type));
+    } else if (operation.type.kind == Type::exception)
       operation.exceptions = operation.type.identity ? ExceptionFacts{exception_value_categories(operation.type)}
           : summary.returned.value.substitute(exception_inputs);
     for (size_t i = 0; i < arguments.size(); ++i) {
@@ -5159,8 +5175,16 @@ class ScalarChecker {
           if (read_effects(operation.supplied_here->instance).propagates_outer_here_transfer)
             note_abrupt(expr.at, {}, completion);
         }
-        else note_abrupt(expr.at, completion.exception() ? std::set<size_t>{completion.category()} : std::set<size_t>{},
-                         completion, scope_failure);
+        else {
+          ExceptionFacts failures;
+          if (completion.exception()) {
+            const auto category = completion.category();
+            const bool direct = operation.callee && expr.kind == Expression::Kind::call &&
+                !expr.has_here_body() && !immediate_scope && summary.direct_owned_failures.contains(category);
+            failures = direct ? ExceptionFacts::direct_owned({category}) : ExceptionFacts{{category}};
+          }
+          note_abrupt(expr.at, failures, completion, scope_failure);
+        }
       }
       lexical_ = before;
       if (case_scan) {
@@ -5484,6 +5508,10 @@ class ScalarChecker {
       }
     lexical_.bindings_available = a_exits ? b.bindings_available : b_exits ? a.bindings_available : intersect(a.bindings_available, b.bindings_available);
     lexical_.available = a_exits ? b.available : b_exits ? a.available : intersect(a.available, b.available);
+    lexical_.live_exception_holders = a_exits ? b.live_exception_holders : b_exits ? a.live_exception_holders :
+        intersect(a.live_exception_holders, b.live_exception_holders);
+    if (a_exits) lexical_.exposed_exception_payloads = b.exposed_exception_payloads;
+    else if (!b_exits) lexical_.exposed_exception_payloads.insert(b.exposed_exception_payloads.begin(), b.exposed_exception_payloads.end());
     if (a_exits) lexical_.started_initializers = b.started_initializers;
     else if (!b_exits) lexical_.started_initializers.insert(b.started_initializers.begin(), b.started_initializers.end());
     lexical_.bound_symbols = a_exits ? b.bound_symbols : b_exits ? a.bound_symbols : intersect(a.bound_symbols, b.bound_symbols);
@@ -5668,6 +5696,8 @@ class ScalarChecker {
     for (const auto &[id, owners] : state.owners) if (owners.contains(scope.id)) state.expired_bindings.insert(id);
     if (const auto owned = scope_storage_.find(scope.id); owned != scope_storage_.end()) for (const auto id : owned->second) {
       state.available.erase(id);
+      state.live_exception_holders.erase(id);
+      state.exposed_exception_payloads.erase(id);
       state.initialized.erase(id);
       state.uninitialized.erase(id);
       state.present.erase(id);
@@ -6421,7 +6451,7 @@ class ScalarChecker {
         return;
       }
       if (expr.kind == K::alias || expr.kind == K::here_binding || expr.kind == K::native_handle_binding ||
-          expr.kind == K::region_binding) {
+          expr.kind == K::region_binding || expr.kind == K::exception_binding) {
         for (const auto &child : expr.children) visit(*child, bound, query);
         if (!expr.owner_name.empty() && expr.owner_name != "here") use(expr.owner_name, expr.at, bound, query);
         bound.insert(expr.text);
@@ -6687,6 +6717,11 @@ class ScalarChecker {
   bool bind_parameter(const CheckedMethod &method, size_t index, const Type &argument,
                       Substitutions &substitutions, bool widening) const {
     index = parameter_index(method, index);
+    if (argument_mode(method.input_parameters()[index]) == ArgumentMode::owning_exception) {
+      const auto &target = method.parameters[index];
+      return argument.kind == Type::exception && target.kind == Type::exception &&
+          (argument == target || matches_failure(program_.exception_types, argument.identity, target.identity));
+    }
     if (bind_type(method, method.parameters[index], argument, substitutions, true)) return true;
     if (method.parameters[index].kind == Type::abstract_type &&
         argument_mode(method.input_parameters()[index]) == ArgumentMode::borrowed_ref &&
@@ -7263,7 +7298,29 @@ class ScalarChecker {
     }
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function && definition.kind == Form::Kind::procedure)
       fail(expr.at, "a function cannot invoke a procedure");
+    std::set<size_t> transfers;
+    for (size_t i = 0; i < arguments.size(); ++i) {
+      if (argument_mode(parameters[i]) != ArgumentMode::owning_exception) continue;
+      if (&expr == prepared_call_ || delayed_ || expr.kind != Expression::Kind::call || expr.has_here_body())
+        implementation_gap(expr.at, "consuming exception operands outside an immediate named call");
+      const auto &operand = operation.argument(expr, i);
+      const auto &value = views[i];
+      if (value.type == Type::never) continue;
+      check_direct_exception_receiver(value, target.arguments[i], parameters[i].read_only, operand.at);
+      const auto holder = *value.place;
+      if (!transfers.insert(holder).second)
+        fail(operand.at, "a call cannot consume the same exception holder twice");
+      if (completes && !lexical_.live_exception_holders.contains(holder))
+        fail(operand.at, "exception holder has relinquished ownership during argument preparation");
+      if (completes) require_exception_custody_transfer(holder, operand.at);
+    }
     if (!completes) { operation.type = Type::never; return; }
+    for (const auto holder : transfers) lexical_.live_exception_holders.erase(holder);
+    if (target.result.owns_exception()) {
+      if (&expr != exception_result_initializer_ || &expr == prepared_call_ || delayed_)
+        implementation_gap(expr.at, "an owning exception result must initialize a fresh exception holder");
+      operation.owns_exception_result = true;
+    }
     if (method.lexical_result) {
       if (&expr == prepared_call_) implementation_gap(expr.at, "a use-site result on a prepared deferred call");
       operation.lexical_result_owner = cleanup_scope_;
@@ -8237,6 +8294,15 @@ class ScalarChecker {
     if (expr.definition && expr.definition->supplied_group &&
         has_deferred_region_return_action(*expr.definition->body)) return true;
     return std::ranges::any_of(expr.children, [](const auto &child) { return has_deferred_region_return_action(*child); });
+  }
+  static void check_exception_result_cleanup(const Expression &expr) {
+    using K = Expression::Kind;
+    if (expr.kind == K::deferred ||
+        (expr.kind == K::try_scope && expr.children.size() > 1 && expr.children.back()->kind == K::block))
+      implementation_gap(expr.at, "an owning exception result with unproved cleanup preservation");
+    if (expr.definition && expr.definition->supplied_group)
+      check_exception_result_cleanup(*expr.definition->body);
+    for (const auto &child : expr.children) check_exception_result_cleanup(*child);
   }
   static void require_direct_region_return(const Form &source) {
     using K = Expression::Kind;
@@ -9380,6 +9446,7 @@ class ScalarChecker {
     query.returns = nullptr;
     query.exits = nullptr;
     query.borrowed_return = nullptr;
+    query.owning_exception_return = false;
     query.deferred = nullptr;
     query.initialization = TypeEvidenceState::InitializationCheck::unevaluated;
     query.delayed_controls.clear();
@@ -10749,6 +10816,7 @@ class ScalarChecker {
       body.required = body.validating_body = true;
       body.initialization = TypeEvidenceState::InitializationCheck::body;
       if (contract.borrowed()) body.borrowed_return = &contract;
+      body.owning_exception_return = contract.owns_exception();
       body.invocation_result = contract.type;
       body.selections.tracking = true;
       body.selections.observation_decisions = std::make_shared<ObservationDecisions>();
@@ -11684,6 +11752,12 @@ class ScalarChecker {
       IndexedUse indexed_use = IndexedUse::value_only) {
     check_ref_selection_mode(operand, mode);
     if (mode == ArgumentMode::borrowed_handle) return check_handle_loan(operand, instance, operations);
+    if (mode == ArgumentMode::owning_exception) {
+      auto actual = prepare_direct_exception_holder(operand);
+      actual.exception_owner = actual.place;
+      operations[&operand] = actual;
+      return actual;
+    }
     const auto *previous_abstract = abstract_operand_;
     if (mode == ArgumentMode::borrowed_ref) abstract_operand_ = &ungrouped_expression(operand);
     const auto type = check(operand, instance, operations, mode == ArgumentMode::value, false, expected,
@@ -11758,7 +11832,7 @@ class ScalarChecker {
       IndexedUse indexed_use = IndexedUse::value_only) {
     const auto view = check_argument_expression(operand, mode, instance, operations, nullptr, indexed_use);
     const auto &type = view.type;
-    if (mode != ArgumentMode::borrowed_handle && type != Type::never) {
+    if (mode != ArgumentMode::borrowed_handle && mode != ArgumentMode::owning_exception && type != Type::never) {
       check_written_operand_type(type, mode, operand.at, aggregate_borrows);
       prepare_borrow(view, mode, operand.at);
     }
@@ -12650,6 +12724,25 @@ class ScalarChecker {
       state.views[expr.text] = {expr.read_only, true, false};
       state.local_declarations[expr.text] = &expr;
       state.owner_bindings[expr.text] = EvidenceOwner::for_scope(expr);
+      state.definitions.erase(expr.text);
+      state.selections.remove_binding(expr.text);
+      return Type::void_type;
+    }
+    case K::exception_binding: {
+      const auto type = evidence_annotation(*expr.annotation, state);
+      if (type.kind != Type::exception) {
+        if (state.required) fail(expr.at, "an owning exception declaration requires an exception type");
+        return {};
+      }
+      const auto value = type_evidence(*expr.children.front(), state);
+      if (!value || *value == Type::never) return value;
+      if (value->kind != Type::exception) {
+        if (state.required) fail(expr.at, "an owning exception declaration requires an exception holder");
+        return {};
+      }
+      state.bindings[expr.text] = type;
+      state.views[expr.text] = {expr.read_only, true, false};
+      state.local_declarations[expr.text] = &expr;
       state.definitions.erase(expr.text);
       state.selections.remove_binding(expr.text);
       return Type::void_type;
@@ -14207,6 +14300,17 @@ class ScalarChecker {
       if (tail && !state.checks_reaching_paths())
         return child(0, false, false, EvidenceRead::discarded) == Type::never ? Type{Type::never} : Type{Type::void_type};
       const auto *expected_return = state.invocation_result ? &*state.invocation_result : nullptr;
+      if (state.owning_exception_return) {
+        if (tail || expr.children.empty() || expr.children.front()->kind != K::name)
+          implementation_gap(expr.at, "an owning exception result requires returning a direct holder");
+        const auto supplied = type_evidence(*expr.children.front(), state, false, nullptr, nullptr,
+                                           ExpectedTypeUse::materialization, true, EvidenceRead::target);
+        if (supplied && supplied->kind != Type::exception)
+          fail(expr.at, "an owning exception result requires an exception holder");
+        if (state.returns) state.returns->value_obligation = true;
+        note_type_exit(state, {1, true});
+        return Type::never;
+      }
       if (expected_return && expected_return->kind == Type::region && expected_return->owned) {
         if (tail || expr.children.empty())
           implementation_gap(expr.at, "an owning region result requires explicit fresh construction");
@@ -15364,6 +15468,13 @@ class ScalarChecker {
   }
   CheckedOperation materialize_definition(const NamedFamily &family, const Type *expected, const Location &at, bool definition_site = false) {
     if (family.methods.empty()) fail(at, "no applicable implementation for declared callable value");
+    if (std::ranges::any_of(family.methods, [&](size_t id) {
+          const auto &method = program_.methods[id];
+          return method.result.owns_exception() || std::ranges::any_of(method.input_parameters(), [](const auto &formal) {
+            return argument_mode(formal) == ArgumentMode::owning_exception;
+          });
+        }))
+      implementation_gap(at, "an owning exception contract in a callable value");
     if (std::ranges::any_of(family.methods, [&](size_t id) { return !program_.methods[id].here.empty(); }))
       implementation_gap(at, "function views containing a here parameter");
     auto &definition = program_.methods[family.methods.front()];
@@ -17919,15 +18030,13 @@ class ScalarChecker {
         return nominal_failure(category) || (proving_ && category == deferred_aggregate_id);
       });
       const auto id = declare(handler.text, type, !nominal || handler.read_only, true, handler.at);
-      if (nominal) for (const auto &field : scalar_exception_schema(type, handler.at).fields) {
-        const auto place = declare("$caught." + std::to_string(id) + "." + field.source->name, field.type,
-                                   handler.read_only || readonly_field(field), true, field.source->at, false);
-        (*storage_)[place].subobject = true;
-        (*storage_)[id].fields.push_back(place);
-        initialize(place);
-      }
+      declare_direct_exception_fields(id, type, handler.read_only, handler.at);
       lexical_.scopes.back().declarations = false;
       initialize(id);
+      if (categories.only_direct_owned() || (!validating_ && nominal)) {
+        lexical_.live_exception_holders.insert(id);
+        direct_exception_holders_.insert(id);
+      }
       assign_exceptions(id, categories.empty() ? owned ? exception_possibilities(type) : exception_value_categories(type) : categories);
       auto active = caught_; caught_ = id; catch_bindings_.insert(id);
       caught_inputs_[id] = std::move(category_inputs);
@@ -18254,8 +18363,13 @@ class ScalarChecker {
       if (place == null_target) continue;
       if (delayed_controls_.contains(place)) fail(expr.at, "a deferred block cannot capture loop-control binding '" + expr.text + "'");
       const bool captured = capture_catch(place);
-      if ((owned_catches_.contains(place) || owning_exception(operation.type)) &&
-          (use != BindingUse::exception_field || captured || !owned_catches_.contains(place)))
+      if (direct_exception_holders_.contains(place) && lexical_.live &&
+          !lexical_.live_exception_holders.contains(place))
+        fail(expr.at, "exception holder has relinquished ownership on a reaching path");
+      if ((owned_catches_.contains(place) || direct_exception_holders_.contains(place) ||
+           owning_exception(operation.type)) &&
+          (use != BindingUse::exception_field || captured ||
+           (!owned_catches_.contains(place) && !direct_exception_holders_.contains(place))))
         implementation_gap(expr.at, "use of an owned exception outside direct local field selection");
       if (captured) operation.captured_place = place;
       if (read && !operation.initialized_target())
@@ -18265,6 +18379,96 @@ class ScalarChecker {
     if (read) operation.predicate = stored_predicate(operation);
     return operation;
   }
+  CheckedOperation prepare_direct_exception_holder(const Expression &expr) {
+    if (expr.kind != Expression::Kind::name)
+      implementation_gap(expr.at, "owning exception reception from an expression other than a direct holder");
+    const auto binding = lexical_.lookup(expr.text);
+    if (!binding || !lexical_.bindings_available.contains(*binding))
+      fail(expr.at, "unknown exception holder '" + expr.text + "'");
+    auto value = read_binding(expr, false, binding, BindingUse::exception_field);
+    if (!value.place || storage(*value.place).binding != *binding ||
+        !direct_exception_holders_.contains(*value.place) ||
+        !lexical_.live_exception_holders.contains(*value.place) ||
+        (validating_ && !value.exceptions.only_direct_owned()))
+      implementation_gap(expr.at, "owning exception reception without a proved direct owner-backed arrival");
+    return value;
+  }
+
+  void check_direct_exception_receiver(const CheckedOperation &value, const Type &target, bool readonly,
+                                       const Location &at) {
+    if (validating_ && !value.exceptions.only_direct_owned())
+      implementation_gap(at, "exception reception without a prepared owning operand");
+    if (value.read_only && !readonly) fail(at, "readonly exception holder cannot supply writable access");
+    const auto categories = value.exceptions.possibilities();
+    if (!std::ranges::all_of(categories, [&](size_t category) {
+          return matches_failure(program_.exception_types, category, target.identity);
+        }))
+      fail(at, "an admitted exception arrival does not satisfy '" + type_name(target) + "'");
+  }
+
+  void require_exception_custody_transfer(size_t holder, const Location &at) const {
+    if (!lexical_.live) return;
+    if (lexical_.exposed_exception_payloads.contains(holder))
+      implementation_gap(at, "transferring an exception holder with an unproved payload loan lifetime");
+    if (std::ranges::any_of(active_loops_, [&](const auto *loop) {
+          return storage(holder).scope < loop_states_.at(loop).first;
+        }))
+      implementation_gap(at, "transferring an enclosing exception holder inside a repeating loop");
+  }
+
+  void declare_direct_exception_fields(size_t place, const Type &type, bool readonly, const Location &at) {
+    if (!nominal_exception(type)) return;
+    for (const auto &field : scalar_exception_schema(type, at).fields) {
+      const auto selected = declare("$exception." + std::to_string(place) + "." + field.source->name,
+                                    field.type, readonly || readonly_field(field), true, field.source->at, false);
+      (*storage_)[selected].subobject = true;
+      (*storage_)[place].fields.push_back(selected);
+      initialize(selected);
+    }
+  }
+
+  CheckedOperation check_direct_exception_binding(const Expression &expr, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations) {
+    if (delayed_ || declaration_scope(expr.text, expr.at).id != cleanup_scope_ ||
+        std::ranges::any_of(active_loops_, [&](const auto *loop) { return cleanup_scope_ < loop_states_.at(loop).first; }))
+      implementation_gap(expr.at, "owning exception local outside a non-delayed lexical cleanup scope");
+    const auto type = resolve_annotation(*expr.annotation, instance);
+    if (type.kind != Type::exception) fail(expr.at, "an owning exception declaration requires an exception type");
+    const auto &source = *expr.children.front();
+    CheckedOperation value;
+    if (source.kind == Expression::Kind::call) {
+      const auto previous = std::exchange(exception_result_initializer_, &source);
+      const auto actual = check(source, instance, operations);
+      exception_result_initializer_ = previous;
+      if (actual == Type::never) {
+        CheckedOperation operation;
+        operation.type = Type::never;
+        return operation;
+      }
+      value = operations.at(&source);
+      if (!value.owns_exception_result || !value.callee)
+        implementation_gap(source.at, "an exception local requires the result of an owning callable");
+      value.read_only = program_.instances[*value.callee].result.read_only;
+    } else value = prepare_direct_exception_holder(source);
+    check_direct_exception_receiver(value, type, expr.read_only, source.at);
+    const auto place = declare(expr.text, type, expr.read_only, true, expr.at);
+    direct_exception_holders_.insert(place);
+    if (!value.owns_exception_result) {
+      require_exception_custody_transfer(*value.place, source.at);
+      lexical_.live_exception_holders.erase(*value.place);
+    }
+    lexical_.live_exception_holders.insert(place);
+    initialize(place);
+    declare_direct_exception_fields(place, type, expr.read_only, expr.at);
+    assign_exceptions(place, value.exceptions);
+    CheckedOperation operation;
+    operation.type = Type::void_type;
+    operation.place = place;
+    if (!value.owns_exception_result) operation.exception_owner = value.place;
+    operations[&source] = std::move(value);
+    return operation;
+  }
+
   CheckedOperation named_binding(const Expression &expr, size_t binding, const Type *expected = nullptr, bool read = true) {
     if (!lexical_.bindings_available.contains(binding)) fail(expr.at, "binding '" + expr.text + "' is not available on every reaching path");
     if (const auto found = definitions_.find(binding); found != definitions_.end()) {
@@ -19997,6 +20201,7 @@ class ScalarChecker {
           const bool borrowed_text = mode == ArgumentMode::borrowed_ref && text_type(argument);
           if (mode == ArgumentMode::value ||
               (mode != ArgumentMode::borrowed_handle && !borrowed_text &&
+               mode != ArgumentMode::owning_exception &&
                !inline_aggregate_type(argument) && argument.kind != Type::array && argument.kind != Type::abstract_type))
             require_value(argument, expr.at);
         }
@@ -20446,6 +20651,7 @@ class ScalarChecker {
       if (repeat_possible) {
         if (!proving_) loop_states_[&expr] = {iteration_scope, iteration_scope, before.bindings_available, {}, {}, {}};
         auto &loop = loop_states_.at(&expr);
+        lexical_.exposed_exception_payloads.insert(loop.exposed_exception_payloads.begin(), loop.exposed_exception_payloads.end());
         refresh_targets(lexical_, true, &loop.rebound);
         if (proving_) {
           retain_loop_targets(loop, before);
@@ -20859,6 +21065,23 @@ class ScalarChecker {
         break;
       }
       const auto &contract = instance->result;
+      if (contract.owns_exception()) {
+        if (expr.kind != K::return_value || expr.children.empty())
+          implementation_gap(expr.at, "an owning exception result requires returning a direct holder");
+        const auto &source = *expr.children.front();
+        const auto value = prepare_direct_exception_holder(source);
+        check_direct_exception_receiver(value, *contract.type, contract.read_only, source.at);
+        operations[&source] = value;
+        operation.type = Type::never;
+        operation.operand_type = *contract.type;
+        operation.exception_owner = value.place;
+        require_exception_custody_transfer(*value.place, source.at);
+        lexical_.live_exception_holders.erase(*value.place);
+        lexical_.returned = {};
+        lexical_.returned.value = value.exceptions;
+        note_abrupt(expr.at, {}, {1, true});
+        break;
+      }
       if (contract.owns_region()) {
         if (expr.kind != K::return_value || expr.children.empty())
           implementation_gap(expr.at, "an owning region result requires explicit fresh construction");
@@ -20960,6 +21183,9 @@ class ScalarChecker {
     }
     case K::region_binding:
       operation = check_region_acquisition(expr, instance, operations);
+      break;
+    case K::exception_binding:
+      operation = check_direct_exception_binding(expr, instance, operations);
       break;
     case K::make_region:
       implementation_gap(expr.at, "region construction outside a direct lexical owning region initializer");
@@ -21113,6 +21339,14 @@ class ScalarChecker {
         operations.insert_or_assign(&base, parent);
         operation = project_product(parent, index, expr.at);
         operation.exception_owner = *parent.place;
+        if (!read && lexical_.live && direct_exception_holders_.contains(*parent.place)) {
+          lexical_.exposed_exception_payloads.insert(*parent.place);
+          for (const auto *site : active_loops_) {
+            auto &loop = loop_states_.at(site);
+            if (storage(*parent.place).scope < loop.first && loop.exposed_exception_payloads.insert(*parent.place).second)
+              loop_evidence_changed_ = true;
+          }
+        }
         if (read) {
           require_initialized(operation, expr.at, expr.text);
           operation.predicate = stored_predicate(operation);
@@ -21225,7 +21459,8 @@ class ScalarChecker {
         }
         if (completes && lexical_.live) {
           named_throw_sites_.try_emplace({expr.at, type.identity}, expr.annotation->name);
-          note_abrupt(expr.at, {type.identity});
+          // The annotated raise form constructs a fresh, cause-less nominal object.
+          note_abrupt(expr.at, ExceptionFacts::direct_owned({type.identity}));
         }
         operation.operand_type = type;
         operation.type = Type::never;
@@ -21237,15 +21472,30 @@ class ScalarChecker {
         if (!caught_) fail(expr.at, "bare throw requires an active catch");
         forwarded = caught_;
       } else if (expr.children.size() == 1 && expr.children.front()->kind == K::name) {
-        if (const auto named = lexical_.lookup(expr.children.front()->text); named && catch_bindings_.contains(*named))
-          forwarded = named;
+        if (const auto named = lexical_.lookup(expr.children.front()->text); named) {
+          if (catch_bindings_.contains(*named)) forwarded = named;
+          else if (const auto selected = lexical_.targets.find(*named);
+                   selected != lexical_.targets.end() && selected->second.size() == 1) {
+            const auto holder = *selected->second.begin();
+            if (direct_exception_holders_.contains(holder) && storage(holder).binding == *named)
+              forwarded = holder;
+          }
+        }
       }
       if (forwarded) {
         const bool captured = capture_catch(*forwarded);
         operation.place = forwarded;
         type = (*storage_)[*forwarded].type;
         operation.exceptions = lexical_.exceptions.at(*forwarded);
-        if (owned_catches_.contains(*forwarded)) {
+        if (direct_exception_holders_.contains(*forwarded)) {
+          if (captured) implementation_gap(expr.at, "deferred transfer of an exception holder");
+          if (lexical_.live && !lexical_.live_exception_holders.contains(*forwarded))
+            fail(expr.at, "exception holder has relinquished ownership on a reaching path");
+          if (!owned_catches_.contains(*forwarded) || abrupt_ != owned_catches_.at(*forwarded))
+            require_exception_custody_transfer(*forwarded, expr.at);
+          operation.exception_owner = forwarded;
+          lexical_.live_exception_holders.erase(*forwarded);
+        } else if (owned_catches_.contains(*forwarded)) {
           if (captured) implementation_gap(expr.at, "deferred transfer of a caught exception owner");
           if (abrupt_ != owned_catches_.at(*forwarded))
             implementation_gap(expr.at, "locally intercepted transfer of a caught exception owner");
@@ -21700,6 +21950,7 @@ class ScalarChecker {
     declared_sites_.clear(); declared_requirements_.clear();
     loop_controls_.clear(); delayed_controls_.clear(); deferred_inputs_.clear(); active_loops_.clear();
     caught_.reset(); catch_bindings_.clear(); owned_catches_.clear(); caught_inputs_.clear();
+    direct_exception_holders_.clear();
     captures_ = nullptr; delayed_ = false; deferred_action_.reset(); return_inputs_ = {}; prepared_call_ = nullptr;
     next_finalizer_input_ = 2 * cleanup_.deferred_return_offset();
     cleanup_scope_ = 0; next_scope_ = 1;
@@ -21996,10 +22247,12 @@ class ScalarChecker {
         const bool live_binding = checking_method_->scope_inputs && checking_method_->scope_inputs->live_bindings.contains(p);
         const auto mode = argument_mode(parameter);
         const auto &declared = checking_method_->parameters[p];
+        const bool consumes_exception = mode == ArgumentMode::owning_exception;
         const auto type = parameter.variadic ? Type{Type::arguments}
-            : text_type(declared) ? declared : instance.arguments[p];
+            : text_type(declared) || consumes_exception ? declared : instance.arguments[p];
         const auto id = declare(parameter.name, type, place || parameter.read_only || (value && parameter.fixed_binding),
-                                value || live_value, parameter.at, !checking_method_->scope_inputs, &entry, place || reference_field);
+                                value || live_value || consumes_exception, parameter.at,
+                                !checking_method_->scope_inputs, &entry, place || reference_field);
         const auto binding = storage_->at(id).binding;
         if (reference_field) initializing_reference_fields_.insert(binding);
         storage_->at(id).identity_only = parameter.not_init_ref.has_value();
@@ -22039,7 +22292,12 @@ class ScalarChecker {
         if (!field && !parameter.not_init_ref &&
             (mode != ArgumentMode::borrowed_ptr || (live_value && method.supplied_scope) ||
              (place && !parameter.initializes_caller_place()))) entry.initialized.insert(id);
-        if (instance.arguments[p].kind == Type::exception)
+        if (consumes_exception) {
+          direct_exception_holders_.insert(id);
+          lexical_.live_exception_holders.insert(id);
+          declare_direct_exception_fields(id, type, parameter.read_only, parameter.at);
+          entry.exceptions.emplace(id, ExceptionFacts::input(p, direct_exception_categories(type), true));
+        } else if (instance.arguments[p].kind == Type::exception)
           entry.exceptions.emplace(id, ExceptionFacts::input(p, exception_value_categories(instance.arguments[p])));
         if (instance.arguments[p] == Type::boolean) seed_boolean_input(id, p);
       }
@@ -22163,13 +22421,26 @@ class ScalarChecker {
           observe_outcome(reason, lexical_);
         }
         const auto normal = lexical_;
+        std::set<size_t> unproved_owners;
         for (const auto &path : outcomes.paths) {
           if (observed_.case_scope_exits && path.completion.reason == 1) observed_.case_scope_exits->result = true;
           observe_outcome(path.completion.reason == 1 && !method.case_scan_scope ? 0 : path.completion.reason, path.state);
+          if (path.completion.exception()) {
+            // Export the proof, without callee-local selection conditions or operand indices.
+            const auto categories = path.exceptions.possibilities();
+            for (const auto category : categories) if (nominal_failure(category)) {
+              if (path.exceptions.restricted({category}).only_direct_owned())
+                observed_.direct_owned_failures.insert(category);
+              else unproved_owners.insert(category);
+            }
+            if (!categories.contains(path.completion.category()))
+              unproved_owners.insert(path.completion.category());
+          }
           if (path.completion.protected_here() && !path.here_exit) observed_.propagates_outer_here_transfer = true;
           lexical_ = path.state; abrupt_ = nullptr;
           forward_abrupt(path);
         }
+        for (const auto category : unproved_owners) observed_.direct_owned_failures.erase(category);
         lexical_ = normal;
       }
     });
@@ -22251,6 +22522,10 @@ class ScalarChecker {
       const auto failure_count = known.escaping_failures.size();
       known.escaping_failures.insert(effects.escaping_failures.begin(), effects.escaping_failures.end());
       changed |= known.escaping_failures.size() != failure_count;
+      if (known.direct_owned_failures != effects.direct_owned_failures) {
+        known.direct_owned_failures = effects.direct_owned_failures;
+        changed = true;
+      }
       if (known.initialized != effects.initialized) { known.initialized = effects.initialized; changed = true; }
       if (known.uninitialized != effects.uninitialized) { known.uninitialized = effects.uninitialized; changed = true; }
       if (known.present != effects.present) { known.present = effects.present; changed = true; }
@@ -23481,6 +23756,15 @@ class ScalarChecker {
         }
       }
       const auto resolve_signature = [&](const Type &type) { return resolve_type(type, &prepared); };
+      const bool owns_exception_result = form->result_type && form->result_type->kind == Type::exception_holder;
+      const bool consumes_exception = std::ranges::any_of(form->parameters, [](const auto &parameter) {
+        return parameter.type.kind == Type::exception_holder;
+      });
+      if ((owns_exception_result || consumes_exception) &&
+          (form->c_linkage || form->symbolic || !operation.empty() || here || constructor ||
+           lexical_methods_.contains(form) || !form->type_parameters.empty() || !form->owner_parameters.empty() ||
+           !form->body))
+        implementation_gap(form->at, "owning exception signature outside an ordinary named CoD callable");
       for (const auto &parameter : form->parameters) {
         if (!parameter.here) break;
         prepared.here.push_back(here_contract(prepared, parameter));
@@ -23500,13 +23784,19 @@ class ScalarChecker {
           fail(form->at, "initializer result must be a writable reference to its sum in the destination owner");
         prepared.result.type = Type::void_type;
       } else if (form->result_type) {
-        prepared.result.type = resolve_signature(*form->result_type);
+        prepared.result.type = resolve_signature(owns_exception_result ? *form->result_type->target : *form->result_type);
         if (handle_result) {
           if (form->kind != Form::Kind::procedure || form->symbolic || !operation.empty() || lexical_methods_.contains(form))
             implementation_gap(form->at, "borrowed handle results outside named CoD procedures");
           if (prepared.result.type->kind != Type::c_type_marker)
             fail(form->at, "handle result requires a 'handle type' name");
           prepared.result.type = native_handle_type(*prepared.result.type, false);
+        } else if (owns_exception_result) {
+          if (prepared.result.type->kind != Type::exception || !form->result_owner.empty())
+            fail(form->at, "an owning exception result requires an exception type and establishes its own owner");
+          prepared.result.mode = ResultMode::owned_exception;
+          prepared.result.read_only = form->result_const;
+          check_exception_result_cleanup(*form->body);
         } else if (prepared.result.type->kind == Type::region && prepared.result.type->owned) {
           if (form->c_linkage || form->symbolic || !operation.empty() || here || lexical_methods_.contains(form) ||
               !form->result_owner.empty() || form->result_const || !form->result_kind.empty() ||
@@ -23532,10 +23822,11 @@ class ScalarChecker {
       if (form->result_kind == "val" && prepared.result.type && !scalar_type(*prepared.result.type))
         implementation_gap(form->at, "explicit val results for non-scalar or generic types");
       if (prepared.result.type && !prepared.result.borrowed() && !prepared.result.owns_region() &&
+          !prepared.result.owns_exception() &&
           *prepared.result.type != Type::void_type && prepared.result.type->kind != Type::procedure && !scalar_type(*prepared.result.type)) {
         if (!form->result_const) implementation_gap(form->at, "default result mode for non-scalar or generic types");
       }
-      if (prepared.result.type && !handle_result && !prepared.result.owns_region())
+      if (prepared.result.type && !handle_result && !prepared.result.owns_region() && !prepared.result.owns_exception())
         signature_type(prepared, *prepared.result.type, form->at, true, prepared.result.borrowed());
       if (prepared.result.type) require_ordinary_callable_type(*prepared.result.type, form->at);
       for (const auto &type : form->throws_types) {
@@ -23590,9 +23881,16 @@ class ScalarChecker {
           prepared.parameters.push_back(native_handle_type(marker, false));
           continue;
         }
+        const auto mode = argument_mode(parameter);
+        if (mode == ArgumentMode::owning_exception) {
+          const auto type = resolve_signature(*parameter.type.target);
+          if (type.kind != Type::exception || parameter.variadic)
+            fail(parameter.at, "a consuming exception parameter requires one exception holder");
+          prepared.parameters.push_back(type);
+          continue;
+        }
         prepared.parameters.push_back(resolve_signature(parameter.type));
         require_ordinary_callable_type(prepared.parameters.back(), parameter.at);
-        const auto mode = argument_mode(parameter);
         if (constructor) {
           const auto &argument = prepared.parameters.back();
           const bool independent = mode == ArgumentMode::value && scalar_type(argument) && parameter.owner.empty();
@@ -23773,7 +24071,9 @@ class ScalarChecker {
   static void require_implemented_source_forms(const Parameter &parameter, bool check_after_nominal_registration = false) {
     if (parameter.not_init_ref && !check_after_nominal_registration)
       implementation_gap(*parameter.not_init_ref, "not init ref parameters");
-    require_implemented_source_forms(parameter.type, parameter.at, "owning exception parameter");
+    if (check_after_nominal_registration && parameter.type.kind == Type::exception_holder)
+      require_implemented_source_forms(*parameter.type.target, parameter.at, "owning exception parameter");
+    else require_implemented_source_forms(parameter.type, parameter.at, "owning exception parameter");
     if (!parameter.here) return;
     for (const auto &input : parameter.here->parameters) require_implemented_source_forms(input);
     require_implemented_source_forms(parameter.here->result, parameter.at, "owning exception result");
@@ -23784,13 +24084,16 @@ class ScalarChecker {
         (form.kind == Form::Kind::function || form.kind == Form::Kind::procedure);
     for (const auto &parameter : form.parameters)
       require_implemented_source_forms(parameter, named_co_d_definition);
-    if (form.result_type) require_implemented_source_forms(*form.result_type, form.at, "owning exception result");
+    if (form.result_type) {
+      const auto &written = *form.result_type;
+      require_implemented_source_forms(named_co_d_definition && written.kind == Type::exception_holder
+          ? *written.target : written, form.at, "owning exception result");
+    }
     if (!form.body) return;
     const auto visit = [&](auto &&self, const Expression &expr) -> void {
       using K = Expression::Kind;
       if (expr.kind == K::predicate_assertion && expr.children.size() > 1)
         implementation_gap(expr.children[1]->at, "predicate assertion with a written diagnostic");
-      if (expr.kind == K::exception_binding) implementation_gap(expr.at, "owning exception local");
       if (expr.kind == K::rethrow_from) implementation_gap(expr.at, "rethrow with an explicit cause");
       if (expr.kind == K::make_exception) implementation_gap(expr.at, "owning make exception expression");
       if (expr.annotation)

@@ -89,6 +89,8 @@ struct ExceptionFacts {
     std::optional<size_t> action = {};
     size_t index = 0;
     SelectionConditions conditions{};
+    // A fresh CoD construction originates at the object selected by matching.
+    bool direct_owned = false;
     auto operator<=>(const Origin &) const = default;
   };
   std::map<Origin, std::set<size_t>> terms;
@@ -102,8 +104,10 @@ struct ExceptionFacts {
     if (!origin.conditions.possible || categories.empty()) return;
     auto &known = terms[std::move(origin)]; known.insert(categories.begin(), categories.end());
   }
-  static ExceptionFacts input(size_t ordinal, const std::set<size_t> &categories) {
-    ExceptionFacts result; result.add({Origin::Kind::input, {}, ordinal}, categories); return result;
+  static ExceptionFacts input(size_t ordinal, const std::set<size_t> &categories, bool direct_owned = false) {
+    ExceptionFacts result;
+    result.add({Origin::Kind::input, {}, ordinal, {}, direct_owned}, categories);
+    return result;
   }
   static ExceptionFacts payload(size_t place, const std::set<size_t> &categories, std::optional<size_t> action = {}) {
     ExceptionFacts result; result.add({Origin::Kind::payload, action, place}, categories); return result;
@@ -116,6 +120,18 @@ struct ExceptionFacts {
     ExceptionFacts result;
     result.add({Origin::Kind::deferred_input, {}, index}, {category});
     return result;
+  }
+  static ExceptionFacts direct_owned(const std::set<size_t> &categories) {
+    ExceptionFacts result;
+    Origin origin;
+    origin.direct_owned = true;
+    result.add(origin, categories);
+    return result;
+  }
+  bool only_direct_owned() const {
+    return !terms.empty() && std::ranges::all_of(terms, [](const auto &term) {
+      return term.first.direct_owned;
+    });
   }
   void merge(const ExceptionFacts &other) { for (const auto &[origin, categories] : other.terms) add(origin, categories); }
   std::set<size_t> possibilities() const {

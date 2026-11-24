@@ -10,6 +10,28 @@
     "stdout": "6\n4\n"
   },
   {
+    "file": "catch-handoff-late-operand.cod",
+    "exit": 0,
+    "stdout": "32\n42\n"
+  },
+  {
+    "file": "catch-handoff-joined-arrivals.cod",
+    "exit": 0,
+    "stdout": "42\n37\n"
+  },
+  {
+    "file": "catch-handoff-retry-consumed.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "exception holder has relinquished ownership on a reaching path"
+  },
+  {
+    "file": "catch-handoff-live-field-loan.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "transferring an exception holder with an unproved payload loan lifetime"
+  },
+  {
     "file": "argument-recovery-error.cod",
     "exit": 2,
     "stdout": "",

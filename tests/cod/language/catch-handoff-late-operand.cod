@@ -1,0 +1,35 @@
+using symbol "std:io" @print;
+using "std:exceptions" Exception;
+data UploadInterrupted <: Exception { upload_id:u64 }
+
+proc upload(code:u64) -> void throws UploadInterrupted {
+    throw UploadInterrupted { upload_id <- code }
+}
+
+proc later() -> u64 throws UploadInterrupted {
+    throw UploadInterrupted { upload_id <- 32u64 }
+}
+
+proc relay(exception x:Exception, tag:u64) -> exception :Exception {
+    behave @print(tag);
+    return x
+}
+
+proc forward(exception saved:Exception) -> void throws Exception { throw saved; }
+
+proc save() -> void throws Exception {
+    try { upload(42u64); }
+    catch (first:UploadInterrupted) {
+        try {
+            exception taken:Exception <- relay(first, later());
+        } catch (second:UploadInterrupted) {
+            behave @print(second.upload_id);
+            forward(first)
+        }
+    };
+    return;
+}
+
+try { save(); }
+catch (e:UploadInterrupted) { behave @print(e.upload_id); }
+catch (unexpected) { behave @print(999u64); };
