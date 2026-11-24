@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 77 · Recorded: 2026-11-24 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 78 · Recorded: 2026-11-24 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+At r78 the [function-valued symbol decision](../CHANGELOG.md#h-function-valued-symbol-20261124) qualifies the call distinction in the [operation table](#callable-families-and-explicit-installation). Resolve the declared kind in the selected module interpretation and preserve the direct procedure call without installation. [D-10 source contract](SymbolicDynamicScope.md#calling-a-function-valued-symbol)
 
 At r77 the [symbol identity decision](../CHANGELOG.md#h-runtime-symbol-identity-20261124) applies [D-10’s protected lexical name](SymbolicDynamicScope.md#the-bare-symbol-name-at-runtime) to module selection and symbol registration. Distinct spellings may denote the same identity. A binding that would hide a visible symbol fails at its declaration.
 
@@ -671,7 +673,8 @@ A declared symbol carries its identity and signature in the module world. Its ba
 | Declare or extend a symbolic procedure | Register the method under existing module permissions. | Registration alone installs nothing. |
 | An effect with a local method or a [method list](SymbolicDynamicScope.md#installing-a-local-family-with-several-methods) | Check the written family against the symbol contract. Its methods belong to this installation. | Snapshot its required bindings and install the complete anonymous family for the scope. |
 | `effect proc @sym;` | Resolve the lexical family under the ordinary selection rules. | Activate it and install the scoped handler. |
-| `@sym(args)` | Select the lexical family and apply ordinary argument dispatch. | Call under current dynamic bindings. |
+| `@sym(args)` for a procedure symbol | Select the lexical family and apply ordinary argument dispatch. | Call under current dynamic bindings, even without an installation for this callee. |
+| `@sym(args)` for a function-valued symbol | Check the ordinary call against the symbol’s function type. | Read the current function selection and call it with the arguments. |
 | `effect @sym = other` or `effect @sym = @other` for procedure symbols | Reject assignment installation. | |
 
 A family installation retains its selected interpretation and uses ordinary method dispatch. Export, using/import/mixin and extension remain module construction; none implicitly installs a receiver TLS value. Dependency initialization still follows its once-only incorporation contract and can execute its own explicit effects.

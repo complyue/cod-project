@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Call a symbol according to its declared callable kind
+
+<a id="h-function-valued-symbol-20261124"></a>
+**H-FUNCTION-VALUED-SYMBOL-20261124.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-24 (America/Los_Angeles), the project user accepted the function-symbol proposal, recommended `return @score()` and required direct calls for function-valued symbols. The subsequent clarification “这个保留吧，我撤回 ‘`proc symbol` 要求必须通过 perform/behave 调用’ 这条” expressly retains [H-LEXICAL-SYMBOLIC-PROC-20261123](#h-lexical-symbolic-proc-20261123). [D-10r261](design/SymbolicDynamicScope.md#calling-a-function-valued-symbol), P-719/P-720, covers both function-symbol declaration spellings, scoped installation of an independent function selection and calls by declared kind. D-15r78, guide r7 and source reference r480 apply that distinction. The earlier procedure call table is at `154e2634ac0870f40756999c7b70e854d4e96adc:design/SymbolicDynamicScope.md:601`.
+
 ## 2026-11-24 — Show the tile inspector's application code in both languages
 
 <a id="k-tile-application-comparison-20261124"></a>

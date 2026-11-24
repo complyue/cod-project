@@ -12,7 +12,7 @@ dependencies are identified where needed.
 
 ## Design authority
 
-Guide revision 6 applies the [single-directive import](../CHANGELOG.md#h-proc-import-identity-20261124) and the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
+Guide revision 7 applies the [single-directive import](../CHANGELOG.md#h-proc-import-identity-20261124) and the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
 [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics), P-694/P-695, and the
 [canonical source style](IdiomaticsGuideline.md#canonical-code-style). The
 [guide baseline](../CHANGELOG.md#k-idiomatic-cod-rewrite-20261123),
@@ -23,6 +23,7 @@ The design sections linked throughout own the language rules, including identity
 owners, effects, control and cleanup. This guide explains their use without extending those rules.
 The [symbolic family selection guideline](../CHANGELOG.md#h-symbolic-family-reuse-idiom-20261123)
 covers the distinction between consuming a symbol, installing a family and extending it.
+The [function-valued symbol decision](../CHANGELOG.md#h-function-valued-symbol-20261124) adds the direct call idiom under [D-10](../design/SymbolicDynamicScope.md#calling-a-function-valued-symbol).
 Acceptance applies the guideline's semantic, example, coverage and mandatory style checks.
 [Long-term design topics](DesignTopics.md) retain their separate scope.
 
@@ -441,6 +442,12 @@ rate retained as a symbolic value is consequently different from freezing an ent
 See [call forms](../design/SymbolicDynamicScope.md#functions-and-procedures),
 [capture and restoration](../design/SymbolicDynamicScope.md#captured-values-and-call-behavior) and
 [symbolic snapshots](../design/CallableViewsAndCaptures.md#symbolic-snapshots-at-definition-activation).
+
+For a function-valued symbol declared as `func symbol @score()->u64`, prefer
+`return @score()` inside a procedure. This reads the installed function and calls it.
+With a procedure symbol, the same spelling calls the lexically selected family.
+Use `perform` or `behave` when the caller wants the installed procedure handler.
+[Call by symbol kind](../design/SymbolicDynamicScope.md#calling-a-function-valued-symbol)
 
 ### Keep symbolic procedure families at integration boundaries
 

@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 260 · Recorded: 2026-11-24 · Phase: language/application co-design.
+Design revision: 261 · Recorded: 2026-11-24 · Phase: language/application co-design.
 
 ## Design authority
+
+[D-10-FUNC-SYMBOL](DesignAuthorityRegistry.md#d-10-func-symbol) r261 covers [function-valued symbols and direct calls](#calling-a-function-valued-symbol) under the [user’s decision](../CHANGELOG.md#h-function-valued-symbol-20261124). P-719/P-720 apply scoped installation and ordinary function selection. Check the installed selection after its source holder changes, both exit paths and the call forms for each symbol kind. The runtime identity, handler activation and callable storage contracts govern their respective uses.
 
 [D-10-SYMBOL-IDENTITY](DesignAuthorityRegistry.md#d-10-symbol-identity) r260 covers [runtime identity and its protected lexical name](#the-bare-symbol-name-at-runtime). The [project user’s decision](../CHANGELOG.md#h-runtime-symbol-identity-20261124) qualifies P-718 under C-35/P-331/P-342. Verify the identity before installation, across a temporary binding and under an imported name. Reject an incompatible declaration even when unused. Callable-prefix syntax, identity representation and a general runtime lookup API have separate scope.
 
@@ -170,6 +172,7 @@ Dynamic symbolic variables have their own storage and rebinding contract (H-277�
 | Binding category | Storage and writes |
 | --- | --- |
 | Bits value symbol, `val symbol @x:T` or `symbol @x:T` when resolved `T` is bits | `effect @x <- rhs` evaluates the RHS and transfers its bits into an independent TLS payload. Later writes to the source leave the installed value intact. |
+| Function-valued symbol, `func symbol @f()->T` or `symbol @f:func()->T` | `effect @f <- chosen` prepares the ordinary function value and installs that selection for the scope. `@f()` calls the selected function. |
 | Existing non-bits object-reference symbol | It references an object inside a region supplied by a region symbol. `effect @x = rhs` may select another such region, subject to the declared type and actual region lifetime. No object is copied into TLS. |
 | Explicit `ref/ptr symbol @x:T in @arena` | A borrowed target in the region selected through @arena at installation; T may be scalar/bits or an admissible object type. `effect @x = rhs` installs the reference and actual-owner association. |
 | Explicit `ref/ptr symbol @x:T in S where {owner S}` | A borrowed target whose one actual owner is established from the RHS; lexical and ordinary regional owners are admitted under H-561 without installing a region symbol. |
@@ -177,7 +180,7 @@ Dynamic symbolic variables have their own storage and rebinding contract (H-277�
 | `symbol @s :own handle S` | `effect @s <- make own handle S(...)` installs one scoped owner. A handle argument borrows the active instance. Shadowing preserves the hidden instance, and leaving the installing scope restores the preceding binding. The [native effect contract](../applications/cod-booter/docs/LLVMInterop.md#owning-native-handle-effects) specifies cleanup and call-path acceptance. |
 | Symbolic procedure | A definition installs a scoped handler. `perform` replays its required symbolic bindings and `behave` uses current bindings. Each selected owner must remain live through use and restoration. |
 
-Symbolic binding writes require `effect`: `effect @x = rhs` performs rebinding, while `effect @x <- rhs` performs ownership/bits transfer (H-280). Bare `@x = rhs` and bare `@x <- rhs` cannot write a symbolic binding. The proposed object-content transfer form is distinguished below. Both forms have scoped validity: an effect saves the preceding binding and restores it when its scope ends. For bits, the saved state is the preceding bits value; for an object reference, it is the preceding reference and its provenance. Edits to referenced regional contents are not undone by restoration. Every effect expression has type `void` (H-288). A following explicit symbolic read obtains the current binding; an effect cannot supply a value argument or form an assignment chain.
+Symbolic binding writes require `effect`: `effect @x = rhs` performs rebinding, while `effect @x <- rhs` installs the independently prepared bits, owned resource, or ordinary function selection according to the declared symbol kind. Bare `@x = rhs` and bare `@x <- rhs` cannot write a symbolic binding. The proposed object-content transfer form is distinguished below. Both forms have scoped validity: an effect saves the preceding binding and restores it when its scope ends. For bits, the saved state is the preceding bits value; for an object reference, it is the preceding reference and its provenance. Edits to referenced regional contents are not undone by restoration. Every effect expression has type `void` (H-288). A following explicit symbolic read obtains the current binding; an effect cannot supply a value argument or form an assignment chain.
 
 The object-reference rebinding form does not take ownership away from the supporting region symbol. A fresh whole-region resource still uses consuming transfer under the existing no-extraction rule. H-281 requires `<-` for independent TLS bits payloads and `=` for reference rebinding. H-482 applies the latter to explicit ref/ptr symbols even when their target type is bits. `effect @bits = rhs` is rejected; it cannot introduce a pointer to RHS lexical storage. An object-reference binding is not a bits-valued symbol merely because its native address occupies bits. Whole-region borrowing/replay and regional graph transfer retain separate interfaces. Neither syntax admits an implicit graph copy or extraction from an existing region symbol.
 
@@ -188,6 +191,31 @@ The compiler must preserve the reference's actual region association through bra
 Procedure capture retains bits values or the selected regional reference with its lifetime dependency. Perform replays those captured values; behave uses current bindings. Capturing an object reference does not own the region or copy its graph. Detailed capture/escape lowering must prove this lifetime condition; the earlier proposal to exclude every interior reference is not an accepted restriction on all symbolic bindings. Functions still cannot read or write symbolic bindings.
 
 Bounded acceptance must demonstrate independent TLS bits payloads, bits/reference restoration, one object symbol rebound between two live symbol-backed regions, and a captured reference retaining its original region. H-561 additionally admits proved ordinary-owner backing through the owner-parameter form; references that escape their actual owner lifetime must reject, including through branches/captures. No runtime borrow registry, RTTI, extra per-object ownership or fraction representation is selected. Fixed-width fraction bits, when implemented, retain their declared representation; this rule chooses no new promotion or alignment policy.
+
+### Calling a function-valued symbol
+
+`func symbol @score()->u64` and `symbol @score:func()->u64` declare the same kind of symbol. The bare name `score` denotes its nominal identity. In procedural code, `effect @score <- chosen` evaluates the right-hand side under the declared function contract and installs the selected function for this dynamic scope. Reassigning the source holder leaves the installed selection intact. A failed preparation preserves the previous binding. Normal exit and unwinding both restore it. Function selection uses the ordinary capture-free callable contract and retains its typed interface. [Function-value preparation](CallableViewsAndCaptures.md#definition-mentions-and-runtime-view-construction)
+
+```cod
+func symbol @score()->u64;
+func seven()->u64 { 7u64 }
+func nine()->u64 { 9u64 }
+
+proc trial()->u64 {
+    func chosen = seven;
+    effect @score <- chosen;
+    chosen <- nine;
+    {{
+        effect @score <- chosen;
+        assert @score() == 9u64
+    }}
+    return @score()
+}
+```
+
+`trial()` returns seven. The preferred `@score(args)` and the ordinary value call `(@score)(args)` both read the installed function once before preparing the arguments. The read requires an available binding and permission to access dynamic effects. An ordinary function can receive the selected function as an explicit argument and call it. `perform` and `behave` reject a function-valued symbol at the call site, including when checking the type of the call.
+
+Resolve the symbol’s declared kind before choosing the meaning of `@score(args)`. For a **procedure symbol**, that spelling calls the lexically selected family with current bindings. It needs an applicable method and requires no installation for its own callee. `perform @score(args)` and `behave @score(args)` require an installed procedure handler and select its captured or the current bindings, respectively. For a **function-valued symbol**, direct invocation always requires its installed function. Availability of an installation never changes the meaning of the direct spelling. [Procedure call and installation examples](#lexical-selection-installation-and-invocation)
 
 ### Declaring a bits value symbol
 
@@ -659,7 +687,7 @@ H-236 requires architecture before local lookup fixes. H-247/H-248 makes that ar
 | `import` an external definition | Select an exported source definition with extension permission. An imported helper uses the receiving module's callable implementation context under H-232; source body/non-callable lexical bindings remain. |
 | `mixin` an external procedure body | Construct a receiving-context definition with its symbol mapping; the handler snapshots its required symbolic bindings at definition activation. |
 | `@var_name` | Read the value under the declared symbol identity; WPO requires a supplied dynamic binding. |
-| `effect @s <- value` | Scoped ownership/bits transfer; bits symbols require this form. Restore the preceding binding on scope exit; result is void. |
+| `effect @s <- value` | Install bits, an owned resource, or a prepared ordinary function selection according to the declared symbol kind. Restore the preceding binding on scope exit. The result is void. |
 | `effect @s = value` | Scoped non-consuming reference rebinding under the symbol's declared owner constraint; H-561 admits lexical and ordinary regional owners for the owner-parameter form. Rejected for plain bits-valued symbols; explicit ref/ptr symbols may have bits targets. |
 | Install a symbolic procedure | A single method or a group of methods supplies one fresh anonymous family. A name-only installation selects the lexical family. Each activation establishes its required symbolic bindings. |
 | `perform @p` | Resolve the procedure, temporarily install its captured effect values in its execution scope, execute its body, and restore the caller's bindings. |
@@ -982,7 +1010,7 @@ A function definition binds a lexical name and cannot access dynamic effect vari
 
 A lexical procedure keeps its definition context. A helper that reaches perform/behave can be invoked [by its definition](#definition-installed-effectful-procedures); invoking it through an ordinary callable value rejects. Assignment of a lexical procedure to an effect slot rejects. Procedure mixin redefines a source body in the receiving context.
 
-H-185 specifies the call forms: `p(...)` resolves a lexical procedure; `perform @p(...)` and `behave @p(...)` resolve a procedure through its symbolic binding. H-189 makes direct lexical calls use the caller's current dynamic bindings. `perform` temporarily installs the selected handler’s saved bindings; `behave` uses current values. `perform p(...)`, `behave p(...)` and direct `@p(...)` calls are invalid. Pure functions cannot invoke procedures through any form.
+H-185 specifies the call forms: `p(...)` resolves a lexical procedure; `perform @p(...)` and `behave @p(...)` resolve a procedure through its symbolic binding. H-189 makes direct lexical calls use the caller's current dynamic bindings. `perform` temporarily installs the selected handler’s saved bindings; `behave` uses current values. Both `perform` and `behave` require a procedure symbol. Direct `@p(...)` uses the lexical family for a procedure symbol and the installed function for a [function-valued symbol](#calling-a-function-valued-symbol). An ordinary function cannot invoke a procedure or read a dynamic binding.
 
 | Call form | Callee lookup | Established invocation rule |
 | --- | --- | --- |
@@ -1845,7 +1873,7 @@ For an explicitly optional resource, shadowing a present value with the absent a
 
 ### Expressions and `void`
 
-A symbolic read is `@var_name`; a symbolic binding write requires `effect @var_name = rhs` for rebinding or `effect @var_name <- rhs` for ownership/bits transfer. Plain assignment, compound assignment and increment syntax must not provide alternate symbolic binding writes. H-282/H-283 separately proposes a transfer expression `@object <- rhs` that mutates the referent rather than the binding. Reads and writes participate in expression evaluation; procedures may also return meaningful results. `void` explicitly indicates no meaningful result, rather than a missing required binding, an implicit nullable value or another allocation carrier.
+A symbolic read is `@var_name`; a symbolic binding write requires `effect @var_name = rhs` for rebinding or `effect @var_name <- rhs` for bits, ownership or an independent function selection according to its declared kind. Plain assignment, compound assignment and increment syntax must not provide alternate symbolic binding writes. H-282/H-283 separately proposes a transfer expression `@object <- rhs` that mutates the referent rather than the binding. Reads and writes participate in expression evaluation; procedures may also return meaningful results. `void` explicitly indicates no meaningful result, rather than a missing required binding, an implicit nullable value or another allocation carrier.
 
 H-280 admits `=` for scoped rebinding alongside `<-` for scoped transfer; bare symbolic binding assignment remains invalid. H-281 requires `<-` for bits and `=` for object references, as specified in [the storage contract](#symbolic-storage-and-regional-provenance). H-204/H-205 additionally develops an ordinary ownership/bits transfer operator with the same glyph. Prefix effect retains scoped installation/restoration and its typed procedure-binding case; ordinary bits stores persist, and ordinary owner moves require a separate admitted owning destination. Captured replay remains non-consuming. The prototype supports `<-` in effect bindings, fresh owning declarations and make root initializers; parameter conversion-route arrows retain their independent grammar. General transfer overloads, owner reassignment and reference-assignment migration remain unimplemented.
 
