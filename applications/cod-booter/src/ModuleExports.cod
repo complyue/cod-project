@@ -31,6 +31,7 @@ export data SelectionSpelling =
     GraphSpelling { span:SourceSpan; };
 
 export array StagedExportNames[u64]:SelectionSpelling;
+export array StagedExportUses[u64]:u64;
 
 export data CheckedSelection =
     UnpublishedSelection {} |
@@ -42,6 +43,7 @@ export data CheckedSelection =
         members:u64;
         local:SelectionSpelling;
         published:SelectionSpelling;
+        public_row:u64;
         export_kind:u8;
         checked:u8;
         publishing_module:u64;
@@ -226,6 +228,9 @@ func validate_checked_selections(
 export data SelectedExport {
     # Input from dependency discovery. Zero selects the builtin namespace.
     dependency_module:u64;
+    checked_resource:u64;
+    selection_site:u64;
+    selection_public_row:u64;
     identity:u64;
     kind:u8;
     checked:u8;
@@ -324,7 +329,7 @@ export func missing_module_export() -> u8 { return 2u8; }
 export func wrong_export_kind() -> u8 { return 3u8; }
 export func export_storage_exhausted() -> u8 { return 4u8; }
 export func invalid_export_tree() -> u8 { return 5u8; }
-func unproved_import_interpretation() -> u8 { return 12u8; }
+export func unproved_import_interpretation() -> u8 { return 12u8; }
 func invalid_member_selection() -> u8 { return 13u8; }
 func missing_enum_member() -> u8 { return 14u8; }
 func conflicting_enum_members() -> u8 { return 15u8; }
@@ -392,6 +397,7 @@ func stage_selection(
     selected[at] <- make SelectedResource {
         revision <- revision; site <- site; mode <- mode; nature <- nature;
         members <- members; local <- local; published <- published;
+        public_row <- if (exports[row].publishing_module == 0u64) { no_node() } else { row };
         export_kind <- exports[row].kind; checked <- exports[row].checked;
         publishing_module <- exports[row].publishing_module;
         defining_module <- exports[row].origin_module;
@@ -505,6 +511,9 @@ export func prepare_module_dependencies(selected:SelectedExports in R, used:u64)
 
 func clear_selection(selected:SelectedExports in R, at:u64) -> void
     where {owner R} {
+    selected[at].checked_resource <- no_node();
+    selected[at].selection_site <- no_node();
+    selected[at].selection_public_row <- no_node();
     selected[at].identity <- 0u64;
     selected[at].kind <- 0u8;
     selected[at].checked <- 0u8;
@@ -523,6 +532,9 @@ func clear_selection(selected:SelectedExports in R, at:u64) -> void
 
 func select_export(exports:const ModuleExports in E, row:u64, selected:SelectedExports in R, at:u64) -> void
     where {const owner E, owner R} {
+    selected[at].checked_resource <- no_node();
+    selected[at].selection_site <- no_node();
+    selected[at].selection_public_row <- no_node();
     selected[at].identity <- exports[row].identity;
     selected[at].kind <- exports[row].kind;
     selected[at].checked <- exports[row].checked;
@@ -784,11 +796,14 @@ export func project_checked_resource(selections:const CheckedSelections in F, us
             val origin <- revision; val directive <- site; val kind <- export_kind; val verb <- mode;
             val identity <- identity; val defining <- defining_module; val publisher <- publishing_module;
             val checked <- checked; val owner_module <- owner_module; val owner_identity <- owner_identity;
-            val shape <- shape;
+            val shape <- shape; val public_row <- public_row;
         } -> {
             if (origin != revision || directive >= syntax_used || kind == 0u8 ||
                 (lexical_use && verb == ReexportResource)) return false;
             output.dependency_module <- publisher;
+            output.checked_resource <- row;
+            output.selection_site <- directive;
+            output.selection_public_row <- public_row;
             output.identity <- identity;
             output.kind <- kind;
             output.checked <- checked;

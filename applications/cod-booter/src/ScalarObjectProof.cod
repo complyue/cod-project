@@ -1,0 +1,474 @@
+using "./ParserStorage.cod" {
+    ExprNodes, AstSlot { Occupied }, ExprPayload { IntegerLiteral, NameReference, ReturnValue },
+    block_tail, is_scope_block, no_node, published_syntax_id,
+    SequenceEntry, inspect_sequence_entry, SequenceSyntax { BlockSequence },
+    CallableSites, inspect_callable, CallableSyntax { ModuleCallable, ModuleCallablePromise, InvalidCallable },
+    BinarySites, inspect_binary, BinarySyntax { ArithmeticBinary },
+    ArithmeticOperation { Addition }, ComparisonRelation { Equal },
+    inspect_group, GroupSyntax { ParenthesizedExpression }, named_operator_at,
+    ModuleSelectionSites, inspect_module_selection, BulkSelectionSites, inspect_bulk_selection,
+    ModuleSelectionMode { UseResource, ImportResource }, ResourceNature { OrdinaryResource },
+    PublicView { DefaultPublic }, SelectionSyntax { OtherSelectionSyntax, InvalidSelection, SelectionReady },
+    name_syntax, NameSyntax { OrdinaryName }, syntax_first, syntax_past
+}
+using "./SourceStorage.cod" SourceBytes;
+using "./Lexer.cod" operator_past;
+using "./NameResolution.cod" { NameBindings, NameWork, formal_binding, callable_binding }
+using "./OperandChecking.cod" { OperandFacts, scalar_u64, local_place, independent_value }
+using "./ModuleExportStorage.cod" {
+    ModuleExports, ModuleInterfaces, find_interface, callable_view_interface,
+    CallableUseProofs, CallableUseProof { CheckedCallableUse },
+    ReceiverImportCheck { ReceiverCallablesReady, OtherReceiverResource },
+    CallableObjectView { PublishedObjectView }, InterfaceCallableKind { CheckedFunction }, write_object_view
+}
+using "./ModuleIndex.cod" { Visits, VisitSlot { Checked }, VisitObject { CompletedVisitObject } }
+using "./ModuleExports.cod" {
+    SelectedExports, CheckedSelections, CheckedSelection { SelectedResource }, StagedExportUses,
+    callable_export, ordinary_callable_shape
+}
+using "./NativeCommands.cod" { NativeCommands, NativeUnitRows, declare_function, begin_function };
+
+export func primitive_names(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64)
+    -> bool where {const owner S, const owner N} {
+    if (used > intrinsic (len)(nodes)) return false;
+    val first <- 0u64;
+    val past <- 0u64;
+    for (at in 0u64 .. used) {
+        if (named_operator_at(nodes, at) != no_node()) return false;
+        if (name_syntax(nodes, used, at) == OrdinaryName) {
+            first <- syntax_first(nodes, used, at);
+            past <- syntax_past(nodes, used, at);
+            if (first >= past || past > intrinsic (len)(source) ||
+                operator_past(source, first, past) != first) return false
+        }
+    };
+    return true
+}
+
+# This proof admits defining modules with no source lookup edge and no
+# operator-family spelling. Along with exact builtin u64 operands this makes
+# the arithmetic selection independent of source fallback or contributions.
+export func primitive_definition_namespace(source:const SourceBytes in S,
+    nodes:const ExprNodes in N, used:u64, revision:u64)
+    -> bool where {const owner S, const owner N} {
+    if (!primitive_names(source, nodes, used)) return false;
+    ref named = make ModuleSelectionSites {
+        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
+        symbolic <- false; mode <- UseResource; nature <- OrdinaryResource
+    };
+    ref expanded = make BulkSelectionSites { path <- no_node(); mode <- UseResource; view <- DefaultPublic };
+    for (at in 0u64 .. used) {
+        if (inspect_module_selection(nodes, revision, used, at, named) != OtherSelectionSyntax ||
+            inspect_bulk_selection(nodes, revision, used, at, expanded) != OtherSelectionSyntax)
+            return false
+    };
+    return true
+}
+
+func completed_primitive_namespace(visits:const Visits in G, used:u64, module:u64) -> bool
+    where {const owner G} {
+    if (module == 0u64 || module > used || used > intrinsic (len)(visits)) return false;
+    return case visits[module - 1u64] of {
+        Checked { val primitive <- primitive_namespace; } -> primitive;
+        _ -> false
+    }
+}
+
+# Bind all receiver methods first. A closed receiver has no operator-family
+# spelling, no extension on the selected family and no unchecked lookup edge.
+export func primitive_receiver_namespace(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, links:const NameWork in L, dependencies:const SelectedExports in E,
+    visits:const Visits in G, visit_used:u64, used:u64, revision:u64) -> bool
+    where {const owner S, const owner N, const owner B, const owner L, const owner E, const owner G} {
+    if (!primitive_names(source, nodes, used) || used > intrinsic (len)(names) ||
+        used > intrinsic (len)(links) || used > intrinsic (len)(dependencies)) return false;
+    ref named = make ModuleSelectionSites {
+        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
+        symbolic <- false; mode <- UseResource; nature <- OrdinaryResource
+    };
+    ref expanded = make BulkSelectionSites { path <- no_node(); mode <- UseResource; view <- DefaultPublic };
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    val selection <- OtherSelectionSyntax;
+    val form <- InvalidCallable;
+    for (at in 0u64 .. used) {
+        selection <- inspect_module_selection(nodes, revision, used, at, named);
+        if (selection == InvalidSelection) return false;
+        if (selection == SelectionReady) {
+            if (named.members != no_node() || named.symbolic ||
+                !completed_primitive_namespace(visits, visit_used, dependencies[at].dependency_module))
+                return false
+        } else {
+            selection <- inspect_bulk_selection(nodes, revision, used, at, expanded);
+            if (selection == InvalidSelection ||
+                (selection == SelectionReady &&
+                 !completed_primitive_namespace(visits, visit_used, dependencies[at].dependency_module)))
+                return false
+        };
+        form <- inspect_callable(nodes, revision, used, at, callable);
+        if (form == InvalidCallable || form == ModuleCallablePromise ||
+            (form == ModuleCallable &&
+             (callable.body == no_node() || names[at].declaration != at || links[at].next_method != no_node())))
+            return false
+    };
+    return true
+}
+
+func scalar_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
+    operands:const OperandFacts in F, definition:u64, at:u64, used:u64, revision:u64)
+    -> bool where {const owner N, const owner B, const owner F} {
+    if (at >= used || operands[at].kind != scalar_u64()) return false;
+    ref inner = make u64 { no_node() };
+    if (inspect_group(nodes, revision, used, at, inner) == ParenthesizedExpression) {
+        return inner < at && scalar_expression(nodes, names, operands, definition, inner, used, revision)
+    };
+    ref operation = make BinarySites {
+        left_operand <- no_node(); right_operand <- no_node(); operator_at <- 0u64;
+        arithmetic <- Addition; relation <- Equal
+    };
+    if (inspect_binary(nodes, revision, used, at, operation) == ArithmeticBinary) {
+        return operation.left_operand < at && operation.right_operand < at &&
+            operands[at].reception == independent_value() &&
+            scalar_expression(nodes, names, operands, definition, operation.left_operand, used, revision) &&
+            scalar_expression(nodes, names, operands, definition, operation.right_operand, used, revision)
+    };
+    return case nodes[at] of {
+        Occupied { val syntax <- node; } -> {
+            case syntax.payload of {
+                IntegerLiteral { val width <- width; } ->
+                    width == 64u64 && operands[at].reception == independent_value();
+                NameReference ->
+                    names[at].kind == formal_binding() && names[at].declaration < at &&
+                    operands[names[at].declaration].kind == scalar_u64() &&
+                    operands[names[at].declaration].reception == local_place() &&
+                    operands[names[at].declaration].owner == definition;
+                _ -> false
+            }
+        };
+        _ -> false
+    }
+}
+
+export func checked_scalar_body(nodes:const ExprNodes in N, names:const NameBindings in B,
+    links:const NameWork in L, operands:const OperandFacts in F, definition:u64, used:u64,
+    revision:u64) -> bool where {const owner N, const owner B, const owner L, const owner F} {
+    if (definition >= used || used > intrinsic (len)(nodes) || used > intrinsic (len)(names) ||
+        used > intrinsic (len)(links) || used > intrinsic (len)(operands) ||
+        names[definition].declaration != definition || links[definition].next_method != no_node() ||
+        operands[definition].kind != scalar_u64() || operands[definition].reception != independent_value())
+        return false;
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    if (inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable ||
+        !callable.function_form || callable.body >= definition || is_scope_block(nodes, callable.body))
+        return false;
+    ref tail = make u64 { no_node() };
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    if (!block_tail(nodes, revision, used, callable.body, tail) || tail >= callable.body ||
+        inspect_sequence_entry(nodes, revision, used, tail, entry) != BlockSequence ||
+        entry.previous != no_node() || entry.item >= tail) return false;
+    ref expression = make u64 { entry.item };
+    case nodes[entry.item] of {
+        Occupied { val syntax <- node; } -> {
+            case syntax.payload of {
+                ReturnValue { val value <- value; } -> {
+                    if (!published_syntax_id(nodes, revision, entry.item, value)) return false;
+                    (expression <- value.index):void
+                };
+                _ -> {}
+            }
+        };
+        _ -> { return false }
+    };
+    return scalar_expression(nodes, names, operands, definition, expression, used, revision)
+}
+
+export func scalar_body_signature(interfaces:const ModuleInterfaces in I, head:u64, past:u64)
+    -> bool where {const owner I} {
+    if (head >= past || past > intrinsic (len)(interfaces) ||
+        interfaces[head].interface_kind != callable_binding() ||
+        interfaces[head].value_kind != 0u8 || interfaces[head].result_kind != scalar_u64() ||
+        interfaces[head].callable_kind != CheckedFunction || interfaces[head].owner_count != 0u64 ||
+        interfaces[head].owner_role != no_node() || interfaces[head].has_here != 0u8 ||
+        interfaces[head].failure_identity != no_node() || interfaces[head].failure_module != 0u64 ||
+        interfaces[head].failure_checked != 0u8 || interfaces[head].entry_count >= past - head)
+        return false;
+    for (at in head + 1u64 .. head + 1u64 + interfaces[head].entry_count) {
+        if (interfaces[at].value_kind != scalar_u64() ||
+            interfaces[at].native_reception != local_place() || interfaces[at].owner_role != no_node())
+            return false
+    };
+    return true
+}
+
+func declares_scalar_body(commands:const NativeCommands in C, count:u64, ordinal:u64, arity:u64)
+    -> bool where {const owner C} {
+    if (ordinal == no_node() || count > intrinsic (len)(commands)) return false;
+    val declared <- false;
+    val defined <- false;
+    for (at in 0u64 .. count) {
+        if (commands[at].a == ordinal) {
+            if (commands[at].opcode == declare_function()) {
+                if (declared || commands[at].b != arity || commands[at].c != 0u64) return false;
+                (declared <- true):void
+            };
+            if (commands[at].opcode == begin_function()) {
+                if (defined || !declared) return false;
+                (defined <- true):void
+            }
+        }
+    };
+    return defined
+}
+
+export func mark_scalar_bodies(nodes:const ExprNodes in N, names:const NameBindings in B,
+    links:const NameWork in L, operands:const OperandFacts in F, used:u64, revision:u64,
+    interfaces:ModuleInterfaces in I, count:u64, commands:const NativeCommands in C, command_count:u64) -> bool
+    where {const owner N, const owner B, const owner L, const owner F, owner I, const owner C} {
+    if (count > intrinsic (len)(interfaces)) return false;
+    val header <- 0u64;
+    for (unused in 0u64 .. count) {
+        if (header == count) return true;
+        if (interfaces[header].entry_count >= count - header) return false;
+        if (scalar_body_signature(interfaces, header, count) &&
+            declares_scalar_body(commands, command_count, interfaces[header].native_function,
+                interfaces[header].entry_count) &&
+            checked_scalar_body(nodes, names, links, operands, interfaces[header].declaration, used, revision))
+            { (interfaces[header].scalar_object_body <- true):void };
+        (header <- header + 1u64 + interfaces[header].entry_count):void
+    };
+    return header == count
+}
+
+export data ObjectPrefixes {
+    visits:u64;
+    exports:u64;
+    interfaces:u64;
+    units:u64;
+    commands:u64;
+    functions:u64;
+}
+
+export data ObjectExportSite {
+    row:u64;
+    publisher:u64;
+    defining_module:u64;
+    declaration:u64;
+}
+
+func completed_callable_context(visits:const Visits in G, module:u64) -> bool where {const owner G} {
+    return case visits[module - 1u64] of {
+        Checked { val structural <- inherited_structural; } -> !structural;
+        _ -> false
+    }
+}
+
+func published_callable_context(visits:const Visits in G, interfaces:const ModuleInterfaces in G, first:u64, past:u64,
+    limit:u64, site:const ObjectExportSite in P, visit_used:u64)
+    -> u64 where {const owner G, const owner P} {
+    if (first > past || past > limit || limit > intrinsic (len)(interfaces)) return no_node();
+    val header <- first;
+    val found <- no_node();
+    for (unused in first .. past) {
+        if (header == past) return found;
+        if (interfaces[header].interface_kind == 0u8 || interfaces[header].value_kind != 0u8 ||
+            interfaces[header].entry_count >= past - header) return no_node();
+        if (interfaces[header].interface_kind == callable_view_interface()) {
+            if (interfaces[header].entry_count != 0u64 || interfaces[header].defining_module != site.publisher)
+                return no_node();
+            case interfaces[header].object_view of {
+                PublishedObjectView {
+                    val row <- public_row; val publisher <- publisher;
+                    val defining_module <- defining_module; val declaration <- declaration;
+                    val incoming <- incoming_context; val selected <- selected_context;
+                } -> {
+                    if (publisher != site.publisher) return no_node();
+                    if (row == site.row) {
+                        if (found != no_node() || defining_module != site.defining_module ||
+                            declaration != site.declaration || incoming == 0u64 || incoming > visit_used ||
+                            selected == 0u64 || selected > visit_used ||
+                            !completed_callable_context(visits, incoming) ||
+                            !completed_callable_context(visits, selected)) return no_node();
+                        (found <- selected):void
+                    }
+                };
+                _ -> { return no_node() }
+            }
+        };
+        (header <- header + interfaces[header].entry_count + 1u64):void
+    };
+    return if (header == past) { (found) } else { no_node() }
+}
+
+export func incoming_callable_context(visits:const Visits in G, exports:const ModuleExports in G,
+    interfaces:const ModuleInterfaces in G, limits:const ObjectPrefixes in L,
+    site:const ObjectExportSite in E) -> u64
+    where {const owner G, const owner L, const owner E} {
+    if (site.publisher == 0u64 || site.publisher > limits.visits ||
+        limits.visits > intrinsic (len)(visits) || site.row >= limits.exports ||
+        limits.exports > intrinsic (len)(exports) || site.defining_module == 0u64 ||
+        site.defining_module > limits.visits || site.declaration == no_node()) return no_node();
+    if (exports[site.row].publishing_module != site.publisher ||
+        exports[site.row].origin_module != site.defining_module ||
+        exports[site.row].identity != site.declaration || exports[site.row].kind != callable_export() ||
+        exports[site.row].shape != ordinary_callable_shape()) return no_node();
+    return case visits[site.publisher - 1u64] of {
+        Checked {
+            val export_first <- exports_first; val export_past <- exports_past;
+            val first <- interfaces_first; val past <- interfaces_past;
+        } -> {
+            if (site.row < export_first || site.row >= export_past || export_past > limits.exports)
+                return no_node();
+            if (site.publisher == site.defining_module) return site.defining_module;
+            return published_callable_context(visits, interfaces, first, past, limits.interfaces,
+                site, limits.visits)
+        };
+        _ -> no_node()
+    }
+}
+
+func verified_scalar_ordinal(interfaces:const ModuleInterfaces in G, units:const NativeUnitRows in G,
+    limits:const ObjectPrefixes in P, header:u64, definition:u64, unit:u64, key_first:u64, key_past:u64,
+    functions_first:u64, functions_past:u64, interfaces_first:u64, interfaces_past:u64)
+    -> u64 where {const owner G, const owner P} {
+    if (unit >= limits.units || key_first >= key_past ||
+        units[unit].name_first != key_first || units[unit].name_past != key_past ||
+        units[unit].command_first >= units[unit].command_past || units[unit].command_past > limits.commands ||
+        functions_first >= functions_past || functions_past > limits.functions ||
+        definition >= functions_past - functions_first ||
+        header < interfaces_first || header >= interfaces_past || interfaces_past > limits.interfaces ||
+        !scalar_body_signature(interfaces, header, interfaces_past) || !interfaces[header].scalar_object_body)
+        return no_node();
+    val expected <- functions_first + definition;
+    return if (interfaces[header].native_function == expected) { (expected) } else { no_node() }
+}
+
+export func completed_scalar_ordinal(visits:const Visits in G, interfaces:const ModuleInterfaces in G,
+    units:const NativeUnitRows in G, limits:const ObjectPrefixes in P, module:u64, definition:u64)
+    -> u64 where {const owner G, const owner P} {
+    if (module == 0u64 || module > limits.visits || limits.visits > intrinsic (len)(visits) ||
+        limits.units > intrinsic (len)(units) || definition == no_node()) return no_node();
+    val header <- find_interface(interfaces, limits.interfaces, module, definition);
+    if (header == no_node()) return no_node();
+    return case visits[module - 1u64] of {
+        Checked { val first <- key_first; val past <- key_past; val primitive <- primitive_namespace;
+                  val interfaces_first <- interfaces_first; val interfaces_past <- interfaces_past;
+                  val object <- object; } -> {
+            if (!primitive) return no_node();
+            case object of {
+                CompletedVisitObject {
+                    val unit <- unit_index; val functions_first <- functions_first; val functions_past <- functions_past;
+                } -> {
+                    return verified_scalar_ordinal(interfaces, units, limits, header, definition, unit,
+                        first, past, functions_first, functions_past, interfaces_first, interfaces_past)
+                };
+                _ -> no_node()
+            }
+        };
+        _ -> no_node()
+    }
+}
+
+func prepare_object_callable(view:const ObjectExportSite in E, mode:ModuleSelectionMode,
+    native_scope:u64, primitive_receiver:bool, visits:const Visits in G, exports:const ModuleExports in G,
+    interfaces:const ModuleInterfaces in G, units:const NativeUnitRows in G, limits:const ObjectPrefixes in L,
+    proof:CallableUseProofs in P, row:u64, site:u64, revision:u64)
+    -> bool where {const owner E, const owner G, const owner L, owner P} {
+    val incoming <- incoming_callable_context(visits, exports, interfaces, limits, view);
+    if (incoming == no_node()) return false;
+    val selected <- if (mode == ImportResource) { native_scope } else { (incoming) };
+    val ordinal <- no_node();
+    if (mode == ImportResource || incoming != view.defining_module) {
+        if (mode == ImportResource && !primitive_receiver) return false;
+        ordinal <- completed_scalar_ordinal(visits, interfaces, units, limits,
+            view.defining_module, view.declaration);
+        if (ordinal == no_node()) return false
+    };
+    proof[row] <- make CheckedCallableUse {
+        site <- site; revision <- revision; public_row <- view.row; publisher <- view.publisher;
+        defining_module <- view.defining_module;
+        declaration <- view.declaration; incoming_context <- incoming; selected_context <- selected;
+        ordinal <- ordinal
+    };
+    return true
+}
+
+export func prepare_object_callables(selections:const CheckedSelections in F, selected_used:u64,
+    used:u64, revision:u64, module:u64, primitive_receiver:bool,
+    visits:const Visits in G, exports:const ModuleExports in G, interfaces:const ModuleInterfaces in G,
+    units:const NativeUnitRows in G, limits:const ObjectPrefixes in L,
+    proof:CallableUseProofs in P, work:NameWork in W, problem:u64 in R)
+    -> bool where {const owner F, const owner G, const owner L, owner P, owner W, owner R} {
+    problem <- no_node();
+    if (selected_used > intrinsic (len)(selections) || selected_used > intrinsic (len)(proof) ||
+        module == 0u64 || module > limits.visits || used > intrinsic (len)(work)) return false;
+    ref view = make ObjectExportSite {
+        row <- no_node(); publisher <- 0u64; defining_module <- 0u64; declaration <- no_node()
+    };
+    for (row in 0u64 .. selected_used) {
+        case selections[row] of {
+            SelectedResource {
+                val site <- site; val selected_revision <- revision; val mode <- mode;
+                val kind <- export_kind; val shape <- shape; val publisher <- publishing_module;
+                val defining_module <- defining_module; val declaration <- identity; val public_row <- public_row;
+            } -> {
+                if (selected_revision != revision || site >= used) return false;
+                if (kind == callable_export() && shape == ordinary_callable_shape()) {
+                    view.row <- public_row;
+                    view.publisher <- publisher;
+                    view.defining_module <- defining_module;
+                    view.declaration <- declaration;
+                    if (!prepare_object_callable(view, mode, module, primitive_receiver, visits, exports,
+                        interfaces, units, limits, proof, row, site, revision)) {
+                        problem <- site;
+                        return false
+                    };
+                    if (mode == ImportResource && work[site].receiver_import != OtherReceiverResource) {
+                        (work[site].receiver_import <- ReceiverCallablesReady):void
+                    };
+                } else {
+                    if (mode == ImportResource) { (work[site].receiver_import <- OtherReceiverResource):void }
+                }
+            };
+            _ -> { return false }
+        }
+    };
+    return true
+}
+
+func publish_callable_view(proof:const CallableUseProofs in P, use:u64, revision:u64,
+    interfaces:ModuleInterfaces in F, header:u64, public_row:u64, publisher:u64,
+    defining_module:u64, declaration:u64) -> bool where {const owner P, owner F} {
+    if (use >= intrinsic (len)(proof)) return false;
+    return case proof[use] of {
+        CheckedCallableUse {
+            val chosen_revision <- revision; val origin <- defining_module; val method <- declaration;
+            val incoming <- incoming_context; val selected <- selected_context;
+        } -> {{
+            if (chosen_revision != revision || origin != defining_module || method != declaration) return false;
+            ref view = make PublishedObjectView {
+                public_row <- public_row; publisher <- publisher; defining_module <- origin;
+                declaration <- method; incoming_context <- incoming; selected_context <- selected
+            };
+            write_object_view(interfaces, header, publisher, view);
+            return true
+        }};
+        _ -> false
+    }
+}
+
+export func publish_callable_views(exports:const ModuleExports in E, uses:const StagedExportUses in E,
+    proof:const CallableUseProofs in P, export_count:u64, export_base:u64, publisher:u64, revision:u64,
+    interfaces:ModuleInterfaces in F, first:u64) -> u64 where {const owner E, const owner P, owner F} {
+    if (export_count > intrinsic (len)(exports) || export_count > intrinsic (len)(uses) ||
+        export_count > no_node() - export_base || first > intrinsic (len)(interfaces)) return no_node();
+    val next <- first;
+    for (at in 0u64 .. export_count) {
+        if (exports[at].kind == callable_export() && exports[at].shape == ordinary_callable_shape() &&
+            exports[at].origin_module != publisher) {
+            if (next >= intrinsic (len)(interfaces) ||
+                !publish_callable_view(proof, uses[at], revision, interfaces, next, export_base + at, publisher,
+                    exports[at].origin_module, exports[at].identity)) return no_node();
+            (next <- next + 1u64):void
+        }
+    };
+    return next
+}

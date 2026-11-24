@@ -50,6 +50,8 @@ using "./NativeDeclarations.cod" {
 };
 using "./AggregateSchemas.cod" AggregateFacts;
 using "./ModuleExportStorage.cod" {
+    CallableObjectView { NoCallableObjectView },
+    ReceiverImportCheck { ReceiverCallablesReady },
     ModuleInterfaceRow, ModuleInterfaces, AggregateStorage { UnprovedAggregate }, SumInterfacePayload { NoSumInterface },
 };
 using "./OperandChecking.cod" {
@@ -131,7 +133,8 @@ func first_extended_declaration(nodes:const ExprNodes in N, work:const NameWork 
     for (unused in 0u64 .. tree.used) {
         if (item == no_node()) return no_node();
         if (inspect_sequence_entry(nodes, tree.revision, tree.used, item, entry) != ModuleSequence) return item;
-        if (extended_declaration(nodes, tree.revision, tree.used, item, entry.item, emit_object)) return entry.item;
+        if (!(emit_object && work[entry.item].receiver_import == ReceiverCallablesReady) &&
+            extended_declaration(nodes, tree.revision, tree.used, item, entry.item, emit_object)) return entry.item;
         item <- work[item].next;
     };
     return no_node();
@@ -435,7 +438,7 @@ export func bind_module(source:const SourceBytes in S, tokens:Tokens in T, nodes
         native_reception <- 0u8;
         membership <- UnprovedMembership;
         native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
-        aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal;
+        aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal; scalar_object_body <- false; object_view <- make NoCallableObjectView {};
     });
     ref facts = make AggregateFacts(result.frontend.tree.used, UnprovedAggregate);
     ref no_selections = make CheckedSelections(0u64, make UnpublishedSelection {});

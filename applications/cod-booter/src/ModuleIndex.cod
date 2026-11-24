@@ -17,6 +17,14 @@ export data ModuleSelectionRanges {
     defaults_past:u64;
 }
 
+export data VisitObject =
+    NoVisitObject {} |
+    CompletedVisitObject {
+        unit_index:u64;
+        functions_first:u64;
+        functions_past:u64;
+    };
+
 export data VisitSlot =
     Vacant {} |
     Visiting { key_first:u64; key_past:u64; revision:u64; } |
@@ -28,6 +36,10 @@ export data VisitSlot =
         exports_past:u64;
         defaults_first:u64;
         defaults_past:u64;
+        interfaces_first:u64;
+        interfaces_past:u64;
+        primitive_namespace:bool;
+        object:VisitObject;
         inherited_structural:bool;
     } |
     StructuralOnly {
@@ -245,10 +257,12 @@ export proc mark_visiting(visits:Visits in G, id:u64, first:u64, past:u64, revis
     return;
 }
 
-export proc mark_checked(visits:Visits in G, id:u64, ranges:const ModuleSelectionRanges in R, inherited:bool)
-    -> bool where {owner G, const owner R} {
+export proc mark_checked(visits:Visits in G, id:u64, ranges:const ModuleSelectionRanges in R,
+    interfaces_first:u64, interfaces_past:u64, inherited:bool,
+    primitive_namespace:bool, object:const VisitObject in O) -> bool
+    where {owner G, const owner R, const owner O} {
     if (id >= intrinsic (len)(visits) || ranges.exports_first > ranges.exports_past ||
-        ranges.defaults_first > ranges.defaults_past) return false;
+        ranges.defaults_first > ranges.defaults_past || interfaces_first > interfaces_past) return false;
     case visits[id] of {
         (Visiting { val first <- key_first; val past <- key_past; val opening <- revision; }) -> {
             visits[id] <- make Checked {
@@ -259,6 +273,10 @@ export proc mark_checked(visits:Visits in G, id:u64, ranges:const ModuleSelectio
                 exports_past <- ranges.exports_past;
                 defaults_first <- ranges.defaults_first;
                 defaults_past <- ranges.defaults_past;
+                interfaces_first <- interfaces_first;
+                interfaces_past <- interfaces_past;
+                primitive_namespace <- primitive_namespace;
+                object <- object;
                 inherited_structural <- inherited
             };
             return true;

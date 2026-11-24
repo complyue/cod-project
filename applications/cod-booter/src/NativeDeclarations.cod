@@ -73,13 +73,15 @@ using "./ModuleExports.cod" {
     SelectedExports, ModuleExports, exception_type_export, exception_root_identity, error_root_identity,
     native_handle_export, record_export, array_export, nominal_exception_export, callable_export, enum_export, sum_export, ordinary_callable_shape,
     symbol_export, abstract_type_export, lexical_builder_export, aggregate_export_shape, numeric_record_shape,
-    CheckedSelections, StagedExportNames, SelectionSpelling { SourceSpelling, GraphSpelling },
+    CheckedSelections, StagedExportNames, StagedExportUses, SelectionSpelling { SourceSpelling, GraphSpelling },
     checked_selection_site, project_public_import, same_selection_spelling,
 };
 using "./ModuleExportStorage.cod" FamilyMembership {
     UnprovedMembership, PromiseOnly, FixedMethods, VariadicMethod
 };
 using "./ModuleExportStorage.cod" {
+    CallableObjectView { NoCallableObjectView },
+    CallableUseProofs, checked_callable_context,
     ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header, enum_type, sum_type,
     SumInterfacePayload { NoSumInterface },
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, CLayoutBitsRecord, NonBitsAggregate },
@@ -1014,6 +1016,7 @@ func check_constructor_arguments(nodes:const ExprNodes in N, names:const NameBin
         native_passes_owner <- 0u8;
         membership <- UnprovedMembership;
         sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal;
+        scalar_object_body <- false; object_view <- make NoCallableObjectView {}
     };
     val operand <- no_node();
     val owner <- no_node();
@@ -1395,6 +1398,7 @@ func check_local_here(nodes:const ExprNodes in N, names:const NameBindings in B,
         native_passes_owner <- 0u8;
         membership <- UnprovedMembership;
         sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate; field_mode <- ValueFormal;
+        scalar_object_body <- false; object_view <- make NoCallableObjectView {}
     };
     if (!describe_parameter(nodes, names, selected, work[callback].next, 0u64, true, parameter, used, revision)) {
         reject_declaration(report, callback, invalid_native_callback());
@@ -1708,7 +1712,7 @@ func check_native_operation_call(nodes:const ExprNodes in N, names:const NameBin
             native_passes_owner <- 0u8;
             membership <- UnprovedMembership;
             sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
-            field_mode <- ValueFormal;
+            field_mode <- ValueFormal; scalar_object_body <- false; object_view <- make NoCallableObjectView {};
         };
         ref role = make SignatureSites {
             previous <- no_node(); name <- no_node(); annotation <- no_node();
@@ -2271,15 +2275,17 @@ export func publish_module_exports(source:const SourceBytes in S, nodes:const Ex
                                    catalog:const SourceBytes in K, graph:const SourceBytes in G,
                                    facts:const AggregateFacts in F,
                                    publication:const ModulePublication in P, used:u64, revision:u64, exports:ModuleExports in X,
-                                   spellings:StagedExportNames in X,
+                                   spellings:StagedExportNames in X, uses:StagedExportUses in X,
+                                   views:const CallableUseProofs in V,
                                    count:u64 in C, conflict:u64 in C) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner T,
-           const owner K, const owner G, const owner F, const owner P, owner X, owner C} {
+           const owner K, const owner G, const owner F, const owner P, const owner V, owner X, owner C} {
     conflict <- no_node();
     if (publication.module_identity == 0u64 || publication.module_identity == no_node() ||
         used > intrinsic (len)(nodes) ||
         used > intrinsic (len)(names) || used > intrinsic (len)(selected) || used > intrinsic (len)(facts) ||
         count > intrinsic (len)(exports) || intrinsic (len)(spellings) != intrinsic (len)(exports) ||
+        intrinsic (len)(uses) != intrinsic (len)(exports) ||
         publication.selection_count > intrinsic (len)(selections) ||
         publication.graph_spelling_count > intrinsic (len)(graph))
         return false;
@@ -2317,7 +2323,7 @@ export func publish_module_exports(source:const SourceBytes in S, nodes:const Ex
                 if (expanded == SelectionReady) {
                     if (bulk.mode != ImportResource ||
                         !append_public_imports(source, catalog, graph, selections, publication, revision,
-                                               entry.item, exports, spellings, count, next)) {
+                                               entry.item, exports, spellings, uses, views, count, next)) {
                         conflict <- entry.item;
                         return false
                     }
@@ -2334,15 +2340,20 @@ export func publish_module_exports(source:const SourceBytes in S, nodes:const Ex
             if (next == intrinsic (len)(exports) || past > intrinsic (len)(source)) return false;
             if (selection) {
                 if (!publish_selection(selected, at, exports, next)) return false;
+                (uses[next] <- selected[at].checked_resource):void
             } else {
                 if (!publish_declaration(nodes, names, selected, facts, publication, name, exports, next, used, revision)) return false;
+                if (names[name].kind == ordinary_selection() || names[name].kind == symbolic_selection()) {
+                    if (names[name].declaration >= used) return false;
+                    (uses[next] <- selected[names[name].declaration].checked_resource):void
+                } else { (uses[next] <- no_node()):void }
             };
             first <- syntax_first(nodes, used, name) + if (name_syntax(nodes, used, name) == SymbolicName) { 1u64 } else { 0u64 };
             if (first >= past) return false;
             remember_source_export_name(spellings, next, first, past);
             prior <- previous_public_name(source, catalog, graph, publication.graph_spelling_count,
                 spellings, count, next);
-            if (prior != no_node() && !same_public_identity(exports, prior, next)) {
+            if (prior != no_node() && !same_public_identity(exports, uses, views, revision, prior, next)) {
                 conflict <- name;
                 return false;
             } else {};
@@ -2370,10 +2381,13 @@ func remember_graph_export_name(spellings:StagedExportNames in R, at:u64, first:
     return
 }
 
-func same_public_identity(exports:const ModuleExports in E, before:u64, after:u64)
-    -> bool where {const owner E} {
+func same_public_identity(exports:const ModuleExports in E, uses:const StagedExportUses in E,
+    views:const CallableUseProofs in V, revision:u64, before:u64, after:u64)
+    -> bool where {const owner E, const owner V} {
     return exports[before].origin_module == exports[after].origin_module &&
-        exports[before].kind == exports[after].kind && exports[before].identity == exports[after].identity
+        exports[before].kind == exports[after].kind && exports[before].identity == exports[after].identity &&
+        checked_callable_context(views, uses[before], revision) ==
+            checked_callable_context(views, uses[after], revision)
 }
 
 func previous_public_name(source:const SourceBytes in S, catalog:const SourceBytes in B,
@@ -2389,9 +2403,10 @@ func previous_public_name(source:const SourceBytes in S, catalog:const SourceByt
 func append_public_imports(source:const SourceBytes in S, catalog:const SourceBytes in B,
     graph:const SourceBytes in G, selections:const CheckedSelections in T,
     publication:const ModulePublication in P, revision:u64, directive:u64,
-    exports:ModuleExports in X, spellings:StagedExportNames in X, start:u64, next:u64 in C)
+    exports:ModuleExports in X, spellings:StagedExportNames in X, uses:StagedExportUses in X,
+    views:const CallableUseProofs in V, start:u64, next:u64 in C)
     -> bool where {const owner S, const owner B, const owner G, const owner T, const owner P,
-                   owner X, owner C} {
+                   const owner V, owner X, owner C} {
     val previous <- no_node();
     val site <- no_node();
     for (row in 0u64 .. publication.selection_count) {
@@ -2403,9 +2418,11 @@ func append_public_imports(source:const SourceBytes in S, catalog:const SourceBy
                     directive, publication.graph_spelling_count, publication.module_identity,
                     exports[next])) return false;
             remember_graph_export_name(spellings, next, exports[next].name_first, exports[next].name_past);
+            uses[next] <- row;
             previous <- previous_public_name(source, catalog, graph, publication.graph_spelling_count,
                 spellings, start, next);
-            if (previous != no_node() && !same_public_identity(exports, previous, next)) return false;
+            if (previous != no_node() &&
+                !same_public_identity(exports, uses, views, revision, previous, next)) return false;
             if (previous == no_node()) { (next <- next + 1u64):void }
         }
     };

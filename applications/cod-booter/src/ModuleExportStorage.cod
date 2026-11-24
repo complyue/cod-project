@@ -32,6 +32,61 @@ export enum InterfaceCallableKind:u8 { NoCallableKind; CheckedFunction; CheckedP
 # a variadic singleton it is also the identity of the sole implementation.
 export enum FamilyMembership:u8 { UnprovedMembership; PromiseOnly; FixedMethods; VariadicMethod; }
 
+export data CallableObjectView =
+    NoCallableObjectView {} |
+    PublishedObjectView {
+        public_row:u64;
+        publisher:u64;
+        defining_module:u64;
+        declaration:u64;
+        incoming_context:u64;
+        selected_context:u64;
+    };
+
+export func callable_view_interface() -> u8 { return 41u8 }
+
+export data CallableUseProof =
+    UnselectedCallable {} |
+    CheckedCallableUse {
+        site:u64;
+        revision:u64;
+        public_row:u64;
+        publisher:u64;
+        defining_module:u64;
+        declaration:u64;
+        incoming_context:u64;
+        selected_context:u64;
+        ordinal:u64;
+    };
+export array CallableUseProofs[u64]:CallableUseProof;
+export enum ReceiverImportCheck:u8 { NoReceiverCallables; ReceiverCallablesReady; OtherReceiverResource; }
+
+export func checked_callable_context(proof:const CallableUseProofs in F, row:u64, revision:u64)
+    -> u64 where {const owner F} {
+    if (row >= intrinsic (len)(proof)) return no_node();
+    return case proof[row] of {
+        CheckedCallableUse { val origin <- revision; val context <- selected_context; } ->
+            if (origin == revision) { context } else { no_node() };
+        _ -> no_node()
+    }
+}
+
+export func matches_object_call(proof:const CallableUseProofs in F, row:u64, revision:u64,
+    site:u64, public_row:u64, publisher:u64, module:u64, declaration:u64, native_function:u64)
+    -> bool where {const owner F} {
+    if (row >= intrinsic (len)(proof) || native_function == no_node()) return false;
+    return case proof[row] of {
+        CheckedCallableUse {
+            val checked_revision <- revision; val definition_module <- defining_module;
+            val method <- declaration; val context <- selected_context; val ordinal <- ordinal;
+            val source_site <- site; val published_row <- public_row; val upstream <- publisher;
+        } -> checked_revision == revision && source_site == site && published_row == public_row &&
+            upstream == publisher && definition_module == module && method == declaration &&
+            (if (ordinal == no_node()) { context == module } else { ordinal == native_function });
+        _ -> false
+    }
+}
+
 export data SumInterfacePayload =
     NoSumInterface {} |
     SumInterface {} |
@@ -71,6 +126,8 @@ export data ModuleInterfaceRow {
     sum_payload:SumInterfacePayload;
     aggregate_storage:AggregateStorage;
     field_mode:FormalMode;
+    scalar_object_body:bool;
+    object_view:CallableObjectView;
 }
 export array ModuleInterfaces[u64]:ModuleInterfaceRow;
 
@@ -103,6 +160,7 @@ export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:
     row.native_passes_owner <- 0u8;
     row.aggregate_storage <- (UnprovedAggregate:AggregateStorage);
     row.field_mode <- ValueFormal;
+    row.scalar_object_body <- false;
     return;
 }
 
@@ -121,8 +179,26 @@ export func write_sum_row(interfaces:ModuleInterfaces in I, row:u64, module:u64,
         native_passes_owner <- 0u8; sum_payload <- payload;
         membership <- (UnprovedMembership:FamilyMembership);
         aggregate_storage <- (UnprovedAggregate:AggregateStorage); field_mode <- ValueFormal;
+        scalar_object_body <- false; object_view <- make NoCallableObjectView {};
     };
     return;
+}
+
+export func write_object_view(interfaces:ModuleInterfaces in I, at:u64, publisher:u64,
+    view:const CallableObjectView in V) -> void where {owner I, const owner V} {
+    interfaces[at] <- make ModuleInterfaceRow {
+        defining_module <- publisher; declaration <- no_node(); entry_count <- 0u64; owner_count <- 0u64;
+        interface_kind <- callable_view_interface(); result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
+        type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
+        target_readonly <- 0u8; owner_readonly <- 0u8; has_here <- 0u8; failure_checked <- 0u8;
+        failure_module <- 0u64; failure_identity <- no_node(); name_first <- 0u64; name_past <- 0u64;
+        enum_code <- 0u64; native_function <- no_node(); callable_kind <- (NoCallableKind:InterfaceCallableKind);
+        native_reception <- 0u8; native_passes_owner <- 0u8; membership <- (UnprovedMembership:FamilyMembership);
+        sum_payload <- make NoSumInterface {};
+        aggregate_storage <- (UnprovedAggregate:AggregateStorage); field_mode <- ValueFormal; scalar_object_body <- false;
+        object_view <- view
+    };
+    return
 }
 
 export func find_interface(interfaces:const ModuleInterfaces in I, published:u64, defining_module:u64, declaration:u64) -> u64
@@ -135,7 +211,9 @@ export func find_interface(interfaces:const ModuleInterfaces in I, published:u64
             return no_node();
         width <- interfaces[row].entry_count;
         if (width >= published - row) return no_node();
-        if (interfaces[row].defining_module == defining_module && interfaces[row].declaration == declaration) return row;
+        if (interfaces[row].interface_kind != callable_view_interface() &&
+            interfaces[row].defining_module == defining_module && interfaces[row].declaration == declaration)
+            return row;
         row <- row + width + 1u64;
     };
     return no_node();

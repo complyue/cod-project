@@ -89,6 +89,7 @@ using "./ModuleExportStorage.cod" {
     FamilyMembership { UnprovedMembership, PromiseOnly, FixedMethods, VariadicMethod },
 };
 using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
+using "./ModuleExportStorage.cod" ReceiverImportCheck { NoReceiverCallables };
 
 export enum ModuleNameUse:u8 {
     LexicalName;
@@ -116,6 +117,7 @@ export data NameBinding {
 export array NameBindings[u64]:NameBinding;
 
 export data NameWorkSlot {
+    receiver_import:ReceiverImportCheck;
     active:u64;
     module_selection:u64;
     next:u64;
@@ -687,6 +689,7 @@ func link_entries(nodes:const ExprNodes in N, work:NameWork in W, revision:u64, 
     val previous <- no_node();
     for (at in 0u64 .. used) {
         work[at].next <- no_node();
+        work[at].receiver_import <- NoReceiverCallables;
         work[at].next_method <- no_node();
         work[at].imported_function <- no_node();
         work[at].imported_owner_argument <- no_node();

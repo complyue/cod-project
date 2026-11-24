@@ -87,7 +87,8 @@ using "./ModuleExports.cod" {
 };
 using "./ModuleExportStorage.cod" FamilyMembership { FixedMethods };
 using "./ModuleExportStorage.cod" {
-    enum_type, ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header
+    enum_type, ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header,
+    CallableUseProofs, matches_object_call
 };
 using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind, CheckedFunction,
     CheckedProcedure };
@@ -1267,8 +1268,9 @@ func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contrac
 export func prepare_imported_calls(nodes:const ExprNodes in N, names:const NameBindings in B,
                                   selected:const SelectedExports in E, links:NameWork in L,
                                   contracts:const ModuleInterfaces in I, interface_count:u64, used:u64, revision:u64,
+                                  views:const CallableUseProofs in V,
                                   report:OperandCheckResult in R) -> bool
-    where {const owner N, const owner B, const owner E, owner L, const owner I, owner R} {
+    where {const owner N, const owner B, const owner E, owner L, const owner I, const owner V, owner R} {
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
     val callee <- no_node();
     val site <- no_node();
@@ -1280,10 +1282,13 @@ export func prepare_imported_calls(nodes:const ExprNodes in N, names:const NameB
                 site <- names[callee].declaration;
                 if (selected[site].kind == callable_export() && selected[site].shape == ordinary_callable_shape()) {
                     header <- find_interface(contracts, interface_count, selected[site].origin_module, selected[site].identity);
-                    if (header != no_node() && contracts[header].native_function != no_node()) {
-                        if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision))
-                            return operand_problem(report, at, wrong_argument_count());
-                    };
+                    if (header == no_node() || !matches_object_call(views, selected[site].checked_resource,
+                        revision, selected[site].selection_site, selected[site].selection_public_row,
+                        selected[site].dependency_module, selected[site].origin_module, selected[site].identity,
+                        contracts[header].native_function))
+                        return operand_problem(report, at, unproved_call_target());
+                    if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision))
+                        return operand_problem(report, at, wrong_argument_count());
                 };
             };
         };
