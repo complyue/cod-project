@@ -24,32 +24,25 @@ Saving 9 at tile entry instead of 1 at installation fails the first row. Wrappin
 entire tile in the saved environment can get the log right but return or throw the wrong
 destination. Discarding the append on failure fails the last two audit observations.
 A fixed numerical answer per mode cannot pass an independent observation of the write.
-The CoD implementation uses a counter and last destination in a journal owned by the enclosing run.
-This represents the whole observable trace for this one-append protocol. The Haskell
-implementations return a list and check exact singleton equality; writer output outside the
-error handling survives both cases. The journal in CoD is held outside the tile for the
-whole call, not in a database or another Actor.
+In CoD a counter and the last destination in the recorder's enclosing lexical scope represent
+the whole observable trace of this one-append protocol. The Haskell observers check that a
+writer outside the error handler produced exactly the expected singleton list.
 
 ## CoD
 
-The form `proc @attempt` declares the symbol and its method locally. Installation has
-a separate source site. The method reads its required bindings directly, and the tile
-chooses the mode on that same installed method. The exceptional harness also checks that
-the audit region remained the same live resource through replay and restoration.
+The destination is a scalar. We use the explicit paper spelling `val symbol` for the
+independent bits binding that the current design text spells `symbol @destination:u64`.
+Installing the procedure with a body gives it access to two live locals in `check`.
+Both invocation modes write to these same locals. Only the choice of destination changes.
+A checked failure occurs after the write, which lets the observer distinguish a restored
+binding from a lost audit entry. [Value and reference symbols](../../design/SymbolicDynamicScope.md#explicit-ref-and-ptr-symbols-backed-by-a-region-symbol)
 
 ```cod
 using "std:exceptions" Exception;
 
 data TileFault <: Exception { destination:u64; }
-region Audit { count:u64; last:u64; }
-region symbol @audit:Audit
-symbol @destination:u64
-
-proc @attempt() -> void {
-    @audit.count <- @audit.count + 1u64
-    @audit.last <- @destination
-    return
-}
+val symbol @destination:u64
+symbol @attempt:proc() -> void
 
 proc tile(replay:bool, bad:bool) -> u64 throws TileFault {
     effect @destination <- 2u64
@@ -59,9 +52,14 @@ proc tile(replay:bool, bad:bool) -> u64 throws TileFault {
 }
 
 proc check(replay:bool, bad:bool) -> void {
-    effect @audit <- make region Audit(256u64 -> capacity) { count <- 0u64; last <- 0u64; };
+    val count <- 0u64
+    val last <- 0u64
     effect @destination <- 1u64
-    effect proc @attempt;
+    effect @attempt() -> void {
+        count <- count + 1u64
+        last <- @destination
+        return
+    }
     effect @destination <- 9u64
     try {
         val where_seen <- tile(replay, bad)
@@ -72,19 +70,18 @@ proc check(replay:bool, bad:bool) -> void {
         assert e.destination == 2u64
     }
     assert @destination == 9u64
-    assert @audit.count == 1u64
-    if (replay) { assert @audit.last == 1u64 } else { assert @audit.last == 2u64 }
+    assert count == 1u64
+    if (replay) { assert last == 1u64 } else { assert last == 2u64 }
     return
 }
 ```
 
-The semantic work specific to providing both modes is `effect proc @attempt;` plus the
-choice between `perform` and `behave`. The author writes no capture record, replay wrapper
-or argument to pass the installed handler through the tile. Extending the method to read
-another declared symbol would add a dependency the checker must validate at activation
-and use. This convenience depends on having the right symbol identity and live targets.
-[Symbolic procedure declarations](../../design/SymbolicDynamicScope.md#direct-symbolic-procedure-declaration)
-· [Methods, installations and invocation modes](../../design/SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
+The recorder is activated at destination 1. A captured call replays that value. A current
+call reads 2 inside the tile. Neither invocation replaces the storage of `count` or
+`last`. This is why the example can test both modes and observe a write after unwinding
+with just ordinary locals and a value symbol.
+[Installing a local procedure body](../../design/SymbolicDynamicScope.md#installing-a-local-procedure-body)
+· [Captured values and lexical access](../../design/SymbolicDynamicScope.md#captured-values-and-call-behavior)
 · [Exception construction and catch](../../design/ExceptionControl.md#exception-construction-throw-and-rethrow)
 
 ## Haskell with mtl
@@ -214,7 +211,7 @@ True and False. Replacing the predicate at installation should require no edit t
 No audit sink, exception or image implementation is needed for this separate question.
 
 ```cod
-symbol @cutoff:i64
+val symbol @cutoff:i64
 proc @defect(score:i64) -> bool { return score >= @cutoff }
 
 effect @cutoff <- 12i64
@@ -303,15 +300,15 @@ Compare the same decisions in each program, including the integration and observ
 | Publish an audit operation | A named symbolic method. | An ordinary action passed to its consumer. | A request family and an interpreter. |
 | Retain the installation-time choice | Activation snapshots the method's required bindings. | Save the destination and construct the replay action. | Save the destination in the interpreter. |
 | Choose current or saved behavior | Two built-in invocation forms on the same symbol. | Choose an action with or without the saved reader context. | Choose a request; the current request carries the call-site destination. |
-| Supply the trace sink and typed failure | A live regional journal and a checked exception. | Writer and an ExceptT action under ReaderT. | Built-in writer and error handlers with explicit installation. |
+| Supply the trace sink and typed failure | Two captured lexical cells and a checked exception. | Writer and an ExceptT action under ReaderT. | Built-in writer and error handlers with explicit installation. |
 
 For a length check, count all nonblank lines of each complete tile-audit listing in the first three language sections, including
-language pragmas, imports, setup and the observation check. The counts are **34 CoD,
+language pragmas, imports, setup and the observation check. The counts are **33 CoD,
 26 mtl and 37 effectful**. Excluding only pragmas, module headers and imports (including
-CoD's `using` line), the counts are **33, 21 and 28**. All signatures and all
+CoD's `using` line), the counts are **32, 21 and 28**. All signatures and all
 harness code remain in the second count. CoD checks the individual fields along the two exit
 paths; the Haskell check compares a tuple and a list. Counting lines also rewards layout.
-The substantive saving is narrower: registration and invocation in CoD carry the capture
+The substantive saving is narrower: installation and invocation in CoD carry the capture
 protocol once for all symbolic methods, and this tile needs no explicit forwarding parameter.
 The explicit mtl encoding is particularly short for a single reader and a single audit.
 No claim of a shortest possible implementation follows from these listings.

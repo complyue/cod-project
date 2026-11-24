@@ -15,12 +15,13 @@ offer a way to write a rule once and run it at different foci. We identify which
 obligations can disappear, which pairs still require a business decision, and the exact
 assumptions under which the two ways of computing a score agree. We give a conditional
 M + N source-size bound for transparent composition, locate the independent policy cost,
-and compare the same two compositions in CoD, mtl and effectful. A physical acquisition can
-fail validation, and a second acquisition can succeed. Should the approved tile's report
-contain the first acquisition's provisional flag? Changing just the nesting of retry and
-publication produces `[2]` or `[1, 2]`. The [three source listings](examples/ComposedTileReport.md)
-exhibit that difference; the [scoped audit](examples/ScopedTileAudit.md) isolates handler
-invocation. All results below are paper derivations.
+and compare retry and selective publication on a stack of **three State and five Writer
+instances**. With the same rejected acquisition followed by an accepted one, two of five
+journals change when the scopes exchange places. All three states and the other three
+journals must agree. The [eight-role programs](examples/ComposedTileReport.md) give the
+observable contract, the concrete `mtl` stack and a labeled `effectful` comparison. A
+[one-handler control](examples/ScopedTileAudit.md) isolates invocation. All results below
+are paper derivations.
 
 ## The inspection that both extensions must preserve
 
@@ -51,48 +52,56 @@ three. [Warehouse policy and its executor](AlgebraicEffectsIsAllYouNeed.md#two-e
 
 ## Compose the inspection, retry and publication
 
-Two teams supply higher-order operations: `retry_once` may run its argument a second time
-after a rejection, while `stage` buffers the flags from its argument and publishes the
-batch only on acceptance. The tile team supplies `inspect`. Each acquisition receives a
-fresh physical ID, emits a provisional flag for that ID, then reports its validator's
-verdict. Neither wrapper calls the other. Their authors can settle their contracts before
-they meet. The application author chooses how the effects of all three are composed.
+A physical camera acquisition changes three pieces of state. Its serial advances from zero,
+it spends two of an initial eight exposure credits, and it samples the current gain before
+advancing it from its initial value of three. Each role holds the same unsigned integer
+type. Five writers also share one output type, an ordered sequence of integers. They have
+distinct business audiences: equipment operators need all acquisition IDs, diagnostics
+needs rejected IDs, the defect report needs provisional IDs *and the corresponding gain
+samples*, and the validator records passing IDs. The defect and sample streams must
+commit together to keep an ID paired with its sample.
 
-Here are the two actual CoD expressions from the [complete comparison](examples/ComposedTileReport.md#cod),
-in the scope of the same `reject_through` input. The first opens one publication scope per
-acquisition. The second opens one scope around the entire tile.
+The tile team supplies the inspection. A retry wrapper calls its body again after a first
+rejection. A separate stage wrapper buffers only the defect IDs and their gain samples,
+then appends both batches to their parents if its body returns acceptance. Neither wrapper
+names the other. Choosing where to put the stage determines what “approved report” means.
+The same CoD leaf can be assembled as `retry_once() { stage() { inspect() } }` or
+`stage() { retry_once() { inspect() } }`. With initial state `(serial, credits, gain) = (0, 8, 3)`, let the first acquisition be
+rejected and the second accepted.
 
-```cod
-retry_once() { stage() { inspect(reject_through) } }
-stage() { retry_once() { inspect(reject_through) } }
-```
+| Observer | Retry around stage (per acquisition) | Stage around retry (per tile) |
+| --- | --- | --- |
+| Verdict and final (serial, credits, gain) | Accepted, (2, 4, 5) | Accepted, (2, 4, 5) |
+| Acquired / rejected / passing IDs | [1, 2] / [1] / [2] | [1, 2] / [1] / [2] |
+| Defect IDs | **[2]** | **[1, 2]** |
+| Gain samples paired with those IDs | **[4]** | **[3, 4]** |
 
-Let acquisition 1 fail and acquisition 2 pass. The first expression opens a private report,
-writes flag 1, discards it on rejection and tries again with a fresh report. It publishes
-`[2]`. The second writes flag 1 before the retry, then flag 2 in the same report and finally
-publishes `[1, 2]`. Both acquire twice and return acceptance. An observer who checks only
-the return value cannot distinguish the compositions. Both publish `[1]` on immediate
-acceptance and `[]` after two rejections. The acquisition source lives outside staging:
-if rejection rolled its position back, the second attempt could read the failed frame again.
+Both orders charge the camera twice. Moving the wrong boundary could refund the first
+exposure, reuse its serial or publish a defect without its matching gain. Each would give
+a distinguishable result even if the tile was ultimately accepted. The
+[worked example](examples/ComposedTileReport.md) also gives immediate-success, exhausted-retry
+and routing controls.
 
-`mtl` can express these orders directly as `retryOnce (stage (inspect k))` and
-`stage (retryOnce (inspect k))`. Its stage eliminates a child `WriterT`, then appends the
-child's output to the parent conditional on acceptance. `effectful` uses the same two
-application expressions with a local writer interpreter over an open effect row. CoD's
-stage rebinds the nominal report to a private owner while calling its body. The inspector
-uses `behave @flag(id)` so its installed flag method writes to that report. The publication
-policy is written once in each encoding. This is a reason to compare their contracts and
-extension costs even where the Haskell composition expressions read more briefly.
-[All three implementations, controls and extension edits](examples/ComposedTileReport.md)
+The `mtl` case really stacks five `WriterT`s on three `StateT`s. The application's adapter
+names the routes to the separate layers. A plain `tell [n]` selects the nearest writer.
+A scalar type alone cannot tell `state` which of three counters the author means. Peeling
+both provisional writers at the stage boundary handles them together; the base states
+and the other journals continue through the body. A labeled `effectful` row gives the
+eight roles names even with identical payloads. In CoD the source gives the roles nominal
+symbol identities. A scoped value such as a threshold can use `val symbol`. Independently
+mutable cells that must retain writes across calls can be local lexical storage selected
+by reference symbols; temporarily selecting private cells stages just the chosen outputs.
+[Value binding and target updates](../design/SymbolicDynamicScope.md#scoped-bindings-versus-object-transfer)
 
-Add an *unrelated* operation such as an acquisition probe. It must observe both physical
-attempts under either order, including the one whose flag is suppressed. Independently add
-a scope that supplies a lot number and restores it on exit. Freeze both previous wrappers.
-The [row and column experiment](examples/ComposedTileReport.md#what-changes-when-another-author-extends-the-program)
-identifies every new definition and the application wiring for CoD, and the comparable
-extension sites for the Haskell libraries. Staging is deliberately nontransparent to flag
-publication and transparent to the independent probe. Counting that difference is the
-connection to the `M × N` question.
+These eight are *instances* of two familiar effect families. Three states and five writers
+make errors in naming and routing visible; their product, fifteen, counts no obligation
+in this experiment. The size argument below has different axes: independently extensible
+interfaces and layer forms. Freeze the two wrappers, add a separately named observation
+which must survive rejection, then add an independent scope which passes the other effects
+through. Record what changes in the old inspector, the adapters, the handler assembly and
+the observers. Compare this with deliberately extending the publication contract to a third
+staged output, which requires a change to the stage's policy.
+[Same-typed instances and extension](examples/ComposedTileReport.md#what-changes-when-another-author-extends-the-program)
 
 ## Where the M × N obligations arise
 
@@ -269,6 +278,10 @@ independently authored effects.
 
 ## What named effects remove in CoD
 
+The listings spell an independent bits binding `val symbol @x:T`, making its value role
+explicit. The current design specifies the same scoped value as `symbol @x:T`. The examples
+assume that established save-and-restore rule. [Symbol categories](../design/SymbolicDynamicScope.md#explicit-ref-and-ptr-symbols-backed-by-a-region-symbol)
+
 Consider a tile scope that binds only its tile identity. An inspection procedure directly
 calls an installed `@flag` operation with `behave`. Provided the required outer flag handler
 and its dependencies are available, the tile scope need not declare an adapter for that symbol.
@@ -284,7 +297,7 @@ caller. The tile procedure can retain its existing body. The new inspection path
 has to pass the binding check.
 
 ```cod
-symbol @tile:u64
+val symbol @tile:u64
 symbol @flag:proc(row:u64, col:u64, score:i64) -> void
 
 proc inspect_tile_cell(tile:u64) -> void {
@@ -376,8 +389,8 @@ The code uses zero-based row and column positions. The scalar binding names
 and the pixel operation belong to one shared vocabulary.
 
 ```cod
-symbol @row:u64
-symbol @col:u64
+val symbol @row:u64
+val symbol @col:u64
 symbol @pixel:proc() -> i64
 
 proc east_sum() -> i64 {

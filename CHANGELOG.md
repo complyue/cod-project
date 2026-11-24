@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Compare same-typed effect instances and independent domain HLVM authors
+
+<a id="k-paper-eight-roles-domain-hlvms-20261124"></a>
+**K-PAPER-EIGHT-ROLES-DOMAIN-HLVMS-20261124.** The project user requested scalar value symbols for simple examples, a concrete three-State/five-Writer stack, and [Software Defined HLVMs](papers/AlgebraicEffectsIsAllYouNeed.md) authored independently by domain application teams for their business users. The [comparison](papers/examples/ComposedTileReport.md) stages two journals and observes all eight roles in CoD, `mtl` and labeled `effectful`. The [single-handler control](papers/examples/ScopedTileAudit.md) uses a scoped value and lexical audit cells. [Design topic 8](docs/DesignTopics.md#8-symbolic-effects-的可组合性与带焦点的上下文计算) records the explicit value-symbol spelling used in the papers. The HLVM study compares AI-assisted graphical business programming with a textual DSL and a graphical workbench on the same authoring and execution requirements.
+
 ## 2026-11-24 — Review recovery between plain products in the CoD name resolver
 
 <a id="k-booter-product-name-recovery-20261124"></a>

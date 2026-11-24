@@ -3,28 +3,57 @@
 
 # Algebraic Effects Is All You Need
 
-**A Software Defined HLVM over relocatable functor graphs**
+**Software Defined HLVMs**
 
 ## Abstract
 
-What would a high-level virtual machine use for instructions if its programmer worked in
-fulfillment rather than machine code? A warehouse policy can be a directed graph admitting
-cycles (DCG) in a relocatable region. Each instruction is a *functor* in the C++ sense:
-an object with fields and a call operation. Its fields describe this particular instruction.
-Its type provides behavior through the compatible executor. Calling a warehouse node can
-issue a typed reservation operation and use its reply to choose the next edge. Software
-defines both the instruction vocabulary and how the environment interprets those operations.
-We call this interpreter a **Software Defined HLVM** (High Level Virtual Machine).
+A fulfillment team wants its planners to write routing policies. A publishing team wants
+its editors to write release policies. Each application author should be able to build a
+domain-specific High Level Virtual Machine (HLVM) in CoD, choose its instructions and
+effects, and offer business users a **Domain Specific Graphical Programming Language**
+for that machine. A planner can draw a warehouse fallback, ask an AI assistant to change
+one route, and inspect the resulting reservations. An editor can put an approval step
+before publication and preview which edition would be released.
 
-We ask how far a fixed vocabulary, typed effect requests and their interpretations suffice
-to run independently authored business programs. We derive the execution of a shared
-warehouse fallback, change its handler, and reopen its program graph at a different base
-address. A small BASIC loop tests the account on a cycle and an observable output effect.
-The economic proposition is that a change expressible in the vocabulary can be delivered
-as a new program image and run by an existing native executor. The performance proposition
-is that coarse domain instructions can amortize graph dispatch, with LLVM specialization
-available for stable workloads. Both have explicit comparisons below. A CoD program that
-edits a source graph with AI assistance is one authoring application of this machine.
+The programs are typed directed graphs admitting cycles (DCGs), stored in relocatable
+regions. An instruction is a functor in the C++ sense: a data object with a call
+operation. Its operands and regional edges travel with the program. Its domain-defined
+method executes in a compatible machine and can request effects supplied by the current
+environment. This separation lets many teams define Software Defined HLVMs on shared CoD
+infrastructure. The research question is what each new DSL costs its *language author* to
+build, what it costs a *domain user* to author and safely revise one business program, and
+how that program performs. We derive example traces and give separate tests for all three.
+
+## Who defines the language, and who writes the program?
+
+The fulfillment application author designs a language of attempts, warehouse choices and
+decline routes. They define the node types, required operands, legal connections, result and
+fault contracts, node methods and reservation handler interface. They decide what the
+planner sees on the canvas and which domain checks explain a mistake. These decisions give
+the graphical notation a grammar and an execution semantics. Connecting the *decline*
+port has a meaning even if the editor is closed and the graph is reopened elsewhere.
+
+The planner authors a program in that language. They choose the entry for each order
+class, pick warehouse operands and connect the fallback routes. An AI assistant can
+propose a subgraph or write a CoD transformation of an existing graph. The planner
+reviews the actual nodes, connections and effect trace against a fulfillment requirement.
+The platform contributes regional storage, checked access, scoped effects and native
+execution. Application authors retain control over the vocabulary and its evolution. A
+test of this division of labor is whether another team can introduce its own node types,
+editor vocabulary and executable meanings using the same platform with no central list
+of business instructions to update.
+
+| Work product | Fulfillment application author | Fulfillment planner |
+| --- | --- | --- |
+| Language and machine | Define `TryWarehouse` and `Backorder`, the type of a route target, the reservation operation and its interpretations. | Use those instructions and choose a permitted warehouse. |
+| Graphical authoring | Give the decline edge a named port, define checks for both entry roots, and show where a shared fallback is also used. | Create a route, connect a decline port or ask the assistant to make a checked edit. |
+| Business acceptance | Specify faults and supply a preview environment with service-reply fixtures. | Read which requests the candidate would issue, examine unaffected orders and approve a program revision. |
+
+The platform goal therefore concerns the economics of building and using **business DSLs**.
+A fair comparison gives a textual DSL or another graphical language workbench the same
+business vocabulary, service contract and test cases. LLVM answers the separate question
+of how to implement and optimize the native machinery the domain machines can share.
+[CoD platform charter](../design/RegionalSemanticPlatformCharter.md) · [MPS language structure, editors and actions](https://www.jetbrains.com/help/mps/mps-project-structure.html)
 
 ## The instruction is a regional functor
 
@@ -34,8 +63,8 @@ a reservation of the current order at B. Acceptance yields a shipping decision f
 Decline transfers control along the edge. A service fault follows the handler's failure
 contract. The inventory call is the effect. The decision about what to do with its answer
 belongs to this instruction. `Backorder` is a second instruction which finishes without
-requesting inventory. The two alternatives deliberately provide no way to reserve at B and
-then ship from a different warehouse.
+requesting inventory. Recording the warehouse once ensures an accepted reservation at B yields a shipping
+decision for B.
 
 | What has to survive | What supplies it in the warehouse machine |
 | --- | --- |
@@ -47,8 +76,7 @@ then ship from a different warehouse.
 The functor is ordinary initialized regional **data that admits a call**. In CoD, `r(args)`
 selects the visible `(())` family of the nominal receiver at the call site. Within that
 family an alternative-specific method can read its receiver's fields. An effectful method
-has `proc` permissions. No Haskell `Functor` instance or `fmap` occurs in this definition.
-The bytes of the receiver do not include a process-local method address, a C++ vtable
+has `proc` permissions. The bytes of the receiver do not include a process-local method address, a C++ vtable
 pointer, a lexical callable view or an installed handler. Persisting the object in this
 sense makes no claim about copying arbitrary C++ object representations. [CoD call-operator lookup](../design/DomainLanguageDesign.md#type-level-call-operator-lookup) · [Callable storage and access](../design/CallableStorageAndHereAccess.md#what-an-invocation-needs) · [C++ function objects](https://eel.is/c++draft/function.objects)
 
@@ -84,7 +112,9 @@ path from the instruction. Fabricating a normal `false` reply would issue an ext
 on the decline route. The listing isolates the two normal replies so that this extension
 can be tested independently. [Functor method permissions](../design/DomainLanguageDesign.md#functor-receivers-and-callback-arguments) · [Calling an installed operation](../design/SymbolicDynamicScope.md#lexical-selection-installation-and-invocation)
 
-## What the HLVM shares with LLVM
+<a id="what-the-hlvm-shares-with-llvm"></a>
+
+## What domain HLVMs share with LLVM
 
 LLVM gives producers of low-level typed SSA programs a common representation and machinery
 for optimization and native code generation. A domain-specific HLVM draws a corresponding
@@ -95,7 +125,7 @@ edge at this boundary. Lowering it earlier would oblige every tool interested in
 business meaning to recover those relationships. MLIR's dialects already provide extensible
 typed operations and lowering. The particular question for CoD is what follows when the
 *executable domain program itself* remains a relocatable regional graph with owned data
-receivers and execution-scoped effects. [LLVM Language Reference](https://llvm.org/docs/LangRef.html) · [MLIR Language Reference](https://mlir.llvm.org/docs/LangRef/) · [CoD architecture, ``3 and 6](../design/RegionalSemanticPlatformCharter.md)
+receivers and execution-scoped effects. [LLVM Language Reference](https://llvm.org/docs/LangRef.html) · [MLIR Language Reference](https://mlir.llvm.org/docs/LangRef/) · [CoD architecture, sections 3 and 6](../design/RegionalSemanticPlatformCharter.md)
 
 In CoD's planned architecture, LLVM supports native handlers and execution machinery. A
 generic native executor can already consume a new graph in its vocabulary. A stable
@@ -123,10 +153,11 @@ Interpretations can themselves use a lower-level effects vocabulary. For example
 warehouse adapter can interpret `reserve` by issuing an atomic conditional stock claim,
 while a simulation interprets the request by updating a private inventory. Reading a count
 and decrementing later would implement a different contract under competing orders.
-This is where authors must specify atomicity and faults. A persistent continuation or a
-multi-shot resumption would need its own representation and laws; neither is needed to
-choose a decline edge. The operations-and-interpretations account follows the algebraic effects literature. The
-regional representation and its costs are additional hypotheses. [Plotkin and Pretnar, *Handling Algebraic Effects*](https://arxiv.org/abs/1312.1399)
+The business contract must specify atomicity and faults. A design that offers persistent
+continuations or multi-shot resumption would also need a representation and laws for those
+operations. Following a decline edge can be specified with a single reply. The operations
+and interpretations account follows the algebraic effects literature. The regional
+representation and its costs are additional hypotheses. [Plotkin and Pretnar, *Handling Algebraic Effects*](https://arxiv.org/abs/1312.1399)
 
 <a id="2-one-executor-one-dsl"></a>
 <a id="making-invalid-states-unrepresentable-in-the-stored-program"></a>
@@ -134,7 +165,19 @@ regional representation and its costs are additional hypotheses. [Plotkin and Pr
 
 ## Two entries share one fallback
 
-The application graph has two named entry roots. The names `R`, `U`, `F` and `Z` below identify nodes in the example revision. The view shows both entries and every decline edge reachable from them. Acceptance is terminal at each warehouse and is omitted from the drawing.
+The planner can create the base program on an empty canvas. From the fulfillment palette
+they place two `TryWarehouse` nodes, set their warehouse fields to A and C, and name them
+as the retail and urgent entries. They add one `Backorder` terminal. They ask the AI
+assistant, “Give both routes a single backup at B before backorder.” The assistant proposes
+one new B node, binds both decline ports to that node, and connects its decline port to
+the terminal. The proposer can use the same typed CoD graph operations available to a
+manual editor. The planner inspects that B has **two incoming edges** and tests a decline
+at C before publishing. Two copies of a B-shaped box would encode a different source
+program even if both previews happened to ship the same orders.
+
+The resulting program has four nodes. `R`, `U`, `F` and `Z` are labels for this revision.
+The view shows both entries and all reachable decline edges. Acceptance is terminal at
+each warehouse. The pictured graph is a program that the warehouse HLVM can execute.
 
 ```mermaid
 flowchart TD
@@ -178,6 +221,37 @@ A view obtained from a consumed owner cannot be used to access the graph under i
 owner. A fresh validated view belongs to the current owner. Page faults, validation,
 format compatibility and native dispatch still have measurable costs. [Regional ownership](../design/RegionalOwnership.md#local-view-validity-after-ownership-transfer) · [Region representation and relocation](../design/GraphGrainedMemoryManagement.md#one-region-per-pointer-graph)
 
+## A second domain team defines an editorial release language
+
+A publishing application author supplies an input revision, a result type with alternatives
+`WaitingFor(role)` and `Released(receipt)`, and two kinds of regional functor. These are
+application-level definitions for this thought experiment.
+
+| Instruction in the editorial language | What the method does |
+| --- | --- |
+| `RequireApproval(role, on_approval)` | Ask `approval(revision, role)` about this exact revision. Follow the stored edge when approved. A normal pending reply finishes this invocation with `WaitingFor(role)`. |
+| `ReleaseEdition(channel)` | Ask `publish(revision, channel)` for a receipt. On success return `Released(receipt)`. A service fault follows the publication failure contract. |
+
+The editor-in-chief starts a graph in this language, places a copy-desk approval before
+a public release, then asks the assistant to insert legal approval between them. The
+candidate contains two distinct approval nodes, each with one role operand, and a single
+`ReleaseEdition(public)` node. In a preview of revision 17, set copy approval to granted
+and legal approval to pending. The requests must be `approval(17, copy)` followed by
+`approval(17, legal)`. The result is `WaitingFor(legal)` and the publication handler
+receives zero requests. On a fresh run with both approvals granted, the preview records
+one additional request, `publish(17, public)`. If it returns receipt 804, the result is
+`Released(804)`. The fixture describes a fresh invocation on each run. Publishing twice
+across independently repeated live invocations would require its own service policy.
+
+The publishing team supplies its own data definitions, ports, callable methods, effect
+interfaces and preview readings. Its business user can insert another existing approval
+step without changing the language. A requirement to schedule a release for a time known
+only at run time would need a new source of information and possibly a new instruction.
+The fulfillment team's nodes, reservation handler and executor need no change in either
+case. A platform implementation that requires the two teams to coordinate a global opcode
+switch would fail the independence test. The BASIC loop below exercises a different
+property, execution of a back edge after reopening a program.
+
 ## A second instruction set with a cycle
 
 The proposed `hlvm-basic` application supplies a small independent check. Let its frontend
@@ -208,8 +282,47 @@ the remaining computation, its state and the status of external effects.
 
 ## What low cost and high performance would mean
 
+### Compare two ways to deliver the same business DSL
+
+A textual route DSL can preserve the relevant source identities in this fixture. For
+example, give each definition one node and let its name be a reference to that node. The
+following is paper notation for a competing business language.
+
+```text
+stop         = backorder
+backup       = try B on decline stop
+entry retail = try A on decline backup
+entry urgent = try C on decline backup
+```
+
+A planner can replace `backup` by `stop` in the retail entry alone. Give the textual
+editor go-to-definition, find-references, the same AI access, and the same reservation
+preview as the graphical editor. Both must keep urgent's B request, eliminate retail's B
+request after decline, and preserve shared identities in the unedited program. Starting
+from an empty program measures authoring. Revising a filtered or imported graph measures
+whether a user can discover affected policies. Eclipse Sirius already lets domain
+specialists work in modelers defined by application teams. Pair such a graphical
+workbench with the same business executor and fixtures for
+another peer on the same tasks. [Sirius architecture](https://eclipse.dev/sirius/doc/developer/Architecture_Overview.html)
+
+Equivalence with the textual DSL can be checked for this small fixture even if a richer
+DCG has no complete textual source language.
+
+Before timing any program, ask a second application team to supply the
+[editorial release language](#a-second-domain-team-defines-an-editorial-release-language).
+Record the node schemas, effect signatures, methods, editor and checker code they supply,
+what platform code they can reuse, and any central runtime changes the team requests.
+Include the cost of the native methods implementing the instructions in each domain.
+Then give practitioners unfamiliar with the implementations the same new-program
+and change requests in each language. Record time to first correct policy, wrong-scope
+edits accepted or caught, and which traces the user could explain. Count AI-assisted
+work on the same terms in both arms. A saving in platform engineering, a saving in
+business authoring and a saving in machine time answer three different questions.
+
+### Compare execution paths with equal observations
+
 Compare (A) a directly compiled CoD implementation of the same warehouse decisions, (B) a
-native Software Defined HLVM executing the regional graph, and, if built, (C) an LLVM
+native domain executor running the regional graph, and, if built, (C) an LLVM
 specialization of B for a pinned configuration. Give all three the same inputs, handler,
 reply stream, validation assumptions and observable trace. The generic executor is useful
 even when specializing each revision would cost more than that revision's entire run.
@@ -222,8 +335,8 @@ even when specializing each revision would cost more than that revision's entire
 | Service-dominated execution | Supply the same service latency distribution to each path and report end-to-end latency separately. Record the ordered calls so that skipping a call cannot masquerade as speed. |
 | Optional specialization | Charge compilation, extra code and invalidation as well as warm savings. At a saving of `d` time per order and a one-time cost `c`, a stable revision needs more than `c/d` orders to pay back compilation when `d > 0`. |
 
-A low-cost, high-performance result would combine reuse across policy revisions with
-competitive warm execution on stated workloads. The crossover between cheap branching and
+A low-cost, high-performance result would combine affordable new DSLs, inexpensive policy
+revisions and competitive execution on stated workloads. The crossover between cheap branching and
 coarse native operations matters more than a single peak throughput figure. These are
 measurement designs. The traces in this paper are derived from the instruction contracts.
 
@@ -243,13 +356,14 @@ returns a `Program<Orders → Decisions>`. The executor subsequently runs the su
 orders. Separating these two roles lets an AI help write a CoD editor without giving it
 inventory authority. [Readable views and complete exchange](../design/RegionalSemanticPlatformCharter.md#82-可读视图与完整交换形式)
 
-The planner selects R's decline edge in a bounded two-dimensional view. The viewer should
-show the field, old and new targets, and both incoming edges at F. If a retail-only filter
-hides U, the reviewer must be able to discover that other user or see that the claimed
-impact is limited to the visible graph. A drag can propose an edge update. A request such
-as “change only retail policies that still share their fallback with urgent” needs a graph
-predicate. An AI-assisted CoD editor can check it before updating a private successor.
-The drawing's layout supplies no persistent node identity.
+The planner's later request changes just one decline edge. The viewer should show the
+field, its old and new targets and both incoming edges at F. If a retail-only filter hides
+U, the planner can expand F's other uses or see how far the impact check actually reached.
+A drag can propose one edge update. “Change only retail policies that still share their
+fallback with urgent” requires a predicate over the graph. An AI-assisted CoD editor can
+check that predicate in a private successor. Canvas positions supply no persistent node
+identity. Domain-specific commands, direct graphical edits and programmatic graph edits
+can all produce a reviewable change to the same program.
 
 <a id="4-the-program-edit-and-the-business-result"></a>
 <a id="appendix-the-warehouse-revision-in-cod"></a>
