@@ -13,6 +13,7 @@ export func "C" diagnostic_limit(handle destination:const DiagnosticDestination 
 export data DiagnosticRun {
     limit:u64;
     retained:u64;
+    package_input_failure:u64;
 }
 export array DiagnosticRuns[u64]:DiagnosticRun;
 

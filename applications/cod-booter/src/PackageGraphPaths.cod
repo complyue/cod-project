@@ -18,6 +18,7 @@ using "./PackageDiagnostics.cod" {
     report_package_path, package_issue, package_delivery_failure, dependency_diagnostics_incomplete,
 };
 using "./SourceStorage.cod" SourceBytes;
+using "./ParserStorage.cod" no_node;
 using "./PackageInputs.cod" PackageSourceRoots;
 using "./LoadPackageInputs.cod" load_package_inputs;
 using "./PackageModuleResolution.cod" {
@@ -53,6 +54,20 @@ export proc report_package_issue(
     return package_rejection_code(result)
 }
 
+proc remember_package_input_failure(
+    handle opened:SourceRevision in S, handle diagnostic:DiagnosticDestination in D,
+    kind:PackageDiagnosticKind, os_error:u64, keys:const SourceBytes in G,
+    spelling:const SourceBytes in F, edge:const PackageEdge in E, run:DiagnosticRuns in G)
+    -> u8 where {const owner S, owner D, owner G, const owner F, const owner E} {
+    const val finding <- run[0u64].retained;
+    val reported <- report_package_issue(opened, diagnostic, kind, os_error, keys, spelling, edge, run);
+    if (reported == package_issue()) {
+        if (run[0u64].retained != finding + 1u64) return package_delivery_failure();
+        (run[0u64].package_input_failure <- finding):void
+    };
+    return reported
+}
+
 proc load_for_edge(
     handle entry:Path in A, handle opened:SourceRevision in S,
     handle diagnostic:DiagnosticDestination in D, keys:const SourceBytes in G,
@@ -61,17 +76,18 @@ proc load_for_edge(
     row_count:u64 in G, path_used:u64 in G, run:DiagnosticRuns in G)
     -> u8 where {const owner A, const owner S, owner D, owner G, const owner F, const owner E} {
     if (ready) return 0u8;
+    if (run[0u64].package_input_failure != no_node()) return package_issue();
     ref process_status = make u64 { 0u64 };
     try {
         val result <- load_package_inputs(entry, rows, paths, row_count, path_used, process_status);
-        if (result == OpenFailed) return report_package_issue(
+        if (result == OpenFailed) return remember_package_input_failure(
             opened, diagnostic, PackageProcessFailure, process_status, keys, spelling, edge, run);
-        if (result != Complete) return report_package_issue(
+        if (result != Complete) return remember_package_input_failure(
             opened, diagnostic, PackageInputFailure, 0u64, keys, spelling, edge, run);
         ready <- true;
         return 0u8
     } catch (error:const PackageCaptureException) {
-        return report_package_issue(
+        return remember_package_input_failure(
             opened, diagnostic, PackageInputFailure, error.os_error, keys, spelling, edge, run)
     }
 }

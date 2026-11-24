@@ -1574,6 +1574,7 @@ proc visit_child(handle parent_path:Path in P, handle entry:Path in A,
                 spelling_first <- first; spelling_past <- past;
                 importer_first <- import_first; importer_past <- import_past;
             };
+            const val previous_input_failure <- run[0u64].package_input_failure;
             val prepared <- if (kind == InvalidPath) {
                 report_package_issue(importing, diagnostic, InvalidModulePath, 0u64, keys, decoded, request, run)
             } else {
@@ -1582,9 +1583,14 @@ proc visit_child(handle parent_path:Path in P, handle entry:Path in A,
             };
             if (prepared != 0u8) {
                 if (prepared == package_issue()) {
-                    if (run[0u64].retained == 0u64) return package_delivery_failure();
-                    edges[edge].finding <- run[0u64].retained - 1u64;
-                    (edges[edge].owns_finding <- true):void
+                    if (kind != InvalidPath && previous_input_failure != no_node()) {
+                        if (previous_input_failure >= run[0u64].retained) return package_delivery_failure();
+                        (edges[edge].finding <- previous_input_failure):void
+                    } else {
+                        if (run[0u64].retained == 0u64) return package_delivery_failure();
+                        edges[edge].finding <- run[0u64].retained - 1u64;
+                        (edges[edge].owns_finding <- true):void
+                    }
                 };
                 return prepared
             }
