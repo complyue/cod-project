@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 252 · Recorded: 2026-11-24 · Phase: language/application co-design.
+Design revision: 253 · Recorded: 2026-11-24 · Phase: language/application co-design.
 
 ## Design authority
+
+[D-10-MIXIN](DesignAuthorityRegistry.md#d-10-mixin) r253 records the [project user's decision](../CHANGELOG.md#h-mixin-template-deferral-20261124) on [body templates](#import-time-alias-translation). C-43/C-46 and P-102/P-111 place body checking and symbolic bindings in the receiving context. Compare an instantiation with the same body written locally. Detailed mapping rules and implementation are deferred.
 
 At r252 the [procedure import rule](ModuleWorlds.md#selecting-a-symbolic-procedure-family) under [H-PROC-IMPORT-IDENTITY-20261124](../CHANGELOG.md#h-proc-import-identity-20261124) and [D-15-DEFAULT-EXPORTS](DesignAuthorityRegistry.md#d-15-default-exports) applies the same free-name identity check to empty and populated families. D-10 keeps the existing lexical and installed call contracts.
 
@@ -578,35 +580,32 @@ The prototype’s `using symbol` and `... @source as @destination` paths combine
 A vocabulary supplies identities without a default binding. In the selected model an integration selects those identities and source semantics, then activates the intended handler definition. This separation preserves H-109/H-140 once-only incorporation and H-166 resource lifetime while making the receiver’s runtime mutation visible.
 
 <a id="import-time-alias-translation"></a>
-### Mixin-time alias translation
+<a id="mixin-time-alias-translation"></a>
 
-H-115 adds a compile-time correspondence between source-body aliases and receiving-module symbols. The following prototype spelling presents the supplied local symbol first and source-body role second. Its outer implicit installation requires H-372/H-373 migration; the inner mapping direction remains the contract:
+### Body templates in the receiving module
 
-```text
+A body selected by `mixin` is a code template in the sense of C++ template instantiation. Reason about the result as if the author had written the selected body in the receiving module at the mixin site. Apply the supplied symbol mapping and check the resulting definition there. The receiver’s ordinary type, access, owner and capture rules apply. Installing the resulting symbolic procedure is a separate, explicit effect.
+
+The receiving module can supply a local symbol for a role used by the source body. The example names the local symbol first and the source role second.
+
+```cod
 symbol @step : proc() -> i64;
-symbol from "application-vocabulary.cod" @cell as @target;
-symbol from "model-vocabulary.cod" @gain;
+symbol from "./application-vocabulary.cod" @cell as @target;
+symbol from "./model-vocabulary.cod" @gain;
+
+mixin "./model.cod" proc @update as @step
+    with { @target as @tgt_neuron; };
 
 effect @target <- 2;
 effect @gain <- 3;
-
-mixin "model.cod" @update as @step
-    with { @target as @tgt_neuron; };
+effect proc @step;
 ```
 
-Read `@target as @tgt_neuron` as “use my `@target` symbol as the mixed-in body’s `@tgt_neuron`.” The left name resolves in the receiving module; the right name identifies a source-body alias to be satisfied. The clause does not introduce a receiving-module alias called `@tgt_neuron` or read either symbol’s runtime value.
+In the `with` clause, `@target as @tgt_neuron` supplies the receiving module’s `@target` wherever the body uses its `@tgt_neuron` role. If the body uses `@gain`, the omitted entry resolves the same spelling in the receiver. The receiver must supply the required symbol and its type. A matching spelling can denote a different nominal identity in each module.
 
-Conceptually, `resolve_mixed_in(@tgt_neuron) = resolve_local(@target)`. An implementation can index the correspondence by the right-hand source alias even though the written clause starts with the supplied local symbol. Resolve this correspondence before checking body requirements, computing captures and lowering runtime accesses. If the body also uses `@gain` and the receiver supplies that spelling, the implicit correspondence is `@gain as @gain`; no explicit entry is necessary.
+Resolve the roles before checking symbolic reads, effect targets and procedure calls or determining captures. The map applies to this instantiated body. The source module keeps its own definitions and once-only initialization. In the example, `as @step` names the receiving definition. When `effect proc @step` executes, its handler captures the required bindings. Subsequent `perform` and `behave` calls follow their ordinary replay and current-binding rules.
 
-The consistent reading of `A as B` is “use A in the role/name B.” For an outer `using/mixin`, A is a supplied source procedure and B is its receiving destination. Inside `with`, A is a supplied receiving symbol and B is the source-body role. The scopes differ explicitly; `as` need not mean a universal source-module-to-receiving-module arrow. The table is compile-time input under H-115; its supplier/role direction is implemented under H-118.
-
-The coherent interpretation with H-105/H-115 is that an omitted entry uses the same receiving spelling. A same-spelling local alias may denote a different identity from the source alias: redefinition then uses the receiving identity; it does not equate the two original symbols. The prototype checks this case with independently declared source and receiving identities; spellings themselves do not determine identity. There is no fallback to a source binding when the intended receiving name or required value is unavailable; the missing requirement is diagnosed on the demanded whole-program path.
-
-The mapping is compiler input and creates no runtime alias relation. `using` keeps source body/identities and interpretation; `mixin` translates the body into the receiving context. Activating a handler definition establishes its symbolic replay data. `perform` installs whichever values that resulting procedure captured; `behave` reads current dynamic bindings under that procedure's resolved identities. Capture values can be computed at runtime even though the set of identities and access locations is determined during compilation.
-
-In that prototype form, outer `as @step` chooses the destination binding; the target language must expose installation as an effect, separately from alias selection. The inner `@target as @tgt_neuron` supplies an existing local symbol for a role in the mixed-in body. Neither should be treated as an implicit text-wide rename. Translation must cover symbolic reads, effect targets and procedure-call symbols consistently. Source initialization and other already-created procedures are not silently rewritten by this body's map; H-109's source execution and its own binding checks remain separate.
-
-The prototype requires each explicit source role to occur in the selected body, rejects duplicate source-role entries, and diagnoses attempts to split aliases of one source identity across different receiving identities. Mapping multiple such aliases to one receiving identity works. These are bounded diagnostic policies; the complete language policy for broader mappings remains open. No general symbol-mapping framework or runtime registry is required.
+The prototype’s bounded mapping checks cover unknown and repeated source roles and two source names for one symbol identity. The latter can map to one receiving identity. Assigning those names to different receiving identities splits the source identity and the prototype rejects it. Two independently declared source symbols mapped to one receiving symbol present a separate [deferred design question](../docs/DesignTopics.md#body-mixin-templates). Current seed and booter delivery excludes body instantiation. Existing selector syntax and diagnostics can be checked independently.
 
 ### Syntax and practical use
 

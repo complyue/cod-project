@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Defer body-mixin templates
+
+<a id="h-mixin-template-deferral-20261124"></a>
+**H-MIXIN-TEMPLATE-DEFERRAL-20261124.** The project user in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-24 (America/Los_Angeles) stated “mixin 是 C++ template 语义，相当于代码模板，mixin 就是抄一遍代码进来” and deferred detailed discussion and implementation, permitting removal of pending tests. [D-10-MIXIN r253](design/SymbolicDynamicScope.md#import-time-alias-translation) continues the receiving-context meaning of H-105/H-115/H-212 under C-43/C-46 and P-102/P-111. Mapping distinct source identities to one destination stays open. [D-ARCH-REVIEW r91](design/ImplementationArchitecture.md#registering-and-importing-an-empty-procedure-family-in-the-seed) supersedes the separate body-mixin fixture requirement at `a8ab84e8cbf10d3e0f1cbdcd37af23819c8201f3:design/ImplementationArchitecture.md`. Ordinary import and its runner checks retain their scope.
+
 ## 2026-11-24 — Review the seed registrar and importer for empty procedure families
 
 <a id="k-seed-empty-procedure-import-20261124"></a>

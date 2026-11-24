@@ -146,6 +146,14 @@ Haskell，再按 CoD 的模块解释规则决定声明的可见性、优先级�
 [Edh 中缀分组](https://github.com/e-wrks/edh/blob/a2e9b95ef1f84cc5677499512c69d4b03a12cbdc/elr/src/Language/Edh/Parser.hs#L2216-L2276) ·
 [Haskell 2010 §4.4.2](https://www.haskell.org/onlinereport/haskell2010/haskellch4.html) · [CoD 的模块解释](../design/ModuleWorlds.md)
 
+<a id="body-mixin-templates"></a>
+
+## 5. `mixin` 代码模板
+
+`mixin` 按 C++ template 的心智模型理解：把选中的代码体当作在接收模块现场重新写了一遍，按该处的绑定检查。将来有具体用例时，再细化并实现这个特性。[接收环境中的定义](../design/SymbolicDynamicScope.md#import-time-alias-translation)
+
+一个待讨论的例子是，模板原本声明两个独立的 symbol，先向 `@output` 写入 9，再读取 `@input`。若接收方显式写 `with { @cell as @output; @cell as @input; }`，是否应接受并读到 9，还是要求这两个角色在接收方也保持独立？这个选择留待用例检验。
+
 ## 按实际用例重启的小议题
 
 | 议题 | 何时值得讨论、需要确定什么 |
