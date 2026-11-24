@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 258 · Recorded: 2026-11-24 · Phase: language/application co-design.
+Design revision: 259 · Recorded: 2026-11-24 · Phase: language/application co-design.
 
 ## Design authority
+
+[D-10-MIXED-EFFECT-GROUP](DesignAuthorityRegistry.md#d-10-mixed-effect-group) r259 covers [grouped bits transfer and reference rebinding](#mixed-value-and-reference-effects) under the [project user’s decision](../CHANGELOG.md#h-mixed-effect-group-20261124). P-716 relates scoped publication to C-36. P-717 carries forward P-248’s storage rules and H-285’s preparation order. Each entry keeps its ordinary storage, owner and access requirements. Compare the grouped result of 10 with the sequential result of 20 and check failure before publication.
 
 [Scope reconciliation](../CHANGELOG.md#k-design-scope-audit-20261124) applies the confirmed [module selector and identity rules](ModuleWorlds.md#selecting-a-symbolic-variable) to the examples below. Check grouped identity selection and kind-qualified resource selection against their respective singleton forms.
 
@@ -398,7 +400,7 @@ A first implementation should accept direct lexical and ordinary regional target
 
 Conservatively reject unresolved owner joins, unknown transitive escapes, invalid restoration, consuming/replacing a region while an active/saved/captured binding still requires its owner, cross-context transport without a lifetime contract and reference results whose owner cannot be retained in their contract. Generalize the existing finite summaries only where needed for accepted programs. This is staged compiler coverage, not a permanent language ban on every returned view or an excuse to accept a case without proof.
 
-The confirmed single-symbol scope does not choose combined multi-symbol generic-owner grammar, new source annotations for higher-order escape summaries, a runtime carrier/ABI, thread migration or persistent captured lexical storage. Existing H-284–H-286 shared-region groups remain separate; spelling one binder in independent declarations cannot silently create such a group. The source form and staged acceptance are confirmed by H-561; exact proof algorithms, physical transport and the complete value path remain pending-human. D-16 fraction payloads retain fixed bits representation and validity invariants; the proposal changes neither numerical promotion nor regional graph transfer.
+The confirmed single-symbol scope does not choose combined multi-symbol generic-owner grammar, new source annotations for higher-order escape summaries, a runtime carrier/ABI, thread migration or persistent captured lexical storage. H-284–H-286 govern shared-region declarations. A [mixed installation](#mixed-value-and-reference-effects) uses the declared owner constraints of its entries. Repeating an owner-parameter spelling in independent declarations establishes no shared-region constraint. The source form and staged acceptance are confirmed by H-561; exact proof algorithms, physical transport and the complete value path remain pending-human. D-16 fraction payloads retain fixed bits representation and validity invariants; the proposal changes neither numerical promotion nor regional graph transfer.
 
 ### Shared-region symbol declarations
 
@@ -451,11 +453,38 @@ After capture/binding analysis, touch needs no object-access instruction in the 
 
 Acceptance must reject the incompatible partial perform, admit explicitly touching the companion when both captured references have a valid shared owner, preserve current bindings for behave, and retain the dependency through symbol aliases. Missing required bindings and expired captured regions still reject. Removing touch as a dead expression before capture analysis must not silently change those outcomes.
 
-#### Remaining source details
+<a id="remaining-source-details"></a>
+Acceptance for the shared-region reference group distinguishes two objects in one suitable region from two equally typed objects in distinct regions. Check a joint A-to-B shadow, rejection of a mismatching partial shadow, owner and root constraints, the preceding binding during the second RHS, and restoration on exit. H-286 governs partial capture and replay.
 
-Single, grouped and inline-procedure effects all return void. The implemented group form uses `=` entries and one shared region clause; mixed transfer/rebind groups remain outside this increment. There is no implicit tuple or transaction result.
+### Mixed value and reference effects
 
-Acceptance must distinguish two objects in one suitable region from two equally typed but distinct regions; reject an unsatisfied root constraint or invalid lifetime/backing; keep the same relation through aliases and scope restoration; show that the second RHS sees the preceding group, and that RHS failure installs no new members. A joint A-to-B shadow should pass where a mismatching single-member shadow rejects. H-286 supplies the capture acceptance above. Current native reports do not establish owner-generic symbolic groups, touch or batched installation.
+One `effect` directive can combine a bits value installation using `<-` with a borrowed reference installation using `=`. Evaluate each RHS once in written order. A bits entry saves its computed payload during preparation. A reference entry retains the selected target and its actual owner. Check each entry against its declared type and storage mode, including access, initialization, nullability and lifetime as applicable. Publish all prepared bindings together after the last RHS succeeds. The expression yields `void`.
+
+```cod
+val symbol @level:u64;
+ref symbol @cell:u64 in S where {owner S};
+
+proc compare_installations() {
+    val old <- 10u64;
+    val next <- 20u64;
+    effect @cell = old;
+    effect @level <- 3u64;
+    {{
+        effect @cell = next, @level <- @cell;
+        assert @level == 10u64;
+        assert @cell == 20u64
+    }};
+    {{
+        effect @cell = next;
+        effect @level <- @cell;
+        assert @level == 20u64
+    }};
+    assert @cell == 10u64;
+    assert @level == 3u64
+}
+```
+
+In the grouped form the second RHS reads through the preceding binding of `@cell`. Separate directives make the new binding visible to the next statement. If the second RHS throws, the pending reference and bits installations both remain unpublished. Earlier operand effects, such as a write through an already installed reference, retain their ordinary consequences. After successful publication, both preceding bindings are restored on normal or exceptional scope exit. This decision covers bits transfer and borrowed reference rebinding. Owning-resource handoff and procedure installation retain their own contracts.
 
 ### Scoped bindings versus object transfer
 

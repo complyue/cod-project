@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Publish mixed value and reference effects together
+
+<a id="h-mixed-effect-group-20261124"></a>
+**H-MIXED-EFFECT-GROUP-20261124.** On 2026-11-24 (America/Los_Angeles) the project user confirmed in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) “同意你的建议，用户需要顺序执行时可以分两条写。” [D-10r259](design/SymbolicDynamicScope.md#mixed-value-and-reference-effects), P-716/P-717, extends the preparation order of [H-285](#h-285) to one directive containing a bits installation and a borrowed reference rebinding. Grouped publication yields 10 in the distinguishing example, separate statements yield 20, and a failing operand leaves all proposed bindings unpublished. This resolves the mixed-form exclusion at `e597150269901e0536a7bcb8c55ebaea55acbac2:design/SymbolicDynamicScope.md:456`. The module name-collision question remains separate.
+
 ## 2026-11-24 — Reconcile design exclusions with their confirmed scopes
 
 <a id="k-design-scope-audit-20261124"></a>
