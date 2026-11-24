@@ -151,7 +151,6 @@ Haskell，再按 CoD 的模块解释规则决定声明的可见性、优先级�
 | 议题 | 何时值得讨论、需要确定什么 |
 | --- | --- |
 | overload 中的 `default` | 有更具体的方法需要调用本族更通用的实现时，比较显式调用与委托的选取规则，涵盖多个候选及递归。模块的 `default { ... }` 与默认导出已经有独立决定。[模块选择](../design/ModuleWorlds.md#default-and-complete-public-selections) |
-| 异常所有权交接后的引用 | 按业务异常匹配后，若队列要接收并保留最外层 wrapper，是否需要显式选择 `e.tip` 的目标并同时交接唯一 owner？直接捕获 wrapper 已能交接它。另一个情形已有定论：`from original` 成功后，只要能证明同一 region 仍由新 holder 持有，此前单独声明的借用仍可使用。[异常所有权](../design/ExceptionControl.md#exception-ownership-across-control-flow) · [保留原目标的借用](../design/ExceptionControl.md#keeping-a-typed-reference-to-the-original) |
 | 初始化与分支结果 | 用真实调用检验非 bits 或产生所有权的分支如何合流。另有无 owner 的纯 bits 构造表达式候选；目前新建实例写 `make`。[构造与分配](../design/ConstructionAndAcquisition.md) · [owner 和初始化](../design/RegionalOwnership.md) |
 | 结构化结果与 generator 的扩展 | 当现有 receiving spec、`yields`、反馈和同步 `here` 无法表达某个调用时，以该调用界定需增加的行为。[generator 与循环](../design/RangedForAndGenerators.md) |
 | 尾调用、分数和单位 | 有实际递归深度要求时讨论尾调用的可保证范围及 ABI 条件。固定宽度分数依已有草案保留兼容性；更广的单位与索引运算需要各自的用例及取舍。[尾调用](../design/ConstFunctionsAndTailCalls.md#tco-and-the-callable-abi) · [分数](../design/FixedWidthFractions.md) · [单位与索引](../design/ScalarUnitsAndIndexTypes.md) |

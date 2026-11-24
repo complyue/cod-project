@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Select the incoming exception for a compatible owning destination
+
+<a id="h-typed-catch-owner-handoff-20261123"></a>
+**H-TYPED-CATCH-OWNER-HANDOFF-20261123.** The project user in the [CoD design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-23 (America/Los_Angeles) specified “让 `exception own_e:Exception <- e` 时，对方接收到的是 `e.tip`” and an ordinary user helper with an owning `Exception` parameter. The user delegated the incompatible-destination rule. [D-17r149 / P-707–P-708](design/ExceptionControl.md#choosing-the-target-of-an-owning-catch-handoff) admits the compatible matched target as fallback and rejects an uncovered arrival. This revises [K-EXCEPTION-SCENARIOS-20261118](#k-exception-scenarios-20261118) for consuming reception. The readonly projection, checked obligations and single owner retain their contracts. The previous wording is at `912b06ade8d855c8f7903b22fe7b0a19f5982b9c:design/ExceptionControl.md`, “Matched binding and hidden tip”.
+
 ## 2026-11-23 — Review scalar object calls through a receiver import
 
 <a id="k-booter-facade-scalar-object-20261123"></a>
