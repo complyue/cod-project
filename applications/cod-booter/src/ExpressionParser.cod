@@ -60,7 +60,8 @@ using "./Lexer.cod" {
     quoted_text, multiline_text, punctuation, init_word, assert_word, is_word,
 };
 using "./ParserStorage.cod" SyntaxRole {
-    InitializerRole, BlockItemRole, ExpressionRole, ReferenceGroupEntryRole, ArgumentOperandRole, ConditionRole
+    InitializerRole, BlockItemRole, ExpressionRole, ReferenceGroupEntryRole, ArgumentOperandRole,
+    ConditionRole, CaseGuardRole
 };
 using "./SourceStorage.cod" { SourceBytes, Token };
 
@@ -1208,6 +1209,27 @@ func parse_short_case_body(source:const SourceBytes in S, tokens:const Tokens in
     append_block(nodes, result, first, end, result.root, false)
 }
 
+func at_braced_case_body(source:const SourceBytes in S, tokens:const Tokens in T,
+                         first:u64, arrow:u64, past:u64) -> bool where {const owner S, const owner T} {
+    if (first > arrow || !punct_pair_at(source, tokens, arrow, past, 45u8, 62u8) ||
+        punct_at(source, tokens, arrow + 1u64, past) != 123u8 ||
+        closing_token(tokens, arrow + 1u64, past) == no_node()) return false;
+    val at <- first;
+    for (step in first .. arrow) {
+        if (at == arrow) return true;
+        val mark <- punct_at(source, tokens, at, past);
+        if (mark == 40u8 || mark == 91u8 || mark == 123u8) {
+            val close <- closing_token(tokens, at, past);
+            if (close == no_node() || close >= arrow) return false;
+            (at <- close + 1u64):void
+        } else {
+            if (mark == 41u8 || mark == 93u8 || mark == 125u8) return false;
+            (at <- at + 1u64):void
+        }
+    };
+    return at == arrow
+}
+
 func parse_case_arm(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
                     result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
@@ -1247,8 +1269,17 @@ func parse_case_arm(source:const SourceBytes in S, tokens:const Tokens in T, nod
     if (punct_at(source, tokens, result.next, past) == 124u8) {
         result.next <- result.next + 1u64;
         if (!punct_pair_at(source, tokens, result.next, past, 45u8, 62u8)) {
+            val guard_first <- result.next;
+            val supplied <- result.supplied_here;
+            val in_case <- result.case_control;
             parse_expression_at(source, tokens, nodes, result, past, 1u8);
-            if (result.diagnostic != 0u8) return;
+            if (result.diagnostic != 0u8) {
+                val body_arrow <- result.next;
+                if (!at_braced_case_body(source, tokens, guard_first, body_arrow, past)) return;
+                result.supplied_here <- supplied;
+                result.case_control <- in_case;
+                if (!recover_syntax_until(tokens, nodes, result, guard_first, body_arrow, past, CaseGuardRole)) return
+            };
             (guard <- result.root):void
         }
     };

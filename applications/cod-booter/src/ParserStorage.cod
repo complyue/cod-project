@@ -28,7 +28,7 @@ export enum FormalMode:u8 {
 
 export enum SyntaxRole:u8 {
     ModuleItemRole; BlockItemRole; InitializerRole; ExpressionRole; BindingNameRole; TypeAnnotationRole;
-    ReferenceGroupEntryRole; ArgumentOperandRole; ModuleSelectionItemRole; ConditionRole;
+    ReferenceGroupEntryRole; ArgumentOperandRole; ModuleSelectionItemRole; ConditionRole; CaseGuardRole;
 }
 
 export enum LocalMode:u8 { ValueLocal; ReferenceLocal; PointerLocal; ExceptionLocal; }
