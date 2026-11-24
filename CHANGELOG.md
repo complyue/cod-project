@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Measure linked booter peak memory on release workloads
+
+<a id="k-booter-memory-baseline-20261124"></a>
+**K-BOOTER-MEMORY-BASELINE-20261124.** D-20-BOOTSTRAP roadmap r31→32, continued under P-642/P-643 and the [user’s memory decision](#h-bootstrap-compiler-memory-20261124). The [per-command budgets](applications/cod-booter/README.md#compiler-memory-acceptance) use the existing released application at `acd9e453:applications/cod-booter`, linked image SHA-256 `dff984aaf6d46363d07aa0d8e38794aa0843bdde7ccc3cf814831783ff282d02`. The 49-module nested graph peaked at 43.8/44.7/55.7 MiB for checking declarations, emitting a provider and emitting an object, respectively. The 512-function file peaked at 58.9/57.9/76.7 MiB. A damaged last child in a 49-file graph retained diagnostics and previous outputs. The compiler entry opened seven of 63 reachable files on its source commands and four on its object command before rejection. Successful full self-compilation remains unmeasured.
+
 ## 2026-11-24 — Qualify bootstrap compiler memory acceptance
 
 <a id="h-bootstrap-compiler-memory-20261124"></a>

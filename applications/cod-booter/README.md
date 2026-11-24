@@ -1,10 +1,10 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 31 · Recorded: 2026-11-24 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 32 · Recorded: 2026-11-24 · Phase: initial seed delivery through alternating booter and seed development.
 
 ## Design authority
 
-- Roadmap r31 adds [compiler memory acceptance](#compiler-memory-acceptance) to [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap) under P-642/P-643. The [project user’s decision](../../CHANGELOG.md#h-bootstrap-compiler-memory-20261124) permits a higher C++ seed footprint when reducing it would materially harm maintainability. Reasonable memory use by the linked CoD booter is a delivery requirement. The booter’s existing correctness and resource-lifetime requirements continue.
+- Roadmap r31 adds [compiler memory acceptance](#compiler-memory-acceptance) to [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap) under P-642/P-643. The [project user’s decision](../../CHANGELOG.md#h-bootstrap-compiler-memory-20261124) permits a higher C++ seed footprint when reducing it would materially harm maintainability. Reasonable memory use by the linked CoD booter is a delivery requirement. The booter’s existing correctness and resource-lifetime requirements continue. Roadmap r32 records the [measured release budgets](../../CHANGELOG.md#k-booter-memory-baseline-20261124) under the same scope.
 
 - Roadmap r30 covers [entry-world diagnostic coverage](#diagnostic-coverage-of-the-entry-modules-fused-world) in the seed, booter and production compiler. [D-20-WORLD-DIAGNOSTICS](../../design/DesignAuthorityRegistry.md#d-20-world-diagnostics), P-713/P-714, records the [project user’s decision](../../CHANGELOG.md#h-entry-world-diagnostics-20261124). The entry determines the work and the invocation owns the optional diagnostic limit. Acceptance covers independent syntax and semantic errors across dependencies and safe publication on completion. The [r30 status review](../../CHANGELOG.md#k-seed-world-product-status-20261124) covers seed dependency traversal and independent direct product declarations.
 
@@ -69,6 +69,15 @@ Build the initial booter with statically linked C providers generated from check
 Keep the C++ seed readable and maintainable. A smaller representation is worthwhile when its measured benefit justifies its complexity. If replacing a standard representation such as `std::variant` would materially obscure the implementation, a higher seed peak is acceptable. Schedule memory-heavy builds against available host memory and limit concurrency across build, verification and profiling jobs.
 
 Verify the linked `cod-booter` executable’s own peak resident memory through process exit on its normal declaration, provider and object commands. Record the executable, host, input size and reachable module count alongside the outcome. Include a small successful program, a larger supported workload, a graph with a shared dependency and a rejected input with its expected diagnostics and preserved output. Compare peaks as source size and graph size grow. Establish practical budgets from these measurements and investigate disproportionate growth, including temporary per-module storage retained across sibling visits. Record the seed’s cost to build the executable separately. A regional capacity alone does not establish the process peak. [Module graph storage and visits](docs/ModuleGraph.md)
+
+The release comparison on x86-64 Linux uses the largest peak RSS from three serial invocations per command with the normal allocator. The following regression budgets apply to the measured fixtures on a comparable build and host. Source size counts all reachable CoD files once.
+
+| Workload | Check declarations | Emit C provider | Emit object |
+| --- | ---: | ---: | ---: |
+| Small graph fixtures, including shared, wide and nested imports, up to 49 modules and 9 KiB of source | 64 MiB | 64 MiB | 80 MiB |
+| Dense source fixtures, up to 512 scalar functions and 32 KiB of source | 72 MiB | 72 MiB | 96 MiB |
+
+The dense-source budget also covers the successful declaration and provider commands on the real lexer. Apply the corresponding budget to comparable damaged inputs and verify their diagnostics and previous artifacts. Record the number of files actually opened when a compiler source input stops early. Measure successful full self-compilation separately when it becomes available. [Release measurements](../../CHANGELOG.md#k-booter-memory-baseline-20261124)
 
 ### Exception syntax in both frontends
 
