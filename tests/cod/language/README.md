@@ -215,6 +215,8 @@ The seed's indexed source provider exposes a C-compatible view of a regular file
 
 The seed recovers missing call operands at the argument separator. In [the argument recovery fixture](argument-recovery-error.cod), the first and last operands each produce a located report. The middle argument and subsequent return remain in the recovered tree, and the errors prevent artifact publication. [Whole-file parser recovery](../../../applications/cod-booter/README.md#whole-file-parser-recovery)
 
+The [terminal body diagnostics test](terminal_body_diagnostics_tests.py) exercises two independent checked throws in both seed modes. It puts a forwarding procedure before its failing callee, checks the original two locations, and verifies the diagnostic cap and preservation of existing provider files. This recovery applies after ordinary direct-call effects and prerequisites have closed. [Final body validation](../../../design/ImplementationArchitecture.md#reporting-uncovered-checked-exceptions-from-independent-bodies)
+
 The [field initializer recovery fixture](field-initializer-recovery-error.cod) exercises separate missing operands in braced exception and product construction. The seed keeps the field and assignment, inserts an initializer-role error at the missing operand and resumes at the field separator to parse the next initializer and the subsequent return.
 
 The [grouped selection recovery fixture](grouped-selection-recovery-error.cod) retains the good selector between invalid selectors in a matched module group. It reports the missing rename destination and both malformed names before reporting the missing initializer operand in the following procedure.

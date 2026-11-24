@@ -139,9 +139,14 @@ class ScalarChecker {
   // Context zero is module initialization; other contexts are instance IDs + 1.
   mutable std::map<size_t, std::set<size_t>> effect_dependents_;
   mutable std::set<size_t> callable_effect_consumers_;
+  struct UnavailableBodyProof {};
+  const std::vector<bool> *unavailable_body_proofs_ = nullptr;
   // Physical binding distinctness refines the proof for the same checked body.
   std::map<size_t, CallEffects> distinct_binding_effects_;
   const CallEffects &read_effects(size_t instance, bool distinct_bindings = false) const {
+    if (unavailable_body_proofs_ && instance + 1 < unavailable_body_proofs_->size() &&
+        (*unavailable_body_proofs_)[instance + 1])
+      throw UnavailableBodyProof{};
     effect_dependents_[instance].insert(checking_context_);
     if (distinct_bindings)
       if (const auto found = distinct_binding_effects_.find(instance); found != distinct_binding_effects_.end())
@@ -270,7 +275,28 @@ class ScalarChecker {
   std::map<size_t, const Expression *> scoped_installations_;
   std::set<const Form *> warned_captures_;
   std::set<size_t> warned_missing_return_;
-  std::set<std::tuple<std::string, size_t, std::string>> warned_shadow_;
+  using ShadowWarning = std::tuple<std::string, size_t, std::string>;
+  std::set<ShadowWarning> warned_shadow_;
+  struct ReplayWarnings {
+    std::vector<WarningDiagnostic> warnings;
+    std::set<const Form *> captures;
+    std::set<size_t> missing_return;
+    std::set<ShadowWarning> shadow;
+    bool shared_proof_changed = false;
+  };
+  ReplayWarnings *replay_warnings_ = nullptr;
+  void note_shared_proof_change() const {
+    if (replay_warnings_) replay_warnings_->shared_proof_changed = true;
+  }
+  using TerminalFinding = std::pair<Location, size_t>;
+  struct TerminalFindingOrder {
+    bool operator()(const TerminalFinding &left, const TerminalFinding &right) const {
+      return std::tie(left.first.filename(), left.first.span, left.second) <
+          std::tie(right.first.filename(), right.first.span, right.second);
+    }
+  };
+  using TerminalFindings = std::set<TerminalFinding, TerminalFindingOrder>;
+  std::set<std::pair<size_t, bool>> possible_terminal_failures_;
   LexicalState lexical_;
   std::vector<CheckedStorage> *storage_ = nullptr;
   std::vector<CheckedBinding> *bindings_ = nullptr;
@@ -2807,6 +2833,15 @@ class ScalarChecker {
     if (scope.bindings.contains(name)) fail(at, "duplicate declaration of '" + name + "' in one lexical scope");
     return scope;
   }
+  template <typename Key>
+  bool record_warning_key(const Key &key, std::set<Key> &confirmed, std::set<Key> ReplayWarnings::*pending) {
+    if (!replay_warnings_) return confirmed.insert(key).second;
+    return !confirmed.contains(key) && (replay_warnings_->*pending).insert(key).second;
+  }
+  void record_warning(WarningDiagnostic warning) {
+    auto &warnings = replay_warnings_ ? replay_warnings_->warnings : program_.warnings;
+    warnings.push_back(std::move(warning));
+  }
   void warn_shadow(const std::string &name, const Location &at) {
     if (!validating_) return;
     const bool outer = lexical_.lookup(name).has_value() ||
@@ -2814,8 +2849,8 @@ class ScalarChecker {
          lexical_self(name, checking_instance_->method) || module_names().values.contains(name))) ||
         module_names().callables.contains(name) || module_names().symbols.contains(name) ||
         module_names().types.contains(name);
-    if (outer && warned_shadow_.emplace(at.filename(), at.span.first, name).second)
-      program_.warnings.push_back({Warning::shadow, at, "declaration shadows outer binding '" + name + "'"});
+    if (outer && record_warning_key(ShadowWarning{at.filename(), at.span.first, name}, warned_shadow_, &ReplayWarnings::shadow))
+      record_warning({Warning::shadow, at, "declaration shadows outer binding '" + name + "'"});
   }
   size_t new_selection_identity(std::set<size_t> sources = {null_target}) {
     const auto id = next_selection_identity_++;
@@ -5783,11 +5818,14 @@ class ScalarChecker {
       if (frame->bindings.contains(id)) { frame->required.insert(id); captured = true; }
     return captured;
   }
-  [[noreturn]] void report_uncovered_exception(const Location &at, size_t category) const {
+  std::string uncovered_exception_message(const Location &at, size_t category) const {
     const auto occurrence = named_throw_sites_.find({at, category});
     const auto spelling = occurrence == named_throw_sites_.end() ? std::string_view{} : occurrence->second;
-    fail(at, "checked exception '" + program_.exception_display_name(category, spelling) +
-             "' requires a covering catch or throws declaration");
+    return "checked exception '" + program_.exception_display_name(category, spelling) +
+        "' requires a covering catch or throws declaration";
+  }
+  [[noreturn]] void report_uncovered_exception(const Location &at, size_t category) const {
+    fail(at, uncovered_exception_message(at, category));
   }
 
   void note_abrupt(const Location &at, ExceptionFacts exceptions = {}, Completion completion = {2, false},
@@ -6609,6 +6647,7 @@ class ScalarChecker {
 
   void resolve_captures(CheckedMethod &method) {
     if (method.captures_resolved) return;
+    note_shared_proof_change();
     // Diagnostic visibility is independent of runtime capture and type evidence.
     auto &names = enclosing_names_[method.source];
     for (const auto &name : free_bindings(*method.source).declarations)
@@ -7117,6 +7156,7 @@ class ScalarChecker {
           if (validating_) throw std::logic_error("abstract call inputs changed during validation");
           if (!instance.result_supplied && definition.source->implicit_scope)
             implementation_gap(at, "an inferred callable result under multiple abstract effect input domains");
+          note_shared_proof_change();
           instance.incoming_abstract_targets = std::move(joined);
           changed_abstract_inputs_.insert(id + 1);
         }
@@ -7170,6 +7210,7 @@ class ScalarChecker {
         (result.contract->mode != ResultMode::borrowed_ref || !result.contract->read_only))
       fail(at, "text results require a readonly, non-null owner-qualified reference");
     check_declared_results(definition, *result.contract, declared);
+    note_shared_proof_change();
     definition.contextual_result = definition.contextual_result || supplied.has_value();
     const auto id = program_.instances.size();
     auto context = arguments;
@@ -7298,6 +7339,8 @@ class ScalarChecker {
       const auto right = physical_slots(views[1].slots);
       distinct_bindings = !left.empty() && !right.empty() && intersect(left, right).empty();
     }
+    operation.reads_direct_body = expr.kind == Expression::Kind::call && !expr.lexical_symbol_call &&
+        !operation.callable_call && !method.scope_inputs && !method.here_group && method.here.empty();
     const auto &effects = read_effects(*operation.callee, distinct_bindings);
     for (size_t i = 0; i < views.size(); ++i) {
       const auto &view = views[i];
@@ -7997,6 +8040,7 @@ class ScalarChecker {
     });
     const auto id = found == candidates.end() ? result_obligations_.size() : *found;
     if (found == candidates.end()) {
+      note_shared_proof_change();
       if (id == instance_limit) fail(definition.source->at, "compiler resource limit: 4096 callable result obligations; result remains unproved");
       result_obligations_.push_back({method, arguments, retained, context, {}, {}, {}});
       candidates.push_back(id);
@@ -8005,11 +8049,15 @@ class ScalarChecker {
     }
     if (result_probe_) {
       if (result_obligations_[*result_probe_].dependencies.insert(id).second) {
+        note_shared_proof_change();
         result_obligations_[id].dependents.insert(*result_probe_);
         invalidate_result(*result_probe_);
         result_graph_changed_ = true;
       }
-    } else if (!pending_results_.empty()) solve_results();
+    } else if (!pending_results_.empty()) {
+      note_shared_proof_change();
+      solve_results();
+    }
     const auto &result = result_obligations_[id].result;
     if (result.contract && !result_probe_) {
       const auto &type = *result.contract->type;
@@ -14869,7 +14917,10 @@ class ScalarChecker {
     }
     const auto found = std::find(program_.query_environments.begin(), program_.query_environments.end(), environment);
     const auto id = std::distance(program_.query_environments.begin(), found);
-    if (found == program_.query_environments.end()) program_.query_environments.push_back(std::move(environment));
+    if (found == program_.query_environments.end()) {
+      note_shared_proof_change();
+      program_.query_environments.push_back(std::move(environment));
+    }
     return id;
   }
   std::vector<ArgumentEvidence> argument_evidence(const Expression &expr, TypeEvidenceState state, size_t first = 0) const {
@@ -15372,7 +15423,10 @@ class ScalarChecker {
           prior.uniform_target == value.uniform_target && prior.selection_inputs == value.selection_inputs;
     });
     const auto id = std::distance(program_.callables.begin(), found);
-    if (found == program_.callables.end()) program_.callables.push_back(std::move(value));
+    if (found == program_.callables.end()) {
+      note_shared_proof_change();
+      program_.callables.push_back(std::move(value));
+    }
     return id;
   }
   CheckedOperation materialized_value(size_t id, const Location &at) {
@@ -15395,11 +15449,12 @@ class ScalarChecker {
     return value;
   }
   void warn_captures(const CheckedMethod &definition) {
-    if (validating_ && definition.source->explicit_captures && warned_captures_.insert(definition.source).second)
+    if (validating_ && definition.source->explicit_captures &&
+        record_warning_key(definition.source, warned_captures_, &ReplayWarnings::captures))
       for (const auto &capture : definition.captures)
         if (std::none_of(free_bindings(*definition.source).captures.begin(), free_bindings(*definition.source).captures.end(),
                          [&](const auto &used) { return used.name == capture.name; }))
-          program_.warnings.push_back({Warning::unused_capture, capture.at, "unused callable capture '" + capture.name + "' remains retained"});
+          record_warning({Warning::unused_capture, capture.at, "unused callable capture '" + capture.name + "' remains retained"});
   }
   void require_value_capture_source(std::optional<size_t> binding, const Location &at) const {
     if (!binding) return;
@@ -15419,6 +15474,7 @@ class ScalarChecker {
     });
     const auto index = std::distance(retained_definitions_.begin(), found);
     if (found == retained_definitions_.end()) {
+      note_shared_proof_change();
       auto &retained = retained_definitions_.emplace_back(definition);
       retained.live_bindings.clear();
     }
@@ -15597,6 +15653,7 @@ class ScalarChecker {
     });
     const auto id = std::distance(program_.callables.begin(), found);
     if (found == program_.callables.end()) {
+      note_shared_proof_change();
       CheckedCallable value{view, family_id};
       const auto selection_inputs = cover_family(family, view, at, [&](size_t selected, const std::vector<Type> &arguments) {
         const auto target = demand(selected, arguments, at);
@@ -15614,6 +15671,7 @@ class ScalarChecker {
   const Expression &scope_operand(size_t method, const Capture &capture, const Expression *call = nullptr) {
     const auto key = std::tuple{method, call, capture.name};
     if (const auto found = scope_operand_names_.find(key); found != scope_operand_names_.end()) return *found->second;
+    note_shared_proof_change();
     auto operand = std::make_unique<Expression>();
     operand->kind = Expression::Kind::name; operand->at = capture.at; operand->text = capture.name;
     const auto &stored = *program_.scope_operands.emplace_back(std::move(operand));
@@ -15664,6 +15722,7 @@ class ScalarChecker {
     }
     method.scope_inputs = std::move(inputs);
     const auto id = program_.methods.size();
+    note_shared_proof_change();
     program_.methods.push_back(std::move(method));
     profiles.push_back(id);
     return id;
@@ -16122,7 +16181,10 @@ class ScalarChecker {
     auto &selected = program_.symbols.at(symbol_id).scoped_instance;
     if (selected && *selected != target)
       implementation_gap(expr.at, "scoped handler with more than one checked frame layout");
-    selected = target;
+    if (!selected) {
+      note_shared_proof_change();
+      selected = target;
+    }
     const auto &effects = read_effects(target);
     for (const auto dependency : effects.symbols) require_symbol(lexical_, dependency, expr.at);
     if (validating_ && !effects.symbols.empty())
@@ -16139,6 +16201,9 @@ class ScalarChecker {
       operation.array_allocator_arguments = std::move(forwarded);
     }
     operation.scoped_effect = target;
+    if (const auto installed = scoped_installations_.find(symbol_id);
+        installed == scoped_installations_.end() || installed->second != &expr)
+      note_shared_proof_change();
     scoped_installations_.insert_or_assign(symbol_id, &expr);
     operation.type = Type::void_type;
   }
@@ -16735,6 +16800,7 @@ class ScalarChecker {
     const auto key = std::pair{receiver, entries};
     const auto [profile, inserted] = here_receiver_profiles_.try_emplace(key, program_.methods.size());
     if (inserted) {
+      note_shared_proof_change();
       auto method = program_.methods[receiver];
       method.instances.clear();
       method.here_targets = entries;
@@ -16750,6 +16816,7 @@ class ScalarChecker {
     for (const auto &input : signature.inputs) labels.push_back(input.label);
     const auto key = std::tuple{&site, module_, interpretation_, std::move(labels), signature.labelled, feedback != Type::void_type};
     if (const auto found = terminal_bodies_.find(key); found != terminal_bodies_.end()) return *found->second;
+    note_shared_proof_change();
     const auto node = [&](K kind, std::string text = {}) {
       auto expr = std::make_unique<Expression>();
       expr->kind = kind; expr->at = sink.at; expr->text = std::move(text);
@@ -17570,7 +17637,10 @@ class ScalarChecker {
       pipeline.terminal = body->instance;
     }
     auto [id, inserted] = open_pipeline_ids_.try_emplace(pipeline, open_pipelines_.size());
-    if (inserted) open_pipelines_.push_back(std::move(pipeline));
+    if (inserted) {
+      note_shared_proof_change();
+      open_pipelines_.push_back(std::move(pipeline));
+    }
     CheckedOperation argument;
     argument.type = Type::void_type;
     argument.open_pipeline_operands = saved.stages;
@@ -17845,6 +17915,7 @@ class ScalarChecker {
   }
   const Expression &attached_operator_operand(const Expression &expr) {
     if (const auto found = attachment_operands_.find(&expr); found != attachment_operands_.end()) return *found->second;
+    note_shared_proof_change();
     auto operand = std::make_unique<Expression>();
     operand->kind = Expression::Kind::call;
     operand->at = expr.at;
@@ -21561,7 +21632,8 @@ class ScalarChecker {
           operations.insert_or_assign(&item, std::move(initializer));
         }
         if (completes && lexical_.live) {
-          named_throw_sites_.try_emplace({expr.at, type.identity}, expr.annotation->name);
+          if (named_throw_sites_.try_emplace({expr.at, type.identity}, expr.annotation->name).second)
+            note_shared_proof_change();
           // The annotated raise form constructs a fresh, cause-less nominal object.
           note_abrupt(expr.at, ExceptionFacts::direct_owned({type.identity}));
         }
@@ -22298,7 +22370,7 @@ class ScalarChecker {
       if (field.type == Type::boolean) seed_boolean_input(place, ordinal);
     }
   }
-  CallEffects check_instance(size_t i, bool distinct_bindings = false) try {
+  CallEffects check_instance(size_t i, bool distinct_bindings = false, TerminalFindings *terminal_findings = nullptr) try {
     checking_context_ = i + 1;
     auto &instance = program_.instances[i];
     checking_instance_ = &instance;
@@ -22306,8 +22378,12 @@ class ScalarChecker {
     const ModuleLookup context(interpretation_, program_.methods[instance.method].interpretation);
     const auto &method = *program_.methods[instance.method].source;
     checking_method_ = &program_.methods[instance.method];
+    const bool named_procedure = method.ordinary_procedure() && !method.name.empty() &&
+        !checking_method_->here_group && !checking_method_->local_effect_symbol;
+    bool possible_terminal_failure = false;
     check_flow([&](bool proving) {
       begin_check(instance.storage, instance.bindings, instance.operations, proving);
+      possible_terminal_failure = false;
       lexical_.abstract_symbol_targets = instance.incoming_abstract_targets;
       if (const auto &group = checking_method_->here_group; group && group->supplier_return.has_value())
         (*group->supplier_return ? return_inputs_.present : return_inputs_.absent).insert(0);
@@ -22501,8 +22577,8 @@ class ScalarChecker {
                                            method.case_scan_scope ? &case_scan : nullptr, returns_void_at_end).type;
       const bool requires_return = !checking_method_->regional_initializer && method.completion_requires_return(*instance.result.type);
       if (validating_ && proving && requires_return && completion != Type::never &&
-          warned_missing_return_.insert(instance.method).second)
-        program_.warnings.push_back({Warning::missing_return, method.at, method.ordinary_procedure()
+          record_warning_key(instance.method, warned_missing_return_, &ReplayWarnings::missing_return))
+        record_warning({Warning::missing_return, method.at, method.ordinary_procedure()
             ? "procedure may finish without an explicit return" : "callable may finish without a result"});
       if (proving) {
         abrupt_ = nullptr;
@@ -22530,6 +22606,7 @@ class ScalarChecker {
         for (const auto &path : outcomes.paths) {
           if (observed_.case_scope_exits && path.completion.reason == 1) observed_.case_scope_exits->result = true;
           observe_outcome(path.completion.reason == 1 && !method.case_scan_scope ? 0 : path.completion.reason, path.state);
+          bool collected = false;
           if (path.completion.exception()) {
             // Export the proof, without callee-local selection conditions or operand indices.
             const auto categories = path.exceptions.possibilities();
@@ -22540,16 +22617,30 @@ class ScalarChecker {
             }
             if (!categories.contains(path.completion.category()))
               unproved_owners.insert(path.completion.category());
+            // The solver observation selects replay work; it is not a finding.
+            if (named_procedure && path.state.live && !categories.contains(0)) for (const auto category : categories) {
+              if (!program_.exception_types.at(category).checked ||
+                  checking_method_->throws_categories.contains(category)) continue;
+              possible_terminal_failure = true;
+              if (validating_ && terminal_findings) {
+                terminal_findings->emplace(path.at, category);
+                collected = true;
+              }
+            }
           }
           if (path.completion.protected_here() && !path.here_exit) observed_.propagates_outer_here_transfer = true;
           lexical_ = path.state; abrupt_ = nullptr;
-          forward_abrupt(path);
+          if (!collected) forward_abrupt(path);
         }
         for (const auto category : unproved_owners) observed_.direct_owned_failures.erase(category);
         lexical_ = normal;
       }
     });
-    instance.complete = validating_;
+    if (!validating_) {
+      const auto profile = std::pair{i, distinct_bindings};
+      if (possible_terminal_failure) possible_terminal_failures_.insert(profile);
+      else if (!possible_terminal_failures_.empty()) possible_terminal_failures_.erase(profile);
+    }
     for (const auto place : payload_writes_.places)
       if (storage(place).borrowed) observed_.written_inputs.insert(input_ordinal(place));
     std::erase_if(observed_.uninitialized, [](const auto &entry) { return entry.second.empty(); });
@@ -22613,6 +22704,187 @@ class ScalarChecker {
     if (!method.local_effect_symbol) throw;
     fail(failure.diagnostic.at,
         local_effect_name(method.source->name, *method.local_effect_symbol) + ": " + failure.diagnostic.message);
+  }
+
+  // Keep the solved body while validation prepares new frame evidence. A
+  // distinct-binding replay and the ordinary replay must both agree.
+  struct BodyReplay {
+    CheckedProgram &program;
+    CheckedInstance &instance;
+    decltype(CheckedInstance::operations) operations;
+    decltype(CheckedInstance::storage) storage;
+    decltype(CheckedInstance::bindings) bindings;
+    CheckedFrame frame;
+    decltype(CheckedInstance::lexical_bindings) lexical_bindings;
+    bool deferred_aggregates, exception_values;
+
+    BodyReplay(CheckedProgram &program, CheckedInstance &value)
+        : program(program), instance(value), operations(std::move(value.operations)), storage(std::move(value.storage)),
+          bindings(std::move(value.bindings)), frame(std::move(value.frame)),
+          lexical_bindings(std::move(value.lexical_bindings)), deferred_aggregates(program.deferred_aggregates),
+          exception_values(program.exception_values) {}
+
+    ~BodyReplay() {
+      if (instance.complete) return;
+      instance.operations = std::move(operations);
+      instance.storage = std::move(storage);
+      instance.bindings = std::move(bindings);
+      instance.frame = std::move(frame);
+      instance.lexical_bindings = std::move(lexical_bindings);
+      program.deferred_aggregates = deferred_aggregates;
+      program.exception_values = exception_values;
+    }
+
+    BodyReplay(const BodyReplay &) = delete;
+    BodyReplay &operator=(const BodyReplay &) = delete;
+  };
+
+  bool replay_instance(size_t id, TerminalFindings *findings = nullptr) {
+    auto &instance = program_.instances[id];
+    std::optional<BodyReplay> replay;
+    if (findings) replay.emplace(program_, instance);
+    ReplayWarnings warnings;
+    struct ReplayScope {
+      ScalarChecker &checker;
+      ~ReplayScope() {
+        checker.replay_warnings_ = nullptr;
+        checker.storage_ = nullptr;
+        checker.bindings_ = nullptr;
+        checker.checking_instance_ = nullptr;
+        checker.checking_method_ = nullptr;
+        checker.abrupt_ = nullptr;
+      }
+    } scope{*this};
+    replay_warnings_ = &warnings;
+    const auto compare = [&](const CallEffects &expected, bool distinct) {
+      const auto actual = check_instance(id, distinct, findings);
+      auto known = expected;
+      if (merge_effects(known, actual, false) || merge_effects(known, actual, true))
+        throw std::logic_error(distinct ? "distinct binding call effects changed after validation"
+                                       : "call effects changed after validation");
+    };
+    if (const auto it = distinct_binding_effects_.find(id); it != distinct_binding_effects_.end())
+      compare(it->second, true);
+    compare(instance.effects, false);
+    const bool succeeded = !findings || findings->empty();
+    if (!succeeded && warnings.shared_proof_changed) {
+      const auto &[at, category] = *findings->begin();
+      report_uncovered_exception(at, category);
+    }
+    for (auto &warning : warnings.warnings) program_.warnings.push_back(std::move(warning));
+    warned_captures_.merge(warnings.captures);
+    warned_missing_return_.merge(warnings.missing_return);
+    warned_shadow_.merge(warnings.shadow);
+    instance.complete = succeeded;
+    return !warnings.shared_proof_changed;
+  }
+
+  struct BodyReplayPlan {
+    // Context zero is module entry. Other contexts select exact solved instances.
+    std::vector<std::set<size_t>> inputs;
+    std::vector<size_t> order;
+  };
+
+  std::optional<BodyReplayPlan> plan_body_replays() const {
+    if (possible_terminal_failures_.empty()) return {};
+    BodyReplayPlan plan;
+    plan.inputs.resize(program_.instances.size() + 1);
+    const auto inputs = [&](size_t context, const auto &operations) {
+      for (const auto &[expression, operation] : operations)
+        if (operation.reads_direct_body) plan.inputs[context].insert(operation.callee.value() + 1);
+    };
+    inputs(0, program_.entry);
+    for (size_t i = 0; i < program_.instances.size(); ++i)
+      inputs(i + 1, program_.instances[i].operations);
+    // The solver may revisit readers for other forms of access. Only a
+    // checked direct selection establishes a prerequisite for this replay.
+    for (const auto &[id, readers] : effect_dependents_)
+      for (const auto reader : readers)
+        if (!plan.inputs.at(reader).contains(id + 1)) return {};
+
+    std::vector<std::vector<size_t>> dependents(plan.inputs.size());
+    std::vector<size_t> pending(plan.inputs.size());
+    std::set<size_t> available;
+    for (size_t context = 0; context < plan.inputs.size(); ++context) {
+      pending[context] = plan.inputs[context].size();
+      if (!pending[context]) available.insert(context);
+      for (const auto input : plan.inputs[context]) dependents.at(input).push_back(context);
+    }
+    while (!available.empty()) {
+      const auto next = *available.begin();
+      available.erase(available.begin());
+      plan.order.push_back(next);
+      for (const auto dependent : dependents[next])
+        if (!--pending[dependent]) available.insert(dependent);
+    }
+    if (plan.order.size() != plan.inputs.size()) return {};
+    return plan;
+  }
+
+  static void relate_module_findings(const SourceProgram &source, size_t module,
+                                     CompilationDiagnostics &diagnostics, size_t first) {
+    const auto past = diagnostics.size();
+    for (const auto &requester : source.modules) for (const auto &form : requester.forms) {
+      const auto dependency = requester.dependencies.find(form.get());
+      if (dependency != requester.dependencies.end() && dependency->second == module)
+        diagnostics.relate_import(first, past, form->at);
+    }
+  }
+
+  bool validate_bodies(const SourceProgram &source, CompilationDiagnostics *diagnostics, size_t &reported_warnings) {
+    validating_ = true;
+    const auto ordinary_replay = [&] {
+      check_entry();
+      for (size_t i = 0; i < program_.instances.size(); ++i) replay_instance(i);
+      return true;
+    };
+    const auto plan = diagnostics ? plan_body_replays() : std::nullopt;
+    if (!plan) return ordinary_replay();
+    std::vector<bool> unavailable(plan->inputs.size());
+    struct BodyProofScope {
+      const std::vector<bool> *&unavailable;
+      ~BodyProofScope() { unavailable = nullptr; }
+    } scope{unavailable_body_proofs_};
+    unavailable_body_proofs_ = &unavailable;
+    std::set<std::tuple<Location, size_t, size_t>> reported;
+    for (const auto context : plan->order) {
+      if (std::ranges::any_of(plan->inputs[context], [&](size_t input) { return unavailable[input]; })) {
+        unavailable[context] = true;
+        continue;
+      }
+      if (!diagnostics->continue_work()) return false;
+      TerminalFindings findings;
+      try {
+        if (!context) check_entry();
+        else if (!replay_instance(context - 1, &findings)) {
+          // A successful replay extended shared evidence. The ordinary
+          // validation route owns any new obligations and comparisons.
+          if (diagnostics->has_error()) return false;
+          return ordinary_replay();
+        }
+      } catch (const UnavailableBodyProof &) {
+        // A replay selected an input beyond the closed direct plan. Retain
+        // the proven findings without consulting or publishing its proof.
+        return false;
+      }
+      while (reported_warnings < program_.warnings.size()) {
+        if (!diagnostics->append(program_.warnings[reported_warnings])) return false;
+        ++reported_warnings;
+      }
+      if (findings.empty()) continue;
+      unavailable[context] = true;
+      const auto &method = program_.methods[program_.instances[context - 1].method];
+      for (const auto &[at, category] : findings) {
+        if (!reported.emplace(at, category, method.interpretation).second) continue;
+        const auto ordinal = diagnostics->size();
+        if (!diagnostics->append(SyntaxDiagnostic{at, uncovered_exception_message(at, category)})) return false;
+        relate_module_findings(source, method.module, *diagnostics, ordinal);
+      }
+    }
+    if (diagnostics->has_error()) return false;
+    for (size_t i = plan->inputs.size() - 1; i < program_.instances.size(); ++i)
+      replay_instance(i);
+    return true;
   }
 
   static bool merge_effects(CallEffects &known, const CallEffects &effects, bool reads) {
@@ -24472,13 +24744,8 @@ class ScalarChecker {
       for (const auto &form : input.forms) require_implemented_source_forms(*form);
       const auto first_finding = diagnostics ? diagnostics->size() : 0;
       if (!register_module(input, print_symbol, unsupported_here, diagnostics)) registered = false;
-      if (diagnostics && diagnostics->size() != first_finding) {
-        for (const auto &requester : source.modules) for (const auto &form : requester.forms) {
-          const auto dependency = requester.dependencies.find(form.get());
-          if (dependency != requester.dependencies.end() && dependency->second == module)
-            diagnostics->relate_import(first_finding, diagnostics->size(), form->at);
-        }
-      }
+      if (diagnostics && diagnostics->size() != first_finding)
+        relate_module_findings(source, module, *diagnostics, first_finding);
       if (diagnostics) while (reported_warnings < program_.warnings.size()) {
         if (!diagnostics->append(program_.warnings[reported_warnings])) return {};
         ++reported_warnings;
@@ -24547,20 +24814,7 @@ class ScalarChecker {
       if (choices == callable_choices_) break;
       callable_choices_ = std::move(choices);
     }
-    validating_ = true;
-    check_entry();
-    for (size_t i = 0; i < program_.instances.size(); ++i) {
-      if (const auto it = distinct_binding_effects_.find(i); it != distinct_binding_effects_.end()) {
-        const auto effects = check_instance(i, true);
-        auto known = it->second;
-        if (merge_effects(known, effects, false) || merge_effects(known, effects, true))
-          throw std::logic_error("distinct binding call effects changed after validation");
-      }
-      const auto effects = check_instance(i);
-      auto known = program_.instances[i].effects;
-      if (merge_effects(known, effects, false) || merge_effects(known, effects, true))
-        throw std::logic_error("call effects changed after validation");
-    }
+    if (!validate_bodies(source, diagnostics, reported_warnings)) return {};
     if (reaching_callables() != callable_choices_) throw std::logic_error("callable flow changed after validation");
     if (std::ranges::any_of(program_.symbols, &CheckedSymbol::live_scope)) for (const auto &value : program_.callables) {
       const auto snapshots = program_.captured_symbols(value);

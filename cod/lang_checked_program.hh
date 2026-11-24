@@ -116,6 +116,7 @@ struct CheckedOperation {
   std::optional<size_t> symbol;
   std::optional<size_t> scoped_effect;
   bool publishes_effect = true;
+  bool reads_direct_body = false;
   std::optional<size_t> callee;
   struct NominalCall {
     std::vector<Type> inputs;
