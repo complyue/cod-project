@@ -2,7 +2,7 @@ using "./Lexer.cod" {
     own_word, quoted_text, multiline_text, identifier, using_word, as_word, symbol_word, symbol_name,
     from_word, proc_word, func_word, ref_word, ptr_word, where_word, const_word, in_word,
     data_word, array_word, export_word, handle_word, c_linkage, enum_word, integer_literal,
-    import_word, type_word, region_word, default_word, mixin_word, var_word, valid_module_path,
+    import_word, type_word, region_word, default_word, mixin_word, var_word, val_word, valid_module_path,
         invalid_module_path_escape,
 };
 using "./ExpressionParser.cod" {
@@ -24,7 +24,7 @@ using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" SyntaxRole { ModuleItemRole, ModuleSelectionItemRole };
 using "./ParserStorage.cod" ExprPayload {
     CallableDefinition, CEntryDefinition, ModulePathSyntax, ModuleSelection, AllMembers, ChosenMembers, ChosenMember,
-    HandleType, NominalParent, RecordDefinition, AbstractType, HandleSymbol, ReferenceSymbol, Publication,
+    HandleType, NominalParent, RecordDefinition, AbstractType, HandleSymbol, ValueSymbol, ReferenceSymbol, Publication,
     ArrayDefinition, EnumInteger, EnumMember, EnumDefinition, SumDefinition, SumArm, RegionDefinition,
     BulkModuleSelection, DefaultPublicSet, DefaultMark,
 };
@@ -509,33 +509,51 @@ func parse_nominal_type(source:const SourceBytes in S, tokens:const Tokens in T,
     });
 }
 
+func value_symbol_head(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64)
+    -> bool where {const owner S, const owner T} {
+    return at + 1u64 < past && val_word(source, tokens[at]) && symbol_word(source, tokens[at + 1u64])
+}
+
 func parse_symbol_declaration(source:const SourceBytes in S, tokens:const Tokens in T,
                               nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
-    result.next <- result.next + 1u64;
+    val explicit_value <- value_symbol_head(source, tokens, result.next, past);
+    result.next <- result.next + (if (explicit_value) { 2u64 } else { 1u64 });
     if (!parse_symbol(tokens, nodes, result, past)) return;
     val name <- result.root;
     val colon <- result.next;
-    if (punct_at(source, tokens, colon, past) != 58u8) { result.diagnostic <- expected_type(); return; } else {};
+    if (punct_at(source, tokens, colon, past) != 58u8) {
+        result.diagnostic <- expected_type();
+        return
+    };
     val qualifier <- colon + 1u64;
-    if (qualifier < past && proc_word(source, tokens[qualifier]) &&
+    if (!explicit_value && qualifier < past && proc_word(source, tokens[qualifier]) &&
         punct_at(source, tokens, qualifier + 1u64, past) == 40u8) {
         result.next <- qualifier;
         parse_procedure_symbol_type(source, tokens, nodes, result, past, first, name);
-        return;
+        return
     };
-    if (qualifier + 1u64 >= past || !own_word(source, tokens[qualifier]) || !handle_word(source, tokens[qualifier + 1u64])) {
-        result.diagnostic <- expected_type();
-        return;
-    } else {};
-    result.next <- qualifier + 2u64;
+    if (!explicit_value && qualifier + 1u64 < past &&
+        own_word(source, tokens[qualifier]) && handle_word(source, tokens[qualifier + 1u64])) {
+        result.next <- qualifier + 2u64;
+        if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
+        val marker <- result.root;
+        append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, marker), make HandleSymbol {
+            name <- make NodeId { revision <- result.revision; index <- name; };
+            marker <- make NodeId { revision <- result.revision; index <- marker; };
+        });
+        return
+    };
+    result.next <- qualifier;
     if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
-    val marker <- result.root;
-    append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, marker), make HandleSymbol {
+    val annotation <- result.root;
+    append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, annotation), make ValueSymbol {
         name <- make NodeId { revision <- result.revision; index <- name; };
-        marker <- make NodeId { revision <- result.revision; index <- marker; };
+        annotation <- make NodeId { revision <- result.revision; index <- annotation; };
+        explicit_value <- explicit_value;
     });
+    return
 }
 
 func reference_symbol_head(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> bool
@@ -753,7 +771,7 @@ func parse_module_form(source:const SourceBytes in S, tokens:const Tokens in T,
         parse_reference_symbol(source, tokens, nodes, result, past);
         return;
     };
-    if (symbol_word(source, tokens[at])) {
+    if (symbol_word(source, tokens[at]) || value_symbol_head(source, tokens, at, past)) {
         parse_symbol_declaration(source, tokens, nodes, result, past);
         return;
     } else {};
@@ -792,6 +810,7 @@ func named_definition_head(source:const SourceBytes in S, tokens:const Tokens in
     return handle_type_head(source, tokens, at, past) ||
         reference_symbol_head(source, tokens, at, past) ||
         (symbol_word(source, tokens[at]) && next_kind == symbol_name()) ||
+        value_symbol_head(source, tokens, at, past) ||
         ((func_word(source, tokens[at]) || proc_word(source, tokens[at])) &&
             !callable_local_head(source, tokens, at, past)) ||
         (data_word(source, tokens[at]) && (next_kind == identifier() || next_kind == quoted_text())) ||
@@ -975,7 +994,11 @@ func parse_module_item(source:const SourceBytes in S, tokens:const Tokens in T,
 # before a following definition or selection at the same delimiter depth.
 func module_recovery_boundary(source:const SourceBytes in S, tokens:const Tokens in T,
                               first:u64, past:u64) -> u64 where {const owner S, const owner T} {
-    val at <- first;
+    val head <- first;
+    if (head + 1u64 < past && default_word(source, tokens[head]) && export_word(source, tokens[head + 1u64]))
+        { (head <- head + 1u64):void };
+    if (head < past && export_word(source, tokens[head])) { (head <- head + 1u64):void };
+    val at <- if (value_symbol_head(source, tokens, head, past)) { head + 2u64 } else { first };
     val close <- no_node();
     val delimiter <- 0u8;
     for (unused in first .. past) {

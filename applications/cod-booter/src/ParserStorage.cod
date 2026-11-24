@@ -66,6 +66,7 @@ export data ExprPayload =
     | RegionConstruction { schema:NodeId; capacity:NodeId; initializers:NodeId; capacity_at:u64; }
     | AbstractType { heading:NodeId; }
     | HandleSymbol { name:NodeId; marker:NodeId; }
+    | ValueSymbol { name:NodeId; annotation:NodeId; explicit_value:bool; }
     | ReferenceSymbol { name:NodeId; target:NodeId; owner_name:NodeId; readonly:bool; nullable:bool; }
     | Publication { name:NodeId; nature:ResourceNature; }
     | ArrayDefinition { name:NodeId; index_type:NodeId; element_type:NodeId; dimension_at:u64; }
@@ -1683,6 +1684,7 @@ export enum DeclarationSyntax:u8 {
     LocalPublication;
     NominalSum;
     NamedRegion;
+    ValueSymbolDeclaration;
 }
 
 export data DeclarationSites {
@@ -1768,6 +1770,37 @@ func nominal_heading(nodes:const ExprNodes in N, revision:u64, at:u64, heading:c
     };
 }
 
+export data ValueSymbolSites { name:u64; annotation:u64; explicit_value:bool; }
+
+func valid_value_symbol(nodes:const ExprNodes in N, revision:u64, at:u64,
+    name:const NodeId in I, annotation:const NodeId in A) -> bool
+    where {const owner N, const owner I, const owner A} {
+    return published_syntax_id(nodes, revision, at, name) &&
+        published_syntax_id(nodes, revision, at, annotation) &&
+        name_syntax(nodes, at, name.index) == (SymbolicName:NameSyntax) &&
+        name_syntax(nodes, at, annotation.index) == (OrdinaryName:NameSyntax)
+}
+
+export func inspect_value_symbol(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+    sites:ValueSymbolSites in R) -> bool where {const owner N, owner R} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        Occupied { val expression <- node; } -> {
+            case expression.payload of {
+                ValueSymbol { val name <-; val annotation <-; val explicit_value <-; } -> {
+                    if (!valid_value_symbol(nodes, revision, at, name, annotation)) return false;
+                    sites.name <- name.index;
+                    sites.annotation <- annotation.index;
+                    sites.explicit_value <- explicit_value;
+                    true
+                };
+                _ -> false
+            }
+        };
+        _ -> false
+    }
+}
+
 export func inspect_declaration(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
                                  sites:DeclarationSites in S) -> DeclarationSyntax where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidDeclaration:DeclarationSyntax;
@@ -1823,6 +1856,13 @@ export func inspect_declaration(nodes:const ExprNodes in N, revision:u64, used:u
                         !published_syntax_id(nodes, revision, at, marker)) return InvalidDeclaration:DeclarationSyntax;
                     sites.value_type <- marker.index;
                     NativeSymbolDeclaration:DeclarationSyntax
+                };
+                (ValueSymbol { val name <-; val annotation <-; }) -> {
+                    if (!valid_value_symbol(nodes, revision, at, name, annotation))
+                        return InvalidDeclaration:DeclarationSyntax;
+                    sites.name <- name.index;
+                    sites.value_type <- annotation.index;
+                    ValueSymbolDeclaration:DeclarationSyntax
                 };
                 (ReferenceSymbol { val name <- name; val target <- target; val owner_name <- owner_name;
                                    val readonly <- readonly; val nullable <- nullable; }) -> {
