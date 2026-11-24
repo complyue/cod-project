@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Establish the procedure family at declaration
+
+<a id="h-empty-procedure-family-20261124"></a>
+**H-EMPTY-PROCEDURE-FAMILY-20261124.** The project user in the [CoD design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) on 2026-11-24 (America/Los_Angeles) specified “定义一个 proc 性质的 symbol 时，就创建 empty family，之后的 export/import/using 都接受 empty family，具体情况下的规则不变” and requested the same model for a bodyless `proc` header. [D-10r251 / D-15r72](design/SymbolicDynamicScope.md#procedure-families-before-the-first-method), P-709/P-710, extend [H-257](#h-257), [H-258](#h-258) and [H-374](#h-374) to this declaration point. Signature, extension and installation contracts retain their scopes. At `bd2ebfb02b300d51b40b007dc1485f58ed3cfdf0:cod/lang_checked.hh`, `publish_module` can still publish a procedure symbol without its family.
+
 ## 2026-11-24 — Review the booter’s nested case and its two helper loans
 
 <a id="k-booter-projected-case-helper-20261124"></a>

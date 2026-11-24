@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 250 · Recorded: 2026-11-23 · Phase: language/application co-design.
+Design revision: 251 · Recorded: 2026-11-24 · Phase: language/application co-design.
 
 ## Design authority
+
+[D-10-EMPTY-PROC-FAMILY](DesignAuthorityRegistry.md#d-10-empty-proc-family) at r251 applies [the project user’s publication decision](../CHANGELOG.md#h-empty-procedure-family-20261124) to [procedure declarations without methods](#procedure-families-before-the-first-method). P-709/P-710 connect declaration identity to inspectable reuse. Verify the empty family, an authorized first method and a demanded call in both states. Symbol installation and method applicability keep their existing rules.
 
 [D-10-VARARGS](DesignAuthorityRegistry.md#d-10-varargs) r250 applies H-272, H-449, the [ordered expansion decision](../CHANGELOG.md#h-ordered-pack-expansions-20261123) and P-403/P-404 to indexed elements. The selected formal determines which writes the caller observes. Check independent [value slots](#indexed-by-value-elements), [borrowed targets](#indexed-borrowed-elements), repeated targets, rebinding and forwarding. Whole-pack storage and native representation have separate scope. [Continuity](../CHANGELOG.md#k-variadic-element-selection-20261123)
 
@@ -552,7 +554,7 @@ In declaration/selection syntax, `@name` identifies which symbol is meant. In an
 
 ### Identity introduction versus procedure installation
 
-A symbol declaration registers an identity, declared TLS contract and local access name. Bare `p` names that symbol object; it is not a second ordinary callable alias. A symbolic method declaration constructs the family’s semantic information. Neither supplies a current TLS binding. For a symbolic proc, perform/behave resolve the installed handler. A free-standing value expression `@p` rejects. Effect-destination syntax identifies the slot.
+A symbol declaration registers an identity, declared TLS contract and local access name. Bare `p` names that symbol object; it is not a second ordinary callable alias. Declaring a procedure symbol establishes its family. A bodyless callable header records a signature declaration. A method definition contributes an executable body to the family. Neither supplies a current TLS binding. For a symbolic proc, perform/behave resolve the installed handler. A free-standing value expression `@p` rejects. Effect-destination syntax identifies the slot.
 
 | Operation | Semantic result | Runtime installation |
 | --- | --- | --- |
@@ -827,6 +829,12 @@ function pair(x:T, y:U) -> i64 where {T, U};
 ```
 
 Type parameters are inferred from argument type evidence at a demanded call. Repeated occurrences constrain those types to agree; bounds use the caller's selected conformance information. A type parameter that cannot be inferred from inputs is diagnosed. Unique-most-specific dispatch compares signature constraints, including concrete types, bounds and repeated-variable relationships, independently of declaration order. Equally specific candidates remain ambiguous. A variadic method stands alone in its family. Its pack length is runtime data. This bounded prototype does not supply generic ADT constructors, explicit type-argument calls or a complete higher-rank type system.
+
+#### Procedure families before the first method
+
+Declaring a procedure symbol such as `symbol @p : proc() -> i64;` establishes its family immediately. It has zero methods until a definition contributes one. The written procedure type constrains handlers installed for that symbol. An ordinary header such as `proc p() -> i64;` likewise establishes a family with zero methods when it is the first declaration. The header records a callable signature promise. A later admissible header belongs to the existing family and preserves any methods already present. The ordinary name `p` identifies a lexical callable. The symbolic name `@p` also identifies a dynamic slot.
+
+An empty family participates in `export`, `import` and `using` under the ordinary rules for that kind of callable. A permitted receiver may contribute the first method. A direct call in an interpretation with zero applicable methods fails, as does a name-only installation whose family cannot satisfy the symbol’s declared procedure type. Dynamic invocation can still select a compatible handler installed by another scope for the same symbol. [Publication and extension example](ModuleWorlds.md#selecting-a-symbolic-procedure-family)
 
 ### Runtime-array expansion and one variadic parameter
 

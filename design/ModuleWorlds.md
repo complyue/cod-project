@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 71 · Recorded: 2026-11-23 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 72 · Recorded: 2026-11-24 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+[D-10-EMPTY-PROC-FAMILY](DesignAuthorityRegistry.md#d-10-empty-proc-family) at D-15r72 covers [selection before the first procedure method](#selecting-a-symbolic-procedure-family) under [the project user’s publication decision](../CHANGELOG.md#h-empty-procedure-family-20261124). P-709/P-710 retain H-374’s complete-family publication, destination identity and receiving-world permissions. Check a vocabulary with zero methods and an importer contributing the first one.
 
 [D-15-PUBLIC-SOURCE](DesignAuthorityRegistry.md#d-15-public-source) r71 applies the [confirmed semicolon policy](SymbolicDynamicScope.md#semicolon-omission-and-syntax-ux) to the closing delimiter of an [explicit resource group](#public-definitions-and-grouped-selections). P-662/P-663 preserve public identity and each verb's permissions. Compare both spellings at EOF and before a following module item in both frontends, including recovery from malformed lists. [Continuity and human baselines](../CHANGELOG.md#k-grouped-selector-boundary-20261123)
 
@@ -124,7 +126,7 @@ An imported helper retains the source-to-receiver sequence of its selected imple
 
 This candidate comparison does not merge the published identities or edit any source world. Direct calls through distinct aliases still select those identities, while `using` preserves the helper's existing interpretation. `import` adds the receiving interpretation without erasing inherited overloads. Explicit syntax for informed conflict arbitration is a future design possibility, not a current feature. Source globals, non-callable names, procedure captures and runtime data layout retain their separate contracts. No arbitrary choice by alias order, original ancestor or preferred source identity resolves a conflicting overload.
 
-Export means **make an identity importable under a public alias** (H-247). For a symbol-identified callable it publishes the entire method set available in that module (H-374); no per-method private subset is hidden inside the published family. A bodyless contract can genuinely have no methods. View compatibility constrains usable calls, not publication privacy. Public aliases are a separate mapping from local lookup names. An ordinary `export name;` publishes the identity selected by that local name. `export from "source.cod" name [as public_name];` instead publishes the explicitly selected upstream object without creating an own local alias or extension target; a private local namesake remains private. `export import` publishes the identities selected by the import, including admitted associated callables. A competing local name does not retarget that publication. Two public aliases may expose the same identity; a single public alias cannot denote two conflicting identities. Selection-as followed by export can publish that local alias; export from also permits an independently chosen public alias.
+Export means **make an identity importable under a public alias** (H-247). For a symbol-identified callable it publishes the entire method set available in that module (H-374); no per-method private subset is hidden inside the published family. The complete family can have zero methods, including when a procedure symbol has only its declared procedure type. View compatibility constrains usable calls, not publication privacy. Public aliases are a separate mapping from local lookup names. An ordinary `export name;` publishes the identity selected by that local name. `export from "source.cod" name [as public_name];` instead publishes the explicitly selected upstream object without creating an own local alias or extension target; a private local namesake remains private. `export import` publishes the identities selected by the import, including admitted associated callables. A competing local name does not retarget that publication. Two public aliases may expose the same identity; a single public alias cannot denote two conflicting identities. Selection-as followed by export can publish that local alias; export from also permits an independently chosen public alias.
 
 The compiler represents this distinction directly:
 
@@ -378,6 +380,23 @@ A newline between a module path and an explicit selection is ordinary whitespace
 For acceptance, compile an external source containing `using "string.cod"` with a relocated toolchain. Exercise the default `str`, `repr` and `(++)` families, a public entry outside the default set, and independent access to a public symbol identity before installation. Check a namespaced same-package module, explicit sibling, package shadow and warning, ambiguous package claim, broken selected package module and absent fallback. Verify both compilers agree across working directories and reuse cached dependencies correctly after adding a shadowing module or changing a default. Migrate actual booter sibling imports and the repository-relative string-library imports alongside the resolver. Preserve intentional named selection, receiver-world extensions and re-exports in the formatter.
 
 ### Selecting a symbolic procedure family
+
+A vocabulary can publish a procedure symbol before any module implements it:
+
+```cod
+# vocabulary.cod
+symbol @p : proc() -> i64;
+export proc @p;
+```
+
+```cod
+# provider.cod
+symbol from "./vocabulary.cod" @p;
+import "./vocabulary.cod" proc @p;
+proc @p() -> i64 { return 7i64 }
+```
+
+The symbol declaration creates the empty family. Export publishes it under the symbol’s identity. In the provider, the first directive selects the destination identity. The explicit import grants permission to add the first method in the provider’s interpretation. The vocabulary and an independent source-preserving `using` still see zero methods. A `using` can select the empty family into a free name but grants no extension permission. A different preselected identity still conflicts under its verb’s rules. Export, import and using can all occur before a handler is installed. Written, default-expanded and complete selections apply the same per-item checks. A body mixin still requires a body. [Procedure declarations](SymbolicDynamicScope.md#procedure-families-before-the-first-method)
 
 These excerpts belong to three separate modules. The tariff package publishes its methods under
 the billing vocabulary's `@quote` identity.
