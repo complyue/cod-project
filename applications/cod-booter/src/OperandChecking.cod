@@ -2226,7 +2226,8 @@ export func selected_target_presence(facts:const OperandFacts in F, at:u64) -> u
     val header <- facts[at].case_context;
     for (unused in 0u64 .. intrinsic (len)(facts)) {
         if (header == no_node()) return presence;
-        if (facts[header].case_selection == selection) return facts[header].case_presence;
+        if (facts[header].case_selection == selection &&
+            facts[header].case_presence != unknown_target()) return facts[header].case_presence;
         header <- facts[header].case_context;
     };
     return presence;
@@ -2234,7 +2235,6 @@ export func selected_target_presence(facts:const OperandFacts in F, at:u64) -> u
 
 func enter_case_context(facts:OperandFacts in F, outer:u64, header:u64) -> u64 where {owner F} {
     facts[header].case_context <- outer;
-    if (facts[header].case_selection == no_node() || facts[header].case_presence == unknown_target()) return outer;
     return header;
 }
 
