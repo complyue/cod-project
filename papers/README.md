@@ -2,7 +2,7 @@
 
 These papers accompany the long-term design of CoD. Each begins with a programming decision
 someone has to make: which edge to edit, when a borrowed view stops being usable, how to stop an
-inventory search, or which state belongs to a completed fuel sale. The worked examples let a
+inventory search, which state belongs to a completed fuel sale, or how to refocus an image rule. The worked examples let a
 reader compare possible language and library designs on paper. The [design registry](../design/DesignAuthorityRegistry.md)
 records settled language contracts; the [design topics](../docs/DesignTopics.md) track decisions
 still open.
@@ -13,6 +13,7 @@ still open.
 | [Which references survive replacement of a region?](CoarseGrainedOwnership.md) | What must a use prove about the actual owner originally selected by a reference? | A replacement can read the old revision during construction. After successful delivery to the occupied holder, a later read through the old view must be rejected. A saved value or a fresh selection in the replacement has a different dependency. |
 | [Composing enumerative choice with producers and transformers](ComposingEnumerativeChoice.md) | What can a higher-kinded synonym express about a synchronous traversal, its feedback and the stages that compose with it? | A seat filter must tell the upstream cursor to continue after skipping a fare. A caller returning the first affordable fare exits two live traversals and receives its result after cleanup. |
 | [Typing open event pipelines across Actors and reactive timelines](OpenEventPipelines.md) | How can a library abstract over independent send and receive families, and over the signal families of a local reactive network? | Pump monitoring separates submission from a later worker turn. A [fuel sale](OpenEventPipelines.md#a-reflex-style-network-for-a-fuel-sale) distinguishes same-frame sampling rules by the amount on a receipt, and a dispenser switch distinguishes which completion reaches the console. |
+| [Extending an Effect Vocabulary and Refocusing a Raster Computation](ComposingEffectsAndFocusedContexts.md) | When an effect author and a tile-library author extend a running inspection independently, which combinations require new code? Can a local rule be composed by refocusing its input? | A fourth effect and fourth transformer expose seven new pairings. A two-stage score is 15 with the correct focus, 0 with captured coordinates and 24 with an in-place update. |
 
 ### Read the two pipeline papers together
 

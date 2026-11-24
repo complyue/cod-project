@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Study effect composition and focused raster computations
+
+<a id="k-effects-focused-contexts-20261124"></a>
+**K-EFFECTS-FOCUSED-CONTEXTS-20261124.** The user asked for a workload that exposes the M × N lifting problem and tests a possible CoD answer to comonadic programming. The [raster paper](papers/ComposingEffectsAndFocusedContexts.md) extends the portfolio at `6a397519f591b0a2d6bde7736545c0b81d667504:papers/README.md`. It derives the small mtl instance matrix, tests independently added flagging and tile handling, and compares scoped CoD reads with a focused Store on a stable image. [Open questions](docs/DesignTopics.md#effect-composition-and-focused-contexts) cover forwarding, reusable refocusing and spatial dependencies. The study adds no language decision or implementation authorization.
+
 ## 2026-11-24 — Check a case on a sum received into an arm local
 
 <a id="k-booter-direct-received-sum-20261124"></a>
