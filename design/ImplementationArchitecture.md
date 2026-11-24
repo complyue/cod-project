@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r108 review](../CHANGELOG.md#k-booter-declared-void-completion-20261124) covers [declared void procedure fallthrough in the booter](#completing-a-declared-void-procedure-in-the-booter) under D-24-TAIL, D-17-RETURN-STATE and P-682/P-683. One checked signature supplies the result for source completion checking and object emission. Verify that cleanup runs on both success and a genuine failure from a callee.
+
 The [r107 review](../CHANGELOG.md#k-normal-completion-review-20261124) clears [natural void completion in the seed and the booter’s empty-pattern reader](#entering-cleanup-on-natural-void-completion) under D-24-TAIL, D-17-RETURN-STATE and P-682/P-683. Compare the two exits in one invocation and preserve independent failure settlement. Source checking and executable admission in the CoD booter have separate evidence requirements.
 
 The [r106 review](../CHANGELOG.md#k-seed-payload-diagnostic-recovery-20261124) continues [the product schema boundary](#recovering-between-product-declarations-in-the-seed) for [independent payload checks](#recovering-independent-schema-payload-checks) under D-20-WORLD-DIAGNOSTICS and P-682/P-683. The seed retains each established failure and commits a layout only when its required proofs succeed. Test interruption within a field list and prior artifact preservation.
@@ -258,6 +260,16 @@ At the owning invocation’s natural exit, supply the same payload-free normal c
 For the CoD reader, recognize contextual `returning ()` at the ordinary conditional branch point with a typed condition and revision-checked children. Preserve the pattern’s half-open source span, full-file recovery after a damaged condition and ordinary name uses of `returning`. Until the checker can prove deferred placement, destination and completion, all three normal CLI routes diagnose the unsupported condition before publication. The next CoD checker/emitter review needs actual producers and consumers for those per-destination facts, including forwarded single-brace and independent full-scope bodies.
 
 Run both seed modes on the same-procedure two-exit trace, caught and propagating failure, replacement between entries, queued failure surviving a positive observation, and typed and unbound inspection of a prepared value. Include the D-10 target write, missing non-void and unresolved recursive results, callback outward return, zero and one yield, and the func/full-scope assignment-tail controls. The booter reader requires direct typed-tree evidence, malformed input with a retained suffix and prior artifact preservation. Track [compiler coverage](../tests/cod/language/README.md#normal-completion-coverage) separately from this clearance.
+
+#### Completing a declared void procedure in the booter
+
+For an ordinary procedure already checked in the current revision, use the result of its defining signature to decide whether reaching the end of its body can itself raise `MissingReturnError`. A written `-> void` makes that path successful. The final statement still executes, including a transfer to borrowed storage. A non-void procedure still owes a value. Functions retain their checked tail rules. [Callable results](CallableResultInference.md#results-of-proc-func-and-here-bodies)
+
+Keep the decision in `CompletionChecking.can_miss_return`, which also supplies `ModuleLowering.lower_activation`. The checker visits module and lexical definitions. The ordinary object path admits module definitions within its existing signature profile. `OperandChecking` records the resolved void clause at the definition, and also uses `only_void` for an omitted-result declaration-only profile. Preserve the provenance of the checked result where those paths meet: the latter fact alone cannot establish an executable signature. Invalid or unavailable signature facts retain their existing diagnostics.
+
+On a proved void path, omit the synthetic missing-result failure in completion checking and its post-cleanup `return_ready` test in the emitted object. Run the existing body, drain, text release and outcome delivery on their ordinary paths. A called procedure can raise the very same failure category: its category and source site must survive the caller’s cleanup. Deferred `if returning ()` needs evidence of the current invocation’s completion at each entry. A missing-value flag cannot supply that evidence. [Deferred observation](ExceptionControl.md#return-state-inspection-and-replacement)
+
+Both booter modes must link and run natural and explicit void exits with identical output (1 then 2), expose the final target write (7), and deliver category 5 and exit 70 for the non-void control. Compare one observable deferred action across both void exits. Exercise a void caller of the failing non-void callee and verify exactly one cleanup and the callee’s original failure site. Preserve the omitted-result object boundary, function and full-scope tail controls, prior artifacts on rejection and provider-pair compatibility across the shipped workloads and frozen comparison inputs.
 
 ### Braced control-only guards in the seed
 

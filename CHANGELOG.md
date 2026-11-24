@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review declared void fallthrough in booter objects
+
+<a id="k-booter-declared-void-completion-20261124"></a>
+**K-BOOTER-DECLARED-VOID-COMPLETION-20261124.** D-ARCH-REVIEW r107→108 continues [normal completion](#h-normal-completion-20261124) under P-682/P-683. The [booter object review](design/ImplementationArchitecture.md#completing-a-declared-void-procedure-in-the-booter) clears a correction to the shared predicate at `fb27c7ae7374828eb7ab6e82d032d02afe0b799a:applications/cod-booter/src/CompletionChecking.cod:509` for validated void procedures. Omitted-result object signatures and deferred return inspection keep separate proof requirements.
+
 ## 2026-11-24 — Review the bootstrap normal-completion paths
 
 <a id="k-normal-completion-review-20261124"></a>
