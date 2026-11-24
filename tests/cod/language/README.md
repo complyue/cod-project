@@ -1,8 +1,10 @@
 # CoD source compiler validation
 
-Reference revision: 476 · Recorded: 2026-11-21 America/Los_Angeles.
+Reference revision: 477 · Recorded: 2026-11-24 America/Los_Angeles.
 
 ## Design authority
+
+At r477 the [bits value declaration decision](../../../CHANGELOG.md#h-bits-value-symbol-spelling-20261124) governs the [two-compiler coverage table](#bits-value-symbol-coverage). D-10-BITS-SYMBOL and P-248 supply the storage and restoration contract. Compare both spellings on the same input and retain a writable reference control.
 
 The [local handler decision](../../../CHANGELOG.md#h-local-proc-handler-body-20261124) governs the source contract for anonymous procedure installation. The module fixture discussion below identifies the current seed registration gap.
 
@@ -406,7 +408,18 @@ Module symbol declarations require explicit types, including grouped declaration
 
 Symbol access follows the nearest lexical binding, including owner parameters and a named lexical callable’s self binding. A non-symbol local prevents access to an outer symbol. Nested callables preserve their definition-site lookup evidence independently of captured runtime values; caller-local shadows cannot rebind a separately defined callable. Type-only inspection of an explicitly declared callable signature does not inspect its body. Inferred results retain the lookup evidence needed for the expressions actually inspected. These lookup rules apply equally to specialized and general native execution and introduce no runtime symbol objects or default binding.
 
-Supported bits symbols (primitive scalars and intrinsic exceptions) support `effect @x <- value`, runtime `@x` reads and `touch @x` dependencies in module execution and procedures. Each identity has thread-local payload storage; bits installation uses the existing value-preparation relation and returns void. Intrinsic exceptions retain their payload, actual failure category and immutable execution-local cause handle. A concrete exception can enter a common `Exception` slot; unrelated concrete categories cannot be interchanged. Reads retain the declared type’s possible exception categories, so a subsequent throw still requires the applicable catch or throws contract. Effect-equals and bare writes reject. Reads and installation cannot bypass a nearer non-symbol binding, and functions cannot access dynamic bindings. Declaration-only/type-only uses create no native TLS slot.
+<a id="bits-value-symbol-coverage"></a>
+**Bits value symbol declarations.** The [paired D-10 source examples](../../../design/SymbolicDynamicScope.md#declaring-a-bits-value-symbol) use the same symbol and program in each pair. The renamed type `Sample` denotes an exported bits product `Reading { count:u64; }`. The seed accepts an ordinary formal using `Sample` and reading its field. The booter accepts that same control under `--check-declarations`.
+
+| Workload | C++ seed, specialized and shared | CoD booter, specialized and shared |
+| --- | --- | --- |
+| `symbol @level:u64` | Executes independent bits transfer, captured/current reads of 10/20 on the same handler, and restoration to 10 after normal exit and after a throw from the binding of 30. | All three commands stop in the symbol type reader (code 20). |
+| `val symbol @level:u64` | The parser reads `val` as a lexical declaration and rejects `symbol` at column 5. Runtime parity is outstanding. | All three commands stop at `symbol` after `val` (first code 19). |
+| Renamed bits enum `Verdict as Approval` | The shorthand `symbol @verdict:Approval` runs the same installed reader with results 0/1/0 (captured/current/restored). Its explicit `val` counterpart stops in parsing. | Both spellings stop in the declaration reader on all three commands. |
+| `symbol @sample:Sample` and `val symbol @sample:Sample` | The shorthand reaches the non-scalar symbol type limit on the defining type `Reading`. The explicit form stops at the prefix. Bits-product execution is outstanding for both. | The shorthand stops at the type and the explicit form stops at `symbol` on all three commands. |
+| Writable `ref symbol @cell:u64 in O where {owner O}` | Updating the inner and then the restored outer target yields 11 and 21 in the two original cells. | Declaration checking and provider generation accept the program printing the two cells. Object emission stops on the reference symbol declaration. |
+
+In the seed, supported bits symbols (primitive scalars and intrinsic exceptions) support `effect @x <- value`, runtime `@x` reads and `touch @x` dependencies in module execution and procedures. Each identity has thread-local payload storage; bits installation uses the existing value-preparation relation and returns void. Intrinsic exceptions retain their payload, actual failure category and immutable execution-local cause handle. A concrete exception can enter a common `Exception` slot; unrelated concrete categories cannot be interchanged. Reads retain the declared type’s possible exception categories, so a subsequent throw still requires the applicable catch or throws contract. Effect-equals and bare writes reject. Reads and installation cannot bypass a nearer non-symbol binding, and functions cannot access dynamic bindings. Declaration-only/type-only uses create no native TLS slot.
 
 Direct procedure calls and `behave @p(...)` use current bindings. The checker propagates required symbol identities through the call graph and deferred-completion equations, independently of operand storage and initialization summaries. A read, touch, value materialization or current-context invocation without a proved supplying binding rejects before execution. Creating a procedure value retains its required bits and complete-callable bindings in its complete image, including dependencies established by `touch`. Lexical captures retain their existing independent frame roles. Functions may copy an existing procedure value but cannot construct a new value requiring dynamic capture.
 

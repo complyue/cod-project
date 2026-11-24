@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 256 · Recorded: 2026-11-24 · Phase: language/application co-design.
+Design revision: 257 · Recorded: 2026-11-24 · Phase: language/application co-design.
 
 ## Design authority
+
+[D-10-BITS-SYMBOL](DesignAuthorityRegistry.md#d-10-bits-symbol) r257 covers [explicit and abbreviated bits value declarations](#declaring-a-bits-value-symbol) under the [project user’s confirmation](../CHANGELOG.md#h-bits-value-symbol-spelling-20261124). P-715, P-160 and P-248 connect readable typed declarations to the existing scoped bits binding. Resolve the type before classifying the unprefixed declaration. Verify the same installation, reads, capture and restoration for both spellings, and a persistent write through a writable reference to the same payload type.
 
 [D-10-HANDLER-INSTALL](DesignAuthorityRegistry.md#d-10-handler-install) r256 covers the [single-method form](#installing-a-local-procedure-body) and the [grouped form](#installing-a-local-family-with-several-methods) under the [local handler decision](../CHANGELOG.md#h-local-proc-handler-body-20261124) and the [grouped installation decision](../CHANGELOG.md#h-grouped-local-proc-install-20261124). P-330/P-613/P-614 separate scoped behavior from module membership and apply ordinary method selection under charter §§3.2 and 6.1. Verify full symbol coverage, order-independent selection, per-call owners, local source attribution and restoration of one binding.
 
@@ -123,7 +125,7 @@ The [module selector decision](../CHANGELOG.md#h-module-default-selector-substit
 
 - **Source fallback and type-carried names:** [H-483](../CHANGELOG.md#h-483)/[H-484](../CHANGELOG.md#h-484) governs r179's selection/alias paragraphs: explicit/local bindings shadow lookup through a selected source's published namespace; symbol from uses that fallback without changing symbol/type identity. [H-485](../CHANGELOG.md#h-485) reserves later information diagnostics at implicit-use sites. [D-15-TYPE-METHODS](DesignAuthorityRegistry.md#d-15-type-methods)/[D-15-LOOKUP](DesignAuthorityRegistry.md#d-15-lookup)/[D-15-LOOKUP-INFO](DesignAuthorityRegistry.md#d-15-lookup-info), C-35/C-45/C-57/C-59/P-425–P-442, supplies candidate paths to charter §§3.1/3.2/4.2/6.3/8/9 through usable definitions, explicit context and inspectable provenance. D-15 owns acceptance; [K-SOURCE-FALLBACK-20261116](../CHANGELOG.md#k-source-fallback-20261116) integrates fallback; [K-REEXPORT-METHODS-20261116](../CHANGELOG.md#k-reexport-methods-20261116) integrates r178→179 under H-488–H-491 with [D-15-METHODS-CLAUSE](DesignAuthorityRegistry.md#d-15-methods-clause)/[D-15-REEXPORT](DesignAuthorityRegistry.md#d-15-reexport). Preserve privacy, publication, explicit extension, helper identity, dispatch and H-481/H-482 capture/owner rules. H-486/H-487/[D-15-LOOKUP-TRANSITIVE](DesignAuthorityRegistry.md#d-15-lookup-transitive) adds multilevel fallback and intermediate private-shadow errors. General proximity algorithms, full qualification and implementation remain separate.
 
-- **Explicit regional reference symbols:** [D-10-REF-SYMBOL](DesignAuthorityRegistry.md#d-10-ref-symbol), r175's symbolic-storage section, records [H-482](../CHANGELOG.md#h-482)/[K-REFERENCE-SYMBOLS-20261116](../CHANGELOG.md#k-reference-symbols-20261116). Explicit ref/ptr symbols may borrow scalar or object targets from the actual region selected at effect installation through a declared region symbol. Later shadowing, capture and restoration retain that original association while its owner effect lives. P-422's candidate C-36/C-54/C-65/C-93 path serves charter §§3.2/3.3/4.3/6.3/8; P-423/P-424 records dependencies and downstream constraints. Preserve separate shared-owner groups, null/access/init, function exclusion, scoped restoration and cleanup; no ownership extraction/extension, arbitrary lexical-owner backing, val-symbol syntax or ABI. Acceptance and exclusions are below. Source behavior is confirmed; full value-path/physical qualification and compiler support remain separate.
+- **Explicit regional reference symbols:** [D-10-REF-SYMBOL](DesignAuthorityRegistry.md#d-10-ref-symbol), r175's symbolic-storage section, records [H-482](../CHANGELOG.md#h-482)/[K-REFERENCE-SYMBOLS-20261116](../CHANGELOG.md#k-reference-symbols-20261116). Explicit ref/ptr symbols may borrow scalar or object targets from the actual region selected at effect installation through a declared region symbol. Later shadowing, capture and restoration retain that original association while its owner effect lives. P-422's candidate C-36/C-54/C-65/C-93 path serves charter §§3.2/3.3/4.3/6.3/8; P-423/P-424 records dependencies and downstream constraints. Preserve separate shared-owner groups, null/access/init, function exclusion, scoped restoration and cleanup; keep ownership extraction/extension, arbitrary lexical-owner backing and ABI outside this regional-reference scope. Bits value declarations have their [own contract](#declaring-a-bits-value-symbol). Acceptance and exclusions are below. Source behavior is confirmed; full value-path/physical qualification and compiler support remain separate.
 
 - **Definition mentions:** [H-481](../CHANGELOG.md#h-481)/[K-CALLABLE-MENTIONS-20261116](../CHANGELOG.md#k-callable-mentions-20261116) continues r173→174's existing symbol/value distinction and integrates [D-18-MENTION](DesignAuthorityRegistry.md#d-18-mention), D-18r105/P-419–P-421. Definition-bound callable names denote definitions; a required runtime view captures at materialization, including recursive mentions. Stored values preserve their captures. The candidate C-65/C-73/C-75 path serves charter §§3.2/3.3/4.3/6.3/8 through explicit identity, context and storage; acceptance is in D-18. Preserve perform/current invocation, lexical lookup, owner/access/init, function exclusion, type-only queries and default origins. H-481 confirms this bounded source rule; complete value-path/physical qualification and recursive source implementation remain separate. No new source-level executing-callable value, capture permission or mandatory allocation.
 
@@ -161,7 +163,7 @@ Dynamic symbolic variables have their own storage and rebinding contract (H-277�
 
 | Binding category | Storage and writes |
 | --- | --- |
-| Plain bits-valued symbol, such as `symbol @x:u64` | Its bits payload is allocated directly in TLS. `effect @x <- rhs` transfers bits rather than rebinding a pointer to the RHS's lexical storage. The payload does not borrow that storage. |
+| Bits value symbol, `val symbol @x:T` or `symbol @x:T` when resolved `T` is bits | `effect @x <- rhs` evaluates the RHS and transfers its bits into an independent TLS payload. Later writes to the source leave the installed value intact. |
 | Existing non-bits object-reference symbol | It references an object inside a region supplied by a region symbol. `effect @x = rhs` may select another such region, subject to the declared type and actual region lifetime. No object is copied into TLS. |
 | Explicit `ref/ptr symbol @x:T in @arena` | A borrowed target in the region selected through @arena at installation; T may be scalar/bits or an admissible object type. `effect @x = rhs` installs the reference and actual-owner association. |
 | Explicit `ref/ptr symbol @x:T in S where {owner S}` | A borrowed target whose one actual owner is established from the RHS; lexical and ordinary regional owners are admitted under H-561 without installing a region symbol. |
@@ -181,6 +183,96 @@ Procedure capture retains bits values or the selected regional reference with it
 
 Bounded acceptance must demonstrate independent TLS bits payloads, bits/reference restoration, one object symbol rebound between two live symbol-backed regions, and a captured reference retaining its original region. H-561 additionally admits proved ordinary-owner backing through the owner-parameter form; references that escape their actual owner lifetime must reject, including through branches/captures. No runtime borrow registry, RTTI, extra per-object ownership or fraction representation is selected. Fixed-width fraction bits, when implemented, retain their declared representation; this rule chooses no new promotion or alignment policy.
 
+### Declaring a bits value symbol
+
+`val` is an explicit prefix on a `symbol` declaration. When `T` resolves to a bits type, `symbol @x:T` abbreviates `val symbol @x:T`. Replacing the declaration in place preserves the typed symbol identity, value category and every use of its binding. A declaration supplies the identity and type. Execution of `effect @x <- rhs` supplies the value. An ordinary procedural read observes the current scoped binding. For an installed handler that reads it, `perform` replays the captured bits and `behave` observes the bits current at invocation.
+
+| Resolved type | Explicit declaration | Equivalent shorthand |
+| --- | --- | --- |
+| Builtin `u64` | `val symbol @level:u64;` | `symbol @level:u64;` |
+| `Approval`, a local name for the bits enum `Verdict` | `val symbol @verdict:Approval;` | `symbol @verdict:Approval;` |
+
+For the second row, `PublishedBits.cod` declares `export enum Verdict:u8 { Pending = 0u8; Approved = 1u8; }`. The type name/identity alias `Approval` retains that enum’s defining identity and bits classification. With either declaration the following consumer prints 0, 1, then 0.
+
+```cod
+using "./PublishedBits.cod" { Verdict as Approval {..} }
+using symbol "std:io" @print;
+val symbol @verdict:Approval;
+symbol @read:proc()->u64;
+proc @read() -> u64 {
+    return if (@verdict == (Approved:Approval)) { 1u64 } else { 0u64 }
+}
+effect @verdict <- (Pending:Approval);
+effect proc @read;
+{{
+    effect @verdict <- (Approved:Approval);
+    behave @print(perform @read());
+    behave @print(behave @read())
+}};
+behave @print(behave @read());
+```
+
+For a non-bits `T`, the abbreviation rule does not apply. The explicit `ref symbol`, `ptr symbol` and `region symbol` categories in the storage table retain their target, owner, nullability and lifetime rules.
+
+Run the following program twice, changing only the first declaration to the other spelling in the table. The same handler remains installed across the inner value binding. The catch is outside the scope that installed 30.
+
+```cod
+val symbol @level:u64;
+using "std:exceptions" Exception;
+data ProbeExit <: Exception { code:u64; }
+symbol @read:proc() -> u64;
+proc @read() -> u64 { return @level }
+
+proc check() -> void {
+    val source <- 10u64;
+    effect @level <- source;
+    source <- 99u64;
+    assert @level == 10u64;
+    effect proc @read;
+    {{
+        effect @level <- 20u64;
+        assert (perform @read()) == 10u64;
+        assert (behave @read()) == 20u64
+    }};
+    assert @level == 10u64;
+    val inner <- 0u64;
+    val restored <- 0u64;
+    try {{
+        effect @level <- 30u64;
+        inner <- @level;
+        throw ProbeExit { code <- 1u64 }
+    }} catch (error:const ProbeExit) {
+        (restored <- @level):void
+    };
+    assert inner == 30u64;
+    assert restored == 10u64;
+    return
+}
+check();
+```
+
+The reference control binds two writable `u64` cells. The inner write survives scope exit in `second`. The next write reaches the restored target, `first`.
+
+```cod
+ref symbol @cell:u64 in O where {owner O};
+proc check_reference() -> void {
+    val first <- 10u64;
+    val second <- 20u64;
+    effect @cell = first;
+    {{
+        effect @cell = second;
+        @cell <- 21u64;
+    }};
+    @cell <- 11u64;
+    assert first == 11u64;
+    assert second == 21u64;
+    return
+}
+check_reference();
+```
+
+[Seed and booter implementation coverage](../tests/cod/language/README.md#bits-value-symbol-coverage)
+
 ### Explicit ref and ptr symbols backed by a region symbol
 
 H-482 selects these declaration forms; they are design syntax, not current parser/runtime support:
@@ -191,7 +283,7 @@ ref symbol @bias:u64 in @arena;
 ptr symbol @optional:u64 in @arena;
 ```
 
-The owner-symbol identity is resolved in the declaration's lexical context. Its currently installed region supplies the actual owner for a new reference effect. A declaration supplies no effect value, implicit region installation or default null. Plain `symbol @bias:u64` remains independent TLS bits storage; explicit val-symbol syntax is not selected.
+The owner-symbol identity is resolved in the declaration's lexical context. Its currently installed region supplies the actual owner for a new reference effect. A declaration supplies no effect value, implicit region installation or default null. For the same payload type, `val symbol @bias:u64` and its shorthand `symbol @bias:u64` both declare an independent bits value. The explicit `ref` above selects the borrowed target category.
 
 `effect @bias = rhs` requires an initialized non-null target with compatible type/access and the actual owner selected through @arena for that installation. `effect @optional = rhs` additionally admits null. `effect @optional = null` obtains owner context from the declaration and the installed region; a qualified null must agree with it. Null remains associated with that owner and does not waive resource availability/lifetime requirements. A non-null proof can admit a ptr source for ref under ordinary rules; nullable dereference and proof invalidation retain their existing behavior.
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-24 — Declare bits value symbols explicitly or by shorthand
+
+<a id="h-bits-value-symbol-spelling-20261124"></a>
+**H-BITS-VALUE-SYMBOL-SPELLING-20261124.** On 2026-11-24 (America/Los_Angeles) the project user confirmed in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) that “当解析后的 `T` 是 bits 类型时，`symbol @x:T` 是 `val symbol @x:T` 的简写。” [D-10r257](design/SymbolicDynamicScope.md#declaring-a-bits-value-symbol) and P-715/P-160/P-248 qualify both spellings for the same independent bits storage, reads, capture and restoration. This supersedes the general exclusion at `485451164acaed56231557b17bf85e6889ef3e9a:design/SymbolicDynamicScope.md:194` and the open question in `docs/DesignTopics.md:218` at that revision. [H-482](#h-482) continues to govern its regional reference scope. [Source reference r477](tests/cod/language/README.md#bits-value-symbol-coverage) distinguishes seed and booter evidence for both spellings, a renamed bits type and a writable ref.
+
+<a id="k-bits-value-symbol-check-20261124"></a>
+**K-BITS-VALUE-SYMBOL-CHECK-20261124.** [D-ARCH-REVIEW r102](design/ImplementationArchitecture.md#checking-bits-value-symbol-declarations) clears the seed’s existing scalar/enum TLS path and the CoD booter’s paired source reader with checked profile gates. The booter parser and seed parser are at `485451164acaed56231557b17bf85e6889ef3e9a:applications/cod-booter/src/ModuleParser.cod:512` and `485451164acaed56231557b17bf85e6889ef3e9a:cod/lang_syntax.hh:2893`. Wider bits storage and linked booter execution have separate acceptance.
+
 ## 2026-11-24 — Expose effect-layer selection and exercise shared ontology data across HLVMs
 
 <a id="k-direct-effects-shared-ontology-20261124"></a>

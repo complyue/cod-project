@@ -215,7 +215,7 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 
 [表面检测栅格论文](../papers/ComposingEffectsAndFocusedContexts.md)把两项猜想放在同一业务中检验。普通动态绑定、`perform` 与 `behave` 的选择以及实际 owner 的存活条件沿用[已有契约](../design/SymbolicDynamicScope.md#captured-values-and-call-behavior)。下列问题留给语言与库的后续设计。
 
-论文中的标量阈值和坐标按本次讨论偏好写作 `val symbol @x:T`。目前 [D-10 的符号存储段](../design/SymbolicDynamicScope.md#explicit-ref-and-ptr-symbols-backed-by-a-region-symbol)以 `symbol @x:T` 声明独立 bits 值。待对齐的语法问题是是否把显式 `val` 纳入语言、与原拼写并存。例子沿用已定的作用域恢复语义。通过已安装引用写词法单元另有既定契约。
+论文中的标量阈值和坐标遵循已确认的[值符号声明规则](../design/SymbolicDynamicScope.md#declaring-a-bits-value-symbol)。当 `T` 解析为 bits 类型时，`symbol @x:T` 是 `val symbol @x:T` 的简写。两种写法使用同一套安装、读取和作用域恢复语义。
 
 | 待讨论问题 | 用什么程序区分候选设计 |
 | --- | --- |
