@@ -23870,9 +23870,14 @@ class ScalarChecker {
         continue;
       }
       if (form->kind == Form::Kind::symbol) {
+        if (form->explicit_value_symbol && form->symbol_owner)
+          fail(form->at, "a value symbol cannot name an external storage owner");
         if (form->symbol_owner) implementation_gap(form->at, "regional symbol ownership contracts");
         if (module_names().types.contains(form->name)) implementation_gap(form->at, "same-scope type and symbol declarations");
         auto type = resolve_type(*form->result_type);
+        // Nominal layouts have completed before symbolic declarations are registered.
+        if (form->explicit_value_symbol && !program_.bits_payload(type))
+          fail(form->at, "val symbol requires a bits type");
         if (form->owning_handle_symbol) {
           if (type.kind != Type::c_type_marker || program_.schemas.at(type.identity).native_owner)
             fail(form->at, "an owning native symbol requires an owning 'handle type'");

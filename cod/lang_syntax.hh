@@ -527,6 +527,7 @@ struct Form {
   Selection selection = Selection::named;
   std::optional<ResourceNature> resource_nature;
   bool owning_handle_symbol = false;
+  bool explicit_value_symbol = false;
   bool conversion = false;
   bool operation = false;
   bool alias_operation = false;
@@ -1533,12 +1534,16 @@ class Parser {
     return (is("func", prefix) || is("proc", prefix)) && tokens_[cursor_ + prefix + 1].kind == TokenKind::identifier &&
            (is("=", prefix + 2) || is(":", prefix + 2));
   }
+  bool value_symbol_head(size_t offset = 0) const {
+    return is("val", offset) && is("symbol", offset + 1);
+  }
   bool module_doclet_target(size_t head) const {
     if (is("default", head) && is("export", head + 1)) ++head;
     if (is("export", head)) ++head;
     if (cursor_ + head + 1 >= tokens_.size()) return false;
     const auto next = tokens_[cursor_ + head + 1].kind;
     if (is("handle", head)) return is("type", head + 1);
+    if (value_symbol_head(head)) return tokens_[cursor_ + head + 2].kind == TokenKind::symbol;
     if (is("symbol", head)) return next == TokenKind::symbol ||
         (next == TokenKind::identifier &&
          !(is("from", head + 1) && tokens_[cursor_ + head + 2].kind == TokenKind::string));
@@ -2747,6 +2752,8 @@ private:
   void synchronize_module(size_t first) {
     cursor_ = first;
     if (is("effect") && is("proc", 1) && tokens_[first + 2].kind == TokenKind::symbol) cursor_ += 2;
+    const size_t definition = is("default") && is("export", 1) ? 2 : is("export") ? 1 : 0;
+    if (value_symbol_head(definition)) cursor_ += definition + 2;
     while (peek().kind != TokenKind::end) {
       if (cursor_ != first && (module_doclet_target(0) || default_mark_head() || is("export") || is("using") ||
           is("import") || is("mixin"))) return;
@@ -2853,7 +2860,8 @@ public:
         const bool named_type = native_handle_head() || (is("data") && (next == TokenKind::identifier || next == TokenKind::string)) ||
             ((is("type") || is("array") || is("enum")) && next == TokenKind::identifier);
         const bool named_callable = (is("func") || is("function") || is("proc") || is("procedure")) && !callable_binding();
-        const bool named_definition = (is("symbol") && next == TokenKind::symbol) || reference_symbol_head() || named_type || named_callable;
+        const bool named_definition = (is("symbol") && next == TokenKind::symbol) || value_symbol_head() ||
+            reference_symbol_head() || named_type || named_callable;
         if (form->default_exporting && !named_definition) fail(start.at, "default export requires a named definition");
         if (is("import") || named_definition) {
           form->exporting = true;
@@ -2889,9 +2897,12 @@ public:
         return;
       }
       const bool region_symbol = is("region") && is("symbol", 1);
+      const bool explicit_value_symbol = value_symbol_head();
       if (region_symbol) expect("region");
+      if (explicit_value_symbol) expect("val");
       if (take("symbol")) {
         if (is("from") && tokens_[cursor_ + 1].kind == TokenKind::string) {
+          if (explicit_value_symbol) fail(peek().at, "expected a symbol name after 'val symbol'");
           expect("from");
           if (region_symbol) fail(start.at, "use 'symbol from' to select a symbol identity; 'region symbol' declares one");
           form->kind = Form::Kind::symbol_from;
@@ -2906,8 +2917,10 @@ public:
           do {
             auto declaration = std::make_unique<Form>();
             declaration->kind = Form::Kind::symbol;
-            const auto token = peek().kind == TokenKind::symbol ? name(TokenKind::symbol) : ordinary_name();
+            const auto token = explicit_value_symbol || peek().kind == TokenKind::symbol
+                ? name(TokenKind::symbol) : ordinary_name();
             declaration->name = token.text;
+            declaration->explicit_value_symbol = explicit_value_symbol;
             declaration->at = token.at;
             declaration->symbolic = true;
             declaration->exporting = form->exporting;
@@ -2922,8 +2935,10 @@ public:
               declaration->result_type = parse_type();
             }
             const auto owner = take("in") ? ordinary_name().text : std::string{};
+            const bool first = declarations.empty();
             declarations.emplace_back(declaration.get(), owner);
             append(std::move(declaration));
+            if (first && explicit_value_symbol) declarations.back().first->span.first = start.at.span.first;
             if (form->exporting && is(",")) fail(peek().at, "export requires a single named symbol declaration");
           } while (take(","));
           if (take("where")) {

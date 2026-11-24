@@ -7,6 +7,13 @@ from language_test_support import expect_source_rejections
 IO = 'using symbol "std:io" @print;'
 F = 'symbol @f:proc(u64)->u64;proc @f(x:u64)->u64{return 1u64;}proc @f(x:T)->u64 where T{return 7u64;}'
 X = 'symbol @x:u64,@y:u64;symbol @f:proc(u64)->u64;proc @f(n:u64)->u64{return @x;}proc @f(n:T)->u64 where T{return @y;}'
+def bits_value_symbol(prefix):
+    return (IO + prefix + 'symbol @amount:u64;symbol @read:proc()->u64;'
+            'proc @read()->u64{return @amount;}effect @amount<-3u64;effect proc @read;'
+            '{{effect @amount<-7u64;behave @print(perform @read());behave @print(behave @read());}};'
+            'behave @print(behave @read());')
+
+
 runner.CASES = {
     'actual_types_before_preparation': (IO + F + 'effect @f;behave @print(behave @f(1u8));behave @print(behave @f(1u32));behave @print(behave @f(1u64));', 0, '7\n7\n1\n', ''),
     'declaration_supplies_result': (IO + 'symbol @f:proc(u64)->u64;proc @f(x:u64)->u64;proc @f(x:u64){return 7u64;}effect @f;behave @print(behave @f(1u8));', 0, '7\n', ''),
@@ -58,6 +65,15 @@ runner.CASES = {
     'unused_generic_body_checked': ('symbol @f:proc(u64)->u64;proc @f(x:u64)->u64{return 1u64;}proc @f(x:T)->u64 where T{return true;}effect @f;behave @f(1u64);', 2, '', 'return type'),
     'method_outside_slot_signature': (IO + F + 'proc @f(x:bool)->u64{return 8u64;}symbol @q:proc(bool)->u64;effect @q=f;behave @print(behave @q(true));', 0, '8\n', ''),
     'nearest_source_binding': ('proc @f()->u64{return 1u64;}symbol @q:proc()->u64;proc go(f:u64)->void{effect @q=f;}go(1u64);', 2, '', 'effect value does not satisfy'),
+    'bits_value_symbol_explicit': (bits_value_symbol('val '), 0, '3\n7\n3\n', ''),
+    'bits_value_symbol_shorthand': (bits_value_symbol(''), 0, '3\n7\n3\n', ''),
+    'bits_value_symbol_renamed_enum': ({
+        'Types.cod': 'export enum Verdict:u8 { Pending = 0u8; Approved = 1u8; }',
+        'main.cod': (IO + 'using "./Types.cod" { Verdict as Approval {..} }'
+            'val symbol @verdict:Approval;effect @verdict<-(Approved:Approval);'
+            'behave @print(if (@verdict==(Approved:Approval)) {1u64} else {0u64});'),
+    }, 0, '1\n', ''),
+    'value_symbol_requires_bits': ('export val symbol @amount:String;', 2, '', 'val symbol requires a bits type'),
     'signature_query_has_no_capture': ('symbol @x:u64;proc @f()->u64{return @x;}val result<-make local typeof(perform @f()){1u64};', 0, '', ''),
 }
 runner.CASE_ARGUMENTS = {}
