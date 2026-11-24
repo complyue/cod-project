@@ -1,8 +1,8 @@
 using "./ParserInput.cod" {
     ParseResult, append_syntax_node, append_block_item, append_block,
-    exception_binder_width, expected_name, expected_type, parse_binding_name,
-        parse_local_binding_name,
-    parse_identifier, punct_at, punct_pair_at, reset_parse_result, expected_c_linkage, closing_token, recover_syntax, recover_block_separator, seed_lexical_reports,
+    exception_binder_width, expected_name, expected_type, parse_binding_name, parse_local_binding_name,
+    parse_identifier, punct_at, punct_pair_at, reset_parse_result, expected_c_linkage, closing_token,
+    recover_syntax, recover_syntax_until, recover_block_separator, seed_lexical_reports,
 };
 using "./CallableSyntax.cod" { parse_callable_signature, parse_scoped_procedure_signature };
 using "./Lexer.cod" { and_word, or_word };
@@ -60,7 +60,7 @@ using "./Lexer.cod" {
     quoted_text, multiline_text, punctuation, init_word, assert_word, is_word,
 };
 using "./ParserStorage.cod" SyntaxRole {
-    InitializerRole, BlockItemRole, ExpressionRole, ReferenceGroupEntryRole, ArgumentOperandRole
+    InitializerRole, BlockItemRole, ExpressionRole, ReferenceGroupEntryRole, ArgumentOperandRole, ConditionRole
 };
 using "./SourceStorage.cod" { SourceBytes, Token };
 
@@ -791,13 +791,28 @@ func parse_conditional(source:const SourceBytes in S, tokens:const Tokens in T,
                        nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
-    result.next <- result.next + 1u64;
-    if (punct_at(source, tokens, result.next, past) != 40u8) { result.diagnostic <- expected_condition_open(); return; } else {};
-    result.next <- result.next + 1u64;
+    val opening <- result.next + 1u64;
+    result.next <- opening;
+    if (punct_at(source, tokens, opening, past) != 40u8) {
+        result.diagnostic <- expected_condition_open();
+        return
+    };
+    val start <- opening + 1u64;
+    result.next <- start;
+    val supplied <- result.supplied_here;
+    val in_case <- result.case_control;
     parse_expression_at(source, tokens, nodes, result, past, 1u8);
-    if (result.diagnostic != 0u8) return;
+    if (result.diagnostic == 0u8 && punct_at(source, tokens, result.next, past) != 41u8) {
+        (result.diagnostic <- expected_close()):void
+    };
+    if (result.diagnostic != 0u8) {
+        val closing <- closing_token(tokens, opening, past);
+        if (closing == no_node() || result.next > closing) return;
+        result.supplied_here <- supplied;
+        result.case_control <- in_case;
+        if (!recover_syntax_until(tokens, nodes, result, start, closing, past, ConditionRole)) return
+    };
     val condition <- result.root;
-    if (punct_at(source, tokens, result.next, past) != 41u8) { result.diagnostic <- expected_close(); return; } else {};
     result.next <- result.next + 1u64;
     val single_return <- result.next < past && return_word(source, tokens[result.next]);
     if (single_return) {
