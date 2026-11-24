@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review scalar object calls through a receiver import
+
+<a id="k-booter-facade-scalar-object-20261123"></a>
+**K-BOOTER-FACADE-SCALAR-OBJECT-20261123.** [D-20-MODULE-GRAPH r68→r69](applications/cod-booter/docs/ModuleGraph.md#reusing-a-scalar-method-body-across-a-receiver-import) and D-ARCH-REVIEW r84→r85 continue P-680–P-683 under [H-232](#h-232) and [H-253](#h-253). At `ae7358adee232232137dc46f0f605d95f958f989:applications/cod-booter/src/OperandChecking.cod`, `prepare_imported_calls` finds a defining header and function number. The scalar facade slice also requires the checked receiving interpretation, eligible body and exact ordinal before reuse. Transitive adaptation retains the 2/14 acceptance.
+
 ## 2026-11-23 — Review onward publication of expanded imports
 
 <a id="k-booter-facade-publication-20261123"></a>
