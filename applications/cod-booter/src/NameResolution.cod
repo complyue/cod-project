@@ -84,7 +84,7 @@ using "./ModuleExports.cod" {
     SelectedExport, SelectedExports, record_export, enum_member_export, exception_type_export,
     builder_storage_export, lexical_builder_export, lexical_result_export, callable_export, ordinary_callable_shape,
     CheckedSelections, CheckedSelection { SelectedResource },
-    find_selected_name, project_checked_resource, symbol_export,
+    find_selected_name, checked_lexical_selection_kind, project_checked_resource, symbol_export,
     array_export, enum_export, sum_export, abstract_type_export, nominal_exception_export,
     native_handle_export, permits_module_family_extension,
 };
@@ -132,6 +132,7 @@ export data NameWorkSlot {
     receiver_import:ReceiverImportCheck;
     active:u64;
     module_selection:u64;
+    selected_symbol:bool;
     case_schema_prepared:bool;
     enclosing_case_arm:u64;
     arm_case:u64;
@@ -286,6 +287,7 @@ func unsupported_callable_promise() -> u8 { return 131u8 }
 export func unprovided_callable_promise() -> u8 { return 132u8 }
 func unsupported_handle_rebind() -> u8 { return 133u8 }
 export func expected_value_binding() -> u8 { return 14u8; }
+func protected_symbol_name() -> u8 { return 142u8 }
 
 func reject_name(state:NameState in R, node:u64, diagnostic:u8) -> void where {owner R} {
     state.diagnostic <- diagnostic;
@@ -395,14 +397,23 @@ export func project_module_selection_candidates(
         return false;
     val first <- 0u64;
     val past <- 0u64;
+    val candidate <- no_node();
+    val kind <- 0u8;
     for (at in 0u64 .. tree.used) {
         work[at].module_selection <- no_node();
+        work[at].selected_symbol <- false;
         if (name_syntax(nodes, tree.used, at) != NotAName || named_operator_at(nodes, at) != no_node()) {
             first <- spelling_start(nodes, at);
             past <- spelling_end(source, nodes, at);
             if (first >= past || past > intrinsic (len)(source)) return false;
-            work[at].module_selection <- find_selected_name(selections, selected_used, tree.revision,
-                source, catalog, graph, graph_used, first, past)
+            candidate <- find_selected_name(selections, selected_used, tree.revision,
+                source, catalog, graph, graph_used, first, past);
+            if (candidate != no_node()) {
+                kind <- checked_lexical_selection_kind(selections, selected_used, candidate, tree.revision, tree.used);
+                if (kind == 0u8) return false;
+                work[at].module_selection <- candidate;
+                (work[at].selected_symbol <- kind == symbol_export()):void
+            }
         }
     };
     return true
@@ -427,10 +438,25 @@ func lookup(source:const SourceBytes in S, nodes:const ExprNodes in N, work:cons
 func declare_name(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                    work:NameWork in W, state:NameState in R, name:u64, declaration:u64, kind:u8,
                    duplicate:u8) -> void where {const owner S, const owner N, owner B, owner W, owner R} {
-    if (lookup(source, nodes, work, name, state.first, state.used) != no_node()) {
-        reject_name(state, name, duplicate);
-        return;
-    } else {};
+    val bound <- lookup(source, nodes, work, name, state.first, state.used);
+    val introducing_symbol <- symbol_binding(kind);
+    if (bound != no_node()) {
+        reject_name(state, name, if (introducing_symbol != symbol_binding(bindings[bound].kind)) {
+            protected_symbol_name()
+        } else { duplicate });
+        return
+    };
+    if (!introducing_symbol && work[name].selected_symbol) {
+        reject_name(state, name, protected_symbol_name());
+        return
+    };
+    if (!introducing_symbol && state.first != 0u64) {
+        val module_name <- lookup(source, nodes, work, name, 0u64, state.module_names);
+        if (module_name != no_node() && symbol_binding(bindings[module_name].kind)) {
+            reject_name(state, name, protected_symbol_name());
+            return
+        }
+    };
     remember(bindings, name, declaration, kind);
     work[state.used].active <- name;
     (state.used <- state.used + 1u64):void;
@@ -441,7 +467,8 @@ func declare_module_name(source:const SourceBytes in S, nodes:const ExprNodes in
     name:u64, declaration:u64, kind:u8) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     if (state.module_candidates && work[name].module_selection != no_node()) {
-        reject_name(state, name, unproved_module_binding());
+        reject_name(state, name, if (work[name].selected_symbol) { protected_symbol_name() }
+            else { unproved_module_binding() });
         return
     };
     declare_name(source, nodes, bindings, work, state, name, declaration, kind, duplicate_binding());

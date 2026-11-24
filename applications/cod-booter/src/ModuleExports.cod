@@ -796,6 +796,22 @@ export func stage_module_selections(
     return true
 }
 
+export func checked_lexical_selection_kind(selections:const CheckedSelections in F, used:u64,
+    row:u64, revision:u64, syntax_used:u64) -> u8 where {const owner F} {
+    if (row >= used || used > intrinsic (len)(selections)) return 0u8;
+    return case selections[row] of {
+        SelectedResource {
+            val origin <- revision; val directive <- site; val kind <- export_kind; val verb <- mode;
+            val identity <- identity; val defining <- defining_module;
+        } -> {
+            if (origin != revision || directive >= syntax_used || verb == ReexportResource ||
+                identity == no_node() || defining == no_node()) { 0u8 }
+            else { kind }
+        };
+        UnpublishedSelection -> 0u8
+    }
+}
+
 export func project_checked_resource(selections:const CheckedSelections in F, used:u64,
     row:u64, revision:u64, syntax_used:u64, lexical_use:bool, output:SelectedExport in R) -> bool
     where {const owner F, owner R} {

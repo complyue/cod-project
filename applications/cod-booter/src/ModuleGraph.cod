@@ -1248,7 +1248,8 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             enclosing_case_arm <- no_node(); arm_case <- no_node();
             sum_loan_formals <- false;
             product_type_diagnostic <- 0u8; product_type_site <- no_node();
-            active <- no_node(); module_selection <- no_node(); next <- no_node(); next_method <- no_node();
+            active <- no_node(); module_selection <- no_node(); selected_symbol <- false;
+            next <- no_node(); next_method <- no_node();
             imported_interface <- no_node(); imported_type_module <- 0u64; imported_type_identity <-
                 0u64;
             imported_function <- no_node(); imported_owner_argument <- no_node(); imported_failure <- 0u64;
