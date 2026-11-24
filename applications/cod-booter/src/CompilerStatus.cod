@@ -7,4 +7,5 @@ export enum CompilerStatus:u8 {
     FinishFailed = 5;
     ScratchFailed = 6;
     SourceOpenFailed = 7;
+    DiagnosticsIncomplete = 8;
 }

@@ -7,6 +7,7 @@ using "./ParserStorage.cod" ExprPayload {
     ConstructorCasePattern, ProcedureSymbol, ScopedProcedureDefinition, ProcedureActivation, ValueSymbol,
     BulkModuleSelection, DefaultPublicSet, ModuleItem, ModuleSelection, Publication,
     BareReferenceBinding, ReferenceBindingGroup, InitializeReservation, PredicateAssertion, ReferenceIdentity,
+    ReturningCondition,
 };
 using "./ParserStorage.cod" ConstructionSyntax {
     OtherConstruction, InvalidConstruction, ExceptionConstructionSyntax, PositionalConstruction,
@@ -44,9 +45,10 @@ using "./ModuleExports.cod" {
     CheckedSelections, CheckedSelection { UnpublishedSelection },
 };
 using "./NameResolution.cod" {
+    protected_symbol_name,
     NameBindings, NameWork, NameResolutionResult, unsupported_module_declaration,
     unsupported_ordinary_construction,
-    resolve_module_names, apply_module_name_uses, text_type, is_lexical_builder, owner_binding, ordinary_selection, record_type,
+    resolve_module_names_recovering, ProductTypeRecovery, apply_module_name_uses, text_type, is_lexical_builder, owner_binding, ordinary_selection, record_type,
 };
 using "./NativeDeclarations.cod" {
     NativeDeclarationResult, check_native_declarations, declared_exception_type, native_declaration_first, unsupported_owning_region_result,
@@ -74,6 +76,7 @@ export data ModuleBindingResult {
     stage:u8;
     diagnostic:u8;
     related_first:u64;
+    symbol_binder:u64;
 }
 
 export func module_read_failed() -> u8 { return 1u8; }
@@ -98,6 +101,7 @@ func unsupported_identity_reference() -> u8 { return 135u8; }
 func unsupported_reserved_initializer() -> u8 { return 136u8; }
 func unsupported_predicate_assertion() -> u8 { return 137u8; }
 func unsupported_reference_identity() -> u8 { return 138u8; }
+func unsupported_returning_condition() -> u8 { return 143u8 }
 
 func constructing_throw_profile(nodes:const ExprNodes in N, revision:u64, used:u64,
     at:u64) -> u8 where {const owner N} {
@@ -124,7 +128,7 @@ export func rejected_unsupported_declaration(result:const ModuleBindingResult in
          result.diagnostic == unsupported_procedure_symbol() || result.diagnostic == unsupported_scoped_procedure() ||
          result.diagnostic == unsupported_reference_group() || result.diagnostic == unsupported_identity_reference() ||
          result.diagnostic == unsupported_reserved_initializer() || result.diagnostic == unsupported_predicate_assertion() ||
-         result.diagnostic == unsupported_reference_identity() ||
+         result.diagnostic == unsupported_reference_identity() || result.diagnostic == unsupported_returning_condition() ||
          (result.diagnostic >= 28u8 && result.diagnostic <= 40u8));
 }
 
@@ -277,6 +281,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64,
                 InitializeReservation -> unsupported_reserved_initializer();
                 PredicateAssertion -> unsupported_predicate_assertion();
                 ReferenceIdentity -> unsupported_reference_identity();
+                ReturningCondition -> unsupported_returning_condition();
                 (Formal { val mode <- mode; val fixed <- binding_const; }) -> {
                     if (mode == ReferenceSlotFormal) return unsupported_reference_slot_formal();
                     if (mode == IdentityOnlyRefFormal) return unsupported_identity_reference();
@@ -359,13 +364,30 @@ export func bind_selected_module(source:const SourceBytes in S, nodes:const Expr
                                      emit_object:bool, allow_structural:bool, result:ModuleBindingResult in R) -> bool
     where {const owner S, const owner N, const owner C, owner X, owner Y, owner W, const owner I, owner F,
         owner H, owner R} {
+    ref recovery = make ProductTypeRecovery {
+        maximum <- 0u64; count <- 0u64; incomplete <- false; first_diagnostic <- 0u8; first_site <- no_node()
+    };
+    return bind_selected_module_recovering(source, nodes, selections, selected_used, selected, bindings,
+        work, interfaces, interface_used, facts, views, emit_object, allow_structural, result, recovery)
+}
+
+export func bind_selected_module_recovering(source:const SourceBytes in S, nodes:const ExprNodes in N,
+                                 selections:const CheckedSelections in C, selected_used:u64,
+                                 selected:SelectedExports in X, bindings:NameBindings in Y,
+                                 work:NameWork in W, interfaces:const ModuleInterfaces in I, interface_used:u64,
+                                 facts:AggregateFacts in F, views:SuppliedViews in H,
+                                     emit_object:bool, allow_structural:bool, result:ModuleBindingResult in R,
+                                     recovery:ProductTypeRecovery in P) -> bool
+    where {const owner S, const owner N, const owner C, owner X, owner Y, owner W, const owner I, owner F,
+        owner H, owner R, owner P} {
     ref names = make NameResolutionResult { diagnostic <- 0u8; node <- no_node(); enclosing_defer <- no_node(); };
-    if (!resolve_module_names(source, nodes, result.frontend.tree, selected, bindings, work,
+    if (!resolve_module_names_recovering(source, nodes, result.frontend.tree, selected, bindings, work,
         interfaces, interface_used,
-        !emit_object, allow_structural, selections, selected_used, names) ||
+        !emit_object, allow_structural, selections, selected_used, names, recovery) ||
         !apply_module_name_uses(selections, selected_used, result.frontend.tree, work, bindings,
             selected, interfaces, interface_used, names)) {
         binding_diagnostic(nodes, result, module_binding_failed(), names.diagnostic, names.node);
+        if (names.diagnostic == protected_symbol_name()) { (result.symbol_binder <- names.node):void };
         if (names.enclosing_defer != no_node()) { result.related_first <- syntax_first(nodes, result.frontend.tree.used, names.enclosing_defer); {}; } else {};
         return false;
     } else {};

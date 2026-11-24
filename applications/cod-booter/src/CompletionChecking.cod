@@ -43,7 +43,7 @@ using "./ParserStorage.cod" SequenceSyntax {
 using "./ParserStorage.cod" CallableSyntax { ModuleCallable, LexicalCallable, CEntry, InvalidCallable };
 using "./ParserStorage.cod" native_installation_input;
 using "./ParserStorage.cod" { HereSites, HereSyntax { HereReady }, inspect_here_invocation };
-using "./ParserStorage.cod" SignatureSyntax { ThrowsSignatureClause };
+using "./ParserStorage.cod" SignatureSyntax { ThrowsSignatureClause, ValueResultClause };
 using "./ParserStorage.cod" LogicalSyntax { LogicalNot, LogicalAnd, LogicalOr, InvalidLogical };
 using "./ParserStorage.cod" RhsEvaluation { ConditionalRhs, SkipsRhs, TakesRhs };
 using "./ParserStorage.cod" ConstructionSyntax {
@@ -513,7 +513,12 @@ export func can_miss_return(nodes:const ExprNodes in N, facts:const OperandFacts
     val form <- inspect_callable(nodes, revision, used, definition, callable);
     if ((form != ModuleCallable && form != LexicalCallable) || !can_continue(sites, callable.body))
         return false;
-    if (!callable.function_form) return true;
+    if (!callable.function_form) {
+        if (facts[definition].kind != void_result()) return true;
+        ref result_clause = make u64 { no_node() };
+        return !find_signature_clause(nodes, revision, used, callable.signature, ValueResultClause, result_clause) ||
+            result_clause == no_node()
+    };
     return facts[definition].kind != void_result() && !has_value_tail(facts, callable.body, callable.function_form);
 }
 

@@ -2,6 +2,7 @@ using "std:exceptions" { OutOfMemoryError, RegionCapacityExceededError };
 using "string.cod" StringBuilder;
 using "./NativeSource.cod" Path;
 using "./NativeDiagnostics.cod" {
+    DiagnosticRun, DiagnosticRuns, diagnostic_limit,
     DiagnosticDestination, report_backend_error, report_scratch_error, report_provider_error
 };
 using "./SourceStorage.cod" SourceBytes;
@@ -180,14 +181,18 @@ proc traverse_graph(here finish(commands:const NativeCommands in G, units:const 
         name_first <- 0u64; name_past <- 0u64; source_size <- 0u64; labels <- 0u64; slots <- 0u64;
     }) in G;
     ref literals = make NativeLiteralRanges(0u64, make NativeLiteralRange { first <- 0u64; past <- 0u64; }) in G;
+    val limit <- diagnostic_limit(diagnostic);
+    ref run = make DiagnosticRuns(1u64, make DiagnosticRun {
+        limit <- limit; retained <- 0u64; package_input_failure <- no_node()
+    }) in G;
     val compiled <- compile_graph(input, diagnostic, purpose, builtin_spellings, builtins, visits, keys,
                                   used, key_used, next_revision, exports, defaults, interfaces, spellings, commands, units, literals,
                                   export_used, default_used, interface_used, spelling_used, command_used,
                                       unit_used,
                                   literal_used, function_used, package_ready, package_rows,
-                                      package_bytes);
+                                      package_bytes, run);
     if (compiled != Complete) return compiled;
-    val profile <- complete_graph_profile(diagnostic, visits, keys, used, key_used, interface_used);
+    val profile <- complete_graph_profile(diagnostic, visits, keys, used, key_used, interface_used, run);
     if (profile != Complete) return profile;
     return finish(commands, units, literals, spellings, keys, visits, interfaces, command_used, unit_used, literal_used,
                   spelling_used, key_used, function_used, used, interface_used);

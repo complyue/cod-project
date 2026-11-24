@@ -45,8 +45,36 @@ enum {
     package_process_failure,
 };
 
-typedef struct cod_booter_package_diagnostic {
-    struct cod_booter_package_diagnostic *next;
+typedef enum {
+    cod_booter_source_reports,
+    cod_booter_package_report,
+    cod_booter_symbol_report,
+} cod_booter_diagnostic_kind;
+
+typedef struct cod_booter_dependency_note {
+    struct cod_booter_dependency_note *next;
+    uint64_t finding;
+    cod_booter_position first;
+    cod_booter_position past;
+    char path[];
+} cod_booter_dependency_note;
+
+typedef struct cod_booter_diagnostic_event {
+    struct cod_booter_diagnostic_event *next;
+    cod_booter_diagnostic_kind kind;
+    uint64_t first_finding;
+    cod_booter_dependency_note *first_note;
+    cod_booter_dependency_note *last_note;
+} cod_booter_diagnostic_event;
+
+typedef struct {
+    cod_booter_diagnostic_event event;
+    size_t count;
+    cod_booter_diagnostic reports[];
+} cod_booter_source_diagnostics;
+
+typedef struct {
+    cod_booter_diagnostic_event event;
     uint8_t kind;
     uint64_t os_error;
     cod_booter_position first;
@@ -59,14 +87,23 @@ typedef struct cod_booter_package_diagnostic {
 } cod_booter_package_diagnostic;
 
 typedef struct {
-    cod_booter_diagnostic *reports;
-    char *path;
-    size_t count;
+    cod_booter_diagnostic_event event;
+    cod_booter_diagnostic location;
+    size_t importer_size;
+    size_t spelling_size;
+    size_t module_size;
+    size_t definition_size;
+    unsigned char bytes[];
+} cod_booter_symbol_diagnostic;
+
+typedef struct {
+    cod_booter_diagnostic_event *first_event;
+    cod_booter_diagnostic_event *last_event;
     bool snapshot_failed;
+    bool primary_retained;
     cod_booter_diagnostic primary;
-    cod_booter_package_diagnostic *package_reports;
-    cod_booter_package_diagnostic *last_package_report;
     bool package_delivery_failed;
+    uint64_t finding_limit;
 } cod_booter_diagnostic_sink;
 
 #endif

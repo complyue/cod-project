@@ -81,10 +81,10 @@ using "./ParserStorage.cod" {
 using "./ParserInput.cod" ParseResult;
 using "./ParserStorage.cod" PublicView { DefaultPublic };
 using "./ModuleExports.cod" {
-    SelectedExports, record_export, enum_member_export, exception_type_export,
+    SelectedExport, SelectedExports, record_export, enum_member_export, exception_type_export,
     builder_storage_export, lexical_builder_export, lexical_result_export, callable_export, ordinary_callable_shape,
     CheckedSelections, CheckedSelection { SelectedResource },
-    find_selected_name, project_checked_resource, symbol_export,
+    find_selected_name, checked_lexical_selection_kind, project_checked_resource, symbol_export,
     array_export, enum_export, sum_export, abstract_type_export, nominal_exception_export,
     native_handle_export, permits_module_family_extension,
 };
@@ -120,14 +120,26 @@ export data NameBinding {
 }
 export array NameBindings[u64]:NameBinding;
 
+export data ProductTypeRecovery {
+    maximum:u64;
+    count:u64;
+    incomplete:bool;
+    first_diagnostic:u8;
+    first_site:u64;
+}
+
 export data NameWorkSlot {
     receiver_import:ReceiverImportCheck;
     active:u64;
     module_selection:u64;
+    selected_symbol:bool;
+    local_symbol_conflict:u64;
     case_schema_prepared:bool;
     enclosing_case_arm:u64;
     arm_case:u64;
     sum_loan_formals:bool;
+    product_type_diagnostic:u8;
+    product_type_site:u64;
     # Reaching installation at expression entry. The syntax count denotes
     # a join with no single proven installation.
     native_installation:u64;
@@ -276,6 +288,7 @@ func unsupported_callable_promise() -> u8 { return 131u8 }
 export func unprovided_callable_promise() -> u8 { return 132u8 }
 func unsupported_handle_rebind() -> u8 { return 133u8 }
 export func expected_value_binding() -> u8 { return 14u8; }
+export func protected_symbol_name() -> u8 { return 142u8 }
 
 func reject_name(state:NameState in R, node:u64, diagnostic:u8) -> void where {owner R} {
     state.diagnostic <- diagnostic;
@@ -305,6 +318,31 @@ func admits_selected_type(kind:u8) -> bool {
         kind == builder_storage_export() || kind == lexical_result_export()
 }
 
+func project_bound_name_use(selections:const CheckedSelections in F, selected_used:u64,
+    revision:u64, used:u64, work:const NameWork in W, bindings:const NameBindings in B,
+    at:u64, selected:SelectedExport in E, interfaces:const ModuleInterfaces in I,
+    interface_used:u64) -> u8
+    where {const owner F, const owner W, const owner B, owner E, const owner I} {
+    if (bindings[at].declaration != at || selected.kind != 0u8 ||
+        !project_checked_resource(selections, selected_used, work[at].module_selection,
+            revision, used, true, selected)) return unproved_module_binding();
+    val kind <- selected.kind;
+    if ((kind == symbol_export()) != (bindings[at].kind == symbolic_selection()))
+        return expected_symbol_binding();
+    val role <- bindings[at].module_use;
+    if (role == (SelectedType:ModuleNameUse) && !admits_selected_type(kind)) return expected_type_binding();
+    if (role == (SelectedValue:ModuleNameUse) && admits_selected_type(kind)) return expected_value_binding();
+    if (kind == enum_export() || kind == sum_export()) {
+        val header <- find_interface(interfaces, interface_used, selected.origin_module, selected.identity);
+        val expected <- if (kind == enum_export()) { enum_type() } else { sum_type() };
+        if (header == no_node() || interfaces[header].interface_kind != expected)
+            return unproved_module_binding();
+        if (kind == enum_export()) { (selected.enum_head <- header):void }
+        else { (selected.sum_head <- header):void }
+    };
+    return 0u8
+}
+
 export func apply_module_name_uses(selections:const CheckedSelections in F, selected_used:u64,
     tree:const ParseResult in T, work:const NameWork in W, bindings:NameBindings in B,
     selected:SelectedExports in E, interfaces:const ModuleInterfaces in I, interface_used:u64,
@@ -314,45 +352,13 @@ export func apply_module_name_uses(selections:const CheckedSelections in F, sele
     report.diagnostic <- invalid_module_tree();
     if (selected_used > intrinsic (len)(selections) || tree.used > intrinsic (len)(work) ||
         tree.used > intrinsic (len)(bindings) || tree.used > intrinsic (len)(selected)) return false;
-    val role <- (LexicalName:ModuleNameUse);
-    val kind <- 0u8;
-    val header <- no_node();
-    val expected_header <- 0u8;
     for (at in 0u64 .. tree.used) {
-        role <- bindings[at].module_use;
-        if (role != (LexicalName:ModuleNameUse)) {
+        if (bindings[at].module_use != (LexicalName:ModuleNameUse)) {
             report.node <- at;
-            if (bindings[at].declaration != at || selected[at].kind != 0u8 ||
-                !project_checked_resource(selections, selected_used, work[at].module_selection,
-                    tree.revision, tree.used, true, selected[at])) {
-                report.diagnostic <- unproved_module_binding();
-                return false
-            };
-            kind <- selected[at].kind;
-            if ((kind == symbol_export()) != (bindings[at].kind == symbolic_selection())) {
-                report.diagnostic <- expected_symbol_binding();
-                return false
-            };
-            if (role == (SelectedType:ModuleNameUse) && !admits_selected_type(kind)) {
-                report.diagnostic <- expected_type_binding();
-                return false
-            };
-            if (role == (SelectedValue:ModuleNameUse) && admits_selected_type(kind)) {
-                report.diagnostic <- expected_value_binding();
-                return false
-            };
-            if (kind == enum_export() || kind == sum_export()) {
-                header <- find_interface(interfaces, interface_used, selected[at].origin_module,
-                    selected[at].identity);
-                expected_header <- if (kind == enum_export()) { enum_type() } else { sum_type() };
-                if (header == no_node() || interfaces[header].interface_kind != expected_header) {
-                    report.diagnostic <- unproved_module_binding();
-                    return false
-                };
-                if (kind == enum_export()) { (selected[at].enum_head <- header):void }
-                else { (selected[at].sum_head <- header):void }
-            };
-            (bindings[at].imported_kind <- kind):void
+            report.diagnostic <- project_bound_name_use(selections, selected_used, tree.revision, tree.used,
+                work, bindings, at, selected[at], interfaces, interface_used);
+            if (report.diagnostic != 0u8) return false;
+            (bindings[at].imported_kind <- selected[at].kind):void
         }
     };
     report.node <- no_node();
@@ -392,14 +398,23 @@ export func project_module_selection_candidates(
         return false;
     val first <- 0u64;
     val past <- 0u64;
+    val candidate <- no_node();
+    val kind <- 0u8;
     for (at in 0u64 .. tree.used) {
         work[at].module_selection <- no_node();
+        work[at].selected_symbol <- false;
         if (name_syntax(nodes, tree.used, at) != NotAName || named_operator_at(nodes, at) != no_node()) {
             first <- spelling_start(nodes, at);
             past <- spelling_end(source, nodes, at);
             if (first >= past || past > intrinsic (len)(source)) return false;
-            work[at].module_selection <- find_selected_name(selections, selected_used, tree.revision,
-                source, catalog, graph, graph_used, first, past)
+            candidate <- find_selected_name(selections, selected_used, tree.revision,
+                source, catalog, graph, graph_used, first, past);
+            if (candidate != no_node()) {
+                kind <- checked_lexical_selection_kind(selections, selected_used, candidate, tree.revision, tree.used);
+                if (kind == 0u8) return false;
+                work[at].module_selection <- candidate;
+                (work[at].selected_symbol <- kind == symbol_export()):void
+            }
         }
     };
     return true
@@ -421,13 +436,45 @@ func lookup(source:const SourceBytes in S, nodes:const ExprNodes in N, work:cons
     return no_node();
 }
 
+func reject_protected_name(work:NameWork in W, state:NameState in R, name:u64, local:u64)
+    -> void where {owner W, owner R} {
+    work[name].local_symbol_conflict <- local;
+    reject_name(state, name, protected_symbol_name())
+}
+
 func declare_name(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                    work:NameWork in W, state:NameState in R, name:u64, declaration:u64, kind:u8,
                    duplicate:u8) -> void where {const owner S, const owner N, owner B, owner W, owner R} {
-    if (lookup(source, nodes, work, name, state.first, state.used) != no_node()) {
-        reject_name(state, name, duplicate);
-        return;
-    } else {};
+    val bound <- lookup(source, nodes, work, name, state.first, state.used);
+    val introducing_symbol <- symbol_binding(kind);
+    if (bound != no_node()) {
+        val previous_kind <- bindings[bound].kind;
+        if (introducing_symbol == symbol_binding(previous_kind)) {
+            reject_name(state, name, duplicate);
+            return
+        };
+        val same_scope_symbol <- if (introducing_symbol) {
+            if (kind != symbolic_selection()) { declaration } else { no_node() }
+        } else {
+            if (previous_kind != symbolic_selection()) { (bindings[bound].declaration) } else { no_node() }
+        };
+        reject_protected_name(work, state, name, same_scope_symbol);
+        return
+    };
+    if (!introducing_symbol && work[name].selected_symbol) {
+        reject_protected_name(work, state, name, no_node());
+        return
+    };
+    if (!introducing_symbol && state.first != 0u64) {
+        val module_name <- lookup(source, nodes, work, name, 0u64, state.module_names);
+        if (module_name != no_node() && symbol_binding(bindings[module_name].kind)) {
+            val module_symbol <- if (bindings[module_name].kind != symbolic_selection()) {
+                (bindings[module_name].declaration)
+            } else { no_node() };
+            reject_protected_name(work, state, name, module_symbol);
+            return
+        }
+    };
     remember(bindings, name, declaration, kind);
     work[state.used].active <- name;
     (state.used <- state.used + 1u64):void;
@@ -438,7 +485,9 @@ func declare_module_name(source:const SourceBytes in S, nodes:const ExprNodes in
     name:u64, declaration:u64, kind:u8) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     if (state.module_candidates && work[name].module_selection != no_node()) {
-        reject_name(state, name, unproved_module_binding());
+        if (work[name].selected_symbol) {
+            reject_protected_name(work, state, name, no_node())
+        } else { reject_name(state, name, unproved_module_binding()) };
         return
     };
     declare_name(source, nodes, bindings, work, state, name, declaration, kind, duplicate_binding());
@@ -712,6 +761,8 @@ func link_entries(nodes:const ExprNodes in N, work:NameWork in W, revision:u64, 
         work[at].enclosing_case_arm <- no_node();
         work[at].arm_case <- no_node();
         work[at].sum_loan_formals <- false;
+        work[at].product_type_diagnostic <- 0u8;
+        work[at].product_type_site <- no_node();
         work[at].imported_interface <- no_node();
         work[at].imported_type_module <- 0u64;
         work[at].imported_type_identity <- 0u64;
@@ -2470,6 +2521,20 @@ func resolve_header_types(source:const SourceBytes in S, nodes:const ExprNodes i
     };
 }
 
+func resolve_ordinary_formal(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    bindings:NameBindings in B, work:NameWork in W, state:NameState in R, parameter:u64,
+    formal:const FormalSites in F, binding:const BindingSites in F) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R, const owner F} {
+    resolve_type_annotation(source, nodes, bindings, work, state, binding.annotation);
+    if (state.diagnostic != 0u8) return;
+    if ((formal.mode == PlaceFormal || formal.mode == InitializingPlaceFormal) &&
+        (binding.readonly || bindings[binding.target_type].kind != builtin_string())) {
+        reject_name(state, parameter, invalid_direct_string_place());
+        return
+    };
+    declare_name(source, nodes, bindings, work, state, binding.name, parameter, formal_binding(), duplicate_binding())
+}
+
 func resolve_formals(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                      work:NameWork in W, state:NameState in R, tail:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
@@ -2494,14 +2559,7 @@ func resolve_formals(source:const SourceBytes in S, nodes:const ExprNodes in N, 
                 reject_name(state, parameter, invalid_module_tree());
                 return;
             };
-            resolve_type_annotation(source, nodes, bindings, work, state, binding.annotation);
-            if (state.diagnostic != 0u8) return;
-            if ((formal.mode == PlaceFormal || formal.mode == InitializingPlaceFormal) &&
-                (binding.readonly || bindings[binding.target_type].kind != builtin_string())) {
-                reject_name(state, parameter, invalid_direct_string_place());
-                return;
-            };
-            declare_name(source, nodes, bindings, work, state, binding.name, parameter, formal_binding(), duplicate_binding());
+            resolve_ordinary_formal(source, nodes, bindings, work, state, parameter, formal, binding)
         };
         if (state.diagnostic != 0u8) return;
         parameter <- work[parameter].next;
@@ -2851,9 +2909,71 @@ func resolve_sum_fields(source:const SourceBytes in S, nodes:const ExprNodes in 
     if (arm != no_node()) { reject_name(state, arm, invalid_module_tree()); };
 }
 
+func resolve_plain_product(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    bindings:NameBindings in B, work:NameWork in W, state:NameState in R,
+    selections:const CheckedSelections in C, selected_used:u64,
+    interfaces:const ModuleInterfaces in I, published:u64, tail:u64) -> bool
+    where {const owner S, const owner N, owner B, owner W, owner R, const owner C, const owner I} {
+    ref parameter = make u64 { no_node() };
+    if (!first_sequence_entry(nodes, state.syntax_revision, state.syntax_used, tail, FormalSequence, parameter)) {
+        reject_name(state, tail, invalid_module_tree());
+        return false
+    };
+    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
+    ref field = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
+    };
+    ref projected = make SelectedExport {
+        checked_resource <- no_node(); selection_site <- no_node(); selection_public_row <- no_node();
+        dependency_module <- 0u64; identity <- 0u64; kind <- 0u8; checked <- 0u8;
+        origin_module <- 0u64; owner_module <- 0u64; owner_identity <- 0u64; shape <- 0u8;
+        enum_head <- no_node(); next_enum_selection <- no_node(); enum_code <- 0u64;
+        sum_head <- no_node(); next_sum_selection <- no_node(); constructor_selection <- no_node(); constructor_row <- no_node()
+    };
+    val marker <- no_node();
+    val problem <- 0u8;
+    val written_selection <- no_node();
+    for (unused in 0u64 .. state.syntax_used) {
+        if (parameter == no_node()) return false;
+        if (inspect_formal(nodes, state.syntax_revision, state.syntax_used, parameter, formal) != OrdinaryFormal ||
+            inspect_binding(nodes, state.syntax_revision, state.syntax_used, formal.binding, field) != TypedBinding) {
+            reject_name(state, parameter, invalid_module_tree());
+            return false
+        };
+        marker <- field.target_type;
+        resolve_ordinary_formal(source, nodes, bindings, work, state, parameter, formal, field);
+        if (state.diagnostic == 0u8 && bindings[marker].module_use == (SelectedType:ModuleNameUse)) {
+            projected.kind <- 0u8;
+            problem <- project_bound_name_use(selections, selected_used, state.syntax_revision, state.syntax_used,
+                work, bindings, marker, projected, interfaces, published);
+            if (problem != 0u8) { reject_name(state, marker, problem) }
+        } else {
+            if (state.diagnostic == 0u8 && bindings[marker].kind == ordinary_selection()) {
+                # A written selection already has a projected resource at its directive.
+                written_selection <- bindings[marker].declaration;
+                if (written_selection >= state.syntax_used || bindings[written_selection].imported_kind == 0u8) {
+                    reject_name(state, marker, unproved_module_binding())
+                } else {
+                    if (!admits_selected_type(bindings[written_selection].imported_kind)) {
+                        reject_name(state, marker, expected_type_binding())
+                    }
+                }
+            }
+        };
+        if (state.diagnostic != 0u8) return state.failed_node == marker &&
+            (state.diagnostic == unresolved_name() || state.diagnostic == expected_type_binding());
+        (parameter <- work[parameter].next):void
+    };
+    if (parameter != no_node()) { reject_name(state, parameter, invalid_module_tree()) };
+    return false
+}
+
 func resolve_module_types(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
-                           work:NameWork in W, state:NameState in R, first:u64) -> void
-    where {const owner S, const owner N, owner B, owner W, owner R} {
+                           work:NameWork in W, state:NameState in R, first:u64,
+                           selections:const CheckedSelections in C, selected_used:u64,
+                           interfaces:const ModuleInterfaces in I, published:u64,
+                           recovery:ProductTypeRecovery in P) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R, const owner C, const owner I, owner P} {
     val item <- first;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     ref declaration = make DeclarationSites {
@@ -2861,6 +2981,9 @@ func resolve_module_types(source:const SourceBytes in S, nodes:const ExprNodes i
         index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
     };
     val shape <- OtherDeclaration;
+    val recovered <- false;
+    val plain <- false;
+    const val floor <- state.first;
     for (unused in 0u64 .. state.syntax_used) {
         if (item == no_node()) return;
         if (inspect_sequence_entry(nodes, state.syntax_revision, state.syntax_used, item, entry) != ModuleSequence) {
@@ -2868,20 +2991,44 @@ func resolve_module_types(source:const SourceBytes in S, nodes:const ExprNodes i
             return;
         };
         shape <- inspect_declaration(nodes, state.syntax_revision, state.syntax_used, entry.item, declaration);
-        if (shape == NominalRecord || shape == NativeRecord || shape == AbstractTypeDeclaration) {
-            if (declaration.parent_type != no_node()) {
-                resolve_type_name(source, nodes, bindings, work, state, declaration.parent_type);
+        plain <- shape == NominalRecord && declaration.parent_type == no_node();
+        if (recovery.maximum != 0u64 && recovery.count >= recovery.maximum) {
+            if (plain) { recovery.incomplete <- true; return }
+        } else {
+            if (shape == NominalRecord || shape == NativeRecord || shape == AbstractTypeDeclaration) {
+                if (declaration.parent_type != no_node()) {
+                    resolve_type_name(source, nodes, bindings, work, state, declaration.parent_type);
+                    if (state.diagnostic != 0u8) return;
+                };
+            };
+            if (shape == NominalRecord || shape == NativeRecord) {
+                recovered <- false;
+                if (plain && recovery.maximum != 0u64) {
+                    (recovered <- resolve_plain_product(source, nodes, bindings, work, state, selections,
+                        selected_used, interfaces, published, declaration.entries)):void
+                } else {
+                    resolve_formals(source, nodes, bindings, work, state, declaration.entries)
+                };
+                state.used <- state.module_names;
+                state.first <- floor;
+                if (recovered) {
+                    work[entry.item].product_type_diagnostic <- state.diagnostic;
+                    work[entry.item].product_type_site <- state.failed_node;
+                    if (recovery.count == 0u64) {
+                        recovery.first_diagnostic <- state.diagnostic;
+                        (recovery.first_site <- state.failed_node):void
+                    };
+                    recovery.count <- recovery.count + 1u64;
+                    state.failed_node <- no_node();
+                    state.enclosing_defer <- no_node();
+                    (state.diagnostic <- 0u8):void
+                };
                 if (state.diagnostic != 0u8) return;
             };
-        };
-        if (shape == NominalRecord || shape == NativeRecord) {
-            resolve_formals(source, nodes, bindings, work, state, declaration.entries);
-            (state.used <- state.module_names):void;
-            if (state.diagnostic != 0u8) return;
-        };
-        if (shape == NominalSum) {
-            resolve_sum_fields(source, nodes, bindings, work, state, declaration.entries);
-            if (state.diagnostic != 0u8) return;
+            if (shape == NominalSum) {
+                resolve_sum_fields(source, nodes, bindings, work, state, declaration.entries);
+                if (state.diagnostic != 0u8) return;
+            };
         };
         item <- work[item].next;
     };
@@ -3023,6 +3170,24 @@ export func resolve_module_names(source:const SourceBytes in S, nodes:const Expr
                                   declarations_only:bool, allow_structural:bool, selections:const CheckedSelections in C, selected_used:u64,
                                   report:NameResolutionResult in R) -> bool
     where {const owner S, const owner N, const owner T, const owner E, const owner C, owner B, owner W, const owner I, owner R} {
+    ref recovery = make ProductTypeRecovery {
+        maximum <- 0u64; count <- 0u64; incomplete <- false; first_diagnostic <- 0u8; first_site <- no_node()
+    };
+    return resolve_module_names_recovering(source, nodes, tree, selected, bindings, work, interfaces,
+        published, declarations_only, allow_structural, selections, selected_used, report, recovery)
+}
+
+export func resolve_module_names_recovering(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    tree:const ParseResult in T, selected:const SelectedExports in E, bindings:NameBindings in B, work:NameWork in W,
+    interfaces:const ModuleInterfaces in I, published:u64, declarations_only:bool, allow_structural:bool,
+    selections:const CheckedSelections in C, selected_used:u64, report:NameResolutionResult in R,
+    recovery:ProductTypeRecovery in P) -> bool
+    where {const owner S, const owner N, const owner T, const owner E, const owner C, owner B, owner W,
+        const owner I, owner R, owner P} {
+    recovery.count <- 0u64;
+    recovery.incomplete <- false;
+    recovery.first_diagnostic <- 0u8;
+    recovery.first_site <- no_node();
     report.node <- no_node();
     report.enclosing_defer <- no_node();
     report.diagnostic <- invalid_module_tree();
@@ -3052,6 +3217,7 @@ export func resolve_module_names(source:const SourceBytes in S, nodes:const Expr
         bindings[at].finalizer <- no_node();
         bindings[at].guarded_local_link <- no_node();
         bindings[at].handle_guard <- no_node();
+        work[at].local_symbol_conflict <- no_node();
     };
     if (!link_entries(nodes, work, tree.revision, tree.used)) return false;
     ref state = make NameState {
@@ -3088,7 +3254,10 @@ export func resolve_module_names(source:const SourceBytes in S, nodes:const Expr
     if (state.diagnostic == 0u8) {
         state.module_names <- state.used;
         state.first <- state.used;
-        resolve_module_types(source, nodes, bindings, work, state, first);
+        resolve_module_types(source, nodes, bindings, work, state, first, selections, selected_used,
+            interfaces, published, recovery);
+        if (state.diagnostic == 0u8 && recovery.count != 0u64)
+            { reject_name(state, recovery.first_site, recovery.first_diagnostic) };
         if (state.diagnostic == 0u8) { resolve_module_bodies(source, nodes, bindings, work, state, first, true); };
     } else {};
     if (state.diagnostic == 0u8) {

@@ -25,9 +25,12 @@ export data VisitObject =
         functions_past:u64;
     };
 
+export data VisitFailure { rejection:u8; finding:u64; }
+
 export data VisitSlot =
     Vacant {} |
     Visiting { key_first:u64; key_past:u64; revision:u64; } |
+    FailedVisit { key_first:u64; key_past:u64; revision:u64; failure:VisitFailure; } |
     Checked {
         key_first:u64;
         key_past:u64;
@@ -68,6 +71,9 @@ export func find_visit(visits:const Visits in G, bytes:const SourceBytes in G, u
             (Vacant) -> {};
             (Visiting { val first <- key_first; val past <- key_past; }) -> {
                 if (same_key(bytes, first, past, canonical)) return id;
+            };
+            (FailedVisit { val first <- key_first; val past <- key_past; }) -> {
+                if (same_key(bytes, first, past, canonical)) return id
             };
             (Checked { val first <- key_first; val past <- key_past; }) -> {
                 if (same_key(bytes, first, past, canonical)) return id;
@@ -164,6 +170,33 @@ export func visit_has_membership(visits:const Visits in G, id:u64) -> bool where
     }
 }
 
+export func visit_rejection(visits:const Visits in G, id:u64, result:VisitFailure in F)
+    -> bool where {const owner G, owner F} {
+    if (id >= intrinsic (len)(visits)) return false;
+    return case visits[id] of {
+        FailedVisit { val failure <-; } -> {
+            result.rejection <- failure.rejection;
+            result.finding <- failure.finding;
+            true
+        };
+        _ -> false
+    }
+}
+
+export proc mark_failed_visit(visits:Visits in G, id:u64, failure:const VisitFailure in F)
+    -> bool where {owner G, const owner F} {
+    if (id >= intrinsic (len)(visits) || failure.rejection == 0u8) return false;
+    case visits[id] of {
+        Visiting { val first <- key_first; val past <- key_past; val opening <- revision; } -> {
+            visits[id] <- make FailedVisit {
+                key_first <- first; key_past <- past; revision <- opening; failure <- failure
+            };
+            return true
+        };
+        _ -> {}
+    };
+    return false
+}
 export func structural_visit_dependency(visits:const Visits in G,
     id:u64) -> bool where {const owner G} {
     return case visits[id] of {
@@ -214,6 +247,20 @@ export func checked_module_key(visits:const Visits in G, used:u64, key_used:u64,
         };
         (_) -> { false };
     };
+}
+
+export func published_module_key(visits:const Visits in G, used:u64, key_used:u64, module:u64,
+    key:CanonicalKeyRange in K) -> bool where {const owner G, owner K} {
+    if (module == 0u64 || module > used || used > intrinsic (len)(visits)) return false;
+    return case visits[module - 1u64] of {
+        StructuralOnly { val first <- key_first; val past <- key_past; } -> {
+            if (first >= past || past > key_used) return false;
+            key.first <- first;
+            key.past <- past;
+            true
+        };
+        _ -> checked_module_key(visits, used, key_used, module, key)
+    }
 }
 
 func record_selection_ranges(ranges:ModuleSelectionRanges in R, export_used:u64, default_used:u64,

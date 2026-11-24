@@ -111,6 +111,7 @@ export data ExprPayload =
     | BorrowHandleConstruction { marker:NodeId; arguments:NodeLink; actual_owner:NodeId; }
     | NullLiteral { owner_name:NodeLink; }
     | Conditional { condition:NodeId; consequent:NodeId; alternative:NodeId; }
+    | ReturningCondition { pattern:SourceSpan; }
     | ArrayLength { target:NodeId; intrinsic_at:u64; }
     | FieldSelection { target:NodeId; field:NodeId; dot_at:u64; }
     | IndexSelection { target:NodeId; index:NodeId; opening:u64; }

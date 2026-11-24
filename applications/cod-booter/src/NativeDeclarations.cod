@@ -1,3 +1,4 @@
+using "./SourceAccess.cod" same_bytes;
 using "./SourceStorage.cod" SourceBytes;
 using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 using "./ParserStorage.cod" { SourceSpan, BulkSelectionSites, inspect_bulk_selection,
@@ -3281,6 +3282,17 @@ func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in
     return false;
 }
 
+func local_symbol_spelling(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    revision:u64, used:u64, declaration:u64, first:u64, past:u64)
+    -> bool where {const owner S, const owner N} {
+    val defining <- definition_name(nodes, revision, used, declaration);
+    if (defining >= used || name_syntax(nodes, used, defining) != SymbolicName) return false;
+    val defining_first <- syntax_first(nodes, used, defining);
+    val defining_past <- syntax_past(nodes, used, defining);
+    return defining_first < defining_past && defining_past <= intrinsic (len)(source) &&
+        same_bytes(source, first, past, source, defining_first + 1u64, defining_past)
+}
+
 # Append explicit exports after successful binding. The caller holds the
 # checked source bytes in the catalog and lends only the committed prefix.
 # A re-export changes spelling and preserves the original definition.
@@ -3365,6 +3377,11 @@ export func publish_module_exports(source:const SourceBytes in S, nodes:const Ex
             };
             first <- syntax_first(nodes, used, name) + if (name_syntax(nodes, used, name) == SymbolicName) { 1u64 } else { 0u64 };
             if (first >= past) return false;
+            if (exports[next].kind == symbol_export() && exports[next].origin_module == publication.module_identity &&
+                !local_symbol_spelling(source, nodes, revision, used, exports[next].identity, first, past)) {
+                conflict <- name;
+                return false
+            };
             remember_source_export_name(spellings, next, first, past);
             prior <- previous_public_name(source, catalog, graph, publication.graph_spelling_count,
                 spellings, count, next);

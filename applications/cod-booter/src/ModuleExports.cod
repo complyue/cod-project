@@ -486,6 +486,16 @@ export func module_selection_path(
     return no_node()
 }
 
+export func file_dependency_path(
+    source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64, at:u64,
+    named:ModuleSelectionSites in M, bulk:BulkSelectionSites in M)
+    -> u64 where {const owner S, const owner N, owner M} {
+    val path <- module_selection_path(nodes, revision, used, at, named, bulk);
+    if (path == no_node() || builtin_path(source, syntax_first(nodes, used, path), syntax_past(nodes, used, path)))
+        return no_node();
+    return path
+}
+
 export func next_module_dependency(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                    used:u64, revision:u64, start:u64) -> u64
     where {const owner S, const owner N} {
@@ -496,12 +506,8 @@ export func next_module_dependency(source:const SourceBytes in S, nodes:const Ex
         nature <- OrdinaryResource;
     };
     ref bulk = make BulkSelectionSites { path <- no_node(); mode <- UseResource; view <- DefaultPublic };
-    val path <- no_node();
     for (at in start .. used) {
-        path <- module_selection_path(nodes, revision, used, at, selection, bulk);
-        if (path != no_node() &&
-            !builtin_path(source, syntax_first(nodes, used, path), syntax_past(nodes, used, path)))
-            return at
+        if (file_dependency_path(source, nodes, used, revision, at, selection, bulk) != no_node()) return at
     };
     return no_node();
 }
@@ -788,6 +794,38 @@ export func stage_module_selections(
     report.node <- no_node();
     report.diagnostic <- 0u8;
     return true
+}
+
+export func defining_symbol_row(exports:const ModuleExports in E, first:u64, past:u64,
+    module:u64, identity:u64, spelling_used:u64) -> u64 where {const owner E} {
+    if (first >= past || past > intrinsic (len)(exports) || module == no_node() ||
+        identity == no_node()) return no_node();
+    val selected <- no_node();
+    for (at in first .. past) {
+        if (exports[at].kind == symbol_export() && exports[at].publishing_module == module &&
+            exports[at].origin_module == module && exports[at].identity == identity) {
+            if (selected != no_node() || exports[at].name_first >= exports[at].name_past ||
+                exports[at].name_past > spelling_used) return no_node();
+            (selected <- at):void
+        }
+    };
+    return selected
+}
+
+export func checked_lexical_selection_kind(selections:const CheckedSelections in F, used:u64,
+    row:u64, revision:u64, syntax_used:u64) -> u8 where {const owner F} {
+    if (row >= used || used > intrinsic (len)(selections)) return 0u8;
+    return case selections[row] of {
+        SelectedResource {
+            val origin <- revision; val directive <- site; val kind <- export_kind; val verb <- mode;
+            val identity <- identity; val defining <- defining_module;
+        } -> {
+            if (origin != revision || directive >= syntax_used || verb == ReexportResource ||
+                identity == no_node() || defining == no_node()) { 0u8 }
+            else { kind }
+        };
+        UnpublishedSelection -> 0u8
+    }
 }
 
 export func project_checked_resource(selections:const CheckedSelections in F, used:u64,

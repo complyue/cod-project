@@ -179,6 +179,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: constructor is not selected for the case subject's nominal sum type\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 141)
         fputs(": error: case receipt or projection requires a checked field of the selected type\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 142)
+        fputs(": error: declaration conflicts with a protected symbol name\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 49)
         fputs(": error: a declaration in a loop body or else requires an explicit {{ ... }} scope\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 50)
@@ -442,45 +444,95 @@ static void report_package(const cod_booter_package_diagnostic *diagnostic) {
     fputc('\n', stderr);
 }
 
+static void report_symbol(const cod_booter_symbol_diagnostic *diagnostic) {
+    const unsigned char *importer = diagnostic->bytes;
+    const unsigned char *spelling = importer + diagnostic->importer_size;
+    const unsigned char *module = spelling + diagnostic->spelling_size;
+    const unsigned char *definition = module + diagnostic->module_size;
+    write_path_bytes(importer, diagnostic->importer_size);
+    fprintf(stderr, ":%" PRIu64 ":%" PRIu64 ": error: declaration conflicts with a protected symbol name '",
+            diagnostic->location.first.line, diagnostic->location.first.column);
+    write_path_bytes(spelling, diagnostic->spelling_size);
+    fputs("' (canonical '", stderr);
+    write_path_bytes(module, diagnostic->module_size);
+    fputs("::@", stderr);
+    write_path_bytes(definition, diagnostic->definition_size);
+    fputs("')\n", stderr);
+}
+
 typedef cod_enum_CompilerStatusx2ecod_14_CompilerStatus compiler_status;
 
 static cod_native_DiagnosticDestination_borrow diagnostic_record(cod_booter_diagnostic_sink *diagnostic,
                                                                  cod_native_loan *destination) {
-    *diagnostic = (cod_booter_diagnostic_sink){0};
     *destination = (cod_native_loan){diagnostic, (uint64_t)(uintptr_t)diagnostic};
     return (cod_native_DiagnosticDestination_borrow){
         (uint64_t)(uintptr_t)&diagnostic->primary, destination->owner,
     };
 }
 
+static void report_dependency_notes(const cod_booter_diagnostic_event *event, size_t index) {
+    for (const cod_booter_dependency_note *note = event->first_note; note; note = note->next) {
+        if (note->finding - event->first_finding == index)
+            fprintf(stderr, "%s:%" PRIu64 ":%" PRIu64 ": note: selected source dependency here\n",
+                note->path, note->first.line, note->first.column);
+    }
+}
+
 static int finish_command(const char *input, cod_native_status result, compiler_status status,
                           cod_booter_diagnostic_sink *diagnostic) {
     bool package_failure = false;
-    for (cod_booter_package_diagnostic *report = diagnostic->package_reports; report;) {
-        cod_booter_package_diagnostic *next = report->next;
-        report_package(report);
-        package_failure |= report->kind != package_shadow;
-        free(report);
-        report = next;
+    bool has_source_reports = false;
+    uint8_t latest_source_stage = 0;
+    for (cod_booter_diagnostic_event *event = diagnostic->first_event; event;) {
+        cod_booter_diagnostic_event *next = event->next;
+        if (event->kind == cod_booter_package_report) {
+            const cod_booter_package_diagnostic *package = (const cod_booter_package_diagnostic *)event;
+            report_package(package);
+            report_dependency_notes(event, 0);
+            package_failure |= package->kind != package_shadow;
+        } else if (event->kind == cod_booter_symbol_report) {
+            const cod_booter_symbol_diagnostic *symbol = (const cod_booter_symbol_diagnostic *)event;
+            report_symbol(symbol);
+            report_dependency_notes(event, 0);
+            has_source_reports = true;
+            latest_source_stage = symbol->location.stage;
+        } else {
+            const cod_booter_source_diagnostics *batch = (const cod_booter_source_diagnostics *)event;
+            const char *path = (const char *)(batch->reports + batch->count);
+            for (size_t i = 0; i < batch->count; ++i) {
+                report(path, status, &batch->reports[i]);
+                report_dependency_notes(event, i);
+            }
+            has_source_reports = true;
+            latest_source_stage = batch->reports[0].stage;
+        }
+        for (cod_booter_dependency_note *note = event->first_note; note;) {
+            cod_booter_dependency_note *next_note = note->next;
+            free(note);
+            note = next_note;
+        }
+        free(event);
+        event = next;
     }
     if (result != COD_NATIVE_OK) {
         fputs("cod-booter: invalid native entry\n", stderr);
     } else if (status != cod_enum_CompilerStatusx2ecod_14_CompilerStatus_member_Complete) {
-        for (size_t i = 0; i < diagnostic->count; ++i)
-            report(diagnostic->path, status, &diagnostic->reports[i]);
         const bool detailed_package_failure = package_failure && diagnostic->primary.stage == 2 &&
             diagnostic->primary.code == module_package_diagnostic;
-        if (!detailed_package_failure &&
-            (!diagnostic->count || diagnostic->primary.stage != diagnostic->reports[0].stage))
+        const bool limited = status == cod_enum_CompilerStatusx2ecod_14_CompilerStatus_member_DiagnosticsIncomplete;
+        if (!detailed_package_failure && !diagnostic->primary_retained &&
+            (!limited || diagnostic->primary.code != 0) &&
+            (!has_source_reports || diagnostic->primary.stage != latest_source_stage))
             report(input, status, &diagnostic->primary);
+        if (limited)
+            fprintf(stderr, "%s: diagnostic limit %" PRIu64 " reached; coverage incomplete\n",
+                input, diagnostic->finding_limit);
         if (diagnostic->snapshot_failed)
-            fprintf(stderr, "%s: error: could not retain the complete parser diagnostics\n", input);
+            fprintf(stderr, "%s: error: could not retain the complete source diagnostics\n", input);
     }
     if (diagnostic->package_delivery_failed &&
         (diagnostic->primary.stage != 2 || diagnostic->primary.code != module_package_delivery_failed))
         fprintf(stderr, "%s: error: could not retain package resolution diagnostics\n", input);
-    free(diagnostic->reports);
-    free(diagnostic->path);
     return result == COD_NATIVE_OK ? status : 70;
 }
 
@@ -519,36 +571,64 @@ static cod_native_status compile(const char *source, const char *object, cod_boo
     return cod_native_compile_cli_entry(&input, &output, &record, &argument_owner, &destination, status);
 }
 
+static bool parse_finding_limit(const char *digits, uint64_t *limit) {
+    uint64_t parsed = 0;
+    if (!*digits) return false;
+    for (; *digits; ++digits) {
+        if (*digits < '0' || *digits > '9') return false;
+        const uint64_t digit = (uint64_t)(*digits - '0');
+        if (parsed > (UINT64_MAX - digit) / 10) return false;
+        parsed = parsed * 10 + digit;
+    }
+    if (!parsed) return false;
+    *limit = parsed;
+    return true;
+}
+
 int main(int argc, char **argv) {
-    const bool providers = argc > 1 && strcmp(argv[1], "--emit-c-provider") == 0;
-    if (argc != (providers ? 4 : 3)) {
-        fputs("usage: cod-booter SOURCE OUTPUT\n       cod-booter --check-declarations SOURCE\n"
-              "       cod-booter --emit-c-provider SOURCE DIRECTORY\n", stderr);
+    const char *arguments[3];
+    size_t count = 0;
+    uint64_t limit = 0;
+    for (int index = 1; index < argc; ++index) {
+        if (strcmp(argv[index], "--max-diagnostics") == 0) {
+            if (limit || ++index >= argc || !parse_finding_limit(argv[index], &limit)) {
+                fputs("cod-booter: --max-diagnostics requires one positive integer\n", stderr);
+                return 64;
+            }
+        } else {
+            if (count == sizeof(arguments) / sizeof(arguments[0])) {
+                count = 0;
+                break;
+            }
+            arguments[count++] = argv[index];
+        }
+    }
+    const bool providers = count && strcmp(arguments[0], "--emit-c-provider") == 0;
+    if (count != (providers ? 3u : 2u)) {
+        fputs("usage: cod-booter [--max-diagnostics N] SOURCE OUTPUT\n"
+              "       cod-booter [--max-diagnostics N] --check-declarations SOURCE\n"
+              "       cod-booter [--max-diagnostics N] --emit-c-provider SOURCE DIRECTORY\n", stderr);
         return 64;
     }
+    cod_booter_diagnostic_sink diagnostic = {.finding_limit = limit};
+    compiler_status status = 0;
     if (providers) {
         if (LLVMInitializeNativeTarget()) {
             fputs("cod-booter: native LLVM target unavailable\n", stderr);
             return 70;
         }
-        cod_booter_diagnostic_sink diagnostic;
-        compiler_status status = 0;
-        const cod_native_status result = generate_providers(argv[2], argv[3], &diagnostic, &status);
-        return finish_command(argv[2], result, status, &diagnostic);
+        const cod_native_status result = generate_providers(arguments[1], arguments[2], &diagnostic, &status);
+        return finish_command(arguments[1], result, status, &diagnostic);
     }
-    if (strcmp(argv[1], "--check-declarations") == 0) {
-        cod_booter_diagnostic_sink diagnostic;
-        compiler_status status = 0;
-        const cod_native_status result = check_declarations(argv[2], &diagnostic, &status);
-        return finish_command(argv[2], result, status, &diagnostic);
+    if (strcmp(arguments[0], "--check-declarations") == 0) {
+        const cod_native_status result = check_declarations(arguments[1], &diagnostic, &status);
+        return finish_command(arguments[1], result, status, &diagnostic);
     }
     if (LLVMInitializeNativeTarget() || LLVMInitializeNativeAsmPrinter()) {
         fputs("cod-booter: native LLVM target unavailable\n", stderr);
         return 70;
     }
 
-    cod_booter_diagnostic_sink diagnostic;
-    compiler_status status = 0;
-    const cod_native_status result = compile(argv[1], argv[2], &diagnostic, &status);
-    return finish_command(argv[1], result, status, &diagnostic);
+    const cod_native_status result = compile(arguments[0], arguments[1], &diagnostic, &status);
+    return finish_command(arguments[0], result, status, &diagnostic);
 }
