@@ -7,6 +7,7 @@ using "./ParserStorage.cod" ExprPayload {
     ConstructorCasePattern, ProcedureSymbol, ScopedProcedureDefinition, ProcedureActivation, ValueSymbol,
     BulkModuleSelection, DefaultPublicSet, ModuleItem, ModuleSelection, Publication,
     BareReferenceBinding, ReferenceBindingGroup, InitializeReservation, PredicateAssertion, ReferenceIdentity,
+    ReturningCondition,
 };
 using "./ParserStorage.cod" ConstructionSyntax {
     OtherConstruction, InvalidConstruction, ExceptionConstructionSyntax, PositionalConstruction,
@@ -100,6 +101,7 @@ func unsupported_identity_reference() -> u8 { return 135u8; }
 func unsupported_reserved_initializer() -> u8 { return 136u8; }
 func unsupported_predicate_assertion() -> u8 { return 137u8; }
 func unsupported_reference_identity() -> u8 { return 138u8; }
+func unsupported_returning_condition() -> u8 { return 143u8 }
 
 func constructing_throw_profile(nodes:const ExprNodes in N, revision:u64, used:u64,
     at:u64) -> u8 where {const owner N} {
@@ -126,7 +128,7 @@ export func rejected_unsupported_declaration(result:const ModuleBindingResult in
          result.diagnostic == unsupported_procedure_symbol() || result.diagnostic == unsupported_scoped_procedure() ||
          result.diagnostic == unsupported_reference_group() || result.diagnostic == unsupported_identity_reference() ||
          result.diagnostic == unsupported_reserved_initializer() || result.diagnostic == unsupported_predicate_assertion() ||
-         result.diagnostic == unsupported_reference_identity() ||
+         result.diagnostic == unsupported_reference_identity() || result.diagnostic == unsupported_returning_condition() ||
          (result.diagnostic >= 28u8 && result.diagnostic <= 40u8));
 }
 
@@ -279,6 +281,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64,
                 InitializeReservation -> unsupported_reserved_initializer();
                 PredicateAssertion -> unsupported_predicate_assertion();
                 ReferenceIdentity -> unsupported_reference_identity();
+                ReturningCondition -> unsupported_returning_condition();
                 (Formal { val mode <- mode; val fixed <- binding_const; }) -> {
                     if (mode == ReferenceSlotFormal) return unsupported_reference_slot_formal();
                     if (mode == IdentityOnlyRefFormal) return unsupported_identity_reference();

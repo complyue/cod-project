@@ -33,12 +33,13 @@ using "./ParserStorage.cod" ExprPayload {
     BareReferenceBinding, ReferenceGroupItem, ReferenceBindingGroup, InitializeReservation, PredicateAssertion,
     LocalCallableSlot, OwningHandleBinding, BorrowedHandleBinding, OwnHandleConstruction, BorrowHandleConstruction,
     OwningRegionBinding, RegionConstruction,
-    NullLiteral, Conditional, ArrayLength, FieldSelection, IndexSelection, CheckedTypeAssertion, DiscardedExpression,
+    NullLiteral, Conditional, ReturningCondition, ArrayLength, FieldSelection, IndexSelection,
+    CheckedTypeAssertion, DiscardedExpression,
     TextLiteral, ArithmeticExpression, ComparisonExpression, ReferenceIdentity, Concatenation, BindSymbolEffect, InstallSymbolEffect,
     BooleanCasePattern, NullCasePattern, MemberCasePattern, ConstructorCasePattern, CaseValueReceiver,
     CaseArm, CaseExpression, CaseFailure, CaseFallthrough,
 };
-using "./ParserStorage.cod" { LocalMode, ArithmeticOperation, ComparisonRelation, BinaryOperands };
+using "./ParserStorage.cod" { LocalMode, ArithmeticOperation, ComparisonRelation, BinaryOperands, SourceSpan };
 using "./ParserStorage.cod" LocalMode { ValueLocal, ReferenceLocal, PointerLocal, ExceptionLocal };
 using "./ParserStorage.cod" ArithmeticOperation {
     Addition, Subtraction, Multiplication, Division, Remainder
@@ -53,7 +54,7 @@ using "./Lexer.cod" {
     rethrow_word, reserved_value_name, intrinsic_word, len_word, reserved_lexical_binder, reserved_module_name, proc_word,
     func_word, region_word, capacity_word, identifier, integer_literal, defer_word,
     catch_word, finally_word, try_word, const_word, behave_word, throw_word, symbol_name, in_word,
-    ptr_word, val_word, null_word, return_word, void_word, if_word, for_word, continue_word,
+    ptr_word, val_word, null_word, return_word, void_word, if_word, returning_word, for_word, continue_word,
     break_word, else_word, true_word, false_word, c_linkage, not_word, case_word, of_word, fallthrough_word, effect_word,
     quoted_text, multiline_text, punctuation, init_word, assert_word, is_word,
 };
@@ -91,6 +92,7 @@ func catch_all_must_be_last() -> u8 { return 17u8; }
 func expected_symbol() -> u8 { return 18u8; }
 func expected_binding_operator() -> u8 { return 21u8; }
 func expected_condition_open() -> u8 { return 27u8; }
+func unsupported_returning_pattern() -> u8 { return 52u8 }
 func expected_exception_initializer() -> u8 { return 32u8; }
 func invalid_exception_placement() -> u8 { return 33u8; }
 func duplicate_exception_placement() -> u8 { return 34u8; }
@@ -792,7 +794,9 @@ func parse_conditional(source:const SourceBytes in S, tokens:const Tokens in T,
                        nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
-    val opening <- result.next + 1u64;
+    val head <- result.next + 1u64;
+    val observes_completion <- head < past && returning_word(source, tokens[head]);
+    val opening <- if (observes_completion) { head + 1u64 } else { head };
     result.next <- opening;
     if (punct_at(source, tokens, opening, past) != 40u8) {
         result.diagnostic <- expected_condition_open();
@@ -802,7 +806,17 @@ func parse_conditional(source:const SourceBytes in S, tokens:const Tokens in T,
     result.next <- start;
     val supplied <- result.supplied_here;
     val in_case <- result.case_control;
-    parse_expression_at(source, tokens, nodes, result, past, 1u8);
+    if (observes_completion) {
+        if (punct_at(source, tokens, start, past) == 41u8) {
+            append_syntax_node(nodes, result, tokens[head].first, tokens[start].past, make ReturningCondition {
+                pattern <- make SourceSpan { first <- tokens[opening].first; past <- tokens[start].past }
+            })
+        } else {
+            (result.diagnostic <- unsupported_returning_pattern()):void
+        }
+    } else {
+        parse_expression_at(source, tokens, nodes, result, past, 1u8)
+    };
     if (result.diagnostic == 0u8 && punct_at(source, tokens, result.next, past) != 41u8) {
         (result.diagnostic <- expected_close()):void
     };
@@ -815,7 +829,7 @@ func parse_conditional(source:const SourceBytes in S, tokens:const Tokens in T,
     };
     val condition <- result.root;
     result.next <- result.next + 1u64;
-    val single_return <- result.next < past && return_word(source, tokens[result.next]);
+    val single_return <- !observes_completion && result.next < past && return_word(source, tokens[result.next]);
     if (single_return) {
         parse_completion(source, tokens, nodes, result, past, return_node(), true);
     } else {
@@ -830,7 +844,8 @@ func parse_conditional(source:const SourceBytes in S, tokens:const Tokens in T,
     } else {};
     if (result.next < past && else_word(source, tokens[result.next])) {
         result.next <- result.next + 1u64;
-        if (result.next < past && if_word(source, tokens[result.next])) {
+        if (result.next < past && if_word(source, tokens[result.next]) &&
+            (!observes_completion || (result.next + 1u64 < past && returning_word(source, tokens[result.next + 1u64])))) {
             parse_conditional(source, tokens, nodes, result, past);
         } else {
             parse_block(source, tokens, nodes, result, past);

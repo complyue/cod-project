@@ -272,6 +272,11 @@ export func if_word(source:const SourceBytes in S, token:const Token in T) -> bo
     return word_is(source, token, "if")
 }
 
+export func returning_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    return word_is(source, token, "returning")
+}
+
 export func for_word(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     return word_is(source, token, "for")
