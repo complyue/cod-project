@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Distinguish dependency initialization from installation cancellation in seed fixtures
+
+<a id="k-module-context-fixture-scope-20261124"></a>
+**K-MODULE-CONTEXT-FIXTURE-SCOPE-20261124.** [D-ARCH-REVIEW r91→r92](design/ImplementationArchitecture.md#module-context-and-import-fixtures) continues P-682/P-683 under [H-379](#h-379) and the [procedure installation contract](#h-effectful-proc-install-20261118). The seven fixture migrations preserve the applicable module identity, scope and query checks. The two ordinary dependency inputs cover initialization order and failure. The obsolete RHS cases are at `9b7ac52277c553e8c1c45e6839271ea47e2c47d4:tests/cod/language/module_context_tests.py`.
+
 ## 2026-11-24 — Plan atomic region transport and independent chan endpoints
 
 <a id="h-actor-region-transport-and-chan-ends-20261124"></a>
