@@ -490,7 +490,7 @@ func check_native_argument(nodes:const ExprNodes in N, names:const NameBindings 
             if (!readonly || !const_role || (direction != c_entry() && direction != c_operation())) {
                 reject_declaration(report, parameter, invalid_native_parameter());
             } else {
-                (work[role].active <- role):void;
+                if (work[role].active == no_node()) { (work[role].active <- role):void };
             };
             return;
         } else {};
