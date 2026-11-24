@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review borrowing the graph owner at the ordinary writer call
+
+<a id="k-booter-owning-local-call-loan-20261123"></a>
+**K-BOOTER-OWNING-LOCAL-CALL-LOAN-20261123.** [D-20-MODULE-GRAPH r65→r66](applications/cod-booter/docs/ModuleGraph.md#borrowing-an-owning-local-for-an-ordinary-call) and D-ARCH-REVIEW r81→r82 continue P-680–P-683 under [ordinary borrowing of an owning handle](#h-booter-handle-owner-ctype-20261120) and [nominal enum identity](#h-typed-enum-20261121). The object-writer workload at `d89c1e58711ee1328d214da6e444178a62e4ace4:applications/cod-booter/docs/ModuleGraph.md` requires both halves of the enum identity on an inferred local and a live acquisition proof at the direct CoD call.
+
 ## 2026-11-23 — Review the graph collection call in the object-writer compatibility input
 
 <a id="k-booter-mixed-native-loans-20261123"></a>

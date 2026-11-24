@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 81. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 82. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+
+The [r82 review](../CHANGELOG.md#k-booter-owning-local-call-loan-20261123) covers [preparing an owning local as a borrowed ordinary argument](../applications/cod-booter/docs/ModuleGraph.md#borrowing-an-owning-local-for-an-ordinary-call) under P-682/P-683. Evidence belongs to the selected use in its live activation.
 
 The [r81 review](../CHANGELOG.md#k-booter-mixed-native-loans-20261123) extends the booter’s imported native call proof to [three handles, two array loans and a nominal enum result](../applications/cod-booter/docs/ModuleGraph.md#checking-handles-and-readonly-array-loans-in-one-native-call). P-682/P-683 govern the checked evidence for each argument position and the completed call.
 
