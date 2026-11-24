@@ -21,7 +21,7 @@ using "./NameResolution.cod" {
     owner_binding, local_binding, native_scalar
 };
 using "./ModuleExports.cod" SelectedExports;
-using "./DeclarationTypes.cod" { DeclaredType, DeclaredExpressionResult, describe_type, describe_record_field };
+using "./DeclarationTypes.cod" { DeclaredType, DeclaredExpressionResult, describe_type, describe_record_field, describe_record_member };
 using "./AggregateSchemas.cod" AggregateFacts;
 using "./ModuleExportStorage.cod" {
     ModuleInterfaces, find_interface, sum_type, enum_type, constructor_type, checked_sum_constructor, checked_aggregate_storage,
@@ -37,6 +37,8 @@ export data ConstructorCaseFact =
     DirectCaseSubject { expression:u64; formal:u64; count:u64; } |
     ReceiptCaseSubject { expression:u64; receipt:u64; arm:u64; count:u64; } |
     CaseSumFormal { definition:u64; owner_site:u64; readonly:bool; value_type:DeclaredType; } |
+    InlineProductFormal { definition:u64; owner_site:u64; value_type:DeclaredType; } |
+    InlineProductField { receiver:u64; field:u64; ordinal:u64; record:DeclaredType; value_type:DeclaredType; } |
     CaseConstructor { case_site:u64; defining_module:u64; declaration:u64; ordinal:u64; representative:u64; } |
     CaseFieldReceipt { case_site:u64; arm:u64; pattern:u64; field:u64; value_type:DeclaredType; } |
     CaseProductField { receiver:u64; record:DeclaredType; value_type:DeclaredType; } |
@@ -118,7 +120,16 @@ func remember_sum_formal(facts:ConstructorCaseFacts in F, formal:u64, definition
     return
 }
 
-func prepare_sum_formals(nodes:const ExprNodes in N, names:const NameBindings in B,
+func remember_inline_product_formal(facts:ConstructorCaseFacts in F, formal:u64,
+    definition:u64, owner_site:u64, type:const DeclaredType in T) -> void
+    where {owner F, const owner T} {
+    facts[formal] <- make InlineProductFormal {
+        definition <- definition; owner_site <- owner_site; value_type <- type
+    };
+    return
+}
+
+func prepare_case_loan_formals(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, interfaces:const ModuleInterfaces in G, published:u64,
     aggregate:const AggregateFacts in A, work:NameWork in W, facts:ConstructorCaseFacts in F,
     definition:u64, signature:u64, used:u64, revision:u64) -> void
@@ -149,11 +160,18 @@ func prepare_sum_formals(nodes:const ExprNodes in N, names:const NameBindings in
             names[binding.name].kind == formal_binding() &&
             names[binding.name].declaration == formal && names[binding.owner_name].kind == owner_binding() &&
             describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type) &&
-            type.kind == sum_type() && case_bits_type(type, aggregate, interfaces, published)) {
+            (type.kind == sum_type() || (type.kind == record_type() && binding.readonly)) &&
+            case_bits_type(type, aggregate, interfaces, published)) {
             owner_site <- names[binding.owner_name].declaration;
             if (owner_site < used) {
-                remember_sum_formal(facts, formal, definition, owner_site, binding.readonly, type);
-                (work[definition].sum_loan_formals <- true):void
+                if (type.kind == sum_type()) {
+                    remember_sum_formal(facts, formal, definition, owner_site, binding.readonly, type);
+                    (work[definition].sum_loan_formals <- true):void
+                } else {
+                    if (owner_constraint_syntax(nodes, owner_site) == ReadonlyOwnerConstraint) {
+                        remember_inline_product_formal(facts, formal, definition, owner_site, type)
+                    }
+                }
             }
         };
         (formal <- work[formal].next):void
@@ -738,11 +756,42 @@ func describe_received_product(facts:const ConstructorCaseFacts in F, site:u64,
     }
 }
 
+func describe_inline_product(facts:const ConstructorCaseFacts in F, site:u64,
+    type:DeclaredType in T) -> bool where {const owner F, owner T} {
+    case facts[site] of {
+        InlineProductFormal { val product <- value_type; } -> {
+            type.kind <- product.kind;
+            type.defining_module <- product.defining_module;
+            type.identity <- product.identity;
+            return true
+        };
+        InlineProductField { val product <- value_type; } -> {
+            if (product.kind != record_type()) return false;
+            type.kind <- product.kind;
+            type.defining_module <- product.defining_module;
+            type.identity <- product.identity;
+            return true
+        };
+        _ -> {}
+    };
+    return false
+}
+
 func remember_case_projection(facts:ConstructorCaseFacts in F, site:u64, receiver:u64,
     record:const DeclaredType in T, type:const DeclaredType in T)
     -> void where {owner F, const owner T} {
     facts[site] <- make CaseProductField {
         receiver <- receiver; record <- record; value_type <- type
+    };
+    return
+}
+
+func remember_inline_product_field(facts:ConstructorCaseFacts in F, site:u64, receiver:u64,
+    field:u64, ordinal:u64, record:const DeclaredType in T, type:const DeclaredType in T)
+    -> void where {owner F, const owner T} {
+    facts[site] <- make InlineProductField {
+        receiver <- receiver; field <- field; ordinal <- ordinal;
+        record <- record; value_type <- type
     };
     return
 }
@@ -757,13 +806,28 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
     ref selection = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
     ref record = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
+    ref ordinal = make u64 { no_node() };
     val origin <- no_node();
     for (site in 0u64 .. used) {
         if (inspect_field_selection(nodes, revision, used, site, selection) &&
             (case facts[site] of { CaseSumProjection -> false; _ -> true })) {
-            origin <- if (names[selection.receiver].kind == local_binding()) {
+            origin <- if (names[selection.receiver].kind == local_binding() ||
+                          names[selection.receiver].kind == formal_binding()) {
                 (names[selection.receiver].declaration)
             } else { (selection.receiver) };
+            if (origin < site && describe_inline_product(facts, origin, type)) {
+                record.kind <- type.kind;
+                record.defining_module <- type.defining_module;
+                record.identity <- type.identity;
+                ordinal <- no_node();
+                if (describe_record_member(source, nodes, names, selected, work, spellings, spelling_used,
+                    interfaces, published, selection.field, used, revision, true, type, ordinal) &&
+                    ordinal != no_node() && (native_scalar(type.kind) || type.kind == enum_type() ||
+                        (type.kind == record_type() && case_bits_type(type, aggregate, interfaces, published)))) {
+                    remember_inline_product_field(facts, site, selection.receiver,
+                        selection.field, ordinal, record, type)
+                }
+            } else {};
             if (origin < site && describe_received_product(facts, origin, type)) {
                 if (type.kind != record_type()) return case_problem(report, selection.field, unproved_case_field());
                 record.kind <- type.kind;
@@ -809,7 +873,7 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
     for (at in 0u64 .. used) {
         mode <- inspect_callable(nodes, revision, used, at, callable);
         if (mode == ModuleCallable || mode == LexicalCallable) {
-            prepare_sum_formals(nodes, names, selected, interfaces, published, aggregate, work,
+            prepare_case_loan_formals(nodes, names, selected, interfaces, published, aggregate, work,
                 facts, at, callable.signature, used, revision);
             if (work[at].sum_loan_formals && first == no_node()) { (first <- at):void }
         }
