@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Record the seed’s delivered module diagnostic coverage
+
+<a id="k-seed-world-loader-status-20261124"></a>
+**K-SEED-WORLD-LOADER-STATUS-20261124.** [Roadmap r28→r29](applications/cod-booter/README.md#diagnostic-coverage-of-the-entry-modules-fused-world) continues [D-20-WORLD-DIAGNOSTICS](#h-entry-world-diagnostics-20261124) under P-713/P-714. The seed ships traversal through recoverable module errors and the shared diagnostic cap at `1d9b292e24a76b9dc702fd2c51cb86de985dea72:cod/lang_modules.hh`. The status distinguishes loader findings from independent semantic checks and CoD booter coverage.
+
 ## 2026-11-24 — Review recovery between independent product schemas in the seed
 
 <a id="k-seed-product-diagnostic-recovery-20261124"></a>
