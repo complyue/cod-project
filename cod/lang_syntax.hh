@@ -3116,14 +3116,20 @@ public:
       }
       depths_.clear();
     }
-    if (!reports_.empty()) return {std::move(forms), std::move(reports_)};
     for (const auto &form : forms) if (form->body) {
-      const auto context = form->kind == Form::Kind::function || form->kind == Form::Kind::procedure
-          ? ReturnContext::callable : ReturnContext::module;
-      validate_explicit_scopes(*form->body, context);
-      normalize_assignment_calls(*form->body);
-      normalize_full_scopes(*form->body, form->kind);
-      normalize_return_tail(*form);
+      if (std::ranges::any_of(reports_, [&](const auto &report) {
+            return form->span.first <= report.at.span.first && report.at.span.first <= form->span.past;
+          })) continue;
+      try {
+        const auto context = form->kind == Form::Kind::function || form->kind == Form::Kind::procedure
+            ? ReturnContext::callable : ReturnContext::module;
+        validate_explicit_scopes(*form->body, context);
+        normalize_assignment_calls(*form->body);
+        normalize_full_scopes(*form->body, form->kind);
+        normalize_return_tail(*form);
+      } catch (const LocatedFailure &failure) {
+        record_fault(failure.diagnostic);
+      }
     }
     return {std::move(forms), std::move(reports_)};
   }

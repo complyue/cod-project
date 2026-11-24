@@ -30,6 +30,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <cerrno>
+#include <charconv>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
@@ -41,6 +42,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <vector>
 
@@ -203,7 +205,8 @@ public:
   std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) const;
   bool compileAndRun(const CodReplConfig &config, const std::string &submission) const;
   int compileLanguage(const CodReplConfig &config, const fs::path &entry, bool check_only,
-                      const LanguageEmission &emission, const cod::language::WarningOptions &warnings) const;
+                      const LanguageEmission &emission, const cod::language::WarningOptions &warnings,
+                      std::optional<size_t> diagnostic_limit) const;
   void runRepl(const CodReplConfig &config) const;
 };
 
@@ -223,6 +226,7 @@ static void printUsage(const char *prog_name) {
             << "  --emit-c-provider DIR  Generate the checked C boundary header and stubs\n"
             << "  --no-specialize    Validate CoD calls through general native implementations\n"
             << "  --no-bounds-checks Assume source builtin indices are in range\n"
+            << "  --max-diagnostics N  Limit the combined source errors and warnings\n"
             << "  --warnings-as-errors  Treat all CoD language warnings as errors\n"
             << "  -Werror=unit-conversion       Reject ambiguous unit conversion paths\n"
             << "  -Werror=multi-alias-extension Reject overload declarations through multiple aliases\n"
@@ -658,18 +662,37 @@ std::vector<std::string> CodTool::buildCompilerArgs(const CodReplConfig &config)
 }
 
 int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry, bool check_only,
-                            const LanguageEmission &emission, const cod::language::WarningOptions &warnings) const {
+                            const LanguageEmission &emission, const cod::language::WarningOptions &warnings,
+                            std::optional<size_t> diagnostic_limit) const {
   try {
     auto compilation = cod::language::Compiler{warnings, emission.specialize, emission.bounds_checks}.compile(
         fs::absolute(entry), {getLanguageLibrary(), config.project_root},
-        emission.ir.has_value(), !check_only || emission.bitcode.has_value(), emission.providers.has_value());
-    for (const auto &warning : compilation.warnings) std::cerr << warning << '\n';
+        emission.ir.has_value(), !check_only || emission.bitcode.has_value(), emission.providers.has_value(),
+        diagnostic_limit);
+    for (const auto &finding : compilation.diagnostics.findings()) {
+      if (const auto *warning = std::get_if<cod::language::WarningDiagnostic>(&finding.primary)) {
+        std::cerr << warning->text();
+        if (warnings.promotes(warning->kind)) std::cerr << " (treated as error)";
+      } else {
+        const auto &error = std::get<cod::language::SyntaxDiagnostic>(finding.primary);
+        std::cerr << cod::language::location_text(error.at) << ": " << error.message;
+      }
+      std::cerr << '\n';
+      for (const auto &site : finding.import_sites)
+        std::cerr << cod::language::location_text(site) << ": note: imported here\n";
+    }
+    using Coverage = cod::language::CompilationDiagnostics::Coverage;
+    if (compilation.diagnostics.coverage() == Coverage::capped)
+      std::cerr << "CoD diagnostic limit reached. Coverage is incomplete.\n";
+    if (compilation.diagnostics.coverage() == Coverage::storage_exhausted)
+      std::cerr << "CoD diagnostic coverage is incomplete because storage was exhausted.\n";
     if (config.verbose) {
       for (const auto &module : compilation.scanned_modules)
         std::cerr << "[CoD scan] " << module << '\n';
       for (const auto &module : compilation.execution_order)
         std::cerr << "[CoD execution semantics] " << module << '\n';
     }
+    if (!compilation.accepted) return 2;
     const auto write = [](const fs::path &path, const std::string &contents) {
       std::ofstream output(path, std::ios::binary);
       output.write(contents.data(), static_cast<std::streamsize>(contents.size()));
@@ -884,6 +907,7 @@ int main(int argc, const char **argv) {
   LanguageEmission emission;
   bool check_only = false;
   cod::language::WarningOptions warnings;
+  std::optional<size_t> diagnostic_limit;
 
   // Parse command line arguments
   for (int i = 1; i < argc; ++i) {
@@ -915,6 +939,20 @@ int main(int argc, const char **argv) {
       emission.specialize = false;
     } else if (arg == "--no-bounds-checks") {
       emission.bounds_checks = false;
+    } else if (arg == "--max-diagnostics") {
+      if (i + 1 >= argc || diagnostic_limit) {
+        std::cerr << "Error: provide one positive count for --max-diagnostics\n";
+        return 1;
+      }
+      const std::string_view count = argv[++i];
+      size_t limit = 0;
+      const auto end = count.data() + count.size();
+      const auto parsed = std::from_chars(count.data(), end, limit);
+      if (parsed.ec != std::errc{} || parsed.ptr != end || !limit) {
+        std::cerr << "Error: --max-diagnostics requires a positive decimal count\n";
+        return 1;
+      }
+      diagnostic_limit = limit;
     } else if (arg == "--warnings-as-errors") {
       warnings.as_errors = true;
     } else if (arg == "-Werror=unit-conversion") {
@@ -976,7 +1014,11 @@ int main(int argc, const char **argv) {
       std::cerr << "Error: CoD source mode cannot be combined with --eval\n";
       return 1;
     }
-    return CodTool{}.compileLanguage(config, *language_entry, check_only, emission, warnings);
+    return CodTool{}.compileLanguage(config, *language_entry, check_only, emission, warnings, diagnostic_limit);
+  }
+  if (diagnostic_limit) {
+    std::cerr << "Error: --max-diagnostics requires --run or --check\n";
+    return 1;
   }
   if (warnings.as_errors || !warnings.errors.empty()) {
     std::cerr << "Error: CoD warning options require --run or --check\n";
