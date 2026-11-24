@@ -684,7 +684,8 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         val primitive <- primitive_receiver_namespace(source, nodes, names, work, selected,
             visits, visit_count, used, revision);
         ref problem = make u64 { no_node() };
-        if (!prepare_object_callables(checked_selections, checked_used, used, revision,
+        if (!prepare_object_callables(source, catalog_spellings, spellings, spelling_size,
+            checked_selections, checked_used, used, revision,
             progress[0u64].identity, primitive, visits, published, published_interfaces, units,
             object_prefixes, callable_uses, work, problem)) {
             report_rejection(source, lines, diagnostic, module_selection_failed(), unproved_import_interpretation(),

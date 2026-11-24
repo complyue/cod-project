@@ -24,7 +24,8 @@ using "./ModuleExportStorage.cod" {
 using "./ModuleIndex.cod" { Visits, VisitSlot { Checked }, VisitObject { CompletedVisitObject } }
 using "./ModuleExports.cod" {
     SelectedExports, CheckedSelections, CheckedSelection { SelectedResource }, StagedExportUses,
-    callable_export, ordinary_callable_shape
+    callable_export, ordinary_callable_shape, compare_selected_bindings,
+    SelectionComparison { RepeatedSelection }
 }
 using "./NativeCommands.cod" { NativeCommands, NativeUnitRows, declare_function, begin_function };
 
@@ -391,12 +392,27 @@ func prepare_object_callable(view:const ObjectExportSite in E, mode:ModuleSelect
     return true
 }
 
-export func prepare_object_callables(selections:const CheckedSelections in F, selected_used:u64,
+func same_callable_contexts(proof:const CallableUseProofs in P, left:u64, right:u64)
+    -> bool where {const owner P} {
+    return case proof[left] of {
+        CheckedCallableUse { val incoming <- incoming_context; val context <- selected_context; } ->
+            case proof[right] of {
+                CheckedCallableUse { val other_incoming <- incoming_context; val other_context <- selected_context; } ->
+                    incoming == other_incoming && context == other_context;
+                _ -> false
+            };
+        _ -> false
+    }
+}
+
+export func prepare_object_callables(source:const SourceBytes in S, catalog:const SourceBytes in B,
+    spellings:const SourceBytes in G, spelling_used:u64, selections:const CheckedSelections in F, selected_used:u64,
     used:u64, revision:u64, module:u64, primitive_receiver:bool,
     visits:const Visits in G, exports:const ModuleExports in G, interfaces:const ModuleInterfaces in G,
     units:const NativeUnitRows in G, limits:const ObjectPrefixes in L,
     proof:CallableUseProofs in P, work:NameWork in W, problem:u64 in R)
-    -> bool where {const owner F, const owner G, const owner L, owner P, owner W, owner R} {
+    -> bool where {const owner S, const owner B, const owner F, const owner G, const owner L,
+                   owner P, owner W, owner R} {
     problem <- no_node();
     if (selected_used > intrinsic (len)(selections) || selected_used > intrinsic (len)(proof) ||
         module == 0u64 || module > limits.visits || used > intrinsic (len)(work)) return false;
@@ -420,6 +436,16 @@ export func prepare_object_callables(selections:const CheckedSelections in F, se
                         interfaces, units, limits, proof, row, site, revision)) {
                         problem <- site;
                         return false
+                    };
+                    # A repeated local spelling can name several rows of one
+                    # publisher. Preserve the selected interpretation of each.
+                    for (earlier in 0u64 .. row) {
+                        if (compare_selected_bindings(selections, selected_used, revision, earlier, row,
+                            source, catalog, spellings, spelling_used) == RepeatedSelection &&
+                            !same_callable_contexts(proof, earlier, row)) {
+                            problem <- site;
+                            return false
+                        }
                     };
                     if (mode == ImportResource && work[site].receiver_import != OtherReceiverResource) {
                         (work[site].receiver_import <- ReceiverCallablesReady):void
