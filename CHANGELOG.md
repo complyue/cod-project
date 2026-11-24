@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review seed memory at checked scope exits
+
+<a id="k-seed-drained-path-memory-20261124"></a>
+**K-SEED-DRAINED-PATH-MEMORY-20261124.** D-ARCH-REVIEW r110→111 continues [normal completion](#h-normal-completion-20261124) and [terminal diagnostic validation](#k-seed-terminal-body-coverage-20261124) under P-682/P-683. The project user gave seed RAM reduction priority over new full-booter-dependent work. The [checker review](design/ImplementationArchitecture.md#consuming-completed-paths-in-the-seed-checker) covers reuse of a completed path’s state after its last consumer. The existing drain is at `2bde4ff6065af3db07ccd4edb2a7839f62517443:cod/lang_checked.hh:6145`. The memory comparison uses the same complete compiler input on both revisions.
+
 ## 2026-11-24 — Review final validation of independent checked throws
 
 <a id="k-seed-terminal-body-coverage-20261124"></a>
