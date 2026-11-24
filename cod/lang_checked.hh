@@ -6105,9 +6105,13 @@ class ScalarChecker {
     refine_known_bindings();
   }
   CheckedOperation finish_scope(CheckedOperation result, AbruptFlow &flow, AbruptFlow *outer,
-                                size_t scope, const Location &at, std::optional<LexicalState> *case_scan = nullptr) {
+                                size_t scope, const Location &at, std::optional<LexicalState> *case_scan = nullptr,
+                                bool returns_void_at_end = false) {
     const auto body = lexical_;
-    if (result.type != Type::never && lexical_.live) flow.paths.push_back({lexical_, {}, at, {0, false}});
+    if (result.type != Type::never && lexical_.live) {
+      const auto completion = returns_void_at_end ? Completion{1, true} : Completion{};
+      flow.paths.push_back({lexical_, {}, at, completion});
+    }
     std::vector<LexicalState> normals, scans;
     std::vector<AbruptPath> exits;
     std::optional<Type> normal_type;
@@ -7871,7 +7875,7 @@ class ScalarChecker {
     result_probe_ = id;
     const auto completion = type_evidence(*method.source->body, state);
     result_probe_ = previous;
-    if (!method.source->case_scan_scope && !method.source->requires_explicit_return() && !returns.value_obligation &&
+    if (!method.source->case_scan_scope && !returns.value_obligation &&
         (completion || !returns.unresolved) && completion != Type::never && state.complete)
       returns.types.push_back(Type::void_type);
     if (method.source->case_scan_scope && returns.types.empty() && !returns.unresolved &&
@@ -9902,7 +9906,7 @@ class ScalarChecker {
   }
   std::optional<PresenceBranches> complete_type_deferred(const TypeDeferredFlow &flow, const TypeEvidenceExits &exits,
                                                         const TypeEvidenceState &body, bool falls_through,
-                                                        TypeEvidenceExits *completed) const {
+                                                        TypeEvidenceExits *completed, bool returns_void_at_end = false) const {
     const bool may_replace = body.selections.deferred_return || std::ranges::any_of(exits.paths,
         [](const auto &path) { return path.state.selections.deferred_return; });
     bool returning = false;
@@ -9970,7 +9974,7 @@ class ScalarChecker {
       else for (const auto reason : path.reasons)
         enqueue(path.state.deferred_queue, path.returned(), reason >= 2 ? reason : 0, {}, path.state, path.result);
     }
-    if (falls_through) enqueue(body.deferred_queue, false, 0, {}, body, {});
+    if (falls_through) enqueue(body.deferred_queue, returns_void_at_end, 0, {}, body, {});
 
     // Reverse registration order visits older tails first within each path.
     // Loop headers also feed earlier iterations until their input stabilizes.
@@ -10980,7 +10984,8 @@ class ScalarChecker {
       }
       const auto completion = type_evidence(*method.source->body, body, false, nullptr, nullptr,
                                             ExpectedTypeUse::materialization, true, EvidenceRead::discarded);
-      complete_type_deferred(deferred, exits, body, completion != Type::never, &completed);
+      complete_type_deferred(deferred, exits, body, completion != Type::never, &completed,
+          !method.regional_initializer && method.source->returns_void_at_end(*contract.type));
       if (!body.complete) return {};
       const bool allows_fallthrough = !method.source->completion_requires_return(*contract.type);
       for (const auto &path : completed.paths) {
@@ -11591,7 +11596,8 @@ class ScalarChecker {
         complete_type_deferred(deferred, exits, body, completion != Type::never, &completed);
       } else if (body.deferred) {
         if (auto proof = complete_type_deferred(deferred, exits, body, completion != Type::never,
-                track_completion ? &completed : nullptr); track_return && !track_completion && proof) {
+                track_completion ? &completed : nullptr, callee.definition->returns_void_at_end(*result.contract->type));
+            track_return && !track_completion && proof) {
           proof->forget_observations(first_local_observation);
           returned.branches = proof->remap(exported_slots);
         }
@@ -12565,11 +12571,14 @@ class ScalarChecker {
     case K::block: {
       std::optional<Type> result = Type::void_type;
       bool exits = false;
+      const auto *method = state.method ? &program_.methods[*state.method] : nullptr;
+      const bool statement_body = method && !method->regional_initializer && method->source->ordinary_procedure() &&
+          method->source->body.get() == &expr;
       for (size_t i = 0; i < expr.children.size(); ++i) {
         const bool last = i + 1 == expr.children.size();
         const auto &item = *expr.children[i];
-        const auto use = last ? read : item.braced_if_with_empty_alternative() ? EvidenceRead::guard_statement
-                                                                             : EvidenceRead::discarded;
+        const auto use = last && !statement_body ? read : item.braced_if_with_empty_alternative() ? EvidenceRead::guard_statement
+                                                                                                : EvidenceRead::discarded;
         result = type_evidence(item, state, contextual && last, last ? expected : nullptr,
                                last ? alternatives : nullptr, expected_use, !exits, use, joining);
         exits = exits || result == Type::never;
@@ -13196,6 +13205,12 @@ class ScalarChecker {
           observes_return && read == EvidenceRead::loop_discard ? EvidenceRead::discarded : read;
       auto arms = conditional_arms(expr, state, contextual, expected, alternatives, expected_use, condition != Type::never, arm_read);
       auto &[yes, no, yes_state, no_state] = arms;
+      if (observes_return && state.returns && !state.invocation_result && alternatives && reaches_yes &&
+          yes != Type::void_type && yes != Type::never) {
+        // The match cannot anchor the type it observes, but a value on that
+        // arm still prevents a default to void.
+        state.returns->value_obligation = true;
+      }
       if (!discarded_arms)
         view = yes == Type::never ? no_state.value : no == Type::never ? yes_state.value : join_views(yes_state.value, no_state.value);
       const bool independent = !discarded_arms && arms.independent();
@@ -20703,11 +20718,13 @@ class ScalarChecker {
     }
     case K::block: {
       bool exits = false;
+      const bool statement_body = checking_method_ && !checking_method_->regional_initializer &&
+          checking_method_->source->ordinary_procedure() && checking_method_->source->body.get() == &expr;
       for (size_t i = 0; i < expr.children.size(); ++i) {
         const bool last = i + 1 == expr.children.size();
         const auto &item = *expr.children[i];
-        const auto use = last ? discard_use : item.braced_if_with_empty_alternative() ? DiscardUse::guard_statement
-                                                                                   : DiscardUse::ordinary;
+        const auto use = last && !statement_body ? discard_use : item.braced_if_with_empty_alternative() ? DiscardUse::guard_statement
+                                                                                                       : DiscardUse::ordinary;
         operation.type = check(item, instance, operations, last ? read : true, last ? discard : true,
                                last ? expected : nullptr, expected_use, false, IndexedUse::value_only,
                                last ? native_loan : NativeLoanContext::none, {}, nullptr, use);
@@ -22479,12 +22496,13 @@ class ScalarChecker {
         fail(method.body->at, "here body fallthrough requires feedback of type '" + type_name(*instance.result.type) + "'");
       completed.type = end == Type::never ? Type{Type::never} : Type{Type::void_type};
       std::optional<LexicalState> case_scan;
+      const bool returns_void_at_end = !checking_method_->regional_initializer && method.returns_void_at_end(*instance.result.type);
       const auto completion = finish_scope(completed, flow, &outcomes, 0, method.at,
-                                           method.case_scan_scope ? &case_scan : nullptr).type;
+                                           method.case_scan_scope ? &case_scan : nullptr, returns_void_at_end).type;
       const bool requires_return = !checking_method_->regional_initializer && method.completion_requires_return(*instance.result.type);
       if (validating_ && proving && requires_return && completion != Type::never &&
           warned_missing_return_.insert(instance.method).second)
-        program_.warnings.push_back({Warning::missing_return, method.at, method.requires_explicit_return()
+        program_.warnings.push_back({Warning::missing_return, method.at, method.ordinary_procedure()
             ? "procedure may finish without an explicit return" : "callable may finish without a result"});
       if (proving) {
         abrupt_ = nullptr;

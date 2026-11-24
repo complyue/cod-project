@@ -566,10 +566,13 @@ struct Form {
     return exporting && (kind == Kind::symbol || kind == Kind::data || kind == Kind::sum_data || kind == Kind::abstract_type || kind == Kind::native_handle_type || kind == Kind::array || kind == Kind::enumeration ||
                          kind == Kind::function || kind == Kind::procedure);
   }
-  bool requires_explicit_return() const { return kind == Kind::procedure && !implicit_scope && !supplied_scope; }
+  bool ordinary_procedure() const { return kind == Kind::procedure && !implicit_scope && !supplied_scope && !supplied_group; }
   bool returns_tail_value() const { return !supplied_group && (kind == Kind::function || implicit_scope || supplied_scope); }
   bool completion_requires_return(const Type &result) const {
-    return !supplied_group && (requires_explicit_return() || result != Type::void_type);
+    return !supplied_group && result != Type::void_type;
+  }
+  bool returns_void_at_end(const Type &result) const {
+    return !supplied_group && !case_scan_scope && result == Type::void_type;
   }
 };
 

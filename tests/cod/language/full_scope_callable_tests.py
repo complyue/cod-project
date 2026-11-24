@@ -152,11 +152,14 @@ runner.CASES = {
         'func done()->void{return;7u64;}done();', 0, '', ''),
     'value_tail_in_void_function_requires_discard': (
         'func wrong()->void{7u64;}wrong();', 2, '', 'value-producing tail in a void callable'),
-    'ordinary_void_procedure_requires_explicit_return_after_cleanup': (
-        IO+'using "std:exceptions" MissingReturnError;'
-        'proc forgotten()->void{defer behave @print(5u64);}'
-        'try{forgotten();}catch(e:const MissingReturnError){behave @print(6u64);};',
-        0, '5\n6\n', '[-Wmissing-return]'),
+    'ordinary_void_procedure_finishes_after_cleanup': (
+        IO+'proc finish()->void{defer behave @print(5u64);}finish();behave @print(6u64);', 0, '5\n6\n', ''),
+    'procedure_final_guard_executes_as_a_statement': (
+        IO+'proc choose(selected:bool,ref output:u64 in O) where {owner O}{if(selected){output<-7u64}}'
+        'val cell<-1u64;choose(false,cell);behave @print(cell);choose(true,cell);behave @print(cell);', 0, '1\n7\n', ''),
+    'local_handler_discards_a_final_value': (
+        IO+'symbol @task:proc()->void;proc value()->u64{behave @print(7u64);return 9u64;}'
+        'effect proc @task(){value()};behave @task();', 0, '7\n', ''),
     'ordinary_void_procedure_can_return_from_cleanup': (
         'proc finished()->void{defer{return;};}finished();', 0, '', ''),
     'return_scalar_filter_matches_prepared_type': (IO+
@@ -522,7 +525,7 @@ proc result = choose();
         'source(mark(1u64))(n)=>{sink(n);};source(mark(1u64)) $> sink;sink <$ source(mark(1u64));',
         0,'1\n11\n11\n1\n11\n11\n1\n11\n11\n',''),
     'pipeline_terminal_zero_offers_do_not_call_a_sink': (IO+
-        'proc source() yields u64{behave @print(1u64);return;}'
+        'proc source() yields u64{behave @print(1u64);}'
         'proc sink(n:u64)->void{behave @print(n);return;}'
         'source $> sink;sink <$ source;',0,'1\n1\n',''),
     'pipeline_terminal_returns_bool_feedback_in_both_directions': (IO+

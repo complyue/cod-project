@@ -2430,7 +2430,8 @@ class LLVMEmission {
     return load(result);
   }
   void call_scope(const std::vector<const Expression *> &expressions, const Location &at,
-                  llvm::Value *requires_return = nullptr, const Type *feedback = nullptr) {
+                  llvm::Value *requires_return = nullptr, const Type *feedback = nullptr,
+                  llvm::Value *returns_void_at_end = nullptr) {
     auto *outer_temporaries = temporaries_;
     auto *outer_native = native_effect_scope_;
     Scope scope{scope_, block("scope.cleanup"), slot(b_.getPtrTy(), "defer.head"), {}, {}};
@@ -2452,7 +2453,17 @@ class LLVMEmission {
       });
       assign_value(completion_.value, value, body.at);
     }
-    if (reachable()) b_.CreateBr(scope.cleanup);
+    if (reachable()) {
+      if (const auto *known = llvm::dyn_cast_or_null<llvm::ConstantInt>(returns_void_at_end)) {
+        if (known->isOne()) save_return(empty_scalar(), at);
+      } else if (returns_void_at_end) {
+        auto *returned = block("return.void");
+        b_.CreateCondBr(returns_void_at_end, returned, scope.cleanup);
+        b_.SetInsertPoint(returned);
+        save_return(empty_scalar(), at);
+      }
+      b_.CreateBr(scope.cleanup);
+    }
     if (case_scan_request_) {
       b_.SetInsertPoint(scope.cleanup);
       auto *kind = load(completion_.kind);
@@ -5250,8 +5261,11 @@ class LLVMEmission {
       auto *value = arguments_.at(call.operands + c);
       store_incoming(place, copy_value(value, method.captures.at(c).at));
     }
+    llvm::Value *returns_void_at_end = nullptr;
+    if (!method.regional_initializer && method.source->returns_void_at_end(Type::void_type))
+      returns_void_at_end = requires_return ? b_.CreateNot(requires_return) : b_.getTrue();
     call_scope({method.source->body.get()}, method.source->at, requires_return,
-        call.here_group ? &*layout.result.type : nullptr);
+        call.here_group ? &*layout.result.type : nullptr, returns_void_at_end);
     if (initialization) {
       b_.SetInsertPoint(initialization->exit);
       for (auto i = parameter_values_.rbegin(); i != parameter_values_.rend(); ++i) clear_value(*i);
