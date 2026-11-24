@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review one failed dependency shared by grouped selectors
+
+<a id="k-grouped-dependency-failure-20261124"></a>
+**K-GROUPED-DEPENDENCY-FAILURE-20261124.** D-ARCH-REVIEW r111→112, continued under D-20-WORLD-DIAGNOSTICS and P-682/P-683. The [grouped-path review](design/ImplementationArchitecture.md#a-failed-path-in-a-grouped-import) applies the [entry-world coverage decision](#h-entry-world-diagnostics-20261124) to a single written dependency shared by multiple selectors. The path node is created in `acd9e453:applications/cod-booter/src/ModuleParser.cod` by `parse_selection_items`. The linked candidate produced two identical parent notes and, at limit one, reported incomplete coverage with only the second blocked selector remaining. This record clears the correction and its acceptance cases.
+
 ## 2026-11-24 — Measure linked booter peak memory on release workloads
 
 <a id="k-booter-memory-baseline-20261124"></a>
