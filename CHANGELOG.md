@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Let a procedure import bind the published symbol
+
+<a id="h-proc-import-identity-20261124"></a>
+**H-PROC-IMPORT-IDENTITY-20261124.** On 2026-11-24 (America/Los_Angeles) the project user in the [CoD design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) specified “`import "./vocabulary.cod" proc @p;` 就够了，不要求写出 `symbol from "./vocabulary.cod" @p;` 当然也允许写出来。” [D-15-DEFAULT-EXPORTS r73 / D-10r252](design/ModuleWorlds.md#selecting-a-symbolic-procedure-family) extends the free-name rule to imports, including [empty families](#h-empty-procedure-family-20261124). Reusing the same identity succeeds and a conflicting one rejects. P-692/P-693 preserve receiver extension and selection rules. Guideline r3 and guide r6 align the contributor example under P-694/P-695. The prior two-directive example is at `b109ea54af33a9f2e2f3603404bb6c4281588b6f:design/ModuleWorlds.md`.
+
 ## 2026-11-24 — Establish the procedure family at declaration
 
 <a id="h-empty-procedure-family-20261124"></a>

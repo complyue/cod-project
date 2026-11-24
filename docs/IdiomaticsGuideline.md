@@ -1,11 +1,11 @@
 # Idiomatics guideline
 
-Guideline revision: 2 · Confirmed: 2026-11-23
+Guideline revision: 3 · Updated: 2026-11-24
 
 ## Design authority
 
 [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics) covers this guideline at
-r2. [D-10-FORMAT-POLICY](../design/DesignAuthorityRegistry.md#d-10-format-policy) covers its
+r3, applying the [single-directive procedure import](../CHANGELOG.md#h-proc-import-identity-20261124) to the contributor example. [D-10-FORMAT-POLICY](../design/DesignAuthorityRegistry.md#d-10-format-policy) covers its
 [canonical code style](#canonical-code-style). The project user's
 [quality-standard approval and formatting decisions](../CHANGELOG.md#h-idiomatics-guideline-20261123)
 establish both scopes, including the initial maximum of 100 source columns.
@@ -192,8 +192,9 @@ identity (`symbol from`) and a dynamic call (`behave` or `perform`).
 
 A family selector needs a concrete reason. An application entry may use `using proc` to select a
 carrier's complete tariff and install it for a billing run. A package adding a refrigerated-shipment
-method to that operation may use `import proc` with the required destination and extension
-permission. Explain who selects, who installs and who calls. A `using` selection grants no extension
+method to that operation can select its identity and gain extension permission in one
+`import proc` directive. An explicit `symbol from` is optional for that same identity. Explain who
+selects, who installs and who calls. A `using` selection grants no extension
 permission. A lexical call to the selected family bypasses a dynamic replacement for that callee.
 [Guide example](IdiomaticCoD.md#keep-symbolic-procedure-families-at-integration-boundaries) ·
 [Module contract](../design/ModuleWorlds.md#selecting-a-symbolic-procedure-family)

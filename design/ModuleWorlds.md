@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 72 · Recorded: 2026-11-24 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 73 · Recorded: 2026-11-24 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+[D-15-DEFAULT-EXPORTS](DesignAuthorityRegistry.md#d-15-default-exports) r73 covers [identity introduction by procedure import](#selecting-a-symbolic-procedure-family) under [H-PROC-IMPORT-IDENTITY-20261124](../CHANGELOG.md#h-proc-import-identity-20261124) and P-692/P-693. Verify the single directive on empty and populated families, optional explicit identity selection and a conflicting destination. The receiving interpretation and extension permission belong to the import.
 
 [D-10-EMPTY-PROC-FAMILY](DesignAuthorityRegistry.md#d-10-empty-proc-family) at D-15r72 covers [selection before the first procedure method](#selecting-a-symbolic-procedure-family) under [the project user’s publication decision](../CHANGELOG.md#h-empty-procedure-family-20261124). P-709/P-710 retain H-374’s complete-family publication, destination identity and receiving-world permissions. Check a vocabulary with zero methods and an importer contributing the first one.
 
@@ -369,11 +371,11 @@ default { var @sout, proc @flush }
 
 For each of `using`, `import` and `mixin`, writing only `"./hooks.cod"` has exactly the meaning of writing `"./hooks.cod" { var @sout, proc @flush }` after that verb. Substitution is a source-level equivalence. The compiler can retain checked selectors with their published spellings, kinds, origins and order. Apply ordinary privacy, renaming, destination, access, extension and body-availability rules at the receiving directive. If the explicitly written list would fail for one item, the omitted form fails there too. Items are never silently dropped to make a verb applicable. This also governs generated entries from the complete public table where module `{..}` is admitted. The public table excludes private entries and implicit fallback names. Type-associated methods and nested type-member selectors retain their existing rules.
 
-Use `var @name` for a symbolic variable resource and `proc @name` for a symbolic procedure resource in export, using, import and mixin selectors. The prefix states what is requested of the source. Match it to the published declaration and reject a missing or wrong kind. `var` in a selector declares no local place or writable access. It preserves the published storage and access contract, including a reference symbol’s owner role. `proc` selects the procedure family under the receiving verb. For `using`, a free receiving name introduces the published identity and its source-preserving family. Reusing the same nominal identity succeeds. A different identity at that name rejects. `import` and `mixin` keep their own destination and body requirements. It does not extract a first-class procedure or perform a call. Bare `@name` remains the operand of the separate identity operation `symbol from "./hooks.cod" @name`. That operation can establish the typed identity before an `effect` installs anything. For a published variable, `using var` also selects that typed identity. For a published procedure, the `using proc` selector itself suffices.
+Use `var @name` for a symbolic variable resource and `proc @name` for a symbolic procedure resource in export, using, import and mixin selectors. The prefix states what is requested of the source. Match it to the published declaration and reject a missing or wrong kind. `var` in a selector declares no local place or writable access. It preserves the published storage and access contract, including a reference symbol’s owner role. `proc` selects the procedure family under the receiving verb. For both `using proc` and `import proc`, a free receiving name introduces the published symbol identity. An existing selection of that identity is compatible. Reject a conflicting identity even when the procedure signatures agree. Apply these checks at the local spelling selected by `as`, where present. `using` preserves the selected source interpretation. `import` brings the family into the receiving interpretation with its ordinary extension permission. `mixin` keeps its destination and body requirements. It does not extract a first-class procedure or perform a call. Bare `@name` remains the operand of the separate identity operation `symbol from "./hooks.cod" @name`. That operation can establish the typed identity before an `effect` installs anything. For a published variable, `using var` also selects that typed identity. For a published procedure, the `using proc` selector itself suffices.
 
 For `var` under `using`, apply the [same identity selection as `symbol from`](#selecting-a-symbolic-variable). A missing dynamic installation cannot make either declaration fail.
 
-A complete definition with an attached `export` already states the kind. For example, `export ref symbol @sout:Utf8StreamOut in O where {owner O}` publishes the same variable resource as the corresponding declaration followed by `export var @sout`. Likewise an already declared procedure symbol can be published by `export proc @flush`. A default mark on a definition contributes the same kind-qualified selector. Publication alone reads no active binding. Preserve explicit symbol identity selection for a caller that only wants to install a writer. Verify that the same unsupported resource, missing destination or symbol conflict rejects with omitted and explicit lists and that a wrong kind rejects even when the spelling matches. A complete or default selection grants exactly what its expanded entries under that verb would grant.
+A complete definition with an attached `export` already states the kind. For example, `export ref symbol @sout:Utf8StreamOut in O where {owner O}` publishes the same variable resource as the corresponding declaration followed by `export var @sout`. Likewise an already declared procedure symbol can be published by `export proc @flush`. A default mark on a definition contributes the same kind-qualified selector. Publication alone reads no active binding. Preserve explicit symbol identity selection for a caller that only wants to install a writer. Verify that omitted and explicit lists give the same result for a free procedure-import name, a conflicting symbol, a wrong kind, and a missing destination for a verb that requires one. A complete or default selection grants exactly what its expanded entries under that verb would grant.
 
 A newline between a module path and an explicit selection is ordinary whitespace. Recognize a path-only directive at an unambiguous grammar boundary, with an explicit semicolon available for disambiguation. Preserve multiline named selectors and an ordinary identifier named `default` wherever the contextual declaration does not apply.
 
@@ -391,12 +393,11 @@ export proc @p;
 
 ```cod
 # provider.cod
-symbol from "./vocabulary.cod" @p;
 import "./vocabulary.cod" proc @p;
 proc @p() -> i64 { return 7i64 }
 ```
 
-The symbol declaration creates the empty family. Export publishes it under the symbol’s identity. In the provider, the first directive selects the destination identity. The explicit import grants permission to add the first method in the provider’s interpretation. The vocabulary and an independent source-preserving `using` still see zero methods. A `using` can select the empty family into a free name but grants no extension permission. A different preselected identity still conflicts under its verb’s rules. Export, import and using can all occur before a handler is installed. Written, default-expanded and complete selections apply the same per-item checks. A body mixin still requires a body. [Procedure declarations](SymbolicDynamicScope.md#procedure-families-before-the-first-method)
+The symbol declaration creates the empty family. Export publishes it under the symbol’s identity. In the provider, the single `import` both binds the vocabulary’s `@p` identity and grants permission to contribute the first method in the provider’s interpretation. Writing `symbol from "./vocabulary.cod" @p;` as well is valid. Both directives refer to the same symbol, and the import supplies the family and extension permission. Identity selection alone grants no extension. The vocabulary and an independent source-preserving `using` still see zero methods. A `using` can select the empty family into a free name but grants no extension permission. A different preselected identity still conflicts under its verb’s rules. Export, import and using can all occur before a handler is installed. Written, default-expanded and complete selections apply the same per-item checks. A body mixin still requires a body. [Procedure declarations](SymbolicDynamicScope.md#procedure-families-before-the-first-method)
 
 These excerpts belong to three separate modules. The tariff package publishes its methods under
 the billing vocabulary's `@quote` identity.
@@ -412,12 +413,11 @@ using "./carrier-tariff.cod" proc @quote
 ```
 
 ```cod
-# Refrigerated-shipping integration establishes the destination and contributes a method there.
-symbol from "./billing-vocabulary.cod" @quote
+# Refrigerated-shipping integration extends the published carrier family.
 import "./carrier-tariff.cod" proc @quote
 ```
 
-The batch entry can introduce a free `@quote` with the single `using` directive. Its `effect proc @quote` installs the family for downstream dynamic calls. Selection itself performs no installation. The refrigerated-shipping module must satisfy the destination, extension and overload checks for its contribution. A module with only `using` cannot add that method. Prefer an ordinary named callable for a fixed calculation. [Programming guideline](../docs/IdiomaticsGuideline.md#selecting-a-symbolic-procedure-family) · [Worked example](../docs/IdiomaticCoD.md#keep-symbolic-procedure-families-at-integration-boundaries)
+The batch entry can introduce a free `@quote` with the single `using` directive. Its `effect proc @quote` installs the family for downstream dynamic calls. Selection itself performs no installation. The refrigerated-shipping import introduces the tariff’s published symbol at a free name. An explicit identity selection from the billing vocabulary is also valid when it denotes that same symbol. Its contributed methods undergo the ordinary extension and overload checks. A module with only `using` cannot add that method. Prefer an ordinary named callable for a fixed calculation. [Programming guideline](../docs/IdiomaticsGuideline.md#selecting-a-symbolic-procedure-family) · [Worked example](../docs/IdiomaticCoD.md#keep-symbolic-procedure-families-at-integration-boundaries)
 
 ### Selecting a symbolic variable
 

@@ -12,7 +12,7 @@ dependencies are identified where needed.
 
 ## Design authority
 
-Guide revision 5 applies the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
+Guide revision 6 applies the [single-directive import](../CHANGELOG.md#h-proc-import-identity-20261124) and the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
 [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics), P-694/P-695, and the
 [canonical source style](IdiomaticsGuideline.md#canonical-code-style). The
 [guide baseline](../CHANGELOG.md#k-idiomatic-cod-rewrite-20261123),
@@ -467,8 +467,9 @@ proc run_carrier_batch() -> void {
 
 Use `import proc` only when a module needs to **contribute a method to that same operation**. For
 example, an integration package may add a rate for its own refrigerated shipment type and publish
-the extended family for the entry to install. It must establish the destination symbol and meet
-ordinary extension, compatibility and conflict checks. Downstream billing code can keep using the
+the extended family for the entry to install. Write `import "./carrier-tariff.cod" proc @quote;`
+to select the carrier’s symbol and gain extension permission. If the package already selected
+that vocabulary identity with `symbol from`, the import reuses it. A different identity conflicts. Downstream billing code can keep using the
 vocabulary identity. When one call simply needs a different calculation, give that calculation an
 ordinary name. [Module selection](../design/ModuleWorlds.md#default-and-complete-public-selections)
 
