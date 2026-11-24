@@ -2,6 +2,11 @@
 
 # Composing three states and five writers in a tile inspector
 
+The [CoD inspector](#cod) and the [Haskell inspector with `Ports m`](#haskell-with-named-operations)
+request the same eight operations. Their implementations below show where the state lives
+and which two writer operations staging intercepts. The [direct transformer](#haskell-with-mtl)
+and [labeled effect](#haskell-with-effectful) listings expose the underlying routing.
+
 ## A scalar setting is enough for a small composition
 
 Two calibration policies modify the cutoff for work carried out in their scope. One
@@ -75,52 +80,89 @@ only the two provisional writers misses an implementation that rolls back the ch
 reissues the same acquisition number. The fixture models synchronous, normally returning
 business verdicts on at most two acquisitions.
 
+<a id="haskell-business-code-shared-by-both-libraries"></a>
+
+## Haskell with named operations
+
+A camera inspection needs eight operations. It can give them business names in a
+record and run each field in a chosen monad `m`. The field `nextSerial` supplies an
+action that obtains a new number each time it runs. A journal field accepts an entry
+and produces an append action. The three state cells and five accumulated journals
+belong to the backend. Here is the complete business interface and its one consumer,
+shared by the two Haskell libraries.
+
+```haskell
+module Inspector where
+
+import Data.Word (Word64)
+
+type N = Word64
+type Trace = [N]
+
+data Ports m = Ports
+  { nextSerial :: m N
+  , charge :: m ()
+  , takeGain :: m N
+  , acquired, rejects, defects, samples, passes :: N -> m ()
+  }
+
+inspect :: Monad m => Ports m -> N -> m Bool
+inspect p rejectThrough = do
+  n <- nextSerial p
+  charge p
+  g <- takeGain p
+  acquired p n
+  defects p n
+  samples p g
+  let ok = n > rejectThrough
+  if ok then passes p n else rejects p n
+  pure ok
+
+advance, takeOld :: N -> (N, N)
+advance n = (n + 1, n + 1)
+takeOld g = (g, g + 1)
+
+pay :: N -> ((), N)
+pay c = ((), c - 2)
+```
+
+The CoD inspection calls installed procedures of the same signatures and in the same
+order. Compare the two leaves here. Then compare where the application supplies their
+implementations, and how a publication scope redirects exactly two writers. A line count
+that includes the Haskell adapter also has to include the CoD installations. Readability
+and the cost of adding a new operation are separate observations.
+
 ## CoD
 
-The rejection threshold is a scoped value. The eight other channels need writes to
-survive a returning procedure. Under the confirmed symbolic storage contract, a new
-`effect` on an independent bits value restores the prior value on exit. A writable
-`ref symbol` can instead select an ordinary lexical `val` as its target. A target write
-survives the procedure's return. Staging needs just two extra lexical values with the
-same representation. The fixture needs no owning region symbol or whole-region acquisition.
-[Borrowing a lexical scalar through a symbol](../../design/SymbolicDynamicScope.md#owner-parameter-reference-symbols-and-implementation-cost)
-
-For this small observation range, a sequence of digits from 1 through 9 can be encoded
-in a `u64`: zero denotes empty, and appending digit `d` to `w` gives `10*w + d`.
-The fixture emits at most two items per channel, plus one optional prefix digit. Thus
-34 records [3, 4], and 43 records the opposite order. The business program only appends. The publication policy
-can additionally seed and commit a private prefix. Real unbounded streams would need a
-different representation.
+The tile author uses eight domain operations. The first three correspond to
+`nextSerial`, `charge` and `takeGain` in Haskell's `Ports m`. Each of the other five
+appends one item to its named journal. A symbol declaration supplies a typed procedure
+slot. Each `effect proc @name(...)` installation supplies a method for that slot.
+The method can access live lexical storage in its defining activation. The same
+`inspect` works with the public journal and with a stage that intercepts two operations.
 
 ```cod
-val symbol @reject_through:u64
-ref symbol @serial:u64 in O where {owner O}
-ref symbol @credits:u64 in O where {owner O}
-ref symbol @gain:u64 in O where {owner O}
-ref symbol @acquired:u64 in O where {owner O}
-ref symbol @rejects:u64 in O where {owner O}
-ref symbol @passes:u64 in O where {owner O}
-ref symbol @defects:u64 in O where {owner O}
-ref symbol @samples:u64 in O where {owner O}
+symbol @next_serial:proc() -> u64
+symbol @charge:proc() -> void
+symbol @take_gain:proc() -> u64
+symbol @acquired:proc(n:u64) -> void
+symbol @rejects:proc(n:u64) -> void
+symbol @defects:proc(n:u64) -> void
+symbol @samples:proc(n:u64) -> void
+symbol @passes:proc(n:u64) -> void
 
-func tell(ref output:u64 in O, digit:u64) where {owner O} {
-    output <- 10u64 * output + digit
-}
-
-proc inspect() -> bool {
-    @serial <- @serial + 1u64
-    @credits <- @credits - 2u64
-    val id <- @serial
-    val used_gain <- @gain
-    @gain <- used_gain + 1u64
-    tell(@acquired, id)
-    tell(@defects, id)
-    tell(@samples, used_gain)
-    if (id <= @reject_through) {
-        tell(@rejects, id)
+proc inspect(reject_through:u64) -> bool {
+    val id <- behave @next_serial()
+    behave @charge()
+    val gain <- behave @take_gain()
+    behave @acquired(id)
+    behave @defects(id)
+    behave @samples(gain)
+    if (id <= reject_through) {
+        behave @rejects(id)
         return false
     }
-    tell(@passes, id)
+    behave @passes(id)
     return true
 }
 
@@ -128,81 +170,251 @@ func retry_once(here body() -> bool) -> bool {
     if (body()) { return true }
     return body()
 }
+```
+
+A stage installs private implementations of `@defects` and `@samples` while the body
+runs. The contract above gives each at most two positive, single-digit entries. Two
+lexical slots per journal suffice for that bound. The helper below checks the bound
+and preserves order. An unbounded workload would supply a growable journal behind
+those same operations.
+
+```cod
+func buffer(ref first:u64 in O, ref second:u64 in O, n:u64) where {owner O} {
+    assert n > 0u64
+    assert n < 10u64
+    if (first == 0u64) { first <- n } else { assert second == 0u64; second <- n }
+    return
+}
+
+func drain(here emit(n:u64) -> void, first:u64, second:u64) {
+    if (first != 0u64) { emit(first) }
+    if (second != 0u64) { emit(second) }
+    return
+}
 
 proc stage(here body() -> bool) -> bool {
-    val defects <- @defects
-    val samples <- @samples
-    val ok <- {{
-        effect @defects = defects
-        effect @samples = samples
+    val d1 <- 0u64
+    val d2 <- 0u64
+    val s1 <- 0u64
+    val s2 <- 0u64
+    val accepted <- {{
+        effect proc @defects(n:u64) -> void { buffer(d1, d2, n) }
+        effect proc @samples(n:u64) -> void { buffer(s1, s2, n) }
         return body()
     }}
-    if (ok) {
-        @defects <- defects
-        @samples <- samples
+    if (accepted) {
+        drain(d1, d2) (n) => { behave @defects(n) }
+        drain(s1, s2) (n) => { behave @samples(n) }
     }
-    return ok
-}
-
-data Observation {
-    accepted:bool; serial:u64; credits:u64; gain:u64;
-    acquired:u64; rejects:u64; passes:u64; defects:u64; samples:u64;
-}
-
-proc run(ref out:Observation in O, per_acquisition:bool, reject_through:u64) where {owner O} {
-    effect @reject_through <- reject_through
-    effect @serial = out.serial
-    effect @credits = out.credits
-    effect @gain = out.gain
-    effect @acquired = out.acquired
-    effect @rejects = out.rejects
-    effect @passes = out.passes
-    effect @defects = out.defects
-    effect @samples = out.samples
-    if (per_acquisition) {
-        out.accepted <- retry_once() { stage() { inspect() } }
-    } else {
-        out.accepted <- stage() { retry_once() { inspect() } }
-    }
-}
-
-proc check_accepted_acquisition() {
-    ref out = make Observation in here {
-        accepted <- false; serial <- 0u64; credits <- 8u64; gain <- 3u64;
-        acquired <- 0u64; rejects <- 0u64; passes <- 0u64;
-        defects <- 0u64; samples <- 0u64;
-    }
-    run(out, true, 1u64)
-    assert out.accepted
-    assert out.serial == 2u64
-    assert out.credits == 4u64
-    assert out.gain == 5u64
-    assert out.acquired == 12u64
-    assert out.rejects == 1u64
-    assert out.passes == 2u64
-    assert out.defects == 2u64
-    assert out.samples == 4u64
+    return accepted
 }
 ```
 
-Each declaration of `O` binds a fresh owner parameter. The selected lexical target
-must remain live wherever its binding can be used. The two local targets in `stage`
-start with the enclosing writer prefixes. During the callback, the only admitted
-business writes to these streams target those locals. Leaving the inner scope restores
-the preceding reference bindings. On acceptance, replacing their contents publishes
-exactly the accumulated suffixes after the original prefixes. On rejection, both
-outer prefixes survive intact. Acquisition, diagnostics and pass counting continue
-through their own bindings under either nesting.
+The end of the inner scope restores the enclosing procedures before either drain.
+An accepted batch therefore reaches the **immediately enclosing** pair of journals,
+one ordinary append at a time. Rejected batches make no calls to that pair. Older
+prefixes in the enclosing journals survive. A second enclosing stage can accept the
+inner batch into its own buffers and still drop it if its own body returns false.
+The other six operations continue to use their installed implementations. The
+observer specifies the order within each journal. Commit in this synchronous fixture
+assumes the enclosing appends complete normally.
 
-For example, `run(out, true, 1u64)` records acceptance, state (2, 4, 5) and the five
-encoded writer values (12, 1, 2, 2, 4). On a fresh observation, `run(out, false, 1u64)`
-changes only the last two to (12, 34). As a prefix control, start the public defect and sample logs at 7 and 8.
-The two accepted reports must then contain (72, 84) and (712, 834), respectively.
-After two rejections both must still contain the original (7, 8).
-This detects a commit that accidentally replaces an existing report with only the
-latest acquisition.
+One control deliberately rejects after an inner stage accepts. In a fresh run with
+the same public installations and prefixes [7] and [8], evaluate the following body.
 
-<a id="haskell-business-code-shared-by-both-libraries"></a>
+```cod
+val outer_ok <- stage() {
+    val inner_ok <- stage() { inspect(0u64) }
+    assert inner_ok
+    false
+}
+```
+
+The verdict is false. Defects and samples still contain [7] and [8]. Acquired and
+passes both contain [1], and the state is (1,6,4). Sending the inner commit straight
+to the public journals would incorrectly produce [7,1] and [8,3]. Change the outer
+verdict to true with the same fresh inputs. Each entry should then reach the public
+journal exactly once, giving [7,1] and [8,3].
+
+Here is the application end of the comparison. Each state transition and each journal
+append is installed explicitly. The operation bodies can read and update live lexical
+variables in the activation of `check`. The observer encodes a journal as decimal
+digits, so `12` and `21` distinguish the two possible orders. Zero is the empty
+journal; all entries in the workload are in the range 1 through 9.
+
+```cod
+proc check(per_acquisition:bool, reject_through:u64, prefix:bool,
+           expected_defects:u64, expected_samples:u64) {
+    val serial <- 0u64
+    val credits <- 8u64
+    val gain <- 3u64
+    val acquired <- 0u64
+    val rejects <- 0u64
+    val passes <- 0u64
+    val defects <- 0u64
+    val samples <- 0u64
+
+    effect proc @next_serial() -> u64 { serial <- serial + 1u64; return serial }
+    effect proc @charge() -> void { credits <- credits - 2u64; return }
+    effect proc @take_gain() -> u64 {
+        val previous <- gain
+        gain <- previous + 1u64
+        return previous
+    }
+    effect proc @acquired(n:u64) -> void { acquired <- 10u64 * acquired + n; return }
+    effect proc @rejects(n:u64) -> void { rejects <- 10u64 * rejects + n; return }
+    effect proc @passes(n:u64) -> void { passes <- 10u64 * passes + n; return }
+    effect proc @defects(n:u64) -> void { defects <- 10u64 * defects + n; return }
+    effect proc @samples(n:u64) -> void { samples <- 10u64 * samples + n; return }
+
+    if (prefix) { behave @defects(7u64); behave @samples(8u64) }
+    val accepted <- if (per_acquisition) {
+        retry_once() { stage() { inspect(reject_through) } }
+    } else {
+        stage() { retry_once() { inspect(reject_through) } }
+    }
+
+    assert accepted == (reject_through < 2u64)
+    assert defects == expected_defects
+    assert samples == expected_samples
+    if (reject_through == 0u64) {
+        assert serial == 1u64; assert credits == 6u64; assert gain == 4u64
+        assert acquired == 1u64; assert rejects == 0u64; assert passes == 1u64
+    } else {
+        assert serial == 2u64; assert credits == 4u64; assert gain == 5u64
+        assert acquired == 12u64
+        if (accepted) { assert rejects == 1u64; assert passes == 2u64 }
+        else { assert rejects == 12u64; assert passes == 0u64 }
+    }
+    return
+}
+
+check(true,  1u64, false,   2u64,   4u64)
+check(false, 1u64, false,  12u64,  34u64)
+check(true,  1u64, true,   72u64,  84u64)
+check(false, 1u64, true,  712u64, 834u64)
+check(false, 2u64, true,    7u64,   8u64)
+```
+
+A `ref symbol` would publish access to a selected mutable cell. The earlier version
+used this so that an assignment made by the inspector would survive a nested call.
+Here the inspector requests the operation. Its local procedure implementation owns
+the decision to mutate a cell. For example, the inspector can charge for an acquisition
+but has no operation for arbitrarily overwriting the credit balance. The ordinary
+`ref` formals of the private buffer helper borrow two lexical slots for one call.
+They introduce no symbolic access to storage. A product of named actions in Haskell
+and these named procedure slots expose the same eight requests to their users.
+[Installing local procedure bodies](../../design/SymbolicDynamicScope.md#installing-a-local-procedure-body)
+· [Lexical access and invocation](../../design/SymbolicDynamicScope.md#captured-values-and-call-behavior)
+· [Synchronous callbacks](../../design/CallableStorageAndHereAccess.md#an-effect-in-a-here-callback)
+
+## Supplying the Haskell operations
+
+### Wiring Ports to the transformer stack
+
+The [`Stacked` module below](#haskell-with-mtl) defines the concrete types and
+publication policy used by this module. `Stack` has five strict `WriterT [Word64]`
+layers, followed by three strict `StateT Word64` layers over `Identity`.
+The three states, from the outside in, are serial (initially 0), credits (8) and
+gain (3). Their roles come from the transitions at these positions. The two fields
+`nextSerial` and `takeGain` even have the same action type. An adapter that switched
+their two implementations could still type-check. The component observations detect it.
+
+```haskell
+module PortStacked where
+
+import Control.Monad (when)
+import Control.Monad.State.Strict (state)
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Writer.Strict (tell)
+import Inspector
+import Stacked (Stack, States, retryOnce, runStack, stage)
+
+fromStates :: States a -> Stack a
+fromStates = lift . lift . lift . lift . lift
+
+ports :: Ports Stack
+ports = Ports
+  { nextSerial = state advance
+  , charge     = fromStates (lift (state pay))
+  , takeGain   = fromStates (lift (lift (state takeOld)))
+  , defects    = \n -> tell [n]
+  , samples    = \n -> lift (tell [n])
+  , acquired   = \n -> (lift . lift) (tell [n])
+  , rejects    = \n -> (lift . lift . lift) (tell [n])
+  , passes     = \n -> (lift . lift . lift . lift) (tell [n])
+  }
+
+run prefix perAcquisition k = runStack $ do
+  when prefix $ defects ports 7 >> samples ports 8
+  if perAcquisition then retryOnce (stage (inspect ports k))
+                    else stage (retryOnce (inspect ports k))
+```
+
+The first available `MonadState` instance reaches serial through all five writers.
+`charge` crosses the writer prefix and serial to reach credits. The gain action goes
+one layer deeper and returns the old reading. The writer lifts select defects,
+samples, acquired, rejects and passes in order of depth. Both assemblies reuse this
+one adapter. `stage` filters the contribution of the two outer writer transformers
+on rejection. The other six layers keep their normal meanings.
+
+### Wiring Ports to labeled effectful handlers
+
+The [`Labeled` module below](#haskell-with-effectful) defines `Eight`, its eight-role
+row, and the same retry and stage policies that its direct inspector uses. These ports
+work in any row providing all eight labels. Inside `stage`, the port record is
+instantiated for the extended row containing the two private writers. Its defects and
+samples actions consequently address the nearest matching handlers. The shared `runEight` runner
+installs each of the eight public handlers.
+
+```haskell
+{-# LANGUAGE ConstraintKinds, DataKinds, FlexibleContexts, TypeApplications, TypeOperators #-}
+module PortLabeled where
+
+import Control.Monad (when)
+import Effectful
+import Effectful.Labeled (labeled)
+import qualified Effectful.State.Static.Local as S
+import qualified Effectful.Writer.Static.Local as W
+import Inspector
+import Labeled (Eight, Journal, StateRole, retryOnce, runEight, stage)
+
+type Roles es =
+  (StateRole "serial" :> es, StateRole "credits" :> es, StateRole "gain" :> es,
+   Journal "acquired" :> es, Journal "rejects" :> es, Journal "passes" :> es,
+   Journal "defects" :> es, Journal "samples" :> es)
+
+ports :: Roles es => Ports (Eff es)
+ports = Ports
+  { nextSerial = labeled @"serial" @(S.State N) (S.state advance)
+  , charge     = labeled @"credits" @(S.State N) (S.state pay)
+  , takeGain   = labeled @"gain" @(S.State N) (S.state takeOld)
+  , acquired   = \n -> labeled @"acquired" @(W.Writer Trace) (W.tell [n])
+  , rejects    = \n -> labeled @"rejects"  @(W.Writer Trace) (W.tell [n])
+  , passes     = \n -> labeled @"passes"  @(W.Writer Trace) (W.tell [n])
+  , defects    = \n -> labeled @"defects" @(W.Writer Trace) (W.tell [n])
+  , samples    = \n -> labeled @"samples" @(W.Writer Trace) (W.tell [n])
+  }
+
+tile :: Bool -> Bool -> N -> Eff Eight Bool
+tile prefix perAcquisition k = do
+  when prefix $ defects ports 7 >> samples ports 8
+  if perAcquisition then retryOnce (stage (inspect ports k))
+                    else stage (retryOnce (inspect ports k))
+
+run prefix perAcquisition k = runEight (tile prefix perAcquisition k)
+```
+
+For either adapter, `run False True 1` publishes defects `[2]` and samples `[4]`.
+With the same leaf and `run False False 1`, the outputs are `[1,2]` and `[3,4]`.
+In both cases the final states are `(2,4,5)`, the acquired log is `[1,2]`, rejects
+is `[1]`, and passes is `[2]`. Start with a public prefix via `run True True 1` and
+the first pair becomes `[7,2]`, `[8,4]`. With `run True False 2`, rejection leaves
+`[7]` and `[8]` intact. The nested result pairs are the runners' ordinary output.
+These predictions can also be checked by inlining each field in the inspector. Both backends share the exact same runner between their port-based and
+direct versions. The listings below make that routing visible and let a reader change one lift or
+label without changing the operation interface.
+
 <a id="haskell-with-mtl"></a>
 
 ## Three StateT layers and five WriterT layers
@@ -254,15 +466,16 @@ stage body = WriterT $ WriterT $ do
   let keep xs = if ok then xs else []
   pure ((ok, keep ds), keep ss)
 
-run prefix perAcquisition k = runIdentity
+runStack action = runIdentity
   $ flip runStateT 3 $ flip runStateT 8 $ flip runStateT 0
-  $ runWriterT $ runWriterT $ runWriterT $ runWriterT $ runWriterT
-  $ do
-      when prefix $ do
-        tell [7]
-        lift (tell [8])
-      if perAcquisition then retryOnce (stage (inspect k))
-                        else stage (retryOnce (inspect k))
+  $ runWriterT $ runWriterT $ runWriterT $ runWriterT $ runWriterT action
+
+run prefix perAcquisition k = runStack $ do
+  when prefix $ do
+    tell [7]
+    lift (tell [8])
+  if perAcquisition then retryOnce (stage (inspect k))
+                    else stage (retryOnce (inspect k))
 ```
 
 At the first line of `inspect`, the stock `MonadState` instance for `WriterT` forwards
@@ -418,7 +631,7 @@ tile prefix perAcquisition k = do
   if perAcquisition then retryOnce (stage (inspect k))
                     else stage (retryOnce (inspect k))
 
-run prefix perAcquisition k = runPureEff
+runEight action = runPureEff
   $ runLabeled @"gain"    (S.runState (3 :: Word64))
   $ runLabeled @"credits" (S.runState (8 :: Word64))
   $ runLabeled @"serial"  (S.runState (0 :: Word64))
@@ -427,7 +640,9 @@ run prefix perAcquisition k = runPureEff
   $ runLabeled @"acquired" (W.runWriter @Entries)
   $ runLabeled @"samples"  (W.runWriter @Entries)
   $ runLabeled @"defects"  (W.runWriter @Entries)
-  $ tile prefix perAcquisition k
+  $ action
+
+run prefix perAcquisition k = runEight (tile prefix perAcquisition k)
 ```
 
 During `stage`, two fresh local writer handlers temporarily shadow the public defects
@@ -443,7 +658,7 @@ handled once by its own `runState` and each public journal once by its own `runW
 
 ### Observing a routed write and testing an extension
 
-In `Stacked` and `Labeled`, every writer runner returns its result and its own output.
+In `PortStacked`, `Stacked`, `PortLabeled` and `Labeled`, each writer runner returns its result and its own output.
 Every state runner returns its result and its own final state. The natural nesting gives
 the following results, in elimination order (verdict, defects, samples, acquired, rejects,
 passes, serial, credits, gain). These are the return values of the eight eliminations.
@@ -473,8 +688,11 @@ positional routes to rejects, passes, credits and gain each cross an additional 
 the stock state lifting to serial still works. The application must also eliminate the
 new writer. With a fresh label in the effectful row, the old operation sites keep their
 labels and the application still owes a handler and an observer for the ninth output.
-In CoD a separate symbol and lexical cell can supply the extra journal while the two
-publication scopes retain their definitions. An independent lot-number binding tests the
+In the Ports version, the original leaf can keep its existing record; a wrapper may request
+the new telemetry operation separately. If the published record grows a field, count the
+change at each record construction. In CoD a new proc symbol, installation and wrapper
+call supply the new journal while the original operation signatures and both scopes keep
+their definitions. An independent lot-number binding tests the
 other axis by enclosing the unchanged acquisition in a new scope. If the business later
 includes telemetry in the provisional evidence, the stage must also implement its new
 publication contract.

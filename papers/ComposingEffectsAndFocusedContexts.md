@@ -19,7 +19,7 @@ and compare retry and selective publication on a stack of **three State and five
 instances**. With the same rejected acquisition followed by an accepted one, two of five
 journals change when the scopes exchange places. All three states and the other three
 journals must agree. The [eight-role programs](examples/ComposedTileReport.md) give the
-observable contract, two concrete transformer layouts and a labeled `effectful` comparison. A
+matched operation interfaces, two concrete transformer layouts and a labeled `effectful` comparison. A
 [one-handler control](examples/ScopedTileAudit.md) isolates invocation. All results below
 are paper derivations.
 
@@ -65,9 +65,10 @@ The tile team supplies the inspection. A retry wrapper calls its body again afte
 rejection. A separate stage wrapper buffers only the defect IDs and their gain samples,
 then appends both batches to their parents if its body returns acceptance. Neither wrapper
 names the other. Choosing where to put the stage determines what “approved report” means.
-The same CoD leaf can be assembled as `retry_once() { stage() { inspect() } }` or
-`stage() { retry_once() { inspect() } }`. With initial state `(serial, credits, gain) = (0, 8, 3)`, let the first acquisition be
-rejected and the second accepted.
+The same CoD leaf can be assembled as `retry_once() { stage() { inspect(k) } }` or
+`stage() { retry_once() { inspect(k) } }`. Set the rejection threshold `k` to 1 and
+initialize `(serial, credits, gain)` to `(0, 8, 3)`. The first acquisition is rejected
+and the second accepted.
 
 | Observer | Retry around stage (per acquisition) | Stage around retry (per tile) |
 | --- | --- | --- |
@@ -82,28 +83,43 @@ a distinguishable result even if the tile was ultimately accepted. The
 [worked example](examples/ComposedTileReport.md) also gives immediate-success, exhausted-retry
 and routing controls.
 
-The first Haskell inspector calls `state`, `tell` and `lift` directly on five `WriterT`s
-above three `StateT`s. A bare `tell [n]` appends to the outermost writer. Selecting a deeper
-writer of the same type takes the appropriate lifts at the call. A
-[second transformer layout](examples/ComposedTileReport.md#an-interleaved-stack-using-transformers-directly)
-puts the acquisition serial between the defect and sample writers. Its stage unwraps
-writer, state and writer, keeps the **new serial on rejection**, and discards the two
-provisional batches together. A third inspector selects the eight handlers of the
-`effectful` row by their labels. Thus each leaf exposes how it finds the intended
-instance. Nested pairs in the transformer results arise when the native runners return
-the state or output alongside the computation result. In CoD the source gives the roles nominal
-symbol identities. A scoped value such as a threshold can use `val symbol`. Independently
-mutable cells that must retain writes across calls can be local lexical storage selected
-by reference symbols; temporarily selecting private cells stages just the chosen outputs.
-[Value binding and target updates](../design/SymbolicDynamicScope.md#scoped-bindings-versus-object-transfer)
+### Compare the operations the inspector can request
+
+Both inspectors get the rejection threshold as an ordinary argument. Each can ask for a
+fresh serial, charge one exposure, sample and advance the gain, and append to any of
+five journals. The Haskell business program accepts a record of named operations,
+`Ports m`. The CoD business program calls eight typed symbolic procedures. For example,
+`charge p` and `behave @charge()` both spend the agreed two credits. The business rule
+does not need a readable balance or an arbitrary balance setter. Those would be stronger
+operations. Switching from a writable `ref symbol @credits` to a proc changes what that
+interface lets its caller do.
+
+| Author's job | Haskell | CoD |
+| --- | --- | --- |
+| Write the inspection | Use `nextSerial p`, `charge p`, `takeGain p` and the five journal fields. The same polymorphic leaf runs with either library. | Invoke the corresponding installed proc with `behave` at each site. The leaf can run under any installation that supplies the required operations. |
+| Supply the operation implementations | Build `Ports Stack` with real lifts into three states and five writers, or supply ports backed by labeled `effectful` handlers. | Install a body for each proc. Those bodies can update the state and journals using direct access to live storage in their defining scope. |
+| Stage defect IDs and samples | In the grouped stack, filter the two provisional writer outputs together. In the labeled row, install two child writers and forward their accepted batches. | Temporarily install two writers that append to private batches. After their scope exits, an accepted stage sends entries to the restored enclosing writers. The other six installations stay in effect. |
+
+[CoD procedure interface and handlers](examples/ComposedTileReport.md#cod) · [Haskell Ports and business rule](examples/ComposedTileReport.md#haskell-with-named-operations) · [Ports on the concrete transformer stack](examples/ComposedTileReport.md#wiring-ports-to-the-transformer-stack) · [Ports on the labeled effect row](examples/ComposedTileReport.md#wiring-ports-to-labeled-effectful-handlers)
+
+A comparison at the application boundary counts selecting and installing the CoD handlers
+and supplying the Haskell record and runners. Count reusable source definitions once and
+measure run-time activation or dispatch separately.
+In Haskell a positional lift for the wrong writer can still type-check when its output
+type agrees. In CoD an installation can likewise attach a method to the wrong journal
+of the same signature. Inspect every named journal when comparing the two applications.
+The [direct stack listings](examples/ComposedTileReport.md#haskell-with-mtl) expose how the
+ports are routed. The [interleaved layout](examples/ComposedTileReport.md#an-interleaved-stack-using-transformers-directly)
+places serial between the two staged writers. Its publication operation must preserve the
+advanced serial on rejection. That cost belongs to the stack implementation and its layout.
 
 These eight are *instances* of two familiar effect families. Three states and five writers
 make errors in naming and routing visible; their product, fifteen, counts no obligation
 in this experiment. The size argument below has different axes: independently extensible
 interfaces and layer forms. Freeze the two wrappers, add a separately named observation
 which must survive rejection, then add an independent scope which passes the other effects
-through. Record what changes in the old inspector, its direct layer selections, the handler assembly and
-the observers. Compare this with deliberately extending the publication contract to a third
+through. Record changes in the business leaf, operation interfaces, adapters, handler installations
+and observers. A reusable Haskell adapter is charged once, like a reusable set of CoD methods. Compare this with deliberately extending the publication contract to a third
 staged output, which requires a change to the stage's policy.
 [Same-typed instances and extension](examples/ComposedTileReport.md#what-changes-when-another-author-extends-the-program)
 

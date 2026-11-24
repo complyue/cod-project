@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Compare named business operations in Haskell and CoD
+
+<a id="k-ports-symbolic-procs-20261124"></a>
+**K-PORTS-SYMBOLIC-PROCS-20261124.** The [tile study](papers/examples/ComposedTileReport.md#which-report-is-correct) pairs Haskell `Ports m` over the actual transformer stack and labeled handlers with eight installed CoD symbolic procedures. Only the two provisional writer operations are reinterpreted under staging. A nested rejection tests that an accepted child forwards to its enclosing stage. The [paper](papers/ComposingEffectsAndFocusedContexts.md#compare-the-operations-the-inspector-can-request) distinguishes an operation interface from access to writable storage and includes the installation work on both sides.
+
 ## 2026-11-24 — Publish mixed value and reference effects together
 
 <a id="h-mixed-effect-group-20261124"></a>
