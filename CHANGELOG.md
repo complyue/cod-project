@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Preserve the symbol identity at its bare name during execution
+
+<a id="h-runtime-symbol-identity-20261124"></a>
+**H-RUNTIME-SYMBOL-IDENTITY-20261124.** On 2026-11-24 (America/Los_Angeles) the project user confirmed in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) “运行时 score 是提供 @score symbol 的 identity 的语义，所以不仅不许shadow，同scope更不许赋予其它值，因为类型不匹配。” [D-10r260](design/SymbolicDynamicScope.md#the-bare-symbol-name-at-runtime), P-718, carries [H-373](#h-373)’s bare symbol identity into runtime use. It supersedes the compilation-only limit associated with [H-114](#h-114) and [H-381](#h-381)’s use-site-only rejection of a shadowing local. The prior text is at lines 710 and 977 of `bc720b26c06d4389f16cad7eb4f1975f094b81f1:design/SymbolicDynamicScope.md`. D-07r215, D-14r136, D-15r77, D-21r35, booter graph r79 and source reference r479 apply the same rule. Dynamic installations continue to shadow bindings. Runtime identity representation and the proposed callable-prefix spellings remain separate.
+
 ## 2026-11-24 — Compare named business operations in Haskell and CoD
 
 <a id="k-ports-symbolic-procs-20261124"></a>

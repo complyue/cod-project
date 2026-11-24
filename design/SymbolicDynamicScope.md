@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 259 · Recorded: 2026-11-24 · Phase: language/application co-design.
+Design revision: 260 · Recorded: 2026-11-24 · Phase: language/application co-design.
 
 ## Design authority
+
+[D-10-SYMBOL-IDENTITY](DesignAuthorityRegistry.md#d-10-symbol-identity) r260 covers [runtime identity and its protected lexical name](#the-bare-symbol-name-at-runtime). The [project user’s decision](../CHANGELOG.md#h-runtime-symbol-identity-20261124) qualifies P-718 under C-35/P-331/P-342. Verify the identity before installation, across a temporary binding and under an imported name. Reject an incompatible declaration even when unused. Callable-prefix syntax, identity representation and a general runtime lookup API have separate scope.
 
 [D-10-MIXED-EFFECT-GROUP](DesignAuthorityRegistry.md#d-10-mixed-effect-group) r259 covers [grouped bits transfer and reference rebinding](#mixed-value-and-reference-effects) under the [project user’s decision](../CHANGELOG.md#h-mixed-effect-group-20261124). P-716 relates scoped publication to C-36. P-717 carries forward P-248’s storage rules and H-285’s preparation order. Each entry keeps its ordinary storage, owner and access requirements. Compare the grouped result of 10 with the sequential result of 20 and check failure before publication.
 
@@ -594,7 +596,7 @@ Reaching the effect prepares the required captures and installs the whole anonym
 
 ### Lexical selection, installation and invocation
 
-`using "./base.cod" proc @score` brings the exported symbol identity and its source-preserving procedure family into a free receiving name. A prior selection of the same identity is compatible. A different identity with that spelling conflicts, even with identical signatures. Looking up a shadowing non-symbol fails at the use site. A procedure family selected by `using` grants no extension permission. A bare `proc @score(x:u64) -> u64 { ... }` contributes a method and requires extension permission. Either spelling of a body-bearing installation can use the selected identity under `using`. The name-only installation `effect proc @score;` activates the selected family. [Module selectors](ModuleWorlds.md#default-and-complete-public-selections)
+`using "./base.cod" proc @score` brings the exported symbol identity and its source-preserving procedure family into a free receiving name. A prior selection of the same identity is compatible. A different identity with that spelling conflicts, even with identical signatures. A declaration that would hide the selected symbol name fails at its declaration site. A procedure family selected by `using` grants no extension permission. A bare `proc @score(x:u64) -> u64 { ... }` contributes a method and requires extension permission. Either spelling of a body-bearing installation can use the selected identity under `using`. The name-only installation `effect proc @score;` activates the selected family. [Module selectors](ModuleWorlds.md#default-and-complete-public-selections)
 
 | Expression in a procedure context | Family and dynamic bindings |
 | --- | --- |
@@ -681,7 +683,7 @@ H-184 requires a type for every newly defined symbol, including those used to bi
 symbol a : T1, b : T2;
 ```
 
-The names in this declaration introduce symbol identities in the module’s compile-time vocabulary. They do not declare runtime lexical values named `a` and `b`; symbolic reads remain `@a` and `@b`. Each identity has its declared value type before binding. A standalone `symbol` declaration does not supply a runtime value, even for an optional type. The compiler checks uses and installations against that type instead of choosing a permanent type from the first effect value.
+The declaration introduces typed identities into the module vocabulary. Bare `a` and `b` denote those identities, including at runtime. Reads of their dynamically installed values use `@a` and `@b`. The declared payload type constrains installation. Declaring the symbol supplies its identity before any payload has been installed.
 
 A combined `proc @p(...) -> RT { ... }` declaration also satisfies the explicit-type requirement: when `@p` has no prior declaration or import, its signature declares the new symbol's procedure type. The identity and methods are established during compilation; a runtime value and binding require an explicit materialization/installation event. No separate `symbol p : ...` declaration is required.
 
@@ -707,9 +709,27 @@ Keep three identities distinct:
 
 A candidate durable identity combines a resolved package-definition identity with a declaration identity. A human-readable version string alone does not distinguish every source/configuration origin; a raw address cannot survive reload. The concrete identity encoding and equivalence of repeated instantiations of the same package remain design choices. Imported aliases must already resolve to the same declaration before layout is assigned.
 
-Under H-114, “first-class” symbol values belong to compilation; aliases resolve before runtime accesses are lowered. The current prototype supports declared identities and their aliases, without runtime symbol objects or dynamically selected identities. Any future runtime symbol-selection or open-ended loading facility needs a separate contract and cannot be inferred from first-class compile-time values.
+### The bare symbol name at runtime
 
-A use makes the declared symbol part of the demanded program’s binding requirements; it does not replace H-184’s explicit symbol type declaration. H-102 still checks value availability along demanded whole-program paths. No zero/default value, implicit Any, optional None or type chosen by the latest binding is introduced.
+With `symbol @score:u64;`, the bare expression `score` denotes the declared symbol identity at runtime. It is available before the first installation. A value read `@score` requires the active binding and produces its `u64` payload. Reading the identity itself requires no dynamic binding. Two selected names for the same declaration denote the same identity. Independent declarations in different modules keep distinct identities even when their names, declared types and installed values agree.
+
+The declaration reserves its lexical name for that identity. Reject a same-scope independent function, value or other binding of that name, in either declaration order. Reject an inner declaration that would shadow the visible identity, including an ordinary formal or owner binder, at the declaration even if its body never uses the name. Assigning a payload to the bare identity name is a type error. These restrictions apply to incompatible bindings. Repeated selections of the same identity still follow the verb’s compatibility and permission rules. A method on a procedure symbol contributes to the existing family under its ordinary grant.
+
+```cod
+symbol @score:u64;
+proc read_score() -> u64 { return @score }
+
+# Each of these declarations would hide the visible identity.
+# func score() -> u64 { 7u64 }
+# func ignore(score:u64) -> u64 { 7u64 }
+
+# This initializer requires the payload type. The expression supplies the identity.
+# val amount:u64 <- score
+```
+
+For acceptance, establish an outer payload of 10 and install 20 in an inner full scope. The bare name denotes the original identity before, during and after that effect. A call to `read_score()` observes 10, 20 and then 10. An identity-aware consumer must obtain the same identity through an explicit rename and a distinct identity for a same-typed namesake. The physical representation, public spelling for an identity type, serialization and lookup by an arbitrary runtime identity have separate design scopes.
+
+A dynamic payload read makes the declared symbol part of the demanded program’s binding requirements. The bare identity is available under H-184’s explicit symbol type declaration. H-102 still checks value availability along demanded whole-program paths. No zero/default value, implicit Any, optional None or type chosen by the latest binding is introduced.
 
 ## Symbol origins, aliases and dynamic values
 
@@ -720,7 +740,7 @@ A kind-qualified `using` selects a procedure family and its nominal symbol under
 | Layer | Binding / value | Consequence |
 | --- | --- | --- |
 | Module resolution | Source selector resolves to a particular module/package origin | Same spelling from distinct selected origins need not denote the same symbol |
-| Compile-time symbol value | `symbol @x` creates a nominal identity S | S has no default runtime value and is not a runtime string/name lookup |
+| Symbol identity | `symbol @x:T` introduces a nominal identity S | Bare `x` supplies S at runtime, including when `@x` has no installed value. |
 | Compile-time alias environment | A module-local spelling such as `@target` denotes S | Aliases disappear from runtime access; multiple aliases of S denote the same dynamic variable |
 | Runtime dynamic environment | S has a current runtime value in the Actor's active binding context | Reads access that value; `effect` installs a scoped binding and restores its predecessor on exit |
 
@@ -728,7 +748,7 @@ Conceptually, compilation resolves `local spelling -> symbol identity S -> progr
 
 The alias environment is a compiler name-resolution relation, not a set of lexical symbolic variables. A module can call S `@x` and another module can call the same S `@target`; both access the same Actor-local dynamic binding. `effect @x <- 2` binds S and yields void; `@x = 2` is invalid. Functions' ordinary lexical parameters/constants remain non-`@` values and do not gain permission to read effects.
 
-In declaration/selection syntax, `@name` identifies which symbol is meant. In an ordinary expression, `@name` reads the runtime value bound under that symbol. Making identities compile-time values does not make those runtime reads compile-time constants. Any later syntax for passing symbol values to compile-time computations must preserve this distinction; no new runtime symbol-object type or user allocation carrier is implied.
+In declaration and selection syntax, `@name` identifies the symbol in the directive. In an expression, the bare name supplies the identity resolved for that spelling. A symbolic value read `@name` accesses the current runtime binding. Each keeps its own type and availability checks.
 
 ### Identity introduction versus procedure installation
 
@@ -972,9 +992,9 @@ H-185 specifies the call forms: `p(...)` resolves a lexical procedure; `perform 
 
 ### Lexical calls and shadowing
 
-H-382 includes inferred owner names: `where {owner o}` introduces a const lexical binding even without region-specific access. It shadows an outer symbol `o`, so `@o` rejects. Binding immutability neither freezes target contents nor grants a region capability; see [owner bindings](RegionalOwnership.md#region-owners-with-root-policy-access).
+An inferred owner name in `where {owner o}` is a const lexical binding. Choose a different owner name if `o` already denotes a visible symbol. The owner’s ordinary access and allocation constraints still apply. [Owner bindings](RegionalOwnership.md#region-owners-with-root-policy-access)
 
-H-381 also applies nearest-binding lookup to symbolic access. If a parameter/local p shadows the module symbol object p, @p rejects because that nearest binding is not a symbol. Reads, effect destinations, touch, perform/behave, deferred uses and typeof inspection follow the same rule. Cached identities and capture pruning cannot bypass it. A separately defined callable still uses its own lexical context, not its caller's local p. Same-scope module-category collisions and general symbol-value storage remain outside this bounded rule.
+A [symbol identity name](#the-bare-symbol-name-at-runtime) remains visible throughout its lexical scope. Check incompatible declarations when introducing their names. Symbol reads, effect destinations, touch, direct calls, perform/behave, deferred operations and type inspection use the resolved declaration identity. A separately defined callable retains its own definition-site lookup.
 
 Ordinary call syntax resolves the nearest lexical binding (H-257). In `apply`, the parameter named `callback` shadows the module function. The argument supplies a capture-free function value with a statically known signature.
 

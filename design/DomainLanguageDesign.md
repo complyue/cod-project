@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 214
+Discussion revision: 215
 
 Recorded: 2026-11-24
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r215 the [symbol identity decision](../CHANGELOG.md#h-runtime-symbol-identity-20261124) applies [D-10’s protected lexical name](SymbolicDynamicScope.md#the-bare-symbol-name-at-runtime) to source spellings and module origins. Distinct spellings may denote the same identity. A binding that would hide a visible symbol fails at its declaration.
 
 D-07 r214 applies the [grouped installation decision](../CHANGELOG.md#h-grouped-local-proc-install-20261124) and the [local handler decision](../CHANGELOG.md#h-local-proc-handler-body-20261124) to DL-14/DL-15 under D-10-HANDLER-INSTALL and P-330. Use the same-signature lexical and dynamic calls to distinguish their targets. See [local procedure bodies](SymbolicDynamicScope.md#installing-a-local-procedure-body).
 
@@ -1012,7 +1014,7 @@ This first local example is a possible intermediate milestone. The charter's bro
 
 **Implementation boundary:** the native subset checks typed bindings, demanded captures and bits-global initializers. Durable package/symbol identity encoding, general capture admissibility, scheduled initialization details and runtime layout/caching remain open; declaration-only cycles are permitted by H-492 but unimplemented in [SymbolicDynamicScope](SymbolicDynamicScope.md). The bounded implementation does not supply a persistent symbol ABI or independent module compilation.
 
-**Origin/alias review:** H-112 requires explicit provenance and local aliases. H-113 excludes lexical symbolic variables and ordinary assignment. H-114 makes identities compile-time values and aliases compile-time names; runtime values bind under identities. H-115 permits a body alias map with matching-name defaults, now belonging to mixin under H-212. The prototype H-116 destination form uses `mixin "module" @source as @local`; its implicit installation requires migration under H-372/H-373. [D-10's relationship model](SymbolicDynamicScope.md#symbol-origins-aliases-and-dynamic-values) separates identity selection, handler definition activation and body translation. H-117 proposes `symbol from "module" @source as @local` and `with { @local as @source_role; }`, read as supplying a local symbol for the source body’s role. H-118 authorizes implementing these discussed forms. The target compiler must separate selection from explicit effect installation and resolve body aliases before runtime capture analysis; existing implicit-installation paths require migration. Broader mapping edge policies remain open; unsupported cases receive explicit diagnostics.
+**Origin/alias review:** H-112 requires explicit provenance and local aliases. H-113 excludes lexical symbolic variables and ordinary assignment. Selections resolve symbol names at compile time. The bare expression provides the selected identity at runtime. The symbolic value read accesses its active binding. H-115 permits a body alias map with matching-name defaults, now belonging to mixin under H-212. The prototype H-116 destination form uses `mixin "module" @source as @local`; its implicit installation requires migration under H-372/H-373. [D-10's relationship model](SymbolicDynamicScope.md#symbol-origins-aliases-and-dynamic-values) separates identity selection, handler definition activation and body translation. H-117 proposes `symbol from "module" @source as @local` and `with { @local as @source_role; }`, read as supplying a local symbol for the source body’s role. H-118 authorizes implementing these discussed forms. The target compiler must separate selection from explicit effect installation and resolve body aliases before runtime capture analysis; existing implicit-installation paths require migration. Broader mapping edge policies remain open; unsupported cases receive explicit diagnostics.
 
 **Selection migration:** H-372/H-373 supersedes the implicit-installation portion of H-119/H-120’s using abbreviation. Selection/aliases and runtime installation must be separate; preserve same-identity aliases, explicit definition installation and once-only source initialization. The compiler’s current shorthand/destination paths remain implementation evidence pending coordinated migration, not the final stage contract. [D-10](SymbolicDynamicScope.md#source-selection-and-explicit-installation) identifies this boundary. Namespace and exact grammar choices remain DD-AOT-07 work.
 

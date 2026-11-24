@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 76 · Recorded: 2026-11-24 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 77 · Recorded: 2026-11-24 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+At r77 the [symbol identity decision](../CHANGELOG.md#h-runtime-symbol-identity-20261124) applies [D-10’s protected lexical name](SymbolicDynamicScope.md#the-bare-symbol-name-at-runtime) to module selection and symbol registration. Distinct spellings may denote the same identity. A binding that would hide a visible symbol fails at its declaration.
 
 [D-15](DesignAuthorityRegistry.md#d-15) r76 applies the [grouped installation decision](../CHANGELOG.md#h-grouped-local-proc-install-20261124) and the [local handler decision](../CHANGELOG.md#h-local-proc-handler-body-20261124) under P-330. A local body can bind an exported symbol for a scope while its published family and the receiver’s extension permissions stay fixed. Compare lexical and dynamic calls in the [same-signature example](SymbolicDynamicScope.md#installing-a-local-procedure-body).
 
@@ -107,7 +109,7 @@ These worlds do not model the same set of entities. The relevant connection is *
 | Function/procedure | A callable identity’s declarations, methods and selected interpretation. | A family, one method, a materialized dispatcher value and an invocation. |
 | Overloaded method | Signature, body, origin and membership in the callable's available method set. | A world-local method set versus a process-global shared mutable method table. |
 | Explicit type relation | Selected abstract inheritance and data-interface declarations. | Declared conformance versus inference from similar fields or a value's storage address. |
-| Symbol object | Identity, declared TLS value contract and module-world semantics, including callable methods where applicable; aliases name this object. | Bare symbol lookup versus reading its current TLS value with `@`; no second callable alias is introduced. |
+| Symbol object | Identity, declared TLS value contract and module-world semantics, including callable methods where applicable; aliases name this object. | Bare symbol lookup supplies the nominal identity at runtime. For a variable symbol, `@` reads its active TLS value. |
 | UoM/conversion | Unit identities and the selected pure conversion definitions. | A unit type versus a particular measured amount/index value. |
 | Module globals and initialization | Permitted global declarations/values and the initialization semantics that establish module resources. | Module state versus an automatic thread-local copy of every global; exact sharing/copying details cannot be inferred from a host compiler container. |
 | Names, selection permissions and exports | Source-local access to the world's definitions, extension permission and explicit publication. | Aliases versus identity; local availability versus onward export. |
@@ -662,7 +664,7 @@ This module-world independence belongs to the [Global Variables Done Right visio
 
 ## Callable families and explicit installation
 
-A declared symbol carries its identity and signature in the module world. H-381 applies nearest-binding lookup to symbolic syntax. A non-symbol local named `other` makes `@other` ill-typed. For a procedure symbol, `perform` and `behave` select the installed handler. Reading the handler as an ordinary value rejects.
+A declared symbol carries its identity and signature in the module world. Its bare name supplies that identity at runtime. Reject a declaration that would occupy or shadow its lexical name with a different meaning. For a procedure symbol, `perform` and `behave` select the installed handler, whose extraction as an ordinary procedure value rejects.
 
 | Operation | Compilation/integration | Runtime |
 | --- | --- | --- |

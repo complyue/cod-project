@@ -1,6 +1,6 @@
 # Ahead-of-time execution preparation and runtime micro-dispatch
 
-Design revision: 34 · Recorded: 2026-11-24 America/Los_Angeles · Status: AOT execution-preparation behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
+Design revision: 35 · Recorded: 2026-11-24 America/Los_Angeles · Status: AOT execution-preparation behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
 
 During AOT compilation, CoD checks the required behavior and prepares native implementations, semantic method selectors and local micro-dispatch paths. Proven call-site facts can resolve selections, demand or reuse specializations and permit direct-call emission. Preparing selection code does not execute that selection or the source program’s runtime effects. At runtime, execution follows the prepared code and performs remaining selections using actual runtime evidence.
 
@@ -9,6 +9,8 @@ Semantic method selection uses actual argument types, declared conformance and t
 Function preparation selects code under a static signature. Here invocation resolves live access to the actual defining activation. Maintain current owner-plus-locator resolution across nested calls and backing growth. Internal symbolic handler replay data and borrowed activation references have separate lifetime and cleanup responsibilities.
 
 ## Design authority
+
+At r35 the [symbol identity decision](../CHANGELOG.md#h-runtime-symbol-identity-20261124) applies [D-10’s protected lexical name](SymbolicDynamicScope.md#the-bare-symbol-name-at-runtime) to lexical lookup and specialization. Distinct spellings may denote the same identity. A binding that would hide a visible symbol fails at its declaration.
 
 D-21 r34 applies the [grouped installation decision](../CHANGELOG.md#h-grouped-local-proc-install-20261124) and the [local handler decision](../CHANGELOG.md#h-local-proc-handler-body-20261124) under P-330/P-337. Entry installation must select the extended family. Validate the independent scoped override and the ordinary name-only entry activation. See [local procedure bodies](SymbolicDynamicScope.md#installing-a-local-procedure-body).
 
@@ -297,7 +299,7 @@ CoD must expose correct roots to LLVM so genuinely unused dependency-world code 
 
 ### Nearest bindings and inferred owners
 
-Bare names and `@` follow the same nearest lexical binding. A non-symbol parameter/local named `p` makes `@p` ill-typed; lookup does not bypass it for an outer symbol. This applies to effects, touch, call modes and type inspection. Definition-site lexical bindings retain their meaning under captures/mixins; a caller-local shadow does not reinterpret a separately defined callee.
+Resolve the declared symbol once in its lexical context. Bare `p` provides its nominal identity at runtime. A supported `@p` value read uses that declaration’s active binding. Reject a parameter or local that would hide the symbol when the name is introduced. The same identity governs effects, touch, calls and type inspection. A separately defined callee keeps its definition-site resolution.
 
 Each inferred owner binder is an implicit const lexical binding, including generic region-or-scope owners. It participates in the same lookup rule. Its constness grants neither region capability, content immutability, ownership nor lifetime extension. Preserve actual owner provenance; no runtime owner object or owner-union ABI is selected.
 
