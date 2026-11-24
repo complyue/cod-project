@@ -601,6 +601,23 @@ func append_local_binding(nodes:ExprNodes in A, result:ParseResult in R, first:u
     });
 }
 
+func parse_initializer_operand(source:const SourceBytes in S, tokens:const Tokens in T,
+    nodes:ExprNodes in A, result:ParseResult in R, past:u64, allow_result_annotation:bool) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    val first <- result.next;
+    val supplied <- result.supplied_here;
+    val in_case <- result.case_control;
+    if (allow_result_annotation) {
+        parse_expression_at(source, tokens, nodes, result, past, 1u8)
+    } else {
+        parse_expression_operand(source, tokens, nodes, result, past, 1u8)
+    };
+    if (result.diagnostic == 0u8) return true;
+    result.supplied_here <- supplied;
+    result.case_control <- in_case;
+    return recover_syntax(source, tokens, nodes, result, first, past, InitializerRole)
+}
+
 func parse_binding_item(source:const SourceBytes in S, tokens:const Tokens in T,
                          nodes:ExprNodes in A, result:ParseResult in R,
                          past:u64, first:u64, mode:LocalMode, declaration_const:bool) -> void
@@ -632,16 +649,8 @@ func parse_binding_item(source:const SourceBytes in S, tokens:const Tokens in T,
         punct_pair_at(source, tokens, assignment, past, 60u8, 45u8) # '<-'
     };
     if (!valid) { result.diagnostic <- expected_binding_operator(); return; } else {};
-    val first_operand <- assignment + 1u64;
-    result.next <- first_operand;
-    val supplied <- result.supplied_here;
-    val in_case <- result.case_control;
-    parse_expression_at(source, tokens, nodes, result, past, 1u8);
-    if (result.diagnostic != 0u8) {
-        result.supplied_here <- supplied;
-        result.case_control <- in_case;
-        if (!recover_syntax(source, tokens, nodes, result, first_operand, past, InitializerRole)) return
-    };
+    result.next <- assignment + 1u64;
+    if (!parse_initializer_operand(source, tokens, nodes, result, past, true)) return;
     val initializer <- result.root;
     append_local_binding(nodes, result, first, binding, initializer, tokens[assignment].first, mode, declaration_const);
 }
@@ -1771,8 +1780,7 @@ func parse_initializer_field(source:const SourceBytes in S, tokens:const Tokens 
         return false;
     } else {};
     result.next <- operator_at + 1u64;
-    parse_expression_at(source, tokens, nodes, result, past, 1u8);
-    if (result.diagnostic != 0u8) return false;
+    if (!parse_initializer_operand(source, tokens, nodes, result, past, true)) return false;
     val value <- result.root;
     ref operands = make AssignmentOperands {
         destination <- make NodeId { revision <- result.revision; index <- name; };
@@ -1859,8 +1867,7 @@ func parse_initializer_assignment(source:const SourceBytes in S, tokens:const To
     val operator_at <- right + 1u64;
     val rebind <- punct_at(source, tokens, operator_at, past) == 61u8;
     result.next <- operator_at + 1u64;
-    parse_expression_operand(source, tokens, nodes, result, past, 1u8);
-    if (result.diagnostic != 0u8) return;
+    if (!parse_initializer_operand(source, tokens, nodes, result, past, false)) return;
     val input <- result.root;
     ref operands = make AssignmentOperands {
         destination <- make NodeId { revision <- result.revision; index <- destination; };

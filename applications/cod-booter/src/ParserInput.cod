@@ -13,7 +13,7 @@ using "./ParserStorage.cod" ExprPayload {
 using "./ParserStorage.cod" AstSlot { Occupied };
 using "./ParserStorage.cod" {
     SyntaxRole { InitializerRole, ExpressionRole, BlockItemRole, BindingNameRole, ReferenceGroupEntryRole,
-        TypeAnnotationRole, ArgumentOperandRole }, ExprPayload { ParseReport, ErrorReport }
+        TypeAnnotationRole, ArgumentOperandRole, ModuleSelectionItemRole }, ExprPayload { ParseReport, ErrorReport }
 };
 using "./SourceStorage.cod" { SourceBytes, DelimiterLink { MatchedDelimiter } };
 
@@ -305,6 +305,7 @@ func lexical_report_at(nodes:const ExprNodes in A, result:const ParseResult in R
 }
 
 func is_recovery_separator(mark:u8, role:SyntaxRole) -> bool {
+    if (role == ModuleSelectionItemRole) return mark == 44u8;
     if (mark == 59u8 || mark == 125u8) return true;
     if (role == BindingNameRole && mark == 58u8) return true;
     if ((role == BindingNameRole || role == TypeAnnotationRole) && mark == 61u8) return true;

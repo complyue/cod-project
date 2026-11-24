@@ -11,7 +11,7 @@ using "./ExpressionParser.cod" {
 using "./ParserInput.cod" {
     ParseResult, punct_at, punct_pair_at, append_syntax_node, append_module_item, append_module, parse_identifier,
     parse_module_name, parse_resource_name, reset_parse_result, expected_name, expected_type, expected_c_linkage,
-    closing_token, recover_syntax_until, seed_lexical_reports,
+    closing_token, recover_syntax, recover_syntax_until, seed_lexical_reports,
 };
 using "./CallableSyntax.cod" {
     expected_owner_clause, parse_constraints, parse_parameter, parse_procedure_symbol_type
@@ -21,7 +21,7 @@ using "./ParserStorage.cod" {
     BindingSites, FormalSites, SignatureSites, inspect_binding, inspect_formal, inspect_signature, braced_reference_group,
 };
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
-using "./ParserStorage.cod" SyntaxRole { ModuleItemRole };
+using "./ParserStorage.cod" SyntaxRole { ModuleItemRole, ModuleSelectionItemRole };
 using "./ParserStorage.cod" ExprPayload {
     CallableDefinition, CEntryDefinition, ModulePathSyntax, ModuleSelection, AllMembers, ChosenMembers, ChosenMember,
     HandleType, NominalParent, RecordDefinition, AbstractType, HandleSymbol, ReferenceSymbol, Publication,
@@ -254,15 +254,25 @@ func parse_selection_items(source:const SourceBytes in S, tokens:const Tokens in
         return emit_bulk_selection(source, tokens, nodes, result, past, first, tokens[path].past,
             previous, path_node,
                                    mode, DefaultPublic, exported);
+    val group_close <- if (grouped) { closing_token(tokens, result.next, past) } else { no_node() };
     if (grouped) { (result.next <- result.next + 1u64):void; } else {};
     val tail <- previous;
     val item_first <- first;
     val form <- no_node();
     val delimiter <- 0u8;
+    val published <- exported;
+    val item_start <- result.next;
     for (unused in result.next .. past) {
-        if (grouped) { (item_first <- tokens[result.next].first):void; } else {};
+        item_start <- result.next;
+        if (grouped) { (item_first <- tokens[item_start].first):void; } else {};
+        published <- exported;
         parse_selection(source, tokens, nodes, result, past, item_first, path_node, mode, symbolic);
-        if (result.diagnostic != 0u8) return false;
+        if (result.diagnostic != 0u8) {
+            if (group_close == no_node() ||
+                !recover_syntax(source, tokens, nodes, result, item_start, group_close,
+                    ModuleSelectionItemRole)) return false;
+            (published <- false):void
+        };
         form <- result.root;
         if (!grouped)
             return finish_selection_item(
@@ -272,14 +282,14 @@ func parse_selection_items(source:const SourceBytes in S, tokens:const Tokens in
         if (punct_at(source, tokens, result.next, past) == 125u8) {
             result.next <- result.next + 1u64;
             return finish_selection_item(source, tokens, nodes, result, past, item_first,
-                tail, form, exported, true);
+                tail, form, published, true);
         };
         if (delimiter != 44u8) {
             result.diagnostic <- expected_group_delimiter();
             return false;
         };
         append_module_item(nodes, result, item_first, syntax_past(nodes, result.used, form), tail,
-            form, exported, false);
+            form, published, false);
         if (result.diagnostic != 0u8) return false;
         tail <- result.root;
     };
