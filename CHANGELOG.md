@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-23 — Review onward publication of expanded imports
+
+<a id="k-booter-facade-publication-20261123"></a>
+**K-BOOTER-FACADE-PUBLICATION-20261123.** [D-20-MODULE-GRAPH r67→r68](applications/cod-booter/docs/ModuleGraph.md#publishing-expanded-imports-from-a-facade) and D-ARCH-REVIEW r83→r84 continue P-680–P-683 under [selector substitution](#h-module-default-selector-substitution-20261123). The written-item publisher at `e513d4acdbd22c7b688a925ee6a5b9bed483bffd:applications/cod-booter/src/NativeDeclarations.cod` establishes the comparison path. Expanded re-exports need checked receiver contributions, owner-bounded name comparisons and facade-local default references.
+
 ## 2026-11-23 — Review constructor field reception in the booter source checker
 
 <a id="k-booter-case-field-source-20261123"></a>

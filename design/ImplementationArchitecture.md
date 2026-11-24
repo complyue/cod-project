@@ -2,7 +2,9 @@
 
 ## Design authority
 
-[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 83. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+[D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), revision 84. The [project user's instruction and delegated review](../CHANGELOG.md#h-project-architecture-review-20261122) cover all existing project components and the proposed structure of every new code addition. P-682/P-683 connect review to inspectable responsibilities and existing semantic and ownership contracts. This document records structural dispositions. Each new-code clearance identifies its units, interfaces, owners, failure paths and verification. Runtime support, code correctness, language changes, build configuration and toolchain changes retain their own evidence and authorization.
+
+The [r84 review](../CHANGELOG.md#k-booter-facade-publication-20261123) covers [onward publication of expanded imports](../applications/cod-booter/docs/ModuleGraph.md#publishing-expanded-imports-from-a-facade) under P-682/P-683. It follows the checked import through the facade’s public and default tables.
 
 The [r83 review](../CHANGELOG.md#k-booter-case-field-source-20261123) qualifies [the booter checker for by-value constructor field reception](../applications/cod-booter/docs/ModuleGraph.md#checking-a-constructor-field-received-by-value). P-682/P-683 govern subject selection, active-field access, arm-local storage and result checking.
 
