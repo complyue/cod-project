@@ -292,6 +292,10 @@ func case_problem(report:DeclaredExpressionResult in R, node:u64, diagnostic:u8)
     return false
 }
 
+func unproved_sum_subject() -> u8 { return 139u8 }
+func unselected_case_constructor() -> u8 { return 140u8 }
+func unproved_case_field() -> u8 { return 141u8 }
+
 func remember_case_subject(facts:ConstructorCaseFacts in F, at:u64,
     loan:const IndexedCaseLoan in R, type:const DeclaredType in R, count:u64)
     -> void where {owner F, const owner R} {
@@ -370,7 +374,7 @@ func prepare_case_fields(source:const SourceBytes in S, nodes:const ExprNodes in
             published_case_field(source, nodes, spellings, spelling_used, interfaces, published,
                 constructor, selector, used, received)
         };
-        if (field == no_node()) return case_problem(report, selector, 95u8);
+        if (field == no_node()) return case_problem(report, selector, unproved_case_field());
         if (!native_scalar(received.kind) && received.kind != enum_type() &&
             !case_bits_type(received, aggregate, interfaces, published))
             return case_problem(report, selector, 94u8);
@@ -428,7 +432,8 @@ func prepare_case_arms(source:const SourceBytes in S, nodes:const ExprNodes in N
                                                ordinal)
                 };
                 if (selected_constructor == no_node() || ordinal >= extent ||
-                    (count != 0u64 && count != extent)) return case_problem(report, spelling, 95u8);
+                    (count != 0u64 && count != extent))
+                    return case_problem(report, spelling, unselected_case_constructor());
                 count <- extent;
                 definition <- if (module == 0u64) { selected_constructor }
                               else { (interfaces[selected_constructor].declaration) };
@@ -461,13 +466,13 @@ func prepare_indexed_sum_case(source:const SourceBytes in S, nodes:const ExprNod
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
     if (!describe_indexed_case_loan(nodes, names, selected, subject.subject, used, revision,
         loan, type) || !case_bits_type(type, aggregate, interfaces, published))
-        return case_problem(report, subject.subject, 93u8);
+        return case_problem(report, subject.subject, unproved_sum_subject());
     ref count = make u64 { 0u64 };
     if (!prepare_case_arms(source, nodes, names, selected, work, spellings, spelling_used,
         interfaces, published, aggregate, facts, at, subject.subject, subject.items, type,
         used, revision, count, report))
         return false;
-    if (count == 0u64) return case_problem(report, at, 93u8);
+    if (count == 0u64) return case_problem(report, at, unproved_sum_subject());
     remember_case_subject(facts, at, loan, type, count);
     return true
 }
@@ -483,13 +488,13 @@ func prepare_direct_sum_case(source:const SourceBytes in S, nodes:const ExprNode
     if (name_syntax(nodes, used, subject) != OrdinaryName ||
         names[subject].kind != formal_binding()) return true;
     val formal <- names[subject].declaration;
-    if (formal >= subject) return case_problem(report, subject, 93u8);
+    if (formal >= subject) return case_problem(report, subject, unproved_sum_subject());
     ref count = make u64 { 0u64 };
     return case facts[formal] of {
         CaseSumFormal { val readonly <- readonly; val sum <- value_type; } -> {
             if (!readonly) return true;
             count <- sum_case_extent(nodes, work, interfaces, published, sum, used, revision);
-            if (count == 0u64) return case_problem(report, subject, 93u8);
+            if (count == 0u64) return case_problem(report, subject, unproved_sum_subject());
             if (!prepare_case_arms(source, nodes, names, selected, work, spellings, spelling_used,
                 interfaces, published, aggregate, facts, at, subject, choice.items, sum, used,
                 revision, count, report)) return false;
@@ -565,13 +570,13 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
                 (names[selection.receiver].declaration)
             } else { (selection.receiver) };
             if (origin < site && describe_received_product(facts, origin, type)) {
-                if (type.kind != record_type()) return case_problem(report, selection.field, 95u8);
+                if (type.kind != record_type()) return case_problem(report, selection.field, unproved_case_field());
                 record.kind <- type.kind;
                 record.defining_module <- type.defining_module;
                 record.identity <- type.identity;
                 if (!describe_record_field(source, nodes, names, selected, work, spellings, interfaces,
                         published, selection.field, used, revision, type))
-                    return case_problem(report, selection.field, 95u8);
+                    return case_problem(report, selection.field, unproved_case_field());
                 if (!native_scalar(type.kind) && type.kind != enum_type() &&
                     !case_bits_type(type, aggregate, interfaces, published))
                     return case_problem(report, selection.field, 94u8);
@@ -603,7 +608,7 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
     where {const owner S, const owner N, const owner B, const owner E, owner W,
            const owner G, const owner A, owner F, owner P, owner R} {
     if (intrinsic (len)(facts) == 0u64) return true;
-    if (used > intrinsic (len)(facts)) return case_problem(report, no_node(), 93u8);
+    if (used > intrinsic (len)(facts)) return case_problem(report, no_node(), unproved_sum_subject());
     ref choice = make CaseSites { subject <- no_node(); items <- no_node() };
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
     ref loan = make IndexedCaseLoan {

@@ -173,6 +173,12 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: predicate assertion checking is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 138)
         fputs(": error: reference identity checking is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 139)
+        fputs(": error: a readable loan of the nominal sum case subject could not be proved\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 140)
+        fputs(": error: constructor is not selected for the case subject's nominal sum type\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 141)
+        fputs(": error: case receipt or projection requires a checked field of the selected type\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 49)
         fputs(": error: a declaration in a loop body or else requires an explicit {{ ... }} scope\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 50)
