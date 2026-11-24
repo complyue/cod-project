@@ -214,3 +214,5 @@ proc repr(number:u64) -> ref const String in D
     }};
     return result_in_scope(make String(scratch) in D);
 }
+
+default { str, repr, (++) }
