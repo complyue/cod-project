@@ -2886,6 +2886,7 @@ func resolve_plain_product(source:const SourceBytes in S, nodes:const ExprNodes 
     };
     val marker <- no_node();
     val problem <- 0u8;
+    val written_selection <- no_node();
     for (unused in 0u64 .. state.syntax_used) {
         if (parameter == no_node()) return false;
         if (inspect_formal(nodes, state.syntax_revision, state.syntax_used, parameter, formal) != OrdinaryFormal ||
@@ -2900,6 +2901,18 @@ func resolve_plain_product(source:const SourceBytes in S, nodes:const ExprNodes 
             problem <- project_bound_name_use(selections, selected_used, state.syntax_revision, state.syntax_used,
                 work, bindings, marker, projected, interfaces, published);
             if (problem != 0u8) { reject_name(state, marker, problem) }
+        } else {
+            if (state.diagnostic == 0u8 && bindings[marker].kind == ordinary_selection()) {
+                # A written selection already has a projected resource at its directive.
+                written_selection <- bindings[marker].declaration;
+                if (written_selection >= state.syntax_used || bindings[written_selection].imported_kind == 0u8) {
+                    reject_name(state, marker, unproved_module_binding())
+                } else {
+                    if (!admits_selected_type(bindings[written_selection].imported_kind)) {
+                        reject_name(state, marker, expected_type_binding())
+                    }
+                }
+            }
         };
         if (state.diagnostic != 0u8) return state.failed_node == marker &&
             (state.diagnostic == unresolved_name() || state.diagnostic == expected_type_binding());
