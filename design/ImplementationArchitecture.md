@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r129 review](../CHANGELOG.md#k-indexed-byte-field-compatibility-20261125) continues P-682/P-683 for [indexed byte fields](../applications/cod-booter/docs/ModuleGraph.md#deciding-which-bodies-need-indexed-field-checks). It preserves R123’s body selection and admits the independent byte once a body is required.
+
 At r128 the [project user’s engineering rule](../CHANGELOG.md#h-restart-from-entry-20261124) applies P-682/P-683 to [pass boundaries and dependency changes](#restarting-a-pass-from-entry). Carry established inputs from one stage to the next and require a local change to identify its affected consumers. The seed caller replay below is the recorded counterexample.
 
 The [r127 review](../CHANGELOG.md#k-seed-ordinary-call-edge-replay-20261124) continues P-682/P-683 for [rechecking an ordinary call](#rechecking-an-ordinary-call-in-one-conditional-arm) in the C++ seed. It separates a call site’s conditional requirements and effects from the incoming facts used to check them. D-14, D-17 and D-10 govern actual places, completion and symbol availability.

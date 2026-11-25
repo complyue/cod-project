@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Review indexed byte fields in a demanded booter body
+
+<a id="k-indexed-byte-field-compatibility-20261125"></a>
+**K-INDEXED-BYTE-FIELD-COMPATIBILITY-20261125.** D-ARCH-REVIEW r128→129 and D-20-MODULE-GRAPH r90→91 continue P-680–P-683. Candidate `af87c3b4:applications/cod-booter/src/OperandChecking.cod:3626` accepts only a `u64` field. Its new demand for the frozen `ParserStorage.selected_resource_name` exposes a valid `u8` read in the same body. The [repair scope](applications/cod-booter/docs/ModuleGraph.md#deciding-which-bodies-need-indexed-field-checks) preserves the demand trigger and the exact type of each accepted field. Release requires the frozen source and provider comparisons to pass.
+
 ## 2026-11-24 — Reject restarting a pass from entry on a local change
 
 <a id="h-restart-from-entry-20261124"></a>
