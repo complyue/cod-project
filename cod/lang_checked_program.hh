@@ -632,6 +632,7 @@ struct CheckedInstance {
   AbstractSymbolTargets incoming_abstract_targets = {};
   std::map<std::string, size_t> lexical_bindings = {};
   bool effects_frozen = false;
+  bool scalar_frame_ready = false;
 };
 struct CheckedHereContract {
   struct Component {

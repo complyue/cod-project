@@ -3253,15 +3253,24 @@ class ScalarChecker {
     auto &warnings = replay_warnings_ ? replay_warnings_->warnings : program_.warnings;
     warnings.push_back(std::move(warning));
   }
-  void warn_shadow(const std::string &name, const Location &at) {
-    if (!validating_) return;
-    const bool outer = lexical_.lookup(name).has_value() ||
-        (checking_method_ && (enclosing_names_[checking_method_->source].contains(name) ||
-         lexical_self(name, checking_instance_->method) || module_names().values.contains(name))) ||
-        module_names().callables.contains(name) || module_names().symbols.contains(name) ||
-        module_names().types.contains(name);
-    if (outer && record_warning_key(ShadowWarning{at.filename(), at.span.first, name}, warned_shadow_, &ReplayWarnings::shadow))
+  bool shadows_enclosing_name(const std::string &name, std::optional<size_t> method) const {
+    const auto &module = module_names();
+    if (method) {
+      const auto enclosing = enclosing_names_.find(program_.methods[*method].source);
+      if ((enclosing != enclosing_names_.end() && enclosing->second.contains(name)) ||
+          lexical_self(name, method) || module.values.contains(name)) return true;
+    }
+    return module.callables.contains(name) || module.symbols.contains(name) || module.types.contains(name);
+  }
+  void report_shadow(const std::string &name, const Location &at) {
+    if (record_warning_key(ShadowWarning{at.filename(), at.span.first, name}, warned_shadow_, &ReplayWarnings::shadow))
       record_warning({Warning::shadow, at, "declaration shadows outer binding '" + name + "'"});
+  }
+  void warn_shadow(const std::string &name, const Location &at) {
+    // Leaf preparation precedes the module entry names used by the warning.
+    if (!validating_ || extracting_leaf_) return;
+    const auto method = checking_method_ && checking_instance_ ? std::optional{checking_instance_->method} : std::nullopt;
+    if (lexical_.lookup(name) || shadows_enclosing_name(name, method)) report_shadow(name, at);
   }
   size_t new_selection_identity(std::set<size_t> sources = {null_target}) {
     const auto id = next_selection_identity_++;
@@ -23269,8 +23278,21 @@ class ScalarChecker {
   void validate_bodies() {
     validating_ = true;
     check_entry();
-    for (size_t i = 0; i < program_.instances.size(); ++i)
-      replay_instance(i);
+    for (size_t i = 0; i < program_.instances.size(); ++i) {
+      auto &instance = program_.instances[i];
+      if (!instance.scalar_frame_ready) {
+        replay_instance(i);
+        continue;
+      }
+      const auto &method = program_.methods[instance.method];
+      const ModuleLookup module(module_, method.module);
+      const ModuleLookup interpretation(interpretation_, method.interpretation);
+      // These bodies introduce only independent formals. Their warnings use
+      // the names established by entry, at the ordinary publication point.
+      for (const auto &parameter : method.input_parameters())
+        if (shadows_enclosing_name(parameter.name, instance.method)) report_shadow(parameter.name, parameter.at);
+      instance.complete = true;
+    }
   }
 
   struct EffectChanges {
@@ -23342,6 +23364,16 @@ class ScalarChecker {
     }
     return changes;
   }
+  static bool independent_scalar_frame(const CheckedInstance &instance, const CheckedMethod &method,
+                                       const LeafBehaviorPlan &plan) {
+    return plan.kind != LeafBehaviorPlan::Kind::borrowed_byte && plan.predicate.calls.empty() &&
+        !method.source->case_scan_scope && !instance.query_environment && instance.retained_types.empty() &&
+        method.captures.empty() && method.retained_types.empty() && method.input_owners().empty() &&
+        std::ranges::all_of(method.input_parameters(), [](const Parameter &parameter) {
+          return parameter.owner.empty() && !parameter.not_init_ref && argument_mode(parameter) == ArgumentMode::value;
+        });
+  }
+
   void freeze_leaf_behaviors() {
     std::map<size_t, LeafBehaviorPlan> bound;
     for (size_t id = 0; id < program_.instances.size(); ++id)
@@ -23350,9 +23382,13 @@ class ScalarChecker {
     for (const auto &[id, plan] : std::as_const(bound)) {
       if ((plan.kind == LeafBehaviorPlan::Kind::borrowed_byte && !plan.primitive) ||
           !plan.predicate.calls.empty()) continue;
+      ReplayWarnings warnings;
       struct ExtractionScope {
         ScalarChecker &checker;
+        bool validating;
         ~ExtractionScope() {
+          checker.validating_ = validating;
+          checker.replay_warnings_ = nullptr;
           checker.extracting_leaf_ = nullptr;
           checker.storage_ = nullptr;
           checker.bindings_ = nullptr;
@@ -23360,14 +23396,21 @@ class ScalarChecker {
           checker.checking_method_ = nullptr;
           checker.abrupt_ = nullptr;
         }
-      } scope{*this};
+      } scope{*this, validating_};
       extracting_leaf_ = &plan;
       auto &instance = program_.instances[id];
+      const bool prepare_frame = independent_scalar_frame(instance, program_.methods[instance.method], plan);
+      if (prepare_frame) {
+        validating_ = true;
+        // Leave any unexpected warning to the ordinary validation path.
+        replay_warnings_ = &warnings;
+      }
       BodyReplay frame{program_, instance};
       try {
         auto completed = check_instance(id, false, &plan);
         instance.effects = std::move(completed);
         instance.effects_frozen = true;
+        instance.scalar_frame_ready = prepare_frame && warnings.warnings.empty();
         frame.keep_frame = true;
         if (plan.kind == LeafBehaviorPlan::Kind::byte_literal) completed_literals.insert(id);
       } catch (const LocatedFailure &failure) {
