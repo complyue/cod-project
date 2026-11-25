@@ -23070,7 +23070,7 @@ class ScalarChecker {
 
   CallEffects check_instance(size_t id, bool distinct_bindings = false, const LeafBehaviorPlan *leaf = nullptr) {
     check_instance_flow(id, distinct_bindings, leaf);
-    return observed_;
+    return std::exchange(observed_, {});
   }
 
   struct BodyFrame {
@@ -23171,13 +23171,13 @@ class ScalarChecker {
     } scope{*this};
     replay_warnings_ = &warnings;
     const auto compare = [&](const CallEffects &expected, bool distinct) {
-      const auto actual = check_instance(id, distinct);
+      auto actual = check_instance(id, distinct);
       if (instance.effects_frozen) {
         if (actual != expected) throw std::logic_error("completed leaf behavior differs from final validation");
         return;
       }
       auto known = expected;
-      if (merge_effects(known, actual, false) || merge_effects(known, actual, true))
+      if (merge_effects(known, std::move(actual), EffectMerge::both))
         throw std::logic_error(distinct ? "distinct binding call effects changed after validation"
                                        : "call effects changed after validation");
     };
@@ -23220,37 +23220,35 @@ class ScalarChecker {
     bool other = false;
     explicit operator bool() const { return symbols || returned || other; }
   };
-  static EffectChanges merge_effects(CallEffects &known, const CallEffects &effects, bool reads) {
+  enum class EffectMerge { writes, reads, both };
+  static EffectChanges merge_effects(CallEffects &known, CallEffects effects, EffectMerge mode) {
     EffectChanges changes;
     auto &changed = changes.other;
-    if (reads) {
-      if (known.reads != effects.reads) { known.reads = effects.reads; changed = true; }
-      if (known.symbols != effects.symbols) { known.symbols = effects.symbols; changes.symbols = true; }
-    } else {
+    if (mode != EffectMerge::reads) {
       const auto allocations = known.lexical_allocations.size();
-      known.lexical_allocations.insert(effects.lexical_allocations.begin(), effects.lexical_allocations.end());
+      known.lexical_allocations.merge(effects.lexical_allocations);
       const auto array_allocations = known.array_allocations.size();
-      known.array_allocations.insert(effects.array_allocations.begin(), effects.array_allocations.end());
+      known.array_allocations.merge(effects.array_allocations);
       const auto written_count = known.written_inputs.size();
-      known.written_inputs.insert(effects.written_inputs.begin(), effects.written_inputs.end());
+      known.written_inputs.merge(effects.written_inputs);
       changed = known.written_inputs.size() != written_count || known.lexical_allocations.size() != allocations ||
           known.array_allocations.size() != array_allocations;
       const auto failure_count = known.escaping_failures.size();
-      known.escaping_failures.insert(effects.escaping_failures.begin(), effects.escaping_failures.end());
+      known.escaping_failures.merge(effects.escaping_failures);
       changed |= known.escaping_failures.size() != failure_count;
       if (known.direct_owned_failures != effects.direct_owned_failures) {
-        known.direct_owned_failures = effects.direct_owned_failures;
+        known.direct_owned_failures = std::move(effects.direct_owned_failures);
         changed = true;
       }
-      if (known.initialized != effects.initialized) { known.initialized = effects.initialized; changed = true; }
-      if (known.uninitialized != effects.uninitialized) { known.uninitialized = effects.uninitialized; changed = true; }
-      if (known.present != effects.present) { known.present = effects.present; changed = true; }
+      if (known.initialized != effects.initialized) { known.initialized = std::move(effects.initialized); changed = true; }
+      if (known.uninitialized != effects.uninitialized) { known.uninitialized = std::move(effects.uninitialized); changed = true; }
+      if (known.present != effects.present) { known.present = std::move(effects.present); changed = true; }
       if (known.case_scope_exits != effects.case_scope_exits) {
         known.case_scope_exits = effects.case_scope_exits;
         changed = true;
       }
       if (known.scope_checked_failures != effects.scope_checked_failures) {
-        known.scope_checked_failures = effects.scope_checked_failures;
+        known.scope_checked_failures = std::move(effects.scope_checked_failures);
         changed = true;
       }
       if (known.breaks_here_call != effects.breaks_here_call || known.returns_from_supplier != effects.returns_from_supplier) {
@@ -23266,19 +23264,22 @@ class ScalarChecker {
         known.propagates_outer_here_transfer = true;
         changed = true;
       }
-      if (known.booleans != effects.booleans) { known.booleans = effects.booleans; changed = true; }
-      auto returned = effects.returned;
-      returned.value.merge(known.returned.value);
-      if (known.returned != returned) {
-        known.returned = std::move(returned);
+      if (known.booleans != effects.booleans) { known.booleans = std::move(effects.booleans); changed = true; }
+      effects.returned.value.merge(known.returned.value);
+      if (known.returned != effects.returned) {
+        known.returned = std::move(effects.returned);
         changes.returned = true;
       }
-      if (known.bindings != effects.bindings) { known.bindings = effects.bindings; changed = true; }
-      if (known.binding_sources != effects.binding_sources) { known.binding_sources = effects.binding_sources; changed = true; }
-      auto payloads = effects.payloads;
+      if (known.bindings != effects.bindings) { known.bindings = std::move(effects.bindings); changed = true; }
+      if (known.binding_sources != effects.binding_sources) { known.binding_sources = std::move(effects.binding_sources); changed = true; }
       for (const auto &[reason, values] : known.payloads)
-        for (const auto &[parameter, value] : values) payloads[reason][parameter].merge(value);
-      if (known.payloads != payloads) { known.payloads = std::move(payloads); changed = true; }
+        for (const auto &[parameter, value] : values) effects.payloads[reason][parameter].merge(value);
+      if (known.payloads != effects.payloads) { known.payloads = std::move(effects.payloads); changed = true; }
+    }
+    // A final comparison only needs the read facts when the writes already agree.
+    if (mode != EffectMerge::writes && !changes) {
+      if (known.reads != effects.reads) { known.reads = std::move(effects.reads); changed = true; }
+      if (known.symbols != effects.symbols) { known.symbols = std::move(effects.symbols); changes.symbols = true; }
     }
     return changes;
   }
@@ -23349,6 +23350,7 @@ class ScalarChecker {
   }
 
   bool close_effects(bool reads) {
+    const auto mode = reads ? EffectMerge::reads : EffectMerge::writes;
     closing_write_effects_ = !reads;
     closing_read_effects_ = reads;
     if (reads) ++read_effect_round_;
@@ -23382,12 +23384,11 @@ class ScalarChecker {
         require_leaf_behavior(instance);
         EffectChanges distinct_changes;
         if (auto it = distinct_binding_effects_.find(instance); it != distinct_binding_effects_.end()) {
-          const auto effects = check_instance(instance, true);
-          distinct_changes = merge_effects(it->second, effects, reads);
+          distinct_changes = merge_effects(it->second, check_instance(instance, true), mode);
         }
-        const auto effects = check_instance(instance);
+        auto effects = check_instance(instance);
         auto &body = program_.instances[instance];
-        const auto changes = merge_effects(body.effects, effects, reads);
+        const auto changes = merge_effects(body.effects, std::move(effects), mode);
         if (changes.symbols) if (const auto *bound = symbol_bound(body.method))
           if (!std::ranges::includes(bound->symbols, body.effects.symbols))
             throw std::logic_error("closed symbol requirement bound missed a checked requirement");
