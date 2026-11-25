@@ -192,13 +192,17 @@ class ScalarChecker {
   using CallableChoices = std::vector<std::map<const Expression *, std::set<size_t>>>;
   CallableChoices callable_choices_;
   size_t checking_context_ = 0;
+  enum class EffectUse { all, discarded_boolean_result };
   // Context zero is module initialization; other contexts are instance IDs + 1.
   struct EffectConsumer {
     size_t read_round = 0;
     bool symbols_covered = false;
+    bool reads_result = false;
+    bool discards_result = false;
   };
   mutable std::map<size_t, std::map<size_t, EffectConsumer>> effect_dependents_;
   size_t read_effect_round_ = 0;
+  bool closing_write_effects_ = false;
   bool closing_read_effects_ = false;
   struct SymbolRequirementBound {
     std::set<size_t> symbols;
@@ -213,14 +217,23 @@ class ScalarChecker {
   const std::vector<bool> *unavailable_body_proofs_ = nullptr;
   // Physical binding distinctness refines the proof for the same checked body.
   std::map<size_t, CallEffects> distinct_binding_effects_;
-  const CallEffects &read_effects(size_t instance, bool distinct_bindings = false, bool symbols_covered = false) const {
+  const CallEffects &read_effects(size_t instance, bool distinct_bindings = false, bool symbols_covered = false,
+                                 EffectUse use = EffectUse::all) const {
     if (unavailable_body_proofs_ && instance + 1 < unavailable_body_proofs_->size() &&
         (*unavailable_body_proofs_)[instance + 1])
       throw UnavailableBodyProof{};
     auto &consumer = effect_dependents_[instance][checking_context_];
+    // Keep every read over the write closure. One precise use prevents
+    // suppressing a result change, even if other sites discard the value.
+    if (closing_write_effects_) {
+      consumer.reads_result |= use == EffectUse::all;
+      consumer.discards_result |= use == EffectUse::discarded_boolean_result;
+    }
     if (closing_read_effects_) {
-      if (consumer.read_round != read_effect_round_) consumer = {read_effect_round_, symbols_covered};
-      else consumer.symbols_covered &= symbols_covered;
+      if (consumer.read_round != read_effect_round_) {
+        consumer.read_round = read_effect_round_;
+        consumer.symbols_covered = symbols_covered;
+      } else consumer.symbols_covered &= symbols_covered;
     }
     if (distinct_bindings)
       if (const auto found = distinct_binding_effects_.find(instance); found != distinct_binding_effects_.end())
@@ -633,7 +646,7 @@ class ScalarChecker {
   enum class ExpectedTypeUse { materialization, callable_result };
   enum class EvidenceRead { payload, target, projection, binding_slot, transfer_destination, discarded,
                             loop_discard, guard_statement, guard_arm, native_loan };
-  enum class DiscardUse { ordinary, loop_result, guard_statement, guard_arm };
+  enum class DiscardUse { ordinary, block_statement, loop_result, guard_statement, guard_arm };
   enum class BindingUse { ordinary, exception_field, native_loan };
   enum class NativeLoanContext { none, borrow, discard_result };
   enum class IndexedUse { value_only, immediate_target, transfer_destination, region_root_loan };
@@ -7491,7 +7504,8 @@ class ScalarChecker {
   }
   void finish_named_call(const Expression &expr, const std::vector<Type> &arguments,
                          const std::vector<CheckedOperation> &views, CheckedOperation &operation,
-                         bool read, bool discard, bool completes = true, std::optional<size_t> selected = {}) {
+                         bool read, bool discard, bool completes = true, std::optional<size_t> selected = {},
+                         DiscardUse discard_use = DiscardUse::ordinary) {
     operation.callee = selected ? *selected : select(expr, arguments, access_of(views), owners_of(views));
     const auto &target = program_.instances[*operation.callee];
     const auto &method = program_.methods[target.method];
@@ -7542,7 +7556,24 @@ class ScalarChecker {
               std::ranges::all_of(bound->symbols, [&](size_t symbol) { return lexical_.symbols.get(symbol).bound; }));
       }
     }
-    const auto &effects = read_effects(*operation.callee, distinct_bindings, symbols_covered);
+    // For this direct statement, the only use of Returned is to describe the
+    // ignored independent Boolean value. Invocation effects are still read.
+    const bool result_ignored = closing_write_effects_ && checking_instance_ &&
+        checking_method_->source->ordinary_procedure() && checking_method_->source->result_type &&
+        !checking_method_->source->c_linkage && !checking_method_->scope_inputs &&
+        !checking_method_->source->symbolic && !checking_method_->here_group && checking_method_->here.empty() &&
+        !checking_method_->local_effect_symbol && !checking_method_->regional_initializer &&
+        checking_instance_->environment.empty() &&
+        discard_use == DiscardUse::block_statement && discard && completes &&
+        operation.reads_direct_body && !expr.has_here_body() && !delayed_ && &expr != prepared_call_ &&
+        active_loops_.empty() && arguments.empty() && parameters.empty() && target.environment.empty() &&
+        operation.callable_captures.empty() && definition.ordinary_procedure() && !definition.c_linkage && !definition.symbolic &&
+        !method.lexical_result && definition.result_type && *definition.result_type == Type::boolean &&
+        target.result.mode == ResultMode::value && *target.result.type == Type::boolean &&
+        !distinct_binding_effects_.contains(checking_context_ - 1) &&
+        !distinct_binding_effects_.contains(*operation.callee);
+    const auto &effects = read_effects(*operation.callee, distinct_bindings, symbols_covered,
+        result_ignored ? EffectUse::discarded_boolean_result : EffectUse::all);
     for (size_t i = 0; i < views.size(); ++i) {
       const auto &view = views[i];
       if (!view.indexed_target || argument_mode(parameters[i]) == ArgumentMode::value) continue;
@@ -20596,7 +20627,7 @@ class ScalarChecker {
       }
       else {
         const auto selected = select(expr, arguments, source_access, source_owners);
-        finish_named_call(expr, arguments, views, operation, read, discard, completes, selected);
+        finish_named_call(expr, arguments, views, operation, read, discard, completes, selected, discard_use);
       }
       break;
     }
@@ -20993,11 +21024,13 @@ class ScalarChecker {
       bool exits = false;
       const bool statement_body = checking_method_ && !checking_method_->regional_initializer &&
           checking_method_->source->ordinary_procedure() && checking_method_->source->body.get() == &expr;
+      const auto tail_use = discard_use == DiscardUse::block_statement ? DiscardUse::ordinary : discard_use;
       for (size_t i = 0; i < expr.children.size(); ++i) {
         const bool last = i + 1 == expr.children.size();
         const auto &item = *expr.children[i];
-        const auto use = last && !statement_body ? discard_use : item.braced_if_with_empty_alternative() ? DiscardUse::guard_statement
-                                                                                                       : DiscardUse::ordinary;
+        const auto use = last && !statement_body ? tail_use :
+            item.braced_if_with_empty_alternative() ? DiscardUse::guard_statement :
+            !last ? DiscardUse::block_statement : DiscardUse::ordinary;
         operation.type = check(item, instance, operations, last ? read : true, last ? discard : true,
                                last ? expected : nullptr, expected_use, false, IndexedUse::value_only,
                                last ? native_loan : NativeLoanContext::none, {}, nullptr, use);
@@ -23083,8 +23116,9 @@ class ScalarChecker {
 
   struct EffectChanges {
     bool symbols = false;
+    bool returned = false;
     bool other = false;
-    explicit operator bool() const { return symbols || other; }
+    explicit operator bool() const { return symbols || returned || other; }
   };
   static EffectChanges merge_effects(CallEffects &known, const CallEffects &effects, bool reads) {
     EffectChanges changes;
@@ -23135,7 +23169,10 @@ class ScalarChecker {
       if (known.booleans != effects.booleans) { known.booleans = effects.booleans; changed = true; }
       auto returned = effects.returned;
       returned.value.merge(known.returned.value);
-      if (known.returned != returned) { known.returned = std::move(returned); changed = true; }
+      if (known.returned != returned) {
+        known.returned = std::move(returned);
+        changes.returned = true;
+      }
       if (known.bindings != effects.bindings) { known.bindings = effects.bindings; changed = true; }
       if (known.binding_sources != effects.binding_sources) { known.binding_sources = effects.binding_sources; changed = true; }
       auto payloads = effects.payloads;
@@ -23146,12 +23183,13 @@ class ScalarChecker {
     return changes;
   }
   bool close_effects(bool reads) {
+    closing_write_effects_ = !reads;
     closing_read_effects_ = reads;
     if (reads) ++read_effect_round_;
-    struct ClosingReadEffects {
-      bool &active;
-      ~ClosingReadEffects() { active = false; }
-    } closing{closing_read_effects_};
+    struct ClosingEffects {
+      bool &writes, &reads;
+      ~ClosingEffects() { writes = false; reads = false; }
+    } closing{closing_write_effects_, closing_read_effects_};
     std::deque<size_t> pending;
     std::set<size_t> queued;
     const auto enqueue = [&](size_t context) {
@@ -23187,8 +23225,11 @@ class ScalarChecker {
             throw std::logic_error("closed symbol requirement bound missed a checked requirement");
         if (changes || distinct_changes)
           for (const auto &[dependent, consumer] : effect_dependents_[instance]) {
-            if (changes.symbols && !changes.other && !distinct_changes &&
-                consumer.read_round == read_effect_round_ && consumer.symbols_covered) continue;
+            if (!changes.other && !distinct_changes) {
+              if (changes.symbols && !changes.returned &&
+                  consumer.read_round == read_effect_round_ && consumer.symbols_covered) continue;
+              if (changes.returned && !changes.symbols && consumer.discards_result && !consumer.reads_result) continue;
+            }
             enqueue(dependent);
           }
       }
