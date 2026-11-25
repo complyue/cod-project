@@ -7931,9 +7931,12 @@ class ScalarChecker {
                                   const std::vector<CheckedOperation> &views = {}) {
     const auto failures = builtin_declarations(expr, arguments, operation.type, destinations, access_of(views), owners_of(views));
     if (failures.empty()) return;
+    if (&expr != prepared_call_) {
+      note_abrupt(expr.at, failures);
+      return;
+    }
     operation.invocation.try_emplace(0, cleanup_.preserve_pending({}));
     for (const auto category : failures) operation.invocation.try_emplace(Completion::failure(category).reason, cleanup_.preserve_pending({}));
-    if (&expr != prepared_call_) note_abrupt(expr.at, failures);
   }
   void check_eager(const Expression &expr, std::string_view name, const std::vector<Type> &arguments,
                    const std::vector<CheckedOperation> &views, CheckedOperation &operation) {
@@ -7945,11 +7948,12 @@ class ScalarChecker {
     if (types.result == Type::never) return;
     if (types.unary && name == "!")
       operation.predicate = predicate(Predicate::Kind::negation, predicate_of(views.front()));
-    operation.invocation.emplace(0, cleanup_.preserve_pending({}));
+    const bool prepared = &expr == prepared_call_;
+    if (prepared) operation.invocation.emplace(0, cleanup_.preserve_pending({}));
     check_builtin_declarations(expr, arguments, operation, false, views);
     if (types.failing) {
-      operation.invocation.emplace(2, cleanup_.preserve_pending({}));
-      if (&expr != prepared_call_) note_abrupt(expr.at);
+      if (prepared) operation.invocation.emplace(2, cleanup_.preserve_pending({}));
+      else note_abrupt(expr.at);
     }
   }
   void add_declared_failures(Type &type, const CheckedMethod &method, const std::vector<Type> &arguments,
