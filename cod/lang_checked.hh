@@ -502,12 +502,21 @@ class ScalarChecker {
   const CallBehavior &read_call_behavior(size_t instance) const {
     return read_effects(instance, SymbolEffectUse::none);
   }
-  const CallBehavior &read_here_behavior(size_t instance, const Location &at) const {
-    // The invocation needs completion facts during closure. Its profile
-    // check reads the completed symbol set only during final validation.
-    const auto &effects = read_effects(instance, validating_ ? SymbolEffectUse::all : SymbolEffectUse::none);
-    if (validating_ && !effects.symbols.empty())
-      implementation_gap(at, "dynamic binding requirements at a here invocation");
+  enum class HereSymbolUse { restricted, current_scalars };
+  const CallBehavior &check_here_behavior(size_t instance, const Location &at,
+                                         HereSymbolUse use = HereSymbolUse::restricted) {
+    const bool current_scalars = use == HereSymbolUse::current_scalars;
+    // The general here boundary needs only completion facts until validation.
+    // Direct bodies also contribute current-context requirements to callers,
+    // including a handler that reaches the body through ordinary helpers.
+    const bool collect = current_scalars && tracks_ordinary_symbol_uses();
+    const auto &effects = read_effects(instance, validating_ || collect ? SymbolEffectUse::all : SymbolEffectUse::none);
+    if (validating_ || collect) for (const auto id : effects.symbols) {
+      const auto &symbol = program_.symbols[id];
+      if (current_scalars && !symbol_needs_transport_fact(id) && symbol.type && scalar_type(*symbol.type)) {
+        if (collect) observe_symbol_use(lexical_, id, at);
+      } else if (validating_) implementation_gap(at, "dynamic binding requirements at a here invocation");
+    }
     return effects;
   }
   struct EnumValue {
@@ -17417,7 +17426,7 @@ class ScalarChecker {
   }
   void finish_bound_here_invocation(const Expression &expr, CheckedOperation &operation, bool read, bool discard) {
     const auto &contract = operation.operand_type;
-    const auto *body_effects = operation.supplied_here ? &read_here_behavior(operation.supplied_here->instance, expr.at) : nullptr;
+    const auto *body_effects = operation.supplied_here ? &check_here_behavior(operation.supplied_here->instance, expr.at) : nullptr;
     const bool protected_body = operation.supplied_here &&
         program_.methods[program_.instances[operation.supplied_here->instance].method].here_group.has_value();
     CallEffects effects;
@@ -17559,13 +17568,18 @@ class ScalarChecker {
       }
       require_forwarded_here(input.lexical.value(), receiver, formal, bindings, views, *supplier, at);
     }
+    const bool direct_full_scope = &expr == &target && syntax.body && syntax.body->scoped && !terminal && !syntax.upstream &&
+        here_count == 1 && !receiver.source->c_linkage && supplier && checking_method_ && !delayed_ &&
+        checking_method_->source->kind == Form::Kind::procedure;
     finish_here_receiver(expr, syntax, supplier, operations, operation, selected, std::move(targets), arguments, views,
-                         completes, read, discard);
+                         completes, read, discard, nullptr,
+                         direct_full_scope ? HereSymbolUse::current_scalars : HereSymbolUse::restricted);
   }
   void finish_here_receiver(const Expression &expr, const HereInvocation &syntax, CheckedInstance *supplier,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, size_t selected,
       std::vector<CheckedHereTarget> targets, const std::vector<Type> &arguments, const std::vector<CheckedOperation> &views,
-      bool completes, bool read, bool discard, const CheckedOperation::SuppliedHere *saved_terminal = nullptr) {
+      bool completes, bool read, bool discard, const CheckedOperation::SuppliedHere *saved_terminal = nullptr,
+      HereSymbolUse symbols = HereSymbolUse::restricted) {
     const bool supplied = syntax.body || syntax.terminal || saved_terminal;
     if (!supplied) {
       if (!completes) { operation.type = Type::never; return; }
@@ -17580,8 +17594,9 @@ class ScalarChecker {
     const auto finish_here = [&](CheckedOperation &call, const CheckedOperation::SuppliedHere &body) {
       targets.front().body = body.instance;
       const auto receiver = demand_here_receiver(selected, targets, arguments, expr.at);
-      const auto &effects = read_here_behavior(body.instance, expr.at);
-      if (program_.methods[program_.instances[body.instance].method].here_group) {
+      const auto &definition = program_.methods[program_.instances[body.instance].method];
+      const auto &effects = check_here_behavior(body.instance, expr.at, definition.here_group ? HereSymbolUse::restricted : symbols);
+      if (definition.here_group) {
         for (const auto failure : effects.scope_checked_failures) {
           if (failure) note_abrupt(expr.at, {failure});
           else note_declared_root();
@@ -17589,7 +17604,7 @@ class ScalarChecker {
       }
       call.supplied_here = body;
       finish_named_call(expr, arguments, views, call, read, discard, true, receiver);
-      if (call.type.kind == Type::procedure && program_.methods[program_.instances[body.instance].method].here_group)
+      if (call.type.kind == Type::procedure && definition.here_group)
         require_here_function_value(expr);
       if (effects.breaks_here_call) call.predicate.reset();
     };
