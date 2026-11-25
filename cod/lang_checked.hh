@@ -467,8 +467,7 @@ class ScalarChecker {
     if (const auto failure = unavailable_leaf_behaviors_.find(instance); failure != unavailable_leaf_behaviors_.end())
       fail(failure->second.at, failure->second.message);
   }
-  const CallEffects &read_effects(size_t instance, bool distinct_bindings = false,
-                                 SymbolEffectUse symbols = SymbolEffectUse::all,
+  const CallEffects &read_effects(size_t instance, SymbolEffectUse symbols, bool distinct_bindings = false,
                                  EffectUse use = EffectUse::all, const Expression *call_site = nullptr) const {
     if (extracting_leaf_)
       throw std::logic_error("closed leaf extraction reached an ordinary behavior dependency");
@@ -500,7 +499,15 @@ class ScalarChecker {
     return body.effects;
   }
   const CallBehavior &read_call_behavior(size_t instance) const {
-    return read_effects(instance, false, SymbolEffectUse::none);
+    return read_effects(instance, SymbolEffectUse::none);
+  }
+  const CallBehavior &read_here_behavior(size_t instance, const Location &at) const {
+    // The invocation needs completion facts during closure. Its profile
+    // check reads the completed symbol set only during final validation.
+    const auto &effects = read_effects(instance, validating_ ? SymbolEffectUse::all : SymbolEffectUse::none);
+    if (validating_ && !effects.symbols.empty())
+      implementation_gap(at, "dynamic binding requirements at a here invocation");
+    return effects;
   }
   struct EnumValue {
     Type type;
@@ -4903,7 +4910,7 @@ class ScalarChecker {
       if (callable.type != contract || (choices && !choices->contains(id))) continue;
       ++covered;
       for (const auto &[inputs, target] : callable.alternatives(arguments)) {
-        const auto &next = read_effects(target, false, symbol_use);
+        const auto &next = read_effects(target, symbol_use);
         if (symbol_use == SymbolEffectUse::all) effects.symbols.insert(next.symbols.begin(), next.symbols.end());
         else if (symbol_use == SymbolEffectUse::transport_only)
           for (const auto symbol : next.symbols)
@@ -7446,7 +7453,7 @@ class ScalarChecker {
       operation.type = *target.result.type;
       return;
     }
-    const auto &effects = read_effects(*operation.callee, distinct_bindings, invocation_symbol_use(),
+    const auto &effects = read_effects(*operation.callee, invocation_symbol_use(), distinct_bindings,
         result_ignored ? EffectUse::discarded_boolean_result : EffectUse::all,
         operation.reads_direct_body ? &expr : nullptr);
     for (size_t i = 0; i < views.size(); ++i) {
@@ -16355,7 +16362,7 @@ class ScalarChecker {
     if (selected && *selected != target)
       implementation_gap(expr.at, "scoped handler with more than one checked frame layout");
     if (!selected) selected = target;
-    const auto &effects = read_effects(target);
+    const auto &effects = read_effects(target, validating_ ? SymbolEffectUse::all : invocation_symbol_use());
     for (const auto dependency : effects.symbols) observe_symbol_use(lexical_, dependency, expr.at);
     if (validating_ && !effects.symbols.empty())
       implementation_gap(expr.at, "live scoped handler requires a nonempty symbolic snapshot");
@@ -16391,7 +16398,7 @@ class ScalarChecker {
     const auto &method = program_.methods[target.method];
     for (size_t i = 0; i < target.arguments.size(); ++i) operation.arguments[i].type = target.arguments[i];
     const auto contract = callable_type(method, target.arguments, target.result);
-    const auto &effects = read_effects(callee);
+    const auto &effects = read_effects(callee, invocation_symbol_use());
     auto reasons = direct_call_reasons(contract, effects);
     finish_call(expr, contract, effects, reasons, call.arguments, call.views, operation, read, discard, 0, true);
   }
@@ -16457,7 +16464,7 @@ class ScalarChecker {
     const auto &selected = program_.instances[target];
     always_throws |= selected.always_throws;
     auto contract = callable_type(program_.methods[profile], selected.arguments, selected.result);
-    const auto &effects = read_effects(target);
+    const auto &effects = read_effects(target, invocation_symbol_use());
     for (const auto failure : effects.scope_checked_failures) contract.throws_types.push_back(exception_type(failure));
     auto reasons = direct_call_reasons(contract, effects);
     if (proving_ && effects.propagates_here_transfer) reasons.insert(Completion::protected_transfer);
@@ -17400,14 +17407,12 @@ class ScalarChecker {
   }
   void finish_bound_here_invocation(const Expression &expr, CheckedOperation &operation, bool read, bool discard) {
     const auto &contract = operation.operand_type;
-    const auto *body_effects = operation.supplied_here ? &read_effects(operation.supplied_here->instance) : nullptr;
-    if (validating_ && body_effects && !body_effects->symbols.empty())
-      implementation_gap(expr.at, "dynamic binding requirements at a here invocation");
+    const auto *body_effects = operation.supplied_here ? &read_here_behavior(operation.supplied_here->instance, expr.at) : nullptr;
     const bool protected_body = operation.supplied_here &&
         program_.methods[program_.instances[operation.supplied_here->instance].method].here_group.has_value();
     CallEffects effects;
     if (operation.opened_source) {
-      const auto &source = read_effects(*operation.opened_source);
+      const auto &source = read_effects(*operation.opened_source, invocation_symbol_use());
       effects.symbols = source.symbols;
       effects.escaping_failures = source.escaping_failures;
     }
@@ -17565,9 +17570,7 @@ class ScalarChecker {
     const auto finish_here = [&](CheckedOperation &call, const CheckedOperation::SuppliedHere &body) {
       targets.front().body = body.instance;
       const auto receiver = demand_here_receiver(selected, targets, arguments, expr.at);
-      const auto &effects = read_effects(body.instance);
-      if (validating_ && !effects.symbols.empty())
-        implementation_gap(expr.at, "dynamic binding requirements at a here invocation");
+      const auto &effects = read_here_behavior(body.instance, expr.at);
       if (program_.methods[program_.instances[body.instance].method].here_group) {
         for (const auto failure : effects.scope_checked_failures) {
           if (failure) note_abrupt(expr.at, {failure});
@@ -19355,7 +19358,7 @@ class ScalarChecker {
     const auto callee = demand_regional_initializer(selected, expr.at);
     const auto &called = program_.instances.at(callee);
     const auto &method = program_.methods.at(called.method);
-    const auto &effects = read_effects(callee);
+    const auto &effects = read_effects(callee, invocation_symbol_use());
     const auto contract = callable_type(method, called.arguments, called.result);
     operation.callee = callee;
     operation.scope_owners = {owner};
