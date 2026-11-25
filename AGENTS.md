@@ -24,7 +24,9 @@ Development mainline owns implementation, regression fixes, the compatibility ba
 
 ## Passes and dependency changes
 
-Split work into passes when one stage produces facts another needs. Give each pass a distinct purpose, retain its usable results, and revisit the work that depends on a changed fact. **Restarting the same pass from entry on a local dependency change is an engineering anti-pattern. Reject it in new designs.** A loop or recursive dependency may require repeated evaluation of recorded facts until they settle. A final validation pass may traverse the complete input to check its own invariants. [Seed checker counterexample](design/ImplementationArchitecture.md#restarting-a-pass-from-entry)
+**A phase must not both collect and use the same kind of information.** State which completed facts each pass reads and which facts it produces. Collection may propagate a new finding to every pending entry that depends on it. Using that finding as evidence for a decision belongs to a later pass. A consumer reads the producer’s completed data and leaves it unchanged.
+
+For example, collect a callee’s guarded requirements and effects on each exit. Caller checking can then apply that contract to the actual arguments and produce call-site results. **Restarting the same pass from entry on a local dependency change is an engineering anti-pattern. Reject it in new designs.** If a concrete workload appears to require collecting and using the same fact kind in one phase, bring the dependency, alternatives and trade-offs to the project user and obtain an explicit decision before making an exception. [Seed checker counterexample](design/ImplementationArchitecture.md#restarting-a-pass-from-entry) · [Callee behavior](design/ImplementationArchitecture.md#consuming-completed-callee-behavior)
 
 ## When to measure an improvement
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Separate collection and use of each kind of information
+
+<a id="h-completed-callee-behavior-20261125"></a>
+**H-COMPLETED-CALLEE-BEHAVIOR-20261125.** The project user directed “不允许某种信息在一个phase中既收集又使用。 如果有合理场景必须打破这个规则，拿给我讨论” in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). Collection propagates discoveries. The use phase reads the completed input and cannot change it. D-ARCH-REVIEW r130→131 supersedes the proposed intra-caller rechecks in `598a2d13:design/ImplementationArchitecture.md`, “Rechecking an ordinary call in one conditional arm”, and refines the [pass rule](AGENTS.md#passes-and-dependency-changes). The [new contract](design/ImplementationArchitecture.md#consuming-completed-callee-behavior) keeps provisional solving private and preserves the existing owner, alias and completion guarantees under P-682/P-683. Seed commit `932dc122` remains evidence of a limited improvement to its current solver.
+
 ## 2026-11-25 — Review source checking of visit-table growth
 
 <a id="k-booter-visit-array-growth-20261125"></a>
