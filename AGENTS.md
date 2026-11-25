@@ -53,6 +53,14 @@ Proceed with a well-founded, maintainable improvement once its implementation sc
 - Dry-run an unfamiliar plan and the first build after client-profile, system-header or toolchain changes. Use `ninja -C build -n -d explain` with the selected target to investigate unexpected invalidation. Check package/content evidence when timestamps suggest broad invalidation. Seek approval before running a plan that would rebuild LLVM on a large scale or whose impact remains uncertain after inspection. An already authorized repair does not need repeated approval.
 - Inspect top-level scripts with unclear effects and run them within the current authorization. Read build scripts, logs, caches and LLVM sources as needed. When asked about LLVM internals, verify and cite file/line evidence in the workspace's `llvm-project/`. If that tree is absent, state the limitation.
 
+### Concurrency on the build host
+
+Run one memory-heavy workload at a time across chats and worktrees on the same host. A full booter build occupies that slot through its nested generation and link steps. Full-input profiling, verification and other jobs with a comparable footprint use the same slot. Treat a large job with uncertain memory needs as heavy until its plan or existing observations establish its footprint.
+
+Small fixtures, routine compiler invocations, debugger probes and ordinary incremental jobs may run alongside each other and a heavy build when their combined expected memory use leaves the host reserve available. Classify the invocation by its input and nested work. A peer process name alone must never block a launch or cancel running work.
+
+For a heavy launch, check available memory before starting and monitor it through completion. On the current Linux build host, preserve the existing 6 GiB `MemAvailable` reserve. Defer new work that would consume the reserve and retain the pressure guard for an actual shortfall. A comparison that needs isolation for valid results may request it for that run.
+
 ### Bootstrap and Build Configuration Safety
 
 Require explicit human authorization before any of the following:

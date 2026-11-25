@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Reserve a single slot for memory-heavy workloads
+
+<a id="h-workload-based-build-concurrency-20261124"></a>
+**H-WORKLOAD-BASED-BUILD-CONCURRENCY-20261124.** The [side discussion](codex://threads/01a210f9-d663-7283-b208-54020badf06c) conveyed the project user’s direction to limit concurrency by workload. A full booter build shares one host slot with comparably heavy jobs. Routine invocations may overlap each other and that build when their combined footprint leaves sufficient memory. The [standing rule](AGENTS.md#concurrency-on-the-build-host) applies this distinction at launch and during execution. D-20-BOOTSTRAP roadmap r33→34 continues P-642/P-643 and the memory acceptance in `7dce4b07:applications/cod-booter/README.md`, “Compiler memory acceptance”.
+
 ## 2026-11-24 — Reserve member names across fields and methods and allow an explicit receiver owner
 
 <a id="h-member-names-and-owner-20261124"></a>
