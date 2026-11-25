@@ -3260,6 +3260,7 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
     val ordinary <- false;
     val callback <- no_node();
     val source_handle <- false;
+    val byte_completion <- NoByteFunction;
     for (at in 0u64 .. used) {
         kind <- names[at].kind;
         shape <- inspect_declaration(nodes, revision, used, at, declaration);
@@ -3290,7 +3291,7 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                     callback != no_node() || source_handle ||
                     (form == ModuleCallablePromise && names[at].declaration == at)) {
                     first <- count;
-                    val byte_completion <- byte_function_completion(views, at);
+                    byte_completion <- byte_function_completion(views, at);
                     if (prepared_byte_function(views, at, true) && byte_completion == NoByteFunction) {
                         reject_declaration(report, at, invalid_native_parameter());
                         return no_node()

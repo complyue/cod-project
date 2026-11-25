@@ -1780,6 +1780,7 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
     val witness <- no_node();
     val actual <- no_node();
     val value <- no_node();
+    val expected <- 0u8;
     for (unused in 0u64 .. used) {
         if (argument == no_node()) {
             if (result_owner != no_node()) {
@@ -1794,7 +1795,7 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
             };
             return 0u8;
         };
-        val expected <- links[argument].imported_kind;
+        expected <- links[argument].imported_kind;
         if (expected == source_handle_loan() ||
             (expected == source_array_loan() && links[at].imported_byte_completion != NoByteFunction)) {
             value <- ordinary_argument_value(nodes, used, revision, argument);
