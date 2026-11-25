@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Move checked operations and prepared defer effects to their consumers
+
+<a id="k-seed-operation-publication-20261125"></a>
+**K-SEED-OPERATION-PUBLICATION-20261125.** D-ARCH-REVIEW r172→173 continues P-682/P-683. The [review](design/ImplementationArchitecture.md#publishing-a-checked-operation-and-registering-a-defer) traces two final copies of local operations and the copy of each prepared effect at `fefd18fa:cod/lang_checked.hh`. Moving these objects preserves expression-table replacement, defer preparation, exception routing and the metadata used by LLVM. The [earlier call-effect review](#k-seed-call-effect-lifetime-20261125) continues through the handoff to the staged action.
+
 ## 2026-11-25 — Retire two seed reports about entry family installation
 
 <a id="k-seed-entry-installation-reports-20261125"></a>
