@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r177 the [project user’s workqueue rule](../CHANGELOG.md#h-workqueue-value-20261125) extends [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 to the operations a scheduling interface may expose. It carries forward the phase and material-consumer requirements. The [worked example](#when-a-workqueue-is-justified) applies them to seed translation.
+
 At r176 the [final body effect review](../CHANGELOG.md#k-seed-final-body-effect-production-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 under the [phase rule](../AGENTS.md#passes-and-dependency-changes) and the trusted seed’s translation contract. It identifies which traversal produces the outgoing summary during final body validation.
 
 At r175 the [project user’s review boundary](../CHANGELOG.md#h-mainline-design-review-boundary-20261125) revises the earlier per-addition clearance rule under [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683. The design discussion confirms major program structure and algorithm choices before implementation. Development mainline owns the work within each decision.
@@ -517,6 +519,13 @@ In the C++ seed, `read_effects` subscribes a caller instance to its callee. When
 
 For a new design, identify what each pass establishes and when its result is fit for consumption. The counterexample begins when a caller takes a provisional callee summary as input. Narrowing a later wakeup to one branch still leaves that dependency in place. During extraction a caller can record the call and continue reading its own source. The collector can forward a newly discovered callee requirement along recorded call edges. Only the later checking phase can use the completed behavior to discharge obligations at that call. A separate final pass can check the whole solved result before publication. [Completed callee behavior](#consuming-completed-callee-behavior) · [Standing rule](../AGENTS.md#passes-and-dependency-changes)
 
+### When a workqueue is justified
+
+Start with the outcome the project needs. For the trusted seed, this could be emitting the correct cleanup path for a supported recursive call. Trace which fact that output consumes and where it comes from. If a direct traversal or an ordered set of passes supplies it, use that design. A cycle establishes a property of the input. Choosing a workqueue still requires showing what the simpler design misses or what concrete resource constraint it violates. Existing source and dependency evidence can settle that question.
+
+For example, if a required fact must propagate around a recursive component, the extractor can read each selected body once and record the call edges. A solver working over those records can accept a newly established fact for a particular edge. Each new fact advances a finite set toward completion. Give the solver only those records and the operation for propagating the fact. Keep the AST visitor and the body-scheduling interface out of its reach. A later consumer receives the completed result read-only. Choosing this algorithm for a real workload still requires the value case above.
+
+For the seed, inspect what can happen after a callee fact changes. If that change can reach the caller’s body visitor again in the same phase, the design still permits the restart. A visited flag, deduplication of pending items or a filter on selected changes can reduce executions while leaving the operation available. At `c8d38acc:cod/lang_checked.hh`, `close_effects` can still enqueue a previously visited caller. This remains an implementation gap under the [phase rule](../AGENTS.md#passes-and-dependency-changes).
 
 ## Component dispositions
 
