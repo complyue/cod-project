@@ -1,10 +1,10 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 41 · Recorded: 2026-11-25 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 42 · Recorded: 2026-11-25 · Phase: initial seed delivery through alternating booter and seed development.
 
 ## Design authority
 
-At r41 the [project user’s correction](../../CHANGELOG.md#h-booter-branch-local-effect-requirements-20261125) restores the r38 trusted-source boundary and assigns the [family effect check](../../design/SymbolicDynamicScope.md#family-wide-effect-requirements-before-20) to the booter under [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap).
+At r42 [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap) continues the r41 local-supply rule. The [project user’s clarification](../../CHANGELOG.md#h-effect-checking-cost-and-compiler-stages-20261125) identifies selected-path binding verification for removal from the seed and assigns the [family check](../../design/SymbolicDynamicScope.md#family-wide-effect-requirements-before-20) to both pre-2.0 semantic checkers.
 
 At r39 the [project user’s naming decision](../../CHANGELOG.md#h-bootstrap-tool-and-entry-names-20261125) names the seed executable and applies the reserved entry name to this application. [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap) continues the r38 stage responsibilities. [D-15-ENTRY](../../design/DesignAuthorityRegistry.md#d-15-entry) governs the entry identity.
 
@@ -82,7 +82,7 @@ The selected name for the C++ build output is `bin/cod-seed` (`bin/cod-seed.exe`
 
 The C++ seed translates trusted, valid CoD source into LLVM IR and bitcode to build the CoD-written booter. The current native build also consumes a C provider header and stubs derived from the same interfaces. The seed must resolve names, types, methods, layouts and other facts as far as their consumers need them to produce correct code. In particular, emitted calls must pass the actual owner or allocator when required. Generated code must implement the specified evaluation order, dynamic checks, exceptions, ownership transfers and cleanup. For a nullable access the seed can emit the prescribed runtime null check directly when eliminating it would require a static proof.
 
-The booter checks the [family’s incoming dynamic symbols](../../design/SymbolicDynamicScope.md#family-wide-effect-requirements-before-20). Each branch contributes its uses after accounting for successful local installations. In the seed, the translation contract covers the code that selects, captures, installs and restores those bindings.
+Before 2.0 the booter and `e-wrks/cod` check the [family’s incoming dynamic symbols](../../design/SymbolicDynamicScope.md#family-wide-effect-requirements-before-20). Each branch contributes its uses after accounting for successful local installations. Remove the seed’s selected-path missing-binding diagnostic and the analysis used exclusively to establish availability. Keep the information needed to emit binding selection, capture, installation and restoration.
 
 Remove a static check and the computation used exclusively to support it when translation has no use for its result. This includes whole-program type or ownership proofs whose sole purpose is to reject invalid input. Seed translation makes no claim of source validity. The CoD booter owns type, ownership and other semantic validation, including checking the full source world of its own compiler entry. Record supported self-check coverage separately from generating or running the first booter and from a successful self-build.
 

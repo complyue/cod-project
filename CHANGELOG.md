@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Retire selected-path binding verification from the trusted seed
+
+<a id="h-effect-checking-cost-and-compiler-stages-20261125"></a>
+**H-EFFECT-CHECKING-COST-AND-COMPILER-STAGES-20261125.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user identified selected-path missing-binding checks as “耗时长的一个主要怀疑点” and specified “之前的 booter 和 e-wrks/cod 只实现极简保守版。” Remove the seed’s availability proof and its exclusive work. Keep symbol facts used to generate correct code. Before 2.0 both semantic checkers use the [family union after branch-local supply](design/SymbolicDynamicScope.md#family-wide-effect-requirements-before-20). Finer path-sensitive admission is deferred for consideration after 2.0. D-10r267, D-ARCH-REVIEW r182 and roadmap r42 extend [the r266 scope](#h-booter-branch-local-effect-requirements-20261125) at `d956ce7d`. The existing whole-cutover performance gate continues.
+
 ## 2026-11-25 — Keep family effect admission in the booter and discharge branch-local uses
 
 <a id="h-booter-branch-local-effect-requirements-20261125"></a>
