@@ -12687,8 +12687,6 @@ class ScalarChecker {
       if (state.required && predicate != Type::boolean) fail(expr.at, "assert requires a bool predicate");
       const auto proof = state.target.branches;
       if (state.selections.reachable(proof, false)) {
-        if (state.required && !state.selections.reachable(proof, true))
-          fail(expr.at, "assertion predicate is provably false");
         auto failed = state;
         failed.selections.assume(proof, false);
         note_type_exit(failed, Completion::failure(exception_id(ExceptionCategory::assertion_failed)));
@@ -20220,8 +20218,6 @@ class ScalarChecker {
         note_abrupt(expr.at, {exception_id(ExceptionCategory::assertion_failed)});
       lexical_ = completed;
       refine(predicate, true, operations);
-      if (proving_ && validating_ && !lexical_.live)
-        fail(predicate.at, "assertion predicate is provably false");
       break;
     }
     case K::return_test: {
