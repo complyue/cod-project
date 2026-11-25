@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Retire cross-call borrowed payload read proofs from trusted translation
+
+<a id="k-seed-borrowed-read-obligations-20261125"></a>
+**K-SEED-BORROWED-READ-OBLIGATIONS-20261125.** Following the [trusted-source decision](#h-trusted-seed-translation-20261125), D-ARCH-REVIEW r157→158 continues P-682/P-683 and D-28 initialization semantics. At `d973346d:cod/lang_checked.hh`, a callee’s borrowed read is exported by parameter ordinal and consumed as a caller-side proof obligation. The [removal review](design/ImplementationArchitecture.md#removing-interprocedural-borrowed-payload-read-obligations) retains the Boolean and exception input observations needed by actual results and writes, runtime guards, prepared slots and conditional representation limits.
+
 ## 2026-11-25 — Apply incremental build approval to CMake regeneration
 
 <a id="h-incremental-cmake-regeneration-20261125"></a>

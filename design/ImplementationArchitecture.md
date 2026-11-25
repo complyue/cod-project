@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r158 the [borrowed payload review](../CHANGELOG.md#k-seed-borrowed-read-obligations-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), P-682/P-683 and the [trusted-source cutover](#seed-checker-migration-and-performance-acceptance). [D-28-INIT](DesignAuthorityRegistry.md#d-28-init) governs initialization in valid programs. The seed retains the facts needed for actual writes, selections, native interfaces and cleanup.
+
 At r157 the [project user’s build approval decision](../CHANGELOG.md#h-incremental-cmake-regeneration-20261125) applies the existing incremental build rule to CMake regeneration. [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues P-682/P-683. The [build rule](../AGENTS.md#bootstrap-and-build-configuration-safety) separates regeneration from execution of the regenerated target plan.
 
 At r156 the [borrowed-Boolean leaf review](../CHANGELOG.md#k-seed-pending-leaf-reads-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), P-682/P-683 and the r149 trusted-source cutover. Its scope is the read graph built during classification of these leaves. The completed exit facts and the ordinary call solver still have translation consumers.
@@ -647,6 +649,14 @@ Use current `make typeof(...)` syntax in the small seed acceptance inputs. The q
 Use `cod-seed` for the C++ compiler and `cod-booter` for its compiled application. Move the CoD entry from `applications/cod-booter/src/CompilerCLI.cod` to `applications/cod-booter/src/__main__.cod`. Keep the three C entry procedures in that file and their existing launcher contracts. Source locations and build dependencies follow the moved file. Historical paths and commands tied to a particular revision identify the original artifacts.
 
 Mainline owns the naming cutover. Update the seed tool definition, build and install references, staged-tool readiness, active runner lookups and command examples together. The standalone Makefile selects the new entry and defaults to the renamed executable while honoring `COD_SEED` and the library under `lib/cod`. Check the renamed tool on a small translation and inspect the normal Make plan for the seed path, entry path and final executable. Reuse the next scheduled full seed workload for the complete generation. The seed-first work order and existing build authorization apply.
+
+#### Removing interprocedural borrowed payload read obligations
+
+At `d973346d:cod/lang_checked.hh`, `observe_read` exports an incoming parameter ordinal so callers can prove the payload was initialized when read. `invocation_effects` maps that ordinal back to caller storage to check or forward the same obligation. Remove this cross-call proof and the work exclusive to creating it. Eliminate an immediate borrowed-place requirement at its producer where its only consumer was that export. Keep initializer-field checks, deferred lexical and prepared-slot requirements that still have their own consumers, and conditional local diagnostics that prevent emission of an unsupported callable image. A prepared reference’s nonnull check can fail before the callee writes. Keep that failure path and its incoming state.
+
+In `finish_call`, conditional ordinal reads can incidentally request Boolean and exception snapshots. Derive the remaining demand from the actual consumers, including conditional writes on each exit, Boolean and exception payloads, local diagnostic conditions and the condition selecting a nullable result. Preserve the actual argument’s saved value or selected target, and read a retained slot at invocation time as its calling convention requires. Removing a proof of prior initialization cannot establish a write, a nonnull target or permission to omit a runtime guard. Retain the read-phase solver while symbols and other live obligations still use it.
+
+Use focused valid seed inputs for aliased or forwarded writes, failure during a later argument, saved and rebound selections in deferred calls, and a returned reference whose nullness depends on an argument. Exercise both outcomes of that selection and inspect the emitted null protection. Preserve the reached callable-image failure and prior output on the unsupported case. Compare LLVM, bitcode and provider outputs on the existing `ProviderNames.cod` and `ModuleIndex.cod` inputs. Any focused IR difference needs a concrete account of the affected guard, target, or completion and equivalent behavior on both paths. The seed-first work order applies.
 
 #### When parallel module processing would help
 
