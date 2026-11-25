@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r176 the [final body effect review](../CHANGELOG.md#k-seed-final-body-effect-production-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 under the [phase rule](../AGENTS.md#passes-and-dependency-changes) and the trusted seed’s translation contract. It identifies which traversal produces the outgoing summary during final body validation.
+
 At r175 the [project user’s review boundary](../CHANGELOG.md#h-mainline-design-review-boundary-20261125) revises the earlier per-addition clearance rule under [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683. The design discussion confirms major program structure and algorithm choices before implementation. Development mainline owns the work within each decision.
 
 At r174 the [user’s fixture retirement decision](../CHANGELOG.md#h-test-fixtures-on-demand-20261125) applies the material-consumer rule to fixture maintenance. The [declared-result review](../CHANGELOG.md#k-seed-declared-result-consumers-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683. [D-10](SymbolicDynamicScope.md#callable-declarations-and-methods), H-258 and P-229 distinguish signature promises from executable methods. [D-24](CallableResultInference.md#establishing-a-result-contract) governs the result used to translate a selected method.
@@ -500,6 +502,14 @@ Identify the source case and the decision that depends on the proposed work. A s
 Consider what the consumer can do with a cheaper sound fact. For example, a possible write through an alias can invalidate an earlier nonnull proof. A later use can check the current target. If that satisfies the component’s contract on the actual workload, use that approach. If a promised initialization or a use after cleanup requires stronger evidence, identify the path and destination that require it, then limit collection, storage and verification accordingly. Keep soundness, ownership, cleanup, required diagnostics and supported valid inputs in the comparison. Omit the proposal or its unsupported precision when review finds no decision that needs it. A change to a qualified obligation still follows the existing design process.
 
 For the [ordinary reference example](#consuming-completed-callee-behavior), the emitter must preserve both the store and its order relative to failure. Running the handler can test that order. A static per-exit write history needs a separate caller decision that consumes it. An `init` parameter requires proof that its promised write occurred on every successful completion. A definite-write fact for the selected destination can satisfy that obligation.
+
+### Producing effects during final body validation
+
+A seed body’s outgoing `CallEffects` describes what a call can do on each completion. During final body validation, the seed prepares possible targets, settles loop headers and then checks the body using those results. Only the last traversal produces the outgoing summary used for comparison. Each earlier traversal still performs the local work its successors depend on, including preparing owners and operands, routing exits through handlers and cleanup, and discovering callable instances. For example, a symbol requirement belonging to a queued cleanup must survive even when this traversal has no outgoing summary to fill.
+
+The choice depends on who consumes the result. In ordinary effect closure, the iteration that settles a loop can itself supply the summary consumed by the solver. It retains that responsibility. Final validation keeps the comparison for each existing binding interpretation, the separate completed scalar and leaf paths, emitted frame data and warnings. Its instance walk covers methods discovered during materialization. The module entry retains its existing checking path. The broader migration of the legacy solver remains open.
+
+Acceptance uses the seed’s translation of `ModuleIndex`, `ProviderNames` and `NativeSource` with matching LLVM IR, bitcode and provider files. The focused inputs distinguish a borrowed write in a loop with failure and cleanup, a returned callable whose validity depends on a condition, and the warning for nonvoid fallthrough. Mainline owns verification and publication.
 
 ### Restarting a pass from entry
 

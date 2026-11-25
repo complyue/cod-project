@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Produce the seed’s final body effect summary after loop settlement
+
+<a id="k-seed-final-body-effect-production-20261125"></a>
+**K-SEED-FINAL-BODY-EFFECT-PRODUCTION-20261125.** D-ARCH-REVIEW r175→176 continues the [per-kind phase rule](#h-completed-callee-behavior-20261125) and the [trusted-source contract](#h-trusted-seed-translation-20261125). At `efb06925:cod/lang_checked.hh`, `check_flow` always runs a final proving traversal when validating, and `begin_check` resets the ordinary effect accumulator before it. The [reviewed boundary](design/ImplementationArchitecture.md#producing-effects-during-final-body-validation) assigns the outgoing effect summary to the traversal with a consumer while preserving loop settlement, late body materialization and the ordinary effect solver. This records architecture approval for mainline implementation.
+
 ## 2026-11-25 — Confirm major program structure and algorithms and delegate routine delivery
 
 <a id="h-mainline-design-review-boundary-20261125"></a>
