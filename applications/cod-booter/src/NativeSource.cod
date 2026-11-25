@@ -9,14 +9,14 @@ export data PathStorageException <: Exception { os_error:u64; }
 export data PathNotReadyException <: Exception { status:u64; }
 export data SourceOpenException <: Exception { os_error:u64; }
 
-proc "C" PathOwner() throws PathStorageException;
+func "C" PathOwner() throws PathStorageException;
 proc "C" Path() throws PathNotReadyException;
 proc "C" SourceRevision(handle path:Path in A) throws SourceOpenException
     where {const owner A};
 
 export proc "C" prepare_root(handle destination:PathOwner in D, handle input:Path in A)
     -> u64 where {owner D, const owner A};
-export proc "C" prepare_child(handle destination:PathOwner in D, handle parent:Path in P,
+export func "C" prepare_child(handle destination:PathOwner in D, handle parent:Path in P,
                              decoded:const SourceBytes in B, used:u64)
     -> u64 where {owner D, const owner P, const owner B};
 func "C" path_ready(handle prepared:PathOwner in P) -> bool where {const owner P};
