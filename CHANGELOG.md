@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Remove local payload-read proof work from trusted seed translation
+
+<a id="k-seed-local-payload-read-obligations-20261125"></a>
+**K-SEED-LOCAL-PAYLOAD-READ-OBLIGATIONS-20261125.** D-ARCH-REVIEW r159→160 continues P-682/P-683 under the [trusted-source decision](#h-trusted-seed-translation-20261125) and D-28 initialization rules. The [review](design/ImplementationArchitecture.md#removing-local-payload-read-obligations) traces physical read requirements in `55c5a602:cod/lang_checked.hh` and `cod/lang_completion.hh` to their diagnostic consumers. It clears their removal and identifies the remaining consumers of conditional read sites, reference selections and actual initialization facts.
+
 ## 2026-11-25 — Keep declared root presence in seed cleanup analysis
 
 <a id="k-seed-declared-root-presence-20261125"></a>
