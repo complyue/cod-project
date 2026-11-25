@@ -10,8 +10,8 @@ export data PathNotReadyException <: Exception { status:u64; }
 export data SourceOpenException <: Exception { os_error:u64; }
 
 func "C" PathOwner() throws PathStorageException;
-proc "C" Path() throws PathNotReadyException;
-proc "C" SourceRevision(handle path:Path in A) throws SourceOpenException
+func "C" Path() throws PathNotReadyException;
+func "C" SourceRevision(handle path:Path in A) throws SourceOpenException
     where {const owner A};
 
 export proc "C" prepare_root(handle destination:PathOwner in D, handle input:Path in A)
