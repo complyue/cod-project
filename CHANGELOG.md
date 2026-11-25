@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Review the native path-key handoff in handler replay
+
+<a id="k-seed-native-path-key-replay-edge-20261125"></a>
+**K-SEED-NATIVE-PATH-KEY-REPLAY-EDGE-20261125.** The [implementation review](design/ImplementationArchitecture.md#symbol-uses-across-the-native-path-key-loan) continues D-ARCH-REVIEW r189→190. The native provider at `96fda399:applications/cod-booter/native/path_provider.c` uses its explicit borrowed input and synchronous callback. A private function declaration can express that promise. The checked relay must still identify the actual CoD body and account for its symbol uses. The wider recursive handler and other native procedures retain their existing acceptance boundaries.
+
 ## 2026-11-25 — Account for a local installation across a synchronous here call
 
 <a id="k-seed-live-handler-local-here-supply-20261125"></a>
