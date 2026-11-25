@@ -22827,9 +22827,10 @@ class ScalarChecker {
   // guarded requirement. Keep the call edges to recover its path.
   using LeafReadOrigin = std::pair<size_t, size_t>;
   struct LeafBehaviorPlan {
-    enum class Kind { borrowed_byte, scalar_predicate } kind = Kind::borrowed_byte;
+    enum class Kind { borrowed_byte, scalar_predicate, byte_literal } kind = Kind::borrowed_byte;
     const Expression *primitive = nullptr;
     std::vector<const Expression *> predicate_operations;
+    const Expression *literal_result = nullptr;
     size_t borrowed_formal = null_target;
     std::string_view borrowed_name;
     std::vector<LeafGuard> guards;
@@ -22953,44 +22954,57 @@ class ScalarChecker {
     const auto &instance = program_.instances[id];
     const auto &method = program_.methods[instance.method];
     const auto &form = *method.source;
-    const bool scalar_predicate = form.kind == Form::Kind::function && !form.implicit_scope &&
+    const bool scalar_function = form.kind == Form::Kind::function && !form.implicit_scope &&
         !form.supplied_scope && !form.supplied_group && !form.explicit_captures;
-    if ((!form.ordinary_procedure() && !scalar_predicate) || form.symbolic || form.c_linkage ||
+    const bool byte_literal = scalar_function && form.result_type == Type::uint8;
+    const auto expected_result = byte_literal ? Type::uint8 : Type::boolean;
+    if ((!form.ordinary_procedure() && !scalar_function) || form.symbolic || form.c_linkage ||
         !method.operation.empty() ||
         !form.body || form.body->kind != Expression::Kind::block || lexical_methods_.contains(&form) ||
         method.parent || method.regional_initializer || method.lexical_result || method.scope_inputs ||
         method.here_group || !method.here.empty() || !method.type_parameters.empty() ||
         !method.throws_types.empty() || !instance.environment.empty() || !instance.incoming_abstract_targets.empty() ||
-        distinct_binding_effects_.contains(id) || form.result_type != Type::boolean ||
-        instance.result.mode != ResultMode::value || instance.result.type != Type::boolean) return {};
+        distinct_binding_effects_.contains(id) || form.result_type != expected_result ||
+        instance.result.mode != ResultMode::value || instance.result.type != expected_result) return {};
 
     if (form.body->children.empty() || form.body->children.back()->kind != Expression::Kind::return_value)
       return {};
-    if (scalar_predicate && (form.body->scoped || form.body->children.size() != 1 ||
-                             !method.input_owners().empty() || method.declaration_context())) return {};
+    if (scalar_function && (form.body->scoped || form.body->children.size() != 1 ||
+                            !method.input_owners().empty() || method.declaration_context())) return {};
     const auto &parameters = method.input_parameters();
     if (parameters.size() != instance.arguments.size()) return {};
+    LeafBehaviorPlan plan;
+    if (byte_literal) {
+      const auto &result = *form.body->children.front();
+      if (!parameters.empty() || result.children.size() != 1) return {};
+      const auto &value = *result.children.front();
+      // Leave numeric range validation to the ordinary checker, where a
+      // located failure is staged with the other unavailable leaf bodies.
+      if (value.kind != Expression::Kind::integer || value.annotation || !value.text.ends_with("u8")) return {};
+      plan.kind = LeafBehaviorPlan::Kind::byte_literal;
+      plan.literal_result = &value;
+      return plan;
+    }
     TypeEvidenceState scope;
     scope.method = instance.method;
-    LeafBehaviorPlan plan;
-    if (scalar_predicate) plan.kind = LeafBehaviorPlan::Kind::scalar_predicate;
+    if (scalar_function) plan.kind = LeafBehaviorPlan::Kind::scalar_predicate;
     for (size_t ordinal = 0; ordinal < parameters.size(); ++ordinal) {
       const auto &parameter = parameters[ordinal];
       const auto &type = instance.arguments[ordinal];
       if (parameter.automatic_conversion || parameter.variadic || parameter.selects_caller_place()) return {};
       if (argument_mode(parameter) != ArgumentMode::value) {
-        if (scalar_predicate || argument_mode(parameter) != ArgumentMode::borrowed_ref || parameter.read_only ||
+        if (scalar_function || argument_mode(parameter) != ArgumentMode::borrowed_ref || parameter.read_only ||
             type != Type::boolean || plan.borrowed_formal != null_target) return {};
         plan.borrowed_formal = ordinal;
         plan.borrowed_name = parameter.name;
-      } else if (type != Type::boolean && type != Type::uint8 && (scalar_predicate || type != Type::uint64)) return {};
+      } else if (type != Type::boolean && type != Type::uint8 && (scalar_function || type != Type::uint64)) return {};
       if (!scope.bindings.emplace(parameter.name, type).second) return {};
     }
     for (const auto &owner : method.input_owners()) scope.symbol_shadows.insert(owner.name);
 
     const ModuleLookup module(module_, method.module);
     const ModuleLookup interpretation(interpretation_, method.interpretation);
-    if (scalar_predicate) {
+    if (scalar_function) {
       const auto &result = *form.body->children.front();
       if (result.children.size() != 1 || !bind_scalar_predicate(*result.children.front(), scope, plan)) return {};
     } else if (plan.borrowed_formal == null_target || !bind_leaf_operations(*form.body, scope, plan, null_target)) return {};
@@ -23004,8 +23018,8 @@ class ScalarChecker {
   };
   void complete_leaf_exits(const LeafBehaviorPlan &leaf, const CheckedInstance &instance,
                            const std::vector<LeafExitEquation> &exits) {
-    const bool scalar = leaf.kind == LeafBehaviorPlan::Kind::scalar_predicate;
-    if (scalar) {
+    const bool borrowed = leaf.kind == LeafBehaviorPlan::Kind::borrowed_byte;
+    if (leaf.kind == LeafBehaviorPlan::Kind::scalar_predicate) {
       for (const auto *site : leaf.predicate_operations) {
         const auto &operation = instance.operations.at(site);
         const auto builtin = short_circuit_predicate(*site) ? BuiltinOperation::none :
@@ -23015,15 +23029,19 @@ class ScalarChecker {
             operation.type != Type::boolean)
           throw std::logic_error("scalar predicate disagrees with its binding plan");
       }
-      if (exits.empty()) throw std::logic_error("closed scalar predicate has no normal exit");
+    } else if (leaf.kind == LeafBehaviorPlan::Kind::byte_literal) {
+      const auto &operation = instance.operations.at(leaf.literal_result);
+      if (operation.type != Type::uint8 || operation.callee || operation.callable_call || operation.builtin != BuiltinOperation::none)
+        throw std::logic_error("byte literal return disagrees with its binding plan");
     } else {
       const auto &operation = instance.operations.at(leaf.primitive);
       if (operation.builtin != BuiltinOperation::text_byte || operation.callee)
         throw std::logic_error("closed leaf primitive disagrees with its binding plan");
     }
+    if (!borrowed && exits.empty()) throw std::logic_error("closed scalar function has no normal exit");
     const auto bounds = Completion::failure(exception_id(ExceptionCategory::index_out_of_bounds)).reason;
     for (const auto &exit : exits) {
-      if (exit.reason && (scalar || exit.reason != bounds || exit.origin != leaf.primitive->at))
+      if (exit.reason && (!borrowed || exit.reason != bounds || exit.origin != leaf.primitive->at))
         throw std::logic_error("closed leaf extraction found an unbound exit");
       observe_outcome(exit.reason, exit.state);
     }
