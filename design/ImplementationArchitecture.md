@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r172 the [entry installation review](../CHANGELOG.md#k-seed-entry-installation-reports-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 for trusted translation. [D-21](DesignAuthorityRegistry.md#d-21), H-379/H-380 and P-339/P-340 govern explicit installation of the extended family and the operational effect of cancelling a dependency installation.
+
 At r171 the [effect application review](../CHANGELOG.md#k-seed-apply-private-effects-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 at the two callers of the seed’s effect applicator. The [deferred exception contract](DesignAuthorityRegistry.md#d-17-defer-dispatch) governs preservation of the pending failure through cleanup.
 
 At r170 the [builtin effect review](../CHANGELOG.md#k-seed-immediate-builtin-effects-20261125) extends [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 to two builtin effect producers under the [material-consumer rule](#justifying-compiler-work-before-coding). The [deferred-call contract](DesignAuthorityRegistry.md#d-17-defer-checks) governs preparation and registration.
@@ -777,6 +779,14 @@ Remove the second copy inside `apply_effects`. Preserve the order of condition r
 For the immediate rows built by `invocation_effects`, omit the initialization of `Effects::thrown` with every possible incoming exception. Immediate application uses `transform_conditions`, which leaves that field alone. The actual call failure gets its category and ownership from the completion reason and the selected callee, or follows the protected `here` transfer. Prepared calls and prepared transfers still need the incoming exception for substitution at cleanup. Preserve their existing `preserve_pending` calls and declared-root handling.
 
 Use the existing immediate-call, saved-target, protected-completion, FIFO, case-scan or case-exit, and located-rejection controls. Include a drain with a write followed by a read, such as `DeferredWriteRead`, which observes `41/43/90`. Compare the supported seed artifacts for Lexer, ModuleIndex and NativeSource against their pinned outputs. The [seed-first work order](#seed-checker-migration-and-performance-acceptance) applies.
+
+#### Translating an entry that extends a dependency family
+
+At `b00fdc9d:cod/lang_checked.hh`, `plan_entry_installations` walks entry initializers to find a candidate named installation. Its sole output is a diagnostic. Separately, `Facts::named_installation` records whether every reaching branch installed the named family. Its only end consumer is the report after the entry scope drains. Remove the candidate walk, both reports and the bookkeeping specific to that field. Equality of dynamic-binding rows may now coalesce states that differed only in report coverage. Keep all operational binding facts, including bound presence, installed local handlers, owners and abstract targets.
+
+Retain the exact set of nominal symbol IDs for which the entry adds a method to an imported receiving family. The source-form pointers served the reports. The IDs still control dependency lifetime checking and, together with the existing scope and activation conditions, `publishes_effect`. A cancelled dependency installation still evaluates its operands, constructs the callable and releases the temporary. A dependency procedure can install its own source family and restore the preceding binding on exit. Preserve name-only activation, private handler bodies, LLVM’s storage and reachability decisions, and the binding check at an actual read.
+
+[D-21’s entry rule](AheadOfTimeExecutionPreparation.md#entry-installation-and-unused-dependency-code) still requires the selected extended family to be explicitly installed. Use the two missing-installation inputs only as compile-time probes, recording any subsequent translation stop. Their original diagnostic expectations remain at `archive/checked-cpp-seed:tests/cod/language/module_context_tests.py`. Remove only those two rows from the active execution runner. Compare generated artifacts and runtime output for the local installation and restoration (`9/1/9`) and the conditional named installation (`9`). The read in the earlier dependency still fails at `7:22` with prior outputs intact. The [seed-first work order](#seed-checker-migration-and-performance-acceptance) applies.
 
 #### When parallel module processing would help
 

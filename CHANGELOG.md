@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Retire two seed reports about entry family installation
+
+<a id="k-seed-entry-installation-reports-20261125"></a>
+**K-SEED-ENTRY-INSTALLATION-REPORTS-20261125.** D-ARCH-REVIEW r171→172 continues P-682/P-683 under the trusted-source decision. The [review](design/ImplementationArchitecture.md#translating-an-entry-that-extends-a-dependency-family) traces the candidate walk and the end-of-entry branch proof at `b00fdc9d:cod/lang_checked.hh` to their diagnostic sinks. The entry extension identities still control cancellation, dependency lifetime and emitted installation. D-21 and H-379/H-380 retain their existing scope. The [fixture reference](tests/cod/language/README.md#current-implementation-boundary) r485→486 assigns the two missing-installation expectations to the checked archive.
+
 ## 2026-11-25 — Apply seed call and cleanup effects to their private records
 
 <a id="k-seed-apply-private-effects-20261125"></a>
