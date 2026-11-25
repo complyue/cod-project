@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Review local handler selection during recursive visits
+
+<a id="k-seed-recursive-local-selection-20261125"></a>
+**K-SEED-RECURSIVE-LOCAL-SELECTION-20261125.** The [implementation review](design/ImplementationArchitecture.md#recursive-local-handler-selection) continues D-ARCH-REVIEW r194→195 under the user's [family capture decision](#h-perform-family-capture-20261125). The private seed at `e8f005c6:cod/lang_checked.hh` resolves the local handler before arguments. The replay collector can consume that selection from the completed call frame. Each nested activation needs its own complete empty inventory on the late route, including when its parent supplies a symbol. The production graph's native disposal obligation remains open.
+
 ## 2026-11-25 — Review replay through the package resolver’s result writes and root scan
 
 <a id="k-seed-package-resolver-replay-20261125"></a>
