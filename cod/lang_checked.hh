@@ -247,7 +247,7 @@ struct LexicalState {
   };
   std::vector<Scope> scopes{{0, {}}};
   DynamicSymbolBindings symbols;
-  std::set<size_t> required_symbols;
+  std::set<size_t> deferred_symbols;
   std::set<size_t> bindings_available, available, initialized, present;
   std::set<size_t> live_exception_holders;
   // Until a payload loan's full duration is proved, retain its exposure on all reaching paths.
@@ -4578,8 +4578,8 @@ class ScalarChecker {
     if (!proving_ || !state.live || state.symbols.get(symbol).bound) return;
     if (!delayed_ && !checking_instance_ && validating_)
       fail(at, "cannot prove an installed binding for symbol '" + program_.symbols[symbol].name + "'");
-    state.required_symbols.insert(symbol);
-    if (!delayed_ && exporting_effects_) observe_effects().symbols.insert(symbol);
+    if (delayed_) state.deferred_symbols.insert(symbol);
+    else if (exporting_effects_) observe_effects().symbols.insert(symbol);
   }
   size_t initialization_frame() const { return deferred_action_ ? CleanupEquations::action_frame(*deferred_action_) : 0; }
   void apply_effects(LexicalState &state, CleanupEquations::Effects &effects, const Location &at) {
@@ -4675,6 +4675,23 @@ class ScalarChecker {
     if (const auto binding = current_binding(view); binding && (!prepared || !rebound_.contains(*binding)))
       selections.initialize(*binding);
   }
+  using CallBindings = std::map<size_t, CallEffects::BindingResult>;
+  static CallBindings initial_call_bindings(const CheckedMethod &method, const std::vector<Type> &arguments) {
+    CallBindings bindings;
+    for (size_t p = 0; p < arguments.size(); ++p) {
+      auto &targets = bindings[p];
+      targets.initialized = true;
+      // Nullable input origins stay distinct from absence introduced by a body.
+      for (size_t q = 0; q < arguments.size(); ++q)
+        if (arguments[p] == arguments[q] && same_owner(method, p, q)) {
+          targets.targets.insert(q);
+          if (argument_mode(method.input_parameters()[p]) != ArgumentMode::borrowed_ref &&
+              argument_mode(method.input_parameters()[q]) == ArgumentMode::borrowed_ptr)
+            targets.null_sources.insert(q);
+        }
+    }
+    return bindings;
+  }
   CallEffects initial_effects(const CheckedMethod &method, const std::vector<Type> &arguments) const {
     CallEffects effects;
     std::set<size_t> borrowed;
@@ -4682,7 +4699,8 @@ class ScalarChecker {
       if (!method.input_parameters()[p].owner.empty()) borrowed.insert(p);
     const auto fields = product_inputs(arguments, method.source->at);
     for (size_t p = 0; p < fields.size(); ++p) borrowed.insert(arguments.size() + p);
-    for (const auto reason : call_reasons(method)) {
+    const auto reasons = call_reasons(method);
+    for (const auto reason : reasons) {
       effects.initialized[reason] = borrowed;
       effects.present[reason] = borrowed;
       for (const auto p : borrowed)
@@ -4694,24 +4712,15 @@ class ScalarChecker {
     const auto input_type = [&](size_t p) -> const Type & {
       return p < arguments.size() ? arguments[p] : fields[p - arguments.size()].type();
     };
-    for (const auto reason : call_reasons(method)) for (const auto parameter : borrowed)
-      if (input_type(parameter) == Type::boolean) effects.booleans[reason][parameter] = effects.returned.boolean;
-    for (const auto reason : call_reasons(method)) for (const auto parameter : borrowed)
-      if (input_type(parameter).kind == Type::exception)
-        effects.payloads[reason].try_emplace(parameter);
-    if (caller_bindings(method)) for (const auto reason : call_reasons(method))
-      for (size_t p = 0; p < arguments.size(); ++p) {
-        auto &targets = effects.bindings[reason][p];
-        targets.initialized = true;
-        // Nullable input origins stay distinct from absence introduced by a body.
-        for (size_t q = 0; q < arguments.size(); ++q)
-          if (arguments[p] == arguments[q] && same_owner(method, p, q)) {
-            targets.targets.insert(q);
-            if (argument_mode(method.input_parameters()[p]) != ArgumentMode::borrowed_ref &&
-                argument_mode(method.input_parameters()[q]) == ArgumentMode::borrowed_ptr)
-              targets.null_sources.insert(q);
-          }
-      }
+    for (const auto parameter : borrowed) {
+      const auto &type = input_type(parameter);
+      if (type == Type::boolean) for (const auto reason : reasons) effects.booleans[reason].try_emplace(parameter);
+      if (type.kind == Type::exception) for (const auto reason : reasons) effects.payloads[reason].try_emplace(parameter);
+    }
+    if (caller_bindings(method) && !arguments.empty()) {
+      const auto bindings = initial_call_bindings(method, arguments);
+      for (const auto reason : reasons) effects.bindings.emplace(reason, bindings);
+    }
     return effects;
   }
   std::map<size_t, CleanupEquations::Effects> invocation_effects(const CallEffects &target, const std::set<size_t> &reasons,
@@ -5253,7 +5262,6 @@ class ScalarChecker {
         [&](size_t i) { return input_type(i) == Type::boolean && !readonly_input(i); });
     const bool observes_values = *contract.target == Type::boolean || !summary.booleans.empty() || writes_boolean ||
         !summary.uninitialized.empty() || conditional_local_check || conditional_nullness;
-    const auto entry_payloads = prepared ? incoming_payloads() : lexical_.exceptions;
     bool independent_boolean_call = false;
     if (*contract.target == Type::boolean && !prepared && !delayed_ && !immediate_scope && !case_scan &&
         !late_payloads && offset == 0 && expr.kind == Expression::Kind::call && !expr.lexical_symbol_call &&
@@ -5281,12 +5289,20 @@ class ScalarChecker {
       boolean_inputs[i] = borrowed ? invocation_slots.contains(i) ? CleanupEquations::unknown_boolean() : stored_boolean(views[i], entry_booleans)
           : snapshot_boolean(predicate_of(views[i]), lexical_, expr.at);
     }
+    using ExceptionPayloads = decltype(lexical_.exceptions);
+    std::optional<ExceptionPayloads> deferred_payloads;
+    const auto entry_payloads = [&]() -> const ExceptionPayloads & {
+      if (!prepared) return lexical_.exceptions;
+      if (!deferred_payloads) deferred_payloads.emplace(incoming_payloads());
+      return *deferred_payloads;
+    };
     if (contract.target->kind == Type::exception || !summary.payloads.empty() || observes_values) {
       exception_inputs.reserve(views.size());
       for (size_t i = 0; i < views.size(); ++i) {
-        const bool borrowed = borrowed_input(i);
-        exception_inputs.push_back(borrowed ? invocation_slots.contains(i) ? ExceptionFacts{exception_value_categories(input_type(i))}
-            : stored_exceptions(views[i], entry_payloads) : views[i].exceptions);
+        if (!borrowed_input(i)) exception_inputs.push_back(views[i].exceptions);
+        else if (invocation_slots.contains(i)) exception_inputs.emplace_back(exception_value_categories(input_type(i)));
+        else if (views[i].type.kind != Type::exception) exception_inputs.emplace_back();
+        else exception_inputs.push_back(stored_exceptions(views[i], entry_payloads()));
       }
     }
     std::map<size_t, size_t> owners;
@@ -5441,15 +5457,20 @@ class ScalarChecker {
     }
     for (auto &[reason, effects] : invocation) {
       effects.payload_writes = written_targets;
-      auto payloads = entry_payloads;
       if (late_payloads) {
         // These calls retain binding slots whose invocation-time selections
         // still need a payload/selection correlation proof.
-        for (auto &[place, value] : payloads)
-          if (written_targets.contains(place)) value = exception_value_categories(storage(place).type);
+        if (!written_targets.empty()) {
+          const auto &payloads = entry_payloads();
+          for (const auto place : written_targets) if (const auto found = payloads.find(place); found != payloads.end()) {
+            ExceptionFacts value{exception_value_categories(storage(place).type)};
+            if (found->second != value) effects.payloads.emplace(place, std::move(value));
+          }
+        }
       } else {
         // Publish simultaneous postconditions after weakening other possible
         // aliases. Sequential strong writes would lose same-target alternatives.
+        std::optional<ExceptionPayloads> payloads;
         std::map<size_t, ExceptionFacts> definite;
         for (size_t i = 0; i < views.size(); ++i) {
           if (input_type(i).kind != Type::exception || !borrowed_input(i)) continue;
@@ -5462,12 +5483,15 @@ class ScalarChecker {
               (writes || !outcome->second.at(i).empty()))
             value = outcome->second.at(i).substitute(exception_inputs);
           else if (!writes) continue;
-          write_exception_payloads(payloads, views[i], value);
+          if (!payloads) payloads.emplace(entry_payloads());
+          write_exception_payloads(*payloads, views[i], value);
           if (views[i].place) definite[*views[i].place].merge(value);
         }
-        for (auto &[place, value] : definite) payloads[place] = std::move(value);
+        if (payloads) {
+          for (auto &[place, value] : definite) (*payloads)[place] = std::move(value);
+          effects.payloads = payload_changes(entry_payloads(), *payloads);
+        }
       }
-      effects.payloads = payload_changes(entry_payloads, payloads);
       auto booleans = entry_booleans;
       if (late_payloads) {
         for (auto &[place, value] : booleans) if (effects.payload_writes.contains(place)) value = CleanupEquations::unknown_boolean();
@@ -5864,7 +5888,7 @@ class ScalarChecker {
     else if (!b_exits) lexical_.exposed_exception_payloads.insert(b.exposed_exception_payloads.begin(), b.exposed_exception_payloads.end());
     if (a_exits) lexical_.symbols = b.symbols;
     else if (!b_exits) lexical_.symbols = join_symbols(a.symbols, b.symbols);
-    lexical_.required_symbols.insert(b.required_symbols.begin(), b.required_symbols.end());
+    lexical_.deferred_symbols.insert(b.deferred_symbols.begin(), b.deferred_symbols.end());
     lexical_.initialized = a_exits ? b.initialized : b_exits ? a.initialized : intersect(a.initialized, b.initialized);
     lexical_.returned = a_exits ? b.returned : a.returned;
     if (!a_exits && !b_exits) lexical_.returned.merge(b.returned);
@@ -21857,7 +21881,7 @@ class ScalarChecker {
         delayed_ = true;
         deferred_action_ = action;
         lexical_.symbols = {};
-        lexical_.required_symbols.clear();
+        lexical_.deferred_symbols.clear();
         refresh_targets(lexical_);
         lexical_.predicates.clear();
         lexical_.boolean_payloads.clear();
@@ -21906,7 +21930,7 @@ class ScalarChecker {
                 if (missing != CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}})
                   effects.uninitialized.emplace(place, std::move(missing));
               }
-              effects.symbols = path.state.required_symbols;
+              effects.symbols = path.state.deferred_symbols;
               effects.payload_writes = path.state.payload_writes;
               effects.present = path.state.input_facts.at(input).present;
               effects.declared_root = flow.declared_root;
@@ -23078,19 +23102,31 @@ class ScalarChecker {
     std::erase_if(observed.uninitialized, [](const auto &entry) { return entry.second.empty(); });
     // Initializer completion uses the observed normal entry to decide
     // whether the reserved target can become ready.
-    for (const auto reason : call_reasons(*checking_method_))
+    const auto reasons = call_reasons(*checking_method_);
+    for (const auto reason : reasons) {
       if (reason || !checking_method_->regional_initializer_fields)
         observed.initialized.try_emplace(reason);
-    for (const auto reason : call_reasons(*checking_method_)) observed.present.try_emplace(reason);
+      observed.present.try_emplace(reason);
+    }
     if (!instance.result.borrowed() && *instance.result.type == Type::boolean && observed.returned.boolean.empty())
       observed.returned.boolean = CleanupEquations::unknown_boolean();
     if (instance.result.nullable() && observed.returned.nullness.empty())
       observed.returned.nullness = CleanupEquations::unknown_boolean();
-    auto initial = initial_effects(*checking_method_, instance.arguments);
-    for (const auto &[reason, values] : initial.booleans)
-      for (const auto &[parameter, value] : values) observed.booleans[reason].try_emplace(parameter, CleanupEquations::unknown_boolean());
-    for (const auto &[reason, payloads] : initial.payloads)
-      for (const auto &[parameter, value] : payloads) observed.payloads[reason].try_emplace(parameter, value);
+    // The final input frame already has the projected product fields. Only
+    // payload defaults are needed here, without the solver's initial state.
+    const auto fill_payload_defaults = [&](size_t ordinal, const Type &type) {
+      if (type == Type::boolean) for (const auto reason : reasons) {
+        const auto [value, inserted] = observed.booleans[reason].try_emplace(ordinal);
+        if (inserted) value->second = CleanupEquations::unknown_boolean();
+      }
+      if (type.kind == Type::exception)
+        for (const auto reason : reasons) observed.payloads[reason].try_emplace(ordinal);
+    };
+    const auto &parameters = checking_method_->input_parameters();
+    for (size_t i = 0; i < parameters.size(); ++i)
+      if (!parameters[i].owner.empty()) fill_payload_defaults(i, instance.arguments[i]);
+    for (size_t i = 0; i < input_field_places_.size(); ++i)
+      fill_payload_defaults(instance.arguments.size() + i, storage(input_field_places_[i]).type);
     visit_binding_inputs([&](size_t parameter, size_t binding) {
       auto &sources = observed.binding_sources[parameter];
       for (const auto place : possible_targets_.at(binding)) if (place != null_target) {
@@ -23100,19 +23136,24 @@ class ScalarChecker {
       }
       if (possible_null_sources_.at(binding).contains(null_target)) sources.insert(null_target);
     });
-    if (caller_bindings(*checking_method_) || checking_method_->scope_inputs) {
+    if (caller_bindings(*checking_method_) && !instance.arguments.empty()) {
       // Recursive closure retains conservative absent outcomes, while a slot
       // with no possible mutation preserves its entry selection on every exit.
-      for (auto &[reason, targets] : initial.bindings) {
-        for (auto &[parameter, result] : targets) {
-          const auto &input = instance.frame.inputs.at(parameter);
-          if (!rebound_.contains(storage(input.place).binding)) {
-            result.targets = {parameter};
-            result.null_sources = input.mode == ArgumentMode::borrowed_ptr ? std::set<size_t>{parameter} : std::set<size_t>{};
-            result.initialized = input.mode != ArgumentMode::borrowed_ptr;
+      std::optional<CallBindings> defaults;
+      for (const auto reason : reasons) {
+        if (observed.bindings.contains(reason)) continue;
+        if (!defaults) {
+          defaults = initial_call_bindings(*checking_method_, instance.arguments);
+          for (auto &[parameter, result] : *defaults) {
+            const auto &input = instance.frame.inputs.at(parameter);
+            if (!rebound_.contains(storage(input.place).binding)) {
+              result.targets = {parameter};
+              result.null_sources = input.mode == ArgumentMode::borrowed_ptr ? std::set<size_t>{parameter} : std::set<size_t>{};
+              result.initialized = input.mode != ArgumentMode::borrowed_ptr;
+            }
           }
         }
-        observed.bindings.try_emplace(reason, std::move(targets));
+        observed.bindings.emplace(reason, *defaults);
       }
     }
     if (observed.returned.value.unresolved())
