@@ -22901,8 +22901,10 @@ class ScalarChecker {
           abstract_effect_inputs_.contains(method.source)) return false;
       const auto matching = [&](size_t id) {
         const auto &instance = program_.instances[id];
+        // An explicitly declared result can set result_supplied. The query
+        // environment identifies a result supplied by the calling context.
         return instance.arguments.empty() && instance.environment.empty() && instance.retained_types.empty() &&
-            !instance.query_environment && !instance.result_supplied && instance.incoming_abstract_targets.empty() &&
+            !instance.query_environment && instance.incoming_abstract_targets.empty() &&
             instance.result.mode == ResultMode::value && instance.result.type == Type::uint8;
       };
       const auto target = std::ranges::find_if(method.instances, matching);
@@ -23073,7 +23075,7 @@ class ScalarChecker {
     if (scalar_function) {
       const auto &result = *form.body->children.front();
       if (result.children.size() != 1 || !bind_scalar_predicate(*result.children.front(), scope, plan.predicate)) return {};
-      if (!plan.predicate.calls.empty() && (form.case_scan_scope || instance.query_environment || instance.result_supplied ||
+      if (!plan.predicate.calls.empty() && (form.case_scan_scope || instance.query_environment ||
           !instance.retained_types.empty() || abstract_effect_inputs_.contains(method.source))) return {};
     } else if (plan.borrowed_formal == null_target || !bind_leaf_operations(*form.body, scope, plan, null_target)) return {};
     return plan;
