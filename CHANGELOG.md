@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Apply seed call and cleanup effects to their private records
+
+<a id="k-seed-apply-private-effects-20261125"></a>
+**K-SEED-APPLY-PRIVATE-EFFECTS-20261125.** D-ARCH-REVIEW r170→171 continues P-682/P-683. At `284894ce:cod/lang_checked.hh`, the [review](design/ImplementationArchitecture.md#applying-a-private-effect-record) clears the redundant copy inside `apply_effects` for its two callers and the unused pending-exception initialization for immediate invocation rows. The cleanup cache, per-origin substitution, post-application selection invalidation and actual exception routes retain their established behavior.
+
 ## 2026-11-25 — Build builtin effect records only for deferred invocation
 
 <a id="k-seed-immediate-builtin-effects-20261125"></a>
