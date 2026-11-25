@@ -16992,9 +16992,10 @@ class ScalarChecker {
           require_readable_target(view, capture.at);
         }
       }
-      // A receiver may enter the body zero or several times. Each invocation
-      // reads the supplier's live slot with its established target owner.
-      if (validating_ && proving_ && lexical_.live && !view.initialized_target() &&
+      // A live scalar value slot is supplied by address. The body may
+      // initialize it before reading it on each actual invocation.
+      if (!(source.value_binding && scalar) && validating_ && proving_ &&
+          lexical_.live && !view.initialized_target() &&
           std::ranges::any_of(view.targets, [&](size_t place) {
             return !missing_initialization(lexical_, place, selected_target(view, place, true)).empty();
           }))
