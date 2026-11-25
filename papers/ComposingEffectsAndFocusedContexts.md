@@ -17,13 +17,15 @@ a separate decision for each of the $M × N$ pairs. We relate this accounting to
 instances in `mtl` and compare two orders of retry and selective publication in CoD,
 `mtl` and labeled `effectful`.
 
-For contextual computation, the Store comonad’s `extend` gives a reference meaning for applying a
-local rule at every focus. On stable input, with the same boundary policy, total and
-observationally pure kernels give the same values under materialization and recomputation.
-Once evaluating a kernel writes an observable log, reusing its value can change the published
-history even when every score agrees. A surface-inspection workload supplies counterexamples
-and worked traces for both questions. The results are paper derivations. General interfaces
-for eligible kernels and their interaction with effects remain design questions.
+A defect viewer and a batch job share a detector that can read either raw pixels or a
+horizontal filter's results. The detector must be able to read its input again at a neighbour.
+We compare how its author expresses the rule and how the application connects the stages
+in CoD, Haskell and C++20. A synchronous CoD `here` body can supply either input under a
+locally changed focus. Caching the filter preserves scores on a stable frame with total,
+observationally pure rules. It can change the report if evaluating a rule itself publishes
+an event. The appendix proves the value equivalence in the Store model. These are design
+results for the stated fragment. The interface for retaining a derived CoD view and the
+conditions for reordering effectful rules remain open.
 
 ## The inspection that both extensions must preserve
 
@@ -430,164 +432,288 @@ to edit every old inspection rule. [Installation and invocation](../design/Symbo
 · [Call-path binding checks](../design/SymbolicDynamicScope.md#call-path-binding-checks)
 · [Ownership of captured resources](../design/SymbolicDynamicScope.md#regional-resource-capture-preserves-owners)
 
-## A focused grid gives the rules a reference semantics
+<a id="a-focused-grid-gives-the-rules-a-reference-semantics"></a>
 
-One concrete meaning of the *comonad question* is whether ordinary CoD can express and
-compose a rule that consumes a focused context. In a two-stage inspection the second rule
-needs the first rule's result at the current focus *and* at another focus. A current-coordinate
-variable can answer “where am I?” by itself. To answer the second question, the program must
-be able to evaluate the same rule over the same image at another legitimate position.
-Structured-grid languages such as Ypnos and work on comonadic dataflow give independent
-precedents. [Orchard, Bolingbroke and Mycroft, *Ypnos*](https://www.cs.kent.ac.uk/people/staff/dao7/publ/ypnos1.html)
-· [Uustalu and Vene, *The Essence of Dataflow Programming*](https://cs.ioc.ee/~tarmo/papers/uustalu-vene-aplas05.pdf)
+## Run the same detector on raw pixels and on a filtered image
 
-Fix a nonempty finite set of valid image positions P, an immutable image and a particular
-boundary rule for relative moves. In paper notation the focused view of values of type A is
-a Store, `W[A] = (P → A, P)`. Write a view as `(v,p)`. The following definitions and laws
-compare complete views pointwise, including their focus.
+An inspector clicks a flagged pixel in the defect viewer. The viewer must explain whether the
+vertical rise is already visible in the raw acquisition or appears only after the horizontal
+filter. Show both scores immediately for that pixel. Overnight, the batch job must use the
+same detector on every tile and publish the filtered flags. The viewer has one requested
+position. The batch job can afford to compute and keep an entire intermediate image.
 
-```text
-refocus((v,p), q) = (v,q)                  for q in P
-extract(v,p)      = v(p)
-extend(f)(v,p)    = (q ↦ f(v,q), p)       for f : W[A] → B
+The detector reads its input here, reads that same input one row north, and subtracts.
+On the raw image the middle score is `8 − 2 = 6`. On the filtered image it is
+`(8 + 13) − (2 + 4) = 15`. With the threshold at 12, only the filtered result flags that
+pixel. Passing the detector the already-computed middle sum, 21, loses the northern sum. Several images can have 21 in the middle and different sums one row north. Giving it a way to sample
+its input at either position lets the application change the input while keeping the detector.
+The test for each implementation is whether another team can supply a new field without
+editing the detector.
 
-extract(extend(f)(w))      = f(w)
-extend(extract)(w)         = w
-extend(g)(extend(f)(w))    = extend(u ↦ g(extend(f)(u)))(w)
-```
+The three listings implement both choices on demand. Each starts with the same stable image,
+zero-based (row, column) positions and signed 64-bit samples. All intermediate values fit.
+`east` and `north` clamp at the physical edge of this image. In CoD each returns a new row or column, and the helper binds that coordinate for the sample.
+In Haskell and C++ each returns the updated position. The application's
+pixel reader supplies the same table in each listing.
 
-The first law reads the result at the original position. The second recovers each value by
-reading it at its own position. For the third, inspect either side at any position q:
-both give g the field whose value at r is f applied to the original image focused at r,
-with q as g's focus. This is why materializing the complete horizontal-sum field and
-recomputing the needed horizontal sums on demand agree for total, read-only rules. A
-straightforward Haskell `Store` or an explicit image-and-coordinate pair is a fair baseline
-for this part of the study. A reader environment carrying that pair can also run a rule
-under a changed focus with `local`. Across all three presentations, the extra work in
-`extend` is to supply a *new field of results* on which the next rule can focus.
-A mixed computation `W[A] → M[B]` that also logs, fails or reads
-a changing service needs further interaction rules before the same equation can be claimed
-for its observable trace. [Comonad operations and laws](https://hackage.haskell.org/package/comonad/docs/Control-Comonad.html)
+<a id="recompute-the-northern-score-in-cod"></a>
 
-The obstruction can be located precisely. After refocusing the input at every position and
-applying the first effectful kernel there, the intermediate shape is `W[M[B]]`. The next
-kernel expects a `W[B]`. One theoretical route supplies a compatible distributive law
-`W[M[B]] → M[W[B]]` for the chosen comonad and monad. For an audit effect, evaluating a
-whole tile eagerly, evaluating only the requested positions, and memoizing repeated reads
-can each produce a different audit history. CoD's ability to name both operations gives a
-programmer places to implement those policies; it does not select a law for that pair.
-[Uustalu and Vene on effectful context-dependent computation](https://doi.org/10.1007/11575467_2)
+### CoD lends each rule a sampling operation
 
-## Recompute the northern score in CoD
-
-The following CoD design example specializes the two rules. `east` and `north` are ordinary
-total helpers that clamp at the image boundary. `fixture_at` is the application's read of
-the table above. The real acquisition must keep its selected image alive and stable through
-both stages. Both coordinate helpers map `u64` to `u64`; `fixture_at` takes two `u64`
-coordinates and returns an `i64`. All intermediate values in this fixture fit in `i64`.
-The code uses zero-based row and column positions. The scalar binding names
-and the pixel operation belong to one shared vocabulary.
+A rule can ask for a value twice and choose the focus for its second request. The image library
+offers two such moves. Each helper rebinds one coordinate for the duration of the supplied
+`here` callback. The rule author can then write the arithmetic directly.
 
 ```cod
 val symbol @row:u64
 val symbol @col:u64
 symbol @pixel:proc() -> i64
 
-proc east_sum() -> i64 {
-    val here_value <- behave @pixel()
-    val east_value <- {{
-        effect @col <- east(@col)
-        behave @pixel()
-    }}
-    return here_value + east_value
+proc at_east(here sample() -> i64) -> i64 {
+    effect @col <- east(@col)
+    return sample()
+}
+
+proc at_north(here sample() -> i64) -> i64 {
+    effect @row <- north(@row)
+    return sample()
+}
+
+proc east_sum(here sample() -> i64) -> i64 {
+    return sample() + at_east(sample)
+}
+
+proc north_difference(here sample() -> i64) -> i64 {
+    return sample() - at_north(sample)
+}
+```
+
+The viewer selects the source in two ordinary procedures. The report's `inspect_cell` above
+calls the same `north_contrast` as the viewer.
+
+```cod
+proc raw_contrast() -> i64 {
+    return north_difference() { behave @pixel() }
 }
 
 proc north_contrast() -> i64 {
-    val middle <- east_sum()
-    val northern <- {{
-        effect @row <- north(@row)
-        east_sum()
-    }}
-    return middle - northern
+    return north_difference() { east_sum() { behave @pixel() } }
 }
 
 effect @row <- 1u64
 effect @col <- 1u64
 effect @pixel() -> i64 { return fixture_at(@row, @col) }
-val middle_score <- north_contrast()
+
+val raw_score <- raw_contrast()
+val filtered_score <- north_contrast()
 ```
 
-`middle_score` is **15**. Inside the northward scope, `east_sum` reads 2, shifts one column,
-and reads 4. When both scopes exit, the focus is again the middle cell. Replace **both** `behave @pixel()` calls
-with `perform @pixel()` and keep the same installation. The pixel handler replays (1,1);
-every read returns 8. Both sums become 16 and their difference becomes **0**. This change
-isolates refocusing from the choice of arithmetic. A second positive control is to direct
-both subcomputations to an ordinary function taking the same image, row and column explicitly:
-that version must recover 15. [Captured values and call behavior](../design/SymbolicDynamicScope.md#captured-values-and-call-behavior)
+For the detector's second sample, `at_north` invokes the body with the north row already
+selected. The eastward read in `east_sum` then reaches the northeast pixel, 4.
+Returning from both helpers leaves the viewer at (1,1). Forwarding `sample` preserves its
+lexical origin and lets it see the dynamic bindings at invocation. The image owner must stay
+live throughout. The application lends work to the pipeline for this call and can install
+a different reader on the next inspection. [Synchronous calls and dynamic bindings](../design/CallableStorageAndHereAccess.md#an-effect-in-a-here-callback)
+· [Single-brace callback results](../design/CallableStorageAndHereAccess.md#single-brace-bodies-for-a-here-callable)
+· [Current and replayed bindings](../design/SymbolicDynamicScope.md#captured-values-and-call-behavior)
 
-The listing uses named procedures and immediate nested scopes on purpose. A general library
-may want an operation that applies a caller-supplied rule at each focus. Such an interface
-must respect CoD's admitted callable kinds, lexical control and owner lifetime. The existence
-of this specialized computation supplies no first-class value containing an installed handler.
-Keeping a handler's snapshot does not copy the image or prolong its owner's lifetime.
-If an actual image owner is replaced, later reads must obtain fresh access under the new owner.
-[Calls through lexical definitions](../design/SymbolicDynamicScope.md#definition-installed-effectful-procedures)
-· [Owner replacement](CoarseGrainedOwnership.md#owner-identity-target-identity-and-representation)
+### Haskell passes a focused field
 
-## Three ways to get the right-looking program wrong
+The `comonad` library already supplies the focused field. `extract` reads at its focus and
+`peeks north` samples one row north. `extend eastSum` makes the horizontal filter's result
+available at *any* focus, keeping the caller's current position. The two branches of
+`scoresAt` show exactly which field the detector receives.
 
-**Tile seam.** Put a tile boundary immediately above the middle cell. The physical northern
-values are 2 and 4 in the neighbouring tile. Treating that seam as an image boundary
-reuses 8 and 13 and incorrectly returns 0. Providing the required border values restores
-15. If those values are unavailable, a checked fault or an explicitly provisional output is
-an application choice. A kernel that only needs the current pixel can still be used on the
-same tile without acquiring that border.
+```haskell
+import Control.Comonad (extend, extract)
+import Control.Comonad.Trans.Store (Store, peeks, store)
+import Data.Int (Int64)
 
-**An edge is part of the calculation.** At the top right, clamping gives
-`(4 + 4) − (4 + 4) = 0`. Switching both axes to periodic boundaries gives
-`(4 + 1) − (19 + 7) = −21`. On the middle row, starting at its right edge and moving east
-then west under clamping reaches the middle value 8. Cancelling the two offsets first
-would leave the original value 13. A footprint or optimization must compose the actual
-boundary-aware focus changes.
+type Pos = (Int, Int)
 
-**Observing the evaluation.** On this 3 × 3 image, materializing the first stage once visits
-nine foci. Computing only the middle output on demand visits two first-stage foci. Even when
-all nine outputs are requested in both versions, a literal two-call evaluation of every output
-without memoization visits eighteen first-stage foci. If every
-first-stage invocation appends a flag or increments an observable counter, the same final
-15 now comes with different histories. Even value equality can fail if the pass overwrites
-the source it is still reading. With rows updated from right to left, the middle row's
-eastern value becomes 26 before its centre sum is written as 34. The northern equivalents
-are 8 and 10. The second stage then returns 24. A read-only view alone cannot establish
-stability against mutation through an independent admitted access path.
+eastSum, northDifference :: Store Pos Int64 -> Int64
+eastSum w         = extract w + peeks east w
+northDifference w = extract w - peeks north w
 
-There is also a case at the intersection of both experiments. Let a second inspection stage
-request the same scored focus twice in a successful tile. If scoring emits the public flag,
-a cache may suppress the second flag, while recomputation stages two copies. Buffering until
-tile acceptance publishes both copies together; it only settles what happens on rejection.
-If the report promises one flag per defect, emit at a separate commit step keyed by image
-revision, position and rule, or explicitly define equivalent deduplication. A kernel whose
-only result is the score permits either evaluation strategy without that side effect.
+scoresAt :: (Pos -> Int64) -> Pos -> (Int64, Int64)
+scoresAt pixel p =
+  let raw = store pixel p
+  in (northDifference raw, northDifference (extend eastSum raw))
+```
 
-A coeffect analysis would address a further question: which part of the input can the
-middle output depend on? Its four positions are middle, east, north and northeast. Changing
-the northeast value from 4 to 5 must give 14. Changing only the southwest value from 7 to
-999 must still give 15. A conservative footprint for a composite rule takes the union of
-the first rule's footprints at all positions that the second rule may inspect. Proving that
-`@pixel` is installed establishes no such spatial bound. Whether to infer it, ask for it in
-a library contract or inspect it at runtime is open. [Petricek, Orchard and Mycroft, *Coeffects*](https://tomasp.net/academic/papers/structural/)
+Calling `scoresAt pixel (1,1)` gives `(6,15)`. The type `Store Pos Int64` is the same on
+both sides of the filter. A third author can name the filtered view, pass it to another
+detector or focus it elsewhere using the existing library. The library leaves the choice of caching to the application. [Store and its sampling operations](https://hackage-content.haskell.org/package/comonad-5.0.10/docs/Control-Comonad-Trans-Store.html)
+· [Control.Comonad](https://hackage-content.haskell.org/package/comonad-5.0.10/docs/Control-Comonad.html)
+
+### C++20 passes the position to a sampler
+
+A pixel reader that accepts a `Pos` is enough. The application can give the detector a
+lambda that computes a horizontal sum at the position it receives. Both kernels accept
+either kind of reader. Here `Pos` holds a row and a column.
+
+```cpp
+std::int64_t east_sum(auto const& sample, Pos p) {
+    return sample(p) + sample(east(p));
+}
+
+std::int64_t north_difference(auto const& sample, Pos p) {
+    return sample(p) - sample(north(p));
+}
+
+auto scores_at(auto const& pixel, Pos p) {
+    auto sums = [&](Pos q) { return east_sum(pixel, q); };
+    return std::pair{north_difference(pixel, p), north_difference(sums, p)};
+}
+```
+
+`scores_at(pixel, Pos{1, 1})` also gives `(6,15)`. The lambda computes a horizontal sum at whichever `q` the detector requests. Its reference
+to `pixel` remains live through both synchronous calls. The caller needs neither an
+intermediate array nor a class hierarchy. [C++ lambda captures](https://eel.is/c++draft/expr.prim.lambda.capture)
+
+### Which code would the next author want to read?
+
+| Change in the inspection service | CoD | Haskell | C++20 |
+| --- | --- | --- | --- |
+| Review the detector's arithmetic | `sample() - at_north(sample)` reads like the local rule. Open `at_north` to see the scoped coordinate change. | `extract w - peeks north w` shows both reads on one named field. Learning `extract` and `peeks` buys that brevity. | `sample(p) - sample(north(p))` shows both positions on one line. Each rule carries `p`. |
+| Put the filter before the detector | Nest the two trailing bodies. `behave @pixel()` identifies the leaf and asks it to read at the active focus. | `northDifference (extend eastSum raw)` names both stages. The library supplies the adapter. | Name `sums` with a one-line lambda. The forwarded position is visible at the connection. |
+| Use a precomputed horizontal field | Supply `north_difference() { cached_sum() }`, where `cached_sum` reads at `@row, @col`. | Supply `northDifference (store cachedSum p)`. | Supply `north_difference(cached_sum, p)`. |
+
+For this two-stage detector, Haskell has the clearest expression for inserting another filter. The
+reader can follow the field through `extend` without inspecting a callback body. C++ has
+the most transparent account of *which coordinate* reaches the pixel reader. CoD keeps those
+coordinates out of both pieces of arithmetic, at the cost of following the nested bodies to
+the active pixel binding. If the team needs a filtered view it can return today and inspect
+later, Haskell already has a value for it. The CoD `here` body shown here is synchronous.
+A CoD interface for a reusable, retained view would also have to express the backing owner's
+lifetime and what happens when the image is replaced. [Callable lifetime](../design/CallableStorageAndHereAccess.md#what-an-invocation-needs)
+· [Replacing a region owner](CoarseGrainedOwnership.md#owner-identity-target-identity-and-representation)
+
+<a id="three-ways-to-get-the-right-looking-program-wrong"></a>
+
+### What goes wrong in the viewer and the batch job?
+
+| Change one condition | What the inspector sees | Consequence for the implementation |
+| --- | --- | --- |
+| Replay the pixel handler installed at (1,1) | Replacing `behave` with `perform` in the filtered entry reads 8 four times. The score becomes `16 − 16 = 0`. | The pixel reader must follow the focus at the time of each request. |
+| Start a tile at the middle row | Clamping at the tile seam substitutes 8 and 13 for 2 and 4. The middle score becomes 0 and the flag disappears. | Read the northern border from the neighbouring tile of the same revision. If unavailable, report a fault or mark the result provisional under an explicit policy. |
+| Change the physical boundary rule | At the top right, clamping gives `(4 + 4) − (4 + 4) = 0`. Wrapping instead gives `(4 + 1) − (19 + 7) = −21`. | Apply the boundary rule at each move. At the right edge, clamped east followed by west need not return to the initial position. |
+| Write horizontal sums back into the source, right to left | In the middle row the eastern cell has already become 26, so the centre becomes 34. Its northern counterpart becomes 10. The reported score is 24. | Use a stable input revision for the pass. A read-only access path alone cannot prevent another admitted writer from changing the pixels. |
+
+A cache also needs a correct account of *which* pixels can change a score. The middle output
+depends on the middle, east, north and northeast pixels. Change northeast from 4 to 5 and the
+score falls to 14. Change only southwest from 7 to 999 and it stays 15. For a composite rule,
+take the union of the first stage's dependencies at each position the second stage samples.
+That gives the tile team a border to prefetch and the viewer an invalidation test. Checking
+that `@pixel` is installed answers a different question. Whether CoD should express such a
+footprint in a library contract or infer it remains open. [Ypnos and structured grids](https://www.cs.kent.ac.uk/people/staff/dao7/publ/ypnos1.html)
+· [Petricek, Orchard and Mycroft, *Coeffects*](https://tomasp.net/academic/papers/structural/)
+
+### Can the batch job cache the first stage?
+
+For a stable frame, calculating each horizontal sum once into a second buffer and computing
+it afresh on request give the same scores at every output position. On this fixture the
+filtered rows are `[0,0,0]`, `[8,15,18]` and `[7,9,12]` with either strategy.
+The bottom-right score is exactly on the inclusive flag threshold. The comparison changes
+if the first stage itself publishes an event every time it runs.
+
+| Requested output | Materialize the entire horizontal field once | Recompute each requested horizontal sum |
+| --- | ---: | ---: |
+| Only the middle cell in the viewer | 9 evaluations | 2 evaluations |
+| All nine cells in the batch, literal two-call detector | 9 evaluations | 18 evaluations |
+
+These counts refer to calls of `east_sum`, including two calls at the top edge when clamping
+selects the same position. An observer of first-stage visits can distinguish the schedules.
+There is a separate failure mode for the defect report. If scoring emits a flag, asking twice
+for the same flagged score can stage two copies on recomputation and one if the second request reuses the first result. Accepting the tile publishes whatever was staged. For one flag per defect,
+publish at the report boundary with a key such as (revision, position, rule). Keep an audit of
+physical evaluations separately if the service promises it. [Retry and selective publication](#composing-retry-and-publication)
+
+The programming question that remains for CoD is which part of this contract a reusable
+library can put in its interface. A synchronous supplier suffices for the viewer and can read
+the batch job's cache. Allowing the library itself to retain a sampler, change its schedule
+or suppress duplicate requests requires evidence about lifetime, stable inputs and observable
+effects. The [derivation in Appendix A](#appendix-a) states exactly what justifies exchanging
+the two numerical implementations.
 
 ## What would settle the design questions?
 
 | Question for CoD | Evidence that would change the conclusion |
 | --- | --- |
 | Can unrelated effects pass a new scope without pair-specific source changes? | Give the flag author and the tiling author only the published interfaces. List changed declarations, generated forwarding, reachable binding checks, intentionally unsupported pairs and explicit policy adapters separately. A hidden central switch over all old effects counts as an edit. |
-| Can a reusable library express the two-stage rule with lawful refocusing? | Supply the specialized named-procedure version and an explicit-context baseline. Propose an admissible interface for arbitrary eligible kernels. Compare 15 in the interior, the boundary cases, missing border data and restoration after an exceptional exit. Keep the stable-image precondition explicit. |
+| Can a library expose a retained, reusable CoD field? | The synchronous `here` example already gives 6 and 15 with one detector. For a proposed retained interface, return the derived field, sample it later under the same live owner, and check that an invalidated old view cannot be used after owner replacement. Exercise a missing border and restoration after a checked fault. |
 | Which effectful kernels can share the pure composition law? | Specify observations first. Count both stage evaluations and committed flags. An equality that preserves the score and changes a promised diagnostic trace fails for that interface. |
 | What does the checker need to know about a neighbourhood? | Show that the footprint covers the northeast dependency, handles the tile seam and respects the boundary policy. Decide separately if conservative over-approximation is acceptable for prefetch, permission checking or invalidation. |
 
-These cases justify two limited claims. Independent named operations can be usable through a
-scope that has no business interpreting them. A stable, focused region with well-defined
-refocusing can support a comonadic fragment of a CoD library. General composition of arbitrary
-comonads, an inferred spatial coeffect system, and a law for combining arbitrary effects
-with refocusing each require their own problem definition and evidence.
+A scope can pass an independently named operation through when it has no policy for that
+operation. The viewer shows another form of reuse. A local detector can read different fields through one
+synchronous sampling contract. To justify new library machinery, a
+proposal must say what further program it admits, which owner keeps its input valid and
+which observations a new evaluation schedule preserves.
+
+<a id="appendix-a"></a>
+
+## Appendix A. Why the two schedules agree on values
+
+### Model and observations
+
+Let $P$ be the finite, nonempty set of valid positions in one image revision. Fix total
+boundary-aware maps $e,n:P\to P$ for east and north. A focused field of values of type $A$
+is a Store $W A=(P\to A)\times P$. Write $w=(v,p)$ with lookup $v$ and selected position
+$p$. Two such fields are equal when they have the same focus and give equal values at every
+position. Refocusing at a valid $q$ gives $(v,q)$. Each move is defined on $P$, including at its edge, so the model admits clamping.
+
+For a total, extensional rule $f:W A\to B$, define
+
+$$
+\operatorname{extract}(v,p)=v(p),\qquad
+E_f(v,p)=\bigl(q\mapsto f(v,q),\,p\bigr).
+$$
+
+Here $f(v,q)$ abbreviates $f((v,q))$ and $E_f$ is `extend f`. The observations in the
+proof are the focus and the field's returned values. Repeated reads must see the same live
+revision, the same boundary policy and the same answers. Assume defined arithmetic, normal
+completion and no observable effects from evaluating the rules. [Comonad class and laws](https://hackage-content.haskell.org/package/comonad-5.0.10/docs/Control-Comonad.html)
+· [Uustalu and Vene, *The Essence of Dataflow Programming*](https://doi.org/10.1007/11575467_2)
+
+### Three laws, derived at a position
+
+1. **Read the result at the starting focus.** Let $h(q)=f(v,q)$. Then
+   $\operatorname{extract}(E_f(v,p))=\operatorname{extract}(h,p)=h(p)=f(v,p)$.
+   An application asking for one filtered value can run the local rule at that position.
+2. **Use the pixel read itself as the rule.** For every $q$,
+   $\operatorname{extract}(v,q)=v(q)$. Thus
+   $E_{\operatorname{extract}}(v,p)=(q\mapsto v(q),p)=(v,p)$ by pointwise equality.
+   This is the identity stage for the viewer's raw mode.
+3. **Regroup two successive rules.** Take $g:W B\to C$ and the same $h$ as in (1).
+   Applying $g$ across the derived field gives $E_g(E_f(v,p))=(q\mapsto g(h,q),p)$.
+   For the other grouping define $k(u)=g(E_f(u))$. At any $q$ we have $E_f(v,q)=(h,q)$,
+   hence $k(v,q)=g(h,q)$. It follows that $E_k(v,p)=(q\mapsto g(h,q),p)$ as well.
+   The lookups agree at every position and both results retain $p$.
+
+### Corollary for the inspection service
+
+Under the CoD installation in the listing, `behave @pixel()` at $q$ reads $v(q)$.
+`at_east` and `at_north` invoke the supplied body at $e(q)$ and $n(q)$ respectively,
+then restore the caller's focus. The horizontal field is therefore
+$h(q)=v(q)+v(e(q))$. Applying the unchanged detector at $p$ gives $v(p)-v(n(p))$ for the
+raw reader and $h(p)-h(n(p))$ for the filtered reader. Haskell's `peeks` and C++'s explicit
+position arguments denote these same lookups.
+
+Filling a separate table $H$ once sets $H(q)=h(q)$ for every $q$. A reader that recomputes
+$h(q)$ answers identically. By pointwise equality, either field can be supplied to an
+extensional second rule at any requested position. In particular their scores and the set
+of positions passing the fixed threshold agree. This argument supplies the cache
+substitution. The third law additionally justifies regrouping when another stage is added.
+Choosing `perform` in the CoD sample changes the lookup premise. Changing the pixels in place removes the single $v$ on which the proof depends.
+
+### What an effectful extension would have to prove
+
+For an effectful kernel $f:W A\to M B$, lifting the kernel pointwise produces $W(M B)$.
+A subsequent kernel $g:W B\to M C$ requires a field of *values*. One theoretical route is
+a distributive law $W(M B)\to M(W B)$ compatible with the monad's unit and multiplication
+and the comonad's counit and duplication. Its existence and the observations it preserves
+must be established for the chosen pair and policy. In particular, a promised event for
+each actual evaluation distinguishes the nine-visit table from the eighteen-visit full
+recomputation. The three equations proved above concern returned values and supply no
+equality of those histories. [Effectful context-dependent computation](https://doi.org/10.1007/11575467_2)
