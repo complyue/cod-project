@@ -25431,16 +25431,9 @@ class ScalarChecker {
       const auto &method = program_.methods.at(entry.method);
       if (!method.captures.empty() || !method.retained_types.empty() || method.declaration_context())
         implementation_gap(method.source->at, "a C entry with an additional lexical calling context");
-      for (const auto instance : method.instances) {
-        const auto &effects = program_.instances.at(instance).effects;
-        if (!effects.lexical_allocations.empty())
+      for (const auto instance : method.instances)
+        if (!program_.instances.at(instance).effects.lexical_allocations.empty())
           implementation_gap(method.source->at, "a C entry owner supplying a lexical allocator");
-        for (const auto symbol : effects.symbols) {
-          const auto &binding = program_.symbols.at(symbol);
-          if (binding.reference || binding.live_scope || (binding.type && binding.type->kind == Type::native_handle))
-            fail(method.source->at, "cannot prove an installed binding for symbol '" + binding.name + "' at C entry");
-        }
-      }
     }
     program_.warnings.erase(program_.warnings.begin(), program_.warnings.begin() + reported_warnings);
     return std::move(program_);
