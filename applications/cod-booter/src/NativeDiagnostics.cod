@@ -21,7 +21,7 @@ export func diagnostic_budget_full(run:const DiagnosticRuns in G) -> bool where 
     return run[0u64].limit != 0u64 and run[0u64].retained >= run[0u64].limit
 }
 
-proc "C" write_diagnostic(handle destination:DiagnosticDestination in D, stage:u8, code:u32,
+func "C" write_diagnostic(handle destination:DiagnosticDestination in D, stage:u8, code:u32,
                           first_line:u64, first_column:u64, past_line:u64, past_column:u64,
                           related_line:u64, related_column:u64, os_error:u64) -> u8 where {owner D};
 
@@ -103,7 +103,7 @@ export enum PackageDiagnosticKind:u8 {
     InvalidModulePath = 6u8;
 }
 
-export proc "C" append_package_diagnostic(
+export func "C" append_package_diagnostic(
     handle diagnostic:DiagnosticDestination in D, kind:PackageDiagnosticKind, os_error:u64,
     first_line:u64, first_column:u64, past_line:u64, past_column:u64,
     importer:const SourceBytes in I, import_first:u64, import_past:u64,
