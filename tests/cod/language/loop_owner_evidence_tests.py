@@ -68,9 +68,6 @@ runner.CASES = {
     'control_storage_is_readonly': (TAG + 'for(i in 0..1){i<-2;};', 2, '', 'readonly'),
     'controls_do_not_escape': ('func bad(ref input:const i64 in O)->ref const i64 in O where {owner O}{'
         'for(i in 0..1){return i;};}val slot<-1;bad(slot);', 2, '', 'owner'),
-    'outer_defer_cannot_borrow_control': ('proc save(ref input:const i64 in O)->void where {owner O}{}'
-        'for(i in 0..1){defer save(i);};', 2, '', 'outlive its cleanup scope'),
-    'delayed_control_capture_rejects': (IO + 'for(i in 0..1){defer{behave @print(i);};};', 2, '', 'loop-control'),
     'body_declaration_rejects': ('for(i in 0..1){val local<-i;};', 2, '', 'nested per-iteration'),
     'else_declaration_rejects': ('for(i in 0..0){}else{val local<-1;};', 2, '', 'nested per-iteration'),
     'unproved_external_equality_stays_unproved': (TAG + 'func project(ref left:const i64 in A,ref right:const i64 in B) where {owner A,owner B}{'

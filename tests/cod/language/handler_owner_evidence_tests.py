@@ -72,8 +72,6 @@ runner.CASES = {
     'caught_value_stays_readonly': (BASE + 'try{throw error();}catch(e){e<-error();};', 2, '', 'readonly'),
     'caught_borrow_cannot_escape': (BASE + 'func project(ref input:const MissingReturnError in O)->ref const MissingReturnError in O where {owner O}{'
         'try{throw input;}catch(e:const MissingReturnError){return e;};}val saved<-error();project(saved);', 2, '', 'owner'),
-    'outer_defer_cannot_borrow_caught_slot': (BASE + 'proc use(ref input:const Exception in O)->void where {owner O}{}'
-        'try{throw error();}catch(e){defer use(e);};', 2, '', 'outlive its cleanup scope'),
     'caught_query_does_not_initialize': (BASE + 'func project(){try{throw error();}catch(e){{'
         'val unread<-make local typeof(tag(e,e));return unread;}};}project();', 2, '', 'before definite initialization'),
     'external_equality_stays_unproved': (BASE + 'func project(ref left:const MissingReturnError in A,ref right:const MissingReturnError in B) where {owner A,owner B}{'

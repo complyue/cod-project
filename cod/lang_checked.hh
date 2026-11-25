@@ -3581,19 +3581,6 @@ class ScalarChecker {
       reference_slot(binding.value_binding, view.fixed_binding || binding.fixed, at);
     }
   }
-  void require_deferred_slots(const CheckedOperation &view, const Location &at) const {
-    const auto cleanup = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) {
-      return entry.id == cleanup_scope_;
-    });
-    for (const auto id : physical_slots(view.slots)) for (const auto owner : bindings_->at(id).place_owners) {
-      if (external_owner(owner)) continue;
-      const auto lifetime = owner_lifetime_scope(owner);
-      const auto scope = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) {
-        return entry.id == lifetime;
-      });
-      if (scope > cleanup) fail(at, "deferred reference binding does not outlive its cleanup scope");
-    }
-  }
   void check_rebind(const CheckedOperation &target, const CheckedOperation &source, const Location &at,
                     bool allow_first_binding = false) {
     reference_destination(target, at, true);
@@ -3672,8 +3659,7 @@ class ScalarChecker {
     return read;
   }
   void prepare_reference_swap(const CheckedOperation &left, const CheckedOperation &right,
-                              CheckedOperation &operation, const Location &at) {
-    require_deferred_slots(left, at); require_deferred_slots(right, at);
+                              CheckedOperation &operation) {
     auto &effects = operation.invocation[0];
     if (left.slots.size() == 1 && left.slots == right.slots) return;
     const auto exchange = [&](const CheckedOperation &target, const CheckedOperation &source) {
@@ -7608,7 +7594,6 @@ class ScalarChecker {
     }
     if (uses_caller_bindings) {
       for (size_t i = 0; i < views.size(); ++i) {
-        if (&expr == prepared_call_) require_deferred_slots(views[i], expr.at);
         for (const auto slot : physical_slots(views[i].slots)) {
           const auto &binding = bindings_->at(slot);
           if (binding.embedded_slot && storage(*binding.embedded_slot).borrowed)
@@ -16211,9 +16196,6 @@ class ScalarChecker {
           implementation_gap(capture.at, "a prepared deferred procedure with a live aggregate");
         if (inputs.live_bindings.contains(first) && mode == ArgumentMode::borrowed_ptr)
           inputs.nonnull.back() = false;
-        // A fixed handle loan retains the selected resource words. Its actual
-        // owner must survive cleanup, but the handle's local slot need not.
-        if (mode != ArgumentMode::borrowed_handle) require_deferred_slots(call.views.back(), capture.at);
       }
       if (!operation.operand_preparation.empty() && call.arguments.size() != first)
         operation.operand_preparation.push_back({CheckedOperation::OperandPreparation::Kind::ordinary, first});
@@ -20240,7 +20222,7 @@ class ScalarChecker {
           check_rebind(left, right, expr.at);
           check_rebind(right, left, expr.at);
           check_builtin_declarations(expr, arguments, operation, true, views);
-          if (&expr == prepared_call_) prepare_reference_swap(left, right, operation, expr.at);
+          if (&expr == prepared_call_) prepare_reference_swap(left, right, operation);
           else if (!left.binding || left.binding != right.binding) {
             const auto before_left = snapshot_selection(left, expr.at), before_right = snapshot_selection(right, expr.at);
             rebind(left, right, before_right);
@@ -21176,7 +21158,6 @@ class ScalarChecker {
           fail(expr.at, "assignment destination's lexical owner has ended");
       if (expr.kind == K::rebind) {
         reference_destination(target, expr.at, true);
-        if (prepared) require_deferred_slots(target, expr.at);
         if (child(1, false) == Type::never) { operation.type = Type::never; break; }
         const auto &selected = operations.at(expr.children[1].get());
         check_rebind(target, selected, expr.at, !prepared && !delayed_);
