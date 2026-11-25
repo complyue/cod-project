@@ -4,7 +4,7 @@ This document specifies the design of the `cod` driver that provides a REPL-like
 
 ## Design authority
 
-[D-02](DesignAuthorityRegistry.md#d-02) remains a driver draft under P-03/P-04. At r2, [H-DBMR-IMMUTABLE-20261119](../CHANGELOG.md#h-dbmr-immutable-20261119) constrains DBMR operations for the driver under charter §§7.1–7.2. Multiple sessions can inspect the same immutable input while a child builds a separate version. Session conflict policy and native implementation remain open.
+[D-02](DesignAuthorityRegistry.md#d-02) remains a driver draft under P-03/P-04. At r3 the [component decision](../CHANGELOG.md#h-retire-shilos-20261125) retires the C++ root and container prescriptions. At r2, [H-DBMR-IMMUTABLE-20261119](../CHANGELOG.md#h-dbmr-immutable-20261119) constrains DBMR operations for the driver under charter §§7.1–7.2. Multiple sessions can inspect the same immutable input while a child builds a separate version. Session conflict policy and native implementation remain open.
 
 ---
 
@@ -14,7 +14,7 @@ This document specifies the design of the `cod` driver that provides a REPL-like
 - No JIT, no ORC, no Clang-Interpreter — all evaluation happens by compiling a tiny runner that links against project code and standard libraries, then spawning it as a separate process.
 - Persistent REPL session state stored in a DBMR file (default: `./.cod/works.dbmr`) that can be shared across processes and inspected offline.
 - Extensible workspace root type — defaults to `cod::WorksRoot` (to be defined in `include/cod.hh`), but projects may opt into a custom root type via CodProject.yaml.
-- Zero-copy, zero-relocation memory-region invariants are respected at all times (see MemoryRegionAndRegionalTypes.md).
+- Zero-copy, zero-relocation memory-region invariants are respected at all times under the [regional ownership contract](RegionalOwnership.md).
 - No standard REPL prelude; the project defines the visible lexical scope for REPL submissions via CodProject.yaml (see “repl.scope”).
 
 ## Non-Goals (Stage 1)
@@ -100,19 +100,7 @@ cod -e "return validateData();" && echo "Validation passed"
 
 ## WorksRoot Model (default workspace root)
 
-Header: `include/cod.hh`
-
-The default root type must satisfy `ValidMemRegionRootType`. It provides:
-
-- `static inline constexpr uuid TYPE_UUID` — type identity.
-- `WorksRoot(memory_region<WorksRoot>&)` constructor — constructs owned structures in-place. No copy/move.
-- Data members (regional types only; zero-cost relocation, allocated in-region):
-  - `list<str>` notes — optional user notes or annotations stored by project code.
-  - `vector<uint8_t>` scratch — general-purpose scratch area for future features.
-  - Optional indices and registries as needed by the project (e.g., `dict<str, uint32_t>`), but the default starts minimal.
-
-Rationale:
-- Keep the root lean; there is no REPL-managed definition storage. Project code decides how to use the workspace for state across runs.
+The driver uses a typed root to store project state across evaluations. The image identifies its root type so an opener can check compatibility. Notes, scratch bytes and project-specific indices belong to the workspace owner and must survive whole-image relocation. The [current driver header](../include/cod.hh) is a migration consumer of the retired C++ library. The native region service owns mapping and publication under the [DBMR contract](ConstructionAndAcquisition.md#publishing-a-newly-created-dbmr).
 
 ---
 
@@ -256,7 +244,7 @@ YAML conversion:
 
 - Optional helpers in a tiny header (opt-in) to ease DBMR access from the project’s scope header (kept outside the REPL by default).
 - `%bench`-like mode as a flag to compile with `-O3` and time execution.
-- Multi-root workspaces for multi-project sessions, mediated by `global_ptr` and explicit root registries.
+- Multi-root workspaces for multi-project sessions, with explicit root registries and checked owner lifetimes.
 - Optional CCache-like backend for runner builds keyed by submission hashes.
 - Precompiled headers for faster startup.
 

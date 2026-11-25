@@ -90,7 +90,7 @@ Transferring d retained connections copies **5*d payload bytes**, implying about
 
 The extra destination storage is already part of M/S. Migration adds no new set or heap allocation. A full requested class can still require deferral, a larger available class or a separately defined exchange policy; class reservations and learning admission remain design choices.
 
-Bits values transfer between existing arrays; the neuron and set storage themselves do not move. Self-relative references are assigned using their normal protocol. Whole-region relocation stays zero-cost, while individual connection transfer has the cost above. See the [regional type reference](../../../design/MemoryRegionAndRegionalTypes.md).
+Bits values transfer between existing arrays; the neuron and set storage themselves do not move. Self-relative references are assigned using their normal protocol. Whole-region relocation stays zero-cost, while individual connection transfer has the cost above. See the [regional type reference](../../../design/RegionalAndLexicalStorageRefactor.md).
 
 Preservation includes the interpretation of stored weights. If a code value 0.5 is decoded with scale 2 before migration and scale 4 afterward, keeping the bits changes its effective weight from 1 to 2. A destination capacity class therefore cannot silently redefine weight scale or neural gain. H-24 keeps scaling within training policy. This condition does not select a scale field or recoding method; any such representation needs its own semantic and precision justification.
 

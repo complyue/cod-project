@@ -1,6 +1,8 @@
 # YAML Specification Extensions
 
-This document describes shilos's extensions and constraints to the YAML specification, focusing on comment support and formatting conventions.
+## Design authority
+
+[D-06](DesignAuthorityRegistry.md#d-06) tracks the comment and formatting behavior exercised by the package YAML tools. Its wider qualification remains pending under P-11. The [shilos retirement](../CHANGELOG.md#h-retire-shilos-20261125) removes the C++ representation from this scope. Existing YAML inputs and formatter examples supply the format-level checks.
 
 ## Design Principles
 
@@ -11,33 +13,7 @@ This document describes shilos's extensions and constraints to the YAML specific
 
 ## Comment Support Model
 
-### Core Type System
-
-```cpp
-// Basic node - NO comment fields
-struct Node {
-    Value value;  // Pure data: string, number, bool, SimpleSequence, Map, etc.
-};
-
-// Only structural elements can have comments:
-struct MapEntry {
-    std::string_view key;
-    Node value;
-    std::vector<std::string_view> leading_comments;
-    std::string_view trailing_comment;
-};
-
-struct SeqItem {  // For dash sequences only
-    Node value; 
-    std::vector<std::string_view> leading_comments;
-    std::string_view trailing_comment;
-};
-
-struct Document {
-    Node root;
-    std::vector<std::string_view> leading_comments;  // Document header only (no footer comments)
-};
-```
+The document can carry header comments. A mapping entry and a block-sequence item can each carry leading and trailing comments. Scalar values and flow-sequence elements have no separate comment attachment.
 
 ### Sequence Type Distinction
 

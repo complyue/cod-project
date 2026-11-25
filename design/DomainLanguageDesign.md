@@ -1167,12 +1167,10 @@ The linked facilities provide implementation context, not independent design aut
 
 | Existing facility | Relevant observation | Topics |
 | --- | --- | --- |
-| [Regional storage](../include/shilos/region.hh) | `regional_ptr` is self-relative; allocation advances `occupation_`; capacity and occupied bytes are distinct. The current `RegionalType` concept is a destructibility check, not a recursive proof of legal regional fields. | DL-01, DL-03, DL-04 |
-| [Shilos C++ runtime pointer](../include/shilos/region.hh) | The host `global_ptr` facility holds a native reference to a region and an offset. CoD business-level identity and resolution have a separate design scope. | DL-03, DL-08 |
-| [DBMR](../include/shilos/dbmr.hh) | Mapped-region validation checks header/root conditions. `constrict_on_close` trims unused tail capacity; it does not rebuild a graph to reclaim unreachable internal allocations. | DL-04, DL-06, DL-09 |
+| [C region storage](../include/cod_region_storage.h) | A region owns backing bytes. Aligned reservations produce extents with offsets and sizes bounded by its capacity. | DL-01, DL-03, DL-04 |
 | [CoD driver](../cod/main.cc) | The [source capability reference](../tests/cod/language/README.md) records current checking, LLVM emission and native execution support. General GADT construction and stable language/interoperation ABI remain separate design scopes. | DL-02, DL-12 |
 
-The [memory-region design](MemoryRegionAndRegionalTypes.md), [CoD driver design](CompileOnDemand.md) and [YAML conversion design](YamlConversionsOfRegionalTypes.md) remain relevant references with the qualification limits listed in the registry. Reusing code does not select its representation as the language's contract.
+The [ownership contract](RegionalOwnership.md) and [DBMR publication contract](ConstructionAndAcquisition.md#publishing-a-newly-created-dbmr) govern storage behavior.
 
 ## Discussion process
 

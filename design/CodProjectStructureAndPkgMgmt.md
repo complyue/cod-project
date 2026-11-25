@@ -1,10 +1,12 @@
 # CoD Project Structure & Package Management
 
-Design revision: 1 · Recorded: 2026-11-16 · Status: package-management reference with scoped module-entry terminology.
+Design revision: 2 · Recorded: 2026-11-25 · Status: package-management reference with scoped module-entry terminology.
 
 ## Design authority
 
-- **Registry / scope:** [D-03](DesignAuthorityRegistry.md#d-03) remains pending-human for the package-management design. This revision changes only Terminology and its entry cross-reference; it does not qualify the remaining mechanisms or implementation claims.
+At r2, [shilos retirement](../CHANGELOG.md#h-retire-shilos-20261125) removes the C++ storage and converter prescriptions. Package metadata, local overrides and deterministic input selection retain their existing qualification.
+
+- **Registry / scope:** [D-03](DesignAuthorityRegistry.md#d-03) remains pending-human for the package-management design. The scoped terminology decision and the retirement of the C++ implementation leave broader package policy pending.
 - **Baseline / value:** [H-500](../CHANGELOG.md#h-500)/[D-15-ENTRY](DesignAuthorityRegistry.md#d-15-entry) distinguishes the dependency/version package from the internal namespace selected to run `__main__`, permitting multiple entry namespaces per package. P-452–P-454 through C-35/C-44/C-45/C-59 is a candidate charter §§2/3.2/4.2/8 path for explicit identity, source organization and execution roots. P-05's broader package value path remains pending.
 - **Invariants / acceptance:** preserve VCS/manifest/local-override requirements and module identity/privacy; directory ancestry creates no owner, implicit import or initialization. Entry selection must distinguish two namespaces in one package and reject absent/ambiguous entries without activating siblings. Exact CLI qualification/path mapping and broader package qualification remain separate; [D-15](ModuleWorlds.md#packages-namespaces-and-entry-selection) owns those boundaries.
 - **Continuity:** [K-STATIC-MODULE-STARTUP-20261116](../CHANGELOG.md#k-static-module-startup-20261116) records the scoped terminology update against the registered baseline blob, without a package-manager or compiler implementation change.
@@ -16,7 +18,7 @@ Design revision: 1 · Recorded: 2026-11-16 · Status: package-management referen
 1. Provide a **deterministic, VCS-native** package workflow for the CoD ecosystem.
 2. Guarantee **reproducible builds** via a lock-file (`CodManifest.yaml`).
 3. Make git the **single source of truth** – no central registry, no tarballs, no version numbers, only commit hashes and branch names.
-4. Optimise for **zero-cost sharing** of rich, pointer-heavy data structures via shilos memory regions (writable, mmap-shared across cooperating processes; no (de)serialization needed).
+4. Optimise for **zero-cost sharing** of rich, pointer-heavy data structures through relocatable, memory-mapped regions shared across cooperating processes.
 
 ## Terminology
 
@@ -71,29 +73,9 @@ deps: # direct dependencies, order = preference
   - …
 ```
 
-### Implementation note – YAML ↔️ In-memory conversion
+### Package metadata I/O
 
-At implementation level **all** parsing / serialisation of `CodProject.yaml` is handled via the generic
-`YamlConvertible` concept defined in `shilos/prelude.hh`.
-
-Concrete data types (`cod::project::CodProject`, `cod::project::CodDep`, *etc.*) provide ADL-visible
-free functions:
-
-```
-yaml::Node to_yaml(const CodProject &);
-template<typename RT> void from_yaml(shilos::memory_region<RT>&, const yaml::Node&, CodProject*);
-```
-
-This separation guarantees that **no component outside the model classes touches raw YAML nodes** – the
-CLI tool (`codp`) or future REPL simply loads a YAML document, hands the root node to
-`from_yaml`, and all further mutations happen through the typed C++ API on the in-memory graph.
-
-Benefits:
-
-1. Strong data ownership – the YAML layer becomes a pure I/O concern.
-2. Centralised validation logic – any structural check lives inside `from_yaml` of the relevant type.
-3. Future alternative front-ends (binary format, DB, …) can reuse the exact same data model by
-   plugging in a different converter set.
+Read and validate YAML at the package input boundary. Resolution uses typed dependency records. Writing the manifest serializes the selected revisions. The on-disk schema and local overrides apply independently of how the package manager stores its working data.
 
 Notes:
 
@@ -165,7 +147,7 @@ codp gc                     # clean unused cached mirrors & snapshots
 ## Compile-on-Demand (future)
 
 - The `cod` REPL will parse `CodManifest.yaml`, map each work-tree, generate include paths and other compiler flags, then JIT/Orc-JIT the requested entry points on-demand.
-- Shilos memory regions are shared via `mmap`-backed files; process orchestration happens over region root objects.
+- Cooperating processes can share a mapped image. Its owner and publication follow the [DBMR contract](ConstructionAndAcquisition.md#publishing-a-newly-created-dbmr).
 
 ---
 

@@ -35,8 +35,8 @@ Proceed with a well-founded, maintainable improvement once its implementation sc
 ## Implementation boundaries
 
 - Model compiler state and algorithms in C++ for the seed and CoD for the booter. Use sum types for alternatives with distinct payloads in idiomatic CoD. CoD owns the booter module graph, typed workspace and scoped symbolic-proc orchestration under the [module graph contract](applications/cod-booter/docs/ModuleGraph.md).
-- Use C for narrow OS/native services, generic raw storage and LLVM, with CoD-defined C interfaces. Follow the [native component roadmap](applications/cod-booter/README.md#next-stage-repositories-and-native-runtime) and the relevant operation contract.
-- Use C++20, match existing code and header style, and reuse repository libraries. Add external dependencies only on user request.
+- Implement new shared native support in C, including OS services, generic raw storage and LLVM, with CoD-defined C interfaces. Prefer CoD for high-level features and use C++ for high-level logic inside the seed. Remove remaining dependencies on the retired shilos library. Follow the operation contract for each caller. [Component boundary](design/ImplementationArchitecture.md#retiring-shilos) · [Native component roadmap](applications/cod-booter/README.md#next-stage-repositories-and-native-runtime)
+- For C++ work, use C++20 and match existing code and header style. Reuse current project libraries. Add external dependencies only on user request.
 - Apply the [diagnostics policy](applications/cod-booter/README.md#diagnostics-by-compiler-stage) in every phase. Both bootstrap compilers in the planned `e-wrks/cod-seed` enforce required checks, report failures and preserve required runtime behavior. The booter fills the seed's exception-handling gaps and verifies propagation, handling and cleanup. Use available source locations and check facts. The future compiler in `e-wrks/cod` owns diagnostic-only passes and detailed explanations.
 - Check relevant interactions with [planned fractions](design/FixedWidthFractions.md), including syntax, promotion, dispatch, layout, borrowing, transfer and formatting. Bring conflicts to design review. Fraction implementation remains deferred. H-256 covers reserving `//`, `#` comments and the representation-independent UoM prerequisites.
 
@@ -81,8 +81,7 @@ Run test scripts only when asked. Confirm the component if unclear. Set `COD_TES
 
 ## Memory Regions and Regional Types
 
-- Preserve zero-cost relocation, ownership and publication in the C region service. Consult [the region protocols](design/MemoryRegionAndRegionalTypes.md) before changing regional pointers or allocation. Ask when a change could affect region invariants.
-- In shilos, construct regional objects only in a region, with `memory_region&`, and preserve their no-copy/no-move model. Use `regional_ptr<T>` for intra-region references to regional or bits types, and `global_ptr<T, RT>` across regions. Prefer `auto_region<RT>` and match the allocator and release operation. Release memory regions through their protocol and never through C++ `delete`.
+- Preserve zero-cost relocation, owner lifetime, allocator pairing and publication in native region operations. Follow the [regional ownership rules](design/RegionalOwnership.md) and [DBMR publication contract](design/ConstructionAndAcquisition.md#publishing-a-newly-created-dbmr). Bring changes to these invariants to design review.
 
 ## Writing CoD source and diagnostics
 
@@ -98,7 +97,7 @@ Use **function value** for `func …` and **functor value** for receiver-bound `
 
 - Follow [CoD operation terminology](design/CallableViewsAndCaptures.md#copying-moving-and-graph-transfer) for bits transfer, reference binding, ownership transfer, callable construction/capture and graph transfer. Native byte copying and C++ moves grant no CoD permission. Callable views require lexical storage, including when part of a compound value.
 - Use the [three qualified alias concepts](design/CallableViewsAndCaptures.md#alias-terminology) in discussions, documentation, comments, diagnostics and interfaces. Distinguish declared place aliasing, runtime target aliasing and name/identity aliasing. Preserve access, owners, lifetimes and permitted overlap. A declaration can select storage at runtime, and independent references can share a target.
-- Keep YAML optional and separate from allocation. Use colocated `*_yaml.hh` conversions and reuse the helpers in `include/shilos/`.
+- Keep YAML optional and convert it at the I/O boundary, separately from region allocation.
 - For codp, Git/VCS supplies package identity. Use `CodManifest.yaml` for deterministic builds and `path:` for local overrides. Preserve mmap sharing, zero-copy and zero-relocation assumptions.
 
 ## Documentation and repository hygiene

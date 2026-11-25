@@ -2148,7 +2148,7 @@ H-146 retains the current field-relative pointer encoding. When the first pointe
 
 H-156 identifies each region with one graph of directly linked objects. H-157 confines relationships between regions to logical business associations. A CoD physical pointer edge must stay inside its region. A business ID or key can describe an association with an entity in another region. Its resolution, identity and version policy, permissions and behavior under reload belong to the business protocol.
 
-The runtime can resolve a native address for a region whose lifetime is established. Each language-level reference still belongs to one region, including when a procedure uses bindings or arguments from several regions. The Shilos C++ `global_ptr` facility belongs to the host storage layer. [Regional memory vision and implementation tracker](GraphGrainedMemoryManagement.md)
+The runtime can resolve a native address for a region whose lifetime is established. Each language-level reference still belongs to one region, including when a procedure uses bindings or arguments from several regions. [Regional memory vision and implementation tracker](GraphGrainedMemoryManagement.md)
 
 ## Whole-program layout and specialization
 

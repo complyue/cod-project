@@ -650,7 +650,7 @@ Captured regional references preserve their referents: authorized referent edits
 
 The [source capability reference](../tests/cod/language/README.md) owns current concrete-type checking and native coverage. A source metadata representation or fixture does not select a general runtime type-information facility, reflection API or persistent layout.
 
-The shilos storage layer separately records a region-root type UUID. That header does not identify each CoD object’s concrete type, supply dynamic method dispatch or expose a CoD reflection API. [Compiler types](../cod/lang_syntax.hh) · [Method selection](../cod/lang_frontend.hh) · [Native object/TLS layout](../cod/lang_llvm.hh) · [Storage header](../include/shilos/region.hh)
+A region-root type identifier describes the stored root. Dispatch resolves the concrete target of the method call. [Compiler types](../cod/lang_syntax.hh) · [Method selection](../cod/lang_frontend.hh) · [Native object/TLS layout](../cod/lang_llvm.hh)
 
 H-375 settles the behavioral requirement: family views dispatch on actual argument types, including abstract parameters/results. A selected Node/Edge result must retain enough evidence for a subsequent Entity-typed call to choose the appropriate method. A one-method or one-concrete-result implementation guard cannot define the language. Direct selection is permitted when equivalent for the selected family/context.
 

@@ -317,10 +317,10 @@ IDE 不应另造一套与运行时分离的模型。源码投影、语言服务�
 
 本文是跨组件的长期设计入口。具体实现仍需各层规范与测试；采用本纲领不意味着现有 API、文件格式或安全保证已经改变。
 
-- [Memory Region and Regional Types](MemoryRegionAndRegionalTypes.md)：区域表示与区域类型的具体约束。
+- [Regional Ownership](RegionalOwnership.md) 与 [Regional and Lexical Storage](RegionalAndLexicalStorageRefactor.md)：区域所有权、引用与重定位约束。
 - [Compile-on-Demand](CompileOnDemand.md)：阶段性的 C++ build-and-run 驱动设计；其中不使用 JIT 的边界针对该驱动，不定义整个平台的长期原生化限制。
 - [CoD Project Structure and Package Management](CodProjectStructureAndPkgMgmt.md)：项目、依赖与版本管理。
-- [Exception Safety](ExceptionSafety.md)：实现层异常安全；不能替代持久提交和业务 effects 的恢复协议。
-- [YAML Conversions of Regional Types](YamlConversionsOfRegionalTypes.md) 与 [YAML Specification Extensions](YamlSpecExt.md)：现有文本转换机制；不预设最终业务语言必须采用 YAML。
+- [Exception Control](ExceptionControl.md)：异常传播、构造失败与资源清理。
+- [YAML Specification Extensions](YamlSpecExt.md)：包工具使用的文本格式；业务语言的源码格式另行设计。
 
 **最终交付不是一套只能由机器理解的结构，也不是一套只能由人阅读的源码，而是一套能被机器低开销使用、被人类直接理解、被智能体可靠修改，并能跨领域、跨阶段和跨执行环境组合的持久语义系统。**

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Retire shilos and assign its remaining work by component
+
+<a id="h-retire-shilos-20261125"></a>
+**H-RETIRE-SHILOS-20261125.** The project user in the CoD design discussion directed “`shilos` 相关的认定为历史遗留作废吧，尽快删除清理，新的支持性功能都转移到 C native components，高层功能优先使用CoD实现。 seed 内部用 C++ 实现高层部分。” This supersedes the maintained-legacy disposition at `0d8591512e18c2f2c3c2cc26904c5f8ca82aeed4:design/ImplementationArchitecture.md:382`. [D-ARCH-REVIEW r135](design/ImplementationArchitecture.md#retiring-shilos) and [the native roadmap](applications/cod-booter/README.md#next-stage-repositories-and-native-runtime) apply the decision to consumers, build wiring and library removal. [D-01](design/DesignAuthorityRegistry.md#d-01), D-04 and D-05 archive the former C++ specifications at their last revision. D-28r50 withdraws its C++ rename proposal. Regional ownership, DBMR publication and package metadata retain their independent contracts. P-593/P-594 and P-682/P-683 continue.
+
 ## 2026-11-25 — Review completed scalar behavior for the booter lexer
 
 <a id="k-seed-lexer-predicate-behavior-20261125"></a>
