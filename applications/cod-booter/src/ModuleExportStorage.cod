@@ -168,7 +168,7 @@ export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:
     row.exception_schema <- (OrdinarySchema:ExceptionSchema);
     row.field_mode <- ValueFormal;
     row.scalar_object_body <- false;
-    row.byte_completion <- NoByteFunction:ByteFunctionCompletion;
+    row.byte_completion <- (NoByteFunction:ByteFunctionCompletion);
     return;
 }
 
