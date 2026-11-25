@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Reserve member names across fields and methods and allow an explicit receiver owner
+
+<a id="h-member-names-and-owner-20261124"></a>
+**H-MEMBER-NAMES-AND-OWNER-20261124.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user confirmed “不允许field和method重名，包括结构数据字段” and accepted the proposed parenthesized receiver-owner syntax. D-07 r216→217 adds [member names and explicit receiver owners](design/DomainLanguageDesign.md#receivers-in-field-accessors-and-member-methods) under P-724–P-727. The prior questions are at `e2ad134c:design/DomainLanguageDesign.md`, “Receivers in field accessors and member methods”. The user leaves the choice of a stateful accessor or a named method to program authors under the ordinary language rules.
+
 ## 2026-11-24 — Place member receiver const before the receiver type
 
 <a id="h-member-receiver-const-20261124"></a>

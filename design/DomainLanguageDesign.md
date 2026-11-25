@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 216
+Discussion revision: 217
 
 Recorded: 2026-11-24
 
@@ -8,7 +8,7 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
 
-[D-07-MEMBER-RECEIVER](DesignAuthorityRegistry.md#d-07-member-receiver) at r216 covers [receiver access in field accessor and member method declarations](#receivers-in-field-accessors-and-member-methods). The [project user’s decision](../CHANGELOG.md#h-member-receiver-const-20261124) gives both forms one readable target-access rule under P-724/P-725. Acceptance compares the four declaration spellings against ordinary external reference formals. Member lookup collisions and public owner-binder syntax have separate discussions.
+[D-07-MEMBER-RECEIVER](DesignAuthorityRegistry.md#d-07-member-receiver) covers the [receiver qualifier](../CHANGELOG.md#h-member-receiver-const-20261124) at r216 and the explicit receiver owner at r217 under P-724/P-725. [D-07-MEMBER-NAMES](DesignAuthorityRegistry.md#d-07-member-names) at r217 covers field, accessor and method name collisions under P-726/P-727. The [project user’s decision](../CHANGELOG.md#h-member-names-and-owner-20261124) settles both questions. Acceptance compares target and allocation access independently and diagnoses colliding declarations even before a member is used. [Member declarations](#receivers-in-field-accessors-and-member-methods)
 
 At r215 the [symbol identity decision](../CHANGELOG.md#h-runtime-symbol-identity-20261124) applies [D-10’s protected lexical name](SymbolicDynamicScope.md#the-bare-symbol-name-at-runtime) to source spellings and module origins. Distinct spellings may denote the same identity. A binding that would hide a visible symbol fails at its declaration.
 
@@ -526,7 +526,18 @@ Here O denotes the actual owner of the receiver in the equivalent signature. The
 
 Receiver access, result access and allocation permission have separate contracts. A writable accessor returning `u64` supplies independent bits. Its receiver qualifier alone supplies no setter or destination for a write to the property. A borrowed result keeps its declared mode, target access and actual owner. `Exception.cause` already selects a nullable readonly target under the receiver’s owner. In contrast, `tip` belongs to the individual catch binding. Passing the matched object to a method supplies the ordinary receiver and its owner. Access to that catch’s incoming tip requires selecting it at the catch binding. [Call results](ScalarCallResults.md) · [Exception cause](ExceptionControl.md#returning-a-locally-caught-exception) · [Catch-binding tip](ExceptionControl.md#the-catch-bindings-readonly-tip-field)
 
-**Open design questions.** A field can hold a data object with a call operator. If the containing type also publishes a method under the field’s name, `x.check(n)` could invoke either. Decide how the receiving world admits such collisions, including a stored field sharing an accessor name. A second question is how to name the receiver owner in a member signature when an argument or result must share it. Review each spelling against a signature with two independently borrowed inputs and a result tied to the receiver. This receiver decision covers source intent and permissions. Publication of new member families, setter declarations and extraction of a bound method as a callable value require their own scope.
+**Explicit receiver owner.** Write `func (T in O).method(...)` or `func (const T in O).method(...)` to associate the receiver with O. The same receiver head applies before `.@name()`. The ordinary `where` clause declares O and its allocation permission. In the following method, the selected exception and its nullable cause have the same actual owner. Another argument declared under P would introduce its own owner constraint.
+
+```cod
+func (const Exception in O).get_cause() -> ptr const Exception in O
+    where {const owner O} {
+    return self.cause
+}
+```
+
+**One name per visible member.** For a given receiver type a spelling can denote a stored data field, a computed accessor family or a named method family. Reject any collision between these categories where the declarations first become visible together, including at module composition. For example, `data Policy { check:Threshold }` conflicts with `func const Policy.check(n:u64)` even when the data field itself supports a call operator. A declaration of `Policy.@check()` also conflicts with that stored field. Check this when establishing the member set even if nobody writes `policy.check`. Unrelated receiver types may use the same spelling. Overloads within one family follow ordinary signature and access rules.
+
+A writable accessor can change its receiver. Two evaluated reads of `counter.next` invoke the accessor twice and may produce different values. The choice between that interface and a named `counter.advance()` method belongs to the program author. Both use ordinary function, evaluation and result rules. This decision covers receiver syntax and member names. Extension permissions, setter declarations and bound method extraction have their own scope.
 
 #### Functor receivers and callback arguments
 
