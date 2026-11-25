@@ -434,7 +434,7 @@ struct CheckedBinding {
 };
 
 // Substitutions are checking obligations, not semantic methods or activation records.
-struct CallEffects {
+struct CallBehavior {
   struct CaseScopeExits {
     bool scan = false;
     bool result = false;
@@ -478,7 +478,6 @@ struct CallEffects {
   std::map<size_t, std::map<size_t, ExceptionFacts>> payloads;
   std::map<size_t, CleanupEquations::BooleanValues> booleans;
   CleanupEquations::Returned returned;
-  std::set<size_t> symbols; // Required current symbol identities, not operand positions.
   // Declared owner indices, translated to the actual owners at each call.
   std::set<size_t> lexical_allocations;
   std::set<size_t> array_allocations;
@@ -493,6 +492,11 @@ struct CallEffects {
   bool returns_from_supplier = false;
   bool propagates_here_transfer = false;
   bool propagates_outer_here_transfer = false;
+  bool operator==(const CallBehavior &) const = default;
+};
+
+struct CallEffects : CallBehavior {
+  std::set<size_t> symbols; // Required current symbol identities, not operand positions.
   bool operator==(const CallEffects &) const = default;
 };
 enum class OwnerMatch { satisfied, unknown, mismatch };

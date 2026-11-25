@@ -420,7 +420,7 @@ class ScalarChecker {
   CallableChoices callable_choices_;
   size_t checking_context_ = 0;
   enum class EffectUse { all, discarded_boolean_result };
-  enum class SymbolEffectUse { all, transport_only, covered };
+  enum class SymbolEffectUse { all, transport_only, none };
   // Context zero is module initialization; other contexts are instance IDs + 1.
   struct EffectConsumer {
     size_t read_round = 0;
@@ -508,6 +508,9 @@ class ScalarChecker {
       if (const auto found = distinct_binding_effects_.find(instance); found != distinct_binding_effects_.end())
         return found->second;
     return body.effects;
+  }
+  const CallBehavior &read_call_behavior(size_t instance) const {
+    return read_effects(instance, false, SymbolEffectUse::none);
   }
   struct EnumValue {
     Type type;
@@ -4949,7 +4952,7 @@ class ScalarChecker {
   std::set<size_t> call_reasons(const Type &contract) const {
     return call_reasons(declared_exception_categories(contract.throws_types));
   }
-  void retain_call_failures(std::set<size_t> &reasons, const CallEffects &effects, bool protected_here = false) const {
+  void retain_call_failures(std::set<size_t> &reasons, const CallBehavior &effects, bool protected_here = false) const {
     std::erase_if(reasons, [&](size_t reason) {
       // The declaration supplies checked obligations. A protected callback
       // carries executable failures through the supplier's transfer channel.
@@ -4958,7 +4961,7 @@ class ScalarChecker {
       return completion.failed() && !checked && (protected_here || !effects.escaping_failures.contains(reason));
     });
   }
-  std::set<size_t> direct_call_reasons(const Type &contract, const CallEffects &effects) const {
+  std::set<size_t> direct_call_reasons(const Type &contract, const CallBehavior &effects) const {
     auto reasons = call_reasons(contract);
     if (proving_) retain_call_failures(reasons, effects);
     return reasons;
@@ -4996,7 +4999,7 @@ class ScalarChecker {
     return std::distance(inputs.begin(), found);
   }
   CallableInvocationEffects callable_effects(const Type &contract, const std::vector<Type> &arguments,
-                                             const std::optional<std::set<size_t>> &choices) const {
+                                             const std::optional<std::set<size_t>> &choices, bool use_current_symbols) const {
     if (closing_write_effects_ || closing_read_effects_)
       callable_effect_consumers_.insert(checking_context_);
     CallEffects effects;
@@ -5007,7 +5010,7 @@ class ScalarChecker {
       if (callable.type != contract || (choices && !choices->contains(id))) continue;
       ++covered;
       for (const auto &[inputs, target] : callable.alternatives(arguments)) {
-        const auto &next = read_effects(target);
+        const auto &next = read_effects(target, false, use_current_symbols ? SymbolEffectUse::all : SymbolEffectUse::none);
         // Different definitions can declare their owners in different orders.
         // Translate each effect to the owner slot of the shared callable type.
         std::set<size_t> owners;
@@ -5015,11 +5018,17 @@ class ScalarChecker {
           const auto &method = program_.methods[program_.instances[target].method];
           owners.insert(contract.owners.at(first_owner_operand(method, owner)));
         }
-        if (first) { effects = next; effects.lexical_allocations = std::move(owners); first = false; continue; }
+        if (first) {
+          static_cast<CallBehavior &>(effects) = next;
+          if (use_current_symbols) effects.symbols = next.symbols;
+          effects.lexical_allocations = std::move(owners);
+          first = false;
+          continue;
+        }
         effects.lexical_allocations.merge(owners);
         effects.array_allocations.insert(next.array_allocations.begin(), next.array_allocations.end());
         effects.reads.insert(next.reads.begin(), next.reads.end());
-        effects.symbols.insert(next.symbols.begin(), next.symbols.end());
+        if (use_current_symbols) effects.symbols.insert(next.symbols.begin(), next.symbols.end());
         effects.written_inputs.insert(next.written_inputs.begin(), next.written_inputs.end());
         effects.escaping_failures.insert(next.escaping_failures.begin(), next.escaping_failures.end());
         for (auto &[reason, known] : effects.initialized) {
@@ -5570,7 +5579,7 @@ class ScalarChecker {
             (program_.exception_types.at(completion.category()).checked || declares_root(contract.throws_types));
         if (completion.protected_here() && operation.supplied_here) {
           if (deliver_here_completion(expr, operation)) here_break = lexical_;
-          if (read_effects(operation.supplied_here->instance).propagates_outer_here_transfer)
+          if (read_call_behavior(operation.supplied_here->instance).propagates_outer_here_transfer)
             note_abrupt(expr.at, {}, completion);
         }
         else {
@@ -7567,7 +7576,7 @@ class ScalarChecker {
           if (const auto *bound = symbol_bound(target.method);
               bound && (!proving_ || (lexical_.live && completes &&
                   std::ranges::all_of(bound->symbols, [&](size_t symbol) { return lexical_.symbols.get(symbol).bound; }))))
-            symbol_use = SymbolEffectUse::covered;
+            symbol_use = SymbolEffectUse::none;
       }
     }
     // For this direct statement, the only use of Returned is to describe the
@@ -16478,12 +16487,11 @@ class ScalarChecker {
       if (installation) {
         const auto &activation = program_.instances.at(*installation->scoped_effect);
         const auto &method = program_.methods.at(activation.method);
-        auto effects = read_effects(*installation->scoped_effect);
+        CallEffects effects{read_call_behavior(*installation->scoped_effect), {}};
         // Allocation authority was selected with the activation. Ordinary
         // completion facts still come from the invoked lexical body.
         effects.array_allocations.clear();
         effects.lexical_allocations.clear();
-        effects.symbols.clear();
         operation.argument_sources.emplace();
         for (const auto &argument : expr.children) operation.argument_sources->push_back(argument.get());
         for (size_t i = 0; i < installation->arguments.size(); ++i) {
@@ -16503,8 +16511,8 @@ class ScalarChecker {
         const auto reasons = direct_call_reasons(internal, effects);
         finish_call(expr, internal, effects, reasons, arguments, views, operation, read, discard, offset);
       } else {
-        const auto effects = target ? read_effects(*target) : CallEffects{};
-        if (validating_ && (!target || !effects.binding_sources.empty() || !effects.written_inputs.empty()))
+        const auto *effects = target ? &read_call_behavior(*target) : nullptr;
+        if (validating_ && (!effects || !effects->binding_sources.empty() || !effects->written_inputs.empty()))
           implementation_gap(expr.at, "mutating scoped handler invocation without a locally selected activation");
         finish_call(expr, contract, {}, call_reasons(contract), arguments, views, operation, read, discard, offset);
       }
@@ -16516,11 +16524,11 @@ class ScalarChecker {
           require_here_owner(one_owner(views[i]), here_formal_owner(*role), operation.argument(expr, i + offset).at);
       }
     auto [effects, closed] = callable_effects(contract, arguments,
-        operation.invokes_here ? std::optional{std::set<size_t>{}} : operation.callable_choices);
-    if (expr.kind == Expression::Kind::perform) effects.symbols.clear();
+        operation.invokes_here ? std::optional{std::set<size_t>{}} : operation.callable_choices,
+        expr.kind != Expression::Kind::perform);
     auto reasons = closed ? direct_call_reasons(contract, effects) : call_reasons(contract);
     if (const auto callback = operation.invokes_here && proving_ ? here_target(*checking_method_, *operation.invokes_here).body : std::nullopt; callback) {
-      const auto &body = read_effects(*callback);
+      const auto &body = read_call_behavior(*callback);
       const bool protected_here = program_.methods[program_.instances[*callback].method].here_group.has_value();
       retain_call_failures(reasons, body, protected_here);
       if (body.propagates_here_transfer || (protected_here && !body.escaping_failures.empty()))
@@ -16897,13 +16905,13 @@ class ScalarChecker {
     const auto profile = scope_profile(std::move(inputs), ResultContract{*contract.target}, failures, std::move(group));
     supplied.instance = demand(profile, std::move(arguments), body.at);
     const auto check_allocations = [&](size_t instance) {
-      for (const auto role : read_effects(instance).lexical_allocations)
+      for (const auto role : read_call_behavior(instance).lexical_allocations)
         require_lexical_allocator(owners.at(role), body.at);
     };
     check_allocations(supplied.instance);
     if (returning) check_allocations(*returning);
-    if (validating_ && (!read_effects(supplied.instance).binding_sources.empty() ||
-                        (returning && !read_effects(*returning).binding_sources.empty())))
+    if (validating_ && (!read_call_behavior(supplied.instance).binding_sources.empty() ||
+                        (returning && !read_call_behavior(*returning).binding_sources.empty())))
       implementation_gap(body.at, "rebinding a supplier reference slot from a repeatedly callable here body");
     return {std::move(supplied), returning};
   }
@@ -17299,7 +17307,7 @@ class ScalarChecker {
     }
   }
   bool deliver_here_completion(const Expression &expr, const CheckedOperation &operation) {
-    const auto &body = read_effects(operation.supplied_here->instance);
+    const auto &body = read_call_behavior(operation.supplied_here->instance);
     const auto receiver = lexical_;
     for (const auto reason : body.escaping_failures) {
       const auto completion = Completion{reason};
@@ -23476,7 +23484,7 @@ class ScalarChecker {
           for (const auto &[dependent, consumer] : effect_dependents_[instance]) {
             if (!changes.other && !distinct_changes) {
               if (changes.symbols && !changes.returned && consumer.read_round == read_effect_round_ &&
-                  (consumer.symbols == SymbolEffectUse::covered ||
+                  (consumer.symbols == SymbolEffectUse::none ||
                    (consumer.symbols == SymbolEffectUse::transport_only && !changes.transport_symbols))) continue;
               if (changes.returned && !changes.symbols && consumer.discards_result && !consumer.reads_result) continue;
             }
