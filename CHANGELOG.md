@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Focus routine booter builds on one seed mode
+
+<a id="h-booter-build-cadence-20261124"></a>
+**H-BOOTER-BUILD-CADENCE-20261124.** The project user proposed concentrating routine builds on one fast mode and comparing both at major milestones in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). The [build rule](AGENTS.md#build-and-command-execution) selects the default specialized mode. At `d007ba5c:applications/cod-booter`, full specialized and shared builds took 57 min 3 s and 59 min 19 s. Their provider files, LLVM IR and linked compiler matched byte for byte. A mode-specific issue gets an immediate focused comparison.
+
 ## 2026-11-24 — Review the package resolver’s indexed row fields
 
 <a id="k-package-row-field-read-20261124"></a>
