@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r194 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r193 for [package resolver replay](#collecting-replay-requirements-in-the-package-resolver). The existing checked constructor and range facts cover finite scalar result fields and a procedure loop with stable symbolic bindings. The family capture, native cleanup and stage boundaries continue. [Review record](../CHANGELOG.md#k-seed-package-resolver-replay-20261125)
+
 At r193 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r192 for the [range and tagged-sum lookup](#collecting-replay-requirements-in-the-key-lookup) on the r190 path. The seed may establish empty replay from completed operations in this lookup. The existing symbol-pass scheduling decision supplies no evidence for effects of native disposal. [Review record](../CHANGELOG.md#k-seed-key-lookup-replay-20261125)
 
 At r192 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r191 for the [protected native path acquisition](#native-reentry-and-protected-path-acquisition). D-10 requires the installed family's outstanding bindings during replay, including reads reached by native reentry. The native provider and handle contracts determine what can be inferred at a foreign call and at cleanup. [Review record](../CHANGELOG.md#k-seed-protected-path-reentry-20261125)
@@ -1014,6 +1016,14 @@ At `0bf6c449:applications/cod-booter/src/ModuleIndex.cod`, `find_visit` searches
 For a completed frame, collect the two bounds in evaluation order. Once both complete, a single visit to the body suffices for the possible iterations when the loop cannot alter the supplied bindings and every operation and cleanup in it is covered. Keep the empty-range successor. Use the existing checked range binder, indexed subject, nominal tag and selected field ordinals. Visit each possible arm under its own payload bindings and retain the called families’ outstanding uses. An early return ends its path. The body’s local names expire at scope exit. This decision covers the unguarded exhaustive case and scalar value receptions used here. An unresolved cleanup or call leaves the empty-replay proof unavailable.
 
 Use the existing linked path-key hit, miss and path-not-ready cases and an altered arm that acquires a native owner with unproved disposal. The latter must retain its replay limit while that effect is unknown. The earlier private shortcut consumed a callee scheduling flag as an empty family inventory. Its removal exposed the range at `ModuleIndex.cod:69`. [Native reentry and cleanup](#native-reentry-and-protected-path-acquisition)
+
+#### Collecting replay requirements in the package resolver
+
+In `a960f7f3:applications/cod-booter/src/PackageModuleResolution.cod`, `probe_package_roots` writes one of four `PackageResolution` alternatives to an array element. For the selected builtin transfer, destination preparation and bounds checking precede its right operand. At `c16b388f:cod/lang_checked.hh`, the checked lexical construction records the sum, alternative, storage place and field ordinal for each written initializer. Collect the scalar operands in written order. An operand that cannot complete has no completed field write, and subsequent operands do not run. `MissingModule` has no fields. On success the existing emitter completes the fields, stores the tag and transfers the bits. User initializers and regional construction retain their own representation requirements.
+
+The numeric procedure loop updates ordinary locals as roots are examined. The first and second matches can therefore take different branches. Reuse the [key lookup’s range rule](#collecting-replay-requirements-in-the-key-lookup) when one pass can collect all possible uses under the same incoming symbolic bindings. Inspect the body in a fresh iteration scope after checking the bounds. Retain call edges that can be reached on a later iteration and the zero-iteration path. A local installation in the iteration or opaque cleanup keeps this proof unavailable.
+
+Exercise the unedited resolver under a live handler with a selected root, two competing roots, an empty search and an actual `SearchFailed` result. For ambiguity, check `first_root` and `second_root` in order. Their sum alone cannot distinguish reversed ordinals. Include an abrupt operand or out-of-bounds destination and an altered body with unresolved native work. This is a completed-frame empty-replay proof.
 
 <a id="rechecking-an-ordinary-call-in-one-conditional-arm"></a>
 

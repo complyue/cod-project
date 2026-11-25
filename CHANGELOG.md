@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Review replay through the package resolver’s result writes and root scan
+
+<a id="k-seed-package-resolver-replay-20261125"></a>
+**K-SEED-PACKAGE-RESOLVER-REPLAY-20261125.** The [implementation review](design/ImplementationArchitecture.md#collecting-replay-requirements-in-the-package-resolver) continues D-ARCH-REVIEW r193→194. The trusted seed can consume the checked lexical constructor and indexed destination for each finite `PackageResolution` result and inspect the installation-free numeric procedure loop once. The actual workload at `a960f7f3:applications/cod-booter/src/PackageModuleResolution.cod` distinguishes search failure, missing, one match and two matches in source order.
+
 ## 2026-11-25 — Review empty replay through the real module key lookup
 
 <a id="k-seed-key-lookup-replay-20261125"></a>
