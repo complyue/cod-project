@@ -84,10 +84,63 @@ public:
   }
 };
 
+class ScopeNames {
+  using Names = std::map<std::string, size_t>;
+  struct Layer {
+    std::shared_ptr<const Layer> parent;
+    size_t depth;
+    Names names;
+  };
+  std::shared_ptr<Layer> leaf_;
+
+  static size_t depth(const Layer *layer) { return layer ? layer->depth : 0; }
+
+  template <typename Visit> void visit_since(const Layer *ancestor, const Visit &visit) const {
+    const auto *leaf = leaf_.get();
+    if (leaf == ancestor) return;
+    if (leaf->parent.get() == ancestor) {
+      for (const auto &[name, id] : leaf->names) visit(name, id);
+      return;
+    }
+    // Across layers, keep the same spelling order as one ordered name table.
+    std::vector<const Names::value_type *> ordered;
+    for (auto *layer = leaf; layer != ancestor; layer = layer->parent.get())
+      for (const auto &name : layer->names) ordered.push_back(&name);
+    std::ranges::sort(ordered, {}, [](const auto *name) -> const std::string & { return name->first; });
+    for (const auto *name : ordered) visit(name->first, name->second);
+  }
+
+public:
+  std::optional<size_t> lookup(const std::string &name) const {
+    for (auto *layer = static_cast<const Layer *>(leaf_.get()); layer; layer = layer->parent.get())
+      if (const auto found = layer->names.find(name); found != layer->names.end()) return found->second;
+    return {};
+  }
+
+  // The declaration and join rules check for an existing spelling first.
+  void append(const std::string &name, size_t id) {
+    if (leaf_.use_count() != 1) leaf_ = std::make_shared<Layer>(Layer{leaf_, depth(leaf_.get()) + 1, {}});
+    leaf_->names.emplace(name, id);
+  }
+
+  template <typename Visit> void each(const Visit &visit) const { visit_since(nullptr, visit); }
+
+  template <typename Visit> void additions_since_common(const ScopeNames &other, const Visit &visit) const {
+    const Layer *left = leaf_.get(), *right = other.leaf_.get();
+    while (depth(left) > depth(right)) left = left->parent.get();
+    while (depth(right) > depth(left)) right = right->parent.get();
+    while (left != right) {
+      left = left->parent.get();
+      right = right->parent.get();
+    }
+    visit_since(left, visit);
+  }
+};
+
 struct LexicalState {
   struct Scope {
     size_t id;
-    std::map<std::string, size_t> bindings;
+    ScopeNames bindings;
     bool declarations = true;
     std::optional<DynamicSymbolBindings> symbol_entry = {};
   };
@@ -136,7 +189,7 @@ struct LexicalState {
 
   std::optional<size_t> lookup(const std::string &name) const {
     for (auto scope = scopes.rbegin(); scope != scopes.rend(); ++scope)
-      if (const auto found = scope->bindings.find(name); found != scope->bindings.end()) return found->second;
+      if (const auto found = scope->bindings.lookup(name)) return found;
     return {};
   }
 };
@@ -3018,11 +3071,11 @@ class ScalarChecker {
   LexicalState::Scope &declaration_scope(const std::string &name, const Location &at) {
     auto selected = lexical_.scopes.rbegin();
     while (!selected->declarations) {
-      if (selected->bindings.contains(name)) fail(at, "duplicate declaration of catch parameter '" + name + "'");
+      if (selected->bindings.lookup(name)) fail(at, "duplicate declaration of catch parameter '" + name + "'");
       ++selected;
     }
     auto &scope = *selected;
-    if (scope.bindings.contains(name)) fail(at, "duplicate declaration of '" + name + "' in one lexical scope");
+    if (scope.bindings.lookup(name)) fail(at, "duplicate declaration of '" + name + "' in one lexical scope");
     return scope;
   }
   template <typename Key>
@@ -3088,7 +3141,7 @@ class ScalarChecker {
       possible_null_sources_.push_back({});
       target_dependencies_.push_back({});
     }
-    scope.bindings.emplace(name, id);
+    scope.bindings.append(name, id);
     lexical_.bindings_available.insert(id);
     return id;
   }
@@ -5836,11 +5889,19 @@ class ScalarChecker {
       bridge(left_paths, versions); bridge(right_paths, other->second);
     }
     lexical_ = a;
-    for (size_t i = 0; i < b.scopes.size(); ++i)
-      for (const auto &[name, id] : b.scopes[i].bindings) {
-        auto [found, inserted] = lexical_.scopes[i].bindings.emplace(name, id);
-        if (!inserted && found->second != id) fail(at, "duplicate declaration of '" + name + "' in one lexical scope");
-      }
+    for (size_t i = 0; i < b.scopes.size(); ++i) {
+      auto &scope = lexical_.scopes[i];
+      const auto &other = b.scopes[i];
+      const auto merge_name = [&](const std::string &name, size_t id) {
+        if (const auto found = scope.bindings.lookup(name)) {
+          if (*found != id) fail(at, "duplicate declaration of '" + name + "' in one lexical scope");
+        } else {
+          scope.bindings.append(name, id);
+        }
+      };
+      if (scope.id == other.id) other.bindings.additions_since_common(scope.bindings, merge_name);
+      else other.bindings.each(merge_name);
+    }
     lexical_.bindings_available = a_exits ? b.bindings_available : b_exits ? a.bindings_available : intersect(a.bindings_available, b.bindings_available);
     lexical_.available = a_exits ? b.available : b_exits ? a.available : intersect(a.available, b.available);
     lexical_.live_exception_holders = a_exits ? b.live_exception_holders : b_exits ? a.live_exception_holders :
@@ -5977,10 +6038,10 @@ class ScalarChecker {
   void retire_scope(LexicalState &state) {
     const auto &scope = state.scopes.back();
     if (scope.symbol_entry) state.symbols = *scope.symbol_entry;
-    for (const auto &[name, id] : scope.bindings) {
+    scope.bindings.each([&](const std::string &, size_t id) {
       state.bindings_available.erase(id);
       state.returned.selection_bindings.erase(id);
-      if (!bindings_->at(id).selection.empty()) continue;
+      if (!bindings_->at(id).selection.empty()) return;
       state.targets.erase(id);
       state.null_sources.erase(id);
       state.owners.erase(id);
@@ -5999,7 +6060,7 @@ class ScalarChecker {
         selections.entry_nonnull.erase(id); selections.targets.erase(id);
         selections.null_inputs.erase(id); selections.nonnull_inputs.erase(id);
       }
-    }
+    });
     for (const auto &[id, owners] : state.owners) if (owners.contains(scope.id)) state.expired_bindings.insert(id);
     if (const auto owned = scope_storage_.find(scope.id); owned != scope_storage_.end()) for (const auto id : owned->second) {
       state.available.erase(id);
@@ -15015,7 +15076,7 @@ class ScalarChecker {
       }
     } else if (names) {
       for (const auto &name : *names) if (const auto binding = lexical_.lookup(name)) retain_binding(name, *binding);
-    } else for (const auto &scope : lexical_.scopes) for (const auto &[name, id] : scope.bindings) retain_binding(name, id);
+    } else for (const auto &scope : lexical_.scopes) scope.bindings.each(retain_binding);
     const auto conditions = track_selection ? path_conditions(lexical_) : CleanupEquations::ConditionClauses{};
     if (track_selection) {
       std::map<size_t, size_t> selected;
@@ -22431,17 +22492,17 @@ class ScalarChecker {
       begin_check(program_.entry_storage, program_.entry_bindings, program_.entry, proving);
       AbruptFlow entry_flow{1, {}};
       abrupt_ = &entry_flow;
-      std::vector<std::map<std::string, size_t>> bindings(modules_.size());
+      std::vector<ScopeNames> bindings(modules_.size());
       for (const auto &[module, expr] : program_.initializers) {
         const ModuleLookup lookup(module_, module);
-        lexical_.scopes.front().bindings.swap(bindings[module_]);
+        std::swap(lexical_.scopes.front().bindings, bindings[module_]);
         behavior.initializer = expr;
         const auto type = check(*expr, nullptr, program_.entry, true, true);
         // After a blocked statement, the following checks have no reaching
         // execution facts to use. The pending diagnostic prevents publication.
         if (type == Type::never || behavior.unavailable) lexical_.live = false;
-        for (const auto &[name, id] : lexical_.scopes.front().bindings) module_names().values.insert(name);
-        lexical_.scopes.front().bindings.swap(bindings[module_]);
+        lexical_.scopes.front().bindings.each([&](const std::string &name, size_t) { module_names().values.insert(name); });
+        std::swap(lexical_.scopes.front().bindings, bindings[module_]);
       }
       if (behavior.unavailable) require_leaf_behavior(*behavior.unavailable);
       CheckedOperation entry_result; entry_result.type = lexical_.live ? Type{Type::void_type} : Type{Type::never};
