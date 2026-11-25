@@ -22044,22 +22044,20 @@ class ScalarChecker {
     if (program_.callables.empty()) return {};
     CallableFlow flow;
     using Node = CallableFlow::Node;
-    std::vector<Node> symbols;
-    for (size_t i = 0; i < program_.symbols.size(); ++i) symbols.push_back(flow.node());
+    std::map<size_t, Node> symbols;
     using Facts = std::map<const Expression *, CheckedOperation>;
     struct Context {
       const Facts *facts;
       const std::vector<CheckedStorage> *storage;
       std::map<const Expression *, Node> expressions, observations;
-      std::vector<Node> places;
-      Node result;
+      std::map<size_t, Node> places;
+      std::optional<Node> result;
       std::optional<Node> supplier_result{}, break_result{}, observed_return{};
     };
     std::vector<Context> contexts;
     const auto context = [&](const Facts &facts, const std::vector<CheckedStorage> &storage,
                              const CheckedMethod::HereGroupResults *group = nullptr) {
-      Context result{&facts, &storage, {}, {}, {}, flow.node()};
-      for (size_t i = 0; i < storage.size(); ++i) result.places.push_back(flow.node());
+      Context result{&facts, &storage, {}, {}, {}, {}};
       if (group && group->supplier && group->supplier->kind == Type::procedure) {
         result.supplier_result = flow.node();
         if (group->binds_return_payload) {
@@ -22075,10 +22073,26 @@ class ScalarChecker {
       const auto &group = program_.methods[instance.method].here_group;
       contexts.push_back(context(instance.operations, instance.storage, group ? &*group : nullptr));
     }
+    const auto node_for = [&](auto &nodes, auto key) {
+      if (const auto found = nodes.find(key); found != nodes.end()) return found->second;
+      return nodes.emplace(key, flow.node()).first->second;
+    };
     const auto expression = [&](size_t c, const Expression *expr) {
-      auto &nodes = contexts[c].expressions;
-      if (const auto found = nodes.find(expr); found != nodes.end()) return found->second;
-      return nodes.emplace(expr, flow.node()).first->second;
+      return node_for(contexts[c].expressions, expr);
+    };
+    const auto place_node = [&](size_t c, size_t place) {
+      auto &frame = contexts[c];
+      (void)frame.storage->at(place);
+      return node_for(frame.places, place);
+    };
+    const auto symbol_node = [&](size_t symbol) {
+      (void)program_.symbols.at(symbol);
+      return node_for(symbols, symbol);
+    };
+    const auto result_node = [&](size_t c) {
+      auto &result = contexts[c].result;
+      if (!result) result = flow.node();
+      return *result;
     };
     std::function<void(size_t, const CheckedOperation &, Node)> value;
     value = [&](size_t c, const CheckedOperation &fact, Node node) {
@@ -22087,12 +22101,12 @@ class ScalarChecker {
         if (!fact.callable_captures.empty()) for (const auto target : program_.callables[*fact.callable].implementations()) {
           const auto &frame = program_.instances[target].frame;
           for (size_t i = 0; i < fact.callable_captures.size(); ++i)
-            value(c, fact.callable_captures[i], contexts[target + 1].places.at(frame.captures.at(i)));
+            value(c, fact.callable_captures[i], place_node(target + 1, frame.captures.at(i)));
         }
       }
       if (fact.type.kind == Type::procedure)
         for (const auto place : fact.targets) if (place != null_target)
-          flow.link(contexts[c].places.at(place), node);
+          flow.link(place_node(c, place), node);
     };
     const auto invocation = [&](size_t c, const Expression &expr, const CheckedOperation &fact, size_t target, size_t offset) {
       CallableFlow::Edges edges;
@@ -22102,18 +22116,18 @@ class ScalarChecker {
         const auto *argument = &fact.argument(expr, i + offset);
         const auto &input = instance.frame.inputs.at(i);
         if (input.mode == ArgumentMode::value)
-          edges.emplace_back(expression(c, argument), contexts[target].places.at(input.place));
+          edges.emplace_back(expression(c, argument), place_node(target, input.place));
         else {
           for (const auto place : fact.callable_argument_targets.at(i)) if (place != null_target) {
-            edges.emplace_back(contexts[c].places.at(place), contexts[target].places.at(input.place));
-            edges.emplace_back(contexts[target].places.at(input.place), contexts[c].places.at(place));
+            edges.emplace_back(place_node(c, place), place_node(target, input.place));
+            edges.emplace_back(place_node(target, input.place), place_node(c, place));
           }
         }
       }
-      if (instance.result.type->kind == Type::procedure) edges.emplace_back(contexts[target].result, expression(c, &expr));
+      if (instance.result.type->kind == Type::procedure) edges.emplace_back(result_node(target), expression(c, &expr));
       if (fact.callee && !instance.environment.empty()) {
         for (size_t i = 0; i < instance.environment.size(); ++i)
-          value(c, fact.callable_captures.at(i), contexts[target].places.at(instance.frame.captures.at(i)));
+          value(c, fact.callable_captures.at(i), place_node(target, instance.frame.captures.at(i)));
       }
       return edges;
     };
@@ -22125,7 +22139,7 @@ class ScalarChecker {
         for (size_t i = 0; i < instance.arguments.size(); ++i) if (instance.arguments[i].kind == Type::procedure)
           for (size_t id = 0; id < program_.callables.size(); ++id)
             if (program_.callables[id].type == instance.arguments[i])
-              flow.seed(contexts[target + 1].places.at(instance.frame.inputs.at(i).place), id);
+              flow.seed(place_node(target + 1, instance.frame.inputs.at(i).place), id);
       }
     using K = Expression::Kind;
     for (size_t c = 0; c < contexts.size(); ++c) {
@@ -22135,41 +22149,42 @@ class ScalarChecker {
           value(c, fact, node());
         if ((expr->kind == K::effect || expr->kind == K::procedure_effect) && fact.publishes_effect &&
             fact.operand_type.kind == Type::procedure)
-          flow.link(fact.callable ? node() : expression(c, expr->children.front().get()), symbols.at(*fact.symbol));
+          flow.link(fact.callable ? node() : expression(c, expr->children.front().get()), symbol_node(*fact.symbol));
         if (expr->kind == K::symbol && fact.type.kind == Type::procedure)
-          flow.link(symbols.at(*fact.symbol), node());
+          flow.link(symbol_node(*fact.symbol), node());
         if ((expr->kind == K::pointer || expr->kind == K::callable) && fact.place &&
             contexts[c].storage->at(*fact.place).type.kind == Type::procedure) {
-          flow.link(expr->kind == K::callable ? node() : expression(c, expr->children.front().get()), contexts[c].places.at(*fact.place));
+          flow.link(expr->kind == K::callable ? node() : expression(c, expr->children.front().get()), place_node(c, *fact.place));
         }
         if (expr->kind == K::transfer && fact.operand_type.kind == Type::procedure) {
           const auto source = expression(c, expr->children[1].get());
           contexts[c].observations.emplace(expr, source);
           for (const auto place : fact.targets) if (place != null_target)
-            flow.link(source, contexts[c].places.at(place));
+            flow.link(source, place_node(c, place));
         }
         if (fact.operand_type.kind == Type::procedure && !fact.borrowed_result && !expr->children.empty() &&
             (fact.here_exit || (c && (expr->kind == K::return_value || expr->kind == K::return_tail)))) {
           const auto source = expression(c, expr->children.front().get());
           const auto destination = fact.here_exit == HereExit::break_call ? contexts[c].break_result.value() :
-              fact.here_exit == HereExit::return_supplier ? contexts[c].supplier_result.value() : contexts[c].result;
+              fact.here_exit == HereExit::return_supplier ? contexts[c].supplier_result.value() : result_node(c);
           flow.link(source, destination);
           contexts[c].observations.emplace(expr, source);
         }
         if (expr->kind == K::return_test && fact.return_filter.can_match && fact.place && fact.operand_type.kind == Type::procedure) {
-          const auto returned = contexts[c].observed_return.value_or(contexts[c].result);
-          flow.link(returned, contexts[c].places.at(*fact.place));
+          const auto &observed = contexts[c].observed_return;
+          const auto returned = observed ? *observed : result_node(c);
+          flow.link(returned, place_node(c, *fact.place));
         }
         if (fact.supplied_here) {
           const auto connect = [&](size_t instance) {
             const auto &body = contexts.at(instance + 1);
-            if (body.supplier_result) flow.link(*body.supplier_result, contexts[c].result);
+            if (body.supplier_result) flow.link(*body.supplier_result, result_node(c));
             if (body.break_result) {
               const auto result = node();
               flow.link(*body.break_result, result);
               contexts[c].observations.emplace(expr, result);
             }
-            if (body.observed_return) flow.link(contexts[c].result, *body.observed_return);
+            if (body.observed_return) flow.link(result_node(c), *body.observed_return);
           };
           connect(fact.supplied_here->instance);
           if (fact.supplied_here->returning) connect(fact.supplied_here->returning->body);
@@ -22186,9 +22201,9 @@ class ScalarChecker {
           const auto callee = flow.node(); contexts[c].observations.emplace(expr, callee);
           const size_t offset = expr->kind == K::value_call ? 1 : 0;
           if (offset) flow.link(expression(c, expr->children.front().get()), callee);
-          else if (fact.symbol) flow.link(symbols.at(*fact.symbol), callee);
+          else if (fact.symbol) flow.link(symbol_node(*fact.symbol), callee);
           else for (const auto place : fact.callable_targets) if (place != null_target)
-            flow.link(contexts[c].places.at(place), callee);
+            flow.link(place_node(c, place), callee);
           for (size_t id = 0; id < program_.callables.size(); ++id) {
             const auto &candidate = program_.callables[id];
             if (candidate.type == fact.operand_type) {
