@@ -1216,8 +1216,8 @@ public:
     // Actual presence of immutable incoming targets, independently of payload initialization.
     std::set<size_t> present{};
     BooleanValues booleans{};
-    // Source handling requirements are independent of runtime category paths.
-    std::set<size_t> declared_failures{};
+    // A declared root is independent of the concrete failure outcomes.
+    bool declared_root = false;
     MissingInitialization uninitialized{};
     // Saved reference selections have readiness independent of physical cells.
     MissingInitialization uninitialized_captures{};
@@ -1436,7 +1436,7 @@ private:
     result.symbols.insert(second.symbols.begin(), second.symbols.end());
     result.payload_writes.insert(second.payload_writes.begin(), second.payload_writes.end());
     result.present.insert(second.present.begin(), second.present.end());
-    result.declared_failures.insert(second.declared_failures.begin(), second.declared_failures.end());
+    result.declared_root |= second.declared_root;
     if (!unconditional(second.action_reaching)) {
       const auto unknown = unknown_boolean();
       const auto lifted = substitute_boolean_payloads(second.action_reaching, [&](size_t place) -> const BooleanValue * {
@@ -1505,7 +1505,7 @@ private:
     const auto previous_payload_writes = known.payload_writes;
     const auto previous_present = known.present;
     const auto previous_booleans = known.booleans;
-    const auto previous_declared = known.declared_failures;
+    const auto previous_declared_root = known.declared_root;
     const auto previous_selections = known.selections;
     const auto previous_symbols = known.symbols;
     const auto previous_reaching = known.reaching;
@@ -1514,7 +1514,7 @@ private:
     for (const auto &path : effects.action_reaching) add_reaching_condition(known.action_reaching, path);
     known.symbols.insert(effects.symbols.begin(), effects.symbols.end());
     known.payload_writes.insert(effects.payload_writes.begin(), effects.payload_writes.end());
-    known.declared_failures.insert(effects.declared_failures.begin(), effects.declared_failures.end());
+    known.declared_root |= effects.declared_root;
     for (const auto &[read, before] : effects.reads) merge_read(known.reads, read, before);
     // A queue arm with no writer can leave a place uninitialized only
     // on paths that reach that arm.
@@ -1549,7 +1549,7 @@ private:
         previous_uninitialized_captures != known.uninitialized_captures ||
         previous_returned != known.returned || previous_thrown != known.thrown || previous_queued != known.queued_failures || previous_unknown_thrown != known.unknown_thrown || previous_payloads != known.payloads ||
         previous_selections != known.selections || previous_symbols != known.symbols || previous_payload_writes != known.payload_writes ||
-        previous_present != known.present || previous_booleans != known.booleans || previous_declared != known.declared_failures ||
+        previous_present != known.present || previous_booleans != known.booleans || previous_declared_root != known.declared_root ||
         previous_reaching != known.reaching || previous_action_reaching != known.action_reaching;
   }
 public:

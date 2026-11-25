@@ -777,7 +777,11 @@ class ScalarChecker {
     bool receiver_transfer_pending = false;
     const Expression *case_result = nullptr;
   };
-  struct AbruptFlow { size_t depth; std::vector<AbruptPath> paths; std::set<size_t> declared{}; };
+  struct AbruptFlow {
+    size_t depth;
+    std::vector<AbruptPath> paths;
+    bool declared_root = false;
+  };
   AbruptFlow *abrupt_ = nullptr;
   std::optional<size_t> caught_;
   std::set<size_t> catch_bindings_;
@@ -813,7 +817,6 @@ class ScalarChecker {
   } return_inputs_;
   size_t next_finalizer_input_ = 0;
   std::vector<CallEffects::ReadSite> read_sites_;
-  std::map<const Expression *, size_t> declared_requirements_;
   bool delayed_ = false;
   size_t next_scope_ = 1;
   static constexpr size_t instance_limit = 4096;
@@ -5582,9 +5585,8 @@ class ScalarChecker {
           effects.booleans[place] = value;
     }
     if (lexical_.live && declares_root(contract.throws_types)) {
-      const auto requirement = declared_requirement(expr);
-      if (prepared) for (auto &[reason, effects] : operation.invocation) effects.declared_failures.insert(requirement);
-      else note_declared(requirement);
+      if (prepared) for (auto &[reason, effects] : operation.invocation) effects.declared_root = true;
+      else note_declared_root();
     }
     if (!prepared) {
       const auto refine_arguments = [&](size_t reason) {
@@ -6242,11 +6244,8 @@ class ScalarChecker {
   static bool declares_root(const std::vector<Type> &types) {
     return std::any_of(types.begin(), types.end(), [](const Type &type) { return type.kind == Type::exception && !type.identity; });
   }
-  size_t declared_requirement(const Expression &expr) {
-    return declared_requirements_.try_emplace(&expr, declared_requirements_.size()).first->second;
-  }
-  void note_declared(size_t requirement) {
-    if (abrupt_) { abrupt_->declared.insert(requirement); return; }
+  void note_declared_root() {
+    if (abrupt_) { abrupt_->declared_root = true; return; }
     if (proving_ && checking_method_ && (checking_method_->source->implicit_scope || checking_method_->here_group))
       observe_effects().scope_checked_failures.insert(0);
   }
@@ -6587,7 +6586,7 @@ class ScalarChecker {
           if (inserted) found->second = snapshot_boolean(state.predicates.get(place), state, at);
           return &found->second;
         };
-        if (effects.declared_failures.empty() && !CleanupEquations::unconditional(effects.action_reaching)) {
+        if (!effects.declared_root && !CleanupEquations::unconditional(effects.action_reaching)) {
           const auto reaching = CleanupEquations::substitute_boolean_payloads(effects.action_reaching, resolve_boolean, false, true);
           if (CleanupEquations::conjoin_conditions(reaching, CleanupEquations::boolean_conditions(path_conditions(state))).empty()) continue;
         }
@@ -6636,7 +6635,7 @@ class ScalarChecker {
       }
     }
     abrupt_ = outer;
-    for (const auto requirement : flow.declared) note_declared(requirement);
+    if (flow.declared_root) note_declared_root();
     for (const auto &path : exits) {
       lexical_ = path.state;
       forward_abrupt(path);
@@ -17607,7 +17606,7 @@ class ScalarChecker {
     if (protected_body) {
       for (const auto failure : body_effects->scope_checked_failures) {
         if (failure) note_abrupt(expr.at, {failure});
-        else note_declared(declared_requirement(expr));
+        else note_declared_root();
       }
       if (proving_ && (body_effects->propagates_here_transfer || !body_effects->escaping_failures.empty()))
         reasons.insert(Completion::protected_transfer);
@@ -17763,7 +17762,7 @@ class ScalarChecker {
       if (program_.methods[program_.instances[body.instance].method].here_group) {
         for (const auto failure : effects.scope_checked_failures) {
           if (failure) note_abrupt(expr.at, {failure});
-          else note_declared(declared_requirement(expr));
+          else note_declared_root();
         }
       }
       call.supplied_here = body;
@@ -18509,7 +18508,7 @@ class ScalarChecker {
       program_.exception_values = true;
       const auto type = handler.annotation ? resolve_annotation(*handler.annotation, instance) : exception_type(0);
       check_catch_category(type, handled, handler);
-      if (!type.identity) incoming.declared.clear();
+      if (!type.identity) incoming.declared_root = false;
       const auto matching = exception_possibilities(type);
       std::vector<LexicalState> entries;
       ExceptionFacts categories;
@@ -18583,7 +18582,7 @@ class ScalarChecker {
           else path.completion.reason = Completion::protected_transfer;
           (path.exceptions.empty() ? control_inputs : outgoing.paths).push_back(std::move(path));
         }
-        outgoing.declared.insert(handler_exits.declared.begin(), handler_exits.declared.end());
+        outgoing.declared_root |= handler_exits.declared_root;
       }
     }
     for (auto &path : incoming.paths) if (!path.exceptions.empty()) outgoing.paths.push_back(path);
@@ -18678,7 +18677,7 @@ class ScalarChecker {
       if (!split.empty()) caught_inputs_ = enclosing_catches;
       if (cleanup != Type::void_type && cleanup != Type::never)
         fail(expr.at, "finally must complete with void or an explicit return");
-      for (const auto requirement : final_exits.declared) note_declared(requirement);
+      if (final_exits.declared_root) note_declared_root();
 
       const auto resume = [&](const SuspendedCompletion &entry, const LexicalState &completed, bool retain_return) {
         if (!entry.state->live || !completed.live) return false;
@@ -18772,10 +18771,8 @@ class ScalarChecker {
       continuations = normals;
       lexical_ = body_state;
     }
-    if (cleanup != Type::never || expr.kind == Expression::Kind::deferred) {
-      for (const auto requirement : incoming.declared) note_declared(requirement);
-      for (const auto requirement : outgoing.declared) note_declared(requirement);
-    }
+    if ((cleanup != Type::never || expr.kind == Expression::Kind::deferred) &&
+        (incoming.declared_root || outgoing.declared_root)) note_declared_root();
     for (size_t i = 0; i < continuations.size(); ++i) {
       const auto joined = lexical_;
       join(joined, i == 0, continuations[i], false, expr.at);
@@ -19988,7 +19985,7 @@ class ScalarChecker {
           forward_abrupt(path);
         }
       }
-      for (const auto requirement : flow.declared) note_declared(requirement);
+      if (flow.declared_root) note_declared_root();
       lexical_ = std::move(current);
       return resumed;
     };
@@ -22048,7 +22045,7 @@ class ScalarChecker {
         if (cause.kind != Type::exception && cause != Type::never) fail(expr.at, "explicit cause requires an exception value");
         note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       }
-      if (lexical_.live && type.kind == Type::exception && !type.identity) note_declared(declared_requirement(expr));
+      if (lexical_.live && type.kind == Type::exception && !type.identity) note_declared_root();
       const auto binding = forwarded ? forwarded : expr.children[0]->kind == K::name ? operations.at(expr.children[0].get()).place : std::optional<size_t>{};
       // An empty provisional result summary is not a non-returning contract.
       auto thrown = operation.exceptions;
@@ -22147,7 +22144,7 @@ class ScalarChecker {
               effects.symbols = path.state.required_symbols;
               effects.payload_writes = path.state.payload_writes;
               effects.present = path.state.input_facts.at(input).present;
-              effects.declared_failures = flow.declared;
+              effects.declared_root = flow.declared_root;
               for (const auto place : path.state.payload_writes) if (boolean_entry.contains(place))
                 effects.booleans[place] = snapshot_boolean(path.state.predicates.get(place), path.state, source.at);
               effects.returned.initialize(effects.initialized, effects.selections);
@@ -22480,7 +22477,6 @@ class ScalarChecker {
     initializing_reference_fields_.clear();
     abstract_operand_ = nullptr;
     literal_text_owner_.reset();
-    declared_requirements_.clear();
     loop_controls_.clear(); delayed_controls_.clear(); deferred_inputs_.clear(); active_loops_.clear();
     caught_.reset(); catch_bindings_.clear(); owned_catches_.clear(); caught_inputs_.clear();
     direct_exception_holders_.clear();
@@ -23199,7 +23195,7 @@ class ScalarChecker {
       if (scalar_exits) {
         abrupt_ = nullptr;
         if (!proving) return;
-        if (case_scan || !outcomes.declared.empty() || (completion != Type::never && lexical_.live))
+        if (case_scan || outcomes.declared_root || (completion != Type::never && lexical_.live))
           throw std::logic_error("scalar application reached an unplanned completion");
         for (const auto &path : outcomes.paths) {
           if (path.completion.reason != 1 || path.here_exit)
@@ -23224,7 +23220,7 @@ class ScalarChecker {
         if (std::any_of(instance.environment.begin(), instance.environment.end(),
               [](const auto &capture) { return capture.type.kind == Type::procedure; }))
           observe_outcome(Completion::failure(exception_id(ExceptionCategory::out_of_memory)).reason, incoming);
-        for (const auto requirement : outcomes.declared) note_declared(requirement);
+        if (outcomes.declared_root) note_declared_root();
         if (case_scan) {
           observed.case_scope_exits->scan = true;
           record_exit(0, method.at, *case_scan);
