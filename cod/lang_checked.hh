@@ -213,15 +213,23 @@ class ScalarChecker {
   std::map<size_t, std::optional<SymbolRequirementBound>> symbol_requirement_bounds_;
   bool symbol_selection_ready_ = false;
   mutable std::set<size_t> callable_effect_consumers_;
+  const Expression *extracting_leaf_primitive_ = nullptr;
   struct UnavailableBodyProof {};
   const std::vector<bool> *unavailable_body_proofs_ = nullptr;
   // Physical binding distinctness refines the proof for the same checked body.
   std::map<size_t, CallEffects> distinct_binding_effects_;
   const CallEffects &read_effects(size_t instance, bool distinct_bindings = false, bool symbols_covered = false,
                                  EffectUse use = EffectUse::all) const {
+    if (extracting_leaf_primitive_)
+      throw std::logic_error("closed leaf extraction reached an ordinary behavior dependency");
     if (unavailable_body_proofs_ && instance + 1 < unavailable_body_proofs_->size() &&
         (*unavailable_body_proofs_)[instance + 1])
       throw UnavailableBodyProof{};
+    const auto &body = program_.instances[instance];
+    if (body.effects_frozen) {
+      if (distinct_bindings) throw std::logic_error("frozen behavior has no binding variant");
+      return body.effects;
+    }
     auto &consumer = effect_dependents_[instance][checking_context_];
     // Keep every read over the write closure. One precise use prevents
     // suppressing a result change, even if other sites discard the value.
@@ -238,7 +246,7 @@ class ScalarChecker {
     if (distinct_bindings)
       if (const auto found = distinct_binding_effects_.find(instance); found != distinct_binding_effects_.end())
         return found->second;
-    return program_.instances[instance].effects;
+    return body.effects;
   }
   struct EnumValue {
     Type type;
@@ -22596,7 +22604,125 @@ class ScalarChecker {
       if (field.type == Type::boolean) seed_boolean_input(place, ordinal);
     }
   }
-  CallEffects check_instance(size_t i, bool distinct_bindings = false, TerminalFindings *terminal_findings = nullptr) try {
+  struct LeafBehaviorPlan {
+    const Expression *primitive = nullptr;
+    // Ordinary dependencies are retained as binding evidence. The leaf
+    // producer does not read their behavior, including a self dependency.
+    std::vector<std::pair<const Expression *, size_t>> pending;
+  };
+  bool bind_leaf_operations(const Expression &expr, TypeEvidenceState &scope, LeafBehaviorPlan &plan) const {
+    using K = Expression::Kind;
+    if (expr.definition || expr.receiving || expr.annotation || expr.checked_ref_argument ||
+        expr.spread || expr.scoped || expr.lexical_symbol_call) return false;
+    switch (expr.kind) {
+    case K::name:
+      return scope.bindings.contains(expr.text);
+    case K::block:
+    case K::boolean: case K::integer:
+    case K::grouped: case K::return_value: case K::return_tail:
+      break;
+    case K::conditional:
+      if (!expr.ordinary_braced_if()) return false;
+      break;
+    case K::pointer_group:
+      if (expr.declaration_kind != "val" || expr.children.size() != 1 ||
+          expr.children.front()->kind != K::pointer) return false;
+      break;
+    case K::pointer:
+      if (expr.declaration_kind != "val" || expr.children.size() != 1 ||
+          !expr.owner_name.empty() || !bind_leaf_operations(*expr.children.front(), scope, plan))
+        return false;
+      return scope.bindings.try_emplace(expr.text).second;
+    case K::unary: case K::binary: {
+      const auto operation = operation_name(expr, &scope);
+      // The ordinary checker still validates the selected builtin and all
+      // operand types. A visible source overload keeps this body legacy.
+      if ((operation != "!" && operation != "==") ||
+          !named_family(expr, &scope).methods.empty() || has_declarations(expr.text)) return false;
+      break;
+    }
+    case K::transfer:
+      if (!named_family(expr, &scope).methods.empty() || expr.children.size() != 2 ||
+          expr.children.front()->kind != K::name) return false;
+      break;
+    case K::call: {
+      if (expr.has_here_body() || expr.intrinsic) return false;
+      if (text_access(text_primitive(expr, &scope)) == BuiltinOperation::text_byte) {
+        if (plan.primitive || expr.children.size() != 2 || expr.children.front()->kind != K::string_literal)
+          return false;
+        plan.primitive = &expr;
+        return bind_leaf_operations(*expr.children[1], scope, plan);
+      } else {
+        const auto family = named_family(expr, &scope);
+        if (family.methods.size() != 1) return false;
+        plan.pending.emplace_back(&expr, family.methods.front());
+      }
+      break;
+    }
+    default:
+      return false;
+    }
+    return std::ranges::all_of(expr.children, [&](const auto &child) {
+      return bind_leaf_operations(*child, scope, plan);
+    });
+  }
+
+  std::optional<LeafBehaviorPlan> bind_leaf_behavior(size_t id) {
+    const auto &instance = program_.instances[id];
+    const auto &method = program_.methods[instance.method];
+    const auto &form = *method.source;
+    if (!form.ordinary_procedure() || form.symbolic || form.c_linkage || !method.operation.empty() ||
+        !form.body || form.body->kind != Expression::Kind::block || lexical_methods_.contains(&form) ||
+        method.parent || method.regional_initializer || method.lexical_result || method.scope_inputs ||
+        method.here_group || !method.here.empty() || !method.type_parameters.empty() ||
+        !method.throws_types.empty() || !instance.environment.empty() || !instance.incoming_abstract_targets.empty() ||
+        distinct_binding_effects_.contains(id) || form.result_type != Type::boolean ||
+        instance.result.mode != ResultMode::value || instance.result.type != Type::boolean) return {};
+
+    if (form.body->children.empty() || form.body->children.back()->kind != Expression::Kind::return_value)
+      return {};
+    const auto &parameters = method.input_parameters();
+    if (parameters.size() != instance.arguments.size()) return {};
+    TypeEvidenceState scope;
+    scope.method = instance.method;
+    bool borrowed = false;
+    for (size_t ordinal = 0; ordinal < parameters.size(); ++ordinal) {
+      const auto &parameter = parameters[ordinal];
+      const auto &type = instance.arguments[ordinal];
+      if (parameter.automatic_conversion || parameter.variadic || parameter.selects_caller_place()) return {};
+      if (argument_mode(parameter) != ArgumentMode::value) {
+        if (argument_mode(parameter) != ArgumentMode::borrowed_ref || parameter.read_only ||
+            type != Type::boolean || borrowed) return {};
+        borrowed = true;
+      } else if (type != Type::boolean && type != Type::uint64 && type != Type::uint8) return {};
+      if (!scope.bindings.emplace(parameter.name, type).second) return {};
+    }
+    if (!borrowed) return {};
+    for (const auto &owner : method.input_owners()) scope.symbol_shadows.insert(owner.name);
+
+    const ModuleLookup module(module_, method.module);
+    const ModuleLookup interpretation(interpretation_, method.interpretation);
+    LeafBehaviorPlan plan;
+    if (!bind_leaf_operations(*form.body, scope, plan)) return {};
+    return plan;
+  }
+
+  struct LeafExitEquation {
+    size_t reason;
+    Location origin;
+    LexicalState state;
+  };
+  void complete_leaf_exits(const LeafBehaviorPlan &leaf, const std::vector<LeafExitEquation> &exits) {
+    const auto bounds = Completion::failure(exception_id(ExceptionCategory::index_out_of_bounds)).reason;
+    for (const auto &exit : exits) {
+      if (exit.reason && (exit.reason != bounds || exit.origin != leaf.primitive->at))
+        throw std::logic_error("closed leaf extraction found an unbound exit");
+      observe_outcome(exit.reason, exit.state);
+    }
+  }
+
+  CallEffects check_instance(size_t i, bool distinct_bindings = false, TerminalFindings *terminal_findings = nullptr,
+                             const LeafBehaviorPlan *leaf = nullptr) try {
     checking_context_ = i + 1;
     auto &instance = program_.instances[i];
     checking_instance_ = &instance;
@@ -22607,6 +22733,11 @@ class ScalarChecker {
     const bool named_procedure = method.ordinary_procedure() && !method.name.empty() &&
         !checking_method_->here_group && !checking_method_->local_effect_symbol;
     bool possible_terminal_failure = false;
+    std::vector<LeafExitEquation> leaf_exits;
+    const auto record_exit = [&](size_t reason, const Location &origin, const LexicalState &state) {
+      if (leaf) leaf_exits.push_back({reason, origin, state});
+      else observe_outcome(reason, state);
+    };
     check_flow([&](bool proving) {
       begin_check(instance.storage, instance.bindings, instance.operations, proving);
       possible_terminal_failure = false;
@@ -22820,19 +22951,20 @@ class ScalarChecker {
         for (const auto requirement : outcomes.declared) note_declared(requirement);
         if (case_scan) {
           observed_.case_scope_exits->scan = true;
-          observe_outcome(0, *case_scan);
+          record_exit(0, method.at, *case_scan);
         }
         if (completion != Type::never && lexical_.live) {
           if (observed_.case_scope_exits && !requires_return) observed_.case_scope_exits->result = true;
           const auto reason = requires_return ? Completion::failure(exception_id(ExceptionCategory::missing_return)).reason :
               method.case_scan_scope ? size_t{1} : size_t{0};
-          observe_outcome(reason, lexical_);
+          record_exit(reason, method.at, lexical_);
         }
         const auto normal = lexical_;
         std::set<size_t> unproved_owners;
         for (const auto &path : outcomes.paths) {
           if (observed_.case_scope_exits && path.completion.reason == 1) observed_.case_scope_exits->result = true;
-          observe_outcome(path.completion.reason == 1 && !method.case_scan_scope ? 0 : path.completion.reason, path.state);
+          record_exit(path.completion.reason == 1 && !method.case_scan_scope ? 0 : path.completion.reason,
+                      path.at, path.state);
           bool collected = false;
           if (path.completion.exception()) {
             // Export the proof, without callee-local selection conditions or operand indices.
@@ -22863,6 +22995,13 @@ class ScalarChecker {
         lexical_ = normal;
       }
     });
+    if (leaf) {
+      const auto &operation = instance.operations.at(leaf->primitive);
+      if (operation.builtin != BuiltinOperation::text_byte || operation.callee)
+        throw std::logic_error("closed leaf primitive disagrees with its binding plan");
+      // Application and summary publication cannot start during extraction.
+      complete_leaf_exits(*leaf, leaf_exits);
+    }
     if (!validating_) {
       const auto profile = std::pair{i, distinct_bindings};
       if (possible_terminal_failure) possible_terminal_failures_.insert(profile);
@@ -23182,6 +23321,30 @@ class ScalarChecker {
     }
     return changes;
   }
+  void freeze_leaf_behaviors() {
+    if (definition_pass_) return;
+    struct SelectedLeaf {
+      size_t instance;
+      LeafBehaviorPlan plan;
+    };
+    std::vector<SelectedLeaf> bound;
+    for (size_t id = 0; id < program_.instances.size(); ++id) {
+      auto plan = bind_leaf_behavior(id);
+      if (plan && plan->primitive && plan->pending.empty()) bound.push_back({id, std::move(*plan)});
+    }
+    for (const auto &[id, plan] : bound) {
+      struct ExtractionScope {
+        const Expression *&active;
+        ~ExtractionScope() { active = nullptr; }
+      } scope{extracting_leaf_primitive_};
+      extracting_leaf_primitive_ = plan.primitive;
+      auto completed = check_instance(id, false, nullptr, &plan);
+      auto &instance = program_.instances[id];
+      instance.effects = std::move(completed);
+      instance.effects_frozen = true;
+    }
+  }
+
   bool close_effects(bool reads) {
     closing_write_effects_ = !reads;
     closing_read_effects_ = reads;
@@ -23193,6 +23356,7 @@ class ScalarChecker {
     std::deque<size_t> pending;
     std::set<size_t> queued;
     const auto enqueue = [&](size_t context) {
+      if (context && program_.instances[context - 1].effects_frozen) return;
       if (queued.insert(context).second) pending.push_back(context);
     };
     enqueue(0);
@@ -25057,13 +25221,16 @@ class ScalarChecker {
       if (definition_pass_ ? !abstract_effect_input : abstract_effect_input && !method.c_linkage) continue;
       demand(i, program_.methods[i].parameters, method.at);
     }
+    freeze_leaf_behaviors();
     check_entry();
     // Write guarantees use a greatest fixed point, with returned selections
     // and value categories joining before read requirements close. Narrower
     // callees require fresh assumptions for recursive cycles.
     for (;;) {
       effect_dependents_.clear(); callable_effect_consumers_.clear();
-      for (auto &instance : program_.instances) instance.effects = initial_effects(program_.methods[instance.method], instance.arguments);
+      for (auto &instance : program_.instances)
+        if (!instance.effects_frozen)
+          instance.effects = initial_effects(program_.methods[instance.method], instance.arguments);
       for (auto &[id, effects] : distinct_binding_effects_) effects = program_.instances[id].effects;
       close_effects(false);
       if (!close_effects(true)) continue;
