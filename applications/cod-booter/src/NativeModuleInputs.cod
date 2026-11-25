@@ -47,12 +47,12 @@ export proc bundled_directory_use(
 
 # The probe reports max u64 for an absent entry, zero for a directory entry,
 # and an OS error otherwise. Canonicalization happens after selection.
-export proc "C" probe_package_module(
+export func "C" probe_package_module(
     root:const SourceBytes in R, root_first:u64, root_past:u64,
     module:const SourceBytes in M, first:u64, past:u64)
     -> u64 where {const owner R, const owner M};
 
-export proc "C" prepare_package_module(
+export func "C" prepare_package_module(
     handle destination:PathOwner in D, root:const SourceBytes in R,
     root_first:u64, root_past:u64, module:const SourceBytes in M, first:u64, past:u64)
     -> u64 where {owner D, const owner R, const owner M};
