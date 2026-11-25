@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Account for a local installation across a synchronous here call
+
+<a id="k-seed-live-handler-local-here-supply-20261125"></a>
+**K-SEED-LIVE-HANDLER-LOCAL-HERE-SUPPLY-20261125.** The [implementation review](design/ImplementationArchitecture.md#local-symbol-supply-through-a-direct-here-call) continues D-ARCH-REVIEW r188→189 under the [family replay decision](#h-perform-family-capture-20261125). At `bba9a1d0:cod/lang_checked.hh` the completed-frame fallback stops at a live handler’s `perform` even when its helper supplies the callback’s only read. Reuse the bound receiver and outlined callback to account for that local supply. The paired unmasked use still requires an activation-time snapshot. The recursive module-graph handler remains under the r188 compatibility gate.
+
 ## 2026-11-25 — Review empty replay and unused snapshot storage in live handlers
 
 <a id="k-seed-live-handler-compatibility-20261125"></a>
