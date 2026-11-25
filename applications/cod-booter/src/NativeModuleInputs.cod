@@ -1,20 +1,34 @@
 using "./CompilerStatus.cod" CompilerStatus;
-using "./NativeSource.cod" { Path, PathOwner };
+using "./NativeSource.cod" PathOwner;
 using "./SourceStorage.cod" SourceBytes;
 using "std:exceptions" Exception;
 
-export handle type PackageInputCapture;
-export data PackageCaptureException <: Exception { os_error:u64; }
+export handle type DirectorySnapshot;
+export data DirectoryStorageException <: Exception { os_error:u64; }
 
-proc "C" PackageInputCapture(handle entry:Path in A) throws PackageCaptureException
-    where {const owner A};
+proc "C" DirectorySnapshot() throws DirectoryStorageException;
 
-export func "C" package_capture_status(handle capture:PackageInputCapture in C) -> u64
-    where {const owner C};
+export proc "C" probe_directory(path:const SourceBytes in B, used:u64)
+    -> u64 where {const owner B};
 
-export proc "C" use_package_capture(
-    here work(output:const SourceBytes in C, diagnostics:const SourceBytes in C) -> CompilerStatus,
-    handle capture:PackageInputCapture in C) -> CompilerStatus where {const owner C};
+export proc "C" read_directory(handle snapshot:DirectorySnapshot in D, path:const SourceBytes in B, used:u64)
+    -> u64 where {owner D, const owner B};
+
+export func "C" directory_name_count(handle snapshot:DirectorySnapshot in D)
+    -> u64 where {const owner D};
+export func "C" directory_name_size(handle snapshot:DirectorySnapshot in D, index:u64)
+    -> u64 where {const owner D};
+export proc "C" select_directory_name(handle snapshot:DirectorySnapshot in D, index:u64)
+    -> u64 where {owner D};
+proc "C" use_directory_name_loan(
+    here work(name:const SourceBytes in D) -> CompilerStatus,
+    handle snapshot:DirectorySnapshot in D) -> CompilerStatus where {const owner D};
+
+export proc use_directory_name(
+    here work(name:const SourceBytes in D) -> CompilerStatus,
+    handle snapshot:DirectorySnapshot in D) -> CompilerStatus where {const owner D} {
+    return use_directory_name_loan(snapshot) (name) => { continue work(name) }
+}
 
 export handle type BundledDirectory;
 export data BundledDirectoryException <: Exception { os_error:u64; }

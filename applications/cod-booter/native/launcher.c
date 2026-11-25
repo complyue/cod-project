@@ -423,7 +423,6 @@ static void report_package(const cod_booter_package_diagnostic *diagnostic) {
     case package_lookup_failure: fputs("could not inspect or open package module '", stderr); break;
     case package_input_failure: fputs("could not load package inputs for module '", stderr); break;
     case invalid_module_path: fputs("invalid source module path '", stderr); break;
-    case package_process_failure: fputs("paired codp failed for module '", stderr); break;
     }
     write_path_bytes(spelling, diagnostic->spelling_size);
     fputc('\'', stderr);
@@ -439,8 +438,7 @@ static void report_package(const cod_booter_package_diagnostic *diagnostic) {
         fputc('\'', stderr);
     }
     if (diagnostic->os_error)
-        fprintf(stderr, diagnostic->kind == package_process_failure
-            ? " (producer status %" PRIu64 ")" : " (system error %" PRIu64 ")", diagnostic->os_error);
+        fprintf(stderr, " (system error %" PRIu64 ")", diagnostic->os_error);
     fputc('\n', stderr);
 }
 

@@ -42,7 +42,6 @@ enum {
     package_lookup_failure,
     package_input_failure,
     invalid_module_path,
-    package_process_failure,
 };
 
 typedef enum {
