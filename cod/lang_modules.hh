@@ -2,10 +2,13 @@
 #pragma once
 
 #include "lang_diagnostics.hh"
-#include "codp_module_inputs.hh"
 
+#include <algorithm>
+#include <filesystem>
 #include <map>
+#include <optional>
 #include <set>
+#include <vector>
 
 namespace cod::language {
 
@@ -41,7 +44,7 @@ class ModuleLoader {
   SourceProgram program_;
   ModuleSearchInputs search_;
   CompilationDiagnostics &diagnostics_;
-  std::optional<std::vector<cod::project::PackageSourceRoot>> packages_;
+  std::optional<std::vector<std::filesystem::path>> package_roots_;
   std::map<std::filesystem::path, size_t> paths_;
   std::set<size_t> scanning_;
   struct Pending { size_t module, next_form = 0; };
@@ -59,29 +62,64 @@ class ModuleLoader {
     }
   }
 
-  static bool claim(const std::filesystem::path &file, const Location &at) {
+  static bool claim(const std::filesystem::path &file, const Location &at,
+                    std::string_view description = "CoD module") {
     std::error_code error;
     const auto status = std::filesystem::symlink_status(file, error);
     if (status.type() == std::filesystem::file_type::not_found) return false;
-    if (error) fail(at, "cannot inspect CoD module '" + file.string() + "': " + error.message());
+    if (error) fail(at, "cannot inspect " + std::string(description) + " '" + file.string() + "': " + error.message());
     return std::filesystem::exists(status);
   }
 
-  const std::vector<cod::project::PackageSourceRoot> &packages(const Location &at) {
-    if (!packages_) {
+  std::vector<std::filesystem::path> read_package_roots(const Location &at) const {
+    namespace fs = std::filesystem;
+    auto project = search_.project;
+    fs::path marker;
+    if (project.empty()) {
+      // A relative child can request the first logical edge. The original
+      // entry still supplies the starting directory for package discovery.
+      for (auto directory = program_.modules.front().path.parent_path(); !directory.empty();) {
+        const auto candidate = directory / ".cod" / "packages";
+        if (claim(candidate, at, "prepared package directory")) {
+          project = directory;
+          marker = candidate;
+          break;
+        }
+        const auto parent = directory.parent_path();
+        if (parent == directory) break;
+        directory = parent;
+      }
+    } else {
+      if (!fs::is_directory(project))
+        fail(at, "expected a project directory at '" + project.string() + "'");
+      const auto candidate = project / ".cod" / "packages";
+      if (claim(candidate, at, "prepared package directory")) marker = candidate;
+    }
+    if (project.empty()) return {};
+
+    std::vector<fs::path> roots{project};
+    if (!marker.empty()) {
+      if (!fs::is_directory(marker))
+        fail(at, "expected a prepared package directory at '" + marker.string() + "'");
+      for (const auto &entry : fs::directory_iterator(marker))
+        if (entry.is_directory()) roots.push_back(entry.path());
+      // Order only the evidence reported for multiple claims.
+      std::sort(roots.begin() + 1, roots.end());
+    }
+    return roots;
+  }
+
+  const std::vector<std::filesystem::path> &package_roots(const Location &at) {
+    if (!package_roots_) {
       try {
-        const auto root = search_.project.empty()
-            ? cod::project::find_source_project(program_.modules.front().path)
-            : std::optional{search_.project};
-        packages_ = root ? cod::project::checked_package_sources(*root)
-                         : std::vector<cod::project::PackageSourceRoot>{};
+        package_roots_ = read_package_roots(at);
       } catch (const std::bad_alloc &) {
         throw;
       } catch (const std::exception &error) {
         fail(at, error.what());
       }
     }
-    return *packages_;
+    return *package_roots_;
   }
 
   std::filesystem::path resolve_dependency(const SourceModule &module, const Form &form) {
@@ -93,8 +131,8 @@ class ModuleLoader {
     }
     if (!namespace_path(requested)) fail(form.at, "invalid package module path '" + form.path + "'");
     std::optional<std::filesystem::path> selected;
-    for (const auto &package : packages(form.at)) {
-      const auto path = package.directory / form.path;
+    for (const auto &root : package_roots(form.at)) {
+      const auto path = root / form.path;
       if (!claim(path, form.at)) continue;
       if (selected)
         fail(form.at, "ambiguous package module '" + form.path + "' claimed by '" +
