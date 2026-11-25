@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Clarify which writes a caller must prove
+
+<a id="k-ordinary-ref-write-facts-20261125"></a>
+**K-ORDINARY-REF-WRITE-FACTS-20261125.** D-ARCH-REVIEW r160→161 continues P-682/P-683. The project user questioned the value of tracking completed ordinary `ref` writes in the [design side discussion](codex://threads/01a212f2-09c5-7951-994a-e2663ec9a088). The [clarification](design/ImplementationArchitecture.md#consuming-completed-callee-behavior) qualifies the general instruction to record ordered writes in `79140a20:design/ImplementationArchitecture.md`. It distinguishes runtime visibility, invalidation of a caller fact by possible mutation, and the successful-completion obligation of [an `init` parameter](design/ConstructionAndAcquisition.md#bounded-init-obligations-and-nullability). The bounded seed proof remains an example of a caller that uses stronger evidence under the [existing phase rule](#h-completed-callee-behavior-20261125).
+
 ## 2026-11-25 — Remove local payload-read proof work from trusted seed translation
 
 <a id="k-seed-local-payload-read-obligations-20261125"></a>
