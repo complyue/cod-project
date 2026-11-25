@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Verify booter diagnostic traversal and peak memory on the compiler entry
+
+<a id="k-booter-entry-world-release-20261124"></a>
+**K-BOOTER-ENTRY-WORLD-RELEASE-20261124.** D-20-BOOTSTRAP r32→33 and D-20-WORLD-DIAGNOSTICS r30, continued under P-642/P-643 and P-713/P-714. Both builds at `2bc0e290:applications/cod-booter/src/ModuleGraph.cod` passed the [fixture memory budgets](applications/cod-booter/README.md#compiler-memory-acceptance), 22 workloads and 38 declaration/provider comparisons. Both report the five [entry-world acceptance findings](applications/cod-booter/README.md#diagnostic-coverage-of-the-entry-modules-fused-world) and distinguish exact from incomplete coverage at the cap. On the actual compiler entry, the three independent source-command findings retain 501, one and one import notes respectively. This release covers failing self-input through all 63 files. Successful self-compilation remains open.
+
 ## 2026-11-24 — Review local sum construction in the package resolver
 
 <a id="k-booter-local-sum-transfer-20261124"></a>
