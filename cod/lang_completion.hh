@@ -1328,7 +1328,8 @@ private:
     }
     return result;
   }
-  Effects compose(const Effects &first, const Effects &second) const {
+  template <typename Next>
+  Effects compose(const Effects &first, Next &&second) const {
     auto result = first;
     result.reaching = intersect_reaching(first.reaching, second.reaching);
     if (result.reaching.empty()) return result;
@@ -1344,7 +1345,9 @@ private:
       }, false, true);
       result.action_reaching = intersect_reaching(first.action_reaching, lifted);
     }
-    auto next = second;
+    result.unknown_thrown = first.unknown_thrown || second.unknown_thrown || second.thrown.reads_unknown(first.payloads) ||
+        std::ranges::any_of(second.queued_failures, [&](const auto &value) { return value.reads_unknown(first.payloads); });
+    auto next = std::forward<Next>(second);
     next.returned.substitute(first.selections);
     const auto observed = project_observed_return(next, first.returned, first.selections);
     next.resolve_conditions([&](size_t binding) -> std::optional<Targets> {
@@ -1362,11 +1365,9 @@ private:
     result.returned.initialize_from_observation(next.selections);
     result.returned.advance(next.selections);
     result.selections.then(next.selections, result.initialized);
-    result.unknown_thrown = first.unknown_thrown || second.unknown_thrown || second.thrown.reads_unknown(first.payloads) ||
-        std::ranges::any_of(second.queued_failures, [&](const auto &value) { return value.reads_unknown(first.payloads); });
     result.returned.then(next.returned);
     result.returned.initialize(result.initialized, result.selections);
-    result.thrown = next.thrown;
+    result.thrown = std::move(next.thrown);
     result.queued_failures = std::move(next.queued_failures);
     for (auto &[target, value] : next.payloads) result.payloads[target] = std::move(value);
     for (auto &[target, value] : next.booleans) result.booleans[target] = std::move(value);
@@ -1374,9 +1375,10 @@ private:
       result.transform_conditions([&](const auto &clauses) { return conjoin_conditions(clauses, result.reaching); });
     return result;
   }
-  bool merge(Outcomes &result, DrainState completion, const Effects &effects) const {
+  template <typename Incoming>
+  bool merge(Outcomes &result, DrainState completion, Incoming &&effects) const {
     if (!effects.selections.possible || effects.reaching.empty()) return false;
-    auto [found, inserted] = result.try_emplace(completion, effects);
+    auto [found, inserted] = result.try_emplace(completion, std::forward<Incoming>(effects));
     if (inserted) return true;
     auto &known = found->second;
     const auto previous_reads = known.reads;
@@ -1567,7 +1569,7 @@ public:
               invoked.enter_selection_guards(*node.action);
               invoked.transform_conditions([&](const auto &clauses) { return enter_conditions(clauses, *node.action); });
               invoked.action_reaching = enter_conditions(invoked.action_reaching, *node.action);
-              merge(visited, intermediate, compose(prefix, invoked));
+              merge(visited, intermediate, compose(prefix, std::move(invoked)));
             }
           }
         };
