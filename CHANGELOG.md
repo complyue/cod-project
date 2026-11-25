@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Finalize a scalar caller after its module names are available
+
+<a id="k-seed-scalar-caller-name-finalization-20261125"></a>
+**K-SEED-SCALAR-CALLER-NAME-FINALIZATION-20261125.** D-ARCH-REVIEW r178→179 continues [scalar frame reuse](#k-seed-completed-scalar-frames-20261125) for the already admitted direct calls to completed byte literal functions. At `71cf4246:cod/lang_checked.hh`, module entry can introduce a value after the caller frame has been prepared. The [reviewed finalizer](design/ImplementationArchitecture.md#reusing-a-completed-scalar-frame) checks the caller’s written call names in their original lookup context and preserves ordinary diagnostic ordering. Implementation and acceptance belong to mainline.
+
 ## 2026-11-25 — Reuse completed call-free scalar frames at final validation
 
 <a id="k-seed-completed-scalar-frames-20261125"></a>
