@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 222
+Discussion revision: 223
 
 Recorded: 2026-11-25
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r223 the [fixed receiver binding](../CHANGELOG.md#h-fixed-self-binding-20261125) specifies the callee-local slot for every OO receiver under [D-07-MEMBER-RECEIVER](DesignAuthorityRegistry.md#d-07-member-receiver), P-724/P-725. The r222 source heads and type-carried dispatch continue. Apply the existing [independent slot and target qualifiers](RegionalOwnership.md#independent-binding-and-target-qualifiers). Check rebinding in both access modes and a field update through a writable receiver.
 
 At r222 the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) qualifies the sole declaration head for a data call operator under [D-07-MEMBER-RECEIVER](DesignAuthorityRegistry.md#d-07-member-receiver), P-724/P-725. It supersedes the two-source-form provision of [r218](../CHANGELOG.md#h-functor-receiver-sugar-20261124). P-636/P-637 continue for family identity and dispatch. Check both callable kinds, declarations and definitions, preserving the implicit dispatch argument, receiver access and actual owner. Ordinary operator declarations keep their own grammar. [Acceptance and implementation plan](ImplementationArchitecture.md#oo-call-operator-implementation-plan)
 
@@ -572,14 +574,18 @@ In a single-brace arm, `break v;` can finish the case from any ordinary nested s
 
 A field accessor is declared with `func T.@name()` and read as `x.name`. A member method is declared with `func T.name(...)` and called as `x.name(...)`. Both receive the initialized target selected by `x` as their implicit first argument, `self`. Write `const` immediately before the receiver type for readonly access. Omitting it requires writable access in either form. The declaration marker `@` identifies an accessor in this position. Reading the member uses its receiver without looking up a dynamic symbol.
 
-| Declaration head | Use | Equivalent receiver formal |
+| Declaration head | Use | Implicit callee-local binding |
 | --- | --- | --- |
-| `func const T.@label()` | `x.label` | `ref self:const T in O` |
-| `func T.@label()` | `x.label` | `ref self:T in O` |
-| `func const T.inspect(n:u64)` | `x.inspect(n)` | `ref self:const T in O` |
-| `func T.update(n:u64)` | `x.update(n)` | `ref self:T in O` |
+| `func const T.@label()` | `x.label` | `const ref self:const T in O` |
+| `func T.@label()` | `x.label` | `const ref self:T in O` |
+| `func const T.inspect(n:u64)` | `x.inspect(n)` | `const ref self:const T in O` |
+| `func T.update(n:u64)` | `x.update(n)` | `const ref self:T in O` |
+| `func const T.(())(n:u64)` | `x(n)` | `const ref self:const T in O` |
+| `proc T.(())(n:u64)` | `x(n)` | `const ref self:T in O` |
 
-Here O denotes the actual owner of the receiver in the equivalent signature. The table introduces no implicit source name for that owner. Prepare the receiver once, before the written arguments, under ordinary reference and completion rules. If a later argument rebinds the source slot, the call keeps the already selected target. If preparation fails, its later effects and the member body do not execute. A readonly target admits a readonly receiver. A fixed reference slot can still supply a writable target. For overloads otherwise identical, ordinary receiver-access ranking gives the writable match to a writable target. [Reference parameters](RegionalOwnership.md#owner-qualified-reference-arguments) · [Call-operator precedent](#functor-receivers-and-callback-arguments)
+The leading `const ref` fixes the callee’s reference slot at entry for the whole invocation. A rebinding such as `self = other` is a source error even when `other` has the same type and actual owner. The slot also cannot be supplied to a helper that requires a rebindable reference slot. With a writable receiver, `self.n <- step` can update a writable field on the selected object. With a readonly receiver that write is a source error. The slot qualifier follows the ordinary callee-local parameter rule and adds no overload distinction.
+
+Here O denotes the actual owner of the receiver. The table introduces no implicit source name for that owner. Prepare the receiver once, before the written arguments, under ordinary reference and completion rules. If a later argument rebinds the source slot, the call keeps the already selected target. If preparation fails, its later effects and the member body do not execute. A readonly target admits a readonly receiver. A fixed reference slot can still supply a writable target. For overloads otherwise identical, ordinary receiver-access ranking gives the writable match to a writable target. [Reference parameters](RegionalOwnership.md#owner-qualified-reference-arguments) · [Call-operator precedent](#functor-receivers-and-callback-arguments)
 
 Receiver access, result access and allocation permission have separate contracts. A writable accessor returning `u64` supplies independent bits. Its receiver qualifier alone supplies no setter or destination for a write to the property. A borrowed result keeps its declared mode, target access and actual owner. `Exception.cause` already selects a nullable readonly target under the receiver’s owner. In contrast, `tip` belongs to the individual catch binding. Passing the matched object to a method supplies the ordinary receiver and its owner. Access to that catch’s incoming tip requires selecting it at the catch binding. [Call results](ScalarCallResults.md) · [Exception cause](ExceptionControl.md#returning-a-locally-caught-exception) · [Catch-binding tip](ExceptionControl.md#the-catch-bindings-readonly-tip-field)
 
@@ -600,7 +606,7 @@ A writable accessor can change its receiver. Two evaluated reads of `counter.nex
 
 A functor is a here callable when its receiver supplies a compatible call operator to a here parameter. A direct call such as `limit(12u64)` invokes that operator on the data receiver. The selected method retains its own func/proc permissions. The here use grants bounded access to the receiver and carries no permission for its method body to read arbitrary caller locals.
 
-Declare a data call operator with an OO receiver head followed by `.(())`. This grammar applies to both `func` and `proc`, in signature-only declarations and in definitions. The head introduces `self`, an implicit reference to the initialized receiver. It is the first internal dispatch argument. The parameter list after `.(())` contains only the caller’s explicit arguments. An explicit formal named `self` would duplicate the binding.
+Declare a data call operator with an OO receiver head followed by `.(())`. This grammar applies to both `func` and `proc`, in signature-only declarations and in definitions. The head introduces `self` as a fixed reference to the initialized receiver, with the [same slot and target qualifiers as other OO members](#receivers-in-field-accessors-and-member-methods). It is the first internal dispatch argument. The parameter list after `.(())` contains only the caller’s explicit arguments. An explicit formal named `self` would duplicate the binding.
 
 ```cod
 data Threshold { minimum:u64 }
@@ -645,7 +651,7 @@ Locate the bare operator head and suggest this declaration:
 func (const Threshold in O).(())(x:u64, y:u64) -> bool where {const owner O};
 ```
 
-Move the receiver type, its access and its owner into the head. Keep the callable kind, remaining arguments in order, result, constraints and any body. Apply this diagnostic to definitions as well as promises, including `proc`. The explicit owner survives even when the method returns independent bits. Ordinary operators such as `func (+)(...)` and `func (|>)(...)` keep their existing declaration syntax.
+Move the receiver type, its access and its owner into the head. Keep the callable kind, remaining arguments in order, result, constraints and any body. Apply this diagnostic to definitions as well as promises, including `proc`. Check the body with the fixed `self` binding after rewriting the head. Any assignment that rebinds `self` still requires a source correction. The explicit owner survives even when the method returns independent bits. Ordinary operators such as `func (+)(...)` and `func (|>)(...)` keep their existing declaration syntax.
 
 For a predicate with one u64 input, `test` has **two outer parameters**. Its first parameter is itself callable.
 

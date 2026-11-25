@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Fix the implicit OO receiver binding at entry
+
+<a id="h-fixed-self-binding-20261125"></a>
+**H-FIXED-SELF-BINDING-20261125.** The project user specified “`self` 参数内部应该声明为 `const ref self:Type`” to prevent accidental `=` rebinding. [D-07 r222→223](design/DomainLanguageDesign.md#receivers-in-field-accessors-and-member-methods) corrects the receiver table at `27323666:design/DomainLanguageDesign.md`. P-724/P-725 continue for visible target access and receiver identity. Apply leading `const ref` to writable and readonly targets alike in accessors, named members and call operators. The [OO source decision](#h-oo-call-operator-head-20261125) and the [queued implementation order](design/ImplementationArchitecture.md#oo-call-operator-implementation-plan) continue.
+
 ## 2026-11-25 — Bound the first regional fixture migration
 
 <a id="k-shilos-native-fixture-boundary-20261125"></a>
