@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Remove hypothetical deferred failures from trusted translation
+
+<a id="k-seed-deferred-coverage-removal-20261125"></a>
+**K-SEED-DEFERRED-COVERAGE-REMOVAL-20261125.** Following the ordinary terminal coverage removal at `42ca800c:cod/lang_checked.hh`, D-ARCH-REVIEW r152→153 continues P-682/P-683 under the [trusted-source decision](#h-trusted-seed-translation-20261125). The [cleanup review](design/ImplementationArchitecture.md#removing-hypothetical-failures-from-seed-cleanup-analysis) clears removal of synthetic declared-root arrivals and their source-coverage flags in `42ca800c:cod/lang_completion.hh`. The ordered reasons and payloads for actual failures, the cyclic model limit and D-17’s completed-pass language rule retain their existing scope. The [seed-first work order](#h-seed-performance-first-20261125) continues.
+
 ## 2026-11-25 — Finish the seed performance task before verifying booter behavior
 
 <a id="h-seed-performance-first-20261125"></a>

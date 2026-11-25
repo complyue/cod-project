@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r153 the [deferred coverage review](../CHANGELOG.md#k-seed-deferred-coverage-removal-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), P-682/P-683 and the r149 trusted-source contract. [D-17-DEFER-DISPATCH](DesignAuthorityRegistry.md#d-17-defer-dispatch) governs the ordering and handling of actual exceptions. The r152 seed-first work order governs acceptance.
+
 At r152 the [project user’s sequencing decision](../CHANGELOG.md#h-seed-performance-first-20261125) places booter behavior work after seed performance acceptance. [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues P-682/P-683 and the r149 trusted-source contract. The [terminal coverage review](#removing-terminal-checked-exception-diagnostics) applies that ordering to the next seed removal.
 
 At r151 the [project user’s workflow decision](../CHANGELOG.md#h-evaluate-the-intended-state-20261125) orders evaluation by the decision it serves and the state that decision concerns. The seed cutover applies it to performance testing after verifier-only work has been removed. [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues P-682/P-683, the [trusted-source contract](../applications/cod-booter/README.md#trusted-source-and-the-seed) and its correctness acceptance.
@@ -615,6 +617,14 @@ In `e8225a21:cod/lang_checked.hh`, `possible_terminal_failures_` feeds a plan th
 Keep the exit facts used to translate ordinary and supplied calls. Each drained path still records its completion and ownership, active flows still reach their handlers, and an implicit or supplied scope still propagates its checked categories and nonlocal transfers. Retain ordinary final frame and operation materialization, including instances discovered during that traversal. The shared-proof-change flag serves the diagnostic replay plan. Its callers also update live translator state, which must still take effect. The separate native feedback check and the checks inside the cleanup drain remain for their own consumer audit.
 
 Mainline can implement this removal. Compare emitted LLVM and C interfaces on valid source and use focused seed-generated programs for a caught failure after cleanup and a failure during operand preparation. Preserve translation warnings, their promotion and old outputs when emission fails. The existing booter observations can stay in the worklog. Booter diagnostic coverage and runtime regression suites belong to the later booter work.
+
+#### Removing hypothetical failures from seed cleanup analysis
+
+At `42ca800c:cod/lang_completion.hh`, a deferred call declaring the root exception causes `CleanupEquations::apply` to try every concrete category against the remaining queue. Only two source-coverage flags return from those hypothetical paths. Remove that expansion, the coverage tag on pending occurrences, the root-only catch marker, and the associated flag propagation and reports. Preserve the actual catch category set, including the categories selected by a root catch. Keep `declared_failures` for now because `finish_scope` also consults it when applying an action's reachability conditions.
+
+The concrete pending reason and its payload must stay at the same queue index. A bodyless handler visits the incoming occurrences in order. A failure raised by that handler goes behind the incoming suffix. Keep the existing summary for a queue without a handler, the separate original body failure, terminal status and residual aggregate generation. An actual cyclic registration that exceeds the model's depth leaves a truncated outcome. Carry its `unproved` bit through nested and remaining queues to the located translation stop, after the existing reachability filters. This bit belongs to the drain-state key. The discarded hypothetical paths need no corresponding stop. Retain the native feedback contract for its own audit.
+
+Mainline can implement this seed-only removal. Compare the existing valid `NativeSource.cod` and `Compiler.cod` LLVM and provider outputs. Focused emitted programs should distinguish a root-declared call that returns normally from one whose nominal payload reaches the registered handler. Exercise two actual occurrences, early operand failure, finally and the existing cyclic model limit with prior output preserved. Reuse existing cases where they cover those paths. The [seed work order](#seed-checker-migration-and-performance-acceptance) applies.
 
 #### When parallel module processing would help
 
