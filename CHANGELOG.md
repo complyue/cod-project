@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Review sharing of per-origin completion inputs
+
+<a id="k-seed-completion-input-layers-20261125"></a>
+**K-SEED-COMPLETION-INPUT-LAYERS-20261125.** D-ARCH-REVIEW r143→144 continues P-682/P-683. At `dfb050fc:cod/lang_checked.hh:5962`, the cleanup join consults the incoming branches as well as their per-origin rows. The [reviewed representation](design/ImplementationArchitecture.md#sharing-per-origin-completion-inputs) shares snapshots while preserving that join and the original remap and scope-drain order. The [whole-seed migration](#h-seed-migration-completion-20261125) remains open.
+
 ## 2026-11-25 — Preserve the micro-dispatch experiment at its historical revision
 
 <a id="k-shilos-dispatch-experiment-archive-20261125"></a>
