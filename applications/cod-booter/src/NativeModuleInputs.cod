@@ -6,21 +6,21 @@ using "std:exceptions" Exception;
 export handle type DirectorySnapshot;
 export data DirectoryStorageException <: Exception { os_error:u64; }
 
-proc "C" DirectorySnapshot() throws DirectoryStorageException;
+func "C" DirectorySnapshot() throws DirectoryStorageException;
 
-export proc "C" probe_directory(path:const SourceBytes in B, used:u64)
+export func "C" probe_directory(path:const SourceBytes in B, used:u64)
     -> u64 where {const owner B};
 
-export proc "C" read_directory(handle snapshot:DirectorySnapshot in D, path:const SourceBytes in B, used:u64)
+export func "C" read_directory(handle snapshot:DirectorySnapshot in D, path:const SourceBytes in B, used:u64)
     -> u64 where {owner D, const owner B};
 
 export func "C" directory_name_count(handle snapshot:DirectorySnapshot in D)
     -> u64 where {const owner D};
 export func "C" directory_name_size(handle snapshot:DirectorySnapshot in D, index:u64)
     -> u64 where {const owner D};
-export proc "C" select_directory_name(handle snapshot:DirectorySnapshot in D, index:u64)
+export func "C" select_directory_name(handle snapshot:DirectorySnapshot in D, index:u64)
     -> u64 where {owner D};
-proc "C" use_directory_name_loan(
+func "C" use_directory_name_loan(
     here work(name:const SourceBytes in D) -> CompilerStatus,
     handle snapshot:DirectorySnapshot in D) -> CompilerStatus where {const owner D};
 
