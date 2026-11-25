@@ -1,10 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 265 · Recorded: 2026-11-25 · Phase: language/application co-design.
+Design revision: 266 · Recorded: 2026-11-25 · Phase: language/application co-design.
 
 ## Design authority
 
-At r265 [D-10-FAMILY-EFFECT-REQUIREMENTS](DesignAuthorityRegistry.md#d-10-family-effect-requirements) records the [project user’s pre-2.0 compiler policy](../CHANGELOG.md#h-family-effect-requirements-20261125). P-738/P-739 connect first-release maturity to a conservative family-wide check and preserve nominal symbol identity, handler capture, dispatch and binding lifetime. The [acceptance example](#family-wide-effect-requirements-before-20) distinguishes a missing symbol in an unselected overload from an unrelated module’s family.
+At r266 [D-10-FAMILY-EFFECT-REQUIREMENTS](DesignAuthorityRegistry.md#d-10-family-effect-requirements) records the [project user’s scope correction](../CHANGELOG.md#h-booter-branch-local-effect-requirements-20261125) to r265. The booter applies the pre-2.0 admission rule. Each use contributes only its unsupplied requirements. P-738/P-739 preserve family identity, invocation mode, lifetime and restoration. The trusted seed retains its translation role. [Rule and examples](#family-wide-effect-requirements-before-20)
 
 At r264 the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) supplies the receiver head in the Stops example. [D-10](DesignAuthorityRegistry.md#d-10) continues the r263 call and generator semantics. Both consumer spellings visit the two IDs in order.
 
@@ -1813,9 +1813,13 @@ CoD checks the demanded whole-program execution with its caller paths available,
 
 ### Family-wide effect requirements before 2.0
 
-Before 2.0, all CoD compilers, including the C++ seed and the CoD booter, check one set of required dynamic symbol identities per visible method family in its selected module interpretation. Take the union of all incoming symbol requirements across that family’s methods and paths, including requirements reached through calls and explicit `touch`. At a call, every member must be supplied by the effective context. A missing member rejects the call even when its actual argument types or branch conditions would have avoided the use. This is a deliberate limit on accepted programs to simplify delivery of the first compilers. Reconsider branch-sensitive acceptance at 2.0 or later.
+Before 2.0, the CoD booter checks one set of required dynamic symbol identities per visible method family in its selected module interpretation. Take the union of all incoming symbol requirements across that family’s methods and paths, including requirements reached through calls and explicit `touch`. At a call, every member must be supplied by the effective context. A missing member rejects the call even when its actual argument types or branch conditions would have avoided the use. This conservative rejection simplifies the first semantic checker. The trusted C++ seed translates valid source and has no family-wide admission obligation. Reconsider more precise admission at 2.0 or later.
 
-Union the **incoming requirements**. An unconditional, successfully published local installation can supply a later use in its scope, including a call to a helper that requires the symbol. Evaluate installation operands against the preceding bindings. For example, the right side of `effect @n <- @n + 1u64` still requires an incoming `@n`. At a call reached by several paths, count only bindings guaranteed to be available there. A conditional or failed installation gives no guarantee at a later use it may not cover. A bare symbol identity has no installation requirement of its own. Renamed selections of one symbol count once. A family extension contributes to the receiving view that includes it. Other modules’ independent extensions do not enlarge that view. An installed anonymous handler has its own method family.
+**Discharge each use on its own branch before taking the union.** For a read, touch or call, subtract the symbols supplied there by a successfully published local `effect`. Union the remaining requirements across uses, paths and methods. An installation covers uses in its dynamic extent, including transitive uses by a helper called there. At a use after a join, every reaching path needs a supplier. Installation operands see the prior bindings. Thus `effect @n <- @n + 1u64` can itself require `@n`. A failed installation supplies nothing, and leaving its scope restores the earlier binding.
+
+For example, one arm installs `@audit` and then calls a helper that needs it. If the other arm does nothing, neither arm contributes `@audit`. If the other arm instead calls the same helper without supplying it, that arm contributes `@audit` and the family requires it. This accounts for local supply even though pre-2.0 callers cannot waive a family requirement by predicting which branch will execute.
+
+A bare symbol identity has no installation requirement of its own. Renamed selections of one symbol count once. A family extension contributes to the receiving view that includes it. Other modules’ independent extensions do not enlarge that view. An installed anonymous handler has its own method family.
 
 For example, suppose the `u64` method of `report` needs `@log` and its `bool` method needs `@audit`. The check for `report(7u64)` requires **both** in a view containing both methods. An installation of `@log` alone gives a missing-`@audit` diagnostic even though dispatch selects the `u64` method. Supplying both admits the call and executes only that method. A source view containing only the first method requires only `@log`. The same union applies when the two uses occur in opposite arms of a single method.
 
@@ -1827,11 +1831,11 @@ H-102 locates checking at compilation of the demanded call paths. The compiler f
 
 - For `behave @p`, required effects must be available in the current effective dynamic scope along each reachable path to their use, accounting for bindings established inside the body.
 - For `perform @p`, the values it must install must have been obtainable at the applicable definition event. Missing required capture values are compilation errors, with no fallback to the caller's values.
-- A binding supplied on one possible path cannot excuse its absence on another. Pre-2.0 compilers use the [family-wide requirement](#family-wide-effect-requirements-before-20) even when a caller knows which method or branch will execute.
+- A binding supplied on one possible path cannot excuse its absence on another. The pre-2.0 booter uses the [family-wide requirement](#family-wide-effect-requirements-before-20) even when a caller knows which method or branch will execute.
 
 Deferred current-context invocation uses the bindings present when its owning full scope drains. A conditional registration requires those bindings on every path reaching that action, including failures after registration; a path that never registered it supplies no invocation obligation. Binding and owner proofs share the queue's branch choices. Later rebinding remains observable, iteration effects restore at their own boundary, and temporary effects inside an explicit cleanup scope restore before later actions. These guarantees do not make a missing binding available to an independent callable or create a definition-time capture.
 
-The reusable-operation case is therefore checked through its complete definition/call paths and chosen mode. This does not select a runtime missing-value sentinel, implicit zero value, or a separate-module rejection policy. By-value captures keep their definition-time values. Before 2.0, the family union can require availability of symbols that a particular call will never read.
+The reusable-operation case is therefore checked through its complete definition/call paths and chosen mode. This does not select a runtime missing-value sentinel, implicit zero value, or a separate-module rejection policy. By-value captures keep their definition-time values. Before 2.0, the booter’s family union can require availability of symbols that a particular call will never read.
 
 ### Module scanning and execution composition
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Keep family effect admission in the booter and discharge branch-local uses
+
+<a id="h-booter-branch-local-effect-requirements-20261125"></a>
+**H-BOOTER-BRANCH-LOCAL-EFFECT-REQUIREMENTS-20261125.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user clarified “seed 已经不检查了吧？ booter 适用这个简化决策” and “任何分支被本地 `effect` install 满足的需求，不进入 family 并集。” [D-10r266](design/SymbolicDynamicScope.md#family-wide-effect-requirements-before-20), D-ARCH-REVIEW r181 and bootstrap roadmap r41 supersede the [r265 assignment to the seed](#h-family-effect-requirements-20261125). During collection the booter discharges each locally supplied use before combining the outstanding demands. An unsupplied sibling still contributes. The family-wide admission rule, 2.0 reconsideration point and invocation semantics continue for the checker. The [trusted seed contract](#h-trusted-seed-translation-20261125) governs seed translation.
+
 ## 2026-11-25 — Require the whole method family’s incoming effect symbols before 2.0
 
 <a id="h-family-effect-requirements-20261125"></a>

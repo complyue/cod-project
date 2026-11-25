@@ -1,10 +1,10 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 40 · Recorded: 2026-11-25 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 41 · Recorded: 2026-11-25 · Phase: initial seed delivery through alternating booter and seed development.
 
 ## Design authority
 
-At r40 the [pre-2.0 family effect rule](../../design/SymbolicDynamicScope.md#family-wide-effect-requirements-before-20) specifies a common admission check for both bootstrap compilers under [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap). The trusted seed continues to translate the booter under its existing stage contract.
+At r41 the [project user’s correction](../../CHANGELOG.md#h-booter-branch-local-effect-requirements-20261125) restores the r38 trusted-source boundary and assigns the [family effect check](../../design/SymbolicDynamicScope.md#family-wide-effect-requirements-before-20) to the booter under [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap).
 
 At r39 the [project user’s naming decision](../../CHANGELOG.md#h-bootstrap-tool-and-entry-names-20261125) names the seed executable and applies the reserved entry name to this application. [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap) continues the r38 stage responsibilities. [D-15-ENTRY](../../design/DesignAuthorityRegistry.md#d-15-entry) governs the entry identity.
 
@@ -82,9 +82,9 @@ The selected name for the C++ build output is `bin/cod-seed` (`bin/cod-seed.exe`
 
 The C++ seed translates trusted, valid CoD source into LLVM IR and bitcode to build the CoD-written booter. The current native build also consumes a C provider header and stubs derived from the same interfaces. The seed must resolve names, types, methods, layouts and other facts as far as their consumers need them to produce correct code. In particular, emitted calls must pass the actual owner or allocator when required. Generated code must implement the specified evaluation order, dynamic checks, exceptions, ownership transfers and cleanup. For a nullable access the seed can emit the prescribed runtime null check directly when eliminating it would require a static proof.
 
-Before 2.0 the seed, booter and production compiler require the caller’s effective context to supply the [whole family’s incoming dynamic symbols](../../design/SymbolicDynamicScope.md#family-wide-effect-requirements-before-20). This specific admission requirement applies by default, including in the trusted seed.
+The booter checks the [family’s incoming dynamic symbols](../../design/SymbolicDynamicScope.md#family-wide-effect-requirements-before-20). Each branch contributes its uses after accounting for successful local installations. In the seed, the translation contract covers the code that selects, captures, installs and restores those bindings.
 
-Remove other static checks and the computation used exclusively to support them when translation has no use for their results. This includes whole-program type or ownership proofs whose sole purpose is to reject invalid input. Seed translation makes no claim of source validity. The CoD booter owns type, ownership and other semantic validation, including checking the full source world of its own compiler entry. Record supported self-check coverage separately from generating or running the first booter and from a successful self-build.
+Remove a static check and the computation used exclusively to support it when translation has no use for its result. This includes whole-program type or ownership proofs whose sole purpose is to reject invalid input. Seed translation makes no claim of source validity. The CoD booter owns type, ownership and other semantic validation, including checking the full source world of its own compiler entry. Record supported self-check coverage separately from generating or running the first booter and from a successful self-build.
 
 The annotated tag [archive/checked-cpp-seed](https://github.com/complyue/cod-project/tree/archive/checked-cpp-seed) preserves the checked seed at `a0922741`. Its 52 focused comparisons across both seed modes and its Lexer, TokenBuffer and ModuleIndex outputs establish the checked-stage reference. Removal of unnecessary checks proceeds in the active implementation. Add an individual opt-in seed check when a concrete engineering use warrants it. Document that use, how to enable the check and the behavior it diagnoses. The default path pays none of the analysis cost unique to that check. The [cutover and acceptance](../../design/ImplementationArchitecture.md#seed-checker-migration-and-performance-acceptance) cover the generated booter and its supported commands.
 
