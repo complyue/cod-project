@@ -1612,15 +1612,6 @@ export enum CallableSyntax:u8 {
 }
 export data CallableSites { signature:u64; body:u64; function_form:bool; }
 
-func callable_function_form(payload:const ExprPayload in P) -> bool where {const owner P} {
-    return case payload of {
-        (CallableDefinition { val function_form <-; }) -> { function_form };
-        (CEntryDefinition { val function_form <-; }) -> { function_form };
-        (CProviderDeclaration { val function_form <-; }) -> { function_form };
-        _ -> false
-    }
-}
-
 func read_callable_definition(nodes:const ExprNodes in N, revision:u64, at:u64,
                               signature:const NodeId in I, body:const NodeId in B, function_form:bool,
                               sites:CallableSites in S, mode:CallableSyntax) -> CallableSyntax
@@ -2893,7 +2884,14 @@ export func is_function(nodes:const ExprNodes in N, at:u64) -> bool where {const
     if (at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         Vacant -> false;
-        (Occupied { val syntax <- node; }) -> { callable_function_form(syntax.payload) }
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (CallableDefinition { val function_form <-; }) -> { function_form };
+                (CEntryDefinition { val function_form <-; }) -> { function_form };
+                (CProviderDeclaration { val function_form <-; }) -> { function_form };
+                _ -> false
+            }
+        }
     }
 }
 
