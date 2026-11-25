@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Order evaluation by its decision and prerequisites
+
+<a id="h-evaluate-the-intended-state-20261125"></a>
+**H-EVALUATE-THE-INTENDED-STATE-20261125.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user specified “所有非代码生成所依赖的checks都砍掉以后，才测试性能” and clarified “不是这件具体事的直接原则，是元工作原则”. D-ARCH-REVIEW r150→151 records the [general work-order rule](AGENTS.md#order-work-by-the-decision-it-serves). It extends the measurement guidance at `e8225a21:AGENTS.md` to evaluation decisions generally. The [seed cutover](design/ImplementationArchitecture.md#seed-checker-migration-and-performance-acceptance) applies it to the default translator. Correctness and compatibility checks whose results carry forward remain appropriate during implementation.
+
 ## 2026-11-25 — Archive the checked seed and clear removal of its second definition graph
 
 <a id="k-seed-remove-definition-graph-20261125"></a>

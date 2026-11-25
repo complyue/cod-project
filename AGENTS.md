@@ -32,6 +32,12 @@ For example, collect a callee’s guarded requirements and effects on each exit.
 
 When the user sets a rule for a whole component, carry its scope, objective and completion conditions through each implementation batch. Keep known uncovered paths in the active work. A scoped correctness result closes only that batch. Design review checks the remaining coverage before accepting completion, changing priority or authorizing a performance comparison. If a concrete case would require narrowing the user’s rule, bring it to the user. [Application to seed bootstrap time](design/ImplementationArchitecture.md#seed-checker-migration-and-performance-acceptance)
 
+## Order work by the decision it serves
+
+Before scheduling an evaluation, identify what decision it could change or what requirement it could verify. **If planned, required work will remove or change something material to the result, finish that work before evaluating the target.** Defer an intermediate evaluation when its result would neither change the next action nor establish something that will still hold at delivery.
+
+During the change, verify properties that must survive each step, such as correctness and compatibility. Use focused investigation when its result can resolve a current implementation choice. Apply the same ordering to a whole workstream and to its individual batches. The [seed cutover](design/ImplementationArchitecture.md#seed-checker-migration-and-performance-acceptance) illustrates the distinction.
+
 ## When to measure an improvement
 
 Proceed with a well-founded, maintainable improvement once its implementation scope is cleared. Verify the behavior that matters for delivery. Collect precise benefit figures only when the user requests them, a concrete decision depends on them, or an explicit acceptance requirement needs them. Use evidence already available from normal work first. Reserve additional instrumentation and benchmark runs for questions that evidence cannot answer.
