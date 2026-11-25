@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r142 the [lexical declaration map review](../CHANGELOG.md#k-seed-lexical-declaration-layers-20261125) clears a representation change within the [r141 seed migration](#seed-checker-migration-and-performance-acceptance) under P-682/P-683. Its acceptance covers lexical lookup and join behavior. Both seed-wide completion conditions remain open.
+
 At r141 the [seed migration decision](../CHANGELOG.md#h-seed-migration-completion-20261125) sets the [completion conditions for seed bootstrap time](#seed-checker-migration-and-performance-acceptance). [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues P-682/P-683 and the r131 per-kind phase rule. The full migration scope supersedes the r117 six-table limit for this objective.
 
 At r140 the [fixed receiver binding](../CHANGELOG.md#h-fixed-self-binding-20261125) refines the binder acceptance in the [queued OO plan](#oo-call-operator-implementation-plan). [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues the r139 scope and scheduling.
@@ -571,6 +573,14 @@ The primary objective is to reduce the time the C++ seed takes to compile the bo
 2. **Fact production and use.** Across the seed, identify the producer, completion point and consumers of each kind of semantic information. Collectors may propagate pending facts, including around recursive components. Decisions about a source program must consume completed facts and produce a different kind of result. Trace every route that still reads or updates provisional callee behavior, including dynamic calls, recursion, cleanup and module entry. Retire the legacy route for those decisions. At `fbede9ed:cod/lang_checked.hh:23526`, the effect solver still rechecks instances, merges their effects and enqueues dependent callers. Published closed-leaf and lexer-predicate producers cover specific paths. A required exception needs a concrete example and the user’s decision.
 
 Use focused correctness checks during migration. A full booter rebuild during this work needs an independent delivery or correctness question that a smaller check cannot settle. Record that question. Routine timings or memory-pressure readings from an authorized job serve its operational purpose. Evaluate the optimization’s performance only after review verifies both conditions across the seed. Then use a comparable specialized booter input and existing artifacts or baselines where applicable. An initial increase in seed RAM is acceptable within the host’s operational limits. Schedule effective reuse of heap storage to reduce peak RSS as separate subsequent work. The linked booter keeps its own memory acceptance.
+
+#### Sharing lexical declaration maps
+
+In `LexicalState::Scope`, share the append-only map from declared spelling to binding ID across snapshots of a scope in the same check. Each layer owns its spellings. Insert into a private leaf or fork a child before writing to a shared leaf. An empty snapshot stays empty after insertion in a sibling. Keep the current scope nesting, binding IDs and availability, and exchange the module-entry handles at the existing two swap sites.
+
+The current join starts from the left state. For each aligned scope it checks every right-hand name for a conflicting binding ID, including on a departing arm, before merging availability. A common immutable ancestor proves its entries identical because neither descendant can overwrite them. Visit the right-hand additions beyond that ancestor in global spelling order and compare them against the **entire** left view. Without proved shared ancestry, visit the entire right view. Keep ordered traversal across layers for capture and retirement, including outer-to-inner capture across scopes. Keep traversal views alive through their last use and maintain sibling isolation while merging into the result.
+
+Mainline can implement and verify this unit within the r141 migration. Exercise empty and populated forks, identical and differing binding IDs, shadowing, skipped or exiting arms, nested cleanup, and independent module-entry name tables. In particular, two conflicting names introduced in different layers must still report the same first spelling as the ordered map. Check focused runtime results, original diagnostics, preserved outputs on rejection and matching generated provider and LLVM bytes for the unmodified booter Lexer. The performance comparison follows the two seed-wide completion conditions above.
 
 ### Reducing seed bootstrap time in dynamic-symbol checks
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Review shared lexical declaration maps
+
+<a id="k-seed-lexical-declaration-layers-20261125"></a>
+**K-SEED-LEXICAL-DECLARATION-LAYERS-20261125.** D-ARCH-REVIEW r141→142 continues P-682/P-683. At `9c368da4:cod/lang_checked.hh:5840` the name merge checks the entire ordered right map against the left, even on a departing arm. The [reviewed representation](design/ImplementationArchitecture.md#sharing-lexical-declaration-maps) preserves that check with shared append-only ancestry and private additions. The [full migration and measurement conditions](#h-seed-migration-completion-20261125) continue.
+
 ## 2026-11-25 — Carry the seed migration scope through review
 
 <a id="h-seed-migration-completion-20261125"></a>
