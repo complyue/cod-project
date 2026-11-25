@@ -836,7 +836,9 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
             return unproved_deferred_error();
         val declaration <- sites[facts[at].call_definition].throws_clause;
         val definition <- facts[at].call_definition;
-        if (prepared_byte_function(views, definition, false)) {
+        if (prepared_byte_function(views, definition, false) &&
+            (prepared_byte_function(views, enclosing_callable(nodes, names, names[at].scope), false) ||
+             prepared_byte_function(views, definition, true))) {
             if (definition >= at || declaration != no_node() ||
                 sites[definition].byte_completion == NoByteFunction) return unproved_byte_completion();
             if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8)
@@ -919,15 +921,15 @@ func record_byte_completion(nodes:const ExprNodes in N, names:const NameBindings
     };
     val event <- sites[at].event;
     if (event == skipped_operand() || names[at].scope == no_node()) return 0u8;
+    val definition <- enclosing_callable(nodes, names, names[at].scope);
+    if (!prepared_byte_function(views, definition, false)) return 0u8;
     val failed <- event == possible_failure() || event == definite_failure();
+    if (!failed && !can_continue(sites, at)) return 0u8;
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
     val invokes <- inspect_invocation(nodes, revision, used, at, call) == OrdinaryInvocation;
     ref index = make IndexSites { target <- no_node(); index <- no_node() };
     val unproved_index <- !facts[at].checks_array_bounds &&
         inspect_index_selection(nodes, revision, used, at, index);
-    if (!failed && !invokes && !unproved_index) return 0u8;
-    val definition <- enclosing_callable(nodes, names, names[at].scope);
-    if (!prepared_byte_function(views, definition, false)) return 0u8;
     if (unproved_index) return unproved_byte_completion();
     if (invokes && links[at].imported_byte_completion == NoByteFunction &&
         !prepared_byte_function(views, facts[at].call_definition, false))

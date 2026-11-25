@@ -149,6 +149,7 @@ func require_called_contracts(nodes:const ExprNodes in N, names:const NameBindin
     val call <- demand[scope].first_call;
     val definition <- no_node();
     val form <- CEntry;
+    val byte_caller <- prepared_byte_function(views, scope, false);
     for (unused in 0u64 .. used) {
         if (call == no_node()) return no_node();
         definition <- demand[call].callee;
@@ -162,7 +163,7 @@ func require_called_contracts(nodes:const ExprNodes in N, names:const NameBindin
         if (prove_loans) {
             if (!require_receipt_body(demand, definition, count, receipt_count, used)) return call
         } else {
-            if ((form == LexicalCallable || prepared_byte_function(views, definition, false)) &&
+            if ((form == LexicalCallable || (byte_caller && prepared_byte_function(views, definition, false))) &&
                 !require_body(demand, definition, count, used, true)) return call
         };
         (call <- demand[call].next_call):void
@@ -251,7 +252,7 @@ export func discover_declaration_demand(
                 (demand[scope].first_call <- site):void
             };
             checked_call <- family_needs_checked_operands(links, demand, definition, used) ||
-                prepared_byte_function(views, definition, false);
+                prepared_byte_function(views, definition, true);
             if (shape == DirectInvocationReady &&
                 passes_case_receipt(nodes, names, links, cases, invocation.arguments, used, revision)) {
                 if (!require_receipt_body(demand, definition, count, receipt_count, used)) {

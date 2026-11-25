@@ -2024,7 +2024,8 @@ func checked_byte_header(contracts:const ModuleInterfaces in I, published:u64, h
     if (result == no_node() || contracts[result].interface_kind != enum_type()) return false;
     val first <- header + 1u64;
     if (contracts[first].interface_kind != 0u8 || contracts[first].entry_count != 0u64 ||
-        contracts[first].value_kind != array_type() || contracts[first].type_module == 0u64 ||
+        contracts[first].value_kind != array_type() || contracts[first].field_mode != ReferenceFormal ||
+        contracts[first].type_module == 0u64 ||
         contracts[first].owner_role != 0u64 || contracts[first].owner_readonly != 1u8 ||
         contracts[first].target_readonly != 1u8 || contracts[first].native_reception != 0u8 ||
         contracts[first].native_passes_owner != 0u8) return false;
@@ -2035,6 +2036,7 @@ func checked_byte_header(contracts:const ModuleInterfaces in I, published:u64, h
     for (row in first + 1u64 .. first + 3u64) {
         if (contracts[row].interface_kind != 0u8 || contracts[row].entry_count != 0u64 ||
             contracts[row].value_kind != builtin_u64() || contracts[row].owner_role != no_node() ||
+            (contracts[row].field_mode != ValueFormal && contracts[row].field_mode != ExplicitValueFormal) ||
             contracts[row].owner_readonly != 0u8 || contracts[row].target_readonly != 0u8 ||
             contracts[row].native_reception != 0u8 || contracts[row].native_passes_owner != 0u8) return false
     };

@@ -876,6 +876,7 @@ func describe_parameter(nodes:const ExprNodes in N, names:const NameBindings in 
     val marker <- binding.target_type;
     write_interface_header(row, 0u64, 0u64, 0u8, 0u8, 0u64);
     val mode <- formal.mode;
+    row.field_mode <- mode;
     if (mode == RetainedHandleFormal) {
         row.value_kind <- c_handle_type();
         row.type_module <- type_module(names, selected, marker, current_module);
