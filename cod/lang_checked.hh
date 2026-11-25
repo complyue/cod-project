@@ -420,10 +420,11 @@ class ScalarChecker {
   CallableChoices callable_choices_;
   size_t checking_context_ = 0;
   enum class EffectUse { all, discarded_boolean_result };
+  enum class SymbolEffectUse { all, transport_only, covered };
   // Context zero is module initialization; other contexts are instance IDs + 1.
   struct EffectConsumer {
     size_t read_round = 0;
-    bool symbols_covered = false;
+    SymbolEffectUse symbols = SymbolEffectUse::all;
     bool reads_result = false;
     bool discards_result = false;
   };
@@ -476,7 +477,8 @@ class ScalarChecker {
     if (const auto failure = unavailable_leaf_behaviors_.find(instance); failure != unavailable_leaf_behaviors_.end())
       fail(failure->second.at, failure->second.message);
   }
-  const CallEffects &read_effects(size_t instance, bool distinct_bindings = false, bool symbols_covered = false,
+  const CallEffects &read_effects(size_t instance, bool distinct_bindings = false,
+                                 SymbolEffectUse symbols = SymbolEffectUse::all,
                                  EffectUse use = EffectUse::all, const Expression *call_site = nullptr) const {
     if (extracting_leaf_)
       throw std::logic_error("closed leaf extraction reached an ordinary behavior dependency");
@@ -499,8 +501,8 @@ class ScalarChecker {
       auto &consumer = effect_dependents_[instance][checking_context_];
       if (consumer.read_round != read_effect_round_) {
         consumer.read_round = read_effect_round_;
-        consumer.symbols_covered = symbols_covered;
-      } else consumer.symbols_covered &= symbols_covered;
+        consumer.symbols = symbols;
+      } else consumer.symbols = std::min(consumer.symbols, symbols);
     }
     if (distinct_bindings)
       if (const auto found = distinct_binding_effects_.find(instance); found != distinct_binding_effects_.end())
@@ -4546,18 +4548,23 @@ class ScalarChecker {
     }
     if (validating_) fail(site.at, site.diagnostic);
   }
-  void require_symbol(LexicalState &state, size_t symbol, const Location &at) {
-    if (delayed_ && state.live && program_.symbols[symbol].live_scope)
+  bool symbol_needs_transport_fact(size_t symbol) const {
+    const auto &binding = program_.symbols[symbol];
+    return binding.reference || binding.live_scope || (binding.type && binding.type->kind == Type::native_handle);
+  }
+  void observe_symbol_use(LexicalState &state, size_t symbol, const Location &at) {
+    // Module initialization has no outgoing capture contract.
+    if (!checking_instance_ && !symbol_needs_transport_fact(symbol)) return;
+    const auto &binding = program_.symbols[symbol];
+    if (delayed_ && state.live && binding.live_scope)
       implementation_gap(at, "deferred access to a live scoped procedure activation");
-    if (validating_ && state.live && program_.symbols[symbol].reference) {
+    if (validating_ && state.live && binding.reference) {
       if (delayed_) implementation_gap(at, "deferred lookup of a borrowed symbol");
       const auto &installed = state.symbols.get(symbol).borrowed_owner;
       if (installed && !*installed)
         implementation_gap(at, "borrowed symbol has no proved common actual owner");
     }
     if (!proving_ || !state.live || state.symbols.get(symbol).bound) return;
-    if (!delayed_ && !checking_instance_ && validating_)
-      fail(at, "cannot prove an installed binding for symbol '" + program_.symbols[symbol].name + "'");
     if (delayed_) state.deferred_symbols.insert(symbol);
     else if (exporting_effects_) observe_effects().symbols.insert(symbol);
   }
@@ -4582,7 +4589,7 @@ class ScalarChecker {
     invalidate_payloads(state, effects.payload_writes);
     for (const auto &[place, value] : effects.booleans) if (state.available.contains(place))
       state.predicates.set(place, boolean_predicate(value));
-    for (const auto symbol : effects.symbols) require_symbol(state, symbol, at);
+    for (const auto symbol : effects.symbols) observe_symbol_use(state, symbol, at);
     if (proving_) for (const auto &[read, when] : effects.reads) {
       if (when.empty()) continue;
       if (delayed_) add_requirement(state, read, state.inputs, when);
@@ -4719,13 +4726,17 @@ class ScalarChecker {
       const auto read = read_obligation(site);
       reads.emplace(read, std::move(when));
     }
+    std::set<size_t> entry_symbol_uses;
+    if (!checking_instance_) for (const auto symbol : target.symbols)
+      if (symbol_needs_transport_fact(symbol)) entry_symbol_uses.insert(symbol);
+    const auto &symbol_uses = checking_instance_ ? target.symbols : entry_symbol_uses;
     std::map<size_t, CleanupEquations::Effects> effects;
     for (const auto reason : reasons) {
       const auto found = target.initialized.find(reason);
       CleanupEquations::Effects row{reads, {}};
       if (prepared) row = cleanup_.preserve_pending(std::move(row));
       auto &effect = effects.emplace(reason, std::move(row)).first->second;
-      effect.symbols = target.symbols;
+      effect.symbols = symbol_uses;
       if (!slots.all) if (const auto outcome = target.present.find(reason); outcome != target.present.end())
         for (const auto parameter : outcome->second) {
           if (slots.projected.contains(parameter)) {
@@ -7539,22 +7550,24 @@ class ScalarChecker {
       const auto right = physical_slots(views[1].slots);
       distinct_bindings = !left.empty() && !right.empty() && intersect(left, right).empty();
     }
-    operation.reads_direct_body = expr.kind == Expression::Kind::call && !expr.lexical_symbol_call &&
+    const bool direct_named_body = expr.kind == Expression::Kind::call &&
         !operation.callable_call && !method.scope_inputs && !method.here_group && method.here.empty();
-    bool symbols_covered = false;
+    operation.reads_direct_body = direct_named_body && !expr.lexical_symbol_call;
+    auto symbol_use = SymbolEffectUse::all;
     if (closing_read_effects_) {
       if (checking_instance_) if (const auto *caller = symbol_bound(checking_instance_->method)) {
         const auto edge = caller->callees.find(&expr);
         if (!operation.reads_direct_body || edge == caller->callees.end() || edge->second != target.method)
           throw std::logic_error("closed symbol requirement bound missed a checked call target");
       }
-      if (operation.reads_direct_body && !delayed_ && &expr != prepared_call_ &&
+      if (direct_named_body && !expr.has_here_body() && !delayed_ && &expr != prepared_call_ &&
           !distinct_binding_effects_.contains(*operation.callee)) {
-        // The target-discovery pass does not use availability for a direct
-        // scalar-symbol call; its other effect dependencies still apply.
-        if (const auto *bound = symbol_bound(target.method))
-          symbols_covered = !proving_ || (lexical_.live && completes &&
-              std::ranges::all_of(bound->symbols, [&](size_t symbol) { return lexical_.symbols.get(symbol).bound; }));
+        if (!checking_context_) symbol_use = SymbolEffectUse::transport_only;
+        else if (operation.reads_direct_body)
+          if (const auto *bound = symbol_bound(target.method);
+              bound && (!proving_ || (lexical_.live && completes &&
+                  std::ranges::all_of(bound->symbols, [&](size_t symbol) { return lexical_.symbols.get(symbol).bound; }))))
+            symbol_use = SymbolEffectUse::covered;
       }
     }
     // For this direct statement, the only use of Returned is to describe the
@@ -7582,7 +7595,7 @@ class ScalarChecker {
       operation.type = *target.result.type;
       return;
     }
-    const auto &effects = read_effects(*operation.callee, distinct_bindings, symbols_covered,
+    const auto &effects = read_effects(*operation.callee, distinct_bindings, symbol_use,
         result_ignored ? EffectUse::discarded_boolean_result : EffectUse::all,
         operation.reads_direct_body ? &expr : nullptr);
     for (size_t i = 0; i < views.size(); ++i) {
@@ -15553,7 +15566,7 @@ class ScalarChecker {
       if (type && type->kind == Type::native_handle) fail(at, "an owning native symbol must be used through a direct procedure call");
       if (program_.symbols[symbol].reference && validating_)
         implementation_gap(at, "capturing a borrowed symbol in a callable value");
-      require_symbol(lexical_, symbol, at);
+      observe_symbol_use(lexical_, symbol, at);
     }
     if (!symbols.empty()) note_abrupt(at, {exception_id(ExceptionCategory::out_of_memory)});
     CheckedOperation value; value.type = program_.callables[id].type; value.callable = id;
@@ -16287,7 +16300,7 @@ class ScalarChecker {
       implementation_gap(expr.at, "scoped handler with more than one checked frame layout");
     if (!selected) selected = target;
     const auto &effects = read_effects(target);
-    for (const auto dependency : effects.symbols) require_symbol(lexical_, dependency, expr.at);
+    for (const auto dependency : effects.symbols) observe_symbol_use(lexical_, dependency, expr.at);
     if (validating_ && !effects.symbols.empty())
       implementation_gap(expr.at, "live scoped handler requires a nonempty symbolic snapshot");
     for (const auto role : effects.lexical_allocations)
@@ -18952,7 +18965,7 @@ class ScalarChecker {
       });
       return;
     }
-    require_symbol(lexical_, id, expr.at);
+    observe_symbol_use(lexical_, id, expr.at);
     if (expr.kind == K::touch) { operation.type = Type::void_type; return; }
     if (type.kind == Type::abstract_type && abstract_operand_ != &expr)
       implementation_gap(expr.at, "an abstract symbol outside direct borrowed argument preparation");
@@ -20483,7 +20496,7 @@ class ScalarChecker {
         if (expr.kind == K::effect || expr.kind == K::procedure_effect)
           check_native_effect(expr, *symbol.type, instance, operations, operation);
         else {
-          require_symbol(lexical_, *operation.symbol, expr.at);
+          observe_symbol_use(lexical_, *operation.symbol, expr.at);
           if (expr.kind == K::touch) { operation.type = Type::void_type; break; }
           if (native_loan != NativeLoanContext::borrow)
             fail(expr.at, "an owning native symbol can only supply a checked handle loan");
@@ -20522,9 +20535,6 @@ class ScalarChecker {
                 break;
               }
               operation = materialize_family(*implementation.family, *symbol.type, expr.at);
-              for (const auto target : program_.callables[*operation.callable].implementations())
-                for (const auto dependency : read_effects(target).symbols)
-                  require_symbol(lexical_, dependency, expr.at);
             } catch (const LocatedFailure &failure) {
               fail(failure.diagnostic.at, local_effect_name(expr.text, id) + ": " + failure.diagnostic.message);
             }
@@ -20535,7 +20545,8 @@ class ScalarChecker {
           }
           operation.symbol = id; operation.operand_type = operation.type; operation.type = Type::void_type;
           operation.publishes_effect = !cancelled;
-          if (!cancelled && lexical_.live) lexical_.symbols.update(id, [](auto &facts) { facts.bound = true; });
+          if (checking_instance_ && !cancelled && lexical_.live)
+            lexical_.symbols.update(id, [](auto &facts) { facts.bound = true; });
           break;
         }
         if (symbol.type->kind == Type::procedure)
@@ -20547,12 +20558,12 @@ class ScalarChecker {
           fail(expr.at, "effect value does not satisfy the declared symbol type");
         operation.operand_type = *symbol.type;
         operation.type = source == Type::never ? Type{Type::never} : Type{Type::void_type};
-        if (!cancelled && source != Type::never && lexical_.live)
+        if (checking_instance_ && !cancelled && source != Type::never && lexical_.live)
           lexical_.symbols.update(*operation.symbol, [](auto &facts) { facts.bound = true; });
       } else {
         if (expr.kind == K::symbol && symbol.type->kind == Type::procedure)
           fail(expr.at, "an installed procedure can only be invoked with perform or behave");
-        require_symbol(lexical_, *operation.symbol, expr.at);
+        observe_symbol_use(lexical_, *operation.symbol, expr.at);
         operation.type = expr.kind == K::touch ? Type{Type::void_type} : *symbol.type;
         operation.exceptions = exception_value_categories(operation.type);
       }
@@ -20566,7 +20577,7 @@ class ScalarChecker {
       const auto &symbol = program_.symbols[*operation.symbol];
       if (!symbol.intrinsic_print) {
         const auto &type = dynamic_procedure_type(symbol, expr.at);
-        require_symbol(lexical_, *operation.symbol, expr.at);
+        observe_symbol_use(lexical_, *operation.symbol, expr.at);
         check_value_call(expr, type, 0, instance, operations, operation, read, discard);
         break;
       }
@@ -21891,7 +21902,7 @@ class ScalarChecker {
             implementation_gap(expr.at, "deferred lookup of a borrowed symbol");
           const auto &type = program_.symbols[symbol].type;
           if (!type || type->kind != Type::native_handle) return false;
-          require_symbol(lexical_, symbol, expr.at);
+          observe_symbol_use(lexical_, symbol, expr.at);
           CheckedOperation loan;
           loan.owners = {native_symbol_owner(lexical_, symbol)};
           require_live_view(loan, expr.at);
@@ -23249,12 +23260,13 @@ class ScalarChecker {
 
   struct EffectChanges {
     bool symbols = false;
+    bool transport_symbols = false;
     bool returned = false;
     bool other = false;
     explicit operator bool() const { return symbols || returned || other; }
   };
   enum class EffectMerge { writes, reads, both };
-  static EffectChanges merge_effects(CallEffects &known, CallEffects effects, EffectMerge mode) {
+  EffectChanges merge_effects(CallEffects &known, CallEffects effects, EffectMerge mode) const {
     EffectChanges changes;
     auto &changed = changes.other;
     if (mode != EffectMerge::reads) {
@@ -23312,7 +23324,17 @@ class ScalarChecker {
     // A final comparison only needs the read facts when the writes already agree.
     if (mode != EffectMerge::writes && !changes) {
       if (known.reads != effects.reads) { known.reads = std::move(effects.reads); changed = true; }
-      if (known.symbols != effects.symbols) { known.symbols = std::move(effects.symbols); changes.symbols = true; }
+      if (known.symbols != effects.symbols) {
+        const auto differs = [&](const auto &before, const auto &after) {
+          return std::ranges::any_of(before, [&](size_t symbol) {
+            return symbol_needs_transport_fact(symbol) && !after.contains(symbol);
+          });
+        };
+        changes.transport_symbols = mode == EffectMerge::reads &&
+            (differs(known.symbols, effects.symbols) || differs(effects.symbols, known.symbols));
+        known.symbols = std::move(effects.symbols);
+        changes.symbols = true;
+      }
     }
     return changes;
   }
@@ -23453,8 +23475,9 @@ class ScalarChecker {
         if (changes || distinct_changes)
           for (const auto &[dependent, consumer] : effect_dependents_[instance]) {
             if (!changes.other && !distinct_changes) {
-              if (changes.symbols && !changes.returned &&
-                  consumer.read_round == read_effect_round_ && consumer.symbols_covered) continue;
+              if (changes.symbols && !changes.returned && consumer.read_round == read_effect_round_ &&
+                  (consumer.symbols == SymbolEffectUse::covered ||
+                   (consumer.symbols == SymbolEffectUse::transport_only && !changes.transport_symbols))) continue;
               if (changes.returned && !changes.symbols && consumer.discards_result && !consumer.reads_result) continue;
             }
             enqueue(dependent);
