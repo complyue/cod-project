@@ -22122,6 +22122,7 @@ class ScalarChecker {
   }
 
   CallableChoices reaching_callables() const {
+    if (program_.callables.empty()) return {};
     CallableFlow flow;
     using Node = CallableFlow::Node;
     std::vector<Node> symbols;
@@ -22301,10 +22302,16 @@ class ScalarChecker {
       }
     }
     flow.solve();
-    CallableChoices result(contexts.size());
-    for (size_t c = 0; c < contexts.size(); ++c)
-      for (const auto &[expr, node] : contexts[c].observations)
-        if (!flow.values(node).empty()) result[c].emplace(expr, flow.values(node));
+    CallableChoices result;
+    for (size_t c = 0; c < contexts.size(); ++c) {
+      for (const auto &[expr, node] : contexts[c].observations) {
+        const auto &choices = flow.values(node);
+        if (choices.empty()) continue;
+        // An absent context and an empty context both provide no choices.
+        if (result.size() <= c) result.resize(c + 1);
+        result[c].emplace(expr, choices);
+      }
+    }
     return result;
   }
 
