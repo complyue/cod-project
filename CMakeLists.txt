@@ -54,5 +54,4 @@ if(APPLE AND LLVM_VERSION_MAJOR EQUAL 23 AND LLVM_VERSION_MINOR EQUAL 1
   endforeach()
 endif()
 
-add_subdirectory(shilos)
 add_subdirectory(cod)

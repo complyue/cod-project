@@ -558,12 +558,10 @@ $Stage2Cod = Join-Path $Stage2InstallDir "bin\cod.exe"
 $Stage2ClangCl = Join-Path $Stage2InstallDir "bin\clang-cl.exe"
 $Stage2ClangXX = Join-Path $Stage2InstallDir "bin\clang++.exe"
 $Stage2LldLink = Join-Path $Stage2InstallDir "bin\lld-link.exe"
-$Stage2Shilos = Join-Path $Stage2InstallDir "bin\shilos.dll"
 $Stage2Ready = (Test-Executable $Stage2Cod) -and
     (Test-Executable $Stage2ClangCl) -and
     (Test-Executable $Stage2ClangXX) -and
-    (Test-Executable $Stage2LldLink) -and
-    (Test-Executable $Stage2Shilos)
+    (Test-Executable $Stage2LldLink)
 
 Write-Step "Stage 1: build Clang/LLD with MSVC"
 if ($Stage2Ready) {
@@ -616,10 +614,9 @@ if (-not $Stage2Ready) {
     $Stage2Ready = (Test-Executable $Stage2Cod) -and
         (Test-Executable $Stage2ClangCl) -and
         (Test-Executable $Stage2ClangXX) -and
-        (Test-Executable $Stage2LldLink) -and
-        (Test-Executable $Stage2Shilos)
+        (Test-Executable $Stage2LldLink)
     if (-not $Stage2Ready) {
-        throw "Stage 2 install is incomplete. Expected cod.exe, clang-cl.exe, clang++.exe, lld-link.exe, and shilos.dll under $Stage2InstallDir."
+        throw "Stage 2 install is incomplete. Expected cod.exe, clang-cl.exe, clang++.exe, and lld-link.exe under $Stage2InstallDir."
     }
 } else {
     Write-Host "Stage 2 install is complete at $Stage2InstallDir"
