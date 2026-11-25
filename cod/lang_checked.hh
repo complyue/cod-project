@@ -22127,16 +22127,17 @@ class ScalarChecker {
     using K = Expression::Kind;
     for (size_t c = 0; c < contexts.size(); ++c) {
       for (const auto &[expr, fact] : *contexts[c].facts) {
-        const auto node = expression(c, expr);
-        value(c, fact, node);
+        const auto node = [&] { return expression(c, expr); };
+        if (fact.callable || (fact.type.kind == Type::procedure && !fact.targets.empty()))
+          value(c, fact, node());
         if ((expr->kind == K::effect || expr->kind == K::procedure_effect) && fact.publishes_effect &&
             fact.operand_type.kind == Type::procedure)
-          flow.link(fact.callable ? node : expression(c, expr->children.front().get()), symbols.at(*fact.symbol));
+          flow.link(fact.callable ? node() : expression(c, expr->children.front().get()), symbols.at(*fact.symbol));
         if (expr->kind == K::symbol && fact.type.kind == Type::procedure)
-          flow.link(symbols.at(*fact.symbol), node);
+          flow.link(symbols.at(*fact.symbol), node());
         if ((expr->kind == K::pointer || expr->kind == K::callable) && fact.place &&
             contexts[c].storage->at(*fact.place).type.kind == Type::procedure) {
-          flow.link(expr->kind == K::callable ? node : expression(c, expr->children.front().get()), contexts[c].places.at(*fact.place));
+          flow.link(expr->kind == K::callable ? node() : expression(c, expr->children.front().get()), contexts[c].places.at(*fact.place));
         }
         if (expr->kind == K::transfer && fact.operand_type.kind == Type::procedure) {
           const auto source = expression(c, expr->children[1].get());
@@ -22161,8 +22162,9 @@ class ScalarChecker {
             const auto &body = contexts.at(instance + 1);
             if (body.supplier_result) flow.link(*body.supplier_result, contexts[c].result);
             if (body.break_result) {
-              flow.link(*body.break_result, node);
-              contexts[c].observations.emplace(expr, node);
+              const auto result = node();
+              flow.link(*body.break_result, result);
+              contexts[c].observations.emplace(expr, result);
             }
             if (body.observed_return) flow.link(contexts[c].result, *body.observed_return);
           };
@@ -22195,7 +22197,7 @@ class ScalarChecker {
           }
         }
         if (fact.type.kind != Type::procedure || fact.callable || fact.callee || fact.callable_call) continue;
-        const auto input = [&](const Expression *child) { flow.link(expression(c, child), node); };
+        const auto input = [&](const Expression *child) { flow.link(expression(c, child), node()); };
         switch (expr->kind) {
         case K::grouped: input(expr->children.front().get()); break;
         case K::block:
@@ -22211,7 +22213,7 @@ class ScalarChecker {
         default:
           // An uncovered value source must not narrow a call's implementation set.
           for (size_t id = 0; id < program_.callables.size(); ++id)
-            if (program_.callables[id].type == fact.type) flow.seed(node, id);
+            if (program_.callables[id].type == fact.type) flow.seed(node(), id);
           break;
         }
       }

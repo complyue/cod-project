@@ -41,6 +41,7 @@ public:
     if (from != to && nodes_[from].outputs.insert(to).second) propagate(from, to);
   }
   void when(Node node, size_t value, Edges edges) {
+    if (edges.empty()) return;
     nodes_[node].gates.push_back({value, std::move(edges)}); enqueue(node);
   }
   void solve() {
