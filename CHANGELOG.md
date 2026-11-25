@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Retain seed call effects through their last use
+
+<a id="k-seed-call-effect-lifetime-20261125"></a>
+**K-SEED-CALL-EFFECT-LIFETIME-20261125.** D-ARCH-REVIEW r168→169 continues P-682/P-683. Following the [material-consumer rule](#h-compiler-work-necessity-20261125), the [review](design/ImplementationArchitecture.md#retaining-call-effects-through-their-last-use) traces the per-exit effect map at `9a299525:cod/lang_checked.hh` from `finish_call` to its immediate application or a prepared child's defer registration. Immediate operations can release the map once applied. Prepared calls retain it through registration. Call behavior, result evidence and the existing callee solver keep their prior contracts.
+
 ## 2026-11-25 — Retire two static predicate assertion reports from trusted translation
 
 <a id="k-seed-predicate-assertion-reports-20261125"></a>

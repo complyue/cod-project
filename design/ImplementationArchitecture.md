@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r169 the [call-effect lifetime review](../CHANGELOG.md#k-seed-call-effect-lifetime-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 under the [material-consumer rule](#justifying-compiler-work-before-coding). [D-17-DEFER-CHECKS](DesignAuthorityRegistry.md#d-17-defer-checks) governs when a plain deferred call prepares its operands and when the call executes.
+
 At r168 the [predicate assertion review](../CHANGELOG.md#k-seed-predicate-assertion-reports-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 under the trusted-source decision. [D-10-ASSERT](DesignAuthorityRegistry.md#d-10-assert) and H-469/H-470/H-472 govern static rejection, operand effects and the executable failure.
 
 At r167 the [live scalar slot review](../CHANGELOG.md#k-seed-live-here-slot-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 for the trusted seed. [D-18-HERE-STORAGE](DesignAuthorityRegistry.md#d-18-here-storage) gives the supplied body synchronous access to the original slot. [D-28-INIT](DesignAuthorityRegistry.md#d-28-init) requires initialization on paths that read the payload.
@@ -743,6 +745,14 @@ At `9a299525:cod/lang_checked.hh`, clear the two reports that a predicate is pro
 In ordinary expression checking, keep both refinements. The false refinement sets `check_predicate_assertion` and records the exceptional exit at the assertion. The true refinement supplies facts to the next operation and may leave it unreachable. Remove only the final report on that unreachable continuation. In `cod/lang_llvm.hh`, the emitted expression evaluates its operand once even when the check can be elided. An operand failure carries its own category and site. A dynamic false result enters the existing assertion failure and cleanup path.
 
 Compare seed LLVM IR, bitcode, provider outputs, diagnostics and execution for the stock predicate fixture (`1/11/2/21/3/9`), the regional constructor prefix, and the unevaluated query that prints only `42`. Use compile-only probes for the retired ordinary and type-query reports at `1:8` and `4:5`. Record the subsequent translation outcome. The non-Boolean control still fails at its operand and preserves prior outputs. Retire the known-false source’s row from the trusted seed’s stock execution manifest with the code change. Its source remains available for compile-only comparison and the archived checker retains the rejection expectation. The [seed-first work order](#seed-checker-migration-and-performance-acceptance) applies.
+
+#### Retaining call effects through their last use
+
+At `9a299525:cod/lang_checked.hh`, `finish_call` substitutes actual arguments into the callee’s effects for each possible exit. An immediate call uses the resulting map to update its caller, including borrowed-target writes, changes in slot selection, ordinary failures, protected transfers and case scans. Keep this map local and let `invocation_bindings` update it directly. The checked operation still supplies the call target, argument and result data to LLVM. The map itself has no reader after the immediate call has applied it.
+
+For a plain deferred call, `prepared_call_` identifies the exact child expression whose invocation will run at drain. Calls inside its operands execute during preparation. Move the prepared child’s map into its checked operation after all outcome annotations, including declared-root presence, and before result handling can return early. Registration copies the prepared effects into the cleanup action and sets the thrown category on exceptional outcomes. Keep the existing empty-map fallback distinct from failed preparation, which registers no action. This scope covers the map produced by `finish_call`; other effect producers and the callee solver retain their existing paths.
+
+After the predicate-assertion cutover, compare existing specialized seed artifacts for `ModuleIndex.cod` and the focused controls for immediate borrowed writes, deferred saved targets and invocation-time slots, failure before or after a write, and cleanup order. Include an existing case-scan or scope-transfer control and the prior-output check on a located rejection. Reuse matching reference artifacts. The [seed-first work order](#seed-checker-migration-and-performance-acceptance) applies.
 
 #### When parallel module processing would help
 
