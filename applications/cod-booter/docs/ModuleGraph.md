@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r82 review](../../../CHANGELOG.md#k-package-classifier-source-call-20261124) covers [the package path classifier](#checking-the-package-path-classifier) under P-680/P-681. Follow the ordinary array loan, the byte read and the nominal enum result through its source call.
+
 The [r81 review](../../../CHANGELOG.md#k-booter-local-sum-transfer-20261124) applies D-07-SUM-CONSTRUCTORS and D-22-TRANSFER under P-680/P-681 to [the package resolver’s indexed write](#checking-a-local-sum-constructor-in-an-indexed-transfer). Verify the selected constructor, array element and completion on the normal source commands.
 
 At r80 the [field-loan review](../../../CHANGELOG.md#k-booter-arm-local-inline-loan-20261124) applies P-680/P-681 and the ordinary readonly borrowing contract to [the arm-local product](#lending-an-inline-field-directly-from-a-case-receipt). Check each selected field and the untouched output on either failed lookup.
@@ -618,6 +620,16 @@ Publish the completed classification on the defining schema’s checked interfac
 A named array declaration can use the completed bits proof for its **element**. An array loan to C, a by-value C record, and a native failure payload each require their own positive mapping under the existing provider profile. A direct or nested sum field cannot pass the C-record check through a CoD bits classification, including across re-export. Schema checking establishes the declared field type and access. Initializing an instance, selecting its active constructor and reading a field from it require the corresponding use-site checks. [Native record boundary](LLVMInterop.md#native-handles-and-c-records)
 
 In both linked modes check the real AST declarations through the declaration driver, a product with an imported sum field, a forward declaration, a shared subgraph and the same defining type selected through a renamed re-export. Reject inline self and mixed product/sum cycles, including one in an unselected alternative or after a non-bits field. Check a legal reference edge under its existing field rules. Exercise missing classifications, a wrong defining identity or header role, a truncated field range, and direct and transitive C-record violations. Retain the scalar and enum controls, existing text-field behavior, and the previously published graph and output after a failed second child. Observe one release of the invocation’s graph.
+
+### Checking the package path classifier
+
+The package resolver calls `classify_module_path(module, first, past)`. The defining function in `ModulePaths.cod` borrows a `const SourceBytes in P`, reads bytes directly and through the private `invalid_segment` helper, and returns an independent `ModulePathKind`. Both scalar arguments are independent `u64` values. Check the bound functions in their defining interpretation and retain the complete ordered signature for the source-preserving selection.
+
+Prove both the `u64` index and the `u8` element against the same defining array. The existing numeric-array export shape proves the index kind but covers several element types. Pair it with the checked element declaration or interface for that identity. Select the initialized, non-null backing, evaluate the index once, and keep the actual owner live through the byte read. A writable actual can supply the readonly loan. Normal scalar consumption reads an independent byte.
+
+Check each actual in order before entering the callee. Preserve the declared array identity, owner role and access through the call to the private helper. Preserve the defining enum identity at the imported return. A read that executes can raise the ordinary unchecked bounds error. Route that possibility with the other proved outcomes through guards, calls, catches and cleanup. A skipped operand contributes no executed read. Earlier argument failure prevents callee entry. If the checked source interface cannot carry the required evidence, diagnose the unsupported call before publication.
+
+Verify a direct byte read and the real classifier and resolver through declaration checking and provider generation. Include mismatched array identities, index kinds and result enums, malformed parameter evidence, a failure while computing an index or a later argument, and preserved artifacts. Product projections, sum construction and executable indexing have separate proofs.
 
 ### Checking a local sum constructor in an indexed transfer
 

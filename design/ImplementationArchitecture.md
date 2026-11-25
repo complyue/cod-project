@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r114 review](../CHANGELOG.md#k-package-classifier-source-call-20261124) applies the existing ordinary source-call and completion rules to [the package path classifier](../applications/cod-booter/docs/ModuleGraph.md#checking-the-package-path-classifier) under P-682/P-683. The review covers the private helper and checked signature used by an importing module.
+
 The [r113 review](../CHANGELOG.md#k-booter-local-sum-transfer-20261124) covers [local sum construction in an indexed transfer](../applications/cod-booter/docs/ModuleGraph.md#checking-a-local-sum-constructor-in-an-indexed-transfer) under P-682/P-683. Existing constructor and bits-transfer rules determine what the booter can check on the real package resolver.
 
 The [r112 review](../CHANGELOG.md#k-grouped-dependency-failure-20261124) continues [entry-world diagnostics](../applications/cod-booter/README.md#diagnostic-coverage-of-the-entry-modules-fused-world) under P-682/P-683. A written [grouped import](#a-failed-path-in-a-grouped-import) supplies one dependency location even when its selectors expand into several syntax items.

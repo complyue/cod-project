@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review source checking the package path classifier
+
+<a id="k-package-classifier-source-call-20261124"></a>
+**K-PACKAGE-CLASSIFIER-SOURCE-CALL-20261124.** D-ARCH-REVIEW r113→114 and D-20-MODULE-GRAPH r81→82, continued under P-680–P-683. The [classifier review](applications/cod-booter/docs/ModuleGraph.md#checking-the-package-path-classifier) applies ordinary loan, nominal result and completion checks to `2060a40a:applications/cod-booter/src/ModulePaths.cod:12`. Both released booter modes reject a demanded private guard with the imported classifier and accept the control that omits the call. A direct byte-read control exposes the producer-side prerequisite. The [indexed sum write](#k-booter-local-sum-transfer-20261124) remains a separate check.
+
 ## 2026-11-24 — Verify booter diagnostic traversal and peak memory on the compiler entry
 
 <a id="k-booter-entry-world-release-20261124"></a>
