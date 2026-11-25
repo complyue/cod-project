@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Retire two direct String place reports from trusted translation
+
+<a id="k-seed-direct-string-init-reports-20261125"></a>
+**K-SEED-DIRECT-STRING-INIT-REPORTS-20261125.** D-ARCH-REVIEW r163→164 continues P-682/P-683 under the [trusted-source decision](#h-trusted-seed-translation-20261125). The [review](design/ImplementationArchitecture.md#translating-a-direct-string-place) traces the two diagnostic sinks at `303af432:cod/lang_checked.hh` separately from the actual field address, transfer method and completion facts consumed by translation. D-22’s source initialization obligation and D-07’s String transfer policy continue.
+
 ## 2026-11-25 — Require a material consumer for proposed compiler work
 
 <a id="h-compiler-work-necessity-20261125"></a>
