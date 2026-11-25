@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Review sharing of stored Boolean predicates
+
+<a id="k-seed-boolean-predicate-layers-20261125"></a>
+**K-SEED-BOOLEAN-PREDICATE-LAYERS-20261125.** D-ARCH-REVIEW r146→147 continues P-682/P-683 under the [seed-wide migration decision](#h-seed-migration-completion-20261125). At `e157ce8f:cod/lang_checked.hh:3869` a multi-target read tests for an absent key. At `e157ce8f:cod/lang_checked.hh:6070` the join takes the union of keys before comparing the two proof pointers. The [review](design/ImplementationArchitecture.md#sharing-stored-boolean-predicates) preserves both behaviors and the numeric order used to assign observation IDs.
+
 ## 2026-11-25 — Review separate application and sealing for the lexer classifier
 
 <a id="k-seed-lexer-classifier-caller-20261125"></a>
