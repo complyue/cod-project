@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Build builtin effect records only for deferred invocation
+
+<a id="k-seed-immediate-builtin-effects-20261125"></a>
+**K-SEED-IMMEDIATE-BUILTIN-EFFECTS-20261125.** D-ARCH-REVIEW r169→170 continues P-682/P-683 after the [call-effect lifetime review](#k-seed-call-effect-lifetime-20261125). At `284894ce:cod/lang_checked.hh`, the [two builtin producers](design/ImplementationArchitecture.md#recording-builtin-effects-for-a-prepared-call) record immediate failure flow independently of the map used for defer registration. The review clears omission of that map’s entries for immediate occurrences and preserves declaration checks, ordered failure events and prepared-call outcomes.
+
 ## 2026-11-25 — Retain seed call effects through their last use
 
 <a id="k-seed-call-effect-lifetime-20261125"></a>

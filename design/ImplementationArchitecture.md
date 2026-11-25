@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r170 the [builtin effect review](../CHANGELOG.md#k-seed-immediate-builtin-effects-20261125) extends [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 to two builtin effect producers under the [material-consumer rule](#justifying-compiler-work-before-coding). The [deferred-call contract](DesignAuthorityRegistry.md#d-17-defer-checks) governs preparation and registration.
+
 At r169 the [call-effect lifetime review](../CHANGELOG.md#k-seed-call-effect-lifetime-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 under the [material-consumer rule](#justifying-compiler-work-before-coding). [D-17-DEFER-CHECKS](DesignAuthorityRegistry.md#d-17-defer-checks) governs when a plain deferred call prepares its operands and when the call executes.
 
 At r168 the [predicate assertion review](../CHANGELOG.md#k-seed-predicate-assertion-reports-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 under the trusted-source decision. [D-10-ASSERT](DesignAuthorityRegistry.md#d-10-assert) and H-469/H-470/H-472 govern static rejection, operand effects and the executable failure.
@@ -753,6 +755,16 @@ At `9a299525:cod/lang_checked.hh`, `finish_call` substitutes actual arguments in
 For a plain deferred call, `prepared_call_` identifies the exact child expression whose invocation will run at drain. Calls inside its operands execute during preparation. Move the prepared child’s map into its checked operation after all outcome annotations, including declared-root presence, and before result handling can return early. Registration copies the prepared effects into the cleanup action and sets the thrown category on exceptional outcomes. Keep the existing empty-map fallback distinct from failed preparation, which registers no action. This scope covers the map produced by `finish_call`; other effect producers and the callee solver retain their existing paths.
 
 After the predicate-assertion cutover, compare existing specialized seed artifacts for `ModuleIndex.cod` and the focused controls for immediate borrowed writes, deferred saved targets and invocation-time slots, failure before or after a write, and cleanup order. Include an existing case-scan or scope-transfer control and the prior-output check on a located rejection. Reuse matching reference artifacts. The [seed-first work order](#seed-checker-migration-and-performance-acceptance) applies.
+
+#### Recording builtin effects for a prepared call
+
+At `284894ce:cod/lang_checked.hh`, `check_eager` and `check_builtin_declarations` build per-exit entries for defer registration. An immediate builtin reports possible failures directly through `note_abrupt`. Neither that function nor LLVM reads the entries. On the immediate path, skip constructing these entries, including the call to `preserve_pending` that builds the pending-exception facts for each entry.
+
+Keep the operand and result types, builtin identity, negation predicate and early exit for a non-completing operand. Run declaration selection and result checks even when the set of declared failures comes back empty. For a live immediate occurrence, keep the existing single notification for the declared failure set, followed by the intrinsic failure notification when applicable. The two events carry different information. LLVM continues to emit its arithmetic failure at the original operator site.
+
+When the expression is the exact `prepared_call_` child, preserve the normal entry, each declared failure reason, and the separate intrinsic failure reason with their existing pending-exception facts. Registration consumes these entries after operand preparation succeeds. Operators inside the operands still execute immediately. Other producers, including the swap branches that record destination updates, keep their existing behavior.
+
+Compare the saved specialized Lexer and ModuleIndex artifacts. The immediate overflow control exits 70 at `3:16`. The prepared addition prints `42` and then `7` before the deferred overflow is reported at `4:10` with status 70. The declared additions print `3` and `7` on their successful immediate and deferred paths. The incompatible declared result still fails at `2:5` and preserves previous outputs. Use the existing traces, diagnostics and generated artifacts under the [seed-first work order](#seed-checker-migration-and-performance-acceptance).
 
 #### When parallel module processing would help
 
