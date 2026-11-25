@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review an unused caller snapshot during seed checking
+
+<a id="k-seed-boolean-entry-snapshot-20261124"></a>
+**K-SEED-BOOLEAN-ENTRY-SNAPSHOT-20261124.** D-ARCH-REVIEW r121→122 continues P-682/P-683. During a full booter build, an observed stack reached `current_booleans` from ordinary call checking. At `75e196aa:cod/lang_checked.hh:5136`, a Boolean result alone can trigger a snapshot of every available Boolean in the caller. The [implementation review](design/ImplementationArchitecture.md#boolean-snapshots-at-immediate-scalar-calls) clears omitting that map for a direct independent scalar function call once its inputs and summary establish that the map has no consumer. By-value result predicates and borrowed-argument checks retain their proofs.
+
 ## 2026-11-24 — Review source checking for growth of the module key array
 
 <a id="k-booter-reserve-keys-20261124"></a>
