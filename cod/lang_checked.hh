@@ -193,17 +193,35 @@ class ScalarChecker {
   CallableChoices callable_choices_;
   size_t checking_context_ = 0;
   // Context zero is module initialization; other contexts are instance IDs + 1.
-  mutable std::map<size_t, std::set<size_t>> effect_dependents_;
+  struct EffectConsumer {
+    size_t read_round = 0;
+    bool symbols_covered = false;
+  };
+  mutable std::map<size_t, std::map<size_t, EffectConsumer>> effect_dependents_;
+  size_t read_effect_round_ = 0;
+  bool closing_read_effects_ = false;
+  struct SymbolRequirementBound {
+    std::set<size_t> symbols;
+    std::map<const Expression *, size_t> callees;
+  };
+  // The checked method ID includes the selected interpretation. The bounded
+  // source profile has no receiver- or argument-dependent target selection.
+  std::map<size_t, std::optional<SymbolRequirementBound>> symbol_requirement_bounds_;
+  bool symbol_selection_ready_ = false;
   mutable std::set<size_t> callable_effect_consumers_;
   struct UnavailableBodyProof {};
   const std::vector<bool> *unavailable_body_proofs_ = nullptr;
   // Physical binding distinctness refines the proof for the same checked body.
   std::map<size_t, CallEffects> distinct_binding_effects_;
-  const CallEffects &read_effects(size_t instance, bool distinct_bindings = false) const {
+  const CallEffects &read_effects(size_t instance, bool distinct_bindings = false, bool symbols_covered = false) const {
     if (unavailable_body_proofs_ && instance + 1 < unavailable_body_proofs_->size() &&
         (*unavailable_body_proofs_)[instance + 1])
       throw UnavailableBodyProof{};
-    effect_dependents_[instance].insert(checking_context_);
+    auto &consumer = effect_dependents_[instance][checking_context_];
+    if (closing_read_effects_) {
+      if (consumer.read_round != read_effect_round_) consumer = {read_effect_round_, symbols_covered};
+      else consumer.symbols_covered &= symbols_covered;
+    }
     if (distinct_bindings)
       if (const auto found = distinct_binding_effects_.find(instance); found != distinct_binding_effects_.end())
         return found->second;
@@ -277,6 +295,12 @@ class ScalarChecker {
   }
   const std::vector<size_t> &family_methods(size_t family) const {
     return interpretation_ ? interpreted_family(family).methods : program_.families.at(family).methods;
+  }
+  const std::vector<size_t> *proven_family_methods(size_t family, size_t interpretation) const {
+    if (!interpretation) return &program_.families.at(family).methods;
+    const auto view = family_views_.find({family, interpretation});
+    if (view == family_views_.end() || !view->second.unproved.empty()) return nullptr;
+    return &view->second.methods;
   }
   const std::vector<CheckedMethod> &declarations(const std::string &name) const {
     static const std::vector<CheckedMethod> empty;
@@ -2670,6 +2694,85 @@ class ScalarChecker {
     const ModuleLookup context(interpretation_, state && state->method ? program_.methods[*state->method].interpretation : interpretation_);
     if (const auto family = module_call_family(module_names(), expr)) return {family_methods(*family)};
     return {};
+  }
+  // Admit only source forms whose runtime calls are the written, statically
+  // selected ordinary methods. New expression forms take the exact solver.
+  bool collect_symbol_requirements(const Expression &expr, const CheckedMethod &method,
+                                   SymbolRequirementBound &bound) {
+    using K = Expression::Kind;
+    if (expr.definition || expr.receiving || expr.annotation || !expr.declaration_kind.empty() ||
+        expr.spread || expr.checked_ref_argument) return false;
+    const auto is_parameter = [&](const std::string &name) {
+      return std::ranges::any_of(method.input_parameters(),
+          [&](const auto &parameter) { return parameter.name == name; });
+    };
+    const auto shadows_module = [&](const std::string &name) {
+      return is_parameter(name) || std::ranges::any_of(method.input_owners(),
+          [&](const auto &owner) { return owner.name == name; });
+    };
+    switch (expr.kind) {
+    case K::name:
+      return is_parameter(expr.text);
+    case K::integer: case K::real: case K::boolean:
+    case K::block: case K::grouped: case K::conditional:
+    case K::return_value: case K::named_argument:
+      break;
+    case K::transfer:
+      if (expr.children.size() != 2 || expr.children.front()->kind != K::name) return false;
+      break;
+    case K::symbol: case K::touch: case K::effect: {
+      if (shadows_module(expr.text)) return false;
+      const auto selected = module_names().symbols.find(expr.text);
+      if (selected == module_names().symbols.end()) return false;
+      const auto &symbol = program_.symbols.at(selected->second);
+      if (symbol.reference || symbol.live_scope || !symbol.type || !scalar_type(*symbol.type)) return false;
+      if (expr.kind == K::effect) {
+        if (expr.binding != "<-" || expr.children.size() != 1) return false;
+      } else bound.symbols.insert(selected->second);
+      break;
+    }
+    case K::call: {
+      if (expr.intrinsic || expr.lexical_symbol_call || shadows_module(expr.text)) return false;
+      const auto family = module_call_family(module_names(), expr);
+      if (!family || program_.families[*family].symbol) return false;
+      const auto *methods = proven_family_methods(*family, interpretation_);
+      if (!methods || methods->size() != 1) return false;
+      const auto selected = methods->front();
+      const auto &callee = first_demand_symbol_bound(selected);
+      if (!callee) return false;
+      bound.symbols.insert(callee->symbols.begin(), callee->symbols.end());
+      bound.callees.emplace(&expr, selected);
+      break;
+    }
+    default:
+      return false;
+    }
+    return std::ranges::all_of(expr.children,
+        [&](const auto &child) { return collect_symbol_requirements(*child, method, bound); });
+  }
+  const std::optional<SymbolRequirementBound> &first_demand_symbol_bound(size_t method) {
+    const auto [entry, first] = symbol_requirement_bounds_.try_emplace(method);
+    // Recursive and unsupported methods stay on the ordinary solver.
+    if (!first) return entry->second;
+    const auto &definition = program_.methods[method];
+    const auto &source = *definition.source;
+    if (!source.ordinary_procedure() || source.symbolic || source.c_linkage || !definition.operation.empty() ||
+        !source.body || lexical_methods_.contains(&source) || definition.parent || definition.regional_initializer ||
+        definition.lexical_result || definition.scope_inputs || definition.here_group || !definition.here.empty() ||
+        !definition.type_parameters.empty() ||
+        !std::ranges::all_of(definition.parameters, scalar_type) ||
+        std::ranges::any_of(definition.input_parameters(), [](const auto &parameter) {
+          return parameter.automatic_conversion || parameter.variadic || parameter.selects_caller_place();
+        })) return entry->second;
+    const ModuleLookup module(module_, definition.module);
+    const ModuleLookup interpretation(interpretation_, definition.interpretation);
+    SymbolRequirementBound bound;
+    if (collect_symbol_requirements(*source.body, definition, bound)) entry->second.emplace(std::move(bound));
+    return entry->second;
+  }
+  const SymbolRequirementBound *symbol_bound(size_t method) const {
+    const auto found = symbol_requirement_bounds_.find(method);
+    return found != symbol_requirement_bounds_.end() && found->second ? &*found->second : nullptr;
   }
   std::string_view operation_name(const Expression &expr, const TypeEvidenceState *state = nullptr) const {
     if (expr.lexical_symbol_call) return {};
@@ -7286,6 +7389,8 @@ class ScalarChecker {
         definition.input_parameters()[0].read_only == definition.input_parameters()[1].read_only)
       distinct_binding_effects_.emplace(id, program_.instances.back().effects);
     definition.instances.push_back(id);
+    if (symbol_selection_ready_ && definition.source->ordinary_procedure())
+      first_demand_symbol_bound(method);
     return id;
   }
   std::vector<size_t> most_specific(const std::vector<size_t> &applicable, const Access &access = {}, const Owners &owners = {},
@@ -7402,7 +7507,23 @@ class ScalarChecker {
     }
     operation.reads_direct_body = expr.kind == Expression::Kind::call && !expr.lexical_symbol_call &&
         !operation.callable_call && !method.scope_inputs && !method.here_group && method.here.empty();
-    const auto &effects = read_effects(*operation.callee, distinct_bindings);
+    bool symbols_covered = false;
+    if (closing_read_effects_) {
+      if (checking_instance_) if (const auto *caller = symbol_bound(checking_instance_->method)) {
+        const auto edge = caller->callees.find(&expr);
+        if (!operation.reads_direct_body || edge == caller->callees.end() || edge->second != target.method)
+          throw std::logic_error("closed symbol requirement bound missed a checked call target");
+      }
+      if (operation.reads_direct_body && !delayed_ && &expr != prepared_call_ &&
+          !distinct_binding_effects_.contains(*operation.callee)) {
+        // The target-discovery pass does not use availability for a direct
+        // scalar-symbol call; its other effect dependencies still apply.
+        if (const auto *bound = symbol_bound(target.method))
+          symbols_covered = !proving_ || (lexical_.live && completes &&
+              std::ranges::all_of(bound->symbols, [&](size_t symbol) { return lexical_.symbols.get(symbol).bound; }));
+      }
+    }
+    const auto &effects = read_effects(*operation.callee, distinct_bindings, symbols_covered);
     for (size_t i = 0; i < views.size(); ++i) {
       const auto &view = views[i];
       if (!view.indexed_target || argument_mode(parameters[i]) == ArgumentMode::value) continue;
@@ -9005,13 +9126,8 @@ class ScalarChecker {
           }
           // A body may select any applicable method in its interpretation.
           // Close the whole family without demanding instances from a query.
-          const auto *methods = &program_.families.at(*family).methods;
-          if (method.interpretation) {
-            const auto view = family_views_.find({*family, method.interpretation});
-            if (view == family_views_.end() || !view->second.unproved.empty()) return false;
-            methods = &view->second.methods;
-          }
-          if (methods->empty()) return false;
+          const auto *methods = proven_family_methods(*family, method.interpretation);
+          if (!methods || methods->empty()) return false;
           pending.insert(pending.end(), methods->begin(), methods->end());
         }
       }
@@ -22858,7 +22974,7 @@ class ScalarChecker {
     // The solver may revisit readers for other forms of access. Only a
     // checked direct selection establishes a prerequisite for this replay.
     for (const auto &[id, readers] : effect_dependents_)
-      for (const auto reader : readers)
+      for (const auto &[reader, consumer] : readers)
         if (!plan.inputs.at(reader).contains(id + 1)) return {};
 
     std::vector<std::vector<size_t>> dependents(plan.inputs.size());
@@ -22946,11 +23062,17 @@ class ScalarChecker {
     return true;
   }
 
-  static bool merge_effects(CallEffects &known, const CallEffects &effects, bool reads) {
-    bool changed = false;
+  struct EffectChanges {
+    bool symbols = false;
+    bool other = false;
+    explicit operator bool() const { return symbols || other; }
+  };
+  static EffectChanges merge_effects(CallEffects &known, const CallEffects &effects, bool reads) {
+    EffectChanges changes;
+    auto &changed = changes.other;
     if (reads) {
       if (known.reads != effects.reads) { known.reads = effects.reads; changed = true; }
-      if (known.symbols != effects.symbols) { known.symbols = effects.symbols; changed = true; }
+      if (known.symbols != effects.symbols) { known.symbols = effects.symbols; changes.symbols = true; }
     } else {
       const auto allocations = known.lexical_allocations.size();
       known.lexical_allocations.insert(effects.lexical_allocations.begin(), effects.lexical_allocations.end());
@@ -23002,9 +23124,15 @@ class ScalarChecker {
         for (const auto &[parameter, value] : values) payloads[reason][parameter].merge(value);
       if (known.payloads != payloads) { known.payloads = std::move(payloads); changed = true; }
     }
-    return changed;
+    return changes;
   }
   bool close_effects(bool reads) {
+    closing_read_effects_ = reads;
+    if (reads) ++read_effect_round_;
+    struct ClosingReadEffects {
+      bool &active;
+      ~ClosingReadEffects() { active = false; }
+    } closing{closing_read_effects_};
     std::deque<size_t> pending;
     std::set<size_t> queued;
     const auto enqueue = [&](size_t context) {
@@ -23027,14 +23155,23 @@ class ScalarChecker {
       if (!context) check_entry();
       else {
         const auto instance = context - 1;
-        bool distinct_changed = false;
+        EffectChanges distinct_changes;
         if (auto it = distinct_binding_effects_.find(instance); it != distinct_binding_effects_.end()) {
           const auto effects = check_instance(instance, true);
-          distinct_changed = merge_effects(it->second, effects, reads);
+          distinct_changes = merge_effects(it->second, effects, reads);
         }
         const auto effects = check_instance(instance);
-        if (merge_effects(program_.instances[instance].effects, effects, reads) || distinct_changed)
-          for (const auto dependent : effect_dependents_[instance]) enqueue(dependent);
+        auto &body = program_.instances[instance];
+        const auto changes = merge_effects(body.effects, effects, reads);
+        if (changes.symbols) if (const auto *bound = symbol_bound(body.method))
+          if (!std::ranges::includes(bound->symbols, body.effects.symbols))
+            throw std::logic_error("closed symbol requirement bound missed a checked requirement");
+        if (changes || distinct_changes)
+          for (const auto &[dependent, consumer] : effect_dependents_[instance]) {
+            if (changes.symbols && !changes.other && !distinct_changes &&
+                consumer.read_round == read_effect_round_ && consumer.symbols_covered) continue;
+            enqueue(dependent);
+          }
       }
       // New obligations must establish their write guarantees before any read
       // closure can rely on them. Callable choices can also change guarantees.
@@ -24822,6 +24959,7 @@ class ScalarChecker {
         check_declared_results(method, method.result, declared_results(method, method.parameters));
     if (unsupported_here) implementation_gap(*unsupported_here, "this receiving pattern for a here body");
     prepare_interpretations();
+    symbol_selection_ready_ = true;
     for (const auto &method : program_.methods) {
       if (!variadic(method)) continue;
       if (!supports_value_pack(method))
