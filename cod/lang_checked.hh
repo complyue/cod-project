@@ -346,6 +346,28 @@ class ScalarChecker {
   mutable std::set<size_t> callable_effect_consumers_;
   struct LeafBehaviorPlan;
   const LeafBehaviorPlan *extracting_leaf_ = nullptr;
+  struct LeafGuard {
+    const Expression *test;
+    bool when;
+    size_t parent;
+  };
+  struct ScalarPredicatePlan {
+    struct Call {
+      const Expression *site;
+      size_t instance, guard;
+    };
+    std::vector<const Expression *> operations;
+    std::vector<LeafGuard> guards;
+    std::vector<Call> calls;
+  };
+  std::map<size_t, ScalarPredicatePlan> scalar_callers_;
+  const ScalarPredicatePlan *applying_scalar_ = nullptr;
+  size_t planned_scalar_target(const Expression *site) const {
+    const auto &calls = applying_scalar_->calls;
+    const auto call = std::ranges::find(calls, site, &ScalarPredicatePlan::Call::site);
+    if (call == calls.end()) throw std::logic_error("scalar application reached an unplanned call");
+    return call->instance;
+  }
   std::map<size_t, SyntaxDiagnostic> unavailable_leaf_behaviors_;
   struct EntryBehaviorCheck {
     const Expression *initializer = nullptr;
@@ -361,9 +383,12 @@ class ScalarChecker {
       fail(failure->second.at, failure->second.message);
   }
   const CallEffects &read_effects(size_t instance, bool distinct_bindings = false, bool symbols_covered = false,
-                                 EffectUse use = EffectUse::all) const {
+                                 EffectUse use = EffectUse::all, const Expression *call_site = nullptr) const {
     if (extracting_leaf_)
       throw std::logic_error("closed leaf extraction reached an ordinary behavior dependency");
+    if (applying_scalar_ && (!call_site || distinct_bindings || planned_scalar_target(call_site) != instance ||
+                             !program_.instances[instance].effects_frozen))
+      throw std::logic_error("scalar application reached an unproved behavior dependency");
     if (unavailable_body_proofs_ && instance + 1 < unavailable_body_proofs_->size() &&
         (*unavailable_body_proofs_)[instance + 1])
       throw UnavailableBodyProof{};
@@ -558,6 +583,10 @@ class ScalarChecker {
   bool proving_ = false;
   bool validating_ = false;
   CallEffects observed_;
+  CallEffects &observe_effects() {
+    if (applying_scalar_) throw std::logic_error("scalar application cannot collect a callable contract");
+    return observed_;
+  }
   std::vector<std::set<size_t>> possible_targets_, possible_null_sources_, target_dependencies_;
   std::vector<CheckedStorage> catalog_storage_;
   std::vector<CheckedBinding> catalog_bindings_;
@@ -733,7 +762,7 @@ class ScalarChecker {
       if (validating_) implementation_gap(at, "allocating into a caller owner through a higher-order here receiver");
       return;
     }
-    observed_.lexical_allocations.insert(null_target - 1 - *actual);
+    observe_effects().lexical_allocations.insert(null_target - 1 - *actual);
   }
   CheckedOperation::ArrayAllocator array_allocator(std::optional<size_t> actual, const Location &at) const {
     using Allocator = CheckedOperation::ArrayAllocator;
@@ -765,7 +794,7 @@ class ScalarChecker {
   }
   void observe_array_allocation(const CheckedOperation::ArrayAllocator &allocator) {
     if (lexical_.live && allocator.kind == CheckedOperation::ArrayAllocator::input)
-      observed_.array_allocations.insert(allocator.place);
+      observe_effects().array_allocations.insert(allocator.place);
   }
   size_t owner_lifetime_scope(size_t owner) const {
     if (const auto region = region_owners_.find(owner); region != region_owners_.end())
@@ -4519,7 +4548,7 @@ class ScalarChecker {
     CleanupEquations::MissingInitialization missing;
     for (const auto &[id, clauses] : before.uninitialized) if (storage(id).borrowed)
       missing.emplace(input_ordinal(id), external_conditions(clauses));
-    observed_.reads.insert({input_ordinal(place), std::move(external), std::move(missing), external_conditions(before.when),
+    observe_effects().reads.insert({input_ordinal(place), std::move(external), std::move(missing), external_conditions(before.when),
         external_initialization(before.initialized_selections)});
   }
   bool in_immediate_scope() const {
@@ -4529,7 +4558,7 @@ class ScalarChecker {
     if (in_immediate_scope()) {
       auto missing = external_conditions(when, true);
       if (!CleanupEquations::unconditional(missing)) {
-        if (!missing.empty()) observed_.reads.insert({site, {}, {}, std::move(missing)});
+        if (!missing.empty()) observe_effects().reads.insert({site, {}, {}, std::move(missing)});
         return;
       }
     }
@@ -4548,7 +4577,7 @@ class ScalarChecker {
     if (!delayed_ && !checking_instance_ && validating_)
       fail(at, "cannot prove an installed binding for symbol '" + program_.symbols[symbol].name + "'");
     state.required_symbols.insert(symbol);
-    if (!delayed_) observed_.symbols.insert(symbol);
+    if (!delayed_) observe_effects().symbols.insert(symbol);
   }
   static bool initialized_entry_alias(const CleanupEquations::ReadRequirement &read, const LexicalState &state) {
     if (read.nonnull || !read.selection) return false;
@@ -6214,11 +6243,11 @@ class ScalarChecker {
     if (!categories.empty()) completion.reason = Completion::failure(*categories.begin()).reason;
     if (!abrupt_) {
       if (!proving_) return;
-      if (here_exit == HereExit::return_supplier) observed_.returns_from_supplier = true;
-      if (here_exit == HereExit::break_call) observed_.breaks_here_call = true;
+      if (here_exit == HereExit::return_supplier) observe_effects().returns_from_supplier = true;
+      if (here_exit == HereExit::break_call) observe_effects().breaks_here_call = true;
       for (const auto category : categories) if (program_.exception_types.at(category).checked) {
         if (checking_method_ && (checking_method_->source->implicit_scope || checking_method_->here_group))
-          observed_.scope_checked_failures.insert(category);
+          observe_effects().scope_checked_failures.insert(category);
         else if (validating_ && (!checking_method_ || !checking_method_->throws_categories.contains(category)))
           report_uncovered_exception(at, category);
       }
@@ -6245,7 +6274,7 @@ class ScalarChecker {
     if (abrupt_) { abrupt_->declared.insert(requirement); return; }
     if (!proving_) return;
     if (checking_method_ && (checking_method_->source->implicit_scope || checking_method_->here_group)) {
-      observed_.scope_checked_failures.insert(0);
+      observe_effects().scope_checked_failures.insert(0);
       return;
     }
     if (!validating_) return;
@@ -7679,6 +7708,13 @@ class ScalarChecker {
     if (family.definition) check_query_binding(expr.text, expr.at);
     if (family.methods.empty()) missing_callable(expr);
     const auto method = select_method(family.methods, arguments, expr.at, expr.text, family.retained_types(), access, owners);
+    if (applying_scalar_) {
+      const auto instance = planned_scalar_target(&expr);
+      if (program_.instances[instance].method != method || !arguments.empty() || family.context || family.definition ||
+          family.declaration || !family.retained_types().empty())
+        throw std::logic_error("scalar application changed its selected call");
+      return instance;
+    }
     return demand_named(expr, family, method, arguments);
   }
   bool applicable_operation(const std::string &name, const std::vector<Type> &arguments, const Access &access = {}, const Owners &owners = {}) const {
@@ -7765,7 +7801,8 @@ class ScalarChecker {
       return;
     }
     const auto &effects = read_effects(*operation.callee, distinct_bindings, symbols_covered,
-        result_ignored ? EffectUse::discarded_boolean_result : EffectUse::all);
+        result_ignored ? EffectUse::discarded_boolean_result : EffectUse::all,
+        operation.reads_direct_body ? &expr : nullptr);
     for (size_t i = 0; i < views.size(); ++i) {
       const auto &view = views[i];
       if (!view.indexed_target || argument_mode(parameters[i]) == ArgumentMode::value) continue;
@@ -22535,7 +22572,8 @@ class ScalarChecker {
 
   void begin_check(std::vector<CheckedStorage> &storage, std::vector<CheckedBinding> &bindings,
                    std::map<const Expression *, CheckedOperation> &operations, bool proving) {
-    proving_ = proving; observed_ = {};
+    proving_ = proving;
+    if (!applying_scalar_) observed_ = {};
     storage_ = &storage; bindings_ = &bindings;
     storage.clear(); bindings.clear(); operations.clear(); definitions_.clear();
     if (!proving) {
@@ -22635,10 +22673,18 @@ class ScalarChecker {
     for (const auto &[binding, referent] : input_slot_referents_) if (rebound_.contains(binding))
       visit(input_ordinal(*bindings_->at(binding).embedded_slot), binding);
   }
+  CleanupEquations::BooleanValue returned_boolean(const LexicalState &state) const {
+    CleanupEquations::BooleanValue returned;
+    for (const auto &[result, clauses] : state.returned.boolean)
+      returned[result] = CleanupEquations::conjoin_conditions(clauses, path_conditions(state));
+    return external_boolean(returned);
+  }
+
   void observe_outcome(size_t reason, const LexicalState &state) {
+    auto &observed = observe_effects();
     const auto completion = Completion{reason};
-    if (completion.failed()) observed_.escaping_failures.insert(reason);
-    if (completion.protected_here()) observed_.propagates_here_transfer = true;
+    if (completion.failed()) observed.escaping_failures.insert(reason);
+    if (completion.protected_here()) observed.propagates_here_transfer = true;
     std::set<size_t> known;
     for (const auto id : state.initialized) if (storage(id).borrowed) known.insert(input_ordinal(id));
     CleanupEquations::MissingInitialization missing;
@@ -22659,26 +22705,26 @@ class ScalarChecker {
       if (parameter.initializes_caller_place() && !known.contains(i))
         fail(parameter.at, "init String place must be written on every successful completion");
     }
-    const auto [found, inserted] = observed_.initialized.emplace(reason, known);
-    if (inserted) observed_.uninitialized[reason] = std::move(missing);
-    else CleanupEquations::combine_initialization(found->second, observed_.uninitialized[reason], known, missing, true);
+    const auto [found, inserted] = observed.initialized.emplace(reason, known);
+    if (inserted) observed.uninitialized[reason] = std::move(missing);
+    else CleanupEquations::combine_initialization(found->second, observed.uninitialized[reason], known, missing, true);
     const auto present = input_ordinals(state.present);
-    const auto [presence, first_presence] = observed_.present.emplace(reason, present);
+    const auto [presence, first_presence] = observed.present.emplace(reason, present);
     if (!first_presence) presence->second = intersect(presence->second, present);
     for (size_t p = 0; p < input_count; ++p) {
       const auto place = input_place(p);
       if (storage(place).borrowed && storage(place).type == Type::boolean) {
         const auto proof = state.predicates.find(place);
         auto value = snapshot_boolean(proof == state.predicates.end() ? nullptr : proof->second, state, checking_method_->source->at);
-        CleanupEquations::merge_boolean(observed_.booleans[reason][p], external_boolean(value));
+        CleanupEquations::merge_boolean(observed.booleans[reason][p], external_boolean(value));
       }
       if (!storage(place).borrowed || storage(place).type.kind != Type::exception) continue;
       const auto value = state.exceptions.find(place);
-      observed_.payloads[reason][p].merge(value == state.exceptions.end()
+      observed.payloads[reason][p].merge(value == state.exceptions.end()
           ? ExceptionFacts{exception_value_categories(storage(place).type)} : value->second);
     }
     visit_binding_inputs([&](size_t p, size_t binding) {
-      const auto [result, first] = observed_.bindings[reason].try_emplace(p);
+      const auto [result, first] = observed.bindings[reason].try_emplace(p);
       auto &targets = result->second;
       const bool initialized = state.selections.initialized.contains(binding) ||
           std::all_of(state.targets.at(binding).begin(), state.targets.at(binding).end(),
@@ -22706,23 +22752,21 @@ class ScalarChecker {
       for (auto &[null, clauses] : returned.nullness)
         clauses = CleanupEquations::conjoin_conditions(clauses, path_conditions(state));
       returned.nullness = external_boolean(returned.nullness);
-      observed_.returned.merge(returned);
+      observed.returned.merge(returned);
     }
     if (!reason && checking_instance_->result.type->kind == Type::exception) {
       if (checking_instance_->result.borrowed()) {
         for (const auto place : state.returned.targets) if (place != null_target) {
           const auto found = state.exceptions.find(place);
-          observed_.returned.value.merge(found == state.exceptions.end()
+          observed.returned.value.merge(found == state.exceptions.end()
               ? ExceptionFacts{exception_value_categories(storage(place).type)} : found->second);
         }
-      } else observed_.returned.value.merge(state.returned.value);
+      } else observed.returned.value.merge(state.returned.value);
     }
     if (!reason && !checking_instance_->result.borrowed() && *checking_instance_->result.type == Type::boolean) {
       CleanupEquations::Returned returned;
-      for (const auto &[result, clauses] : state.returned.boolean)
-        returned.boolean[result] = CleanupEquations::conjoin_conditions(clauses, path_conditions(state));
-      returned.boolean = external_boolean(returned.boolean);
-      observed_.returned.merge(returned);
+      returned.boolean = returned_boolean(state);
+      observed.returned.merge(returned);
     }
     for (const auto &[read, requirement] : state.requirements)
       if (!requirement.before.nonnull && std::ranges::any_of(requirement.inputs,
@@ -22808,11 +22852,6 @@ class ScalarChecker {
       if (field.type == Type::boolean) seed_boolean_input(place, ordinal);
     }
   }
-  struct LeafGuard {
-    const Expression *test;
-    bool when;
-    size_t parent;
-  };
   struct LeafRead {
     const Expression *site;
     size_t guard;
@@ -22829,7 +22868,7 @@ class ScalarChecker {
   struct LeafBehaviorPlan {
     enum class Kind { borrowed_byte, scalar_predicate, byte_literal } kind = Kind::borrowed_byte;
     const Expression *primitive = nullptr;
-    std::vector<const Expression *> predicate_operations;
+    ScalarPredicatePlan predicate;
     const Expression *literal_result = nullptr;
     size_t borrowed_formal = null_target;
     std::string_view borrowed_name;
@@ -22842,7 +22881,8 @@ class ScalarChecker {
     return expr.kind == Expression::Kind::binary && (expr.text == "&&" || expr.text == "||");
   }
 
-  bool bind_scalar_predicate(const Expression &expr, const TypeEvidenceState &scope, LeafBehaviorPlan &plan) const {
+  bool bind_scalar_predicate(const Expression &expr, const TypeEvidenceState &scope, ScalarPredicatePlan &plan,
+                             size_t guard = null_target) const {
     using K = Expression::Kind;
     if (expr.annotation || expr.intrinsic || expr.lexical_symbol_call || expr.checked_ref_argument) return false;
     switch (expr.kind) {
@@ -22850,23 +22890,49 @@ class ScalarChecker {
       return scope.bindings.contains(expr.text);
     case K::boolean: case K::integer:
       return true;
+    case K::call: {
+      if (!expr.children.empty() || expr.has_here_body() || scope.bindings.contains(expr.text) ||
+          text_primitive(expr, &scope) || native_operation(expr.text, &scope)) return false;
+      const auto family = named_family(expr, &scope);
+      if (family.methods.size() != 1 || family.context || family.definition || family.declaration ||
+          !family.retained_types().empty() || has_declarations(expr.text)) return false;
+      const auto &method = program_.methods[family.methods.front()];
+      if (!method.input_parameters().empty() || method.source->kind != Form::Kind::function ||
+          abstract_effect_inputs_.contains(method.source)) return false;
+      const auto matching = [&](size_t id) {
+        const auto &instance = program_.instances[id];
+        return instance.arguments.empty() && instance.environment.empty() && instance.retained_types.empty() &&
+            !instance.query_environment && !instance.result_supplied && instance.incoming_abstract_targets.empty() &&
+            instance.result.mode == ResultMode::value && instance.result.type == Type::uint8;
+      };
+      const auto target = std::ranges::find_if(method.instances, matching);
+      if (target == method.instances.end()) return false;
+      plan.calls.push_back({&expr, *target, guard});
+      return true;
+    }
     case K::grouped:
       break;
     case K::unary: case K::binary:
-      if (!short_circuit_predicate(expr)) {
+      plan.operations.push_back(&expr);
+      if (short_circuit_predicate(expr)) {
+        const auto &left = *expr.children.front();
+        if (!bind_scalar_predicate(left, scope, plan, guard)) return false;
+        const auto right_guard = plan.guards.size();
+        plan.guards.push_back({&left, expr.text == "&&", guard});
+        return bind_scalar_predicate(*expr.children.back(), scope, plan, right_guard);
+      } else {
         const auto operation = operation_name(expr, &scope);
         if (operation != expr.text ||
             (operation != "!" && operation != "==" && operation != "!=" &&
              operation != "<" && operation != "<=" && operation != ">" && operation != ">=") ||
             !named_family(expr, &scope).methods.empty() || has_declarations(expr.text)) return false;
       }
-      plan.predicate_operations.push_back(&expr);
       break;
     default:
       return false;
     }
     return std::ranges::all_of(expr.children, [&](const auto &child) {
-      return bind_scalar_predicate(*child, scope, plan);
+      return bind_scalar_predicate(*child, scope, plan, guard);
     });
   }
 
@@ -23006,7 +23072,9 @@ class ScalarChecker {
     const ModuleLookup interpretation(interpretation_, method.interpretation);
     if (scalar_function) {
       const auto &result = *form.body->children.front();
-      if (result.children.size() != 1 || !bind_scalar_predicate(*result.children.front(), scope, plan)) return {};
+      if (result.children.size() != 1 || !bind_scalar_predicate(*result.children.front(), scope, plan.predicate)) return {};
+      if (!plan.predicate.calls.empty() && (form.case_scan_scope || instance.query_environment || instance.result_supplied ||
+          !instance.retained_types.empty() || abstract_effect_inputs_.contains(method.source))) return {};
     } else if (plan.borrowed_formal == null_target || !bind_leaf_operations(*form.body, scope, plan, null_target)) return {};
     return plan;
   }
@@ -23016,19 +23084,34 @@ class ScalarChecker {
     Location origin;
     LexicalState state;
   };
+  struct ScalarExit {
+    Location origin;
+    CleanupEquations::BooleanValue result;
+  };
+
+  static void check_scalar_operations(const ScalarPredicatePlan &plan, const CheckedInstance &instance) {
+    for (const auto *site : plan.operations) {
+      const auto &operation = instance.operations.at(site);
+      const auto builtin = short_circuit_predicate(*site) ? BuiltinOperation::none :
+          site->kind == Expression::Kind::unary ? BuiltinOperation::unary : BuiltinOperation::binary;
+      if (operation.callee || operation.callable_call || operation.builtin != builtin ||
+          (builtin != BuiltinOperation::none && operation.builtin_name != site->text) ||
+          operation.type != Type::boolean)
+        throw std::logic_error("scalar predicate disagrees with its binding plan");
+    }
+    for (const auto &call : plan.calls) {
+      const auto &operation = instance.operations.at(call.site);
+      if (!operation.reads_direct_body || operation.callable_call || operation.builtin != BuiltinOperation::none ||
+          operation.callee != call.instance || !operation.arguments.empty() || operation.type != Type::uint8)
+        throw std::logic_error("scalar predicate disagrees with its planned call");
+    }
+  }
+
   void complete_leaf_exits(const LeafBehaviorPlan &leaf, const CheckedInstance &instance,
                            const std::vector<LeafExitEquation> &exits) {
     const bool borrowed = leaf.kind == LeafBehaviorPlan::Kind::borrowed_byte;
     if (leaf.kind == LeafBehaviorPlan::Kind::scalar_predicate) {
-      for (const auto *site : leaf.predicate_operations) {
-        const auto &operation = instance.operations.at(site);
-        const auto builtin = short_circuit_predicate(*site) ? BuiltinOperation::none :
-            site->kind == Expression::Kind::unary ? BuiltinOperation::unary : BuiltinOperation::binary;
-        if (operation.callee || operation.callable_call || operation.builtin != builtin ||
-            (builtin != BuiltinOperation::none && operation.builtin_name != site->text) ||
-            operation.type != Type::boolean)
-          throw std::logic_error("scalar predicate disagrees with its binding plan");
-      }
+      check_scalar_operations(leaf.predicate, instance);
     } else if (leaf.kind == LeafBehaviorPlan::Kind::byte_literal) {
       const auto &operation = instance.operations.at(leaf.literal_result);
       if (operation.type != Type::uint8 || operation.callee || operation.callable_call || operation.builtin != BuiltinOperation::none)
@@ -23047,8 +23130,8 @@ class ScalarChecker {
     }
   }
 
-  CallEffects check_instance(size_t i, bool distinct_bindings = false, TerminalFindings *terminal_findings = nullptr,
-                             const LeafBehaviorPlan *leaf = nullptr) try {
+  void check_instance_flow(size_t i, bool distinct_bindings, TerminalFindings *terminal_findings,
+                           const LeafBehaviorPlan *leaf, std::vector<ScalarExit> *scalar_exits = nullptr) try {
     checking_context_ = i + 1;
     auto &instance = program_.instances[i];
     checking_instance_ = &instance;
@@ -23273,6 +23356,18 @@ class ScalarChecker {
       const bool returns_void_at_end = !checking_method_->regional_initializer && method.returns_void_at_end(*instance.result.type);
       const auto completion = finish_scope(completed, flow, &outcomes, 0, method.at,
                                            method.case_scan_scope ? &case_scan : nullptr, returns_void_at_end).type;
+      if (scalar_exits) {
+        abrupt_ = nullptr;
+        if (!proving) return;
+        if (case_scan || !outcomes.declared.empty() || (completion != Type::never && lexical_.live))
+          throw std::logic_error("scalar application reached an unplanned completion");
+        for (const auto &path : outcomes.paths) {
+          if (path.completion.reason != 1 || path.here_exit)
+            throw std::logic_error("scalar application reached an unplanned exit");
+          scalar_exits->push_back({path.at, returned_boolean(path.state)});
+        }
+        return;
+      }
       const bool requires_return = !checking_method_->regional_initializer && method.completion_requires_return(*instance.result.type);
       if (validating_ && proving && requires_return && completion != Type::never &&
           record_warning_key(instance.method, warned_missing_return_, &ReplayWarnings::missing_return))
@@ -23280,7 +23375,8 @@ class ScalarChecker {
             ? "procedure may finish without an explicit return" : "callable may finish without a result"});
       if (proving) {
         abrupt_ = nullptr;
-        if (method.case_scan_scope) observed_.case_scope_exits.emplace();
+        auto &observed = observe_effects();
+        if (method.case_scan_scope) observed.case_scope_exits.emplace();
         // Complete capture preparation can fail before the body registers any
         // cleanup or establishes output facts. Retain this incoming outcome
         // for deferred invocation as well as ordinary calls, independently of
@@ -23290,11 +23386,11 @@ class ScalarChecker {
           observe_outcome(Completion::failure(exception_id(ExceptionCategory::out_of_memory)).reason, incoming);
         for (const auto requirement : outcomes.declared) note_declared(requirement);
         if (case_scan) {
-          observed_.case_scope_exits->scan = true;
+          observed.case_scope_exits->scan = true;
           record_exit(0, method.at, *case_scan);
         }
         if (completion != Type::never && lexical_.live) {
-          if (observed_.case_scope_exits && !requires_return) observed_.case_scope_exits->result = true;
+          if (observed.case_scope_exits && !requires_return) observed.case_scope_exits->result = true;
           const auto reason = requires_return ? Completion::failure(exception_id(ExceptionCategory::missing_return)).reason :
               method.case_scan_scope ? size_t{1} : size_t{0};
           record_exit(reason, method.at, lexical_);
@@ -23302,7 +23398,7 @@ class ScalarChecker {
         const auto normal = lexical_;
         std::set<size_t> unproved_owners;
         for (const auto &path : outcomes.paths) {
-          if (observed_.case_scope_exits && path.completion.reason == 1) observed_.case_scope_exits->result = true;
+          if (observed.case_scope_exits && path.completion.reason == 1) observed.case_scope_exits->result = true;
           record_exit(path.completion.reason == 1 && !method.case_scan_scope ? 0 : path.completion.reason,
                       path.at, path.state);
           bool collected = false;
@@ -23311,7 +23407,7 @@ class ScalarChecker {
             const auto categories = path.exceptions.possibilities();
             for (const auto category : categories) if (nominal_failure(category)) {
               if (path.exceptions.restricted({category}).only_direct_owned())
-                observed_.direct_owned_failures.insert(category);
+                observed.direct_owned_failures.insert(category);
               else unproved_owners.insert(category);
             }
             if (!categories.contains(path.completion.category()))
@@ -23327,14 +23423,15 @@ class ScalarChecker {
               }
             }
           }
-          if (path.completion.protected_here() && !path.here_exit) observed_.propagates_outer_here_transfer = true;
+          if (path.completion.protected_here() && !path.here_exit) observed.propagates_outer_here_transfer = true;
           lexical_ = path.state; abrupt_ = nullptr;
           if (!collected) forward_abrupt(path);
         }
-        for (const auto category : unproved_owners) observed_.direct_owned_failures.erase(category);
+        for (const auto category : unproved_owners) observed.direct_owned_failures.erase(category);
         lexical_ = normal;
       }
     });
+    if (scalar_exits) return;
     if (leaf) {
       // Application and summary publication cannot start during extraction.
       complete_leaf_exits(*leaf, instance, leaf_exits);
@@ -23344,26 +23441,27 @@ class ScalarChecker {
       if (possible_terminal_failure) possible_terminal_failures_.insert(profile);
       else if (!possible_terminal_failures_.empty()) possible_terminal_failures_.erase(profile);
     }
+    auto &observed = observe_effects();
     for (const auto place : payload_writes_.places)
-      if (storage(place).borrowed) observed_.written_inputs.insert(input_ordinal(place));
-    std::erase_if(observed_.uninitialized, [](const auto &entry) { return entry.second.empty(); });
+      if (storage(place).borrowed) observed.written_inputs.insert(input_ordinal(place));
+    std::erase_if(observed.uninitialized, [](const auto &entry) { return entry.second.empty(); });
     // Initializer completion uses the observed normal entry to decide
     // whether the reserved target can become ready.
     for (const auto reason : call_reasons(*checking_method_))
       if (reason || !checking_method_->regional_initializer_fields)
-        observed_.initialized.try_emplace(reason);
-    for (const auto reason : call_reasons(*checking_method_)) observed_.present.try_emplace(reason);
-    if (!instance.result.borrowed() && *instance.result.type == Type::boolean && observed_.returned.boolean.empty())
-      observed_.returned.boolean = CleanupEquations::unknown_boolean();
-    if (instance.result.nullable() && observed_.returned.nullness.empty())
-      observed_.returned.nullness = CleanupEquations::unknown_boolean();
+        observed.initialized.try_emplace(reason);
+    for (const auto reason : call_reasons(*checking_method_)) observed.present.try_emplace(reason);
+    if (!instance.result.borrowed() && *instance.result.type == Type::boolean && observed.returned.boolean.empty())
+      observed.returned.boolean = CleanupEquations::unknown_boolean();
+    if (instance.result.nullable() && observed.returned.nullness.empty())
+      observed.returned.nullness = CleanupEquations::unknown_boolean();
     auto initial = initial_effects(*checking_method_, instance.arguments);
     for (const auto &[reason, values] : initial.booleans)
-      for (const auto &[parameter, value] : values) observed_.booleans[reason].try_emplace(parameter, CleanupEquations::unknown_boolean());
+      for (const auto &[parameter, value] : values) observed.booleans[reason].try_emplace(parameter, CleanupEquations::unknown_boolean());
     for (const auto &[reason, payloads] : initial.payloads)
-      for (const auto &[parameter, value] : payloads) observed_.payloads[reason].try_emplace(parameter, value);
+      for (const auto &[parameter, value] : payloads) observed.payloads[reason].try_emplace(parameter, value);
     visit_binding_inputs([&](size_t parameter, size_t binding) {
-      auto &sources = observed_.binding_sources[parameter];
+      auto &sources = observed.binding_sources[parameter];
       for (const auto place : possible_targets_.at(binding)) if (place != null_target) {
         if (!storage(place).borrowed)
           implementation_gap(method.at, "caller-binding access source without input provenance");
@@ -23383,12 +23481,12 @@ class ScalarChecker {
             result.initialized = input.mode != ArgumentMode::borrowed_ptr;
           }
         }
-        observed_.bindings.try_emplace(reason, std::move(targets));
+        observed.bindings.try_emplace(reason, std::move(targets));
       }
     }
-    if (observed_.returned.value.unresolved())
+    if (observed.returned.value.unresolved())
       throw std::logic_error("unresolved cleanup exception origin in callable result");
-    for (const auto &[reason, payloads] : observed_.payloads) for (const auto &[parameter, value] : payloads)
+    for (const auto &[reason, payloads] : observed.payloads) for (const auto &[parameter, value] : payloads)
       if (value.unresolved())
         throw std::logic_error("unresolved cleanup exception origin in borrowed payload");
     const auto resolved_boolean = [](const auto &value) {
@@ -23397,11 +23495,10 @@ class ScalarChecker {
             std::any_of(facts.exceptions.begin(), facts.exceptions.end(), [](const auto &value) { return value.unresolved(); }))
         throw std::logic_error("unresolved cleanup boolean origin in callable summary");
     };
-    resolved_boolean(observed_.returned.boolean);
-    resolved_boolean(observed_.returned.nullness);
-    for (const auto &[reason, values] : observed_.booleans)
+    resolved_boolean(observed.returned.boolean);
+    resolved_boolean(observed.returned.nullness);
+    for (const auto &[reason, values] : observed.booleans)
       for (const auto &[parameter, value] : values) resolved_boolean(value);
-    return observed_;
   } catch (const LocatedFailure &failure) {
     const auto &method = program_.methods[program_.instances[i].method];
     if (!method.local_effect_symbol) throw;
@@ -23409,32 +23506,48 @@ class ScalarChecker {
         local_effect_name(method.source->name, *method.local_effect_symbol) + ": " + failure.diagnostic.message);
   }
 
-  // Keep the solved body while validation prepares new frame evidence. A
-  // distinct-binding replay and the ordinary replay must both agree.
-  struct BodyReplay {
-    CheckedProgram &program;
-    CheckedInstance &instance;
+  CallEffects check_instance(size_t id, bool distinct_bindings = false, TerminalFindings *findings = nullptr,
+                             const LeafBehaviorPlan *leaf = nullptr) {
+    check_instance_flow(id, distinct_bindings, findings, leaf);
+    return observed_;
+  }
+
+  struct BodyFrame {
     decltype(CheckedInstance::operations) operations;
     decltype(CheckedInstance::storage) storage;
     decltype(CheckedInstance::bindings) bindings;
     CheckedFrame frame;
     decltype(CheckedInstance::lexical_bindings) lexical_bindings;
+
+    explicit BodyFrame(CheckedInstance &value)
+        : operations(std::move(value.operations)), storage(std::move(value.storage)), bindings(std::move(value.bindings)),
+          frame(std::move(value.frame)), lexical_bindings(std::move(value.lexical_bindings)) {}
+
+    void install(CheckedInstance &value) && {
+      value.operations = std::move(operations);
+      value.storage = std::move(storage);
+      value.bindings = std::move(bindings);
+      value.frame = std::move(frame);
+      value.lexical_bindings = std::move(lexical_bindings);
+    }
+  };
+
+  // Keep the solved body while validation prepares new frame evidence. A
+  // distinct-binding replay and the ordinary replay must both agree.
+  struct BodyReplay {
+    CheckedProgram &program;
+    CheckedInstance &instance;
+    BodyFrame previous;
     bool deferred_aggregates, exception_values;
     bool keep_frame = false;
 
     BodyReplay(CheckedProgram &program, CheckedInstance &value)
-        : program(program), instance(value), operations(std::move(value.operations)), storage(std::move(value.storage)),
-          bindings(std::move(value.bindings)), frame(std::move(value.frame)),
-          lexical_bindings(std::move(value.lexical_bindings)), deferred_aggregates(program.deferred_aggregates),
+        : program(program), instance(value), previous(value), deferred_aggregates(program.deferred_aggregates),
           exception_values(program.exception_values) {}
 
     ~BodyReplay() {
       if (instance.complete || keep_frame) return;
-      instance.operations = std::move(operations);
-      instance.storage = std::move(storage);
-      instance.bindings = std::move(bindings);
-      instance.frame = std::move(frame);
-      instance.lexical_bindings = std::move(lexical_bindings);
+      std::move(previous).install(instance);
       program.deferred_aggregates = deferred_aggregates;
       program.exception_values = exception_values;
     }
@@ -23442,6 +23555,44 @@ class ScalarChecker {
     BodyReplay(const BodyReplay &) = delete;
     BodyReplay &operator=(const BodyReplay &) = delete;
   };
+
+  std::vector<ScalarExit> apply_scalar_caller(size_t id, const ScalarPredicatePlan &plan) {
+    struct ApplicationScope {
+      ScalarChecker &checker;
+      ~ApplicationScope() {
+        checker.applying_scalar_ = nullptr;
+        checker.storage_ = nullptr;
+        checker.bindings_ = nullptr;
+        checker.checking_instance_ = nullptr;
+        checker.checking_method_ = nullptr;
+        checker.abrupt_ = nullptr;
+      }
+    } scope{*this};
+    applying_scalar_ = &plan;
+    std::vector<ScalarExit> exits;
+    check_instance_flow(id, false, nullptr, nullptr, &exits);
+    const auto &instance = program_.instances[id];
+    check_scalar_operations(plan, instance);
+    if (exits.empty()) throw std::logic_error("scalar application found no normal return");
+    for (const auto &exit : exits) for (const auto &[truth, clauses] : exit.result) for (const auto &facts : clauses) {
+      CleanupEquations::ConditionFacts formal;
+      formal.inputs = facts.inputs;
+      if (facts != formal || std::ranges::any_of(facts.inputs, [&](const auto &input) {
+            return input.first >= instance.arguments.size() || instance.arguments[input.first] != Type::boolean;
+          }))
+        throw std::logic_error("scalar application retained a condition outside its Boolean formals");
+    }
+    return exits;
+  }
+
+  static CallEffects seal_scalar_caller(const std::vector<ScalarExit> &exits) {
+    CallEffects effects;
+    effects.initialized.try_emplace(0);
+    effects.present.try_emplace(0);
+    for (const auto &exit : exits) CleanupEquations::merge_boolean(effects.returned.boolean, exit.result);
+    if (effects.returned.boolean.empty()) effects.returned.boolean = CleanupEquations::unknown_boolean();
+    return effects;
+  }
 
   bool replay_instance(size_t id, TerminalFindings *findings = nullptr) {
     auto &instance = program_.instances[id];
@@ -23471,9 +23622,15 @@ class ScalarChecker {
         throw std::logic_error(distinct ? "distinct binding call effects changed after validation"
                                        : "call effects changed after validation");
     };
-    if (const auto it = distinct_binding_effects_.find(id); it != distinct_binding_effects_.end())
-      compare(it->second, true);
-    compare(instance.effects, false);
+    if (const auto plan = scalar_callers_.find(id); plan != scalar_callers_.end()) {
+      const auto exits = apply_scalar_caller(id, plan->second);
+      const auto actual = seal_scalar_caller(exits);
+      if (actual != instance.effects) throw std::logic_error("completed scalar caller differs from final validation");
+    } else {
+      if (const auto it = distinct_binding_effects_.find(id); it != distinct_binding_effects_.end())
+        compare(it->second, true);
+      compare(instance.effects, false);
+    }
     const bool succeeded = !findings || findings->empty();
     if (!succeeded && warnings.shared_proof_changed) {
       const auto &[at, category] = *findings->begin();
@@ -23697,9 +23854,10 @@ class ScalarChecker {
     for (size_t id = 0; id < program_.instances.size(); ++id)
       if (auto plan = bind_leaf_behavior(id)) bound.emplace(id, std::move(*plan));
     propagate_pending_leaf_reads(bound);
+    std::set<size_t> completed_literals;
     for (const auto &[id, plan] : std::as_const(bound)) {
       if ((plan.kind == LeafBehaviorPlan::Kind::borrowed_byte && !plan.primitive) ||
-          !plan.pending.empty() || !plan.inherited_reads.empty()) continue;
+          !plan.predicate.calls.empty() || !plan.pending.empty() || !plan.inherited_reads.empty()) continue;
       struct ExtractionScope {
         ScalarChecker &checker;
         ~ExtractionScope() {
@@ -23719,11 +23877,42 @@ class ScalarChecker {
         instance.effects = std::move(completed);
         instance.effects_frozen = true;
         frame.keep_frame = true;
+        if (plan.kind == LeafBehaviorPlan::Kind::byte_literal) completed_literals.insert(id);
       } catch (const LocatedFailure &failure) {
         // An independent entry error retains its ordinary precedence. A
         // consumer of this leaf cannot apply the initial placeholder.
         unavailable_leaf_behaviors_.emplace(id, failure.diagnostic);
       }
+    }
+
+    struct Application {
+      size_t instance;
+      BodyFrame frame;
+      std::vector<ScalarExit> exits;
+    };
+    std::vector<Application> applications;
+    for (const auto &[id, plan] : std::as_const(bound)) {
+      if (plan.predicate.calls.empty() || !std::ranges::all_of(plan.predicate.calls, [&](const auto &call) {
+            return completed_literals.contains(call.instance);
+          })) continue;
+      auto &instance = program_.instances[id];
+      BodyReplay frame{program_, instance};
+      try {
+        auto exits = apply_scalar_caller(id, plan.predicate);
+        applications.push_back({id, BodyFrame{instance}, std::move(exits)});
+      } catch (const LocatedFailure &) {
+        // The ordinary checker retains this body's diagnostic and its order.
+      }
+    }
+    // No caller contract is available to any of the applications above.
+    for (auto &application : applications) {
+      const auto id = application.instance;
+      auto &instance = program_.instances[id];
+      auto completed = seal_scalar_caller(application.exits);
+      scalar_callers_.emplace(id, std::move(bound.at(id).predicate));
+      std::move(application.frame).install(instance);
+      instance.effects = std::move(completed);
+      instance.effects_frozen = true;
     }
   }
 
