@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Use the installed procedure family’s union for perform capture and restoration
+
+<a id="h-perform-family-capture-20261125"></a>
+**H-PERFORM-FAMILY-CAPTURE-20261125.** The project user confirmed in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) “proc 的 perform 准备，也用 family 并集去 capture 和 restore 吧，从简。” [D-10r268](design/SymbolicDynamicScope.md#captured-values-and-call-behavior) extends r267’s [outstanding-requirement union](#h-effect-checking-cost-and-compiler-stages-20261125) to runtime replay, including unselected methods of the installed family. D-18r137, D-ARCH-REVIEW r184 and roadmap r43 carry the rule through handler activation, lowering and exceptional restoration. The [r183 entry evidence](#k-seed-module-entry-symbol-consumers-20261125) at `9961d657` used name-only handler activation in both source orders. Calling this storage of a proc value misstated D-18’s existing restriction. The trusted-seed exemption from static availability checking continues.
+
 ## 2026-11-25 — Distinguish direct invocation from capture at seed module entry
 
 <a id="k-seed-module-entry-symbol-consumers-20261125"></a>

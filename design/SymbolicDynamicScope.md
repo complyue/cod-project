@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 267 · Recorded: 2026-11-25 · Phase: language/application co-design.
+Design revision: 268 · Recorded: 2026-11-25 · Phase: language/application co-design.
 
 ## Design authority
+
+At r268 the [project user’s decision](../CHANGELOG.md#h-perform-family-capture-20261125) extends [D-10-FAMILY-EFFECT-REQUIREMENTS](DesignAuthorityRegistry.md#d-10-family-effect-requirements) to [handler activation and replay](#captured-values-and-call-behavior). The installed family’s outstanding symbols determine the full capture and restoration set. The stage boundary, local-supply rule and invocation ordering continue from r267.
 
 At r267 the [project user’s clarification](../CHANGELOG.md#h-effect-checking-cost-and-compiler-stages-20261125) assigns the pre-2.0 family rule to the CoD booter and the production compiler in `e-wrks/cod`. The trusted seed drops selected-path availability checking. [D-10-FAMILY-EFFECT-REQUIREMENTS](DesignAuthorityRegistry.md#d-10-family-effect-requirements) continues r266’s local-supply, invocation and restoration rules under P-738/P-739. [Scope and examples](#family-wide-effect-requirements-before-20)
 
@@ -494,7 +496,7 @@ If an RHS throws, none of this group's proposed bindings is installed. This is a
 
 #### Explicit capture dependencies with touch
 
-A procedure using only @o1 can capture its value from A, while a later caller has both symbols bound into B. H-286 requires rejecting a perform call that would replay only captured o1 and create an invalid A/B pair. The compiler does not silently capture unused group members. A partial replay that preserves the owner constraint is not rejected merely for being partial.
+A handler whose family requires only @o1 can capture its value from A, while a later caller has both symbols bound into B. H-286 requires rejecting a perform call that would replay only captured o1 and create an invalid A/B pair. Shared-group membership alone adds no symbol to the family union. A sibling method that requires @o2 would add it. A partial replay that preserves the owner constraint is not rejected merely for being partial.
 
 `touch @o2` explicitly includes that symbol in the containing procedure's dynamic capture dependencies without using its referent for computation:
 
@@ -651,7 +653,7 @@ effect @quote -> u64 where {const owner S} {
 
 Check the shared header and the complete family against the resolved symbol’s procedure signature. Every argument tuple admitted by the symbol must select a unique most-specific applicable method, and that method must satisfy the shared result and the symbol’s owner, access and checked-failure obligations. The call’s actual arguments supply `S` for that invocation. A missing general case, ambiguous winners or an incompatible winning method reject the installation. Ordinary family formation rules apply, including the restriction on overloading a variadic method. [Method selection and coverage](AheadOfTimeExecutionPreparation.md#callable-method-and-native-implementation-hierarchy)
 
-Reaching the effect prepares the required captures and installs the whole anonymous family once in the surrounding dynamic scope. A failure during preparation leaves the previous binding active. Bodies execute on invocation. With the general arm written first, an ordinary shipment returns `10` and a refrigerated shipment with a fee of `3` returns `13`. Reversing the two arms gives the same results. Verify calls with shipments from distinct live owners and restoration of the previous handler on both normal and exceptional exit. A bare lexical call still sees its named family. Diagnostics for a local method identify the symbol and the relevant arm under the same naming rule as a single-method installation.
+Reaching the effect captures the [outstanding requirements](#family-wide-effect-requirements-before-20) of all arms and installs the whole anonymous family once in the surrounding dynamic scope. A failure during preparation leaves the previous binding active. Bodies execute on invocation. With the general arm written first, an ordinary shipment returns `10` and a refrigerated shipment with a fee of `3` returns `13`. Reversing the two arms gives the same results. Verify calls with shipments from distinct live owners and restoration of the previous handler on both normal and exceptional exit. A bare lexical call still sees its named family. Diagnostics for a local method identify the symbol and the relevant arm under the same naming rule as a single-method installation.
 
 ### Lexical selection, installation and invocation
 
@@ -1755,22 +1757,23 @@ The SNN support layer may use functions for numerical work and explicit array ed
 
 [D-18’s definition-mention contract](CallableViewsAndCaptures.md#definition-mentions-and-runtime-view-construction) separates named definitions from eligible stored callable values. For an installed handler only definition activation captures its required symbolic bindings. Direct calls and type-only queries do not construct views merely by naming a definition. See the [direct-call rule](#definition-installed-effectful-procedures) for ordinary procedures.
 
-Let `D` be the caller's current symbolic bindings, and let the installed handler record for `@p` supply its selected family/interpretation, direct lexical access `L`, and saved bindings `C` indexed by its required symbols. These are semantic components, not a prescribed heap object layout.
+At handler activation, take the [family union](#family-wide-effect-requirements-before-20) of outstanding symbol identities for the installed family in its selected module interpretation. A name-only activation uses the selected lexical family. A body-bearing installation uses its own local family. Capture the then-current binding once for every identity in that set, including identities required only by another overload. A missing member makes activation invalid for a checking compiler. If preparation fails, the previous handler stays installed. The scoped record supplies the family, its lexical access `L` and those saved bindings `C`.
 
 ```text
 perform @p:
-    save caller bindings for the identities in C
+    select the installed handler, then prepare arguments in the caller environment
+    on entry save the caller bindings for every identity in C
     install C in the procedure's execution scope
     select the method using actual arguments in the retained family/interpretation
     evaluate that method under L and those temporary bindings
-    restore the saved caller bindings on scope exit
+    restore those same caller bindings on every normal or exceptional exit
 
 behave @p:
     select the method using actual arguments in the retained family/interpretation
     evaluate that method under L and the current dynamic bindings
 ```
 
-Only the captured identities are temporarily installed. `behave` preserves the handler’s direct access to its defining lexical slots. The callee can establish further `effect` bindings normally in either call mode.
+Argument effects precede replay. If an argument fails, the body is never entered and no replay bindings have been installed. Nested calls restore the environment they actually entered from. Replay covers every identity in the activation’s set regardless of which overload wins. `behave` preserves the handler’s direct access to its defining lexical slots. The callee can establish further `effect` bindings normally in either call mode.
 
 For a scalar example, evaluate `effect @x <- 1`, activate a handler definition under `@p` whose selected method reads `@x`, then evaluate `effect @x <- 2` in the caller scope:
 
@@ -1823,7 +1826,9 @@ A bare symbol identity has no installation requirement of its own. Renamed selec
 
 For example, suppose the `u64` method of `report` needs `@log` and its `bool` method needs `@audit`. The check for `report(7u64)` requires **both** in a view containing both methods. An installation of `@log` alone gives a missing-`@audit` diagnostic even though dispatch selects the `u64` method. Supplying both admits the call and executes only that method. A source view containing only the first method requires only `@log`. The same union applies when the two uses occur in opposite arms of a single method.
 
-The [invocation rules](#captured-values-and-call-behavior) determine what supplies a requirement. Direct procedure calls and `behave` use current bindings. For `perform`, the installed handler supplies its captured bindings at invocation, with availability established at activation. Deferred current-context calls observe their scope at drain. Preserve dispatch, the values observed, owner and lifetime requirements, and restoration on every exit. This admission rule concerns availability of dynamic symbols. Checked exceptions, borrow permissions and initialization keep their own contracts.
+The [invocation rules](#captured-values-and-call-behavior) determine what supplies a requirement. Direct procedure calls and `behave` use current bindings. For `perform`, the installed handler supplies its captured bindings at invocation, with availability established at activation. Deferred current-context calls observe their scope at drain. Preserve dispatch, the values observed, owner and lifetime requirements, and restoration on every exit. This admission rule concerns availability of dynamic symbols. The same completed union also supplies the capture and restoration set for `perform`. Checked exceptions, borrow permissions and initialization keep their own contracts.
+
+For a two-method `@quote` handler over `Shipment`, suppose its general method reads `@base` and its `Refrigerated` method reads `@cold`. Activate it with those bits bindings at 7 and 11, then rebind them to 9 and 13. Separate `perform` calls select the respective methods and return 7 and 11. The corresponding `behave` calls return 9 and 13. Both caller bindings are 9 and 13 after a normal return or a caught failure from the handler. Activation with only `@base` available fails the checking rule even if every later argument is an ordinary shipment. If the specialized method instead installs a literal `@cold` locally before its only read, the family captures just `@base`.
 
 ### Call-path binding checks
 
@@ -2108,7 +2113,7 @@ The bounded implementation selects methods by argument types across both kinds, 
 
 H-158 separates intrinsic operation identities from symbolic bindings. A `proc (+)(...)` overload belongs to the operator family. It introduces no `@` symbol. Parentheses in `(@len)` group a symbolic read. An ordinary `len(values)` call uses the selected library or user family. The selected method’s callable kind governs its body operations.
 
-H-159 specifies current-binding invocation for an operation-selected procedure, like `behave`. Its body sees the caller's dynamic context. An enclosing ordinary `perform @p` still establishes its own captured context; an intrinsic procedure invoked within that body sees that context. Capture analysis must therefore follow demanded typed calls without requiring effects used only by unselected overload candidates. Ordinary procedure definitions still resolve directly referenced symbol identities at their definition point; an alias requires its introducing module encounter first. This identity check does not require the corresponding dynamic value to be bound yet. No runtime method registry or user heap follows from operation syntax.
+H-159 specifies current-binding invocation for an operation-selected procedure, like `behave`. Its body sees the caller's dynamic context. An enclosing ordinary `perform @p` still establishes its own captured context; an intrinsic procedure invoked within that body sees that context. For pre-2.0 symbol requirements and replay, the selected operator family contributes its [family union](#family-wide-effect-requirements-before-20), including outstanding symbols used by another overload in that view. Argument types still select the method that executes. Ordinary procedure definitions still resolve directly referenced symbol identities at their definition point; an alias requires its introducing module encounter first. This identity check does not require the corresponding dynamic value to be bound yet. No runtime method registry or user heap follows from operation syntax.
 
 The implementation uses the compile-time method table and exact-before-conversion selection. Broader method replacement, explicit `perform` syntax for intrinsic operations and extensions to body-mixin syntax are separate work; none is implied by assigning intrinsics CoD symbol identities. H-160 defers new design decisions to a consolidated review at the end of the current work period, while already confirmed implementation work continues.
 

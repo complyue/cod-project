@@ -1,8 +1,10 @@
 # Function values, here callables and declared place aliases
 
-Design revision: 136 · Recorded: 2026-11-24 · Status: scoped callable contract; implementation boundaries recorded separately.
+Design revision: 137 · Recorded: 2026-11-25 · Status: scoped callable contract; implementation boundaries recorded separately.
 
 ## Design authority
+
+At r137 [D-18](DesignAuthorityRegistry.md#d-18) adopts [D-10’s family replay rule](SymbolicDynamicScope.md#family-wide-effect-requirements-before-20) for symbolic handler activation. The [project user’s decision](../CHANGELOG.md#h-perform-family-capture-20261125) sets the capture and restoration scope. Function and functor values, synchronous here calls and the restriction on ordinary proc storage continue.
 
 At r136 [D-18](DesignAuthorityRegistry.md#d-18) applies the [normal-completion decision](../CHANGELOG.md#h-normal-completion-20261124) to the result destination of a proc or here invocation. [D-24](CallableResultInference.md#results-of-proc-func-and-here-bodies) governs the result and [D-17](ExceptionControl.md#return-state-inspection-and-replacement) governs its observation during cleanup.
 
@@ -168,7 +170,7 @@ The frame proof leaves two obligations. A region referenced through an outer slo
 
 ### Symbolic snapshots at definition activation
 
-Definition activation snapshots the required symbolic bindings. Registering static method information supplies no runtime snapshot. Under the restricted design, activation of an effectful definition supplies an internal record for scoped installation. Only `perform` and `behave` invoke that handler. Standalone extraction or assignment installation cannot request a second snapshot. [Restricted handler operations](SymbolicDynamicScope.md#definition-installed-effectful-procedures)
+Definition activation snapshots every incoming binding in the installed family’s union after local supply. A `perform` invocation overlays the full set and restores the caller’s bindings on exit. Registering static method information supplies no runtime snapshot. Under the restricted design, activation of an effectful definition supplies an internal record for scoped installation. Only `perform` and `behave` invoke that handler. Standalone extraction or assignment installation cannot request a second snapshot. [Restricted handler operations](SymbolicDynamicScope.md#definition-installed-effectful-procedures)
 
 ```cod
 symbol @rate:u64;
