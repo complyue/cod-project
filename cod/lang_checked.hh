@@ -25328,6 +25328,11 @@ class ScalarChecker {
     // Write guarantees use a greatest fixed point, with returned selections
     // and value categories joining before symbol requirements close. Narrower
     // callees require fresh assumptions for recursive cycles.
+    // Registration is complete. Intrinsic print emits directly and has no
+    // dynamic binding, so only other symbols can change this closure.
+    const bool has_runtime_symbols = std::ranges::any_of(program_.symbols, [](const auto &symbol) {
+      return !symbol.intrinsic_print;
+    });
     for (;;) {
       effect_dependents_.clear(); callable_effect_consumers_.clear();
       for (auto &instance : program_.instances)
@@ -25335,7 +25340,7 @@ class ScalarChecker {
           instance.effects = initial_effects(program_.methods[instance.method], instance.arguments);
       for (auto &[id, effects] : distinct_binding_effects_) effects = program_.instances[id].effects;
       close_effects(false);
-      if (!close_effects(true)) continue;
+      if (has_runtime_symbols && !close_effects(true)) continue;
       auto choices = reaching_callables();
       if (choices == callable_choices_) break;
       callable_choices_ = std::move(choices);
