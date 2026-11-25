@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Use one seed mode to build the booter at milestones
+
+<a id="k-booter-one-build-20261124"></a>
+**K-BOOTER-ONE-BUILD-20261124.** Following the project user’s question about identical booter IR in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the [build rule](AGENTS.md#build-and-command-execution) supersedes the automatic milestone comparison in [H-BOOTER-BUILD-CADENCE](#h-booter-build-cadence-20261124). In the two builds of `d007ba5c:applications/cod-booter`, all 1,939 emitted CoD methods used their single native body. The same seed produced four bodies for `relay` in default mode and one in shared mode on `b6464e46:tests/cod/language/numeric_dispatch_staging_tests.py`. Both executions produced identical output.
+
 ## 2026-11-24 — Review the native package probe’s array and value arguments
 
 <a id="k-package-probe-value-arguments-20261124"></a>
