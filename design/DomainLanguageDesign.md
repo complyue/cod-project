@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 215
+Discussion revision: 216
 
 Recorded: 2026-11-24
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+[D-07-MEMBER-RECEIVER](DesignAuthorityRegistry.md#d-07-member-receiver) at r216 covers [receiver access in field accessor and member method declarations](#receivers-in-field-accessors-and-member-methods). The [project user’s decision](../CHANGELOG.md#h-member-receiver-const-20261124) gives both forms one readable target-access rule under P-724/P-725. Acceptance compares the four declaration spellings against ordinary external reference formals. Member lookup collisions and public owner-binder syntax have separate discussions.
 
 At r215 the [symbol identity decision](../CHANGELOG.md#h-runtime-symbol-identity-20261124) applies [D-10’s protected lexical name](SymbolicDynamicScope.md#the-bare-symbol-name-at-runtime) to source spellings and module origins. Distinct spellings may denote the same identity. A binding that would hide a visible symbol fails at its declaration.
 
@@ -508,6 +510,23 @@ for val n <- items() {
 For n equal to zero, `consume(10u64)` runs in the current outer iteration. For n equal to one, the nested traversal runs and `consume(20u64)` follows. Placing either `continue;` or `continue value;` directly in either arm is a source error, even when the enclosing loop accepts the corresponding feedback. The inner continue belongs to parts, and the final continue belongs to items. The same boundary applies to ordinary statements between arms. A nested case establishes its own boundary. Forwarding or inlining a here body preserves its original control destinations.
 
 In a single-brace arm, `break v;` can finish the case from any ordinary nested statement group. Evaluate v once and join this result with the other value-producing case paths under the ordinary conditional result rules, including mode, owner and lifetime. A bare `break;` is a void completion. A value/void mismatch rejects at the chosen case, even if an outer target could accept the exit. Throwing during operand evaluation follows ordinary exception control. Run cleanup for scopes actually exited before delivering the result. The enclosing callable’s return and deferred actions keep their ordinary destinations. A break in an ordinary statement between arms likewise completes the case. Case completion itself registers no return in the enclosing callable. Fallthrough requires an active arm and resumes the scan. Double-brace arms retain their local return and the specific fallthrough permission above. There is no general transfer across an independently invoked full scope.
+
+#### Receivers in field accessors and member methods
+
+A field accessor is declared with `func T.@name()` and read as `x.name`. A member method is declared with `func T.name(...)` and called as `x.name(...)`. Both receive the initialized target selected by `x` as their implicit first argument, `self`. Write `const` immediately before the receiver type for readonly access. Omitting it requires writable access in either form. The declaration marker `@` identifies an accessor in this position. Reading the member uses its receiver without looking up a dynamic symbol.
+
+| Declaration head | Use | Equivalent receiver formal |
+| --- | --- | --- |
+| `func const T.@label()` | `x.label` | `ref self:const T in O` |
+| `func T.@label()` | `x.label` | `ref self:T in O` |
+| `func const T.inspect(n:u64)` | `x.inspect(n)` | `ref self:const T in O` |
+| `func T.update(n:u64)` | `x.update(n)` | `ref self:T in O` |
+
+Here O denotes the actual owner of the receiver in the equivalent signature. The table introduces no implicit source name for that owner. Prepare the receiver once, before the written arguments, under ordinary reference and completion rules. If a later argument rebinds the source slot, the call keeps the already selected target. If preparation fails, its later effects and the member body do not execute. A readonly target admits a readonly receiver. A fixed reference slot can still supply a writable target. For overloads otherwise identical, ordinary receiver-access ranking gives the writable match to a writable target. [Reference parameters](RegionalOwnership.md#owner-qualified-reference-arguments) · [Call-operator precedent](#functor-receivers-and-callback-arguments)
+
+Receiver access, result access and allocation permission have separate contracts. A writable accessor returning `u64` supplies independent bits. Its receiver qualifier alone supplies no setter or destination for a write to the property. A borrowed result keeps its declared mode, target access and actual owner. `Exception.cause` already selects a nullable readonly target under the receiver’s owner. In contrast, `tip` belongs to the individual catch binding. Passing the matched object to a method supplies the ordinary receiver and its owner. Access to that catch’s incoming tip requires selecting it at the catch binding. [Call results](ScalarCallResults.md) · [Exception cause](ExceptionControl.md#returning-a-locally-caught-exception) · [Catch-binding tip](ExceptionControl.md#the-catch-bindings-readonly-tip-field)
+
+**Open design questions.** A field can hold a data object with a call operator. If the containing type also publishes a method under the field’s name, `x.check(n)` could invoke either. Decide how the receiving world admits such collisions, including a stored field sharing an accessor name. A second question is how to name the receiver owner in a member signature when an argument or result must share it. Review each spelling against a signature with two independently borrowed inputs and a result tied to the receiver. This receiver decision covers source intent and permissions. Publication of new member families, setter declarations and extraction of a bound method as a callable value require their own scope.
 
 #### Functor receivers and callback arguments
 

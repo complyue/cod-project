@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Place member receiver const before the receiver type
+
+<a id="h-member-receiver-const-20261124"></a>
+**H-MEMBER-RECEIVER-CONST-20261124.** The project user confirmed “`const` 放在 receiver 类型前面，field accessor 和 member method 都一样，省略时 `self` 可写” in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). D-07 r215→216 qualifies [the four receiver forms](design/DomainLanguageDesign.md#receivers-in-field-accessors-and-member-methods) under P-724/P-725. Prior receiver and owner rules are at `92853ab5:design/DomainLanguageDesign.md`, “Functor receivers and callback arguments”, and `92853ab5:design/RegionalOwnership.md`, “Owner-qualified reference arguments”. The decision covers the accessor marker, implicit receiver and target qualifier. Lookup collisions and the spelling that exposes the receiver owner are still open.
+
 ## 2026-11-24 — Decide symbol-union eligibility on first demand
 
 <a id="h-seed-symbol-union-admission-20261124"></a>
