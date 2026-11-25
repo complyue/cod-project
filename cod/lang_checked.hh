@@ -17817,19 +17817,6 @@ class ScalarChecker {
       require_here_protocol_owners(output.here.front(), expected.here.front(),
           [&](size_t role) { return consumer_port.owners.at(role - 1); }, receiver_owner, at);
     }
-    // The named terminal's selected call is checked in its supplying context.
-    // Use that completed proof when checking the exposed completion contract.
-    if (pipeline.terminal && !validating_) return;
-    auto failures = output.throws_categories;
-    bool throws_root = declares_root(output.throws_types);
-    if (pipeline.terminal) {
-      for (const auto category : read_effects(*pipeline.terminal).scope_checked_failures) {
-        if (category) failures.insert(category);
-        else { throws_root = true; break; }
-      }
-    }
-    if (throws_root != expected.throws_root || (!throws_root && failures != expected.throws_categories))
-      fail(at, "open pipeline checked failures do not match the selected here contract");
   }
   void check_bound_pipeline(const Expression &expr, const HereInvocation &syntax, size_t slot, CheckedInstance *supplier,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard) {

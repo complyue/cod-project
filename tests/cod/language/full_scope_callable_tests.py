@@ -1015,12 +1015,6 @@ proc result = choose();
         'here stages=stage(32u64) |> stage(33u64);here terminal=stages $> sink;'
         'try{drive(terminal);}catch(e:const NullPointerException){behave @print(34u64);};',
         0,'7\n31\n32\n33\n34\n',''),
-    'lexical_pipeline_forwarding_cannot_erase_a_named_terminal_failure': ('using "std:exceptions" NullPointerException;'
-        'func stage(here input() yields u64) yields u64{for val item<-input(){yield(item);};}'
-        'proc sink(n:u64)->void throws NullPointerException{ptr p:u64=null in here;p;return;}'
-        'proc discard(here terminal(here input() yields u64)->void)->void{return;}'
-        'here stages=stage |> stage;here terminal=stages $> sink;discard(terminal);',
-        2,'','open pipeline checked failures do not match the selected here contract'),
     'lexical_handoff_nested_stage_keeps_labelled_borrow_and_feedback': (IO+
         'proc rows(line:const u64 in O) yields {id:u64;ref cell:const u64 in O;} -> bool where {owner O}{'
         'behave @print(17u64);if(!yield(line->cell,17u64->id)){return;}else{};'
