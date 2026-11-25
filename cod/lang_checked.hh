@@ -2448,7 +2448,7 @@ class ScalarChecker {
   };
   struct CaseProjectionEvidence {
     const Expression *source;
-    ViewEvidence view;
+    bool nullable;
     TargetPresence presence;
     auto operator==(const CaseProjectionEvidence &) const -> bool = default;
   };
@@ -8907,8 +8907,8 @@ class ScalarChecker {
     left.same_selected = QuerySelections::common_slots(std::move(left.same_selected), right.same_selected);
     return left;
   }
-  static void require_present_projection(const ViewEvidence &view, TargetPresence presence, const Location &at) {
-    if (view.view != true || !view.nullable || presence == TargetPresence::present) return;
+  static void require_present_projection(bool nullable_view, TargetPresence presence, const Location &at) {
+    if (!nullable_view || presence == TargetPresence::present) return;
     if (presence == TargetPresence::absent) fail(at, "conditional scalar value requires a proven non-null target");
     implementation_gap(at, "conditional scalar value requires a proven non-null target in typeof");
   }
@@ -9739,7 +9739,7 @@ class ScalarChecker {
         const auto arm_view = arm.value;
         auto arm_target = arm.target;
         if (state.required && arm_view.view == true)
-          projections.push_back({&body, arm_view, arm_target.presence});
+          projections.push_back({&body, arm_view.nullable, arm_target.presence});
         leave_receiving(arm);
         complete(value, arm_view, std::move(arm_target), std::move(arm), body.at);
       }
@@ -9752,7 +9752,7 @@ class ScalarChecker {
       if (joined_view->mixed_view) {
         if (value_projection) *value_projection = true;
         if (state.required && proving_ && validating_) for (const auto &projection : projections)
-          require_present_projection(projection.view, projection.presence, projection.source->at);
+          require_present_projection(projection.nullable, projection.presence, projection.source->at);
       } else {
         view.read_only = joined_view->read_only;
         view.view = true;
@@ -13498,7 +13498,7 @@ class ScalarChecker {
           prepared.borrowed = TypeBorrowedReturn::capture(state.target, state.selections);
         CaseBreakEvidence result{type, view, {}};
         if (state.required && view.view == true) {
-          result.projection.emplace(CaseProjectionEvidence{expr.children.front().get(), view, state.target.presence});
+          result.projection.emplace(CaseProjectionEvidence{expr.children.front().get(), view.nullable, state.target.presence});
           result.projection_initialized = !state.checks_initialization() || state.target.places.empty() || state.target.initialized;
         }
         merge_type_exits(*state.exits, {Completion::case_break}, state, std::move(prepared), std::move(result));
@@ -13539,8 +13539,10 @@ class ScalarChecker {
       const bool independent = !discarded_arms && arms.independent();
       if (independent) {
         if (state.required && proving_ && validating_ && state.checks_reaching_paths() && condition != Type::never) {
-          if (reaches_yes) require_present_projection(yes_state.value, yes_state.target.presence, expr.children[1]->at);
-          if (reaches_no) require_present_projection(no_state.value, no_state.target.presence, expr.children[2]->at);
+          if (reaches_yes && yes_state.value.view == true)
+            require_present_projection(yes_state.value.nullable, yes_state.target.presence, expr.children[1]->at);
+          if (reaches_no && no_state.value.view == true)
+            require_present_projection(no_state.value.nullable, no_state.target.presence, expr.children[2]->at);
         }
         view = {false, false, {}};
       } else if (!discarded_arms) target_facts = yes == Type::never ? no_state.target : no == Type::never ? yes_state.target :
