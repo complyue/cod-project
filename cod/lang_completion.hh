@@ -1256,8 +1256,18 @@ private:
   // New nodes leave existing dependencies intact. Changes to backedges,
   // action definitions or the observation projection can revise old results.
   std::map<QueueState, SolvedState> solved_;
-  std::pair<bool, bool> defer_graph(size_t queue) const {
-    bool handles_failures = false, cyclic = false;
+  struct DeferredGraph {
+    bool has_actions = false;
+    bool handles_failures = false;
+    bool cyclic = false;
+  };
+  // Outcomes also depend on the incoming completion and observed conditions.
+  // The graph classification changes only with backedges or catch definitions.
+  std::map<size_t, DeferredGraph> deferred_graphs_;
+  DeferredGraph defer_graph(size_t queue) {
+    if (!queue) return {};
+    if (const auto found = deferred_graphs_.find(queue); found != deferred_graphs_.end()) return found->second;
+    DeferredGraph graph;
     std::set<size_t> visited;
     std::vector<size_t> work{queue};
     while (!work.empty()) {
@@ -1265,13 +1275,17 @@ private:
       work.pop_back();
       if (!id || !visited.insert(id).second) continue;
       const auto &node = queues_.at(id);
-      if (node.action) handles_failures |= actions_.at(*node.action).bodyless_catch;
+      if (node.action) {
+        graph.has_actions = true;
+        graph.handles_failures |= actions_.at(*node.action).bodyless_catch;
+      }
       for (const auto prior : node.previous) {
-        cyclic |= prior >= id;
+        graph.cyclic |= prior >= id;
         work.push_back(prior);
       }
     }
-    return {handles_failures, cyclic};
+    deferred_graphs_.emplace(queue, graph);
+    return graph;
   }
   void advance_deferred_phase(DrainState &state, size_t action_id,
                               std::optional<size_t> selected, Completion completed, Effects &effects) const {
@@ -1447,20 +1461,14 @@ public:
   void observe_reference(const BooleanValue &observations) {
     for (const auto &[null, paths] : observations) observe_input_conditions(paths);
   }
-  bool has_actions(size_t queue) const {
-    std::set<size_t> seen;
-    std::vector<size_t> pending{queue};
-    while (!pending.empty()) {
-      const auto id = pending.back(); pending.pop_back();
-      if (!seen.insert(id).second) continue;
-      const auto &node = queues_.at(id);
-      if (node.action) return true;
-      pending.insert(pending.end(), node.previous.begin(), node.previous.end());
-    }
-    return false;
-  }
+  bool has_actions(size_t queue) { return defer_graph(queue).has_actions; }
   size_t action() { actions_.push_back({}); return actions_.size() - 1; }
-  void define(size_t id, Action action) { solved_.clear(); actions_.at(id) = std::move(action); }
+  void define(size_t id, Action action) {
+    auto &previous = actions_.at(id);
+    if (previous.bodyless_catch != action.bodyless_catch) deferred_graphs_.clear();
+    solved_.clear();
+    previous = std::move(action);
+  }
   size_t push(size_t previous, size_t action, const ConditionClauses &reaching) {
     queues_.push_back({{previous}, action, {}, {}, reaching}); return queues_.size() - 1;
   }
@@ -1497,15 +1505,20 @@ public:
   size_t header(size_t entry) {
     queues_.push_back({{entry}, {}}); return queues_.size() - 1;
   }
-  void backedge(size_t header, size_t body) { solved_.clear(); queues_.at(header).previous.push_back(body); }
+  void backedge(size_t header, size_t body) {
+    queues_.at(header).previous.push_back(body);
+    deferred_graphs_.clear();
+    solved_.clear();
+  }
   const Outcomes &apply(size_t queue, Completion input, bool proving = true) {
     DrainState ordinary{(input.failed() ? Completion{0, input.returned} : input).index(), input.failed() ? input.reason : 0};
     if (!queue) return identity(ordinary);
-    std::tie(ordinary.fifo, ordinary.cyclic) = defer_graph(queue);
+    const auto graph = defer_graph(queue);
     // Discovery uses the call signature's broad failure envelope before
     // executable call effects have closed. Summarize those arrivals without
     // expanding them into ordered positions during discovery.
-    if (!proving) ordinary.fifo = false;
+    ordinary.fifo = proving && graph.handles_failures;
+    ordinary.cyclic = graph.cyclic;
     const QueueState root{queue, ordinary};
     const auto [entry, inserted] = solved_.try_emplace(root);
     if (!inserted) return entry->second.outcomes;
