@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Remove unused pending-read propagation from seed leaf classification
+
+<a id="k-seed-pending-leaf-reads-20261125"></a>
+**K-SEED-PENDING-LEAF-READS-20261125.** The [trusted-source cutover](#h-trusted-seed-translation-20261125) supersedes collecting pending read origins for the archived [R132 leaf boundary](#k-seed-closed-leaf-behavior-20261125). At `d973346d:cod/lang_checked.hh`, the presence of an ordinary callee already determines the borrowed procedure’s fallback before any propagated read could affect admission. D-ARCH-REVIEW r155→156 continues P-682/P-683 and clears the [classification change](design/ImplementationArchitecture.md#removing-unused-read-propagation-from-leaf-classification). The checked byte operation, completed exit facts and separate scalar caller path retain their existing scope.
+
 ## 2026-11-25 — Name the seed executable and the booter entry
 
 <a id="h-bootstrap-tool-and-entry-names-20261125"></a>

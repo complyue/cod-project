@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r156 the [borrowed-Boolean leaf review](../CHANGELOG.md#k-seed-pending-leaf-reads-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), P-682/P-683 and the r149 trusted-source cutover. Its scope is the read graph built during classification of these leaves. The completed exit facts and the ordinary call solver still have translation consumers.
+
 At r155 the [bootstrap names review](../CHANGELOG.md#h-bootstrap-tool-and-entry-names-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and the [seed-first work order](#seed-checker-migration-and-performance-acceptance). It applies [D-15-ENTRY](DesignAuthorityRegistry.md#d-15-entry) to the source root built by the seed.
 
 At r154 the [supplied callback query review](../CHANGELOG.md#k-seed-here-query-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), P-682/P-683 and the trusted-source cutover. The [callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies) govern callback feedback and the [seed work order](#seed-checker-migration-and-performance-acceptance) governs acceptance.
@@ -741,9 +743,15 @@ In `WriteAndFailure.cod`, `route` conditionally calls `update(ready, move_before
 
 Make the contract available for the selected instance and variant before the first semantic call check, including module entry. Keep one authoritative value throughout that compilation. The ordinary call transfer, final body validation and checked-program readers must agree on that value. Verify the completed contract can represent the exits before admitting the selection. Existing solver resets, merges and subscriptions apply only to their legacy data. Preserve the ordinary unavailable-body and output-publication gates.
 
-For open or recursive selections the initial binding plan identifies the existing checking path. Collection may propagate pending dependencies around a cycle and retain their origins. Composing multiple ordinary procedure contracts is a separate review. Topological order alone does not separate collecting a procedure behavior from using the same fact kind.
+For open or recursive selections the initial binding plan identifies the existing checking path. The archived checker propagated pending read origins through candidate calls. The trusted seed can decide admission while binding a borrowed-Boolean leaf, as described below. Composing multiple ordinary procedure contracts is a separate review. Topological order alone does not separate collecting a procedure behavior from using the same fact kind.
 
-Verify the checked write itself on both bounds paths, using a discriminating static check or inspection of the actual completed contract and its use. Runtime output alone cannot distinguish a correct checker summary from code that happens to execute the write. Compare the original four results (`true/true/false/false`), caller-first and callee-first declarations, the skipped call, normal return and failure during operand preparation. Check rejection locations and prior artifacts, and show that a recursive dependency stays pending in the new producer while the existing path handles that program.
+Verify the checked write itself on both bounds paths, using a discriminating static check or inspection of the actual completed contract and its use. Runtime output alone cannot distinguish a correct checker summary from code that happens to execute the write. Compare the original four results (`true/true/false/false`), caller-first and callee-first declarations, the skipped call, normal return and failure during operand preparation. Check rejection locations and prior artifacts, and confirm that a recursive procedure takes the ordinary translation path.
+
+#### Removing unused read propagation from leaf classification
+
+At `d973346d:cod/lang_checked.hh`, every insertion into a caller’s `inherited_reads` follows an edge in that caller’s `pending` list. Any such edge already excludes the caller from the borrowed-Boolean leaf path, even if the callee reads nothing. In the second pass only scalar predicates with calls to completed literal functions qualify. A borrowed-Boolean plan has no entries in that list.
+
+On the borrowed path, keep exactly one writable borrowed Boolean and the existing checks on parameters, local bindings, operators and the selected byte primitive. Fall back to ordinary translation on the first call outside that profile, including a call in a conditional arm. Remove the reverse graph, pending-read propagation and the fields used solely to build them. Preserve the scalar predicate’s short-circuit guards, its separate call list, and the exact byte-operation site used to attribute a bounds exit. Mainline can verify this change with the existing conditional write and failure, recursive fallback, and Lexer and TokenBuffer artifact comparisons. The [seed-first work order](#seed-checker-migration-and-performance-acceptance) applies.
 
 #### Completing the lexer’s scalar predicates
 
