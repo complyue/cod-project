@@ -213,7 +213,8 @@ class ScalarChecker {
   std::map<size_t, std::optional<SymbolRequirementBound>> symbol_requirement_bounds_;
   bool symbol_selection_ready_ = false;
   mutable std::set<size_t> callable_effect_consumers_;
-  const Expression *extracting_leaf_primitive_ = nullptr;
+  struct LeafBehaviorPlan;
+  const LeafBehaviorPlan *extracting_leaf_ = nullptr;
   std::map<size_t, SyntaxDiagnostic> unavailable_leaf_behaviors_;
   struct EntryBehaviorCheck {
     const Expression *initializer = nullptr;
@@ -230,7 +231,7 @@ class ScalarChecker {
   }
   const CallEffects &read_effects(size_t instance, bool distinct_bindings = false, bool symbols_covered = false,
                                  EffectUse use = EffectUse::all) const {
-    if (extracting_leaf_primitive_)
+    if (extracting_leaf_)
       throw std::logic_error("closed leaf extraction reached an ordinary behavior dependency");
     if (unavailable_body_proofs_ && instance + 1 < unavailable_body_proofs_->size() &&
         (*unavailable_body_proofs_)[instance + 1])
@@ -22654,7 +22655,9 @@ class ScalarChecker {
   // guarded requirement. Keep the call edges to recover its path.
   using LeafReadOrigin = std::pair<size_t, size_t>;
   struct LeafBehaviorPlan {
+    enum class Kind { borrowed_byte, scalar_predicate } kind = Kind::borrowed_byte;
     const Expression *primitive = nullptr;
+    std::vector<const Expression *> predicate_operations;
     size_t borrowed_formal = null_target;
     std::string_view borrowed_name;
     std::vector<LeafGuard> guards;
@@ -22662,6 +22665,38 @@ class ScalarChecker {
     std::vector<LeafPendingCall> pending;
     std::set<LeafReadOrigin> inherited_reads;
   };
+  static bool short_circuit_predicate(const Expression &expr) {
+    return expr.kind == Expression::Kind::binary && (expr.text == "&&" || expr.text == "||");
+  }
+
+  bool bind_scalar_predicate(const Expression &expr, const TypeEvidenceState &scope, LeafBehaviorPlan &plan) const {
+    using K = Expression::Kind;
+    if (expr.annotation || expr.intrinsic || expr.lexical_symbol_call || expr.checked_ref_argument) return false;
+    switch (expr.kind) {
+    case K::name:
+      return scope.bindings.contains(expr.text);
+    case K::boolean: case K::integer:
+      return true;
+    case K::grouped:
+      break;
+    case K::unary: case K::binary:
+      if (!short_circuit_predicate(expr)) {
+        const auto operation = operation_name(expr, &scope);
+        if (operation != expr.text ||
+            (operation != "!" && operation != "==" && operation != "!=" &&
+             operation != "<" && operation != "<=" && operation != ">" && operation != ">=") ||
+            !named_family(expr, &scope).methods.empty() || has_declarations(expr.text)) return false;
+      }
+      plan.predicate_operations.push_back(&expr);
+      break;
+    default:
+      return false;
+    }
+    return std::ranges::all_of(expr.children, [&](const auto &child) {
+      return bind_scalar_predicate(*child, scope, plan);
+    });
+  }
+
   bool bind_leaf_operations(const Expression &expr, TypeEvidenceState &scope, LeafBehaviorPlan &plan,
                             size_t guard, bool reads_payload = true) const {
     using K = Expression::Kind;
@@ -22746,7 +22781,10 @@ class ScalarChecker {
     const auto &instance = program_.instances[id];
     const auto &method = program_.methods[instance.method];
     const auto &form = *method.source;
-    if (!form.ordinary_procedure() || form.symbolic || form.c_linkage || !method.operation.empty() ||
+    const bool scalar_predicate = form.kind == Form::Kind::function && !form.implicit_scope &&
+        !form.supplied_scope && !form.supplied_group && !form.explicit_captures;
+    if ((!form.ordinary_procedure() && !scalar_predicate) || form.symbolic || form.c_linkage ||
+        !method.operation.empty() ||
         !form.body || form.body->kind != Expression::Kind::block || lexical_methods_.contains(&form) ||
         method.parent || method.regional_initializer || method.lexical_result || method.scope_inputs ||
         method.here_group || !method.here.empty() || !method.type_parameters.empty() ||
@@ -22756,29 +22794,34 @@ class ScalarChecker {
 
     if (form.body->children.empty() || form.body->children.back()->kind != Expression::Kind::return_value)
       return {};
+    if (scalar_predicate && (form.body->scoped || form.body->children.size() != 1 ||
+                             !method.input_owners().empty() || method.declaration_context())) return {};
     const auto &parameters = method.input_parameters();
     if (parameters.size() != instance.arguments.size()) return {};
     TypeEvidenceState scope;
     scope.method = instance.method;
     LeafBehaviorPlan plan;
+    if (scalar_predicate) plan.kind = LeafBehaviorPlan::Kind::scalar_predicate;
     for (size_t ordinal = 0; ordinal < parameters.size(); ++ordinal) {
       const auto &parameter = parameters[ordinal];
       const auto &type = instance.arguments[ordinal];
       if (parameter.automatic_conversion || parameter.variadic || parameter.selects_caller_place()) return {};
       if (argument_mode(parameter) != ArgumentMode::value) {
-        if (argument_mode(parameter) != ArgumentMode::borrowed_ref || parameter.read_only ||
+        if (scalar_predicate || argument_mode(parameter) != ArgumentMode::borrowed_ref || parameter.read_only ||
             type != Type::boolean || plan.borrowed_formal != null_target) return {};
         plan.borrowed_formal = ordinal;
         plan.borrowed_name = parameter.name;
-      } else if (type != Type::boolean && type != Type::uint64 && type != Type::uint8) return {};
+      } else if (type != Type::boolean && type != Type::uint8 && (scalar_predicate || type != Type::uint64)) return {};
       if (!scope.bindings.emplace(parameter.name, type).second) return {};
     }
-    if (plan.borrowed_formal == null_target) return {};
     for (const auto &owner : method.input_owners()) scope.symbol_shadows.insert(owner.name);
 
     const ModuleLookup module(module_, method.module);
     const ModuleLookup interpretation(interpretation_, method.interpretation);
-    if (!bind_leaf_operations(*form.body, scope, plan, null_target)) return {};
+    if (scalar_predicate) {
+      const auto &result = *form.body->children.front();
+      if (result.children.size() != 1 || !bind_scalar_predicate(*result.children.front(), scope, plan)) return {};
+    } else if (plan.borrowed_formal == null_target || !bind_leaf_operations(*form.body, scope, plan, null_target)) return {};
     return plan;
   }
 
@@ -22787,10 +22830,28 @@ class ScalarChecker {
     Location origin;
     LexicalState state;
   };
-  void complete_leaf_exits(const LeafBehaviorPlan &leaf, const std::vector<LeafExitEquation> &exits) {
+  void complete_leaf_exits(const LeafBehaviorPlan &leaf, const CheckedInstance &instance,
+                           const std::vector<LeafExitEquation> &exits) {
+    const bool scalar = leaf.kind == LeafBehaviorPlan::Kind::scalar_predicate;
+    if (scalar) {
+      for (const auto *site : leaf.predicate_operations) {
+        const auto &operation = instance.operations.at(site);
+        const auto builtin = short_circuit_predicate(*site) ? BuiltinOperation::none :
+            site->kind == Expression::Kind::unary ? BuiltinOperation::unary : BuiltinOperation::binary;
+        if (operation.callee || operation.callable_call || operation.builtin != builtin ||
+            (builtin != BuiltinOperation::none && operation.builtin_name != site->text) ||
+            operation.type != Type::boolean)
+          throw std::logic_error("scalar predicate disagrees with its binding plan");
+      }
+      if (exits.empty()) throw std::logic_error("closed scalar predicate has no normal exit");
+    } else {
+      const auto &operation = instance.operations.at(leaf.primitive);
+      if (operation.builtin != BuiltinOperation::text_byte || operation.callee)
+        throw std::logic_error("closed leaf primitive disagrees with its binding plan");
+    }
     const auto bounds = Completion::failure(exception_id(ExceptionCategory::index_out_of_bounds)).reason;
     for (const auto &exit : exits) {
-      if (exit.reason && (exit.reason != bounds || exit.origin != leaf.primitive->at))
+      if (exit.reason && (scalar || exit.reason != bounds || exit.origin != leaf.primitive->at))
         throw std::logic_error("closed leaf extraction found an unbound exit");
       observe_outcome(exit.reason, exit.state);
     }
@@ -23071,11 +23132,8 @@ class ScalarChecker {
       }
     });
     if (leaf) {
-      const auto &operation = instance.operations.at(leaf->primitive);
-      if (operation.builtin != BuiltinOperation::text_byte || operation.callee)
-        throw std::logic_error("closed leaf primitive disagrees with its binding plan");
       // Application and summary publication cannot start during extraction.
-      complete_leaf_exits(*leaf, leaf_exits);
+      complete_leaf_exits(*leaf, instance, leaf_exits);
     }
     if (!validating_) {
       const auto profile = std::pair{i, distinct_bindings};
@@ -23436,11 +23494,12 @@ class ScalarChecker {
       if (auto plan = bind_leaf_behavior(id)) bound.emplace(id, std::move(*plan));
     propagate_pending_leaf_reads(bound);
     for (const auto &[id, plan] : std::as_const(bound)) {
-      if (!plan.primitive || !plan.pending.empty() || !plan.inherited_reads.empty()) continue;
+      if ((plan.kind == LeafBehaviorPlan::Kind::borrowed_byte && !plan.primitive) ||
+          !plan.pending.empty() || !plan.inherited_reads.empty()) continue;
       struct ExtractionScope {
         ScalarChecker &checker;
         ~ExtractionScope() {
-          checker.extracting_leaf_primitive_ = nullptr;
+          checker.extracting_leaf_ = nullptr;
           checker.storage_ = nullptr;
           checker.bindings_ = nullptr;
           checker.checking_instance_ = nullptr;
@@ -23448,7 +23507,7 @@ class ScalarChecker {
           checker.abrupt_ = nullptr;
         }
       } scope{*this};
-      extracting_leaf_primitive_ = plan.primitive;
+      extracting_leaf_ = &plan;
       auto &instance = program_.instances[id];
       BodyReplay frame{program_, instance};
       try {
