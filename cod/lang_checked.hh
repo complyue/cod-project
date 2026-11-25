@@ -384,11 +384,16 @@ class ScalarChecker {
     }
   }
   CheckedProgram program_;
+  std::set<size_t> default_call_reasons_{0, 2};
   std::map<const Form *, std::set<size_t>> abstract_effect_inputs_;
   std::set<size_t> changed_abstract_inputs_;
   Type exception_type(size_t category) const { return program_.exception_type(category); }
   std::set<size_t> exception_possibilities(const Type &type) const {
     if (type.kind != Type::exception) return {};
+    if (concrete_failure(type.identity)) {
+      if (type.identity < program_.exception_types.size()) return {type.identity};
+      return {};
+    }
     std::set<size_t> result;
     for (size_t category = 1; category < program_.exception_types.size(); ++category)
       if (matches_failure(program_.exception_types, category, type.identity)) result.insert(category);
@@ -4538,10 +4543,8 @@ class ScalarChecker {
     state.returned.initialize(state.initialized, state.selections);
   }
   std::set<size_t> call_reasons(const std::set<size_t> &declared_categories) const {
-    std::set<size_t> reasons{0, 2};
-    for (size_t category = 1; category < program_.exception_types.size(); ++category)
-      if (concrete_failure(category) && (!program_.exception_types[category].checked || declared_categories.contains(category)))
-        reasons.insert(Completion::failure(category).reason);
+    auto reasons = default_call_reasons_;
+    for (const auto category : declared_categories) reasons.insert(Completion::failure(category).reason);
     return reasons;
   }
   std::set<size_t> call_reasons(const CheckedMethod &method) const {
@@ -25356,6 +25359,10 @@ class ScalarChecker {
     }
     if (!registered || diagnostics.has_error() || !diagnostics.continue_work()) return {};
     check_native_type_names();
+    // Module registration has completed the exception catalog before any call is checked.
+    for (size_t category = 1; category < program_.exception_types.size(); ++category)
+      if (concrete_failure(category) && !program_.exception_types[category].checked)
+        default_call_reasons_.insert(Completion::failure(category).reason);
     for (auto &method : program_.methods)
       method.throws_categories = declared_exception_categories(method.throws_types);
     for (auto &family : program_.families)
