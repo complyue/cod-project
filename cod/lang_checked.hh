@@ -5134,7 +5134,26 @@ class ScalarChecker {
         [](const auto &read) { return !read.uninitialized.empty() || read.when != CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}}; });
     const auto entry_payloads = prepared ? incoming_payloads() : lexical_.exceptions;
     const bool boolean_call = *contract.target == Type::boolean || !summary.booleans.empty() || conditional_call;
-    const auto entry_booleans = !boolean_call ? CleanupEquations::BooleanValues{} :
+    bool independent_boolean_call = false;
+    if (*contract.target == Type::boolean && !prepared && !delayed_ && !immediate_scope && !case_scan &&
+        !late_payloads && offset == 0 && expr.kind == Expression::Kind::call && !expr.lexical_symbol_call &&
+        !expr.has_here_body() && operation.callee && !operation.callable_call && !operation.supplied_here &&
+        operation.here_arguments.empty() && operation.callable_captures.empty() && fields.empty() &&
+        summary.booleans.empty() && summary.written_inputs.empty() && summary.bindings.empty() &&
+        summary.binding_sources.empty()) {
+      const auto &method = program_.methods[program_.instances[*operation.callee].method];
+      independent_boolean_call = method.source->kind == Form::Kind::function && !method.source->c_linkage &&
+          !method.scope_inputs && !method.lexical_result && !variadic(method) && method.here.empty() &&
+          method.input_parameters().size() == arguments.size() && operation.arguments.size() == arguments.size() &&
+          std::ranges::all_of(arguments, scalar_type) &&
+          std::ranges::all_of(contract.owners, [](size_t owner) { return owner == 0; }) &&
+          std::ranges::all_of(operation.arguments, [](const auto &argument) {
+            return argument.mode == ArgumentMode::value && !argument.binding_slot && scalar_type(argument.type);
+          });
+    }
+    // An independent call reads no borrowed Boolean payload and produces no
+    // Boolean payload delta. Its value arguments still carry their own snapshots.
+    const auto entry_booleans = !boolean_call || independent_boolean_call ? CleanupEquations::BooleanValues{} :
         prepared ? incoming_booleans() : current_booleans(lexical_, expr.at);
     std::vector<CleanupEquations::BooleanValue> boolean_inputs(views.size());
     for (size_t i = 0; i < views.size(); ++i) if (boolean_call && input_type(i) == Type::boolean) {
