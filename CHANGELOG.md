@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Share seed binding snapshots and bound symbol requirements on first demand
+
+<a id="k-seed-symbol-bound-release-20261124"></a>
+**K-SEED-SYMBOL-BOUND-RELEASE-20261124.** The specialized seed using shared binding snapshots at `54c40e3e:cod/lang_checked.hh` reproduced the saved provider files, LLVM IR and linked booter for `d007ba5c:applications/cod-booter`. The [first-demand rule](design/ImplementationArchitecture.md#first-demand-union-of-dynamic-symbol-requirements) shipped separately at `75e196aa:cod/lang_checked.hh`. Sixteen focused comparisons matched execution, diagnostics and emitted artifacts. Traces showed that a closed call could skip a caller recheck triggered solely by symbol availability. An open call used precise checking from its first visit. A caller with both kinds of use still received the required notification, as did one affected by a borrowed read.
+
 ## 2026-11-24 — Reserve a single slot for memory-heavy workloads
 
 <a id="h-workload-based-build-concurrency-20261124"></a>
