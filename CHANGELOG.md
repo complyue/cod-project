@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Reuse completed call-free scalar frames at final validation
+
+<a id="k-seed-completed-scalar-frames-20261125"></a>
+**K-SEED-COMPLETED-SCALAR-FRAMES-20261125.** At `069c377a:cod/lang_checked.hh`, the producer retains the selected scalar method’s frame and effects, and final validation revisits its body. D-ARCH-REVIEW r177→178 continues P-682/P-683 and the [phase rule](#h-completed-callee-behavior-20261125). The [reviewed architecture](design/ImplementationArchitecture.md#reusing-a-completed-scalar-frame) lets LLVM use that original frame when emission facts are complete. The finalizer observes parameter shadows after entry names become available and preserves warning and error order. This records a design decision for mainline implementation.
+
 ## 2026-11-25 — Make invalid algorithms inexpressible and justify workqueues by project value
 
 <a id="h-workqueue-value-20261125"></a>

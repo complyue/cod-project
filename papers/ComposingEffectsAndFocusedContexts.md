@@ -13,8 +13,10 @@ For $M$ independently named operations and $N$ transparent scopes, we give a con
 $O(M + N)$ bound on authored routing code. The construction uses nominal lookup and restoration,
 bounded definitions and statically checked, live binding targets. With $K$ independent,
 bounded interaction rules the bound is $O(M + N + K)$. Arbitrary policies can still require
-a separate decision for each of the $M × N$ pairs. We relate this accounting to the interface-by-transformer
-instances in `mtl` and compare two orders of retry and selective publication in CoD,
+a separate decision for each of the $M × N$ pairs. Three independently authored Haskell
+transformers expose the integration cost. One fixed stack uses three native instances and
+three cross-layer instances. Supporting all six orders requires six distinct cross-layer
+instances in total. A separate retry and selective-publication experiment compares CoD,
 `mtl` and labeled `effectful`.
 
 A defect viewer and a batch job share a detector that can read either raw pixels or a
@@ -50,7 +52,9 @@ must still produce 15 and must attribute the flag to the middle cell in this rev
 The warehouse policy paper can compare two handlers for a fixed operation. For this study we
 need authors who can independently add *kinds of operation* and *execution layers*, and an
 old rule that must still work on a newly focused part of a result. The inspection supplies all
-three. [Warehouse policy and its executor](AlgebraicEffectsIsAllYouNeed.md#two-entries-share-one-fallback)
+three. The [three business transformers](#ship-three-business-transformers) measure the cost
+of integration. The retry experiment below measures the observable effect of changing a scope.
+[Warehouse policy and its executor](AlgebraicEffectsIsAllYouNeed.md#two-entries-share-one-fallback)
 
 <a id="composing-retry-and-publication"></a>
 
@@ -208,62 +212,210 @@ staged output, which requires a change to the stage's policy.
 
 ## Where the M × N obligations arise
 
-Let M count independent effect interfaces and N count outer transformer constructors through
-which clients want to use them. A cell asks how all methods of one interface work on that
-outer layer. Count supported pairs for this workload. A built-in instance, a derived forwarding
-instance, a new semantic implementation and a rejected pairing have different costs.
-Permutations of a complete stack and the number of domain algorithms are different quantities.
+### Ship three business transformers
 
-Here is a baseline that can be checked against `mtl` 2.3.1. The application uses the standard
-classes to expose focus, mutable run state and tile faults. The columns are three constructors
-applied to an appropriate base monad. For each non-native cell the base supplies the interface
-being forwarded. The state transformer is the strict variant.
+The camera driver, calibration library and defect reporter are released by different teams.
+Each team supplies a capability that client code can request, a transformer that implements
+it, and a runner. The application must use all three capabilities in one inspection. What
+must the authors supply between the first working package and the assembled application?
 
-| Interface available to the client | `ReaderT Focus` | `StateT RunState` | `ExceptT TileFault` |
+| Team | Public methods | What the team's own transformer does |
+| --- | --- | --- |
+| Camera | `acquire :: m (Maybe Int)` | `CameraT` spends one exposure credit and issues the next serial together. An empty budget yields `Nothing` and leaves the serial unchanged. |
+| Calibration | `gain :: m Int` and `withGain :: Int -> m a -> m a` | `GainT` supplies a calibration and overrides it for the duration of a caller's computation. |
+| Defect report | `flag :: Flag -> m ()` and `publishIf :: (a -> Bool) -> m a -> m a` | `ReportT` collects ordered (serial, gain) pairs. A protected computation returns its result in either case. Its flags reach the enclosing report only if the predicate accepts that result. |
+
+The three public types are new transformers. They reuse strict `StateT`, `ReaderT` and
+strict `WriterT` privately for storage, environment and ordered output. That reuse pays
+for the underlying monad machinery. The assembled client must also be able to
+ask for `MonadReport` through `CameraT`, even though a camera by itself knows nothing
+about publishing a report. `mtl` supplies no instances for these domain classes. The listing uses its class-and-instance
+pattern. Its imports need only `base` and `transformers` because the teams define all three classes. [Complete Haskell program](examples/ThreeBusinessTransformers.hs)
+
+Begin with serial 1, two exposure credits and normal gain 3. Make one acquisition at gain 7,
+reject it, then accept an acquisition at normal gain. The inspection has one definition for
+every stack. Here is the body at the centre of the comparison.
+
+```haskell
+attempt :: (MonadCamera m, MonadGain m, MonadReport m) => Bool -> m Bool
+attempt accepted = publishIf id $ do
+  acquired <- acquire
+  case acquired of
+    Nothing -> pure False
+    Just serial -> do
+      sampled <- gain
+      flag (serial, sampled)
+      pure accepted
+```
+
+The caller runs `withGain 7 (attempt False)` followed by `attempt True` and reads `gain`
+again. Both credits have been spent, the next serial is 3, the visible gain is 3, and the
+published report contains only `[(2,3)]`. Accept the first attempt as a control and the report
+must contain `[(1,7),(2,3)]` in order. Without this control a broken `withGain` that ignored
+the override could pass the rejection example. Reverse the decisions and the final report must
+keep `[(1,7)]`, even though the second attempt staged `(2,3)` before it was rejected. The full
+source also covers exhaustion before the second shot and before the first.
+
+### What one application has to write
+
+Fix the order `CameraT (GainT (ReportT Identity))`, outermost first. Start at the innermost
+layer and ship outward. Each row gives the *additional* source in the direct `mtl`-style
+encoding. A native instance implements the layer's own class. A crossing exposes an inner
+capability on the new outer type.
+
+| Release | New native instance | New crossings required by the client | New instance heads | New method bindings |
+| --- | --- | --- | ---: | ---: |
+| Report on its own | `MonadReport (ReportT m)` | None | 1 | 2 |
+| Put calibration over report | `MonadGain (GainT m)` | Report through `GainT` | 2 | 4 |
+| Put camera over both | `MonadCamera (CameraT m)` | Gain through `CameraT`; report through `CameraT` | 3 | 5 |
+| **One delivered stack** | **3 native** | **3 crossings** | **6** | **11 = 5 native + 6 forwarding** |
+
+At the final step a call to `flag` travels through camera and calibration to reach the reporter.
+The app keeps the calibration team's existing report bridge. It adds one bridge from report to camera, irrespective of
+how many layers separate the two. Omit that last bridge and `inspection` still has a valid
+polymorphic definition. Specializing it to `Application` now lacks `MonadReport (CameraT …)`.
+The application author can point to the call and the missing instance in the following assembly.
+
+```haskell
+type Application = CameraT (GainT (ReportT Identity))
+
+runApplication :: CameraState -> Application a -> ((a, CameraState), [Flag])
+runApplication s = runIdentity . runReport . runGain 3 . runCamera s
+
+-- Reject the first report, then accept the second.
+example = runApplication (CameraState 1 2) (inspection (False, True))
+```
+
+One of the new camera instances illustrates the difference between forwarding a request
+and forwarding a scope.
+
+```haskell
+instance MonadReport m => MonadReport (CameraT m) where
+  flag = lift . flag
+  publishIf ok (CameraT action) = CameraT $ StateT $ \s ->
+    publishIf (ok . fst) (runStateT action s)
+```
+
+`flag` lifts an action that already runs in the inner monad. The body handed to `publishIf`
+still needs an initial camera state. Running it returns `(result, finalCamera)`.
+The inner reporter must apply the approval predicate to `result` and pass the whole pair back.
+Resetting the camera on rejection would let the next shot reuse serial 1. Keeping all the
+flags would leak `(1,7)`. The supplied body needs more than `lift`. The gain crossing can reuse
+`mapStateT (withGain n)` to carry its scoped action through the camera state.
+The fixed stack's six forwarding methods consist of three ordinary lifts, two library
+mappings and the result projection above.
+
+### What changes when a second application wants another order?
+
+Each cell below names an implementation in the companion source. **F** marks a crossing
+needed by the first application. **R** marks one added for the remaining orders.
+Rows count three independently authored interfaces ($M$). Columns count three public
+transformer constructors ($N$). Counting individual method bindings gives a different unit.
+
+| Capability requested | Outer `CameraT` | Outer `GainT` | Outer `ReportT` |
 | --- | --- | --- | --- |
-| `MonadReader` — inspect focus or run a body under a changed focus | Supplies its own environment and `local`. | Lifts the read; `local` maps over the underlying state computation. | Lifts the read; `local` maps over the underlying error computation. |
-| `MonadState` — read or update run state | Lifts the state operation. | Supplies its own state. | Lifts the state operation. |
-| `MonadError` — raise a fault or protect a computation with a handler | Lifts a throw; runs the protected action and handler with the reader environment. | Lifts a throw; runs the catch handler with the state from entry to the protected action. | Supplies its own throw and catch. |
+| `MonadCamera` | Native acquisition | R · lift `acquire` | R · lift `acquire` |
+| `MonadGain` | F · lift `gain`, map `withGain` over state | Native calibration | R · lift `gain`, map `withGain` over writer output |
+| `MonadReport` | F · lift `flag`, project `fst` for `publishIf` | F · lift `flag`, map `publishIf` over the reader | Native publication |
 
-These are three native cells and six inherited cells already supplied by the library.
-In these nine instances the source spells out 24 method bindings: eight native methods,
-twelve ordinary lifts, two mappings for `local` and two specialized liftings for `catchError`.
-A user of this stack writes none of the nine instances. The table explains the maintenance
-question faced by someone shipping a *new* interface or transformer. Lifting a single base
-action suffices for many operations. `local` and `catchError` also receive computations that
-must run in the right context. The library's transformer-specific mappings and catch helpers
-make those choices inspectable. Jaskelioff identified this product of axes and gave a modular
-lifting construction under additional structure. It would be misleading to turn the example
-into a lower bound on all Haskell encodings. [Reader instances](https://hackage-content.haskell.org/package/mtl-2.3.1/docs/src/Control.Monad.Reader.Class.html)
+Supporting all six orders adds **three** instance heads and **four** method bindings to the
+fixed stack. Across the library the total is **nine heads, fifteen method bindings**.
+Of those, six heads and ten bindings provide crossings. Six of the ten bindings are plain
+lifts, three reuse a carrier mapping, and one adjusts the result predicate. The six application
+orders share these definitions. The fixture peels each stack with the three existing runners
+and normalizes the placement of final camera state and report so that every order faces the
+same observer. Agreement is a business requirement for *these* packages. The earlier
+retry/publication experiment deliberately requires different observations for its two scope nestings.
+
+| Authored work beyond the method bodies | One production order | Order-independent library and its example clients |
+| --- | --- | --- |
+| Public contracts and package machinery | 3 capability classes with 5 signatures; 3 newtypes; 3 `MonadTrans` lifts; 3 domain runners. Each newtype derives `Functor`, `Applicative` and `Monad`. | Reuse the same contracts, types, lift definitions and runners. |
+| Application and verification | One stack alias and runner composition for the production order; one acquisition rule, one two-attempt inspection and its expected observations. | Exercise the same inspection through 6 runner compositions; normalize the 2 result shapes. |
+| Package integration | Deliver 3 cross-layer instances along with the 3 native instances. | Deliver all 6 cross-layer instances with the same 3 natives. An integration module can supply the bridge source when the domain packages are frozen. |
+
+The companion's `main` specifies five business cases across all six orderings. Its entry point is
+`runghc papers/examples/ThreeBusinessTransformers.hs` with `transformers` available. The
+source keeps the declarations together so readers can inspect each implementation. In separately released Haskell packages, putting a cross-instance in a module owning
+neither class nor outer type makes it an orphan. Publish one consistent instance set or
+introduce an integrating newtype. A library can also reuse default methods, deriving or
+a generic lifting construction wherever the required semantics fit. Credit the shared
+definition once and count any remaining opt-ins. A single generic `MonadReport (StateT s m)` instance, for example, could let
+multiple domain newtypes derive their report bridge from the same representation, where that
+policy fits. A `Ports m` record is a legitimate
+application-specific alternative. Count its construction and the scoped operation adapters
+that the application actually needs. [Haskell program and runners](examples/ThreeBusinessTransformers.hs)
+· [MonadTrans and lifting](https://hackage-content.haskell.org/package/transformers-0.6.2.0/docs/Control-Monad-Trans-Class.html)
+· [Jaskelioff, *Modular Monad Transformers*](https://www.fceia.unr.edu.ar/~mauro/pubs/mmt/mmt.pdf)
+· [Affeldt and Nowak on the hypotheses of modular lifting](https://doi.org/10.4230/LIPIcs.TYPES.2020.2)
+
+With $n$ such packages, a fixed stack whose leaf uses all capabilities has $n$ native
+instances and $n(n-1)/2$ distinct crossings in the direct pairwise encoding. Supporting
+every order covers $n(n-1)$ directed crossings plus the $n$ natives. These counts describe
+the published interface and coding choice. An application using standard `ReaderT`, `StateT`
+and `ExceptT` already receives their `mtl` instances from the library. An application whose requirements fit those existing interfaces can ship against them
+with zero new instances. The library sources show the work that was amortized.
+[Reader instances](https://hackage-content.haskell.org/package/mtl-2.3.1/docs/src/Control.Monad.Reader.Class.html)
 · [State instances](https://hackage-content.haskell.org/package/mtl-2.3.1/docs/src/Control.Monad.State.Class.html)
 · [Error instances](https://hackage-content.haskell.org/package/mtl-2.3.1/docs/src/Control.Monad.Error.Class.html)
-· [Jaskelioff, *Modular Monad Transformers*](https://www.fceia.unr.edu.ar/~mauro/pubs/mmt/mmt.pdf)
-· [Affeldt and Nowak, formalization of modular transformations and their hypotheses](https://doi.org/10.4230/LIPIcs.TYPES.2020.2)
+
+### What CoD pays for the same inspection
+
+In CoD the camera provider can implement `acquire` against the current serial and credit
+cells. Calibration supplies the current gain and rebinds that value for a call. The reporter
+appends to the current journal and changes the journal destination while a result is provisional.
+For the Boolean verdicts in this inspection the two scope bodies have the following shapes.
+The enclosing caller supplies the business leaf and the initial bindings.
+
+```cod
+proc with_gain(here body() -> bool, value:u64) -> bool {
+    effect @gain <- value
+    return body()
+}
+
+proc publish_if_accepted(here body() -> bool) -> bool {
+    val draft <- @report
+    val accepted <- {{
+        effect @report = draft
+        body()
+    }}
+    if (accepted) { @report <- draft }
+    return accepted
+}
+```
+
+Here `@gain` is a bits value symbol. `@report` is a writable reference symbol bound to an
+owned cell holding the fixture's bounded journal as bits. The draft copies the parent's
+current contents, so acceptance retains the prefix. Camera cells remain live and writable
+under both scopes. The caller can run `with_gain(7u64) { publish_if_accepted() { shot(false) } }`,
+then `publish_if_accepted() { shot(true) }` at restored gain 3. Here `shot` acquires if credit
+is available, appends (serial, gain) on acquisition and returns its supplied verdict, or
+returns false on exhaustion. These steps give the same camera, verdict and journal trace.
+The Haskell `publishIf` accepts a predicate on arbitrary results. This CoD excerpt covers
+the Boolean protocol used by the inspection. [Concrete CoD journal cells and scoped publication](examples/ComposedTileReport.md#cod)
+
+CoD still needs three business providers, five operations including the two scopes, live
+storage, domain initializers and an application entry. The scoped bindings carry the other
+providers through both scope bodies with **zero per-pair forwarding declarations** for this
+trace. This count compares routing source. It assigns real work to credit accounting, gain
+restoration and conditional publication on both sides. Refunding a rejected exposure, for
+example, would change the camera contract and require explicit coordination. The
+[additive bound](#additive-source-extension) specifies which transparent policies generalize.
 
 ### Add a row, then a column
 
-1. **Add the inspection team's `Flag` interface.** Its operation records the coordinate and score
-   when the contrast threshold is reached. If it lives in the base, the three existing layers each need
-   a route to it. An implementation can reuse an appropriate lift for this first-order operation.
-   Native dispatch, reusable generic definitions and generated forwarding each count as reuse.
-2. **Add the image team's `TileT` layer.** Existing focus, state and error operations must
-   still be available where the tiled calculation uses them. The new layer must distinguish
-   the physical image boundary from a tile's private storage boundary. A scoped change of focus
-   may read a neighbouring tile. A tile with no access to the required border pixels must
-   obtain them or report a fault.
-3. **Install both extensions.** Where does a flag written during a tile attempt go if the tile
-   subsequently fails verification? An audit of every attempt keeps it. A published defect
-   report containing only verified tiles drops it. Either contract is useful, but a transparent
-   lift to an append-only destination implements only the first. For the second, stage the flag
-   until tile acceptance.
+The three-package experiment grows both axes together. To vary them independently, freeze the
+nine-cell library. Add only a `MonadAudit` interface with an operation recording each physical
+exposure in a base audit sink. Trace it through the three existing outer constructors. Next
+add only an outer `TileT` execution layer. Check which of the four interfaces it must expose,
+including whether an acquisition in a rejected tile still charges credit, survives in the
+audit, and disappears from the public defect report.
 
-Going from three by three to four by four adds **seven candidate pairings**: three old layers
-for the new interface, three old interfaces for the new layer, and the new intersection.
-In general, adding one row and one column to a full M × N table adds M + N + 1 cells.
-The seven are a reproducible count of questions, not seven required hand-written instances.
-For each, record who had to change code, what default applied, what evidence the checker
-required and what an unchanged client observed. A single conditional over every supported
-layer, relocated into a registry, would still be pair-specific maintenance.
+The fully supported rectangle has grown from three by three to four by four. It adds three
+candidate routes for the new audit interface, three for existing interfaces through `TileT`,
+and their new intersection, **seven cells**. In general one row and one column add $M+N+1$
+cells to a full $M\times N$ rectangle. Record the provider, shared default, explicit instance
+or deliberately unsupported combination in each. One reusable rule can cover several cells.
+An independently chosen policy for every cell still costs information somewhere.
 
 ### One cell where a generic answer changes the result
 
@@ -277,7 +429,7 @@ observation; restoration of a pure state value could not undo it.
 
 | Comparison | What to try on this same workload |
 | --- | --- |
-| `mtl` with standard transformers | Use the table above, then allow reasonable baselines such as deriving through a newtype or projecting two services out of one reader environment. Record which functions still need a scoped interpretation and whether the supplied failure semantics match the requested report. |
+| `mtl` with standard transformers | Use the supplied error and state instances for the caught-fault control. For the three business packages above, also account for derivation and projecting services out of one reader environment. Record which functions still need a scoped interpretation and whether the supplied failure semantics match the requested report. |
 | `fused-effects` | Make `Flag` a member of the effect signature; let a carrier handle its own operations and delegate the remaining signature. Check whether the tile carrier can delegate unknown first-order flags unchanged, and where it must take responsibility for provisional publication. |
 | Polysemy | Interpret the domain operations into a pure state and a typed error. In the documented pure interpreters, eliminating `Error` before `State` preserves the increment in the catch; the opposite order discards it. Record the chosen interpreters and order alongside the result. |
 | `effectful` | Compare its `Error.Static` and `State.Static.Local` handlers. In this single-threaded caught-fault case both orders keep the increment. To publish verified flags only, express the commit boundary explicitly. |

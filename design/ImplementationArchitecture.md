@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r178 the [scalar frame review](../CHANGELOG.md#k-seed-completed-scalar-frames-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 under the trusted seed’s translation contract. It assigns the emission frame and any observations that require later facts to their respective phases. [Scope and acceptance](#reusing-a-completed-scalar-frame)
+
 At r177 the [project user’s workqueue rule](../CHANGELOG.md#h-workqueue-value-20261125) extends [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 to the operations a scheduling interface may expose. It carries forward the phase and material-consumer requirements. The [worked example](#when-a-workqueue-is-justified) applies them to seed translation.
 
 At r176 the [final body effect review](../CHANGELOG.md#k-seed-final-body-effect-production-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 under the [phase rule](../AGENTS.md#passes-and-dependency-changes) and the trusted seed’s translation contract. It identifies which traversal produces the outgoing summary during final body validation.
@@ -512,6 +514,14 @@ A seed body’s outgoing `CallEffects` describes what a call can do on each comp
 The choice depends on who consumes the result. In ordinary effect closure, the iteration that settles a loop can itself supply the summary consumed by the solver. It retains that responsibility. Final validation keeps the comparison for each existing binding interpretation, the separate completed scalar and leaf paths, emitted frame data and warnings. Its instance walk covers methods discovered during materialization. The module entry retains its existing checking path. The broader migration of the legacy solver remains open.
 
 Acceptance uses the seed’s translation of `ModuleIndex`, `ProviderNames` and `NativeSource` with matching LLVM IR, bitcode and provider files. The focused inputs distinguish a borrowed write in a loop with failure and cleanup, a returned callable whose validity depends on a condition, and the warning for nonvoid fallthrough. Mainline owns verification and publication.
+
+### Reusing a completed scalar frame
+
+The existing producer for a call-free Boolean predicate, a byte literal or a guarded unsigned 64-bit result can establish both the callable’s behavior and the frame LLVM will use. Record frame readiness for the exact selected instance and interpretation after ordinary checking establishes its arguments, bindings, operations, result and exits. Keep the frame in the instance. The existing frozen-effect flag also covers bodies with outstanding frame work, so it cannot double as the readiness decision.
+
+Final validation handles the module entry first. On reaching a reusable instance in its normal order, the finalizer handles any outstanding parameter shadow warnings and then marks the instance complete. Its inputs are the finished frame and the applicable name information. The body visitor belongs to the ordinary replay path. A formal may shadow a module value whose name becomes visible after leaf extraction. Apply the ordinary warning rule in the method’s original naming context and parameter order, with existing deduplication and promotion. A failed extraction retains the diagnosed site and the existing precedence of independent entry errors.
+
+Borrowed leaves, bodies that call another method, distinct-binding variants, late instances and any obligation the producer cannot finish keep their ordinary validation. The final callable-graph comparison still covers the whole program. Acceptance uses unchanged `Lexer` and `ModuleIndex` LLVM and provider outputs, the guarded multiplication and its overflow control, operation selection through an override, and a parameter shadow under warning and error policies. Check that a reusable instance reaches emission without a second body visit and that a promoted warning preserves previous outputs.
 
 ### Restarting a pass from entry
 
