@@ -5234,26 +5234,37 @@ class ScalarChecker {
         [&](size_t i) { return input_type(i) == Type::boolean && !readonly_input(i); });
     const bool observes_values = *contract.target == Type::boolean || !summary.booleans.empty() || writes_boolean ||
         !summary.uninitialized.empty() || conditional_local_check || conditional_nullness;
-    bool independent_boolean_call = false;
+    bool skip_entry_booleans = false;
     if (*contract.target == Type::boolean && !prepared && !delayed_ && !immediate_scope && !case_scan &&
         !late_payloads && offset == 0 && expr.kind == Expression::Kind::call && !expr.lexical_symbol_call &&
         !expr.has_here_body() && operation.callee && !operation.callable_call && !operation.supplied_here &&
-        operation.here_arguments.empty() && operation.callable_captures.empty() && fields.empty() &&
+        operation.here_arguments.empty() && operation.callable_captures.empty() &&
         summary.booleans.empty() && summary.written_inputs.empty() && summary.bindings.empty() &&
         summary.binding_sources.empty()) {
       const auto &method = program_.methods[program_.instances[*operation.callee].method];
-      independent_boolean_call = method.source->kind == Form::Kind::function && !method.source->c_linkage &&
+      const auto supported_operand = [&](size_t i) {
+        const auto &argument = operation.arguments[i];
+        if (argument.binding_slot) return false;
+        if (argument.mode == ArgumentMode::value)
+          return !borrowed_input(i) && scalar_type(arguments[i]) && scalar_type(argument.type);
+        return (argument.mode == ArgumentMode::borrowed_ref || argument.mode == ArgumentMode::borrowed_read) &&
+            borrowed_input(i) && readonly_input(i) && views[i].view && !views[i].mixed_view &&
+            input_type(i) != Type::boolean && argument.type != Type::boolean &&
+            (argument.type.kind == Type::array || program_.bits_payload(argument.type) || text_type(argument.type));
+      };
+      skip_entry_booleans = method.source->kind == Form::Kind::function && !method.source->c_linkage &&
           !method.scope_inputs && !method.lexical_result && !variadic(method) && method.here.empty() &&
           method.input_parameters().size() == arguments.size() && operation.arguments.size() == arguments.size() &&
-          std::ranges::all_of(arguments, scalar_type) &&
-          std::ranges::all_of(contract.owners, [](size_t owner) { return owner == 0; }) &&
-          std::ranges::all_of(operation.arguments, [](const auto &argument) {
-            return argument.mode == ArgumentMode::value && !argument.binding_slot && scalar_type(argument.type);
+          (contract.owners.empty() || !contract.owners.back()) &&
+          std::ranges::none_of(std::span{views}.subspan(arguments.size()), [](const auto &field) {
+            return field.type == Type::boolean;
           });
+      for (size_t i = 0; skip_entry_booleans && i < arguments.size(); ++i)
+        skip_entry_booleans = supported_operand(i);
     }
-    // An independent call reads no borrowed Boolean payload and produces no
-    // Boolean payload delta. Its value arguments still carry their own snapshots.
-    const auto entry_booleans = !observes_values || independent_boolean_call ? CleanupEquations::BooleanValues{} :
+    // Without Boolean loans or payload changes, no outcome uses the entry
+    // map. By-value arguments still carry their own snapshots.
+    const auto entry_booleans = !observes_values || skip_entry_booleans ? CleanupEquations::BooleanValues{} :
         prepared ? incoming_booleans() : current_booleans(lexical_, expr.at);
     std::vector<CleanupEquations::BooleanValue> boolean_inputs(views.size());
     for (size_t i = 0; i < views.size(); ++i) if (observes_values && input_type(i) == Type::boolean) {
