@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Require the whole method family’s incoming effect symbols before 2.0
+
+<a id="h-family-effect-requirements-20261125"></a>
+**H-FAMILY-EFFECT-REQUIREMENTS-20261125.** The project user directed “在 method family 口径上，汇总所有路径可能要求的 symbols 并集，要求caller上下文完整提供” for all current CoD compilers and deferred branch precision until at least 2.0. [D-10r265](design/SymbolicDynamicScope.md#family-wide-effect-requirements-before-20), D-ARCH-REVIEW r180 and bootstrap roadmap r40 record the first-release trade-off under P-738/P-739. A miss on the family-wide union now rejects a call even when its selected overload or branch is safe. This supersedes the precise fallback in the [earlier seed bound](#h-seed-symbol-union-admission-20261124) for this question. The [trusted seed scope](#h-trusted-seed-translation-20261125) is narrowed by this specific default check. Dynamic lookup, captured/current values, restoration and ownership retain their existing meaning.
+
 ## 2026-11-25 — Finalize a scalar caller after its module names are available
 
 <a id="k-seed-scalar-caller-name-finalization-20261125"></a>

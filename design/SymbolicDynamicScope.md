@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 264 · Recorded: 2026-11-25 · Phase: language/application co-design.
+Design revision: 265 · Recorded: 2026-11-25 · Phase: language/application co-design.
 
 ## Design authority
+
+At r265 [D-10-FAMILY-EFFECT-REQUIREMENTS](DesignAuthorityRegistry.md#d-10-family-effect-requirements) records the [project user’s pre-2.0 compiler policy](../CHANGELOG.md#h-family-effect-requirements-20261125). P-738/P-739 connect first-release maturity to a conservative family-wide check and preserve nominal symbol identity, handler capture, dispatch and binding lifetime. The [acceptance example](#family-wide-effect-requirements-before-20) distinguishes a missing symbol in an unselected overload from an unrelated module’s family.
 
 At r264 the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) supplies the receiver head in the Stops example. [D-10](DesignAuthorityRegistry.md#d-10) continues the r263 call and generator semantics. Both consumer spellings visit the two IDs in order.
 
@@ -1809,17 +1811,27 @@ The required-symbol analysis must account for dispatch, transitive calls, higher
 
 CoD checks the demanded whole-program execution with its caller paths available, rather than compiling a module against an unknowable future caller. A finite summary or fixed-point analysis is a candidate way to handle recursion and branches; the semantic requirement is not to enumerate an unbounded runtime stack. Missing requirements cannot be hidden behind an empty summary or deferred to an ordinary runtime lookup failure.
 
+### Family-wide effect requirements before 2.0
+
+Before 2.0, all CoD compilers, including the C++ seed and the CoD booter, check one set of required dynamic symbol identities per visible method family in its selected module interpretation. Take the union of all incoming symbol requirements across that family’s methods and paths, including requirements reached through calls and explicit `touch`. At a call, every member must be supplied by the effective context. A missing member rejects the call even when its actual argument types or branch conditions would have avoided the use. This is a deliberate limit on accepted programs to simplify delivery of the first compilers. Reconsider branch-sensitive acceptance at 2.0 or later.
+
+Union the **incoming requirements**. An unconditional, successfully published local installation can supply a later use in its scope, including a call to a helper that requires the symbol. Evaluate installation operands against the preceding bindings. For example, the right side of `effect @n <- @n + 1u64` still requires an incoming `@n`. At a call reached by several paths, count only bindings guaranteed to be available there. A conditional or failed installation gives no guarantee at a later use it may not cover. A bare symbol identity has no installation requirement of its own. Renamed selections of one symbol count once. A family extension contributes to the receiving view that includes it. Other modules’ independent extensions do not enlarge that view. An installed anonymous handler has its own method family.
+
+For example, suppose the `u64` method of `report` needs `@log` and its `bool` method needs `@audit`. The check for `report(7u64)` requires **both** in a view containing both methods. An installation of `@log` alone gives a missing-`@audit` diagnostic even though dispatch selects the `u64` method. Supplying both admits the call and executes only that method. A source view containing only the first method requires only `@log`. The same union applies when the two uses occur in opposite arms of a single method.
+
+The [invocation rules](#captured-values-and-call-behavior) determine what supplies a requirement. Direct procedure calls and `behave` use current bindings. For `perform`, the installed handler supplies its captured bindings at invocation, with availability established at activation. Deferred current-context calls observe their scope at drain. Preserve dispatch, the values observed, owner and lifetime requirements, and restoration on every exit. This admission rule concerns availability of dynamic symbols. Checked exceptions, borrow permissions and initialization keep their own contracts.
+
 ### Call-path binding checks
 
 H-102 locates checking at compilation of the demanded call paths. The compiler follows module initialization, callers, scoped bindings, callable selection and invocation mode; declaration text in an isolated module is not the compilation unit.
 
 - For `behave @p`, required effects must be available in the current effective dynamic scope along each reachable path to their use, accounting for bindings established inside the body.
 - For `perform @p`, the values it must install must have been obtainable at the applicable definition event. Missing required capture values are compilation errors, with no fallback to the caller's values.
-- Branches and possible callees are checked in their corresponding contexts. Knowing caller paths does not require knowing runtime branch values; a reachable path lacking a required binding cannot be excused by another path that supplies it.
+- A binding supplied on one possible path cannot excuse its absence on another. Pre-2.0 compilers use the [family-wide requirement](#family-wide-effect-requirements-before-20) even when a caller knows which method or branch will execute.
 
 Deferred current-context invocation uses the bindings present when its owning full scope drains. A conditional registration requires those bindings on every path reaching that action, including failures after registration; a path that never registered it supplies no invocation obligation. Binding and owner proofs share the queue's branch choices. Later rebinding remains observable, iteration effects restore at their own boundary, and temporary effects inside an explicit cleanup scope restore before later actions. These guarantees do not make a missing binding available to an independent callable or create a definition-time capture.
 
-The reusable-operation case is therefore checked through its complete definition/call paths and chosen mode. This does not select a runtime missing-value sentinel, implicit zero value, or a separate-module rejection policy. The precise analysis must preserve by-value captures while avoiding requirements for values that the checked path does not use.
+The reusable-operation case is therefore checked through its complete definition/call paths and chosen mode. This does not select a runtime missing-value sentinel, implicit zero value, or a separate-module rejection policy. By-value captures keep their definition-time values. Before 2.0, the family union can require availability of symbols that a particular call will never read.
 
 ### Module scanning and execution composition
 
