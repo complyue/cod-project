@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Confirm major program structure and algorithms and delegate routine delivery
+
+<a id="h-mainline-design-review-boundary-20261125"></a>
+**H-MAINLINE-DESIGN-REVIEW-BOUNDARY-20261125.** The project user told the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) “主线也不应该事无巨细地跟你确认吧，不是结对编程” and clarified “程序大结构和算法还是要找你确认，这种时机应该不会很多”. D-ARCH-REVIEW r174→175 supersedes the per-addition approval requirement of [the earlier structural review](#h-project-architecture-review-20261122). Under [the revised division of responsibilities](design/ImplementationArchitecture.md#design-review-and-delivery-responsibilities), mainline obtains confirmation for major structural and algorithmic choices before implementation and owns routine choices, verification and publication within the agreed design. Human confirmation still governs changes to language contracts and user principles. P-682/P-683 retain the material-consumer and evidence requirements.
+
 ## 2026-11-25 — Retire test fixtures and restore them on demand
 
 <a id="h-test-fixtures-on-demand-20261125"></a>
