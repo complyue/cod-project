@@ -4481,7 +4481,8 @@ class ScalarChecker {
     }
   }
   size_t initialization_frame() const { return deferred_action_ ? CleanupEquations::action_frame(*deferred_action_) : 0; }
-  void apply_effects(LexicalState &state, CleanupEquations::Effects &effects, const Location &at) {
+  void apply_effects(LexicalState &state, CleanupEquations::Effects &effects, const Location &at,
+                     const std::set<size_t> &payload_writes, const std::set<size_t> &symbol_uses) {
     const auto entry = path_conditions(state);
     effects.transform_conditions([&](const auto &clauses) { return CleanupEquations::conjoin_conditions(clauses, entry); });
     for (const auto input : state.inputs)
@@ -4498,10 +4499,10 @@ class ScalarChecker {
         for (const auto input : state.inputs)
           state.input_facts.edit(input, [&](auto &facts) { facts.initialized_saved_selections.insert(selection->second); });
     effects.returned.substitute(state.selections);
-    invalidate_payloads(state, effects.payload_writes);
+    invalidate_payloads(state, payload_writes);
     for (const auto &[place, value] : effects.booleans) if (state.available.contains(place))
       state.predicates.set(place, boolean_predicate(value));
-    for (const auto symbol : effects.symbols) observe_symbol_use(state, symbol, at);
+    for (const auto symbol : symbol_uses) observe_symbol_use(state, symbol, at);
     CleanupEquations::combine_initialization(state.initialized, state.uninitialized,
         effects.initialized, effects.uninitialized, false);
     std::erase_if(state.initialized, [&](size_t place) { return !state.available.contains(place); });
@@ -4627,17 +4628,19 @@ class ScalarChecker {
       return binding;
     };
     std::set<size_t> transport_symbols;
-    const bool collect_ordinary_symbols = tracks_ordinary_symbol_uses();
-    if (!collect_ordinary_symbols) for (const auto symbol : target.symbols)
+    const bool collect_ordinary_symbols = prepared && tracks_ordinary_symbol_uses();
+    if (prepared && !collect_ordinary_symbols) for (const auto symbol : target.symbols)
       if (symbol_needs_transport_fact(symbol)) transport_symbols.insert(symbol);
     const auto &symbol_uses = collect_ordinary_symbols ? target.symbols : transport_symbols;
     std::map<size_t, CleanupEquations::Effects> effects;
     for (const auto reason : reasons) {
       const auto found = target.initialized.find(reason);
       CleanupEquations::Effects row{};
-      if (prepared) row = cleanup_.preserve_pending(std::move(row));
+      if (prepared) {
+        row = cleanup_.preserve_pending(std::move(row));
+        row.symbols = symbol_uses;
+      }
       auto &effect = effects.emplace(reason, std::move(row)).first->second;
-      effect.symbols = symbol_uses;
       if (!slots.all) if (const auto outcome = target.present.find(reason); outcome != target.present.end())
         for (const auto parameter : outcome->second) {
           if (slots.projected.contains(parameter)) {
@@ -5333,7 +5336,7 @@ class ScalarChecker {
       record_payload_write(target, prepared);
     }
     for (auto &[reason, effects] : invocation) {
-      effects.payload_writes = written_targets;
+      if (prepared) effects.payload_writes = written_targets;
       if (late_payloads) {
         // These calls retain binding slots whose invocation-time selections
         // still need a payload/selection correlation proof.
@@ -5372,7 +5375,7 @@ class ScalarChecker {
       if (!needs_entry_booleans) continue;
       auto booleans = entry_booleans;
       if (late_payloads) {
-        for (auto &[place, value] : booleans) if (effects.payload_writes.contains(place)) value = CleanupEquations::unknown_boolean();
+        for (auto &[place, value] : booleans) if (written_targets.contains(place)) value = CleanupEquations::unknown_boolean();
       } else {
         CleanupEquations::BooleanValues definite;
         for (size_t i = 0; i < views.size(); ++i) {
@@ -5381,7 +5384,7 @@ class ScalarChecker {
           auto value = CleanupEquations::unknown_boolean();
           const auto outcome = summary.booleans.find(reason);
           const bool reported = outcome != summary.booleans.end() && outcome->second.contains(i);
-          if (readonly && (!reported || !intersect(payload_targets(views[i]), effects.payload_writes).empty())) continue;
+          if (readonly && (!reported || !intersect(payload_targets(views[i]), written_targets).empty())) continue;
           if (reported)
             value = instantiate_boolean(outcome->second.at(i), boolean_inputs, views, observed_slots, exception_inputs);
           if (readonly) {
@@ -5401,7 +5404,7 @@ class ScalarChecker {
         for (auto &[place, value] : definite) booleans[place] = std::move(value);
       }
       for (const auto &[place, value] : booleans)
-        if (effects.payload_writes.contains(place) || !entry_booleans.contains(place) || entry_booleans.at(place) != value)
+        if (written_targets.contains(place) || !entry_booleans.contains(place) || entry_booleans.at(place) != value)
           effects.booleans[place] = value;
     }
     if (lexical_.live && declares_root(contract.throws_types)) {
@@ -5434,8 +5437,11 @@ class ScalarChecker {
               lexical_.input_facts.edit(input, [&](auto &facts) { facts.selections.refine(*binding, false); });
           }
       };
+      const std::set<size_t> no_symbol_uses;
       const auto apply_invocation = [&](size_t reason, CleanupEquations::Effects &effects) {
-        apply_effects(lexical_, effects, expr.at);
+        // The original call outcomes carry the callee's symbol uses.
+        const auto &symbol_uses = reasons.contains(reason) ? summary.symbols : no_symbol_uses;
+        apply_effects(lexical_, effects, expr.at, written_targets, symbol_uses);
         if (!summary.bindings.empty()) refresh_targets(lexical_, false,
             immediate_scope || embedded_updates ? &effects.selections.invalidated : nullptr);
         if (immediate_scope) if (const auto outcome = summary.bindings.find(reason); outcome != summary.bindings.end())
@@ -6329,7 +6335,7 @@ class ScalarChecker {
           if (!effects.unknown_thrown) continue;
           failure = {completion.category()};
         }
-        apply_effects(state, applied, at);
+        apply_effects(state, applied, at, applied.payload_writes, applied.symbols);
         state.input_facts.retain_only(origin);
         if (!queued_actions.has_value()) queued_actions = queue && cleanup_.has_actions(queue);
         if (*queued_actions) {
