@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Archive the checked seed and clear removal of its second definition graph
+
+<a id="k-seed-remove-definition-graph-20261125"></a>
+**K-SEED-REMOVE-DEFINITION-GRAPH-20261125.** The annotated tag `archive/checked-cpp-seed` (tag object `54a52351`) resolves to `a0922741befb276e8b5225c2eaaae84a8923d3e3`. On the booter’s unmodified `ProviderNames.cod`, the archived seed enters both the translating and definition-only graphs. At `a0922741:cod/lang_checked.hh:25887` only warnings from the second graph reach the first on success. D-ARCH-REVIEW r149→150 continues P-682/P-683 under [H-TRUSTED-SEED-TRANSLATION-20261125](#h-trusted-seed-translation-20261125). The [first removal](design/ImplementationArchitecture.md#removing-the-second-definition-graph) preserves the translating graph’s concrete dispatch and output.
+
 ## 2026-11-25 — Archive the checked C++ seed and focus the seed on LLVM translation
 
 <a id="h-trusted-seed-translation-20261125"></a>
