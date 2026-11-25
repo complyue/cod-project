@@ -20288,12 +20288,8 @@ class ScalarChecker {
             (operation.targets == std::set<size_t>{null_target} || (proving_ && validating_ &&
               (operation.targets.empty() || operation.targets.contains(null_target)))))
           fail(expr.at, "reserved ref binding has no definitely selected target");
-        if (binding.direct_text_place && !write_slot && indexed_use != IndexedUse::transfer_destination) {
-          const auto place = *binding.embedded_slot;
-          if (proving_ && validating_ && lexical_.live && !missing_initialization(lexical_, place).empty())
-            fail(expr.at, "direct String place read before definite initialization");
+        if (binding.direct_text_place && !write_slot && indexed_use != IndexedUse::transfer_destination)
           operation.initialization.emplace();
-        }
       }
       break;
     case K::callable: {
@@ -22470,13 +22466,14 @@ class ScalarChecker {
       else if (clauses != CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}})
         missing.emplace(p, std::move(clauses));
     }
-    if (validating_ && reason == 0) for (size_t i = 0; i < checking_method_->input_parameters().size(); ++i) {
-      const auto &parameter = checking_method_->input_parameters()[i];
-      const auto first_field = checking_method_->regional_initializer_fields;
-      if (first_field && i >= *first_field && !known.contains(i))
+    if (const auto first_field = checking_method_->regional_initializer_fields;
+        validating_ && reason == 0 && first_field) {
+      const auto parameters = checking_method_->input_parameters();
+      for (size_t i = *first_field; i < parameters.size(); ++i) {
+        if (known.contains(i)) continue;
+        const auto &parameter = parameters[i];
         fail(parameter.at, "initializer field '" + parameter.name + "' must be initialized on every successful completion");
-      if (parameter.initializes_caller_place() && !known.contains(i))
-        fail(parameter.at, "init String place must be written on every successful completion");
+      }
     }
     const auto [found, inserted] = observed.initialized.emplace(reason, known);
     if (inserted) observed.uninitialized[reason] = std::move(missing);
