@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Finish the seed performance task before verifying booter behavior
+
+<a id="h-seed-performance-first-20261125"></a>
+**H-SEED-PERFORMANCE-FIRST-20261125.** The project user asked “seed性能任务完成前，先不需要关注booter行为吧？” in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). D-ARCH-REVIEW r151→152 applies the [work-order rule](AGENTS.md#order-work-by-the-decision-it-serves) to the [seed cutover](design/ImplementationArchitecture.md#seed-checker-migration-and-performance-acceptance). The seed uses real booter source to check translation and, once verifier-only work is gone, to assess compilation time. Verification of the booter’s own behavior follows the seed performance task. The [terminal exception diagnostic review](design/ImplementationArchitecture.md#removing-terminal-checked-exception-diagnostics) clears the next seed removal against the consumers in `e8225a21:cod/lang_checked.hh`. The booter retains its static checking responsibility under [the stage decision](#h-trusted-seed-translation-20261125).
+
 ## 2026-11-25 — Order evaluation by its decision and prerequisites
 
 <a id="h-evaluate-the-intended-state-20261125"></a>
