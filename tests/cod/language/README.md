@@ -1,8 +1,10 @@
 # CoD source compiler validation
 
-Reference revision: 481 · Recorded: 2026-11-24 America/Los_Angeles.
+Reference revision: 482 · Recorded: 2026-11-25 America/Los_Angeles.
 
 ## Design authority
+
+At r482 the [OO receiver decision](../../../CHANGELOG.md#h-oo-call-operator-head-20261125) supplies the declaration contract for [data call-operator coverage](#data-call-operator-coverage). This reference continues the r481 separation of language requirements from observed compiler behavior.
 
 At r481 the [normal-completion decision](../../../CHANGELOG.md#h-normal-completion-20261124) governs the [two-compiler migration controls](#normal-completion-coverage). D-24 owns result inference and D-17 owns the observation at each cleanup point.
 
@@ -175,6 +177,16 @@ H-258 supplies mandatory bodyless signatures with generic and variadic parameter
 D-21r15/H-375–H-378/P-333/P-337 preserves a callable’s selected interpretation. D-10/H-106/H-109/H-166/H-212/H-231/H-233/H-372–H-373 and D-15/H-245/H-247–H-249 constrain source-preserving selection, explicit publication, source isolation and once-only initialization. K-674 records bounded source-module selection and ordinary import under those scopes, H-230/H-232/H-252/H-253 and H-398. [K-737](../../../CHANGELOG.md#k-737) preserves the same source identity, isolation and ordered-incorporation contract through explicit discovery and initialization work lists. Identity-centered construction preserves source intent and explicit receiver interpretation through P-216–P-220; D-15’s full operational/value-path qualification, general composition and persistent representations remain separate.
 
 ## Current implementation boundary
+
+<a id="data-call-operator-coverage"></a>
+**Data call operators.** The [receiver contract](../../../design/DomainLanguageDesign.md#functor-receivers-and-callback-arguments) and [OO implementation plan](../../../design/ImplementationArchitecture.md#oo-call-operator-implementation-plan) govern future acceptance. The following observations used isolated one-file inputs on 2026-11-25.
+
+| Frontend and command | Observed source behavior |
+| --- | --- |
+| C++ seed, image `024c7c97`, `--check` | Rejected the short readonly head at `const`, the owner-named head inside the parentheses, and writable OO heads at the dot for both callable kinds and both body forms. All four explicit-first-formal controls failed at the inner parenthesis. The ordinary product `(+)` definition and scalar addition function passed. Running the ordinary overload on a minimum of 10 and step 2 printed 12. |
+| Linked CoD booter, image `ed8e03cb`, `--check-declarations` | Rejected the readonly and owner-named heads with code 19 and the writable OO heads with code 23. Both old declarations and both old definitions received code 19. The ordinary product `(+)` definition also met the reader boundary. The scalar addition function passed. |
+
+Neither frontend supplied the OO rewrite in these probes. Runtime dispatch, borrowing, module composition and generator acceptance await the implementation stages above.
 
 <a id="normal-completion-coverage"></a>
 **Normal completion in deferred work.** The [source contract](../../../design/ExceptionControl.md#return-state-inspection-and-replacement) accepts natural void completion and an explicit empty return equally.

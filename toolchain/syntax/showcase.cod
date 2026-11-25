@@ -109,7 +109,7 @@ func (const Threshold in O).(())() -> ref const u64 in O where {const owner O} {
     self.minimum
 }
 
-func (())(self:const Threshold in O, x:u64, y:u64) -> bool where {const owner O} {
+func const Threshold.(())(x:u64, y:u64) -> bool {
     x + y >= self.minimum
 }
 

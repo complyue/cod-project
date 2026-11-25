@@ -28,6 +28,10 @@ Development mainline owns implementation, regression fixes, the compatibility ba
 
 For example, collect a callee’s guarded requirements and effects on each exit. Caller checking can then apply that contract to the actual arguments and produce call-site results. **Restarting the same pass from entry on a local dependency change is an engineering anti-pattern. Reject it in new designs.** If a concrete workload appears to require collecting and using the same fact kind in one phase, bring the dependency, alternatives and trade-offs to the project user and obtain an explicit decision before making an exception. [Seed checker counterexample](design/ImplementationArchitecture.md#restarting-a-pass-from-entry) · [Callee behavior](design/ImplementationArchitecture.md#consuming-completed-callee-behavior)
 
+## Review scope and completion
+
+When the user sets a rule for a whole component, carry its scope, objective and completion conditions through each implementation batch. Keep known uncovered paths in the active work. A scoped correctness result closes only that batch. Design review checks the remaining coverage before accepting completion, changing priority or authorizing a performance comparison. If a concrete case would require narrowing the user’s rule, bring it to the user. [Application to seed bootstrap time](design/ImplementationArchitecture.md#seed-checker-migration-and-performance-acceptance)
+
 ## When to measure an improvement
 
 Proceed with a well-founded, maintainable improvement once its implementation scope is cleared. Verify the behavior that matters for delivery. Collect precise benefit figures only when the user requests them, a concrete decision depends on them, or an explicit acceptance requirement needs them. Use evidence already available from normal work first. Reserve additional instrumentation and benchmark runs for questions that evidence cannot answer.
@@ -99,7 +103,7 @@ Use **function value** for `func …` and **functor value** for receiver-bound `
 - Follow [CoD operation terminology](design/CallableViewsAndCaptures.md#copying-moving-and-graph-transfer) for bits transfer, reference binding, ownership transfer, callable construction/capture and graph transfer. Native byte copying and C++ moves grant no CoD permission. Callable views require lexical storage, including when part of a compound value.
 - Use the [three qualified alias concepts](design/CallableViewsAndCaptures.md#alias-terminology) in discussions, documentation, comments, diagnostics and interfaces. Distinguish declared place aliasing, runtime target aliasing and name/identity aliasing. Preserve access, owners, lifetimes and permitted overlap. A declaration can select storage at runtime, and independent references can share a target.
 - Keep YAML optional and convert it at the I/O boundary, separately from region allocation.
-- For seed and booter inputs, prepare the [project-local source tree](design/CodProjectStructureAndPkgMgmt.md#directory-layout) by hand. The project and each immediate directory under `.cod/packages/` are module roots. Future package management belongs in `e-wrks/code`.
+- For seed and booter inputs, prepare the [project-local source tree](design/CodProjectStructureAndPkgMgmt.md#directory-layout) by hand. The project and each immediate directory under `.cod/packages/` are module roots. Future package management belongs in `e-wrks/cod`.
 
 ## Documentation and repository hygiene
 

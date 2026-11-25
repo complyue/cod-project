@@ -319,7 +319,7 @@ IDE 不应另造一套与运行时分离的模型。源码投影、语言服务�
 
 - [Regional Ownership](RegionalOwnership.md) 与 [Regional and Lexical Storage](RegionalAndLexicalStorageRefactor.md)：区域所有权、引用与重定位约束。
 - [编译器职责](../applications/cod-booter/README.md#next-stage-repositories-and-native-runtime)：seed 编译及运行 CoD 源文件；交互式 REPL 留给生产编译器。
-- [Bootstrap project layout](CodProjectStructureAndPkgMgmt.md)：自举编译器使用手工准备的依赖目录；包管理由未来的 `e-wrks/code` 承接。
+- [Bootstrap project layout](CodProjectStructureAndPkgMgmt.md)：自举编译器使用手工准备的依赖目录；包管理由未来的 `e-wrks/cod` 承接。
 - [Exception Control](ExceptionControl.md)：异常传播、构造失败与资源清理。
 - [YAML Specification Extensions](YamlSpecExt.md)：包工具使用的文本格式；业务语言的源码格式另行设计。
 

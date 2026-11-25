@@ -13,7 +13,7 @@ dependencies are identified where needed. For a compact reference to the source 
 
 ## Design authority
 
-Guide revision 10 integrates the [confirmed OO source rules](../design/DomainLanguageDesign.md#product-storage-inheritance)
+Guide revision 12 applies the [fixed receiver binding](../CHANGELOG.md#h-fixed-self-binding-20261125) to the member examples. Revision 11 applies the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) to direct calls and borrowed results. It continues the revision 10 guidance on the [confirmed OO source rules](../design/DomainLanguageDesign.md#product-storage-inheritance)
 and [direct-parent construction](../design/ConstructionAndAcquisition.md#initializing-the-storage-parent-of-a-product). It applies the [normal-completion rule](../CHANGELOG.md#h-normal-completion-20261124), the [single-directive import](../CHANGELOG.md#h-proc-import-identity-20261124) and the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
 [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics), P-694/P-695, and the
 [canonical source style](IdiomaticsGuideline.md#canonical-code-style). The
@@ -489,7 +489,9 @@ writable receiver. `held_units` names the receiver owner because its result borr
 The result is readonly and its lifetime remains bounded by that actual owner.
 
 Put `const` before the receiver type for readonly access. Omitting it requires writable access,
-including for an accessor. A writable accessor can change its receiver on every read. Give
+including for an accessor. The implicit `self` slot is fixed in both cases. In a writable
+method, `self.reserved <-:+ units` can update the field, while `self = other` is an error.
+A writable accessor can change its receiver on every read. Give
 that behavior an action name when callers should count invocations. A writable receiver alone
 grants no property setter, and a readonly receiver alone promises no purity. The target is
 selected once before the written arguments. Later rebinding of the source reference slot does
@@ -509,10 +511,20 @@ val overweight <- fits(limit, 13u64)
 ```
 
 `at_limit` is true and `overweight` is false. `make` constructs the instance. Both later calls
-use its initialized receiver. The OO head `.(())` declares the same call-operator method as
-the explicit `(())` spelling with the receiver as first formal. Define one body for that
-signature. To keep a selected `func` bound to the receiver for later use, give the functor
-value its actual owner and keep it live through every call.
+use its initialized receiver. Write the short head when the interface only needs the receiver’s
+access. To expose a borrow from the same object, name its owner in the head and in the result:
+
+```cod
+func (const WeightLimit in O).(())() -> ref const u64 in O where {const owner O} {
+    self.maximum
+}
+ref maximum:const u64 = limit()
+```
+
+The zero-argument overload lends the field while its actual owner is live. The same head lets
+another parameter require that owner. The leading `const` governs receiver access, the result lends
+readonly access, and `const owner O` withholds allocation authority. To keep a selected `func`
+for later use, give the functor value its actual owner and keep the receiver live through every call.
 
 [Accessors, member names and receiver owners](../design/DomainLanguageDesign.md#receivers-in-field-accessors-and-member-methods) ·
 [Functor receivers and synchronous use](../design/DomainLanguageDesign.md#functor-receivers-and-callback-arguments) ·

@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-11-25 — Review shared lexical declaration maps
+
+<a id="k-seed-lexical-declaration-layers-20261125"></a>
+**K-SEED-LEXICAL-DECLARATION-LAYERS-20261125.** D-ARCH-REVIEW r141→142 continues P-682/P-683. At `9c368da4:cod/lang_checked.hh:5840` the name merge checks the entire ordered right map against the left, even on a departing arm. The [reviewed representation](design/ImplementationArchitecture.md#sharing-lexical-declaration-maps) preserves that check with shared append-only ancestry and private additions. The [full migration and measurement conditions](#h-seed-migration-completion-20261125) continue.
+
+## 2026-11-25 — Carry the seed migration scope through review
+
+<a id="h-seed-migration-completion-20261125"></a>
+**H-SEED-MIGRATION-COMPLETION-20261125.** In the [seed performance discussion](codex://threads/01a21256-bf46-7801-ade0-9f396b479fa1) the project user specified “layering改造应该把能覆盖掉的地方都覆盖掉” and “phase rule必须全面应用了再测性能，跟layering改造一样”. Compile time takes priority. An initial RAM increase is acceptable and effective heap reuse follows separately. D-ARCH-REVIEW r140→141 applies P-682/P-683 to the [complete seed scope](design/ImplementationArchitecture.md#seed-checker-migration-and-performance-acceptance). It supersedes the six-table limit for that objective at `fbede9ed:design/ImplementationArchitecture.md`, preserves the [per-kind phase rule](#h-completed-callee-behavior-20261125), and makes the [review responsibility](AGENTS.md#review-scope-and-completion) explicit.
+
+## 2026-11-25 — Fix the implicit OO receiver binding at entry
+
+<a id="h-fixed-self-binding-20261125"></a>
+**H-FIXED-SELF-BINDING-20261125.** The project user specified “`self` 参数内部应该声明为 `const ref self:Type`” to prevent accidental `=` rebinding. [D-07 r222→223](design/DomainLanguageDesign.md#receivers-in-field-accessors-and-member-methods) corrects the receiver table at `27323666:design/DomainLanguageDesign.md`. P-724/P-725 continue for visible target access and receiver identity. Apply leading `const ref` to writable and readonly targets alike in accessors, named members and call operators. The [OO source decision](#h-oo-call-operator-head-20261125) and the [queued implementation order](design/ImplementationArchitecture.md#oo-call-operator-implementation-plan) continue.
+
+## 2026-11-25 — Bound the first regional fixture migration
+
+<a id="k-shilos-native-fixture-boundary-20261125"></a>
+**K-SHILOS-NATIVE-FIXTURE-BOUNDARY-20261125.** D-ARCH-REVIEW r138→139 continues the [shilos retirement](#h-retire-shilos-20261125) at `47b60a0b:design/ImplementationArchitecture.md`. The [fixture review](design/ImplementationArchitecture.md#first-native-regional-fixture-checkpoint) pairs a relocated keyed cycle with an abrupt initializer and assigns the remaining legacy observations to separate evidence. The seed with a matching C runtime reproduced both source outputs. The instrumented observations remain pending.
+
+## 2026-11-25 — Declare data call operators on their OO receiver
+
+<a id="h-oo-call-operator-head-20261125"></a>
+**H-OO-CALL-OPERATOR-HEAD-20261125.** The project user confirmed “数据接收者的调用运算符 `(())` 只支持 OO 接收者声明语法” for `func` and `proc`, signatures and definitions, in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). [D-07 r221→222](design/DomainLanguageDesign.md#functor-receivers-and-callback-arguments) supersedes the two source heads in [H-FUNCTOR-RECEIVER-SUGAR-20261124](#h-functor-receiver-sugar-20261124) at `41f82794:design/DomainLanguageDesign.md`. The owner-preserving diagnostic and the OO-only first implementation are confirmed. P-724/P-725 and P-636/P-637 continue for the first dispatch argument, target access, ownership and type-carried family. Ordinary operator syntax continues. D-15 r81→82, D-31 r13→14 and D-10 r263→264 migrate the module and generator examples. Guide r11 and the syntax showcase adopt the confirmed form. [D-ARCH-REVIEW r138](design/ImplementationArchitecture.md#oo-call-operator-implementation-plan) records the ordered future work. [Source reference r482](tests/cod/language/README.md#data-call-operator-coverage) records the separate frontend observations.
+
+## 2026-11-25 — Correct the future package repository name
+
+<a id="h-package-repository-name-20261125"></a>
+**H-PACKAGE-REPOSITORY-NAME-20261125.** The project user corrected a typo in the [manual bootstrap package decision](#h-manual-bootstrap-packages-20261125). Future package management belongs in `e-wrks/cod`. D-03 r3→4 and the booter roadmap r36→37 continue the hand-prepared project layout and lookup rules recorded at `41f82794:design/CodProjectStructureAndPkgMgmt.md`.
+
 ## 2026-11-25 — Check the manually staged project example with the seed
 
 <a id="k-manual-project-example-20261125"></a>

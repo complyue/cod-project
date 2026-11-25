@@ -226,7 +226,7 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 
 ## 生产阶段的包管理
 
-包管理留给未来的 `e-wrks/code`。重启讨论时，从一个需要获取、选择版本和复现依赖的实际项目出发。旧 `codp` 的命令和 YAML 格式仅作历史参考。当前 seed 与 booter 使用[手工准备的项目目录](../design/CodProjectStructureAndPkgMgmt.md#directory-layout)。
+包管理留给未来的 `e-wrks/cod`。重启讨论时，从一个需要获取、选择版本和复现依赖的实际项目出发。旧 `codp` 的命令和 YAML 格式仅作历史参考。当前 seed 与 booter 使用[手工准备的项目目录](../design/CodProjectStructureAndPkgMgmt.md#directory-layout)。
 
 ## 按实际用例重启的小议题
 

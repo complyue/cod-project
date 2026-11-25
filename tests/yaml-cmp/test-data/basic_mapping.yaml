@@ -1,5 +1,0 @@
-# Basic mapping example with various data types
-name: "John Doe"    # String value
-age: 30             # Integer value
-city: "New York"    # Another string value
-active: true        # Boolean value
