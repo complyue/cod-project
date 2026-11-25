@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Retire the trusted seed’s case projection read report
+
+<a id="k-seed-case-projection-read-20261125"></a>
+**K-SEED-CASE-PROJECTION-READ-20261125.** D-ARCH-REVIEW r164→165 continues P-682/P-683 under the [trusted-source decision](#h-trusted-seed-translation-20261125). The [review](design/ImplementationArchitecture.md#projecting-a-scalar-from-a-case-arm) traces the ordinary arm’s initialization snapshot to a single report at `3144d6e5:cod/lang_checked.hh` and clears both for removal. A value-carrying break uses the same bit in pending-exit equality before cleanup. This review preserves that comparison and the independent target-presence check. D-07-CASE and D-22-CONDITIONAL keep their existing meaning.
+
 ## 2026-11-25 — Align bootstrap verification with its current consumers
 
 <a id="k-bootstrap-verification-scope-20261125"></a>
