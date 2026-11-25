@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Retire codp and stage bootstrap dependencies in each project
+
+<a id="h-manual-bootstrap-packages-20261125"></a>
+**H-MANUAL-BOOTSTRAP-PACKAGES-20261125.** The project user directed “codp也砍掉，规划到未来 e-wrks/code 去实现，当前 seed/booter 手工制作符合预期的目录结构。” On the proposed `PROJECT/.cod/packages/<dependency>/` convention, including the project itself as a source root, they selected “Use the project-local layout”. [D-03r3](design/CodProjectStructureAndPkgMgmt.md) supersedes the CLI and lockfile draft at `3545f504:design/CodProjectStructureAndPkgMgmt.md` and the producer/transport at `3545f504:applications/cod-booter/docs/ModuleGraph.md:380`. [D-15r81](design/ModuleWorlds.md#resolving-source-module-paths) continues relative lookup, ambiguity rejection, bundle fallback and the shadow warning under P-690/P-691. D-ARCH-REVIEW r137 and D-20-MODULE-GRAPH r94 continue P-680–P-683 for filesystem inputs and the normal compiler entry points.
+
 ## 2026-11-25 — Retire the C++ REPL and its workspace commands
 
 <a id="h-retire-cpp-repl-20261125"></a>

@@ -2,7 +2,7 @@
 
 ## Design authority
 
-[D-06](DesignAuthorityRegistry.md#d-06) tracks the comment and formatting behavior exercised by the package YAML tools. Its wider qualification remains pending under P-11. The [shilos retirement](../CHANGELOG.md#h-retire-shilos-20261125) removes the C++ representation from this scope. Existing YAML inputs and formatter examples supply the format-level checks.
+[D-06](DesignAuthorityRegistry.md#d-06) tracks the comment and formatting behavior exercised by the standalone YAML tools. Its wider qualification remains pending under P-11. The [shilos retirement](../CHANGELOG.md#h-retire-shilos-20261125) removes the C++ representation from this scope. Existing YAML inputs and formatter examples supply the format-level checks.
 
 ## Design Principles
 

@@ -11,7 +11,7 @@
 
 系统同时面向机器、人类和智能体：机器直接使用结构化语义图，以低开销访问和执行；人类能够迅速获得可阅读、可导航、可编辑的文本源码；智能体能够通过具有语义约束的编辑机制完成局部、可验证、可审阅的修改。
 
-交互式运行 C++ 不是最终目的。C++ seed、包管理和工具链自举是验证与实现上述目标的设施，不定义最终业务语言的边界。
+交互式运行 C++ 不是最终目的。C++ seed 和工具链自举是验证与实现上述目标的设施，不定义最终业务语言的边界。
 
 ### 核心原则
 
@@ -319,7 +319,7 @@ IDE 不应另造一套与运行时分离的模型。源码投影、语言服务�
 
 - [Regional Ownership](RegionalOwnership.md) 与 [Regional and Lexical Storage](RegionalAndLexicalStorageRefactor.md)：区域所有权、引用与重定位约束。
 - [编译器职责](../applications/cod-booter/README.md#next-stage-repositories-and-native-runtime)：seed 编译及运行 CoD 源文件；交互式 REPL 留给生产编译器。
-- [CoD Project Structure and Package Management](CodProjectStructureAndPkgMgmt.md)：项目、依赖与版本管理。
+- [Bootstrap project layout](CodProjectStructureAndPkgMgmt.md)：自举编译器使用手工准备的依赖目录；包管理由未来的 `e-wrks/code` 承接。
 - [Exception Control](ExceptionControl.md)：异常传播、构造失败与资源清理。
 - [YAML Specification Extensions](YamlSpecExt.md)：包工具使用的文本格式；业务语言的源码格式另行设计。
 

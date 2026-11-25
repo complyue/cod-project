@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 80 · Recorded: 2026-11-24 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 81 · Recorded: 2026-11-25 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+At r81 the [bootstrap input decision](../CHANGELOG.md#h-manual-bootstrap-packages-20261125) supplies the project and its manually staged dependencies to the existing [module-path resolution](#resolving-source-module-paths). [D-15-MODULE-PATH](DesignAuthorityRegistry.md#d-15-module-path) continues P-690/P-691 for relative edges, ambiguity, bundled fallback and canonical module identity.
 
 At r79 the [operation table](#callable-families-and-explicit-installation) applies the [functor-value decision](../CHANGELOG.md#h-functor-value-distinction-20261124) and its receiver-owner requirement to direct symbolic calls. D-10 and D-18 govern installation and value-kind checking.
 
@@ -343,7 +345,7 @@ Classify the decoded path by its spelling **before** filesystem normalization. A
 | `"billing/text/format.cod"` | The exact module path in the project package namespace, then the bundled library namespace on a miss. |
 | `"string.cod"` | A project package's root entry of this name, otherwise the bundled module under the active compiler's toolchain root. |
 
-Package lookup uses the project's resolved dependencies and applicable local overrides. Distinct eligible package modules claiming the same logical path are ambiguous. Filesystem enumeration, manifest iteration order, working directory and user-supplied directory lists cannot serve as priority rules. CoD has no Java-style classpath. A failed read or check of a selected module reports that module's error. Only an absent package module selects the bundled fallback. The active compiler supplies its bundled library location from its toolchain root. The physical installation layout and the development-tree mapping are implementation concerns. Existing intrinsic resources with catalog identities such as `std:exceptions` retain their checked identity. A matching source spelling cannot grant an intrinsic capability.
+Bootstrap package lookup uses the project root and its [hand-prepared dependency roots](CodProjectStructureAndPkgMgmt.md#directory-layout). Distinct eligible package modules claiming the same logical path are ambiguous. Directory enumeration and the invoking process’s working directory cannot give one package priority over another. CoD has no Java-style classpath. A failed read or check of a selected module reports that module's error. Only an absent package module selects the bundled fallback. The active compiler supplies its bundled library location from its toolchain root. The physical installation layout and the development-tree mapping are implementation concerns. Existing intrinsic resources with catalog identities such as `std:exceptions` retain their checked identity. A matching source spelling cannot grant an intrinsic capability.
 
 When the package selection shadows a bundled module at the same logical path, use the package module and **warn** at lookup. Identify the requested path, selected package module and shadowed bundled module. An explicit `./` request only selects its local file. The warning follows directly from these resolver inputs in the seed and booter. Reaching the same module under two valid spellings preserves its identity and executes its initialization once under the existing module rules. Record the resolved dependency for reuse. A change in the selected package set or a new package module shadowing a previously used builtin must invalidate a stale selection.
 
@@ -696,7 +698,7 @@ Cross-module module-world editing is impossible at compile time and runtime (H-2
 
 ## Packages, namespaces and entry selection
 
-Use the following vocabulary across module selection, startup and [package management](CodProjectStructureAndPkgMgmt.md#terminology):
+Use the following vocabulary across module selection, startup and [bootstrap package inputs](CodProjectStructureAndPkgMgmt.md#terminology):
 
 | Term | Meaning |
 | --- | --- |

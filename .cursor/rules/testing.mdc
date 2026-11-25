@@ -11,11 +11,11 @@ Each component directory under `tests/` contains a `run-all.sh` script that
 # Build yaml-cmp tool and run its self-check
 ./tests/yaml-cmp/run-all.sh
 
-# Run CoD Package Manager shell tests (automatically builds yaml-cmp first)
-./tests/codp/run-all.sh
+# Run the CoD compiler tests
+./tests/cod/run-all.sh
 
 # Use pre-release toolchain from built/ directory
-COD_TEST_TOOLCHAIN=built ./tests/codp/run-all.sh
+COD_TEST_TOOLCHAIN=built ./tests/cod/run-all.sh
 ```
 
 `run-all.sh` scripts automatically:
@@ -23,7 +23,7 @@ COD_TEST_TOOLCHAIN=built ./tests/codp/run-all.sh
 * create a local `build/` directory and configure CMake (first invocation only);
 * perform incremental builds (`cmake --build ./build`);
 * select the appropriate toolchain based on the `COD_TEST_TOOLCHAIN` environment variable;
-* prepend required tool-chain paths to `PATH` so that tools such as `codp` and `yaml-cmp` are resolved;
+* prepend required tool-chain paths to `PATH` so that tools such as `cod` are resolved;
 * forward the exit status of each individual test, failing fast on error **so the script's own exit code accurately reflects pass/fail status**.
 
 All test folders **must** include a `run-all.sh` script to preserve this uniform
@@ -42,7 +42,7 @@ For rapid development with test verification, use the default `build` toolchain 
 cmake --build ./build
 
 # Run tests directly against build/ directory (no install needed)
-./tests/codp/run-all.sh
+./tests/cod/run-all.sh
 ```
 
 The tests will automatically use the toolchain from `<project>/build/` which contains the latest compiled code. This eliminates the need to run `ninja install` after every change.
@@ -56,7 +56,7 @@ For final verification before release, use the installed toolchain:
 cmake --build ./build && ninja -C ./build install
 
 # Run tests against installed toolchain in built/
-COD_TEST_TOOLCHAIN=built ./tests/codp/run-all.sh
+COD_TEST_TOOLCHAIN=built ./tests/cod/run-all.sh
 ```
 
 ### Toolchain Selection
@@ -93,7 +93,7 @@ Follow the patterns below when adding functionality:
 * Place scripts inside `tests/<component>/<scenario>/`.
 * The scenario directory **must** expose a `run.sh` entry point executed by the
   parent component's `run-all.sh`.
-* Scripts should respect `COD_TEST_TOOLCHAIN` for setting up `PATH` (see `tests/codp/local_single/run.sh` for reference).
+* Scripts should respect `COD_TEST_TOOLCHAIN` for setting up `PATH`.
 * Scripts should exit non-zero on failure and print minimal diagnostic output.
 * Use the `yaml-cmp` utility (built in `tests/yaml-cmp`) for YAML comparisons
   instead of ad-hoc `grep`/`sed` logic.
@@ -101,10 +101,7 @@ Follow the patterns below when adding functionality:
 
 ### 3. Cross-component dependencies
 
-If your tests depend on another component's artifacts (e.g. CoD Package Manager tests requiring
-`yaml-cmp`), invoke the other component's `run-all.sh` first **and rely on
-`set -e` to abort if it fails**, then add its `build/` folder to `PATH` – see
-`tests/codp/run-all.sh` for reference.
+If a test consumes another component’s artifacts, use its documented build entry and propagate any failure before invoking the consumer.
 
 ---
 

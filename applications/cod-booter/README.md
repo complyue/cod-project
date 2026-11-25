@@ -1,8 +1,10 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 35 · Recorded: 2026-11-25 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 36 · Recorded: 2026-11-25 · Phase: initial seed delivery through alternating booter and seed development.
 
 ## Design authority
+
+At r36 the [manual package input decision](../../CHANGELOG.md#h-manual-bootstrap-packages-20261125) replaces the bootstrap package manager with the [project-local layout](../../design/CodProjectStructureAndPkgMgmt.md#directory-layout). The seed and booter apply the same module lookup. Package management is future work in `e-wrks/code`.
 
 At r35 the [shilos retirement](../../CHANGELOG.md#h-retire-shilos-20261125) confirms the [native component boundary](#next-stage-repositories-and-native-runtime) under [D-20-NATIVE-C](../../design/DesignAuthorityRegistry.md#d-20-native-c). Shared support uses C. High-level features belong preferentially in CoD and the seed’s internal compiler logic uses C++.
 
@@ -107,21 +109,23 @@ make -C applications/cod-booter COD_SEED=/path/to/ready-seed/bin/cod
 
 The program prints `1` on three lines. Use `TOOLCHAIN` for a ready toolchain prefix. The runtime and LLVM service builds accept `CLANG` and `LLVM_AR`, and the LLVM service also accepts `LLVM_CONFIG`. The booter accepts `COD_SEED`, `CLANG`, `LLVM_CONFIG`, `COD_RUNTIME_ARCHIVE` and `COD_LLVM_ARCHIVE`. Use a separate `OUT` for each build you run concurrently or want to retain, such as `OUT=../../build-cod-booter-shared COD_SEED_FLAGS=--no-specialize`. Make interprets relative paths from the selected build directory. Use paths without whitespace.
 
-The seed checks the booter sources and emits the provider header, C stubs and LLVM IR into `OUT`. The grouped build tracks the library selected by the resolved seed executable. A seed in its CoD CMake development tree can use that checkout's `cod/library` when the installed library directory is absent. When an active project can supply a package override, the standalone build rechecks the source graph before reuse. Clang compiles the generated files and handwritten C adapters, then links the CoD archives and the shared libraries reported by `llvm-config`. The SDK library directory is recorded for the loader. The prepared inputs are read-only. When the resulting booter requests project package inputs, it uses the `codp` executable beside itself.
+The seed checks the booter sources and emits the provider header, C stubs and LLVM IR into `OUT`. The grouped build tracks the library selected by the resolved seed executable. A seed in its CoD CMake development tree can use that checkout's `cod/library` when the installed library directory is absent. When an active project can supply a package override, the standalone build rechecks the source graph before reuse. Clang compiles the generated files and handwritten C adapters, then links the CoD archives and the shared libraries reported by `llvm-config`. The SDK library directory is recorded for the loader. The prepared inputs are read-only. The bootstrap input contract uses the [hand-prepared project directory](../../design/CodProjectStructureAndPkgMgmt.md#directory-layout).
 
 After building the runtime, the development seed uses it for `./build/bin/cod --run FILE`. An installed toolchain can provide `lib/libcod-runtime.a` under its prefix. Set the `COD_RUNTIME_ARCHIVE` environment variable to select a different compatible archive. Link seed-emitted objects or bitcode with the same archive when building an executable outside the seed.
 
 ## Next-stage repositories and native runtime
 
-All five planned repositories will live in the [e-wrks GitHub organization](https://github.com/e-wrks).
+The compiler and toolchain repositories are planned in the [e-wrks GitHub organization](https://github.com/e-wrks).
 
 | Planned repository | Responsibility |
 | --- | --- |
 | `cod-lang` | CoD language design and the authoritative language specification shared by both compilers. |
 | `cod-seed` | The C++ seed compiler, the CoD-written booter and the C-native components they use, including the region core and LLVM bindings. The booter stays in this repository after the split. |
 | `cod` | The future production compiler written in CoD, including full diagnostics and a future CoD REPL. [REPL decision](../../CHANGELOG.md#h-retire-cpp-repl-20261125) |
-| `codup` | Toolchain version management in the role of rustup. CoD package dependency resolution and lockfiles have their own [codp design](../../design/CodProjectStructureAndPkgMgmt.md). |
+| `codup` | Toolchain version management in the role of rustup. |
 | `codmate` | The Language Server Protocol server and IDE plugins, including [reference-site doclet tooltips and navigation](../../design/DomainLanguageDesign.md#definition-doclets). |
+
+Future package management belongs in `e-wrks/code`. The bootstrap consumes [manually staged source roots](../../design/CodProjectStructureAndPkgMgmt.md#directory-layout).
 
 After the split, a change to what a CoD program means belongs in `cod-lang`. Each compiler repository documents how it implements the rule, its current coverage and any known gaps.
 

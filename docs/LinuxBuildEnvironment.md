@@ -90,7 +90,7 @@ unchanged in content and relevant metadata. This does not replace rebuilding
 when headers, libraries, compiler options or the compiler itself actually change.
 
 When tests are authorized, use `COD_TEST_TOOLCHAIN=build`. Linux validation
-covers CoD, codp and YAML integration; direct C/C++ compiler use; bundled
+covers CoD, prepared module inputs and standalone YAML tools; direct C/C++ compiler use; bundled
 runtime loading; and installation relocation. Record failures and unrun checks
 as such, without treating a successful configure as a successful build.
 
@@ -132,7 +132,7 @@ libc++ headers and an unsaved diagnostic round trip. The deployed server is
 IDE acceptance requires the installed extension to activate on this checkout,
 start the configured server, and load `build/compile_commands.json`. Verify
 diagnostics, code completion, hover information and go-to-definition on actual
-seed, C native component and codp sources and headers. Standard library, project and generated
+seed and C native component sources and headers. Standard library, project and generated
 headers must resolve using the active build configuration. Installation, server
 startup or a standalone sample alone does not establish project IDE readiness.
 Keep this check pending until the final compilation database and required build
