@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Review completed behavior for the lexer’s literal token functions
+
+<a id="k-seed-lexer-literal-contracts-20261125"></a>
+**K-SEED-LEXER-LITERAL-CONTRACTS-20261125.** D-ARCH-REVIEW r144→145 continues P-682/P-683. At `b24c2df1:applications/cod-booter/src/Lexer.cod:23` the real error classifier calls two zero-argument functions that return exact byte literals. The [review](design/ImplementationArchitecture.md#completing-literal-returns-used-by-the-lexer) reuses the checked leaf producer, keeps normal source diagnostics and leaves ordinary caller composition open under the [full migration](#h-seed-migration-completion-20261125).
+
 ## 2026-11-25 — Review sharing of per-origin completion inputs
 
 <a id="k-seed-completion-input-layers-20261125"></a>

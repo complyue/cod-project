@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r145 the [lexer literal review](../CHANGELOG.md#k-seed-lexer-literal-contracts-20261125) extends the existing completed-body producer under [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), P-682/P-683. The r141 migration conditions continue for the ordinary caller and the remaining state copies.
+
 At r144 the [per-origin state review](../CHANGELOG.md#k-seed-completion-input-layers-20261125) continues the [r141 seed migration](#seed-checker-migration-and-performance-acceptance) under P-682/P-683. It covers the lifetime of completion-input snapshots and the existing cleanup join.
 
 At r143 the [archival disposition](../CHANGELOG.md#k-shilos-dispatch-experiment-archive-20261125) continues the [shilos retirement](#retiring-shilos) under [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), P-682/P-683. The archived experiment and the stock language runner have separate dispositions.
@@ -662,6 +664,14 @@ Select ordinary functions with fixed independent `u8` or `bool` parameters, an e
 Use the existing scalar transfer for those operations, including skipped and taken right operands. Freeze the resulting normal exit and the Boolean relations the checker can represent. For example, a function returning its Boolean argument preserves the predicate captured when that argument was prepared. Numeric comparisons use their ordinary result evidence. Keep the prohibition on reading another procedure’s behavior active throughout extraction, including when the selected function has no text-byte operation. The earlier borrowed-write procedure keeps its distinct bounds exit.
 
 The consumer reads the completed instance contract after its actual arguments have finished. A failure preparing an argument precedes the invocation. Preserve final validation against the same contract, diagnostic order, and the ordinary behavior of caller loops. Verify the three definitions on the unedited lexer through normal specialized checking and LLVM generation. Check original IR bytes, production call selection, and that the two legacy solvers skip each frozen body. Exercise representative bytes just inside and outside the digit, identifier and whitespace boundaries, Boolean argument correlation, a failing later argument, and an open or borrowed control. A small closure supplies this evidence without a separate full bootstrap.
+
+#### Completing literal returns used by the lexer
+
+The ordinary `lexical_error(kind)` expression compares its input to the results of two direct calls, `unsupported_byte()` and `multiline_text()`. Each callee has a body returning one exact `u8` literal. Extend the existing producer to record the return site and verify its checked scalar result for eligible zero-argument definitions. Apply the same rule to every matching definition. Match the defining instance, interpretation, ordinary function kind and body, and check the literal’s exact builtin type and range using the normal checker. Admit the plan only for the isolated body with no captures, owner inputs, other operands, invocation or conversion. Use the existing diagnostic staging, completed instance effects, fence on reading other callees’ effects, normal exit projection and final validation. A malformed literal retains its source error. Other valid result types and callable forms keep their existing checks.
+
+Compare matching provider, LLVM and bitcode output for the unedited [Lexer](../applications/cod-booter/src/Lexer.cod). Check that the two definitions are each extracted once and skip both legacy closures. For token kinds 6, 7, 14 and 15, `lexical_error` must return false, true, true and false, respectively. Keep the actual selected calls through a source-preserving rename. Verify an out-of-range literal, an unavailable body, and a valid different-width definition that remains on its ordinary path.
+
+This proves two callees for the next ordinary caller migration. The caller’s own short-circuit path and call edges still need collection and later application of completed behavior. Keep this dependency explicit in the [seed-wide scope](#seed-checker-migration-and-performance-acceptance). No token-specific effect table or constant folding is needed.
 
 ### Boolean snapshots at immediate scalar calls
 
