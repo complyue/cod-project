@@ -499,6 +499,7 @@ struct CallEffects {
   bool returns_from_supplier = false;
   bool propagates_here_transfer = false;
   bool propagates_outer_here_transfer = false;
+  bool operator==(const CallEffects &) const = default;
 };
 enum class OwnerMatch { satisfied, unknown, mismatch };
 // Proof identities are separate from executable owner handles. Scoped identities
