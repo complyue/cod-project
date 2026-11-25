@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Review imported functions with one literal return
+
+<a id="k-booter-imported-literal-return-20261125"></a>
+**K-BOOTER-IMPORTED-LITERAL-RETURN-20261125.** D-ARCH-REVIEW r132→133 and D-20-MODULE-GRAPH r92→93 continue P-680–P-683. The candidate at `7d4e28a0:applications/cod-booter/src/NativeDeclarations.cod:3411` already stages interfaces for ordinary functions without declared failures. At `7d4e28a0:applications/cod-booter/src/OperandChecking.cod:2176` source-call preparation skips the frozen parser’s `call_node()` and `no_node()`. The [reviewed continuation](applications/cod-booter/docs/ModuleGraph.md#checking-an-imported-function-that-returns-a-scalar-literal) requires positive defining-body evidence on the existing header and checks the selected view and argument list on use. Indexed-field demand and the frozen release gate continue.
+
 ## 2026-11-25 — Warn when a derived product declares a shadowing field
 
 <a id="h-product-field-shadow-warning-20261125"></a>

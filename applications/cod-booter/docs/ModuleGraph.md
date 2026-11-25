@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r93 review](../../../CHANGELOG.md#k-booter-imported-literal-return-20261125) continues [D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph) under P-680/P-681. It extends [source-call checking](#checking-an-imported-function-that-returns-a-scalar-literal) to a public zero-argument function with one checked literal return. The defining module owns the body proof. The importing checker uses its published result and completion contract.
+
 The [r92 review](../../../CHANGELOG.md#k-booter-visit-array-growth-20261125) continues P-680/P-681 for [growth of the visit array](#checking-growth-of-the-module-visit-array). The source checker proves the complete finite bits element type and applies the existing caller-slot and failure rules to `reserve_visits`.
 
 The [r91 review](../../../CHANGELOG.md#k-indexed-byte-field-compatibility-20261125) continues P-680/P-681 for [indexed fields in a demanded body](#deciding-which-bodies-need-indexed-field-checks). It covers direct builtin byte and word fields under the checked record identity.
@@ -850,6 +852,18 @@ During the defining visit, resolve the callable signature and check any supplied
 For each selected call, validate the complete header and parameter range against the current published interface prefix in G. Check the selected callable identity, row roles, nominal failure reference and arity before recording the interface index in the visit’s `NameWorkSlot`. The index is valid for that graph. A missing or malformed required contract cannot stand for an empty failure set. Use the same validated source contract in operand preparation and completion checking, including argument failures and each reachable invocation. Identify calls requiring this check from the resolved callable selection before looking up its interface. This also covers a consumer that calls or forwards the procedure without a local `NamedThrow`. Keep the native ordinal as a separate requirement of executable lowering. A declaration alone supplies no extra proof of residual deferred cleanup effects.
 
 Mainline checks both linked modes through declaration checking and provider publication. The unchanged `distinct.cod` must report the uncovered obligation at `signal(code)` and preserve both previous provider files byte for byte. The matching catch and a correctly declared forwarding helper must pass through both facade forms. Include a wrong argument, a caller of the forwarding helper, a producer whose declared failure does not occur, and a malformed interface range. Replay the 38 released provider pairs and declaration results. These checks qualify source checking and publication.
+
+#### Checking an imported function that returns a scalar literal
+
+The frozen parser imports `call_node()`, whose entire body returns `6u8`. Two other modules import `no_node()`, which returns `18446744073709551615u64`. In a demanded caller these functions supply independent values of their declared types and complete normally. The maximum `u64` is a valid result even in a compiler that also uses that bit pattern for an absent syntax-node index.
+
+In the defining visit, check the unique ordinary module function against its original signature and body in the same revision. Verify a genuinely empty parameter list, an explicit independent builtin `u8` or `u64` result, and the absence of owner clauses, implicit inputs, callbacks and declared failures. Read the complete block and its single immediate return. The ordinary numeric rules must accept the literal at the exact declared width. Preserve any independent demand on the definition. A bodyless promise or a different body shape supplies no evidence under this rule.
+
+Once local public exports are staged, record the completed proof on the existing callable header for that defining module and declaration. Ordinary structural headers can have zero parameter rows even for functions with parameters. The positive body proof must be distinguishable from a structural header. Initialize its marker on row creation and reuse. Record the checked scalar result, normal completion and absent failure identity. One definition has one such row across public aliases. Commit it with the successful module publication. The graph needs neither the literal’s value nor an executable function ordinal for this source contract.
+
+In the importing visit, match the direct, source-preserving `using` selection, including a rename, to its defining identity and committed interface extent. Check the function kind, body proof, result, and empty actual argument list before recording a successful call. Preparation can retain a reference for a later demanded check. Selecting this header adds no body demand. Receiver adaptation and executable calls require their existing independent proofs. A failed definition, damaged range or incomplete call preserves previous outputs.
+
+Verify the three frozen call sites through declaration checking and provider generation. Include a renamed use, a same-spelled definition in another module, a nonempty signature whose structural row looks empty, and a failed body or malformed header. Restore the frozen 38-input comparison and its dependent modules alongside the real resolver, supported workloads and memory checks before cutover.
 
 ### Selecting checked exception evidence for declaration commands
 
