@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 219
+Discussion revision: 220
 
 Recorded: 2026-11-25
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r220 [the field-shadowing decision](../CHANGELOG.md#h-product-field-shadow-20261125) corrects r219’s rejection of a child’s same-named stored field. [D-07-PRODUCT-EXTENDS](DesignAuthorityRegistry.md#d-07-product-extends) and [D-07-MEMBER-NAMES](DesignAuthorityRegistry.md#d-07-member-names) apply P-726–P-729 to two distinct field declarations on one live target. Check the two stored values through child and parent views, including a child-field write before parent construction. Ordinary method dispatch, duplicate names within one product and cross-category collisions retain their existing rules.
 
 At r219 the [project user’s product and super-call decision](../CHANGELOG.md#h-product-extends-super-20261125) qualifies [D-07-PRODUCT-EXTENDS](DesignAuthorityRegistry.md#d-07-product-extends) and [D-07-SUPER-CALL](DesignAuthorityRegistry.md#d-07-super-call), P-728–P-731. A product declares its storage parent at its definition. An OO body can explicitly reuse an ancestor implementation on its live receiver. The r218 receiver, actual-type dispatch and ownership rules continue for ordinary calls. Check inherited field identity, member conflicts, and nearest versus named ancestor calls on a three-level chain. [D-22 parent initialization](ConstructionAndAcquisition.md#initializing-the-storage-parent-of-a-product) governs constructors. Compiler delivery is separate.
 
@@ -272,9 +274,24 @@ Adding a call operator leaves the initializer count of every constructor unchang
 
 `data Child extends Parent { ... }` declares a nominal product with one direct product storage parent. The definition fixes that parent, including across module selections and aliases. The chain must be acyclic. A child has the inherited fields and its declared fields in one object. It is usable through a reference to any storage ancestor and retains the ancestor’s established nominal conformance. An adapter may establish an ordinary abstract conformance under the existing import rules. It cannot add or replace a storage parent. A sum still owns its fixed alternatives.
 
-A borrow through the parent selects the original target with the same actual owner, access and lifetime. A write to an inherited field is visible through both references. Upcasting a target gives no permission to rebind a caller’s child-typed slot to a plain parent, or to use a writable array of children as an array of parents. Storage classification examines all inherited and declared fields. A new independent value follows ordinary construction and bits-transfer rules. The reference relationship supplies no implicit slicing operation or fixed native field offsets. [Reference slots](RegionalOwnership.md#reference-assignment-and-the-ownershipbits-transfer-operator) · [Construction and storage](ConstructionAndAcquisition.md#confirmed-requirements)
+A borrow through the parent selects the original target with the same actual owner, access and lifetime. Two references selecting the same field declaration observe each other’s writes to that field. Upcasting a target gives no permission to rebind a caller’s child-typed slot to a plain parent, or to use a writable array of children as an array of parents. Storage classification examines all inherited and declared fields. A new independent value follows ordinary construction and bits-transfer rules. The reference relationship supplies no implicit slicing operation or fixed native field offsets. [Reference slots](RegionalOwnership.md#reference-assignment-and-the-ownershipbits-transfer-operator) · [Construction and storage](ConstructionAndAcquisition.md#confirmed-requirements)
 
-The visible member set includes inherited names. A second stored field with an inherited spelling would make one field name designate two places and is rejected. An inherited stored field, accessor and named method obey the existing [member-name collision rule](#receivers-in-field-accessors-and-member-methods). A method specialized on the child may belong to the same family as the parent method. Ordinary visibility, extension permission and unique-best selection apply.
+**A child may shadow an inherited stored field.** Each declaration denotes its own storage, with its own type and initialization obligation. A stored-field selection starts at the product type through which the receiver is viewed and selects the nearest declaration on its storage-parent chain. Inside a method declared on the parent, `self` selects stored fields through the parent view even when the concrete object is a child.
+
+```cod
+data Parent { id:u64 }
+data Child extends Parent { id:u64 }
+
+func Parent(raw:u64) { id <- raw }
+func Child(parent_id:u64, child_id:u64) {
+    id <- child_id
+    super(parent_id)
+}
+```
+
+For `ref c = make Child(7u64, 9u64)`, `c.id` reads 9. Bind `ref p:Parent = c` and `p.id` reads 7 from the same object. Writing `p.id <- 11u64` changes only the parent field. An ordinary call such as `p.score()`, when defined, still dispatches on the actual concrete type. The child constructor’s bare `id` means its own field both before and after `super(parent_id)`. Only the parent constructor initializes the embedded parent. [Parent readiness](ConstructionAndAcquisition.md#initializing-the-storage-parent-of-a-product)
+
+Two stored declarations named `id` in the same product still conflict. Shadowing applies between ordinary stored fields on distinct levels. The existing [member-name collision rule](#receivers-in-field-accessors-and-member-methods) rejects a stored field against a computed accessor or named method of the same spelling, including across levels. Reserved intrinsic members such as the exception catch binding’s [`tip`](ExceptionControl.md#the-catch-bindings-readonly-tip-field) retain their contracts. A method specialized on the child may belong to the same family as the parent method. Ordinary visibility, extension permission and unique-best selection apply.
 
 The child constructor starts with an uninitialized embedded parent. Before reading or writing inherited fields it must explicitly complete `super(...)` on the direct parent. Successful construction requires that parent and the child’s own fields to be ready. The [parent initialization contract](ConstructionAndAcquisition.md#initializing-the-storage-parent-of-a-product) covers branches, failure and the distinction from a member call.
 
@@ -567,7 +584,7 @@ func (const Exception in O).get_cause() -> ptr const Exception in O
 }
 ```
 
-**One name per visible member.** For a given receiver type a spelling can denote a stored data field, a computed accessor family or a named method family. Reject any collision between these categories where the declarations first become visible together, including at module composition. For example, `data Policy { check:Threshold }` conflicts with `func const Policy.check(n:u64)` even when the data field itself supports a call operator. A declaration of `Policy.@check()` also conflicts with that stored field. Check this when establishing the member set even if nobody writes `policy.check`. Unrelated receiver types may use the same spelling. Overloads within one family follow ordinary signature and access rules.
+**One name per visible member.** For a given receiver type a spelling can denote a stored data field, a computed accessor family or a named method family. Reject any collision between these categories where the declarations first become visible together, including at module composition. Two [stored fields on different storage-parent levels](#product-storage-inheritance) belong to the same category and may shadow. For example, `data Policy { check:Threshold }` conflicts with `func const Policy.check(n:u64)` even when the data field itself supports a call operator. A declaration of `Policy.@check()` also conflicts with that stored field. Check this when establishing the member set even if nobody writes `policy.check`. Unrelated receiver types may use the same spelling. Overloads within one family follow ordinary signature and access rules.
 
 A writable accessor can change its receiver. Two evaluated reads of `counter.next` invoke the accessor twice and may produce different values. The choice between that interface and a named `counter.advance()` method belongs to the program author. Both use ordinary function, evaluation and result rules. The same receiver head also applies to [the functor call operator](#functor-receivers-and-callback-arguments). Extension permissions, setter declarations and bound method extraction have their own scope.
 

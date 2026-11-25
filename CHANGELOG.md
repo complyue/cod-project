@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Allow a child to shadow a parent’s stored field
+
+<a id="h-product-field-shadow-20261125"></a>
+**H-PRODUCT-FIELD-SHADOW-20261125.** The project user asked “子类shadow父类字段是自然允许的吧，有没有明确讲出来？” in the [OO discussion](codex://threads/01a211e6-8b5f-7532-8e67-c1337ce40796). D-07 r219→220 corrects the contrary sentence at `d44c1e2a:design/DomainLanguageDesign.md:277`. [The worked example](design/DomainLanguageDesign.md#product-storage-inheritance) preserves both declarations and both initialization places under P-726–P-729. H-MEMBER-NAMES-AND-OWNER-20261124 continues to govern collisions across member categories. Physical layout and compiler implementation remain separate.
+
 ## 2026-11-25 — Require explicit parent construction before inherited field access
 
 <a id="h-product-parent-init-20261125"></a>
