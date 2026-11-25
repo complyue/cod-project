@@ -4334,8 +4334,6 @@ class ScalarChecker {
       }
       for (const auto &call : deferred_product_writes_) changed |= discover_product_writes(call);
     } while (changed);
-    catalog_storage_ = *storage_;
-    catalog_bindings_ = *bindings_;
     resolve_payload_writes(payload_writes_);
     for (auto &[expr, loop] : loop_states_) resolve_payload_writes(loop.writes);
   }
@@ -22246,6 +22244,10 @@ class ScalarChecker {
     validating_ = false;
     check(false);
     solve_targets();
+    // Discovery has finished using its frame. Keep its rows for lookups of
+    // targets that the next traversal has not bound yet.
+    catalog_storage_.swap(*storage_);
+    catalog_bindings_.swap(*bindings_);
     for (auto &[expr, loop] : loop_states_)
       for (const auto binding : intersect(loop.bindings, loop.rebound)) loop.initialized[binding] = {};
     if (!loop_states_.empty()) {
