@@ -15805,10 +15805,18 @@ class ScalarChecker {
       if (scope.continues) body.calls.push_back({*methods, scope.supplied});
       return;
     }
-    case K::behave: case K::perform:
-      if (!program_.symbols[symbol()].intrinsic_print) unsupported();
+    case K::behave: case K::perform: {
+      const auto id = symbol();
+      const auto &binding = program_.symbols[id];
+      if (!binding.intrinsic_print) {
+        if (expr.kind == K::behave || binding.live_scope) unsupported();
+        dynamic_procedure_type(binding, expr.at);
+        // The selected handler replays its own saved bindings.
+        if (!scope.supplied.contains(id)) body.incoming.insert(id);
+      }
       operands();
       return;
+    }
     default:
       unsupported();
     }
