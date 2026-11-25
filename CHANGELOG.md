@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Omit symbol-only work for eligible seed function instances
+
+<a id="k-seed-function-symbol-work-20261125"></a>
+**K-SEED-FUNCTION-SYMBOL-WORK-20261125.** The delegated [architecture review](design/ImplementationArchitecture.md#functions-with-an-empty-outgoing-symbol-set) continues D-ARCH-REVIEW r184→185 from `c111e60a` under the [trusted-seed cost decision](#h-effect-checking-cost-and-compiler-stages-20261125). A selected ordinary function with no effect-capable handoff has an empty outgoing dynamic-symbol set even in a mixed world. Keep preparation for separately demanded callbacks, actual calls, final frames and handler replay. This changes work-item admission in the seed’s symbol phase.
+
 ## 2026-11-25 — Use the installed procedure family’s union for perform capture and restoration
 
 <a id="h-perform-family-capture-20261125"></a>
