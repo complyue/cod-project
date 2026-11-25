@@ -2443,17 +2443,17 @@ class ScalarChecker {
       boolean_revision = selections.writes;
     }
   };
-  struct CaseProjectionEvidence {
+  struct CaseBreakProjection {
     const Expression *source;
     bool nullable;
     TargetPresence presence;
-    auto operator==(const CaseProjectionEvidence &) const -> bool = default;
+    auto operator==(const CaseBreakProjection &) const -> bool = default;
   };
   struct CaseBreakEvidence {
     std::optional<Type> type;
     ViewEvidence view;
-    std::optional<CaseProjectionEvidence> projection;
-    // Preserve the distinction between pending exits before finally is applied.
+    // Keep projected breaks distinct while their pending finally runs.
+    std::optional<CaseBreakProjection> projection;
     bool projection_initialized = true;
     auto operator==(const CaseBreakEvidence &) const -> bool = default;
   };
@@ -8830,11 +8830,6 @@ class ScalarChecker {
     left.same_selected = QuerySelections::common_slots(std::move(left.same_selected), right.same_selected);
     return left;
   }
-  static void require_present_projection(bool nullable_view, TargetPresence presence, const Location &at) {
-    if (!nullable_view || presence == TargetPresence::present) return;
-    if (presence == TargetPresence::absent) fail(at, "conditional scalar value requires a proven non-null target");
-    implementation_gap(at, "conditional scalar value requires a proven non-null target in typeof");
-  }
   static bool return_owner_filter(const Expression &pattern) {
     return pattern.binding.empty() && !pattern.owner_name.empty();
   }
@@ -9517,7 +9512,6 @@ class ScalarChecker {
     std::optional<ViewEvidence> joined_view;
     std::vector<std::optional<EvidenceOwner>> owners;
     std::optional<TargetEvidence> joined_target;
-    std::vector<CaseProjectionEvidence> projections;
     const auto complete = [&](const std::optional<Type> &type, const ViewEvidence &arm_view, TargetEvidence arm_target,
                               TypeEvidenceState arm, const Location &at) {
       arm.exits = outer;
@@ -9546,7 +9540,6 @@ class ScalarChecker {
         if (path.reasons.erase(Completion::case_break)) {
           const auto &value = *path.case_result;
           auto target = path.result.borrowed ? path.result.borrowed->observe(path.state.selections) : TargetEvidence{};
-          if (value.projection) projections.push_back(*value.projection);
           complete(value.type, value.view, std::move(target), path.state, at);
         }
         if (path.reasons.erase(Completion::case_scan)) {
@@ -9661,8 +9654,6 @@ class ScalarChecker {
       if (body_reaches && value != Type::never && (!scoped || scope_paths.result)) {
         const auto arm_view = arm.value;
         auto arm_target = arm.target;
-        if (state.required && arm_view.view == true)
-          projections.push_back({&body, arm_view.nullable, arm_target.presence});
         leave_receiving(arm);
         complete(value, arm_view, std::move(arm_target), std::move(arm), body.at);
       }
@@ -9674,8 +9665,6 @@ class ScalarChecker {
     if (joined_view && joined_view->view == true && result && *result != Type::void_type) {
       if (joined_view->mixed_view) {
         if (value_projection) *value_projection = true;
-        if (state.required && proving_ && validating_) for (const auto &projection : projections)
-          require_present_projection(projection.nullable, projection.presence, projection.source->at);
       } else {
         view.read_only = joined_view->read_only;
         view.view = true;
@@ -13395,7 +13384,7 @@ class ScalarChecker {
           prepared.borrowed = TypeBorrowedReturn::capture(state.target, state.selections);
         CaseBreakEvidence result{type, view, {}};
         if (state.required && view.view == true) {
-          result.projection.emplace(CaseProjectionEvidence{expr.children.front().get(), view.nullable, state.target.presence});
+          result.projection.emplace(CaseBreakProjection{expr.children.front().get(), view.nullable, state.target.presence});
           result.projection_initialized = !state.checks_initialization() || state.target.places.empty() || state.target.initialized;
         }
         merge_type_exits(*state.exits, {Completion::case_break}, state, std::move(prepared), std::move(result));
@@ -19895,8 +19884,6 @@ class ScalarChecker {
 
   void require_case_projection(const CheckedOperation &source, const Location &at) {
     require_live_view(source, at);
-    if (proving_ && validating_ && lexical_.live && source.targets.contains(null_target))
-      fail(at, "case scalar value requires a proven non-null target");
     read_view(source, at);
   }
   Type check_pack_source(const Expression &source, CheckedInstance *instance,
