@@ -1,51 +1,145 @@
 using "./SourceStorage.cod" SourceBytes;
-using "./NativeSource.cod" Path;
+using "./NativeSource.cod" { PathOwner, PathNotReadyException, path_key };
 using "./CompilerStatus.cod" CompilerStatus { Complete, Rejected, OpenFailed };
 using "./NativeModuleInputs.cod" {
-    PackageInputCapture, PackageCaptureException, package_capture_status, use_package_capture,
+    DirectorySnapshot, DirectoryStorageException, probe_directory, read_directory,
+    directory_name_count, directory_name_size, select_directory_name, use_directory_name,
 };
-using "./PackageInputs.cod" {
-    PackageInputPlan, PackageSourceRoot, PackageSourceRoots,
-    plan_package_inputs, decode_package_inputs,
-};
+using "./PackageInputs.cod" { PackageSourceRoot, PackageSourceRoots };
+using "std:text-storage" utf8_byte;
 
-proc with_package_frame(
-    here work(source:const SourceBytes in C, diagnostics:const SourceBytes in C) -> CompilerStatus,
-    handle capture:PackageInputCapture in C) -> CompilerStatus where {const owner C} {
-    return use_package_capture(capture) (source, diagnostics) => {
-        continue work(source, diagnostics)
-    }
+func parent_path_end(path:const SourceBytes in P, past:u64) -> u64 where {const owner P} {
+    if (past <= 1u64) return 0u64;
+    val separator <- 0u64;
+    for (at in 0u64 .. past) {
+        if (path[at] == 47u8) { (separator <- at):void }
+    };
+    return if (separator == 0u64) { 1u64 } else { (separator) }
+}
+
+func copy_path(input:const SourceBytes in S, count:u64, output:SourceBytes in D,
+    start:u64) -> bool where {const owner S, owner D} {
+    val capacity <- intrinsic (len)(output);
+    if (start > capacity || count > capacity - start || count > intrinsic (len)(input)) return false;
+    for (at in 0u64 .. count) { output[start + at] <- input[at] };
+    return true
+}
+
+func prepare_marker(entry:const SourceBytes in P, project_past:u64,
+    marker:SourceBytes in M) -> u64 where {const owner P, owner M} {
+    if (!copy_path(entry, project_past, marker, 0u64)) return 0u64;
+    val first <- project_past;
+    if (marker[first - 1u64] != 47u8) {
+        marker[first] <- 47u8;
+        (first <- first + 1u64):void
+    };
+    for (at in 0u64 .. 13u64) { marker[first + at] <- utf8_byte(".cod/packages", at) };
+    return first + 13u64
+}
+
+func copy_directory_name(name:const SourceBytes in N, count:u64, output:SourceBytes in B,
+    first:u64) -> CompilerStatus where {const owner N, owner B} {
+    if (count == 0u64 || count != intrinsic (len)(name)) return Rejected;
+    for (at in 0u64 .. count) {
+        if (name[at] == 0u8 || name[at] == 47u8) return Rejected;
+    };
+    return if (copy_path(name, count, output, first)) { Complete } else { Rejected }
+}
+
+proc load_directory_roots(marker:const SourceBytes in M, marker_past:u64, project_past:u64,
+    ref var roots:PackageSourceRoots in G, ref var bytes:SourceBytes in G,
+    published_rows:u64 in G, published_bytes:u64 in G, os_error:u64 in E)
+    -> CompilerStatus throws DirectoryStorageException where {const owner M, owner G, owner E} {
+    own handle snapshot:DirectorySnapshot <- make own handle DirectorySnapshot();
+    os_error <- read_directory(snapshot, marker, marker_past);
+    if (os_error != 0u64) return OpenFailed;
+    val count <- directory_name_count(snapshot);
+    if (count == 18446744073709551615u64) return Rejected;
+    if (marker_past == 18446744073709551615u64) return Rejected;
+    val prefix <- marker_past + 1u64;
+    val limit <- 18446744073709551615u64 - prefix;
+    val length <- 0u64;
+    val total <- project_past;
+    for (index in 0u64 .. count) {
+        length <- directory_name_size(snapshot, index);
+        if (total > limit || length == 0u64 || length > limit - total) return Rejected;
+        (total <- total + prefix + length):void
+    };
+    ref next_roots = make PackageSourceRoots(count + 1u64, make PackageSourceRoot {
+        path_first <- 0u64; path_past <- 0u64
+    }) in G;
+    ref next_bytes = make SourceBytes(total, 0u8) in G;
+    if (!copy_path(marker, project_past, next_bytes, 0u64)) return Rejected;
+    next_roots[0u64].path_past <- project_past;
+    val used <- project_past;
+    val name_start <- 0u64;
+    val copied <- Complete;
+    for (index in 0u64 .. count) {
+        length <- directory_name_size(snapshot, index);
+        if (used > total || prefix > total - used || length > total - used - prefix ||
+            !copy_path(marker, marker_past, next_bytes, used)) return Rejected;
+        next_bytes[used + marker_past] <- 47u8;
+        name_start <- used + prefix;
+        os_error <- select_directory_name(snapshot, index);
+        if (os_error != 0u64) return OpenFailed;
+        copied <- use_directory_name(snapshot) (name) => {
+            continue copy_directory_name(name, length, next_bytes, name_start)
+        };
+        if (copied != Complete) return copied;
+        next_roots[index + 1u64].path_first <- used;
+        used <- name_start + length;
+        (next_roots[index + 1u64].path_past <- used):void
+    };
+    if (used != total) return Rejected;
+    roots = next_roots;
+    bytes = next_bytes;
+    published_rows <- count + 1u64;
+    published_bytes <- used;
+    return Complete
 }
 
 export proc load_package_inputs(
-    handle entry:Path in A, ref var roots:PackageSourceRoots in G,
+    handle entry:PathOwner in A, ref var roots:PackageSourceRoots in G,
     ref var bytes:SourceBytes in G, published_rows:u64 in G, published_bytes:u64 in G,
-    process_status:u64 in P)
-    -> CompilerStatus throws PackageCaptureException where {const owner A, owner G, owner P} {
-    own handle capture:PackageInputCapture <- make own handle PackageInputCapture(entry);
-    process_status <- package_capture_status(capture);
-    if (process_status != 0u64) return OpenFailed;
-
-    ref plan = make PackageInputPlan { rows <- 0u64; bytes <- 0u64; };
-    val measured <- with_package_frame(capture) (source, diagnostics) => {
-        continue if (plan_package_inputs(source, plan)) { Complete } else { Rejected }
+    os_error:u64 in E) -> CompilerStatus throws DirectoryStorageException
+    where {const owner A, owner G, owner E} {
+    val size <- 0u64;
+    try {
+        val measured <- path_key(entry) (entry_path) => {
+            size <- intrinsic (len)(entry_path);
+            continue Complete
+        };
+        if (measured != Complete) return measured;
+        if (size == 0u64 || size > 18446744073709551601u64) return Rejected;
+        ref path = make SourceBytes(size, 0u8);
+        val copied <- path_key(entry) (entry_path) => {
+            continue if (copy_path(entry_path, size, path, 0u64) && size == intrinsic (len)(entry_path)) {
+                Complete
+            } else { Rejected }
+        };
+        if (copied != Complete) return copied;
+        if (path[0u64] != 47u8) return Rejected;
+        ref marker = make SourceBytes(size + 14u64, 0u8);
+        val project_past <- parent_path_end(path, size);
+        val marker_past <- 0u64;
+        for (unused in 0u64 .. size) {
+            marker_past <- prepare_marker(path, project_past, marker);
+            if (marker_past == 0u64) return Rejected;
+            os_error <- probe_directory(marker, marker_past);
+            if (os_error == 0u64) return load_directory_roots(marker, marker_past, project_past, roots, bytes,
+                published_rows, published_bytes, os_error);
+            if (os_error != 18446744073709551615u64) return OpenFailed;
+            if (project_past == 1u64) {
+                os_error <- 0u64;
+                published_rows <- 0u64;
+                published_bytes <- 0u64;
+                return Complete
+            };
+            (project_past <- parent_path_end(path, project_past)):void
+        };
+    } catch (error:const PathNotReadyException) {
+        os_error <- error.status;
+        return OpenFailed
     };
-    if (measured != Complete) return measured;
-
-    ref next_roots = make PackageSourceRoots(plan.rows, make PackageSourceRoot {
-        uuid_first <- 0u64; path_first <- 0u64; path_past <- 0u64;
-    }) in G;
-    ref next_bytes = make SourceBytes(plan.bytes, 0u8) in G;
-    ref decoded = make PackageInputPlan { rows <- 0u64; bytes <- 0u64; };
-    val copied <- with_package_frame(capture) (source, diagnostics) => {
-        continue if (decode_package_inputs(source, next_roots, next_bytes, decoded)) {
-            Complete
-        } else { Rejected }
-    };
-    if (copied != Complete) return copied;
-    roots = next_roots;
-    bytes = next_bytes;
-    published_rows <- decoded.rows;
-    published_bytes <- decoded.bytes;
-    return Complete
+    return Rejected
 }

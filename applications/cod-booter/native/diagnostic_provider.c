@@ -91,7 +91,7 @@ cod_native_status cod_native_append_package_diagnostic_impl(
     diagnostic_bytes ranges[4];
     if (!sink || !valid_finding_range(sink, finding, 1) || !first_line || !first_column || !past_line || !past_column ||
         past_line < first_line || (past_line == first_line && past_column < first_column) ||
-        kind < package_shadow || kind > package_process_failure ||
+        kind < package_shadow || kind > invalid_module_path ||
         !diagnostic_range(importer.base, importer.count, import_first, import_past, &ranges[0]) ||
         !diagnostic_range(spelling.base, spelling.count, first, past, &ranges[1]) ||
         !diagnostic_range(candidate.base, candidate.count, 0, candidate.count, &ranges[2]) ||

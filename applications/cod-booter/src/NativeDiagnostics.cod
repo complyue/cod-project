@@ -101,7 +101,6 @@ export enum PackageDiagnosticKind:u8 {
     PackageLookupFailure = 4u8;
     PackageInputFailure = 5u8;
     InvalidModulePath = 6u8;
-    PackageProcessFailure = 7u8;
 }
 
 export proc "C" append_package_diagnostic(

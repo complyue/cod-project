@@ -1289,7 +1289,7 @@ proc reject_dependency(handle opened:SourceRevision in S, handle diagnostic:Diag
 }
 
 proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in P,
-                         handle entry:Path in A,
+                         handle entry:PathOwner in A,
                          handle diagnostic:DiagnosticDestination in D, const val purpose:GraphPurpose,
                          builtin_spellings:const SourceBytes in B,
                          builtins:const ModuleExports in B,
@@ -1630,11 +1630,11 @@ export proc compile_graph(handle input:Path in A, handle diagnostic:DiagnosticDe
         if (key.id != root || insert_visit(canonical, key.length, visits, keys, used, key_used, next_revision) != Complete)
             return ScratchFailed;
         ref package_roots = make PackageSourceRoots(0u64, make PackageSourceRoot {
-            uuid_first <- 0u64; path_first <- 0u64; path_past <- 0u64;
+            path_first <- 0u64; path_past <- 0u64;
         }) in G;
         ref package_paths = make SourceBytes(0u64, 0u8) in G;
         ref failure = make VisitFailure { rejection <- 0u8; finding <- no_node() };
-        return visit_open_revision(opened, path, input, diagnostic, purpose, builtin_spellings,
+        return visit_open_revision(opened, path, canonical, diagnostic, purpose, builtin_spellings,
             builtins,
                                    visits, keys, used, key_used, next_revision, exports, defaults, interfaces, spellings,
                                    commands, units, literals, export_used, default_used, interface_used, spelling_used,
@@ -1653,7 +1653,7 @@ export proc compile_graph(handle input:Path in A, handle diagnostic:DiagnosticDe
     }
 }
 
-proc visit_child(handle parent_path:Path in P, handle entry:Path in A,
+proc visit_child(handle parent_path:Path in P, handle entry:PathOwner in A,
                  handle importing:SourceRevision in S,
                  handle diagnostic:DiagnosticDestination in D, purpose:GraphPurpose,
                  builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B,

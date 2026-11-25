@@ -1,17 +1,17 @@
 using "./CompilerStatus.cod" CompilerStatus { Complete, OpenFailed, Rejected, ScratchFailed, DiagnosticsIncomplete };
 using "std:exceptions" OutOfMemoryError;
 using "./NativeSource.cod" {
-    Path, PathOwner, SourceRevision,
+    PathOwner, SourceRevision,
 };
 using "./NativeModuleInputs.cod" {
-    PackageCaptureException, BundledDirectory, BundledDirectoryException, bundled_directory_use,
+    DirectoryStorageException, BundledDirectory, BundledDirectoryException, bundled_directory_use,
     probe_package_module, prepare_package_module,
 };
 using "./NativeDiagnostics.cod" {
     DiagnosticDestination, DiagnosticRuns, diagnostic_budget_full, PackageDiagnosticKind,
     PackageDiagnosticKind {
         PackageShadow, PackageAmbiguity, PackageMissing, PackageLookupFailure,
-        PackageInputFailure, PackageProcessFailure, InvalidModulePath,
+        PackageInputFailure, InvalidModulePath,
     },
 };
 using "./PackageDiagnostics.cod" {
@@ -69,7 +69,7 @@ proc remember_package_input_failure(
 }
 
 proc load_for_edge(
-    handle entry:Path in A, handle opened:SourceRevision in S,
+    handle entry:PathOwner in A, handle opened:SourceRevision in S,
     handle diagnostic:DiagnosticDestination in D, keys:const SourceBytes in G,
     spelling:const SourceBytes in F, edge:const PackageEdge in E,
     ready:bool in G, ref var rows:PackageSourceRoots in G, ref var paths:SourceBytes in G,
@@ -77,16 +77,16 @@ proc load_for_edge(
     -> u8 where {const owner A, const owner S, owner D, owner G, const owner F, const owner E} {
     if (ready) return 0u8;
     if (run[0u64].package_input_failure != no_node()) return package_issue();
-    ref process_status = make u64 { 0u64 };
+    ref os_error = make u64 { 0u64 };
     try {
-        val result <- load_package_inputs(entry, rows, paths, row_count, path_used, process_status);
+        val result <- load_package_inputs(entry, rows, paths, row_count, path_used, os_error);
         if (result == OpenFailed) return remember_package_input_failure(
-            opened, diagnostic, PackageProcessFailure, process_status, keys, spelling, edge, run);
+            opened, diagnostic, PackageInputFailure, os_error, keys, spelling, edge, run);
         if (result != Complete) return remember_package_input_failure(
             opened, diagnostic, PackageInputFailure, 0u64, keys, spelling, edge, run);
         ready <- true;
         return 0u8
-    } catch (error:const PackageCaptureException) {
+    } catch (error:const DirectoryStorageException) {
         return remember_package_input_failure(
             opened, diagnostic, PackageInputFailure, error.os_error, keys, spelling, edge, run)
     }
@@ -231,7 +231,7 @@ proc prepare_resolved_module(
 }
 
 export proc prepare_logical_dependency(
-    handle entry:Path in A, handle opened:SourceRevision in S,
+    handle entry:PathOwner in A, handle opened:SourceRevision in S,
     handle diagnostic:DiagnosticDestination in D, handle destination:PathOwner in P,
     keys:const SourceBytes in G, spelling:const SourceBytes in F, edge:const PackageEdge in E,
     ready:bool in G, ref var rows:PackageSourceRoots in G, ref var paths:SourceBytes in G,
