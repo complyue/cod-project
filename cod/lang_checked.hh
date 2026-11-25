@@ -137,10 +137,9 @@ public:
   }
 };
 
-class BooleanPredicates {
-  using Proof = std::shared_ptr<const CheckedOperation::Predicate>;
-  // An absent row hides an inherited key. A present row may hold a null proof.
-  using Row = std::optional<Proof>;
+template <typename Value> class LexicalRows {
+  // A tombstone hides an inherited key without constraining its value type.
+  using Row = std::optional<Value>;
   struct Layer {
     std::shared_ptr<const Layer> parent;
     size_t depth;
@@ -168,12 +167,11 @@ public:
     return {};
   }
 
-  Proof get(size_t place) const { return lookup(place).value_or(nullptr); }
-  void set(size_t place, Proof proof) { store(place, std::move(proof)); }
+  void set(size_t place, Value value) { store(place, std::move(value)); }
   void erase(size_t place) { store(place, std::nullopt); }
   void clear() { leaf_.reset(); }
 
-  std::set<size_t> changed_keys(const BooleanPredicates &other) const {
+  std::set<size_t> changed_keys(const LexicalRows &other) const {
     const Layer *left = leaf_.get(), *right = other.leaf_.get();
     while (depth(left) > depth(right)) left = left->parent.get();
     while (depth(right) > depth(left)) right = right->parent.get();
@@ -196,6 +194,48 @@ public:
     std::set<size_t> keys;
     collect_keys(keys, leaf_.get(), nullptr);
     for (const auto place : keys) if (const auto proof = lookup(place)) visit(place, *proof);
+  }
+};
+
+class BooleanPredicates : public LexicalRows<std::shared_ptr<const CheckedOperation::Predicate>> {
+public:
+  // A present Boolean row may hold a null proof.
+  auto get(size_t place) const { return lookup(place).value_or(nullptr); }
+};
+
+class BindingTargets {
+public:
+  struct Bounds {
+    std::set<size_t> places, null_sources, versions;
+    bool operator==(const Bounds &) const = default;
+  };
+
+private:
+  LexicalRows<std::shared_ptr<const Bounds>> rows_;
+
+public:
+  std::shared_ptr<const Bounds> find(size_t binding) const { return rows_.lookup(binding).value_or(nullptr); }
+  std::shared_ptr<const Bounds> at(size_t binding) const {
+    if (auto row = find(binding)) return row;
+    throw std::out_of_range("missing reference target bounds");
+  }
+  void set(size_t binding, Bounds bounds) {
+    if (const auto old = find(binding); old && *old == bounds) return;
+    rows_.set(binding, std::make_shared<const Bounds>(std::move(bounds)));
+  }
+  void erase(size_t binding) { rows_.erase(binding); }
+
+  template <typename Visit> void each(const Visit &visit) const {
+    rows_.each([&](size_t binding, const auto &row) { visit(binding, *row); });
+  }
+  std::set<size_t> changed_keys(const BindingTargets &other) const { return rows_.changed_keys(other.rows_); }
+  bool same_places(const BindingTargets &other) const {
+    for (const auto binding : changed_keys(other)) {
+      const auto left = find(binding), right = other.find(binding);
+      if (left == right) continue;
+      if (!left || !right || left->places != right->places) return false;
+    }
+    return true;
   }
 };
 
@@ -314,11 +354,9 @@ struct LexicalState {
   CleanupEquations::MissingInitialization uninitialized;
   CleanupEquations::ConditionClauses predicate_conditions{CleanupEquations::ConditionFacts{}};
   std::set<size_t> payload_writes;
-  std::map<size_t, std::set<size_t>> targets;
-  std::map<size_t, std::set<size_t>> null_sources;
+  BindingTargets targets;
   std::map<size_t, std::set<size_t>> owners;
   std::set<size_t> expired_bindings;
-  std::map<size_t, std::set<size_t>> target_versions;
   std::map<size_t, size_t> selection_identities;
   // A finalizer may initialize a saved target and then rebind its last slot.
   std::set<size_t> observed_saved_selections;
@@ -3296,12 +3334,11 @@ class ScalarChecker {
     bindings_->back().place_owners.insert(scope.id);
     bindings_->back().alias = alias;
     if (!alias) {
-      lexical_.targets[id] = targets;
-      lexical_.null_sources[id] = targets.contains(null_target) ? std::set<size_t>{null_target} : std::set<size_t>{};
+      const auto null_sources = targets.contains(null_target) ? std::set<size_t>{null_target} : std::set<size_t>{};
       lexical_.owners[id] = target_owners(targets);
-      lexical_.target_versions[id] = {next_target_version_++};
+      lexical_.targets.set(id, {targets, null_sources, {next_target_version_++}});
       lexical_.selection_identities[id] = new_selection_identity();
-      const auto selection = selection_targets(targets, lexical_.null_sources.at(id));
+      const auto selection = selection_targets(targets, null_sources);
       if (callable_entry) callable_entry->selections.assign(id, selection);
       else assign_selection(lexical_, id, selection);
     }
@@ -3374,20 +3411,19 @@ class ScalarChecker {
     return selected;
   }
   void assign_targets(size_t binding, const CheckedOperation &source, const CleanupEquations::Targets &update) {
-    lexical_.targets[binding] = source.targets;
-    lexical_.null_sources[binding] = source.null_sources;
     lexical_.owners[binding].insert(source.owners.begin(), source.owners.end());
-    lexical_.target_versions[binding] = {next_target_version_++};
+    const std::set<size_t> versions{next_target_version_++};
+    lexical_.targets.set(binding, {source.targets, source.null_sources, versions});
     lexical_.selection_identities[binding] = source.selection_identity ? *source.selection_identity : new_selection_identity();
     if (source.binding && !source.selection_versions.empty() && source.targets.contains(null_target) && source.targets.size() > 1) {
       CleanupEquations::ConditionFacts copies;
-      copies.same_bindings.insert({{binding, lexical_.target_versions.at(binding)}, {*source.binding, source.selection_versions}});
+      copies.same_bindings.insert({{binding, versions}, {*source.binding, source.selection_versions}});
       lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions, {copies});
     }
     if (source.nullness && source.targets.contains(null_target) && source.targets.size() > 1) {
       CleanupEquations::ConditionClauses alternatives;
       for (const auto &[null, clauses] : *source.nullness) for (auto facts : clauses) {
-        (null ? facts.absent_bindings : facts.bindings).emplace(binding, lexical_.target_versions.at(binding));
+        (null ? facts.absent_bindings : facts.bindings).emplace(binding, versions);
         CleanupEquations::add_condition(alternatives, std::move(facts));
       }
       lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions, alternatives);
@@ -3617,9 +3653,9 @@ class ScalarChecker {
       // Any possible earlier target makes this a rebind of a potentially
       // readable object. A fresh embedded slot can establish the edge first.
       const bool first_binding = allow_first_binding && binding.embedded_slot &&
-          physical.contains(id) && lexical_.targets.at(id).empty();
+          physical.contains(id) && lexical_.targets.at(id)->places.empty();
       const bool first_reservation = allow_first_binding && binding.reservation_slot && physical.contains(id) &&
-          lexical_.targets.at(id) == std::set<size_t>{null_target} &&
+          lexical_.targets.at(id)->places == std::set<size_t>{null_target} &&
           source.place && storage(*source.place).reserved_alternative &&
           source.targets == std::set<size_t>{*source.place};
       if (binding.requires_initialized && !first_binding && !first_reservation &&
@@ -3635,8 +3671,9 @@ class ScalarChecker {
               const CleanupEquations::Targets &snapshot, bool deferred = false) {
     const auto written = overlapping_slots(target.slots);
     std::vector<size_t> affected;
-    for (const auto &[id, targets] : lexical_.targets)
+    lexical_.targets.each([&](size_t id, const auto &) {
       if (!intersect(written, physical_slots({id})).empty()) affected.push_back(id);
+    });
     // A definite local rebind inside a delayed body can retain the selected
     // entry target in another slot. Prepared rebinds already carry a snapshot.
     const auto entry = delayed_ && !deferred && affected.size() == 1 ? current_binding(source) : std::nullopt;
@@ -3649,10 +3686,9 @@ class ScalarChecker {
         selected.selection_identity = merge_selection_identities(source.selection_identity, lexical_.selection_identities.at(id));
         selected.binding.reset();
         selected.nullness.reset();
-        const auto &previous = lexical_.targets.at(id);
-        selected.targets.insert(previous.begin(), previous.end());
-        const auto &nulls = lexical_.null_sources.at(id);
-        selected.null_sources.insert(nulls.begin(), nulls.end());
+        const auto previous = lexical_.targets.at(id);
+        selected.targets.insert(previous->places.begin(), previous->places.end());
+        selected.null_sources.insert(previous->null_sources.begin(), previous->null_sources.end());
         selected.origins.insert(id);
         selected.constrain_initialization(selection_initialization(lexical_, id));
       }
@@ -3680,12 +3716,13 @@ class ScalarChecker {
       requirement.nonnull = incoming;
       std::erase_if(*requirement.nonnull, [&](size_t id) { return !possible_targets_.at(id).contains(null_target); });
       // A source version distinguishes iterations only for invariant slots.
-      for (const auto &[id, versions] : lexical_.target_versions)
-        if (!lexical_.targets.at(id).contains(null_target) &&
+      lexical_.targets.each([&](size_t id, const auto &bounds) {
+        if (!bounds.places.contains(null_target) &&
             std::none_of(active_loops_.begin(), active_loops_.end(), [&](const auto *loop) {
               const auto &state = loop_states_.at(loop);
               return state.first > cleanup_scope_ && state.rebound.contains(id);
-            })) requirement.nonnull_versions.emplace(id, versions);
+            })) requirement.nonnull_versions.emplace(id, bounds.versions);
+      });
     }
     for (const auto id : incoming) {
       if (initialized.contains(id)) continue;
@@ -3715,8 +3752,8 @@ class ScalarChecker {
     const auto exchange = [&](const CheckedOperation &target, const CheckedOperation &source) {
       const auto written = overlapping_slots(target.slots);
       const auto incoming = physical_slots(source.slots);
-      for (const auto &[id, current] : lexical_.targets) {
-        if (intersect(written, physical_slots({id})).empty()) continue;
+      lexical_.targets.each([&](size_t id, const auto &) {
+        if (intersect(written, physical_slots({id})).empty()) return;
         CleanupEquations::Targets update{{}, {}, incoming};
         if (target.slots.size() != 1 || !target.slots.contains(id)) update.entries.insert(id);
         effects.selections.targets[id].merge(update);
@@ -3727,7 +3764,7 @@ class ScalarChecker {
           target_dependencies_.at(id).insert(incoming.begin(), incoming.end());
           record_rebinding(id, true);
         }
-      }
+      });
       if (!proving_ || std::none_of(written.begin(), written.end(), [&](size_t id) { return bindings_->at(id).requires_initialized; })) return;
       const auto reads = prepared_binding_reads(source, at, true);
       effects.reads.insert(reads.begin(), reads.end());
@@ -3745,12 +3782,12 @@ class ScalarChecker {
       identities.insert(lexical_.selection_identities.at(id));
       if (lexical_.live && lexical_.expired_bindings.contains(id))
         fail(at, "reference binding's target owner has ended or may expire across a loop backedge");
-      const auto &targets = lexical_.targets.at(id), &nulls = lexical_.null_sources.at(id);
-      const auto &owners = lexical_.owners.at(id), &versions = lexical_.target_versions.at(id);
-      view.targets.insert(targets.begin(), targets.end());
-      view.null_sources.insert(nulls.begin(), nulls.end());
+      const auto targets = lexical_.targets.at(id);
+      const auto &owners = lexical_.owners.at(id);
+      view.targets.insert(targets->places.begin(), targets->places.end());
+      view.null_sources.insert(targets->null_sources.begin(), targets->null_sources.end());
       view.owners.insert(owners.begin(), owners.end());
-      view.selection_versions.insert(versions.begin(), versions.end());
+      view.selection_versions.insert(targets->versions.begin(), targets->versions.end());
       view.constrain_initialization(selection_initialization(lexical_, id));
     }
     if (identities.size() == 1) view.selection_identity = *identities.begin();
@@ -3977,10 +4014,11 @@ class ScalarChecker {
   template <typename Observe>
   static void observe_boolean_conditions(const LexicalState &state, const Observe &observe) {
     for (auto facts : path_conditions(state)) {
-      for (const auto &[binding, targets] : state.targets) if (!targets.empty()) {
-        if (!targets.contains(null_target)) facts.bindings.emplace(binding, state.target_versions.at(binding));
-        else if (targets.size() == 1) facts.absent_bindings.emplace(binding, state.target_versions.at(binding));
-      }
+      state.targets.each([&](size_t binding, const auto &bounds) {
+        if (bounds.places.empty()) return;
+        if (!bounds.places.contains(null_target)) facts.bindings.emplace(binding, bounds.versions);
+        else if (bounds.places.size() == 1) facts.absent_bindings.emplace(binding, bounds.versions);
+      });
       observe(std::move(facts));
     }
   }
@@ -4239,41 +4277,41 @@ class ScalarChecker {
   }
   void refresh_targets(LexicalState &state, bool invalidate = true, const std::set<size_t> *changed = nullptr) {
     if (!proving_) return;
-    for (auto &[binding, targets] : state.targets) {
+    const auto previous = state.targets;
+    previous.each([&](size_t binding, const auto &) {
       // A copied reference keeps its selected target when its source is rebound.
-      if (!rebound_.contains(binding)) continue;
-      if (changed && !changed->contains(binding)) continue;
-      targets = possible_targets_.at(binding);
-      state.null_sources[binding] = possible_null_sources_.at(binding);
+      if (!rebound_.contains(binding) || (changed && !changed->contains(binding))) return;
+      auto targets = possible_targets_.at(binding);
+      auto null_sources = possible_null_sources_.at(binding);
       if (!invalidate) {
         // Completed cleanup can supply tighter bounds than whole-method discovery.
         if (const auto known = state.selections.targets.find(binding);
             known != state.selections.targets.end() && known->second.entries.empty()) {
           targets = known->second.places;
-          state.null_sources[binding] = known->second.null_sources;
+          null_sources = known->second.null_sources;
           if (known->second.nullable()) targets.insert(null_target);
         }
       }
       // Every mutation of a ref must preserve its checked non-null target.
       if (bindings_->at(binding).requires_initialized) targets.erase(null_target);
-      if (!targets.contains(null_target)) state.null_sources[binding].clear();
-      if (targets.contains(null_target) && state.null_sources[binding].empty()) state.null_sources[binding].insert(null_target);
+      if (!targets.contains(null_target)) null_sources.clear();
+      else if (null_sources.empty()) null_sources.insert(null_target);
       const auto owners = target_owners(targets);
       state.owners[binding].insert(owners.begin(), owners.end());
       if (invalidate) invalidate_selection(state, binding);
-      state.target_versions[binding] = {next_target_version_++};
+      state.targets.set(binding, {std::move(targets), std::move(null_sources), {next_target_version_++}});
       state.selection_identities[binding] = new_selection_identity();
-    }
+    });
     refine_present(state);
   }
   void retain_loop_targets(LoopState &loop, const LexicalState &state) {
     for (const auto binding : loop.rebound) {
       if (!loop.bindings.contains(binding)) continue;
       const auto selected = state.targets.find(binding);
-      if (selected == state.targets.end()) continue;
+      if (!selected) continue;
       auto &known = loop.header_targets[binding];
       const auto count = known.places.size() + known.null_sources.size();
-      known.merge(selection_targets(selected->second, state.null_sources.at(binding)));
+      known.merge(selection_targets(selected->places, selected->null_sources));
       loop_evidence_changed_ |= count != known.places.size() + known.null_sources.size();
     }
   }
@@ -4463,7 +4501,8 @@ class ScalarChecker {
     refresh_input_facts(state);
   }
   std::optional<CleanupEquations::Initialization> selection_initialization(const LexicalState &state, size_t id) const {
-    const auto &targets = state.targets.at(id);
+    const auto bounds = state.targets.at(id);
+    const auto &targets = bounds->places;
     const auto selection = state.selection_identities.find(id);
     if (state.selections.initialized.contains(id) ||
         std::all_of(targets.begin(), targets.end(), [&](size_t place) {
@@ -4498,8 +4537,8 @@ class ScalarChecker {
       state.input_facts.edit_or_insert(input, [&](auto &facts) { facts.selections.invalidate(id); });
   }
   std::optional<size_t> current_binding(const CheckedOperation &view) const {
-    if (view.binding && lexical_.target_versions.contains(*view.binding) &&
-        lexical_.target_versions.at(*view.binding) == view.selection_versions) return view.binding;
+    if (const auto bounds = view.binding ? lexical_.targets.find(*view.binding) : nullptr;
+        bounds && bounds->versions == view.selection_versions) return view.binding;
     if (view.selection_identity) for (const auto &[binding, identity] : lexical_.selection_identities)
       if (identity == *view.selection_identity && lexical_.bindings_available.contains(binding)) return binding;
     return {};
@@ -4536,15 +4575,17 @@ class ScalarChecker {
     return places;
   }
   static void refine_present(LexicalState &state) {
-    for (auto &[binding, targets] : state.targets) {
-      const auto &sources = state.null_sources.at(binding);
+    const auto previous = state.targets;
+    previous.each([&](size_t binding, const auto &bounds) {
+      const auto &targets = bounds.places, &sources = bounds.null_sources;
       if (!targets.contains(null_target) || targets.size() == 1 || sources.empty() ||
-          !std::all_of(sources.begin(), sources.end(), [&](size_t source) { return state.present.contains(source); })) continue;
-      targets.erase(null_target);
-      state.null_sources[binding].clear();
+          !std::all_of(sources.begin(), sources.end(), [&](size_t source) { return state.present.contains(source); })) return;
+      auto narrowed = targets;
+      narrowed.erase(null_target);
+      state.targets.set(binding, {std::move(narrowed), {}, bounds.versions});
       // Binding effects can already describe the next selection while these
       // target bounds still describe the previous one. Refine only its bounds.
-    }
+    });
   }
   void record_present(const std::set<size_t> &present) {
     if (!lexical_.live) return;
@@ -4688,8 +4729,9 @@ class ScalarChecker {
       known.when = CleanupEquations::conjoin_conditions(known.when,
           CleanupEquations::missing_initialization(*place, known.initialized, known.uninitialized));
       if (known.nonnull) std::erase_if(*known.nonnull, [&](size_t id) {
-        const auto guard = known.nonnull_versions.find(id), current = state.target_versions.find(id);
-        return guard != known.nonnull_versions.end() && current != state.target_versions.end() && guard->second == current->second;
+        const auto guard = known.nonnull_versions.find(id);
+        const auto current = state.targets.find(id);
+        return guard != known.nonnull_versions.end() && current && guard->second == current->versions;
       });
       if (known.satisfied(place, state.initialized, state.selections) || initialized_entry_alias(known, state)) continue;
       known.initialized.insert(state.initialized.begin(), state.initialized.end());
@@ -4953,8 +4995,8 @@ class ScalarChecker {
                            bool deferred, bool immediate_scope) {
     if (!proving_) for (const auto &[parameter, sources] : summary.binding_sources) {
       const auto written = overlapping_slots(views.at(parameter).slots);
-      for (const auto &[binding, current] : lexical_.targets) {
-        if (intersect(written, physical_slots({binding})).empty()) continue;
+      lexical_.targets.each([&](size_t binding, const auto &) {
+        if (intersect(written, physical_slots({binding})).empty()) return;
         for (const auto input : sources) {
           if (input == null_target) {
             possible_targets_.at(binding).insert(null_target);
@@ -4966,7 +5008,7 @@ class ScalarChecker {
           possible_null_sources_.at(binding).insert(source.null_sources.begin(), source.null_sources.end());
           target_dependencies_.at(binding).insert(source.origins.begin(), source.origins.end());
         }
-      }
+      });
     }
     for (auto &[reason, effects] : operation.invocation) {
       const auto outcome = summary.bindings.find(reason);
@@ -5016,8 +5058,9 @@ class ScalarChecker {
           owners.insert(incoming.begin(), incoming.end());
         }
         std::set<size_t> affected;
-        for (const auto &[id, current] : lexical_.targets)
+        lexical_.targets.each([&](size_t id, const auto &) {
           if (!intersect(written, physical_slots({id})).empty()) affected.insert(id);
+        });
         if (deferred) for (const auto id : written)
           if (const auto slot = binding(id).embedded_slot; slot && !storage(*slot).borrowed) affected.insert(id);
         for (const auto id : affected) {
@@ -5671,12 +5714,13 @@ class ScalarChecker {
             const auto &view = views.at(parameter);
             const auto binding = current_binding(view);
             if (!binding || changed.contains(*binding)) continue;
-            auto &targets = lexical_.targets.at(*binding);
+            const auto current = lexical_.targets.at(*binding);
             // Postconditions refine a possible selection; they cannot remove a
             // declared completion when its actual argument is definitely null.
-            if (targets.size() == 1 && targets.contains(null_target)) continue;
+            if (current->places.size() == 1 && current->places.contains(null_target)) continue;
+            auto targets = current->places;
             targets.erase(null_target);
-            lexical_.null_sources.at(*binding).clear();
+            lexical_.targets.set(*binding, {std::move(targets), {}, current->versions});
             lexical_.selections.refine(*binding, false);
             for (const auto input : lexical_.inputs)
               lexical_.input_facts.edit(input, [&](auto &facts) { facts.selections.refine(*binding, false); });
@@ -5896,11 +5940,11 @@ class ScalarChecker {
         if (field.storage != PlaceKind::reference) continue;
         const auto slot = storage(place).binding;
         const auto targets = lexical_.targets.find(slot);
-        if (targets == lexical_.targets.end() || targets->second.empty() || targets->second.contains(null_target)) {
+        if (!targets || targets->places.empty() || targets->places.contains(null_target)) {
           if (validating_) implementation_gap(at, "required field '" + name + "' has no proved non-null target");
           continue;
         }
-        for (const auto target : targets->second) {
+        for (const auto target : targets->places) {
           const auto &referent = storage(target);
           if (referent.fields.empty() && !referent.reserved_alternative)
             require_initialized(target, at, name + " target", {}, selected);
@@ -6058,18 +6102,21 @@ class ScalarChecker {
     a_exits = a_exits || !a.live;
     b_exits = b_exits || !b.live;
     auto left_paths = path_conditions(a), right_paths = path_conditions(b);
-    if (!a_exits && !b_exits) for (const auto &[binding, versions] : a.target_versions) {
-      const auto other = b.target_versions.find(binding);
-      if (other == b.target_versions.end() || versions == other->second) continue;
-      auto targets = a.targets.at(binding); targets.insert(b.targets.at(binding).begin(), b.targets.at(binding).end());
+    const auto changed_targets = !a_exits && !b_exits ? a.targets.changed_keys(b.targets) : std::set<size_t>{};
+    for (const auto binding : changed_targets) {
+      const auto left = a.targets.find(binding), right = b.targets.find(binding);
+      if (!left || !right || left->versions == right->versions) continue;
+      auto targets = left->places;
+      targets.insert(right->places.begin(), right->places.end());
       if (!targets.contains(null_target) || targets.size() == 1) continue;
-      auto joined = versions; joined.insert(other->second.begin(), other->second.end());
+      auto joined = left->versions;
+      joined.insert(right->versions.begin(), right->versions.end());
       const auto bridge = [&](auto &paths, const auto &previous) {
         CleanupEquations::ConditionFacts copies;
         copies.same_bindings.insert({{binding, joined}, {binding, previous}});
         paths = CleanupEquations::conjoin_conditions(paths, {copies});
       };
-      bridge(left_paths, versions); bridge(right_paths, other->second);
+      bridge(left_paths, left->versions); bridge(right_paths, right->versions);
     }
     lexical_ = a;
     for (size_t i = 0; i < b.scopes.size(); ++i) {
@@ -6178,7 +6225,6 @@ class ScalarChecker {
         add_requirement(lexical_, read, requirement.inputs, requirement.before);
     }
     lexical_.targets = a_exits ? b.targets : a.targets;
-    lexical_.null_sources = a_exits ? b.null_sources : a.null_sources;
     lexical_.owners = a_exits ? b.owners : a.owners;
     lexical_.expired_bindings = a_exits ? b.expired_bindings : a.expired_bindings;
     if (!a_exits && !b_exits) {
@@ -6188,7 +6234,6 @@ class ScalarChecker {
         if (lexical_.owners[id].size() > 1) fail(at, "reference owner differs between reaching paths");
       }
     }
-    lexical_.target_versions = a_exits ? b.target_versions : a.target_versions;
     lexical_.selection_identities = a_exits ? b.selection_identities : a.selection_identities;
     if (!a_exits && !b_exits) {
       std::map<std::pair<size_t, size_t>, size_t> joined;
@@ -6208,12 +6253,15 @@ class ScalarChecker {
         lexical_.selection_identities[binding] = joined.at(key);
       }
     }
-    if (!a_exits && !b_exits) for (const auto &[id, targets] : b.targets) {
-      lexical_.targets[id].insert(targets.begin(), targets.end());
-      const auto &nulls = b.null_sources.at(id);
-      lexical_.null_sources[id].insert(nulls.begin(), nulls.end());
-      const auto &versions = b.target_versions.at(id);
-      lexical_.target_versions[id].insert(versions.begin(), versions.end());
+    for (const auto binding : changed_targets) {
+      const auto right = b.targets.find(binding);
+      if (!right) continue;
+      const auto left = a.targets.find(binding);
+      auto merged = left ? *left : BindingTargets::Bounds{};
+      merged.places.insert(right->places.begin(), right->places.end());
+      merged.null_sources.insert(right->null_sources.begin(), right->null_sources.end());
+      merged.versions.insert(right->versions.begin(), right->versions.end());
+      lexical_.targets.set(binding, std::move(merged));
     }
     lexical_.inputs = a_exits ? b.inputs : a.inputs;
     if (!a_exits && !b_exits) lexical_.inputs.insert(b.inputs.begin(), b.inputs.end());
@@ -6229,10 +6277,8 @@ class ScalarChecker {
       state.returned.selection_bindings.erase(id);
       if (!bindings_->at(id).selection.empty()) return;
       state.targets.erase(id);
-      state.null_sources.erase(id);
       state.owners.erase(id);
       state.expired_bindings.erase(id);
-      state.target_versions.erase(id);
       state.selection_identities.erase(id);
       state.selections.forget_initialization(id);
       state.selections.entry_initialized.erase(id);
@@ -6346,26 +6392,29 @@ class ScalarChecker {
     fail(declared_sites_.at(requirement), "declared checked exception 'Exception' requires a covering catch or throws declaration; coverage by narrower catches is unproved");
   }
   void refine_test(const CheckedOperation::NullTest &test, bool value) {
-    if (!lexical_.targets.contains(test.binding) || lexical_.target_versions.at(test.binding) != test.versions) return;
-    auto &targets = lexical_.targets.at(test.binding);
+    const auto current = lexical_.targets.find(test.binding);
+    if (!current || current->versions != test.versions) return;
     const bool null = value == test.null_when_true;
     CleanupEquations::ConditionFacts tested;
     (null ? tested.absent_bindings : tested.bindings).emplace(test.binding, test.versions);
-    if (targets.contains(null_target))
+    if (current->places.contains(null_target))
       tested.conditions.add({{}, lexical_.selection_identities.at(test.binding), null_target, null, true});
     if (const auto condition = deferred_selection_condition(test.binding, null_target, null))
       tested.conditions.add(*condition);
     lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions, {tested});
     if (null) lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions,
-        absence_conditions(lexical_.null_sources.at(test.binding)));
-    std::erase_if(targets, [&](size_t place) { return (place == null_target) != null; });
+        absence_conditions(current->null_sources));
+    auto narrowed = *current;
+    std::erase_if(narrowed.places, [&](size_t place) { return (place == null_target) != null; });
+    if (!null) narrowed.null_sources.clear();
+    const bool has_targets = !narrowed.places.empty();
+    lexical_.targets.set(test.binding, std::move(narrowed));
     lexical_.selections.test(test.binding, null);
     for (const auto input : lexical_.inputs)
       lexical_.input_facts.edit(input, [&](auto &facts) { facts.selections.test(test.binding, null); });
     if (null) record_return_readiness(lexical_, test.binding);
-    if (!null) lexical_.null_sources.at(test.binding).clear();
-    lexical_.live = lexical_.live && !targets.empty() && lexical_.selections.possible;
-    if (!null) record_presence(targets);
+    lexical_.live = lexical_.live && has_targets && lexical_.selections.possible;
+    if (!null) record_presence(lexical_.targets.at(test.binding)->places);
     lexical_.live = lexical_.live && !path_conditions(lexical_).empty();
   }
   void refine_known_bindings() {
@@ -6589,7 +6638,7 @@ class ScalarChecker {
     while (lexical_.live) {
       const auto before = lexical_.targets;
       refine_predicate(proof, value, expr.at);
-      if (lexical_.targets == before) break;
+      if (lexical_.targets.same_places(before)) break;
     }
   }
   void dereference(const CheckedOperation &view, const Location &at) {
@@ -6652,8 +6701,8 @@ class ScalarChecker {
           if (binding == CleanupEquations::pending_return_selection) return observed_selection;
           if (deferred_action_) return state.selections.selection_on_exit(binding);
           const auto found = state.targets.find(binding);
-          if (found == state.targets.end()) return {};
-          auto selected = selection_targets(found->second, state.null_sources.at(binding));
+          if (!found) return {};
+          auto selected = selection_targets(found->places, found->null_sources);
           if (const auto recorded = state.selections.targets.find(binding);
               recorded != state.selections.targets.end() && recorded->second.entries.empty())
             selected.nullness = recorded->second.nullness;
@@ -6661,7 +6710,7 @@ class ScalarChecker {
             // A cleanup condition observes the selection at the drain entry.
             // Relate that observation to other snapshots before applying writes.
             CleanupEquations::BooleanValue observed;
-            const CleanupEquations::BindingSnapshot snapshot{binding, state.target_versions.at(binding)};
+            const CleanupEquations::BindingSnapshot snapshot{binding, found->versions};
             for (const auto &[null, paths] : selected.null_observations()) for (auto facts : paths) {
               (null ? facts.absent_bindings : facts.bindings).insert(snapshot);
               CleanupEquations::add_condition(observed[null], std::move(facts));
@@ -15097,8 +15146,8 @@ class ScalarChecker {
   EvidencePlaces lexical_boolean_targets(size_t slot, const Type &type) const {
     EvidencePlaces result;
     if (type != Type::boolean) return result;
-    if (const auto targets = lexical_.targets.find(slot); targets != lexical_.targets.end()) {
-      for (const auto place : targets->second) {
+    if (const auto targets = lexical_.targets.find(slot)) {
+      for (const auto place : targets->places) {
         if (place == null_target) continue;
         if (storage(place).borrowed) return {};
         result.insert(place);
@@ -15109,9 +15158,9 @@ class ScalarChecker {
   void observe_lexical_selection(QuerySelections &flow, const EvidenceSelection &selection, const Type &type) const {
     const auto remember = [&](const EvidenceSlot &slot) {
       const auto id = std::get<size_t>(slot);
-      if (const auto targets = lexical_.targets.find(id); targets != lexical_.targets.end() && !targets->second.empty()) {
-        if (!targets->second.contains(null_target)) flow.facts[slot] = TargetPresence::present;
-        else if (targets->second.size() == 1) flow.facts[slot] = TargetPresence::absent;
+      if (const auto targets = lexical_.targets.find(id); targets && !targets->places.empty()) {
+        if (!targets->places.contains(null_target)) flow.facts[slot] = TargetPresence::present;
+        else if (targets->places.size() == 1) flow.facts[slot] = TargetPresence::absent;
       }
       const auto known = lexical_boolean_targets(id, type);
       if (!known.empty()) flow.targets[slot] = known;
@@ -15130,9 +15179,8 @@ class ScalarChecker {
     auto &flow = state.selections;
     const auto input_binding = [&](size_t ordinal) { return storage(input_place(ordinal)).binding; };
     const auto unchanged = [&](size_t ordinal) {
-      const auto versions = lexical_.target_versions.find(input_binding(ordinal));
-      return versions != lexical_.target_versions.end() &&
-          std::ranges::all_of(versions->second, [&](size_t id) { return id < scope_entry_version_limit_; });
+      const auto targets = lexical_.targets.find(input_binding(ordinal));
+      return targets && std::ranges::all_of(targets->versions, [&](size_t id) { return id < scope_entry_version_limit_; });
     };
     struct QueryPlace {
       EvidenceSlot slot;
@@ -15230,8 +15278,8 @@ class ScalarChecker {
       if (binding.type.kind == Type::native_handle && binding.type.owned) {
         owner.reset();
         const auto targets = lexical_.targets.find(id);
-        if (targets != lexical_.targets.end() && targets->second.size() == 1)
-          if (const auto resource = native_resource_owners_.find(*targets->second.begin()); resource != native_resource_owners_.end())
+        if (targets && targets->places.size() == 1)
+          if (const auto resource = native_resource_owners_.find(*targets->places.begin()); resource != native_resource_owners_.end())
             owner = resource->second;
       }
       std::optional<bool> slot_read_only;
@@ -15288,8 +15336,8 @@ class ScalarChecker {
     }
     const auto current_slot = [&](const CleanupEquations::BindingSnapshot &snapshot) {
       const auto &[slot, versions] = snapshot;
-      const auto current = lexical_.target_versions.find(slot);
-      return current != lexical_.target_versions.end() && current->second == versions && state.selections.footprints.contains(slot);
+      const auto current = lexical_.targets.find(slot);
+      return current && current->versions == versions && state.selections.footprints.contains(slot);
     };
     const auto project_presence = [&](const CleanupEquations::ConditionFacts &clause) {
       PresenceFacts facts;
@@ -19016,10 +19064,11 @@ class ScalarChecker {
     operation.binding = selected;
     operation.slots = {selected};
     operation.owners = lexical_.owners.at(selected);
-    operation.selection_versions = lexical_.target_versions.at(selected);
+    const auto targets = lexical_.targets.at(selected);
+    operation.selection_versions = targets->versions;
     operation.selection_identity = lexical_.selection_identities.at(selected);
-    operation.null_sources = lexical_.null_sources.at(selected);
-    select_targets(operation, lexical_.targets.at(selected));
+    operation.null_sources = targets->null_sources;
+    select_targets(operation, targets->places);
     operation.origins = {selected};
     operation.type = slot.type;
     operation.nullable_view = slot.nullable;
@@ -21355,9 +21404,10 @@ class ScalarChecker {
           // Assignments that are restored before the backedge do not select
           // the next iteration's target. Keep only entry and backedge bounds.
           for (const auto &[binding, selected] : loop.header_targets) {
-            lexical_.targets[binding] = selected.places;
-            if (selected.nullable()) lexical_.targets[binding].insert(null_target);
-            lexical_.null_sources[binding] = selected.null_sources;
+            auto places = selected.places;
+            if (selected.nullable()) places.insert(null_target);
+            const auto current = lexical_.targets.at(binding);
+            lexical_.targets.set(binding, {std::move(places), selected.null_sources, current->versions});
             lexical_.owners[binding] = before.owners.at(binding);
             assign_selection(lexical_, binding, selected);
           }
@@ -21668,9 +21718,10 @@ class ScalarChecker {
         operation.selection_identity = selected.selection_identity;
         operation.owners.clear(); operation.selection_versions.clear();
         for (const auto id : target.slots) {
-          const auto &owners = lexical_.owners.at(id), &versions = lexical_.target_versions.at(id);
+          const auto &owners = lexical_.owners.at(id);
+          const auto targets = lexical_.targets.at(id);
           operation.owners.insert(owners.begin(), owners.end());
-          operation.selection_versions.insert(versions.begin(), versions.end());
+          operation.selection_versions.insert(targets->versions.begin(), targets->versions.end());
         }
         operation.origins = target.slots;
         operation.read_only = target.read_only;
@@ -22175,8 +22226,8 @@ class ScalarChecker {
         if (const auto named = lexical_.lookup(expr.children.front()->text); named) {
           if (catch_bindings_.contains(*named)) forwarded = named;
           else if (const auto selected = lexical_.targets.find(*named);
-                   selected != lexical_.targets.end() && selected->second.size() == 1) {
-            const auto holder = *selected->second.begin();
+                   selected && selected->places.size() == 1) {
+            const auto holder = *selected->places.begin();
             if (direct_exception_holders_.contains(holder) && storage(holder).binding == *named)
               forwarded = holder;
           }
@@ -22780,16 +22831,17 @@ class ScalarChecker {
     visit_binding_inputs([&](size_t p, size_t binding) {
       const auto [result, first] = observed.bindings[reason].try_emplace(p);
       auto &targets = result->second;
+      const auto bounds = state.targets.at(binding);
       const bool initialized = state.selections.initialized.contains(binding) ||
-          std::all_of(state.targets.at(binding).begin(), state.targets.at(binding).end(),
+          std::all_of(bounds->places.begin(), bounds->places.end(),
               [&](size_t place) { return place == null_target || state.initialized.contains(place); });
       targets.initialized = initialized && (first || targets.initialized);
-      for (const auto place : state.targets.at(binding)) if (place != null_target) {
+      for (const auto place : bounds->places) if (place != null_target) {
         if (!storage(place).borrowed) throw std::logic_error("caller binding retained local storage");
         targets.targets.insert(input_ordinal(place));
       }
-      if (state.targets.at(binding).contains(null_target))
-        for (const auto source : state.null_sources.at(binding))
+      if (bounds->places.contains(null_target))
+        for (const auto source : bounds->null_sources)
           targets.null_sources.insert(source == null_target ? null_target : input_ordinal(source));
     });
     if (!reason && checking_instance_->result.borrowed() && !checking_instance_->result.native_borrow()) {
@@ -22888,16 +22940,16 @@ class ScalarChecker {
       if (referent) {
         const auto binding = storage(container).binding;
         input_slot_referents_.emplace(binding, place);
-        auto &targets = lexical_.targets.at(binding);
-        auto &sources = lexical_.null_sources.at(binding);
-        targets.insert(place);
-        if (nullable) { targets.insert(null_target); sources.insert(place); }
-        entry.selections.assign(binding, selection_targets(targets, sources));
+        auto bounds = *lexical_.targets.at(binding);
+        bounds.places.insert(place);
+        if (nullable) { bounds.places.insert(null_target); bounds.null_sources.insert(place); }
+        entry.selections.assign(binding, selection_targets(bounds.places, bounds.null_sources));
         lexical_.selection_identities.at(binding) = selection;
         if (!proving_) {
-          possible_targets_.at(binding) = targets;
-          possible_null_sources_.at(binding) = sources;
+          possible_targets_.at(binding) = bounds.places;
+          possible_null_sources_.at(binding) = bounds.null_sources;
         }
+        lexical_.targets.set(binding, std::move(bounds));
       }
       if (entry.initialized.contains(container) && !nullable) {
         entry.initialized.insert(place);
@@ -23289,10 +23341,13 @@ class ScalarChecker {
           if (place || reference_field) bindings_->at(binding).place_owners = {owner};
           const bool nonnull = checking_method_->scope_inputs && checking_method_->scope_inputs->nonnull.at(p);
           if (parameter.declaration_kind == "ptr" && !nonnull) {
-            lexical_.targets[binding].insert(null_target);
-            lexical_.null_sources[binding] = {id};
+            auto bounds = *lexical_.targets.at(binding);
+            bounds.places.insert(null_target);
+            bounds.null_sources = {id};
+            const auto selection = selection_targets(bounds.places, bounds.null_sources);
+            lexical_.targets.set(binding, std::move(bounds));
             lexical_.input_facts.edit(0, [&](auto &entry) {
-              entry.selections.assign(binding, selection_targets(lexical_.targets[binding], lexical_.null_sources.at(binding)));
+              entry.selections.assign(binding, selection);
             });
             if (!proving) { possible_targets_[binding].insert(null_target); possible_null_sources_[binding] = {id}; }
           }
@@ -23345,7 +23400,7 @@ class ScalarChecker {
         }
         const auto binding_snapshot = [&](size_t ordinal) {
           const auto binding = storage(instance.frame.inputs.at(ordinal).place).binding;
-          return CleanupEquations::BindingSnapshot{binding, lexical_.target_versions.at(binding)};
+          return CleanupEquations::BindingSnapshot{binding, lexical_.targets.at(binding)->versions};
         };
         CleanupEquations::ConditionClauses captured;
         for (const auto &condition : checking_method_->scope_inputs->reference_conditions) {
