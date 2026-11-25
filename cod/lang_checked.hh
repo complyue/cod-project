@@ -23271,6 +23271,15 @@ class ScalarChecker {
       const auto &method = program_.methods[instance.method];
       const ModuleLookup module(module_, method.module);
       const ModuleLookup interpretation(interpretation_, method.interpretation);
+      // Entry checking may introduce module-local names. A collision at a
+      // recorded call spelling still needs the ordinary diagnostic path.
+      if (const auto plan = scalar_callers_.find(i); plan != scalar_callers_.end() &&
+          std::ranges::any_of(plan->second.calls, [&](const auto &call) {
+            return module_names().values.contains(call.site->text);
+          })) {
+        replay_instance(i);
+        continue;
+      }
       // These bodies introduce only independent formals. Their warnings use
       // the names established by entry, at the ordinary publication point.
       for (const auto &parameter : method.input_parameters())
@@ -23350,7 +23359,7 @@ class ScalarChecker {
   }
   static bool independent_scalar_frame(const CheckedInstance &instance, const CheckedMethod &method,
                                        const LeafBehaviorPlan &plan) {
-    return plan.kind != LeafBehaviorPlan::Kind::borrowed_byte && plan.predicate.calls.empty() &&
+    return plan.kind != LeafBehaviorPlan::Kind::borrowed_byte &&
         !method.source->case_scan_scope && !instance.query_environment && instance.retained_types.empty() &&
         method.captures.empty() && method.retained_types.empty() && method.input_owners().empty() &&
         std::ranges::all_of(method.input_parameters(), [](const Parameter &parameter) {
@@ -23427,11 +23436,15 @@ class ScalarChecker {
     for (auto &application : applications) {
       const auto id = application.instance;
       auto &instance = program_.instances[id];
+      auto &plan = bound.at(id);
+      const auto &method = program_.methods[instance.method];
+      const bool frame_ready = independent_scalar_frame(instance, method, plan);
       auto completed = seal_scalar_caller(application.exits);
-      scalar_callers_.emplace(id, std::move(bound.at(id).predicate));
+      scalar_callers_.emplace(id, std::move(plan.predicate));
       std::move(application.frame).install(instance);
       instance.effects = std::move(completed);
       instance.effects_frozen = true;
+      instance.scalar_frame_ready = frame_ready;
     }
   }
 
