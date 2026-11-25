@@ -349,7 +349,7 @@ struct LexicalState {
   // Necessary alternatives for paths still lacking initialization.
   CleanupEquations::MissingInitialization uninitialized;
   CleanupEquations::ConditionClauses predicate_conditions{CleanupEquations::ConditionFacts{}};
-  std::set<size_t> payload_writes;
+  std::set<size_t> deferred_payload_writes;
   BindingTargets targets;
   std::map<size_t, std::set<size_t>> owners;
   std::map<size_t, size_t> selection_identities;
@@ -3733,6 +3733,9 @@ class ScalarChecker {
         !checking_method_->scope_inputs->disjoint_input_targets.contains(
             std::minmax(input_ordinal(left), input_ordinal(right)));
   }
+  bool has_borrowed_payload_target(const std::set<size_t> &places) const {
+    return std::ranges::any_of(places, [&](size_t place) { return storage(place).borrowed; });
+  }
   void record_payload_write(const CheckedOperation &target, bool deferred = false) {
     if (proving_) return;
     // A write can preserve the first iteration's value yet change a later one.
@@ -3757,14 +3760,16 @@ class ScalarChecker {
   std::set<size_t> payload_targets(const CheckedOperation &target) const {
     auto written = target.targets;
     written.erase(null_target);
+    // A distinct storage place can share this write only through a borrowed input.
+    if (!has_borrowed_payload_target(written)) return written;
     for (const auto place : lexical_.available)
       if (std::any_of(target.targets.begin(), target.targets.end(), [&](size_t other) {
             return payload_targets_may_share(other, place);
           })) written.insert(place);
     return written;
   }
-  static void invalidate_payloads(LexicalState &state, const std::set<size_t> &written) {
-    state.payload_writes.insert(written.begin(), written.end());
+  void invalidate_payloads(LexicalState &state, const std::set<size_t> &written) const {
+    if (delayed_) state.deferred_payload_writes.insert(written.begin(), written.end());
     for (const auto place : written) state.predicates.erase(place);
   }
   std::shared_ptr<const CheckedOperation::Predicate> stored_predicate(const CheckedOperation &view) {
@@ -4152,7 +4157,7 @@ class ScalarChecker {
       writes.places.insert(places.begin(), places.end());
     }
     writes.places.erase(null_target);
-    if (writes.places.empty()) return;
+    if (!has_borrowed_payload_target(writes.places)) return;
     const auto written = writes.places;
     for (size_t place = 0; place < storage_->size(); ++place)
       if (storage(place).borrowed && std::any_of(written.begin(), written.end(), [&](size_t target) {
@@ -5775,7 +5780,7 @@ class ScalarChecker {
         lexical_.uninitialized[place] = std::move(missing);
       }
     }
-    lexical_.payload_writes = a_exits ? b.payload_writes : a.payload_writes;
+    lexical_.deferred_payload_writes = a_exits ? b.deferred_payload_writes : a.deferred_payload_writes;
     if (!a_exits && !b_exits) {
       std::erase_if(lexical_.boolean_inputs, [&](const auto &input) { return !b.boolean_inputs.contains(input); });
       std::erase_if(lexical_.boolean_payloads, [&](const auto &payload) { return !b.boolean_payloads.contains(payload); });
@@ -5788,7 +5793,7 @@ class ScalarChecker {
         lexical_.predicates.set(place, lhs == rhs ? lhs : predicate(Predicate::Kind::alternatives,
             constrain_predicate(lhs, left_paths), constrain_predicate(rhs, right_paths)));
       }
-      lexical_.payload_writes.insert(b.payload_writes.begin(), b.payload_writes.end());
+      lexical_.deferred_payload_writes.insert(b.deferred_payload_writes.begin(), b.deferred_payload_writes.end());
     }
     lexical_.input_facts = a_exits ? b.input_facts : a.input_facts;
     if (!a_exits && !b_exits) {
@@ -21824,6 +21829,7 @@ class ScalarChecker {
         deferred_action_ = action;
         lexical_.symbols = {};
         lexical_.deferred_symbols.clear();
+        lexical_.deferred_payload_writes.clear();
         refresh_targets(lexical_);
         lexical_.predicates.clear();
         lexical_.boolean_payloads.clear();
@@ -21838,7 +21844,6 @@ class ScalarChecker {
           deferred_action_ = phase;
           const auto boolean_entry = incoming_booleans(phase);
           for (const auto &[place, value] : boolean_entry) lexical_.predicates.set(place, boolean_predicate(value));
-          lexical_.payload_writes.clear();
           const auto incoming = incoming_payloads(phase);
           lexical_.exceptions = incoming;
           result.observes_return = source.inspects_return();
@@ -21872,10 +21877,10 @@ class ScalarChecker {
                   effects.uninitialized.emplace(place, std::move(missing));
               }
               effects.symbols = path.state.deferred_symbols;
-              effects.payload_writes = path.state.payload_writes;
+              effects.payload_writes = path.state.deferred_payload_writes;
               effects.present = path.state.input_facts.at(input).present;
               effects.declared_root = flow.declared_root;
-              for (const auto place : path.state.payload_writes) if (boolean_entry.contains(place))
+              for (const auto place : path.state.deferred_payload_writes) if (boolean_entry.contains(place))
                 effects.booleans[place] = snapshot_boolean(path.state.predicates.get(place), path.state, source.at);
               effects.returned.initialize(effects.initialized, effects.selections);
               for (const auto &[target, value] : payload_changes(incoming, path.state.input_facts.at(input).exceptions))
