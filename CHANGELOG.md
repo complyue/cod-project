@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Apply native function permissions to the exported source revision loan
+
+<a id="k-seed-source-use-function-20261125"></a>
+**K-SEED-SOURCE-USE-FUNCTION-20261125.** The [implementation review](design/ImplementationArchitecture.md#callable-kind-of-the-exported-source-revision-loan) continues D-ARCH-REVIEW r190→191 under [H-NATIVE-CALLABLE-KIND](#h-native-callable-kind-20261123). The private path-key review is followed by the exported `source_use` declaration at `88784b85:applications/cod-booter/src/NativeSourceUse.cod`. Its provider meets the documented native function contract. The approved correction makes this operation directly usable from an eligible CoD function while preserving its callback, borrowed revision and C interface.
+
 ## 2026-11-25 — Review the native path-key handoff in handler replay
 
 <a id="k-seed-native-path-key-replay-edge-20261125"></a>

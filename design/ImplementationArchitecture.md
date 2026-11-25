@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r191 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r190 for the [exported source revision loan](#callable-kind-of-the-exported-source-revision-loan). The user's [native callable-kind rule](../CHANGELOG.md#h-native-callable-kind-20261123) and the [first-host interface](../applications/cod-booter/docs/LLVMInterop.md#declarations-and-the-first-host-call) already select a function for this operation. The public source interface retains its named owner and checked callback result. [Review record](../CHANGELOG.md#k-seed-source-use-function-20261125)
+
 At r190 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r189 for the [native path-key loan](#symbol-uses-across-the-native-path-key-loan). The existing native function contract bounds what the provider can do on its own. D-18 gives the actual callback its supplier's permissions. The wider live-handler cutover still requires the r188 activation evidence. [Review record](../CHANGELOG.md#k-seed-native-path-key-replay-edge-20261125)
 
 At r189 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r188 for a [direct synchronous callback supplied under a local installation](#local-symbol-supply-through-a-direct-here-call). D-18 keeps the supplier's live scope. D-10 counts outstanding uses for the activated family. The seed consumes the completed callback binding to establish an empty replay inventory for this case. [Review record](../CHANGELOG.md#k-seed-live-handler-local-here-supply-20261125)
@@ -986,6 +988,12 @@ In `ModuleGraph.visit_child`, `ModuleIndex.lookup_path` supplies a body to `Nati
 Use the declared function permissions to bound the provider's independent behavior. A native procedure can also call a generated CoD procedure entry. Reading one implementation's C source cannot establish a guarantee for every provider linked against a procedure declaration. At `b57b3385:cod/lang_checked.hh`, the checked native operation identifies the outlined body, and the bound lexical here formal identifies the supplier's target in that interpretation. Follow both links. Include operand evaluation, the possible callback and its transitive family uses. Preserve its owner, lexical access, feedback and abrupt completion. A borrowed byte view carries no permission to retain the callback.
 
 An unresolved target or a provider with unbounded reentry leaves the contribution open. Acceptance distinguishes an outstanding symbol used only in the supplied body, pre-handoff failure and the protected completion that returns through the native bridge. Closing the path-key edge supplies one prerequisite for the [graph handler decision](#live-handlers-without-scalar-snapshot-fields). Each other handoff still needs applicable binding evidence.
+
+#### Callable kind of the exported source revision loan
+
+Declare `source_use` in `NativeSourceUse.cod` as `export func "C"`. A function caller can import it and lend a synchronous body under that caller's permissions. The exported `with_source` wrapper remains a procedure. In `88784b85:applications/cod-booter/native/source_use_provider.c`, the provider checks the borrowed revision, obtains its canonical byte and line views and invokes the supplied callback while both views are live. The checked adapter validates both arrays against the same actual owner S. Keep the existing C interface and `CompilerStatus` feedback and result. [Generated first-host interface](../applications/cod-booter/docs/LLVMInterop.md#declarations-and-the-first-host-call)
+
+Check the exported kind through an eligible importing function. A four-byte source with three line-index entries gives 43 in the existing loan control. The protected-return control gives 77. An owner mismatch fails before callback entry and preserves the result destination. Account for symbol uses in the actual supplied body under the [bound-callback rule](#symbol-uses-across-the-native-path-key-loan). Native acquisition, package operations and the recursive graph visit have independent dependencies.
 
 <a id="rechecking-an-ordinary-call-in-one-conditional-arm"></a>
 
