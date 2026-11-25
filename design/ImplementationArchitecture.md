@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r130 review](../CHANGELOG.md#k-booter-visit-array-growth-20261125) continues P-682/P-683 for [checking visit-table growth](../applications/cod-booter/docs/ModuleGraph.md#checking-growth-of-the-module-visit-array). It reuses the lexical slot and completion checks for a local array whose element is a nominal finite bits sum.
+
 The [r129 review](../CHANGELOG.md#k-indexed-byte-field-compatibility-20261125) continues P-682/P-683 for [indexed byte fields](../applications/cod-booter/docs/ModuleGraph.md#deciding-which-bodies-need-indexed-field-checks). It preserves R123’s body selection and admits the independent byte once a body is required.
 
 At r128 the [project user’s engineering rule](../CHANGELOG.md#h-restart-from-entry-20261124) applies P-682/P-683 to [pass boundaries and dependency changes](#restarting-a-pass-from-entry). Carry established inputs from one stage to the next and require a local change to identify its affected consumers. The seed caller replay below is the recorded counterexample.

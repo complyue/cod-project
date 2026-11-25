@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Review source checking of visit-table growth
+
+<a id="k-booter-visit-array-growth-20261125"></a>
+**K-BOOTER-VISIT-ARRAY-GROWTH-20261125.** D-ARCH-REVIEW r129→130 and D-20-MODULE-GRAPH r91→92 continue P-680–P-683. Both linked source commands on candidate `af87c3b4` rejected the caller-slot formal in `932dc122:applications/cod-booter/src/ModuleIndex.cod:94`. The [review](applications/cod-booter/docs/ModuleGraph.md#checking-growth-of-the-module-visit-array) extends the byte-array proof to the checked `VisitSlot` sum, its `Vacant` fill and the ordered whole-element transfer. The C++ seed and booter runtime layouts are outside this source-checking change.
+
 ## 2026-11-25 — Review indexed byte fields in a demanded booter body
 
 <a id="k-indexed-byte-field-compatibility-20261125"></a>
