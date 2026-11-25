@@ -3959,7 +3959,8 @@ class ScalarChecker {
         return value;
       }
     }
-    const auto before = lexical_, input = state;
+    const auto input = state; // The source may be lexical_ itself.
+    auto before = std::move(lexical_);
     for (const bool result : {false, true}) {
       lexical_ = input;
       predicate_paths(proof, result, at, [&] {
@@ -3968,7 +3969,7 @@ class ScalarChecker {
         });
       });
     }
-    lexical_ = before;
+    lexical_ = std::move(before);
     return value;
   }
   void merge_nullness(CheckedOperation &result, const CheckedOperation &source,
@@ -6042,24 +6043,28 @@ class ScalarChecker {
       if (frame->bindings.contains(id)) { frame->required.insert(id); captured = true; }
     return captured;
   }
+  void observe_scope_exit(std::optional<HereExit> here_exit, const ExceptionFacts &exceptions) {
+    if (!proving_ || !exporting_effects_) return;
+    if (here_exit == HereExit::return_supplier) observe_effects().returns_from_supplier = true;
+    if (here_exit == HereExit::break_call) observe_effects().breaks_here_call = true;
+    if (checking_method_ && (checking_method_->source->implicit_scope || checking_method_->here_group))
+      for (const auto category : exceptions.possibilities())
+        if (program_.exception_types.at(category).checked) observe_effects().scope_checked_failures.insert(category);
+  }
+  void append_abrupt(AbruptFlow &destination, AbruptPath path) {
+    const auto categories = path.exceptions.possibilities();
+    if (!categories.empty()) path.completion.reason = Completion::failure(*categories.begin()).reason;
+    while (path.state.scopes.size() > destination.depth) retire_scope(path.state);
+    destination.paths.push_back(std::move(path));
+  }
   void note_abrupt(const Location &at, ExceptionFacts exceptions = {}, Completion completion = {2, false},
                    bool immediate_scope_failure = false, std::optional<HereExit> here_exit = {},
                    bool receiver_transfer_pending = false, const Expression *case_result = nullptr) {
-    if (!lexical_.live || (!abrupt_ && (!proving_ || !exporting_effects_))) return;
-    const auto categories = exceptions.possibilities();
-    if (!categories.empty()) completion.reason = Completion::failure(*categories.begin()).reason;
-    if (!abrupt_) {
-      if (here_exit == HereExit::return_supplier) observe_effects().returns_from_supplier = true;
-      if (here_exit == HereExit::break_call) observe_effects().breaks_here_call = true;
-      if (checking_method_ && (checking_method_->source->implicit_scope || checking_method_->here_group))
-        for (const auto category : categories)
-          if (program_.exception_types.at(category).checked) observe_effects().scope_checked_failures.insert(category);
-      return;
-    }
-    auto state = lexical_;
-    while (state.scopes.size() > abrupt_->depth) retire_scope(state);
-    abrupt_->paths.push_back({std::move(state), std::move(exceptions), at, completion, immediate_scope_failure, here_exit,
-                             receiver_transfer_pending, case_result});
+    if (!lexical_.live) return;
+    if (abrupt_) {
+      append_abrupt(*abrupt_, {lexical_, std::move(exceptions), at, completion, immediate_scope_failure,
+                               here_exit, receiver_transfer_pending, case_result});
+    } else observe_scope_exit(here_exit, exceptions);
   }
   void forward_abrupt(const AbruptPath &path) {
     note_abrupt(path.at, path.exceptions, path.completion, path.immediate_scope_failure, path.here_exit,
@@ -6465,9 +6470,9 @@ class ScalarChecker {
     }
     abrupt_ = outer;
     if (flow.declared_root) note_declared_root();
-    for (const auto &path : exits) {
-      lexical_ = path.state;
-      forward_abrupt(path);
+    for (auto &path : exits) if (path.state.live) {
+      if (outer) append_abrupt(*outer, std::move(path));
+      else observe_scope_exit(path.here_exit, path.exceptions);
     }
     if (!scans.empty()) {
       join(body, true, scans.front(), false, at);
@@ -23037,7 +23042,6 @@ class ScalarChecker {
               method.case_scan_scope ? size_t{1} : size_t{0};
           record_exit(reason, method.at, lexical_);
         }
-        const auto normal = lexical_;
         std::set<size_t> unproved_owners;
         for (const auto &path : outcomes.paths) {
           if (observed.case_scope_exits && path.completion.reason == 1) observed.case_scope_exits->result = true;
@@ -23055,11 +23059,9 @@ class ScalarChecker {
               unproved_owners.insert(path.completion.category());
           }
           if (path.completion.protected_here() && !path.here_exit) observed.propagates_outer_here_transfer = true;
-          lexical_ = path.state; abrupt_ = nullptr;
-          forward_abrupt(path);
+          if (path.state.live) observe_scope_exit(path.here_exit, path.exceptions);
         }
         for (const auto category : unproved_owners) observed.direct_owned_failures.erase(category);
-        lexical_ = normal;
       }
     });
     if (scalar_exits) return;
