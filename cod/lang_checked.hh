@@ -339,8 +339,6 @@ struct LexicalState {
     }
   };
   InputReceipts input_facts{0, {}};
-  struct Requirement { CompletionInputs inputs; CleanupEquations::ConditionClauses when; };
-  std::map<size_t, Requirement> requirements;
   std::map<size_t, ExceptionFacts> exceptions;
   // Boolean payload snapshots retain the tested binding versions.
   BooleanPredicates predicates;
@@ -429,9 +427,9 @@ class ScalarChecker {
     bool discards_result = false;
   };
   mutable std::map<size_t, std::map<size_t, EffectConsumer>> effect_dependents_;
-  size_t read_effect_round_ = 0;
+  size_t symbol_effect_round_ = 0;
   bool closing_write_effects_ = false;
-  bool closing_read_effects_ = false;
+  bool closing_symbol_effects_ = false;
   mutable std::set<size_t> callable_effect_consumers_;
   struct LeafBehaviorPlan;
   const LeafBehaviorPlan *extracting_leaf_ = nullptr;
@@ -489,10 +487,10 @@ class ScalarChecker {
       auto &consumer = effect_dependents_[instance][checking_context_];
       consumer.reads_result |= use == EffectUse::all;
       consumer.discards_result |= use == EffectUse::discarded_boolean_result;
-    } else if (closing_read_effects_) {
+    } else if (closing_symbol_effects_) {
       auto &consumer = effect_dependents_[instance][checking_context_];
-      if (consumer.read_round != read_effect_round_) {
-        consumer.read_round = read_effect_round_;
+      if (consumer.read_round != symbol_effect_round_) {
+        consumer.read_round = symbol_effect_round_;
         consumer.symbols = symbols;
       } else consumer.symbols = std::min(consumer.symbols, symbols);
     }
@@ -810,7 +808,6 @@ class ScalarChecker {
     std::optional<CleanupEquations::Targets> borrowed_selection{};
   } return_inputs_;
   size_t next_finalizer_input_ = 0;
-  std::vector<CallEffects::ReadSite> read_sites_;
   bool delayed_ = false;
   size_t next_scope_ = 1;
   static constexpr size_t instance_limit = 4096;
@@ -3569,11 +3566,6 @@ class ScalarChecker {
     reference_destination(view, at);
     return selection_state(std::move(view), at);
   }
-  size_t read_obligation(CallEffects::ReadSite site) {
-    const auto read = read_sites_.size();
-    read_sites_.push_back(std::move(site));
-    return read;
-  }
   void prepare_reference_swap(const CheckedOperation &left, const CheckedOperation &right,
                               CheckedOperation &operation) {
     auto &effects = operation.invocation[0];
@@ -4359,13 +4351,6 @@ class ScalarChecker {
       if (identity == *view.selection_identity && lexical_.bindings_available.contains(binding)) return binding;
     return {};
   }
-  static void add_requirement(LexicalState &state, size_t read, const CompletionInputs &inputs, const CleanupEquations::ConditionClauses &when) {
-    auto [found, inserted] = state.requirements.emplace(read, LexicalState::Requirement{inputs, when});
-    if (!inserted) {
-      found->second.inputs.insert(inputs.begin(), inputs.end());
-      for (const auto &facts : when) CleanupEquations::add_condition(found->second.when, facts);
-    }
-  }
   size_t input_place(size_t ordinal) const {
     const auto &inputs = checking_instance_->frame.inputs;
     return ordinal < inputs.size() ? inputs[ordinal].place : input_field_places_.at(ordinal - inputs.size());
@@ -4450,20 +4435,6 @@ class ScalarChecker {
     }
     return result;
   }
-  bool in_immediate_scope() const {
-    return checking_method_ && checking_method_->source->implicit_scope;
-  }
-  void require_local_read(const CallEffects::ReadSite &site, const CleanupEquations::ConditionClauses &when) {
-    if (!exporting_effects_ && !validating_) return;
-    if (in_immediate_scope()) {
-      auto missing = external_conditions(when, true);
-      if (!CleanupEquations::unconditional(missing)) {
-        if (exporting_effects_ && !missing.empty()) observe_effects().reads.insert({site, std::move(missing)});
-        return;
-      }
-    }
-    if (validating_) fail(site.at, site.diagnostic);
-  }
   bool symbol_needs_transport_fact(size_t symbol) const {
     const auto &binding = program_.symbols[symbol];
     return binding.reference || binding.live_scope || (binding.type && binding.type->kind == Type::native_handle);
@@ -4506,11 +4477,6 @@ class ScalarChecker {
     for (const auto &[place, value] : effects.booleans) if (state.available.contains(place))
       state.predicates.set(place, boolean_predicate(value));
     for (const auto symbol : effects.symbols) observe_symbol_use(state, symbol, at);
-    if (proving_) for (const auto &[read, when] : effects.reads) {
-      if (when.empty()) continue;
-      if (delayed_) add_requirement(state, read, state.inputs, when);
-      else require_local_read(read_sites_.at(read), when);
-    }
     CleanupEquations::combine_initialization(state.initialized, state.uninitialized,
         effects.initialized, effects.uninitialized, false);
     std::erase_if(state.initialized, [&](size_t place) { return !state.available.contains(place); });
@@ -4635,13 +4601,6 @@ class ScalarChecker {
       if (prepared && binding && rebound_.contains(*binding)) binding.reset();
       return binding;
     };
-    CleanupEquations::Reads reads;
-    if (proving_) for (const auto &[site, condition] : target.reads) {
-      auto when = instantiate_conditions(condition, booleans, views, slots, exceptions);
-      if (when.empty()) continue;
-      const auto read = read_obligation(site);
-      reads.emplace(read, std::move(when));
-    }
     std::set<size_t> entry_symbol_uses;
     if (!checking_instance_) for (const auto symbol : target.symbols)
       if (symbol_needs_transport_fact(symbol)) entry_symbol_uses.insert(symbol);
@@ -4649,7 +4608,7 @@ class ScalarChecker {
     std::map<size_t, CleanupEquations::Effects> effects;
     for (const auto reason : reasons) {
       const auto found = target.initialized.find(reason);
-      CleanupEquations::Effects row{reads, {}};
+      CleanupEquations::Effects row{};
       if (prepared) row = cleanup_.preserve_pending(std::move(row));
       auto &effect = effects.emplace(reason, std::move(row)).first->second;
       effect.symbols = symbol_uses;
@@ -4915,7 +4874,7 @@ class ScalarChecker {
   }
   CallableInvocationEffects callable_effects(const Type &contract, const std::vector<Type> &arguments,
                                              const std::optional<std::set<size_t>> &choices, SymbolEffectUse symbol_use) const {
-    if (closing_write_effects_ || closing_read_effects_)
+    if (closing_write_effects_ || closing_symbol_effects_)
       callable_effect_consumers_.insert(checking_context_);
     CallEffects effects;
     bool first = true;
@@ -4945,7 +4904,6 @@ class ScalarChecker {
         }
         effects.lexical_allocations.merge(owners);
         effects.array_allocations.insert(next.array_allocations.begin(), next.array_allocations.end());
-        effects.reads.insert(next.reads.begin(), next.reads.end());
         effects.written_inputs.insert(next.written_inputs.begin(), next.written_inputs.end());
         effects.escaping_failures.insert(next.escaping_failures.begin(), next.escaping_failures.end());
         for (auto &[reason, known] : effects.initialized) {
@@ -5158,8 +5116,6 @@ class ScalarChecker {
     auto observed_slots = invocation_slots;
     observed_slots.all = has_invocation_time_slots;
     const bool late_payloads = prepared_slots || !invocation_slots.projected.empty();
-    const bool conditional_local_check = std::ranges::any_of(summary.reads,
-        [](const auto &read) { return !CleanupEquations::unconditional(read.when); });
     const bool conditional_nullness = !prepared && !contract.nullable_views.empty() && contract.nullable_views.back() &&
         std::ranges::any_of(summary.returned.nullness, [](const auto &outcome) {
           return std::ranges::any_of(outcome.second, [](const auto &facts) {
@@ -5169,7 +5125,7 @@ class ScalarChecker {
     const bool writes_boolean = std::ranges::any_of(summary.written_inputs,
         [&](size_t i) { return input_type(i) == Type::boolean && !readonly_input(i); });
     const bool observes_values = *contract.target == Type::boolean || !summary.booleans.empty() || writes_boolean ||
-        !summary.uninitialized.empty() || conditional_local_check || conditional_nullness;
+        !summary.uninitialized.empty() || conditional_nullness;
     // Borrowed Boolean operands read the entry map, and possible writes can
     // invalidate its payloads. By-value arguments use their own observations.
     bool needs_entry_booleans = observes_values && !summary.written_inputs.empty();
@@ -5567,7 +5523,7 @@ class ScalarChecker {
     }
   }
   // Only immutable parameter evidence crosses a callable boundary. Dropping
-  // local conditions weakens a necessary missing-write/read condition safely.
+  // local conditions weakens a necessary missing-write condition safely.
   CleanupEquations::ConditionClauses external_conditions(const CleanupEquations::ConditionClauses &clauses,
                                                          bool presence = false) const {
     CleanupEquations::ConditionClauses result;
@@ -5688,12 +5644,6 @@ class ScalarChecker {
       state.inputs.insert(to);
       state.input_facts.insert_from(to, source.input_facts, from);
     }
-    for (auto &[read, requirement] : state.requirements) {
-      const auto original = std::exchange(requirement.inputs, {});
-      for (const auto &[from, to] : routes)
-        if (source.inputs.contains(from) && original.contains(from)) requirement.inputs.insert(to);
-    }
-    std::erase_if(state.requirements, [](const auto &entry) { return entry.second.inputs.empty(); });
     state.live = state.live && !state.inputs.empty();
     refresh_input_facts(state);
     return state;
@@ -5827,7 +5777,6 @@ class ScalarChecker {
       lexical_.payload_writes.insert(b.payload_writes.begin(), b.payload_writes.end());
     }
     lexical_.input_facts = a_exits ? b.input_facts : a.input_facts;
-    lexical_.requirements = a_exits ? b.requirements : a.requirements;
     if (!a_exits && !b_exits) {
       for (const auto input : b.inputs) {
         if (!a.inputs.contains(input)) {
@@ -5863,8 +5812,6 @@ class ScalarChecker {
           for (const auto &[place, value] : other.exceptions) facts.exceptions[place].merge(value);
         });
       }
-      for (const auto &[read, requirement] : b.requirements)
-        add_requirement(lexical_, read, requirement.inputs, requirement.when);
     }
     lexical_.targets = a_exits ? b.targets : a.targets;
     lexical_.owners = a_exits ? b.owners : a.owners;
@@ -6299,8 +6246,6 @@ class ScalarChecker {
         state.initialized = entry.initialized;
         state.selections = entry.selections;
         state.exceptions = entry.exceptions;
-        for (auto &[read, requirement] : state.requirements)
-          requirement.inputs = intersect(requirement.inputs, state.inputs);
         auto pending = input.exception() ? path.exceptions.restricted({input.category()}) : ExceptionFacts{};
         if (input.exception() && pending.empty()) pending = {input.category()};
         if (!payloads) {
@@ -15445,8 +15390,12 @@ class ScalarChecker {
   }
   CheckedOperation materialized_value(size_t id, const Location &at) {
     const auto &callable = program_.callables[id];
-    if (callable.type.pure_callable)
-      for (const auto target : callable.implementations()) require_leaf_behavior(target);
+    if (callable.type.pure_callable) for (const auto target : callable.implementations()) {
+      require_leaf_behavior(target);
+      const auto &instance = program_.instances[target];
+      if (!instance.environment.empty() || !program_.methods[instance.method].captures.empty())
+        fail(at, "a storable func must be capture-free");
+    }
     const auto &symbols = program_.captured_symbols(callable);
     for (const auto symbol : symbols) {
       const auto &type = program_.symbols[symbol].type;
@@ -20847,12 +20796,6 @@ class ScalarChecker {
           auto &binding = bindings_->at(storage(id).binding);
           binding.fixed = test.fixed_binding;
           binding.callable_value = pattern.operand_type.kind == Type::procedure;
-          if (binding.callable_value && proving_ && lexical_.live && !capture_free_callables(observed_callables(test))) {
-            // Check the prepared value on the cleanup path that actually matches.
-            const auto read = read_obligation({test.at,
-                "micro-dispatch implementation gap: return pattern needs proof of a capture-free function value; this is not a language restriction"});
-            add_requirement(lexical_, read, lexical_.inputs, path_conditions(lexical_));
-          }
           initialize(id);
           pattern.place = id;
         }
@@ -21917,7 +21860,6 @@ class ScalarChecker {
           lexical_.input_facts = {0, {lexical_.initialized, {}, incoming, {{cleanup_scope_, 0}}, lexical_.present}};
           if (result.observes_return)
             lexical_.input_facts.insert_from(cleanup_.deferred_return_offset(), lexical_.input_facts, 0);
-          lexical_.requirements.clear();
           lexical_.returned = {};
           lexical_.live = true;
           AbruptFlow flow{lexical_.scopes.size(), {}};
@@ -21927,7 +21869,7 @@ class ScalarChecker {
           for (const auto &path : flow.paths) {
             for (const auto input : path.state.inputs) {
               const auto queue = path.state.input_facts.at(input).queues.at(cleanup_scope_);
-              auto effects = cleanup_.preserve_pending(CleanupEquations::Effects{{}, path.state.input_facts.at(input).initialized,
+              auto effects = cleanup_.preserve_pending(CleanupEquations::Effects{path.state.input_facts.at(input).initialized,
                   path.state.returned, path.state.input_facts.at(input).selections});
               effects.action_reaching = CleanupEquations::boolean_conditions(path_conditions(path.state));
               for (const auto place : path.state.available) if (!effects.initialized.contains(place)) {
@@ -21944,8 +21886,6 @@ class ScalarChecker {
               effects.returned.initialize(effects.initialized, effects.selections);
               for (const auto &[target, value] : payload_changes(incoming, path.state.input_facts.at(input).exceptions))
                 if (incoming.contains(target)) effects.payloads.emplace(target, value);
-              for (const auto &[read, requirement] : path.state.requirements) if (requirement.inputs.contains(input))
-                effects.reads.emplace(read, requirement.when);
               if (path.exceptions.empty()) result.paths.push_back({input, path.completion, queue, effects});
               else for (const auto category : path.exceptions.possibilities()) {
                 auto failed = effects;
@@ -22181,7 +22121,6 @@ class ScalarChecker {
         if (expr->kind == K::return_test && fact.return_filter.can_match && fact.place && fact.operand_type.kind == Type::procedure) {
           const auto returned = contexts[c].observed_return.value_or(contexts[c].result);
           flow.link(returned, contexts[c].places.at(*fact.place));
-          contexts[c].observations.emplace(expr, returned);
         }
         if (fact.supplied_here) {
           const auto connect = [&](size_t instance) {
@@ -22268,7 +22207,7 @@ class ScalarChecker {
       catalog_bindings_.clear();
       rebound_.clear(); payload_writes_ = {}; loop_states_.clear(); deferred_product_writes_.clear();
     }
-    lexical_ = {}; cleanup_ = CleanupEquations{program_.exception_types}; scope_storage_.clear(); checked_scope_owners_.clear(); read_sites_.clear(); external_owners_.clear();
+    lexical_ = {}; cleanup_ = CleanupEquations{program_.exception_types}; scope_storage_.clear(); checked_scope_owners_.clear(); external_owners_.clear();
     native_resource_owners_.clear(); native_owner_scopes_.clear(); scope_native_owner_places_.clear(); region_owners_.clear();
     incoming_native_symbol_owners_.clear();
     abstract_input_bindings_.clear();
@@ -23363,11 +23302,11 @@ class ScalarChecker {
     bool other = false;
     explicit operator bool() const { return symbols || returned || other; }
   };
-  enum class EffectMerge { writes, reads, both };
+  enum class EffectMerge { writes, symbols, both };
   EffectChanges merge_effects(CallEffects &known, CallEffects effects, EffectMerge mode) const {
     EffectChanges changes;
     auto &changed = changes.other;
-    if (mode != EffectMerge::reads) {
+    if (mode != EffectMerge::symbols) {
       const auto allocations = known.lexical_allocations.size();
       known.lexical_allocations.merge(effects.lexical_allocations);
       const auto array_allocations = known.array_allocations.size();
@@ -23419,16 +23358,15 @@ class ScalarChecker {
         for (const auto &[parameter, value] : values) effects.payloads[reason][parameter].merge(value);
       if (known.payloads != effects.payloads) { known.payloads = std::move(effects.payloads); changed = true; }
     }
-    // A final comparison only needs the read facts when the writes already agree.
+    // A final comparison only needs the symbol facts when the writes already agree.
     if (mode != EffectMerge::writes && !changes) {
-      if (known.reads != effects.reads) { known.reads = std::move(effects.reads); changed = true; }
       if (known.symbols != effects.symbols) {
         const auto differs = [&](const auto &before, const auto &after) {
           return std::ranges::any_of(before, [&](size_t symbol) {
             return symbol_needs_transport_fact(symbol) && !after.contains(symbol);
           });
         };
-        changes.transport_symbols = mode == EffectMerge::reads &&
+        changes.transport_symbols = mode == EffectMerge::symbols &&
             (differs(known.symbols, effects.symbols) || differs(effects.symbols, known.symbols));
         known.symbols = std::move(effects.symbols);
         changes.symbols = true;
@@ -23527,15 +23465,15 @@ class ScalarChecker {
     }
   }
 
-  bool close_effects(bool reads) {
-    const auto mode = reads ? EffectMerge::reads : EffectMerge::writes;
-    closing_write_effects_ = !reads;
-    closing_read_effects_ = reads;
-    if (reads) ++read_effect_round_;
+  bool close_effects(bool symbols) {
+    const auto mode = symbols ? EffectMerge::symbols : EffectMerge::writes;
+    closing_write_effects_ = !symbols;
+    closing_symbol_effects_ = symbols;
+    if (symbols) ++symbol_effect_round_;
     struct ClosingEffects {
-      bool &writes, &reads;
-      ~ClosingEffects() { writes = false; reads = false; }
-    } closing{closing_write_effects_, closing_read_effects_};
+      bool &writes, &symbols;
+      ~ClosingEffects() { writes = false; symbols = false; }
+    } closing{closing_write_effects_, closing_symbol_effects_};
     std::deque<size_t> pending;
     std::set<size_t> queued;
     const auto enqueue = [&](size_t context) {
@@ -23570,7 +23508,7 @@ class ScalarChecker {
         if (changes || distinct_changes)
           for (const auto &[dependent, consumer] : effect_dependents_[instance]) {
             if (!changes.other && !distinct_changes) {
-              if (changes.symbols && !changes.returned && consumer.read_round == read_effect_round_ &&
+              if (changes.symbols && !changes.returned && consumer.read_round == symbol_effect_round_ &&
                   (consumer.symbols == SymbolEffectUse::none ||
                    (consumer.symbols == SymbolEffectUse::transport_only && !changes.transport_symbols))) continue;
               if (changes.returned && !changes.symbols && consumer.discards_result && !consumer.reads_result) continue;
@@ -23580,7 +23518,7 @@ class ScalarChecker {
       }
       // New obligations must establish their write guarantees before any read
       // closure can rely on them. Callable choices can also change guarantees.
-      if (reads && (instances != program_.instances.size() || callables != program_.callables.size() || !changed_abstract_inputs_.empty()))
+      if (symbols && (instances != program_.instances.size() || callables != program_.callables.size() || !changed_abstract_inputs_.empty()))
         return false;
       discover();
     }
@@ -25372,7 +25310,7 @@ class ScalarChecker {
     freeze_leaf_behaviors();
     check_entry();
     // Write guarantees use a greatest fixed point, with returned selections
-    // and value categories joining before read requirements close. Narrower
+    // and value categories joining before symbol requirements close. Narrower
     // callees require fresh assumptions for recursive cycles.
     for (;;) {
       effect_dependents_.clear(); callable_effect_consumers_.clear();

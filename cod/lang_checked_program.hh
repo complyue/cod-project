@@ -443,18 +443,6 @@ struct CallBehavior {
   // A case-arm scope preserves normal scan and delivered return as distinct
   // exit summaries. Ordinary callables combine them under normal completion.
   std::optional<CaseScopeExits> case_scope_exits;
-  struct ReadSite {
-    Location at;
-    std::string diagnostic;
-    auto operator<=>(const ReadSite &) const = default;
-  };
-  struct Read {
-    // A local read can only be proved by excluding its missing-write paths.
-    ReadSite site;
-    CleanupEquations::ConditionClauses when{CleanupEquations::ConditionFacts{}};
-    auto operator<=>(const Read &) const = default;
-  };
-  std::set<Read> reads;
   std::map<size_t, std::set<size_t>> initialized;
   std::map<size_t, CleanupEquations::MissingInitialization> uninitialized;
   std::map<size_t, std::set<size_t>> present;

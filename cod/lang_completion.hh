@@ -999,8 +999,6 @@ public:
       initialized.insert(entry.first); return true;
     });
   }
-  // Reaching conditions for callable-image checks, indexed by source site.
-  using Reads = std::map<size_t, ConditionClauses>;
   // Explicit returns retain selected targets or copied value evidence. Cleanup
   // can preserve that pending result, replace it, or join both possibilities.
   struct Returned {
@@ -1111,7 +1109,6 @@ public:
     }
   };
   struct Effects {
-    Reads reads;
     std::set<size_t> initialized;
     Returned returned{};
     Selections selections{};
@@ -1148,7 +1145,6 @@ public:
       for (auto &[truth, clauses] : returned.boolean) clauses = transform(clauses);
       for (auto &[truth, clauses] : returned.nullness) clauses = transform(clauses);
       for (auto &[target, value] : booleans) for (auto &[truth, clauses] : value) clauses = transform(clauses);
-      for (auto &[read, when] : reads) when = transform(when);
       for (auto &[place, clauses] : uninitialized) clauses = transform(clauses);
       for (auto &[capture, clauses] : uninitialized_captures) clauses = transform(clauses);
       resolve_initialization();
@@ -1357,8 +1353,6 @@ private:
     next.transform_values([&](const auto &value) { return value.through(first.payloads, first.thrown, false, false, first.queued_failures); },
         [&](const auto &value) { return value.through(first.payloads, first.thrown, false, true, first.queued_failures); });
     next.transform_conditions([&](const auto &clauses) { return through_conditions(clauses, first.booleans); });
-    for (const auto &[read, when] : next.reads)
-      if (!when.empty()) merge_read(result.reads, read, when);
     combine_initialization(result.initialized, result.uninitialized, next.initialized, next.uninitialized, false);
     combine_initialization(result.selections.initialized_captures, result.uninitialized_captures,
                            next.selections.initialized_captures, next.uninitialized_captures, false);
@@ -1381,7 +1375,6 @@ private:
     auto [found, inserted] = result.try_emplace(completion, std::forward<Incoming>(effects));
     if (inserted) return true;
     auto &known = found->second;
-    const auto previous_reads = known.reads;
     const auto previous_initialized = known.initialized;
     const auto previous_uninitialized = known.uninitialized;
     const auto previous_uninitialized_captures = known.uninitialized_captures;
@@ -1403,7 +1396,6 @@ private:
     known.symbols.insert(effects.symbols.begin(), effects.symbols.end());
     known.payload_writes.insert(effects.payload_writes.begin(), effects.payload_writes.end());
     known.declared_root |= effects.declared_root;
-    for (const auto &[read, before] : effects.reads) merge_read(known.reads, read, before);
     // A queue arm with no writer can leave a place uninitialized only
     // on paths that reach that arm.
     combine_initialization(known.initialized, known.uninitialized, effects.initialized, effects.uninitialized,
@@ -1433,7 +1425,7 @@ private:
     known.selections.merge(effects.selections);
     known.selections.initialized_captures = std::move(captures);
     known.resolve_initialization();
-    return previous_reads != known.reads || previous_initialized != known.initialized || previous_uninitialized != known.uninitialized ||
+    return previous_initialized != known.initialized || previous_uninitialized != known.uninitialized ||
         previous_uninitialized_captures != known.uninitialized_captures ||
         previous_returned != known.returned || previous_thrown != known.thrown || previous_queued != known.queued_failures || previous_unknown_thrown != known.unknown_thrown || previous_payloads != known.payloads ||
         previous_selections != known.selections || previous_symbol_count != known.symbols.size() ||
@@ -1454,10 +1446,6 @@ public:
   }
   void observe_reference(const BooleanValue &observations) {
     for (const auto &[null, paths] : observations) observe_input_conditions(paths);
-  }
-  static void merge_read(Reads &reads, size_t read, const ConditionClauses &when) {
-    auto [found, inserted] = reads.try_emplace(read, when);
-    if (!inserted) for (const auto &facts : when) add_condition(found->second, facts);
   }
   bool has_actions(size_t queue) const {
     std::set<size_t> seen;
@@ -1542,7 +1530,7 @@ public:
       };
       bool changed = false;
       if (!node.action) {
-        auto known = preserve_queue(preserve_pending(Effects{{}, node.initialized}), state);
+        auto known = preserve_queue(preserve_pending(Effects{node.initialized}), state);
         known.uninitialized = node.uninitialized;
         known.reaching = conditions->second;
         known.selections.initialized_captures = node.initialized_captures;
