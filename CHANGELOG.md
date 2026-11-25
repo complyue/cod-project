@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-25 — Retire test fixtures and restore them on demand
+
+<a id="h-test-fixtures-on-demand-20261125"></a>
+**H-TEST-FIXTURES-ON-DEMAND-20261125.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), after an inventory of 72 seed cases was proposed for migration, the project user directed “测试fixture可以都砍了，有需要时再加回来”. The [working rule](AGENTS.md#tests) permits removal of all existing test fixtures, including complete groups. A concrete need determines when to add a case back. This supersedes fixture retention and case-by-case migration expectations. [D-ARCH-REVIEW r174](design/ImplementationArchitecture.md#justifying-compiler-work-before-coding) carries the decision into implementation review. Language contracts and the seed’s delivery objective continue.
+
+## 2026-11-25 — Keep declaration results that supply a translation contract
+
+<a id="k-seed-declared-result-consumers-20261125"></a>
+**K-SEED-DECLARED-RESULT-CONSUMERS-20261125.** D-ARCH-REVIEW r173→174 continues P-682/P-683 under the trusted-source decision. The [review](design/ImplementationArchitecture.md#selecting-a-declared-result-for-translation) traces the comparison-only uses of `check_declared_results` at `8bab8677:cod/lang_checked.hh` and retains covering declarations that determine an omitted result or answer a type query. D-10/H-258 and D-24 retain their language contracts. The [fixture reference](tests/cod/language/README.md#current-implementation-boundary) r486→487 qualifies archived result-mismatch expectations separately from translation and declared failure transport.
+
 ## 2026-11-25 — Move checked operations and prepared defer effects to their consumers
 
 <a id="k-seed-operation-publication-20261125"></a>

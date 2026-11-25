@@ -92,6 +92,8 @@ Require explicit human authorization before any of the following:
 
 ## Tests
 
+Existing test fixtures may all be deleted, including whole fixture groups and their test-only runner entries. Add or restore a fixture when a concrete development or delivery need arises. Check the requested behavior through the real workload where it supplies the evidence. [Fixture retirement decision](CHANGELOG.md#h-test-fixtures-on-demand-20261125)
+
 Run test scripts only when asked. Confirm the component if unclear. Set `COD_TEST_TOOLCHAIN=build` by default and use `built` for release/pre-release context. Use the appropriate script under `tests/` or CTest/CMake test target.
 
 ## Memory Regions and Regional Types
