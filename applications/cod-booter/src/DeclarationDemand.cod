@@ -12,10 +12,12 @@ using "./NameResolution.cod" { NameBindings, NameWork, enclosing_callable, calla
 using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField } };
 using "./ExceptionTypes.cod" ExceptionType;
 using "./NativeDeclarations.cod" {
-    SuppliedViews, read_acquisition_failure, has_imported_native_loan, source_handle_callable
+    SuppliedViews, read_acquisition_failure, has_imported_native_loan, source_handle_callable,
+    prepared_byte_function
 };
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" sum_type;
+using "./ModuleExportStorage.cod" ByteFunctionCompletion { NoByteFunction };
 using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt } };
 
 export data DeclarationDemand {
@@ -137,9 +139,10 @@ func require_transfer_signatures(links:const NameWork in W, demand:DeclarationDe
 }
 
 func require_called_contracts(nodes:const ExprNodes in N, names:const NameBindings in B,
-    links:const NameWork in W, demand:DeclarationDemands in D,
+    links:const NameWork in W, views:const SuppliedViews in V, demand:DeclarationDemands in D,
     scope:u64, revision:u64, used:u64, count:u64 in Q, receipt_count:u64 in R,
-    prove_loans:bool) -> u64 where {const owner N, const owner B, const owner W, owner D, owner Q, owner R} {
+    prove_loans:bool) -> u64 where {const owner N, const owner B, const owner W, const owner V,
+        owner D, owner Q, owner R} {
     ref sites = make CallableSites {
         signature <- no_node(); body <- no_node(); function_form <- false;
     };
@@ -159,7 +162,8 @@ func require_called_contracts(nodes:const ExprNodes in N, names:const NameBindin
         if (prove_loans) {
             if (!require_receipt_body(demand, definition, count, receipt_count, used)) return call
         } else {
-            if (form == LexicalCallable && !require_body(demand, definition, count, used, true)) return call
+            if ((form == LexicalCallable || prepared_byte_function(views, definition, false)) &&
+                !require_body(demand, definition, count, used, true)) return call
         };
         (call <- demand[call].next_call):void
     };
@@ -195,7 +199,7 @@ export func discover_declaration_demand(
                 return false
             };
             demand[site].declared_failure <- clause;
-            if ((clause != no_node() || links[site].sum_loan_formals ||
+            if ((clause != no_node() || links[site].sum_loan_formals || prepared_byte_function(views, site, true) ||
                  source_handle_callable(nodes, names, selected, links, site, used, revision)) &&
                 !require_body(demand, site, count, used, true)) {
                 problem <- site;
@@ -223,7 +227,8 @@ export func discover_declaration_demand(
         scope <- enclosing_callable(nodes, names, names[site].scope);
         demand[site].scope <- scope;
         checked_call <- links[site].imported_interface != no_node() &&
-            links[site].imported_failure_checked != 0u8;
+            (links[site].imported_failure_checked != 0u8 ||
+             links[site].imported_byte_completion != NoByteFunction);
         shape <- direct_invocation(nodes, revision, used, site, invocation);
         if (shape == InvalidInvocation) {
             problem <- site;
@@ -245,7 +250,8 @@ export func discover_declaration_demand(
                 demand[site].next_call <- demand[scope].first_call;
                 (demand[scope].first_call <- site):void
             };
-            checked_call <- family_needs_checked_operands(links, demand, definition, used);
+            checked_call <- family_needs_checked_operands(links, demand, definition, used) ||
+                prepared_byte_function(views, definition, false);
             if (shape == DirectInvocationReady &&
                 passes_case_receipt(nodes, names, links, cases, invocation.arguments, used, revision)) {
                 if (!require_receipt_body(demand, definition, count, receipt_count, used)) {
@@ -270,7 +276,7 @@ export func discover_declaration_demand(
     val failed <- no_node();
     for (item in 0u64 .. used) {
         if (item < receipt_count) {
-            failed <- require_called_contracts(nodes, names, links, demand, demand[item].receipt_pending, revision,
+            failed <- require_called_contracts(nodes, names, links, views, demand, demand[item].receipt_pending, revision,
                 used, count, receipt_count, true);
             if (failed != no_node()) {
                 problem <- failed;
@@ -280,7 +286,7 @@ export func discover_declaration_demand(
     };
     for (item in 0u64 .. used) {
         if (item >= count) return true;
-        failed <- require_called_contracts(nodes, names, links, demand, demand[item].pending, revision, used,
+        failed <- require_called_contracts(nodes, names, links, views, demand, demand[item].pending, revision, used,
             count, receipt_count, false);
         if (failed != no_node()) {
             problem <- failed;

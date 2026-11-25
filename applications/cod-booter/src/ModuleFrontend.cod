@@ -1,3 +1,4 @@
+using "./ModuleExportStorage.cod" ByteFunctionCompletion { NoByteFunction };
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
     NameReference, IntegerLiteral, BooleanLiteral, NamedThrow, LocalBinding, Formal, ExceptionResult, TypeConstraint, SumDefinition,
@@ -489,7 +490,7 @@ export func bind_module(source:const SourceBytes in S, tokens:Tokens in T, nodes
         membership <- UnprovedMembership;
         native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
         aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-        scalar_object_body <- false; object_view <- make NoCallableObjectView {};
+        scalar_object_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
     });
     ref facts = make AggregateFacts(result.frontend.tree.used, UnprovedAggregate);
     ref no_selections = make CheckedSelections(0u64, make UnpublishedSelection {});

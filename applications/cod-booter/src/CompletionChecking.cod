@@ -67,6 +67,10 @@ using "./ModuleExports.cod" {
     out_of_memory_identity, index_out_of_bounds_identity, type_assertion_failed_identity, text_byte_export,
 };
 using "./ExceptionTypes.cod" exception_type_covers;
+using "./ModuleExportStorage.cod" ByteFunctionCompletion {
+    NoByteFunction, CheckedByteFunction, ByteFunctionMayFailBounds
+};
+using "./NativeDeclarations.cod" prepared_byte_function;
 
 export data CompletionSite {
     event:u8;
@@ -78,6 +82,7 @@ export data CompletionSite {
     in_delayed_body:u8;
     in_supplied_body:bool;
     escaping_failure:u8;
+    byte_completion:ByteFunctionCompletion;
     case_break:u8;
     case_scan:u8;
     guarded_by:u64;
@@ -121,6 +126,7 @@ export func unproved_caught_handoff() -> u8 { return 11u8; }
 func unproved_nonnull_argument() -> u8 { return 12u8; }
 func unproved_nonnull_binding() -> u8 { return 16u8; }
 export func unsupported_case_transfer() -> u8 { return 18u8; }
+func unproved_byte_completion() -> u8 { return 19u8; }
 
 func initialize_site(sites:CompletionSites in X, at:u64) -> void where {owner X} {
     sites[at].event <- 0u8;
@@ -131,6 +137,7 @@ func initialize_site(sites:CompletionSites in X, at:u64) -> void where {owner X}
     sites[at].forwarded_operand <- 0u8;
     sites[at].in_delayed_body <- 0u8;
     sites[at].in_supplied_body <- false;
+    sites[at].byte_completion <- NoByteFunction;
     sites[at].case_break <- 0u8;
     sites[at].case_scan <- 0u8;
     sites[at].guarded_by <- no_node();
@@ -814,6 +821,9 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
             # The declaration alone cannot prove coverage of residual
             # failures raised while draining an imported deferred call.
             if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8) return unproved_deferred_error();
+            if (links[at].imported_byte_completion == ByteFunctionMayFailBounds)
+                return route_failure(nodes, names, links, facts, sites, at, used, revision,
+                    index_out_of_bounds_identity(), 0u8, possible_failure());
             return 0u8;
         };
         if (facts[at].text_intrinsic == text_byte_export())
@@ -825,6 +835,17 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
             sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8))
             return unproved_deferred_error();
         val declaration <- sites[facts[at].call_definition].throws_clause;
+        val definition <- facts[at].call_definition;
+        if (prepared_byte_function(views, definition, false)) {
+            if (definition >= at || declaration != no_node() ||
+                sites[definition].byte_completion == NoByteFunction) return unproved_byte_completion();
+            if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8)
+                return unproved_deferred_error();
+            if (sites[definition].byte_completion == ByteFunctionMayFailBounds)
+                return route_failure(nodes, names, links, facts, sites, at, used, revision,
+                    index_out_of_bounds_identity(), 0u8, possible_failure());
+            return 0u8
+        };
         if (declaration == no_node()) return 0u8;
         return check_call_completion(nodes, names, links, facts, sites, at,
             facts[declaration].identity_module, facts[declaration].identity,
@@ -883,6 +904,41 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
     };
     if (facts[at].kind == never_result()) { sites[at].can_continue <- 0u8; {}; } else {};
     return 0u8;
+}
+
+func record_byte_completion(nodes:const ExprNodes in N, names:const NameBindings in B,
+    links:const NameWork in L, facts:const OperandFacts in F, views:const SuppliedViews in V,
+    sites:CompletionSites in X, at:u64, used:u64, revision:u64) -> u8
+    where {const owner N, const owner B, const owner L, const owner F, const owner V, owner X} {
+    if (prepared_byte_function(views, at, false)) {
+        if (can_miss_return(nodes, facts, sites, at, revision, used)) return unproved_byte_completion();
+        if (sites[at].byte_completion == NoByteFunction) {
+            (sites[at].byte_completion <- CheckedByteFunction):void
+        };
+        return 0u8
+    };
+    val event <- sites[at].event;
+    if (event == skipped_operand() || names[at].scope == no_node()) return 0u8;
+    val failed <- event == possible_failure() || event == definite_failure();
+    ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
+    val invokes <- inspect_invocation(nodes, revision, used, at, call) == OrdinaryInvocation;
+    ref index = make IndexSites { target <- no_node(); index <- no_node() };
+    val unproved_index <- !facts[at].checks_array_bounds &&
+        inspect_index_selection(nodes, revision, used, at, index);
+    if (!failed && !invokes && !unproved_index) return 0u8;
+    val definition <- enclosing_callable(nodes, names, names[at].scope);
+    if (!prepared_byte_function(views, definition, false)) return 0u8;
+    if (unproved_index) return unproved_byte_completion();
+    if (invokes && links[at].imported_byte_completion == NoByteFunction &&
+        !prepared_byte_function(views, facts[at].call_definition, false))
+        return unproved_byte_completion();
+    if (failed && sites[at].replacing_try != no_node()) return unproved_byte_completion();
+    if (failed && sites[at].destination == definition) {
+        if (sites[at].category_module != 0u64 || sites[at].category != index_out_of_bounds_identity())
+            return unproved_byte_completion();
+        (sites[definition].byte_completion <- ByteFunctionMayFailBounds):void
+    };
+    return 0u8
 }
 
 # Every normal fallthrough crosses the direct items of the procedure body.
@@ -1054,7 +1110,11 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
         if (needs_body_check(demand, at)) {
             report.diagnostic <- check_event(
                 nodes, names, links, facts, views, sites, at, tree.used, tree.revision);
-            if (report.diagnostic != 0u8) { report.node <- at; return false; } else {}
+            if (report.diagnostic == 0u8) {
+                report.diagnostic <- record_byte_completion(nodes, names, links, facts, views,
+                    sites, at, tree.used, tree.revision)
+            };
+            if (report.diagnostic != 0u8) { report.node <- at; return false; }
         }
     };
     return check_escaping_failure_paths(nodes, names, links, facts, sites, demand, report,

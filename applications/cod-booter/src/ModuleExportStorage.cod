@@ -29,6 +29,7 @@ export func constructor_type() -> u8 { return 40u8; }
 
 export enum AggregateStorage:u8 { UnprovedAggregate; CoDBitsAggregate; CLayoutBitsRecord; NonBitsAggregate; }
 export enum InterfaceCallableKind:u8 { NoCallableKind; CheckedFunction; CheckedProcedure; }
+export enum ByteFunctionCompletion:u8 { NoByteFunction; CheckedByteFunction; ByteFunctionMayFailBounds; }
 export enum ExceptionSchema:u8 { OrdinarySchema; CheckedExceptionSchema; UncheckedExceptionSchema; }
 
 # Every membership header already identifies its defining source row. In
@@ -131,6 +132,7 @@ export data ModuleInterfaceRow {
     exception_schema:ExceptionSchema;
     field_mode:FormalMode;
     scalar_object_body:bool;
+    byte_completion:ByteFunctionCompletion;
     object_view:CallableObjectView;
 }
 export array ModuleInterfaces[u64]:ModuleInterfaceRow;
@@ -166,6 +168,7 @@ export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:
     row.exception_schema <- (OrdinarySchema:ExceptionSchema);
     row.field_mode <- ValueFormal;
     row.scalar_object_body <- false;
+    row.byte_completion <- NoByteFunction:ByteFunctionCompletion;
     return;
 }
 
@@ -185,7 +188,7 @@ export func write_sum_row(interfaces:ModuleInterfaces in I, row:u64, module:u64,
         membership <- (UnprovedMembership:FamilyMembership);
         aggregate_storage <- (UnprovedAggregate:AggregateStorage);
         exception_schema <- (OrdinarySchema:ExceptionSchema); field_mode <- ValueFormal;
-        scalar_object_body <- false; object_view <- make NoCallableObjectView {};
+        scalar_object_body <- false; byte_completion <- (NoByteFunction:ByteFunctionCompletion); object_view <- make NoCallableObjectView {};
     };
     return;
 }
@@ -203,7 +206,7 @@ export func write_object_view(interfaces:ModuleInterfaces in I, at:u64, publishe
         sum_payload <- make NoSumInterface {};
         aggregate_storage <- (UnprovedAggregate:AggregateStorage);
         exception_schema <- (OrdinarySchema:ExceptionSchema); field_mode <- ValueFormal;
-        scalar_object_body <- false;
+        scalar_object_body <- false; byte_completion <- (NoByteFunction:ByteFunctionCompletion);
         object_view <- view
     };
     return
