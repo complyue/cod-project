@@ -657,9 +657,11 @@ class ScalarChecker {
   bool validating_ = false;
   bool exporting_effects_ = true;
   CallEffects observed_;
-  CallEffects &observe_effects() {
+  bool exports_call_behavior() const { return exporting_effects_ && !closing_symbol_effects_; }
+  bool exports_symbol_uses() const { return exporting_effects_ && !closing_write_effects_; }
+  CallBehavior &observe_call_behavior() {
     if (applying_scalar_) throw std::logic_error("scalar application cannot collect a callable contract");
-    if (!exporting_effects_) throw std::logic_error("preliminary body traversal cannot export a callable contract");
+    if (!exports_call_behavior()) throw std::logic_error("traversal cannot export call behavior");
     return observed_;
   }
   std::vector<std::set<size_t>> possible_targets_, possible_null_sources_, target_dependencies_;
@@ -835,7 +837,7 @@ class ScalarChecker {
       if (validating_) implementation_gap(at, "allocating into a caller owner through a higher-order here receiver");
       return;
     }
-    if (exporting_effects_) observe_effects().lexical_allocations.insert(null_target - 1 - *actual);
+    if (exports_call_behavior()) observe_call_behavior().lexical_allocations.insert(null_target - 1 - *actual);
   }
   CheckedOperation::ArrayAllocator array_allocator(std::optional<size_t> actual, const Location &at) const {
     using Allocator = CheckedOperation::ArrayAllocator;
@@ -866,8 +868,8 @@ class ScalarChecker {
     implementation_gap(at, "array allocation without a proved lexical or regional allocator");
   }
   void observe_array_allocation(const CheckedOperation::ArrayAllocator &allocator) {
-    if (exporting_effects_ && lexical_.live && allocator.kind == CheckedOperation::ArrayAllocator::input)
-      observe_effects().array_allocations.insert(allocator.place);
+    if (exports_call_behavior() && lexical_.live && allocator.kind == CheckedOperation::ArrayAllocator::input)
+      observe_call_behavior().array_allocations.insert(allocator.place);
   }
   size_t owner_lifetime_scope(size_t owner) const {
     if (const auto region = region_owners_.find(owner); region != region_owners_.end())
@@ -4453,7 +4455,10 @@ class ScalarChecker {
     }
     if (!proving_ || !state.live || state.symbols.get(symbol).bound) return;
     if (delayed_) state.deferred_symbols.insert(symbol);
-    else if (exporting_effects_) observe_effects().symbols.insert(symbol);
+    else if (exports_symbol_uses()) {
+      if (applying_scalar_) throw std::logic_error("scalar application cannot collect symbol requirements");
+      observed_.symbols.insert(symbol);
+    }
   }
   size_t initialization_frame() const { return deferred_action_ ? CleanupEquations::action_frame(*deferred_action_) : 0; }
   void apply_effects(LexicalState &state, CleanupEquations::Effects &effects, const Location &at) {
@@ -5915,12 +5920,12 @@ class ScalarChecker {
     return captured;
   }
   void observe_scope_exit(std::optional<HereExit> here_exit, const ExceptionFacts &exceptions) {
-    if (!proving_ || !exporting_effects_) return;
-    if (here_exit == HereExit::return_supplier) observe_effects().returns_from_supplier = true;
-    if (here_exit == HereExit::break_call) observe_effects().breaks_here_call = true;
+    if (!proving_ || !exports_call_behavior()) return;
+    if (here_exit == HereExit::return_supplier) observe_call_behavior().returns_from_supplier = true;
+    if (here_exit == HereExit::break_call) observe_call_behavior().breaks_here_call = true;
     if (checking_method_ && (checking_method_->source->implicit_scope || checking_method_->here_group))
       for (const auto category : exceptions.possibilities())
-        if (program_.exception_types.at(category).checked) observe_effects().scope_checked_failures.insert(category);
+        if (program_.exception_types.at(category).checked) observe_call_behavior().scope_checked_failures.insert(category);
   }
   void append_abrupt(AbruptFlow &destination, AbruptPath path) {
     const auto categories = path.exceptions.possibilities();
@@ -5946,8 +5951,8 @@ class ScalarChecker {
   }
   void note_declared_root() {
     if (abrupt_) { abrupt_->declared_root = true; return; }
-    if (proving_ && exporting_effects_ && checking_method_ && (checking_method_->source->implicit_scope || checking_method_->here_group))
-      observe_effects().scope_checked_failures.insert(0);
+    if (proving_ && exports_call_behavior() && checking_method_ && (checking_method_->source->implicit_scope || checking_method_->here_group))
+      observe_call_behavior().scope_checked_failures.insert(0);
   }
   void refine_test(const CheckedOperation::NullTest &test, bool value) {
     const auto current = lexical_.targets.find(test.binding);
@@ -22314,7 +22319,7 @@ class ScalarChecker {
   }
 
   void observe_outcome(size_t reason, const LexicalState &state) {
-    auto &observed = observe_effects();
+    auto &observed = observe_call_behavior();
     const auto completion = Completion{reason};
     if (completion.failed()) observed.escaping_failures.insert(reason);
     if (completion.protected_here()) observed.propagates_here_transfer = true;
@@ -22966,7 +22971,7 @@ class ScalarChecker {
       AbruptFlow flow{1, {}}, outcomes{1, {}};
       abrupt_ = &flow;
       std::optional<LexicalState> capture_failure_entry;
-      if (proving && exporting_effects_ && std::ranges::any_of(instance.environment,
+      if (proving && exports_call_behavior() && std::ranges::any_of(instance.environment,
               [](const auto &capture) { return capture.type.kind == Type::procedure; }))
         capture_failure_entry = lexical_;
       CheckedOperation completed;
@@ -22999,8 +23004,8 @@ class ScalarChecker {
           record_warning_key(instance.method, warned_missing_return_, &ReplayWarnings::missing_return))
         record_warning({Warning::missing_return, method.at, method.ordinary_procedure()
             ? "procedure may finish without an explicit return" : "callable may finish without a result"});
-      if (proving && exporting_effects_) {
-        auto &observed = observe_effects();
+      if (proving && exports_call_behavior()) {
+        auto &observed = observe_call_behavior();
         if (method.case_scan_scope) observed.case_scope_exits.emplace();
         // Complete capture preparation can fail before the body registers any
         // cleanup or establishes output facts. Retain this incoming outcome
@@ -23041,12 +23046,12 @@ class ScalarChecker {
         for (const auto category : unproved_owners) observed.direct_owned_failures.erase(category);
       }
     });
-    if (scalar_exits) return;
+    if (scalar_exits || !exports_call_behavior()) return;
     if (leaf) {
       // Application and summary publication cannot start during extraction.
       complete_leaf_exits(*leaf, instance, leaf_exits);
     }
-    auto &observed = observe_effects();
+    auto &observed = observe_call_behavior();
     for (const auto place : payload_writes_.places)
       if (storage(place).borrowed) observed.written_inputs.insert(input_ordinal(place));
     std::erase_if(observed.uninitialized, [](const auto &entry) { return entry.second.empty(); });
