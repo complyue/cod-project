@@ -1221,8 +1221,6 @@ public:
     MissingInitialization uninitialized{};
     // Saved reference selections have readiness independent of physical cells.
     MissingInitialization uninitialized_captures{};
-    bool needs_checked_cleanup_proof = false;
-    bool uncovered_deferred_root = false;
     std::vector<ExceptionFacts> queued_failures{};
     // Necessary immutable input facts for reaching this queue completion.
     ConditionClauses reaching{ConditionFacts{}};
@@ -1287,16 +1285,7 @@ public:
     std::vector<Path> paths;
     bool observes_return = false;
     bool bodyless_catch = false;
-    bool catches_root = false;
     std::set<size_t> catches{};
-  };
-  // Checked deferred arrivals have a different obligation from ordinary
-  // scope-body failures. Declared roots also have hypothetical arrivals.
-  enum class DeferredCoverage { none, checked, declared_root };
-  struct DeferredOccurrence {
-    size_t reason;
-    DeferredCoverage coverage = DeferredCoverage::none;
-    auto operator<=>(const DeferredOccurrence &) const = default;
   };
   // This bounds the proof of growing registration cycles. Native delivery
   // uses one record per successful registration.
@@ -1304,7 +1293,7 @@ public:
   struct DrainState {
     size_t encoded;
     size_t body_failure = 0;
-    std::vector<DeferredOccurrence> pending{};
+    std::vector<size_t> pending{};
     bool fifo = false;
     bool cyclic = false;
     bool unproved = false;
@@ -1312,15 +1301,12 @@ public:
     bool resumes_body_failure() const { return body_failure && pending.empty(); }
     Completion completion() const {
       const auto current = active();
-      if (body_failure == 2 || std::ranges::any_of(pending, [](const auto &entry) { return entry.reason == 2; }))
+      if (body_failure == 2 || std::ranges::find(pending, size_t{2}) != pending.end())
         return {2, current.returned};
       if (!pending.empty()) return Completion::failure(deferred_aggregate_id, current.returned);
       return body_failure ? Completion{body_failure, current.returned} : current;
     }
     bool has_deferred_failure() const { return !pending.empty(); }
-    bool pending_checked() const {
-      return std::ranges::any_of(pending, [](const auto &entry) { return entry.coverage != DeferredCoverage::none; });
-    }
     auto operator<=>(const DrainState &) const = default;
   };
   Targets project_observed_return(Effects &effects, const Returned &incoming, const Selections &entry) const {
@@ -1356,11 +1342,10 @@ private:
   Effects preserve_queue(Effects effects, const DrainState &state) const {
     effects.queued_failures.clear();
     for (size_t i = 0; i < state.pending.size(); ++i) {
-      const Completion occurrence{state.pending[i].reason};
+      const Completion occurrence{state.pending[i]};
       effects.queued_failures.push_back(occurrence.exception() ? ExceptionFacts::deferred_input(i, occurrence.category())
                                                                : ExceptionFacts{});
     }
-    effects.needs_checked_cleanup_proof |= state.unproved;
     return effects;
   }
   const Outcomes &identity(DrainState completion) {
@@ -1393,7 +1378,7 @@ private:
     }
     return {handles_failures, cyclic};
   }
-  void advance_deferred_phase(DrainState &state, const Action &action, size_t action_id,
+  void advance_deferred_phase(DrainState &state, size_t action_id,
                               std::optional<size_t> selected, Completion completed, Effects &effects) const {
     const auto incoming = state.active();
     if (completed.returned || (completed.reason && !completed.failed())) state.body_failure = 0;
@@ -1404,36 +1389,26 @@ private:
 
     ExceptionFacts arrival;
     if (selected) {
-      const auto &occurrence = state.pending[*selected];
       arrival = effects.queued_failures[*selected];
-      if (occurrence.coverage == DeferredCoverage::declared_root && !action.catches_root)
-        effects.needs_checked_cleanup_proof = true;
       state.pending.erase(state.pending.begin() + *selected);
       effects.queued_failures.erase(effects.queued_failures.begin() + *selected);
     }
     effects.transform_values([&](const auto &value) { return value.enter(action_id, arrival); });
     if (!completed.failed()) return;
 
-    const auto coverage = completed.exception() &&
-        (exception_types_[completed.category()].checked || !effects.declared_failures.empty())
-        ? DeferredCoverage::checked : DeferredCoverage::none;
     auto reason = completed.reason;
     if (!state.fifo && !state.pending.empty()) {
-      // A pass without a deferred handler only needs residual presence,
-      // terminal status and checked obligations. Native delivery retains
-      // the complete ordered sequence.
-      if (state.pending_checked() || coverage != DeferredCoverage::none)
-        effects.needs_checked_cleanup_proof = true;
-      if (state.pending.front().reason == 2) reason = 2;
+      // Without a deferred handler the model needs only residual presence and
+      // terminal status. Native delivery retains the complete ordered sequence.
+      if (state.pending.front() == 2) reason = 2;
       state.pending.clear();
       effects.queued_failures.clear();
     }
     if (state.cyclic && state.pending.size() == deferred_proof_depth) {
       state.unproved = true;
-      effects.needs_checked_cleanup_proof = true;
       return;
     }
-    state.pending.push_back({reason, coverage});
+    state.pending.push_back(reason);
     effects.queued_failures.push_back(completed.exception() ? effects.thrown : ExceptionFacts{});
   }
   static ConditionClauses intersect_reaching(const ConditionClauses &left, const ConditionClauses &right) {
@@ -1462,8 +1437,6 @@ private:
     result.payload_writes.insert(second.payload_writes.begin(), second.payload_writes.end());
     result.present.insert(second.present.begin(), second.present.end());
     result.declared_failures.insert(second.declared_failures.begin(), second.declared_failures.end());
-    result.needs_checked_cleanup_proof = first.needs_checked_cleanup_proof || second.needs_checked_cleanup_proof;
-    result.uncovered_deferred_root = first.uncovered_deferred_root || second.uncovered_deferred_root;
     if (!unconditional(second.action_reaching)) {
       const auto unknown = unknown_boolean();
       const auto lifted = substitute_boolean_payloads(second.action_reaching, [&](size_t place) -> const BooleanValue * {
@@ -1533,8 +1506,6 @@ private:
     const auto previous_present = known.present;
     const auto previous_booleans = known.booleans;
     const auto previous_declared = known.declared_failures;
-    const auto previous_checked_cleanup = known.needs_checked_cleanup_proof;
-    const auto previous_uncovered_root = known.uncovered_deferred_root;
     const auto previous_selections = known.selections;
     const auto previous_symbols = known.symbols;
     const auto previous_reaching = known.reaching;
@@ -1544,8 +1515,6 @@ private:
     known.symbols.insert(effects.symbols.begin(), effects.symbols.end());
     known.payload_writes.insert(effects.payload_writes.begin(), effects.payload_writes.end());
     known.declared_failures.insert(effects.declared_failures.begin(), effects.declared_failures.end());
-    known.needs_checked_cleanup_proof = previous_checked_cleanup || effects.needs_checked_cleanup_proof;
-    known.uncovered_deferred_root = previous_uncovered_root || effects.uncovered_deferred_root;
     for (const auto &[read, before] : effects.reads) merge_read(known.reads, read, before);
     // A queue arm with no writer can leave a place uninitialized only
     // on paths that reach that arm.
@@ -1581,7 +1550,6 @@ private:
         previous_returned != known.returned || previous_thrown != known.thrown || previous_queued != known.queued_failures || previous_unknown_thrown != known.unknown_thrown || previous_payloads != known.payloads ||
         previous_selections != known.selections || previous_symbols != known.symbols || previous_payload_writes != known.payload_writes ||
         previous_present != known.present || previous_booleans != known.booleans || previous_declared != known.declared_failures ||
-        previous_checked_cleanup != known.needs_checked_cleanup_proof || previous_uncovered_root != known.uncovered_deferred_root ||
         previous_reaching != known.reaching || previous_action_reaching != known.action_reaching;
   }
 public:
@@ -1660,8 +1628,8 @@ public:
     if (!queue) return identity(ordinary);
     std::tie(ordinary.fifo, ordinary.cyclic) = defer_graph(queue);
     // Discovery uses the call signature's broad failure envelope before
-    // executable call effects have closed. Only the coverage pass expands
-    // those arrivals into their ordered positions.
+    // executable call effects have closed. Summarize those arrivals without
+    // expanding them into ordered positions during discovery.
     if (!proving) ordinary.fifo = false;
     const QueueState root{queue, ordinary};
     const auto [entry, inserted] = solved_.try_emplace(root);
@@ -1701,32 +1669,20 @@ public:
             merge(visited, from, prefix);
             return;
           }
-          const auto input = deferred_input({selected ? from.pending[*selected].reason : 0, from.active().returned},
+          const auto input = deferred_input({selected ? from.pending[*selected] : 0, from.active().returned},
                                            selected.has_value(), action.observes_return);
           for (const auto &path : action.paths) {
             if (path.input != input) continue;
             auto outgoing = from;
             auto effects = preserve_queue(path.effects, outgoing);
             effects.reaching = intersect_reaching(effects.reaching, conditions->second);
-            advance_deferred_phase(outgoing, action, *node.action, selected, path.completion, effects);
+            advance_deferred_phase(outgoing, *node.action, selected, path.completion, effects);
             for (const auto &[intermediate, nested] : require(path.queue, outgoing)) {
               auto invoked = compose(effects, nested);
               invoked.enter_initialization(action_frame(*node.action));
               invoked.enter_selection_guards(*node.action);
               invoked.transform_conditions([&](const auto &clauses) { return enter_conditions(clauses, *node.action); });
               invoked.action_reaching = enter_conditions(invoked.action_reaching, *node.action);
-              // An explicit root declaration remains an obligation even on
-              // executable paths where the operation prepares no failure.
-              if (!effects.declared_failures.empty()) for (const auto category : categories_) {
-                auto possible = outgoing;
-                if (path.completion.failed()) possible.pending.pop_back();
-                possible.pending.push_back({Completion::failure(category).reason, DeferredCoverage::declared_root});
-                if (possible.cyclic && possible.pending.size() > deferred_proof_depth) possible.unproved = true;
-                for (const auto &[residual, evidence] : require(node.previous.front(), possible)) {
-                  invoked.uncovered_deferred_root |= residual.pending_checked() || evidence.uncovered_deferred_root;
-                  invoked.needs_checked_cleanup_proof |= evidence.needs_checked_cleanup_proof;
-                }
-              }
               merge(visited, intermediate, compose(prefix, invoked));
             }
           }
@@ -1738,8 +1694,8 @@ public:
           // The original length determines the visit. A matched entry is
           // removed at the cursor and its outputs go behind the incoming suffix.
           size_t cursor = 0;
-          for (const auto &occurrence : state.pending) {
-            const Completion failure{occurrence.reason};
+          for (const auto reason : state.pending) {
+            const Completion failure{reason};
             if (!failure.exception() || !action.catches.contains(failure.category())) {
               ++cursor;
               continue;

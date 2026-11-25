@@ -6684,14 +6684,8 @@ class ScalarChecker {
           const auto reaching = CleanupEquations::substitute_boolean_payloads(effects.action_reaching, resolve_boolean, false, true);
           if (CleanupEquations::conjoin_conditions(reaching, CleanupEquations::boolean_conditions(path_conditions(state))).empty()) continue;
         }
-        if (proving_ && validating_) {
-          if (effects.uncovered_deferred_root)
-            fail(path.at, "declared checked failure 'Exception' requires coverage within the owning pass");
-          if (effects.needs_checked_cleanup_proof)
-            implementation_gap(path.at, "checked failures involving deferred execution require coverage within the owning pass");
-          if (outcome.pending_checked())
-            fail(path.at, "checked deferred failure requires coverage within the owning pass");
-        }
+        if (proving_ && validating_ && outcome.unproved)
+          implementation_gap(path.at, "cyclic deferred failure queue exceeds the translation model");
         applied.transform_conditions([&](const auto &clauses) {
           return CleanupEquations::substitute_boolean_payloads(clauses, resolve_boolean, true);
         });
@@ -22362,7 +22356,6 @@ class ScalarChecker {
       if (summary.bodyless_catch) for (const auto &clause : std::span{expr.children}.subspan(1)) {
         if (clause->kind != K::handler) break;
         const auto &type = operations.at(clause.get()).type;
-        summary.catches_root |= !type.identity;
         summary.catches.merge(exception_possibilities(type));
       }
       const auto writes_storage = [](const CleanupEquations::Action &part) {
