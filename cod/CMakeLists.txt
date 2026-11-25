@@ -1,17 +1,14 @@
 
 set( LLVM_LINK_COMPONENTS
   ${LLVM_TARGETS_TO_BUILD}
+  BitWriter
   Core
-  LineEditor
-  Option
-  OrcJIT
   Support
+  TargetParser
   )
 
 add_clang_tool( cod
   main.cc
-  cod_cache.cc
-  cod_workspace.cc
   )
 
 target_link_libraries( cod PRIVATE
@@ -19,12 +16,5 @@ target_link_libraries( cod PRIVATE
   )
 
 clang_target_link_libraries( cod PRIVATE
-  clangAST
   clangBasic
-  clangFrontend
-  clangInterpreter
-  clangLex
-  clangParse
-  clangSema
-  clangSerialization
   )
