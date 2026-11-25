@@ -9111,12 +9111,16 @@ class ScalarChecker {
                                     const Location &at) const {
     if (!state.checks_initialization() || !state.selections.initialization_reachable) return;
     // An unresolved receiver can make a different candidate's field evidence insufficient.
-    bool inline_product = false, unresolved = false;
+    bool required_fields = false, unresolved = false;
     for (const auto &place : target.places) if (const auto *product = std::get_if<QueryProductPlace>(&place)) {
-      inline_product |= inline_query_product(*product).has_value();
       unresolved |= !product->reservation && !product->enclosing;
+      if (const auto type = inline_query_product(*product)) {
+        const auto &schema = program_.schemas.at(*type);
+        // A checked bits layout also excludes reference fields in inline children.
+        required_fields |= !schema.layout_checked || !schema.bits;
+      }
     }
-    if (!inline_product && !unresolved) return;
+    if (!required_fields && !unresolved) return;
     const auto &flow = state.selections;
     const auto reaching = state.selections.outcome(state.selections.selection_outcomes(target), true);
     // Follow required edges, keeping inline field paths and ending the path on a reference edge.
@@ -24369,6 +24373,7 @@ class ScalarChecker {
           if (valid) {
             schema.has_sum_storage = has_sum;
             schema.has_enum_storage = has_enum;
+            schema.layout_checked = true;
           }
         }
       }

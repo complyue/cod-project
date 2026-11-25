@@ -359,6 +359,7 @@ struct CheckedSchema {
   std::optional<size_t> abstract_parent = {};
   bool lexical_builder = false;
   bool has_sum_storage = false;
+  bool layout_checked = false;
 };
 
 struct CheckedSum {
