@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import tempfile
 
+from language_test_support import seed_executable
 from regional_runtime_tests import run_case
 
 HARNESS = r'''
@@ -171,7 +172,7 @@ behave @print(7002u64);
                           '26', '24', '31', '31', '23', '19', '327', '2569', '19', '19',
                           '6001', '6002', '109', '9', '6201', '6202', '9', '7001',
                           str(sum(4 * (i % 97) + 2570 for i in range(10000))), '7002'], output
-        evidence.update(compiler_sha256=hashlib.sha256((toolchain / "bin/cod").read_bytes()).hexdigest(),
+        evidence.update(compiler_sha256=hashlib.sha256(seed_executable(toolchain).read_bytes()).hexdigest(),
                         fixture_sha256=hashlib.sha256(fixture.read_bytes()).hexdigest(),
                         script_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
         parameters = directory / "closures/callable-parameters.cod"

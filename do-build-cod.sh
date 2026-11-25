@@ -224,7 +224,7 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 	#     https://github.com/llvm/llvm-project/issues/43419
 	#
 	{ test "${COD_RECONFIGURE_BOOTSTRAP:-0}" != 1 &&
-		test -x "$STAGE2_INSTALL_DIR/bin/cod" &&
+		test -x "$STAGE2_INSTALL_DIR/bin/cod-seed" &&
 		test -x "$STAGE2_INSTALL_DIR/bin/clang++" &&
 		test -x "$STAGE2_INSTALL_DIR/bin/$BOOTSTRAP_LINKER"; } || (
 		#

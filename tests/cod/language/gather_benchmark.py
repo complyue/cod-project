@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 import time
 
-from language_test_support import runtime_archive
+from language_test_support import runtime_archive, seed_executable
 
 
 def run(command, root):
@@ -89,7 +89,7 @@ def main():
         bitcode = scratch / 'main.bc'
         runtime = runtime_archive(toolchain)
         entry.write_text(source)
-        _, frontend_seconds = run([toolchain / 'bin/cod', '--check', entry, '--emit-llvm', generated, '--emit-bc', bitcode], root)
+        _, frontend_seconds = run([seed_executable(toolchain), '--check', entry, '--emit-llvm', generated, '--emit-bc', bitcode], root)
         command = [toolchain / 'bin/clang', '-O2', '-fuse-ld=lld', bitcode, runtime, '-o', executable]
         _, compile_seconds = run(command, root)
         output, process_seconds = run([executable], root)

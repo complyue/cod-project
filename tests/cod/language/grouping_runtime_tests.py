@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import tempfile
 
+from language_test_support import seed_executable
 from callable_runtime_tests import HARNESS as CALLABLE_HARNESS
 from regional_runtime_tests import run_case
 
@@ -65,7 +66,7 @@ def main():
     sources += [fixture, Path(__file__), directory / "callable_runtime_tests.py", directory / "regional_runtime_tests.py",
                 root / "include/shilos/region.hh"]
     evidence.update(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(), toolchain=mode, trace=trace,
-                    compiler_sha256=hashlib.sha256((root / mode / "bin/cod").read_bytes()).hexdigest(),
+                    compiler_sha256=hashlib.sha256(seed_executable(root / mode).read_bytes()).hexdigest(),
                     source_sha256={str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources})
     print("PASS: shared groups, selected region/object/callable effects, caught effects, common finally and exact release")
     if report := os.environ.get("COD_GROUPING_REPORT"):

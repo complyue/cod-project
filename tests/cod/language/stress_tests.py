@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 import time
 
-from language_test_support import runtime_archive
+from language_test_support import runtime_archive, seed_executable
 
 
 def run(executable, root, entry, expected, label):
@@ -57,7 +57,7 @@ def run(executable, root, entry, expected, label):
 
 def main():
     root = Path(__file__).resolve().parents[3]
-    executable = root / os.environ.get('COD_TEST_TOOLCHAIN', 'build') / 'bin/cod'
+    executable = seed_executable(root / os.environ.get('COD_TEST_TOOLCHAIN', 'build'))
     results = []
     with tempfile.TemporaryDirectory(prefix='cod-composition-stress-') as scratch:
         directory = Path(scratch)

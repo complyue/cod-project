@@ -11,7 +11,13 @@ ROOT = DIRECTORY.parents[2]
 MODE = os.environ.get("COD_TEST_TOOLCHAIN", "build")
 if MODE not in ("build", "built"):
     raise SystemExit("COD_TEST_TOOLCHAIN must be build or built")
-COD = ROOT / MODE / "bin" / ("cod.exe" if os.name == "nt" else "cod")
+
+
+def seed_executable(toolchain):
+    return toolchain / "bin" / ("cod-seed.exe" if os.name == "nt" else "cod-seed")
+
+
+COD = seed_executable(ROOT / MODE)
 RUNTIME_SOURCE = ROOT / "cod/runtime/cod_lang_runtime.c"
 
 

@@ -11,7 +11,7 @@ import time
 
 def main():
     root = Path(__file__).resolve().parents[4]
-    compiler = root / os.environ.get("COD_TEST_TOOLCHAIN", "build") / "bin/cod"
+    compiler = root / os.environ.get("COD_TEST_TOOLCHAIN", "build") / "bin" / ("cod-seed.exe" if os.name == "nt" else "cod-seed")
     results = []
     with tempfile.TemporaryDirectory(prefix="cod-closure-composition-") as temporary:
         scratch = Path(temporary)

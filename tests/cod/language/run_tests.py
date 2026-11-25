@@ -11,6 +11,8 @@ import subprocess
 import sys
 import tempfile
 
+from language_test_support import seed_executable
+
 
 def digest(path):
     with path.open("rb") as stream:
@@ -23,7 +25,7 @@ def main():
     mode = os.environ.get("COD_TEST_TOOLCHAIN", "build")
     if mode not in ("build", "built"):
         raise SystemExit("COD_TEST_TOOLCHAIN must be build or built")
-    executable = root / mode / "bin" / ("cod.exe" if os.name == "nt" else "cod")
+    executable = seed_executable(root / mode)
     cases = json.loads((directory / "cases.json").read_text())
     if sys.argv[1:]:
         requested = set(sys.argv[1:])
@@ -71,7 +73,8 @@ def main():
         sources = [root / "cod/main.cc", root / "cod/lang_exceptions.hh", root / "cod/lang_syntax.hh", root / "cod/lang_frontend.hh",
                    root / "cod/lang_llvm.hh", root / "cod/runtime/cod_lang_runtime.c",
                    root / "include/cod_region_storage.h", root / "cod/runtime/cod_lang_runtime.h",
-                   root / "tests/cod/test_language.sh", directory / "run_tests.py", directory / "cases.json",
+                   root / "tests/cod/test_language.sh", directory / "run_tests.py", directory / "language_test_support.py",
+                   directory / "cases.json",
                    *sorted(directory.rglob("*.cod"))]
         evidence = {"schema_version": 2, "recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     "platform": platform.platform(), "toolchain": mode, "backend": "llvm", "passed": passed_count,

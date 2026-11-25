@@ -11,6 +11,7 @@ import struct
 import subprocess
 import tempfile
 import time
+from language_test_support import seed_executable
 
 
 def f32(x):
@@ -64,7 +65,7 @@ def main():
         entry = Path(temporary) / 'main.cod'
         entry.write_text(source)
         started = time.perf_counter()
-        result = subprocess.run([str(root / mode / 'bin/cod'), '--run', str(entry)], cwd=root,
+        result = subprocess.run([str(seed_executable(root / mode)), '--run', str(entry)], cwd=root,
                                 capture_output=True, text=True, timeout=120)
         seconds = time.perf_counter() - started
         if result.returncode or result.stderr or result.stdout.splitlines() != expected:

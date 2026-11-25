@@ -9,7 +9,7 @@ from pathlib import Path
 import platform
 import tempfile
 
-from language_test_support import checked, write_instrumented_runtime
+from language_test_support import checked, seed_executable, write_instrumented_runtime
 
 
 # The only hook runs when the generated program releases its region. The CoD
@@ -213,7 +213,7 @@ extern "C" void cod_lang_region_free(void *owner) {
 def run_case(root, toolchain, entry, scratch, harness, capture_lifetimes=False, extra_wrappers="", frontend_warnings=()):
     ir, bitcode = [scratch / name for name in ("main.ll", "main.bc")]
     diagnostics = []
-    _, frontend_seconds = checked([toolchain / "bin/cod", "--check", entry,
+    _, frontend_seconds = checked([seed_executable(toolchain), "--check", entry,
                                    "--emit-llvm", ir, "--emit-bc", bitcode],
                                   root, frontend_warnings, diagnostics)
     roundtrip = scratch / "roundtrip.bc"
@@ -267,8 +267,8 @@ def main():
             raise RuntimeError("Resource capture fixture produced unexpected output: " + repr(output))
         evidence = {"schema_version": 4, "recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     "platform": platform.platform(), "toolchain": mode, "passed": True,
-                    "executable": {"path": str((toolchain / "bin/cod").relative_to(root)),
-                                   "sha256": hashlib.sha256((toolchain / "bin/cod").read_bytes()).hexdigest()},
+                    "executable": {"path": str(seed_executable(toolchain).relative_to(root)),
+                                   "sha256": hashlib.sha256(seed_executable(toolchain).read_bytes()).hexdigest()},
                     "llvm_artifact_roundtrip": True, **records, "pool": pool, "resources": resources,
                     "notes": ["The CoD program creates the inspected records, array, sharing and cycle through LLVM IR.",
                               "The graph retains a module-lifetime dynamic region; the pool owns a typed root returned by its factory and releases it at lexical scope exit.",

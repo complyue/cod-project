@@ -74,7 +74,7 @@ Build the initial booter with statically linked C providers generated from resol
 
 ### Bootstrap executable and entry names
 
-The selected name for the C++ build output is `bin/cod-seed` (`bin/cod-seed.exe` on Windows). That compiler translates `applications/cod-booter/src/__main__.cod` to build the single `cod-booter` executable. Its launcher dispatches compilation, declaration checking and provider generation to three procedures in that entry module. The bootstrap commands continue to accept explicit source paths. The build at `23796b73` still uses `bin/cod` and `src/CompilerCLI.cod`. [Implementation and cutover](../../design/ImplementationArchitecture.md#naming-the-bootstrap-executables-and-source-entry)
+The selected name for the C++ build output is `bin/cod-seed` (`bin/cod-seed.exe` on Windows). That compiler translates `applications/cod-booter/src/__main__.cod` to build the single `cod-booter` executable. Its launcher dispatches compilation, declaration checking and provider generation to three procedures in that entry module. The bootstrap commands continue to accept explicit source paths. [Implementation and cutover](../../design/ImplementationArchitecture.md#naming-the-bootstrap-executables-and-source-entry)
 
 ### Trusted source and the seed
 
@@ -111,12 +111,12 @@ Apply the [name rules](../../design/SymbolicDynamicScope.md#clause-words-and-lex
 
 ## Build and run on Linux
 
-The standalone build uses GNU Make 4.3 or newer, a prepared CoD seed and its language library, and a compatible LLVM SDK with shared libraries. The seed prefix provides `bin/cod` and `lib/cod/string.cod`. Use the following commands from the repository root with your ready seed prefix and the existing LLVM SDK in `build`.
+The standalone build uses GNU Make 4.3 or newer, a prepared CoD seed and its language library, and a compatible LLVM SDK with shared libraries. The seed prefix provides `bin/cod-seed` and `lib/cod/string.cod`. Use the following commands from the repository root with your ready seed prefix and the existing LLVM SDK in `build`.
 
 ```sh
 make -C cod/runtime
 make -C cod/native/llvm
-make -C applications/cod-booter COD_SEED=/path/to/ready-seed/bin/cod
+make -C applications/cod-booter COD_SEED=/path/to/ready-seed/bin/cod-seed
 ./build-cod-booter/cod-booter applications/cod-booter/workloads/deferred-release.cod \
     build-cod-booter/deferred-release.o
 ./build/bin/clang build-cod-booter/deferred-release.o -o build-cod-booter/deferred-release
@@ -127,7 +127,7 @@ The program prints `1` on three lines. Use `TOOLCHAIN` for a ready toolchain pre
 
 The seed processes the booter sources and emits the provider header, C stubs and LLVM IR into `OUT`. The grouped build tracks the library selected by the resolved seed executable. A seed in its CoD CMake development tree can use that checkout's `cod/library` when the installed library directory is absent. When an active project can supply a package override, the standalone build rechecks the source graph before reuse. Clang compiles the generated files and handwritten C adapters, then links the CoD archives and the shared libraries reported by `llvm-config`. The SDK library directory is recorded for the loader. The prepared inputs are read-only. The bootstrap input contract uses the [hand-prepared project directory](../../design/CodProjectStructureAndPkgMgmt.md#directory-layout).
 
-After building the runtime, the development seed uses it for `./build/bin/cod --run FILE`. An installed toolchain can provide `lib/libcod-runtime.a` under its prefix. Set the `COD_RUNTIME_ARCHIVE` environment variable to select a different compatible archive. Link seed-emitted objects or bitcode with the same archive when building an executable outside the seed.
+After building the runtime, the development seed uses it for `./build/bin/cod-seed --run FILE`. An installed toolchain can provide `lib/libcod-runtime.a` under its prefix. Set the `COD_RUNTIME_ARCHIVE` environment variable to select a different compatible archive. Link seed-emitted objects or bitcode with the same archive when building an executable outside the seed.
 
 ## Next-stage repositories and native runtime
 

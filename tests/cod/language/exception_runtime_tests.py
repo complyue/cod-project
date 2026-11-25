@@ -9,7 +9,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from language_test_support import checked, write_instrumented_runtime
+from language_test_support import checked, seed_executable, write_instrumented_runtime
 from regional_runtime_tests import run_case
 
 
@@ -279,7 +279,7 @@ false && (func()->const bool { return true })();
 ''' +
             (directory / "exception-reraise.cod").read_text().replace(
                 'try {{', 'try {{\n  func local_value = module_value;', 1))
-        checked([toolchain / "bin/cod", "--check", uncaught_source,
+        checked([seed_executable(toolchain), "--check", uncaught_source,
                  "--emit-llvm", ir], root)
         source, executable = scratch / "uncaught.cc", scratch / "uncaught"
         write_instrumented_runtime(source, "#define cod_lang_region_free cod_lang_region_release\n"
@@ -350,7 +350,7 @@ catch(seed) {
   }}
 };
 ''')
-        checked([toolchain / "bin/cod", "--check", loop, "--emit-llvm", ir], root)
+        checked([seed_executable(toolchain), "--check", loop, "--emit-llvm", ir], root)
         write_instrumented_runtime(source, "#define cod_lang_region_free cod_lang_region_release\n", r'''
 #undef cod_lang_region_free
 #include <cassert>
@@ -400,14 +400,14 @@ static const int audit = [] {
         for name, (source, diagnostic) in rejects.items():
             path = scratch / (name + ".cod")
             path.write_text(source)
-            result = subprocess.run([str(toolchain / "bin/cod"), "--check", str(path)],
+            result = subprocess.run([str(seed_executable(toolchain)), "--check", str(path)],
                                     text=True, capture_output=True, timeout=30)
             assert result.returncode == 2 and diagnostic in result.stderr, (name, result.returncode, result.stderr)
             print("PASS: " + name)
         if report := os.environ.get("COD_EXCEPTION_REPORT"):
             evidence["recorded_utc"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
             evidence["compile_rejections"] = list(rejects)
-            evidence["compiler_sha256"] = hashlib.sha256((toolchain / "bin/cod").read_bytes()).hexdigest()
+            evidence["compiler_sha256"] = hashlib.sha256(seed_executable(toolchain).read_bytes()).hexdigest()
             evidence["source_sha256"] = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
                 for path in [root / "cod/lang_exceptions.hh", root / "cod/lang_syntax.hh", root / "cod/lang_frontend.hh", root / "cod/lang_llvm.hh",
                              root / "cod/runtime/cod_lang_runtime.c", root / "include/shilos/region.hh",

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import tempfile
 
+from language_test_support import seed_executable
 from regional_runtime_tests import run_case
 
 HARNESS = r'''
@@ -60,7 +61,7 @@ def main():
                ("lang_exceptions.hh", "lang_syntax.hh", "lang_frontend.hh", "lang_llvm.hh", "runtime/cod_lang_runtime.c")]
     sources += [fixture, Path(__file__), directory / "regional_runtime_tests.py", root / "include/shilos/region.hh"]
     evidence.update(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(), toolchain=mode,
-                    trace=trace, compiler_sha256=hashlib.sha256((root / mode / "bin/cod").read_bytes()).hexdigest(),
+                    trace=trace, compiler_sha256=hashlib.sha256(seed_executable(root / mode).read_bytes()).hexdigest(),
                     source_sha256={str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources})
     print("PASS: nested iteration and zero-iteration else effects; normal/throw release; captured/hidden owners")
     if report := os.environ.get("COD_LOOP_SCOPE_REPORT"):

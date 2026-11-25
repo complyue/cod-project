@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
+from language_test_support import seed_executable
 from regional_runtime_tests import run_case
 
 HARNESS = r'''
@@ -131,12 +132,12 @@ def main():
         for name, (body, diagnostic) in REJECTS.items():
             source = scratch / (name + ".cod")
             source.write_text(BASE + body)
-            result = subprocess.run([toolchain / "bin/cod", "--check", source], capture_output=True, text=True, timeout=30)
+            result = subprocess.run([seed_executable(toolchain), "--check", source], capture_output=True, text=True, timeout=30)
             assert result.returncode == 2 and diagnostic in result.stderr, (name, result.returncode, result.stderr)
             print("PASS: " + name)
         evidence.update(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
                         toolchain=mode, trace=output, compile_rejections=list(REJECTS))
-        evidence["compiler_sha256"] = hashlib.sha256((toolchain / "bin/cod").read_bytes()).hexdigest()
+        evidence["compiler_sha256"] = hashlib.sha256(seed_executable(toolchain).read_bytes()).hexdigest()
         paths = [root / "cod" / name for name in ("lang_exceptions.hh", "lang_syntax.hh", "lang_frontend.hh", "lang_llvm.hh", "runtime/cod_lang_runtime.c")]
         paths += [directory / name for name in ("owned-region-library.cod", "owned-region-lifecycle.cod", "owned_region_tests.py")]
         evidence["source_sha256"] = {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}

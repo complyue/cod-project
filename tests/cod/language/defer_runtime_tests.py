@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import tempfile
 
+from language_test_support import seed_executable
 from regional_runtime_tests import run_case
 
 HARNESS = r'''
@@ -555,7 +556,7 @@ behave @print(9042u64);
             print('PASS', name, evidence['layout'], flush=True)
     report = dict(schema_version=1, recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
                   toolchain=mode, passed=True, cases=results,
-                  compiler_sha256=hashlib.sha256((root / mode / 'bin/cod').read_bytes()).hexdigest(),
+                  compiler_sha256=hashlib.sha256(seed_executable(root / mode).read_bytes()).hexdigest(),
                   script_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                   harness_helper_sha256=hashlib.sha256((directory / 'regional_runtime_tests.py').read_bytes()).hexdigest())
     if path := os.environ.get('COD_DEFER_REPORT'):

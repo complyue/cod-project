@@ -554,7 +554,7 @@ $CommonCMakeArgs = @(
 
 $Stage1ClangCl = Join-Path $Stage1Dir "bin\clang-cl.exe"
 $Stage1LldLink = Join-Path $Stage1Dir "bin\lld-link.exe"
-$Stage2Cod = Join-Path $Stage2InstallDir "bin\cod.exe"
+$Stage2Cod = Join-Path $Stage2InstallDir "bin\cod-seed.exe"
 $Stage2ClangCl = Join-Path $Stage2InstallDir "bin\clang-cl.exe"
 $Stage2ClangXX = Join-Path $Stage2InstallDir "bin\clang++.exe"
 $Stage2LldLink = Join-Path $Stage2InstallDir "bin\lld-link.exe"
@@ -616,7 +616,7 @@ if (-not $Stage2Ready) {
         (Test-Executable $Stage2ClangXX) -and
         (Test-Executable $Stage2LldLink)
     if (-not $Stage2Ready) {
-        throw "Stage 2 install is incomplete. Expected cod.exe, clang-cl.exe, clang++.exe, and lld-link.exe under $Stage2InstallDir."
+        throw "Stage 2 install is incomplete. Expected cod-seed.exe, clang-cl.exe, clang++.exe, and lld-link.exe under $Stage2InstallDir."
     }
 } else {
     Write-Host "Stage 2 install is complete at $Stage2InstallDir"

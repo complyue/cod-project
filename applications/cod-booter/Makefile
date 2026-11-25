@@ -6,7 +6,7 @@ $(error GNU Make 4.3 or newer is required)
 endif
 
 TOOLCHAIN ?= ../../build
-COD_SEED ?= $(TOOLCHAIN)/bin/cod
+COD_SEED ?= $(TOOLCHAIN)/bin/cod-seed
 LLVM_CONFIG ?= $(TOOLCHAIN)/bin/llvm-config
 CLANG ?= $(TOOLCHAIN)/bin/clang
 COD_RUNTIME_ARCHIVE ?= ../../build-cod-runtime/libcod-runtime.a
@@ -64,7 +64,7 @@ llvm_ldflags := $(call llvm_query,--link-shared --ldflags --libs $(llvm_componen
 llvm_libfiles := $(call llvm_query,--link-shared --libfiles $(llvm_components))
 llvm_libdir := $(call llvm_query,--libdir)
 
-entry := src/CompilerCLI.cod
+entry := src/__main__.cod
 cod_sources := $(sort $(shell find src -type f -name '*.cod'))
 # A prepared package can shadow the library. Record the marker's presence
 # so removing the package layout also invalidates a previously selected group.
