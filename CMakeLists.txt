@@ -56,11 +56,3 @@ endif()
 
 add_subdirectory(shilos)
 add_subdirectory(cod)
-add_subdirectory(codp)
-
-install(FILES
-  include/codp.hh
-  include/codp_yaml.hh
-  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
-  COMPONENT cod
-  )
