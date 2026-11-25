@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r83 review](../../../CHANGELOG.md#k-package-row-field-read-20261124) applies the ordinary array and inline field rules to [the package row read](#reading-a-field-of-an-indexed-package-row) under P-680/P-681. Acceptance distinguishes the two adjacent scalar fields and preserves evaluation order on bounds or index failure.
+
 The [r82 review](../../../CHANGELOG.md#k-package-classifier-source-call-20261124) covers [the package path classifier](#checking-the-package-path-classifier) under P-680/P-681. Follow the ordinary array loan, the byte read and the nominal enum result through its source call.
 
 The [r81 review](../../../CHANGELOG.md#k-booter-local-sum-transfer-20261124) applies D-07-SUM-CONSTRUCTORS and D-22-TRANSFER under P-680/P-681 to [the package resolver’s indexed write](#checking-a-local-sum-constructor-in-an-indexed-transfer). Verify the selected constructor, array element and completion on the normal source commands.
@@ -630,6 +632,14 @@ Prove both the `u64` index and the `u8` element against the same defining array.
 Check each actual in order before entering the callee. Preserve the declared array identity, owner role and access through the call to the private helper. Preserve the defining enum identity at the imported return. A read that executes can raise the ordinary unchecked bounds error. Route that possibility with the other proved outcomes through guards, calls, catches and cleanup. A skipped operand contributes no executed read. Earlier argument failure prevents callee entry. If the checked source interface cannot carry the required evidence, diagnose the unsupported call before publication.
 
 Verify a direct byte read and the real classifier and resolver through declaration checking and provider generation. Include mismatched array identities, index kinds and result enums, malformed parameter evidence, a failure while computing an index or a later argument, and preserved artifacts. Product projections, sum construction and executable indexing have separate proofs.
+
+### Reading a field of an indexed package row
+
+In `probe_package_roots`, the expressions `rows[row].path_first` and `rows[row].path_past` read two independent `u64` values. Resolve the named array from the readonly formal. For an import, join its checked index shape and nominal element declaration using the same defining array identity. A renamed array keeps that identity. For a local array, check its declared index and element directly.
+
+Prove the element is a finite bits record. Keep its defining module and declaration when the inline member reader returns the field ordinal and type. In `PackageSourceRoot`, the ordinals are 1 and 2 respectively. Bind the evidence to the actual index and field syntax in the visit frame. A writable actual may supply the readonly array loan. Its selected backing must stay live while the index is evaluated and the field is read.
+
+Evaluate each written index once. An exception from the index precedes the bounds check. An out-of-range index prevents the read and any later argument from executing. Only a successful selection supplies the independent scalar. This source check covers immediate field reads on the ordinary array formal. Whole-row reception, mutation and object emission require their own evidence. Use direct controls for distinct field values in neighboring rows, local and renamed arrays, damaged field or element evidence, and index failure. Verify the unchanged resolver and its importers through declaration checking and provider generation.
 
 ### Checking a local sum constructor in an indexed transfer
 

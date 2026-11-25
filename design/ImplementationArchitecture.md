@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r115 review](../CHANGELOG.md#k-package-row-field-read-20261124) continues the readonly array and field checks for [two fields of an indexed package row](../applications/cod-booter/docs/ModuleGraph.md#reading-a-field-of-an-indexed-package-row) under P-682/P-683. It covers the scalar read and its completion in the source checker.
+
 The [r114 review](../CHANGELOG.md#k-package-classifier-source-call-20261124) applies the existing ordinary source-call and completion rules to [the package path classifier](../applications/cod-booter/docs/ModuleGraph.md#checking-the-package-path-classifier) under P-682/P-683. The review covers the private helper and checked signature used by an importing module.
 
 The [r113 review](../CHANGELOG.md#k-booter-local-sum-transfer-20261124) covers [local sum construction in an indexed transfer](../applications/cod-booter/docs/ModuleGraph.md#checking-a-local-sum-constructor-in-an-indexed-transfer) under P-682/P-683. Existing constructor and bits-transfer rules determine what the booter can check on the real package resolver.

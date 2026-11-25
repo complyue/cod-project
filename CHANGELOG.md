@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review the package resolver’s indexed row fields
+
+<a id="k-package-row-field-read-20261124"></a>
+**K-PACKAGE-ROW-FIELD-READ-20261124.** D-ARCH-REVIEW r114→115 and D-20-MODULE-GRAPH r82→83, continued under P-680–P-683. The [row-field review](applications/cod-booter/docs/ModuleGraph.md#reading-a-field-of-an-indexed-package-row) combines the [array loan](#k-package-classifier-source-call-20261124) and [inline field](#k-booter-nested-product-loan-20261124) checks for `2060a40a:applications/cod-booter/src/PackageModuleResolution.cod:33`. With the classifier call and result writes removed in a private control, both released build modes reject the first row projection through declaration checking and provider generation. Acceptance requires the unchanged resolver once its earlier prerequisites are available.
+
 ## 2026-11-24 — Review source checking the package path classifier
 
 <a id="k-package-classifier-source-call-20261124"></a>
