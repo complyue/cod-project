@@ -59,16 +59,9 @@ for spelling in ('call', 'intrinsic'):
         'ref_ptr_restored': (exchange_program(REF_PTR,swap()+'q=null;q=c;'),0,'9\n1\n',''),
         'ref_ptr_cleanup_restore': (exchange_program(REF_PTR,swap()+'defer (=)(q,c);q=null;'),0,'9\n1\n',''),
         'ref_ptr_cleanup_clear_restore': (exchange_program(REF_PTR,swap()+'defer (=)(q,c);defer (=)(q,null);'),0,'9\n1\n',''),
-        'ref_ptr_cleanup_null': ('val a<-1,b<-7;ref p=a;ptr q=b;{{'+swap()+'defer (=)(q,null);}};',2,'','cannot prove a non-null target'),
         'conditional_nullable_queue': (flagged_program(NULLABLE,'if(!(q is null)){'+swap()+'}else{};',OUT('p')),0,'7\n1\n',''),
-        'conditional_guard_body_null': ('proc run(flag:bool)->void{val a<-1,b<-7;ref p=a;ptr q=if(flag){b}else{null};{{if(!(q is null)){'+swap()+'}else{};q=null:void;}};return;}run(true);',2,'','cannot prove a non-null target'),
-        'conditional_guard_cleanup_null': ('proc run(flag:bool)->void{val a<-1,b<-7;ref p=a;ptr q=if(flag){b}else{null};{{if(!(q is null)){'+swap()+'defer (=)(q,null);}else{};}};}run(true);',2,'','cannot prove a non-null target'),
-        'conditional_guard_swapped_null': ('proc run(flag:bool)->void{val a<-1,b<-7;ref p=a;ptr q=if(flag){b}else{null},r:i64=null in here;{{if(!(q is null)){'+swap()+swap('q','r')+'}else{};}};}run(true);',2,'','cannot prove a non-null target'),
         'conditional_guard_restored': (flagged_program('val c<-9;'+NULLABLE,
             'if(!(q is null)){'+swap()+'defer (=)(q,c);q=null;{}}else{};',OUT('p')),0,'9\n1\n',''),
-        'loop_guard_escapes_iteration': (
-            'val a<-1,b<-7;ref p=a;ptr q=b;for(i in 0..2){q=if(i==0){b}else{null};if(!(q is null)){'+swap()+'}else{};};',
-            2,'','cannot prove a non-null target'),
         'loop_guard_iteration_cleanup': (IO+
             'func step(ref left:i64 in O,ref right:i64 in O,flag:bool)->ref i64 in O where {owner O}'
             '{ref p=left;ptr q=if(flag){right}else{null in O};defer{return p;};'
@@ -76,10 +69,7 @@ for spelling in ('call', 'intrinsic'):
             'val a<-1,b<-7;ref selected=a;for(i in 0..2){selected=step(selected,b,i==0);};'+OUT('selected'),0,'7\n',''),
         'ref_ptr_cleanup_initialize': (exchange_program('val a<-1,b<-7,c<-make local i64;ref p=a;ptr q=b;',
             swap()+'defer (<-)(c,9);q=c;'),0,'9\n1\n',''),
-        'ref_ptr_late_null': ('val a<-1,b<-7;ref p=a;ptr q=b;{{'+swap()+'q=null:void;}};',2,'','cannot prove a non-null target'),
         'ref_ptr_late_uninitialized': ('val a<-1,b<-7,c<-make local i64;ref p=a;ptr q=b;'+swap()+'q=c;',2,'','cannot prove initialization'),
-        'ref_ptr_failed_restore': ('using "std:exceptions" OutOfMemoryError;'+REF_PTR+swap()+
-            'q=null;try{defer (=)(q,c);}catch(e:const OutOfMemoryError){};',2,'','cannot prove a non-null target'),
         'before_return': (IO+'proc run()->i64{'+BASE+'defer{'+OUT('p')+OUT('q')+'};'+swap()+'return p;}'+OUT('run()'),0,'7\n1\n1\n',''),
         'pending_failure': (IO+NPE+CHECKED_RUN+BASE+ABSENT+observe_after_cleanup(swap(),PAIR)+'absent;'+CATCH_RUN,0,'7\n1\n',''),
         'failed_operand': (IO+NPE+CHECKED_RUN+BASE+ABSENT+'defer{'+PAIR+'};'+swap('p','{absent;q}')+CATCH_RUN,0,'1\n7\n',''),

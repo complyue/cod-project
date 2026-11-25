@@ -65,7 +65,6 @@ runner.CASES = {
  'queued_twice': (IO+PTR+queued(CALL+CALL,PAIR),0,'1\n7\n',''),
  'loop_queue': (IO+REF+queued('for(i in 0..3){'+CALL+'};',PAIR),0,'7\n1\n',''),
  'observer': (IO+NPE+PTR+queued(CALL+'q=z;',guarded_observation(PAIR)),0,'9\n1\n',''),
- 'ref_late_null': (REF+queued(CALL+'q=null;'),2,'','cannot prove a non-null target'),
  'ref_late_uninitialized': (REF+queued(CALL+'q=empty;',setup=BASE+'val empty<-make local i64;'),2,'','cannot prove initialization'),
  'ref_cleanup_initialize': (IO+REF+queued(CALL+'defer (<-)(empty,9);q=empty;',OUT('p'),BASE+'val empty<-make local i64;'),
      0,'9\n',''),

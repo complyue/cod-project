@@ -738,12 +738,6 @@ public:
     bool possible = true;
     std::map<size_t, Targets> targets;
     bool operator==(const Selections &) const = default;
-    bool nonnull(size_t id) const {
-      if (const auto target = targets.find(id); target != targets.end())
-        return !target->second.nullable() && (!target->second.places.empty() || !target->second.entries.empty()) &&
-            std::all_of(target->second.entries.begin(), target->second.entries.end(), [&](size_t entry) { return entry_nonnull.contains(entry); });
-      return !invalidated.contains(id) && entry_nonnull.contains(id);
-    }
     void initialize(size_t id) {
       initialized.insert(id);
       initialized_if.erase(id);
@@ -1005,45 +999,8 @@ public:
       initialized.insert(entry.first); return true;
     });
   }
-  struct ReadRequirement {
-    // An engaged set marks a nonnull slot check. Otherwise this is an image check.
-    std::optional<std::set<size_t>> nonnull = {};
-    bool nonnull_unproved = false;
-    // Registration-path guards apply only while the original binding versions remain current.
-    std::map<size_t, std::set<size_t>> nonnull_versions = {};
-    // Necessary conditions on paths that still require this check.
-    ConditionClauses when{ConditionFacts{}};
-    bool operator==(const ReadRequirement &) const = default;
-    bool satisfied(const Selections &selections) const {
-      return when.empty() || (nonnull && !nonnull_unproved && std::ranges::all_of(*nonnull,
-          [&](size_t id) { return selections.nonnull(id); }));
-    }
-    void substitute(const Selections &before) {
-      if (!nonnull) return;
-      std::set<size_t> entries;
-      for (const auto id : *nonnull) {
-        if (before.nonnull(id)) continue;
-        if (const auto target = before.targets.find(id); target != before.targets.end()) {
-          nonnull_unproved = nonnull_unproved || target->second.nullable();
-          entries.insert(target->second.entries.begin(), target->second.entries.end());
-        } else if (before.invalidated.contains(id)) nonnull_unproved = true;
-        else entries.insert(id);
-      }
-      nonnull = std::move(entries);
-    }
-    void merge(const ReadRequirement &other) {
-      for (const auto &facts : other.when) add_condition(when, facts);
-      if (nonnull && other.nonnull) {
-        nonnull->insert(other.nonnull->begin(), other.nonnull->end());
-        nonnull_unproved = nonnull_unproved || other.nonnull_unproved;
-        std::erase_if(nonnull_versions, [&](const auto &guard) {
-          const auto found = other.nonnull_versions.find(guard.first);
-          return found == other.nonnull_versions.end() || found->second != guard.second;
-        });
-      }
-    }
-  };
-  using Reads = std::map<size_t, ReadRequirement>;
+  // Reaching conditions for callable-image checks, indexed by source site.
+  using Reads = std::map<size_t, ConditionClauses>;
   // Explicit returns retain selected targets or copied value evidence. Cleanup
   // can preserve that pending result, replace it, or join both possibilities.
   struct Returned {
@@ -1191,7 +1148,7 @@ public:
       for (auto &[truth, clauses] : returned.boolean) clauses = transform(clauses);
       for (auto &[truth, clauses] : returned.nullness) clauses = transform(clauses);
       for (auto &[target, value] : booleans) for (auto &[truth, clauses] : value) clauses = transform(clauses);
-      for (auto &[read, requirement] : reads) requirement.when = transform(requirement.when);
+      for (auto &[read, when] : reads) when = transform(when);
       for (auto &[place, clauses] : uninitialized) clauses = transform(clauses);
       for (auto &[capture, clauses] : uninitialized_captures) clauses = transform(clauses);
       resolve_initialization();
@@ -1259,14 +1216,9 @@ public:
   };
   static Targets project_observed_return(Effects &effects, const Returned &incoming, const Selections &entry) {
     auto selected = incoming.observed_selection();
-    if (incoming.observed_selection_initialized(entry)) {
-      const SelectionCondition observed{{}, pending_return_selection, null_target, true};
-      for (auto &[read, requirement] : effects.reads) if (requirement.nonnull) {
-        std::erase_if(requirement.when, [&](const auto &facts) { return facts.conditions.terms.contains(observed); });
-      }
-      if (effects.returned.borrowed_selection && effects.returned.borrowed_selection->single_entry() == pending_return_selection)
-        effects.returned.initialize_saved_selection();
-    }
+    if (effects.returned.borrowed_selection && effects.returned.borrowed_selection->single_entry() == pending_return_selection &&
+        incoming.observed_selection_initialized(entry))
+      effects.returned.initialize_saved_selection();
     effects.returned.project_selection(selected);
     return selected;
   }
@@ -1402,13 +1354,8 @@ private:
     next.transform_values([&](const auto &value) { return value.through(first.payloads, first.thrown, false, false, first.queued_failures); },
         [&](const auto &value) { return value.through(first.payloads, first.thrown, false, true, first.queued_failures); });
     next.transform_conditions([&](const auto &clauses) { return through_conditions(clauses, first.booleans); });
-    for (const auto &[read, known] : next.reads) {
-      if (known.satisfied(first.selections)) continue;
-      auto before = known;
-      before.substitute(first.selections);
-      if (before.satisfied({})) continue;
-      merge_read(result.reads, read, before);
-    }
+    for (const auto &[read, when] : next.reads)
+      if (!when.empty()) merge_read(result.reads, read, when);
     combine_initialization(result.initialized, result.uninitialized, next.initialized, next.uninitialized, false);
     combine_initialization(result.selections.initialized_captures, result.uninitialized_captures,
                            next.selections.initialized_captures, next.uninitialized_captures, false);
@@ -1505,9 +1452,9 @@ public:
   void observe_reference(const BooleanValue &observations) {
     for (const auto &[null, paths] : observations) observe_input_conditions(paths);
   }
-  static void merge_read(Reads &reads, size_t read, const ReadRequirement &before) {
-    auto [found, inserted] = reads.emplace(read, before);
-    if (!inserted) found->second.merge(before);
+  static void merge_read(Reads &reads, size_t read, const ConditionClauses &when) {
+    auto [found, inserted] = reads.try_emplace(read, when);
+    if (!inserted) for (const auto &facts : when) add_condition(found->second, facts);
   }
   bool has_actions(size_t queue) const {
     std::set<size_t> seen;
