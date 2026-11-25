@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r81 review](../../../CHANGELOG.md#k-booter-local-sum-transfer-20261124) applies D-07-SUM-CONSTRUCTORS and D-22-TRANSFER under P-680/P-681 to [the package resolver’s indexed write](#checking-a-local-sum-constructor-in-an-indexed-transfer). Verify the selected constructor, array element and completion on the normal source commands.
+
 At r80 the [field-loan review](../../../CHANGELOG.md#k-booter-arm-local-inline-loan-20261124) applies P-680/P-681 and the ordinary readonly borrowing contract to [the arm-local product](#lending-an-inline-field-directly-from-a-case-receipt). Check each selected field and the untouched output on either failed lookup.
 
 At r79 the [runtime symbol identity decision](../../../CHANGELOG.md#h-runtime-symbol-identity-20261124) changes the required declaration check for [imported names](#lookup-of-imported-names). An unused parameter that would hide an introduced symbol must be diagnosed. Check written and default-expanded selectors on the same input.
@@ -616,6 +618,16 @@ Publish the completed classification on the defining schema’s checked interfac
 A named array declaration can use the completed bits proof for its **element**. An array loan to C, a by-value C record, and a native failure payload each require their own positive mapping under the existing provider profile. A direct or nested sum field cannot pass the C-record check through a CoD bits classification, including across re-export. Schema checking establishes the declared field type and access. Initializing an instance, selecting its active constructor and reading a field from it require the corresponding use-site checks. [Native record boundary](LLVMInterop.md#native-handles-and-c-records)
 
 In both linked modes check the real AST declarations through the declaration driver, a product with an imported sum field, a forward declaration, a shared subgraph and the same defining type selected through a renamed re-export. Reject inline self and mixed product/sum cycles, including one in an unselected alternative or after a non-bits field. Check a legal reference edge under its existing field rules. Exercise missing classifications, a wrong defining identity or header role, a truncated field range, and direct and transitive C-record violations. Retain the scalar and enum controls, existing text-field behavior, and the previously published graph and output after a failed second child. Observe one release of the invocation’s graph.
+
+### Checking a local sum constructor in an indexed transfer
+
+The package resolver writes `resolution[0u64] <- make SearchFailed { os_error <- error; }`. For a braced `make` naming a local constructor, bind its defining arm and parent sum in the completed module interpretation. Registration supplies the arm declaration. Establish its membership in the parent’s checked arm sequence in the same revision. Braces require zero visible initializer overloads on that arm, including overloads inapplicable to this use. The normal type-name and case-pattern readers keep their respective lookup rules. [Publishing and selecting data constructors](../../../design/DomainLanguageDesign.md#publishing-and-selecting-data-constructors)
+
+Keep the checked construction site, nominal identities, field schema and written initializer order in the visit frame. In this source profile, admit direct independent scalar fields and the fieldless alternative. Check each supplied write and its effects, including repeated writes to a writable field. Every normal completion must establish all required fields. The fresh construction has the ordinary lexical owner. Whole-payload transfer requires a finite bits parent across all alternatives. [Storage eligibility and payload transfer](../../../design/ConstructionAndAcquisition.md#storage-eligibility-and-payload-transfer)
+
+For the builtin indexed write, check the initialized writable array formal, its actual backing and owner, and the index. Select the element once and account for bounds failure before evaluating the RHS. Match the completed payload’s nominal parent to the element type. Only normal RHS completion performs the final store. Earlier effects remain visible if evaluation throws. The package resolver discards the readonly destination view produced by the transfer.
+
+Verify the four `PackageResolution` alternatives on the package resolver and its importer through declaration checking and provider generation. Check a wrong parent with identical fields, a non-bits sibling, an initializer overload, field initialization, access and failure order. Preserve previous artifacts on rejection. Executable sum construction in the booter requires a separate lowering proof.
 
 ## Reentry and completion
 

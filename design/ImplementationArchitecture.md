@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r113 review](../CHANGELOG.md#k-booter-local-sum-transfer-20261124) covers [local sum construction in an indexed transfer](../applications/cod-booter/docs/ModuleGraph.md#checking-a-local-sum-constructor-in-an-indexed-transfer) under P-682/P-683. Existing constructor and bits-transfer rules determine what the booter can check on the real package resolver.
+
 The [r112 review](../CHANGELOG.md#k-grouped-dependency-failure-20261124) continues [entry-world diagnostics](../applications/cod-booter/README.md#diagnostic-coverage-of-the-entry-modules-fused-world) under P-682/P-683. A written [grouped import](#a-failed-path-in-a-grouped-import) supplies one dependency location even when its selectors expand into several syntax items.
 
 The [r111 review](../CHANGELOG.md#k-seed-drained-path-memory-20261124) covers [memory used to check scope exits in the seed](#consuming-completed-paths-in-the-seed-checker). It continues D-17-RETURN-STATE and the r110 terminal diagnostic proof under P-682/P-683. Reuse checker storage after its last consumer. Compare cleanup behavior and measure the full compiler invocation to establish any saving.
