@@ -4967,8 +4967,7 @@ class ScalarChecker {
       if (!contract.owners.empty() && contract.owners[i] && (contract.const_views.empty() || !contract.const_views[i]))
         effects.written_inputs.insert(i);
     std::erase_if(effects.uninitialized, [](const auto &entry) { return entry.second.empty(); });
-    for (const auto reason : call_reasons(contract)) effects.initialized.try_emplace(reason);
-    for (const auto reason : call_reasons(contract)) effects.present.try_emplace(reason);
+    // The invocation keeps its exit reasons separately from its postconditions.
     return {std::move(effects), choices && covered && choices->size() == covered};
   }
   void discover_deferred_product_call(const std::vector<ProductInput> &fields, const std::vector<CheckedOperation> &operands,
@@ -5176,7 +5175,7 @@ class ScalarChecker {
     const auto entry_booleans = needs_entry_booleans
         ? prepared ? incoming_booleans() : current_booleans(lexical_, expr.at)
         : CleanupEquations::BooleanValues{};
-    std::vector<CleanupEquations::BooleanValue> boolean_inputs(views.size());
+    std::vector<CleanupEquations::BooleanValue> boolean_inputs(observes_values ? views.size() : 0);
     for (size_t i = 0; i < views.size(); ++i) if (observes_values && input_type(i) == Type::boolean) {
       const bool borrowed = borrowed_input(i);
       boolean_inputs[i] = borrowed ? invocation_slots.contains(i) ? CleanupEquations::unknown_boolean() : stored_boolean(views[i], entry_booleans)
@@ -5468,10 +5467,12 @@ class ScalarChecker {
           }
         refine_arguments(reason);
       };
-      const auto before = lexical_;
+      // A lone normal exit applies directly to the prepared caller state.
+      const auto before = case_scan || invocation.size() != 1 || invocation.begin()->first != 0
+          ? std::optional{lexical_} : std::nullopt;
       std::optional<LexicalState> here_break;
       for (auto &[reason, effects] : invocation) if (reason && !(case_scan && reason == 1)) {
-        lexical_ = before; apply_invocation(reason, effects);
+        lexical_ = *before; apply_invocation(reason, effects);
         const auto completion = Completion{reason, false};
         const bool scope_failure = immediate_scope && completion.exception() &&
             (program_.exception_types.at(completion.category()).checked || declares_root(contract.throws_types));
@@ -5491,12 +5492,12 @@ class ScalarChecker {
           note_abrupt(expr.at, failures, completion, scope_failure);
         }
       }
-      lexical_ = before;
+      if (before) lexical_ = *before;
       if (case_scan) {
         if (invocation.contains(0)) {
           apply_invocation(0, invocation.at(0));
           *case_scan = lexical_;
-          lexical_ = before;
+          lexical_ = *before;
         }
         if (invocation.contains(1)) apply_invocation(1, invocation.at(1));
         else lexical_.live = false;
@@ -17449,10 +17450,6 @@ class ScalarChecker {
       // The ordinary callback's failures return to the producer and are
       // checked against its declared call contract.
       if (proving_ && body_effects->propagates_here_transfer) reasons.insert(Completion::protected_transfer);
-    }
-    for (const auto reason : reasons) {
-      effects.initialized.try_emplace(reason);
-      effects.present.try_emplace(reason);
     }
     finish_call(expr, contract, effects, reasons, {}, {}, operation, read, discard);
   }
