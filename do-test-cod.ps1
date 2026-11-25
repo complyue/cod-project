@@ -4,7 +4,7 @@
 param(
     [ValidateSet("build", "built")]
     [string]$Toolchain = $(if ($env:COD_TEST_TOOLCHAIN) { $env:COD_TEST_TOOLCHAIN } else { "build" }),
-    [string[]]$Components = @("shilos", "yaml-cmp", "yaml-pretty", "yaml-ux", "yaml-exc-trace", "codp", "cod")
+    [string[]]$Components = @("cod")
 )
 
 Set-StrictMode -Version Latest

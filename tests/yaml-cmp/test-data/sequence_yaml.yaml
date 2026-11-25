@@ -1,7 +1,0 @@
-# Sequence example with mixed data types
-- "apple"    # String value
-- "banana"   # Another string value
-- "cherry"   # Third string value
-- 42         # Integer value
-- true       # Boolean value
-- null       # Null value
