@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r88 review](../../../CHANGELOG.md#k-booter-array-slot-failure-row-20261124) continues P-680/P-681 for [the key-array source interface](#checking-growth-of-the-module-key-array). The completed body proof supplies a compact set of unchecked failure categories on its graph header.
+
 The [r87 review](../../../CHANGELOG.md#k-booter-indexed-field-demand-20261124) continues P-680/P-681 for [indexed field checks in demanded bodies](#deciding-which-bodies-need-indexed-field-checks). It corrects when the declaration and provider commands initiate a body check and ties local sum discovery to its indexed transfer.
 
 The [r86 clarification](../../../CHANGELOG.md#k-booter-forward-parameter-slot-20261124) continues P-680/P-681 and distinguishes forwarding an ordinary parameter’s own slot from forwarding a caller’s slot. [Key-array growth](#checking-growth-of-the-module-key-array)
@@ -558,6 +560,10 @@ An ordinary parameter `keys:SourceBytes in G` receives the caller’s selected a
 Prepare a slot argument by selecting its lexical place at that operand. If a later operand rebinds the same slot to another array in G, the callee reads its new target at entry. An ordinary array loan prepared earlier still designates the earlier array. If a later operand fails, preserve its preceding effects and skip callee entry. Keep slot and target lifetimes through each immediate use. At a join of the early-return and growth paths, both targets can be initialized arrays in G. An exact target fact on any alias of the slot survives only if the reaching paths agree. A completed rebind remains visible to an enclosing handler.
 
 Keep actual places, backings and per-use completion facts in the visit frame. Publish the ordinary source interface only after body proof, with the defining callable, receiver interpretation, ordered formal modes, owner roles, allocation requirement and representable completion evidence. Each reader validates the full row extent before use. A header or use the checker cannot represent gets a located stop before output. The executable path, C mapping, callback forwarding and growth of record or sum arrays keep their separate proof requirements.
+
+Keep the typed `CheckedArraySlotBody` in the visit frame. When staging its defining callable header, copy the four named `ByteArrayFailures` fields for bounds, out-of-memory, region capacity and invalid capacity. Initialize ordinary headers and parameter rows with the checked marker clear and the fields false, including when reusing a row. Set the marker on the matching completed header. A checked header with four false fields establishes that none of those four failures escapes. A clear marker supplies no such evidence. Commit this header, its ordered parameter rows and the matching export shape through the existing successful publication step.
+
+These fields record possible escaping categories. The formal owner row separately records allocation permission requirements. An imported caller still needs a proof of slot effects on each completion, including whether a rebind has already taken effect. Keep the located imported-use stop until that proof exists. Check a published all-clear header, a mix of set and clear fields, reuse for an ordinary row, and preservation of the previous published extent on failure.
 
 Verify the unedited scalar leaf through both source commands and exercise direct slot forwarding, saved target identity, copied bytes, early return and failure before and after a rebind. Use seed execution for runtime observations. Reject wrong nominal arrays, wrong owners, fixed slots, insufficient target or allocator access and escaping places. On the integrated specialized booter, report the remaining locations in ModuleIndex, LoadPackageInputs and CompilerCLI and preserve earlier artifacts on rejection.
 

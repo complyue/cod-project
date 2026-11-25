@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review failure facts on a private array-slot header
+
+<a id="k-booter-array-slot-failure-row-20261124"></a>
+**K-BOOTER-ARRAY-SLOT-FAILURE-ROW-20261124.** D-ARCH-REVIEW r123→124 and D-20-MODULE-GRAPH r87→88 continue P-680–P-683. Seed `cad15cf2` accepted the prior `015af50c:applications/cod-booter/src/ModuleExportStorage.cod` and rejected the draft whole-sum field transfer. The [R121 refinement](applications/cod-booter/docs/ModuleGraph.md#checking-growth-of-the-module-key-array) retains the typed body proof in the visit frame and clears ordinary named-field writes to the private graph header. The acceptance distinguishes an absent proof from a checked empty failure set. Imported slot calls still require their own completion and rebinding proof.
+
 ## 2026-11-24 — Bound the body checks triggered by indexed record fields
 
 <a id="k-booter-indexed-field-demand-20261124"></a>
