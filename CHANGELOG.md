@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Distinguish direct invocation from capture at seed module entry
+
+<a id="k-seed-module-entry-symbol-consumers-20261125"></a>
+**K-SEED-MODULE-ENTRY-SYMBOL-CONSUMERS-20261125.** Under the [trusted-seed removal decision](#h-effect-checking-cost-and-compiler-stages-20261125) at `07868aae`, D-ARCH-REVIEW r182→183 clears removal of entry-only ordinary availability facts and the rechecks they induce. The [reviewed boundary](design/ImplementationArchitecture.md#symbol-requirements-at-seed-module-entry) preserves full reads for actual capture and layout, and the narrower inputs used for native loans and scoped handlers. The implementation reference is `e67910be:cod/lang_checked.hh`. Language and performance gates continue.
+
 ## 2026-11-25 — Retire selected-path binding verification from the trusted seed
 
 <a id="h-effect-checking-cost-and-compiler-stages-20261125"></a>
