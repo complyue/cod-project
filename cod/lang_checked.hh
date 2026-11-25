@@ -4597,8 +4597,7 @@ class ScalarChecker {
     if (!delayed_) observe_effects().symbols.insert(symbol);
   }
   size_t initialization_frame() const { return deferred_action_ ? CleanupEquations::action_frame(*deferred_action_) : 0; }
-  void apply_effects(LexicalState &state, const CleanupEquations::Effects &incoming, const Location &at) {
-    auto effects = incoming;
+  void apply_effects(LexicalState &state, CleanupEquations::Effects &effects, const Location &at) {
     const auto entry = path_conditions(state);
     effects.transform_conditions([&](const auto &clauses) { return CleanupEquations::conjoin_conditions(clauses, entry); });
     for (const auto input : state.inputs)
@@ -4763,7 +4762,9 @@ class ScalarChecker {
     std::map<size_t, CleanupEquations::Effects> effects;
     for (const auto reason : reasons) {
       const auto found = target.initialized.find(reason);
-      auto &effect = effects.emplace(reason, cleanup_.preserve_pending(CleanupEquations::Effects{reads, {}})).first->second;
+      CleanupEquations::Effects row{reads, {}};
+      if (prepared) row = cleanup_.preserve_pending(std::move(row));
+      auto &effect = effects.emplace(reason, std::move(row)).first->second;
       effect.symbols = target.symbols;
       if (!slots.all) if (const auto outcome = target.present.find(reason); outcome != target.present.end())
         for (const auto parameter : outcome->second) {
@@ -5564,7 +5565,7 @@ class ScalarChecker {
               lexical_.input_facts.edit(input, [&](auto &facts) { facts.selections.refine(*binding, false); });
           }
       };
-      const auto apply_invocation = [&](size_t reason, const CleanupEquations::Effects &effects) {
+      const auto apply_invocation = [&](size_t reason, CleanupEquations::Effects &effects) {
         apply_effects(lexical_, effects, expr.at);
         if (!summary.bindings.empty()) refresh_targets(lexical_, false,
             immediate_scope || embedded_updates ? &effects.selections.invalidated : nullptr);
@@ -5581,7 +5582,7 @@ class ScalarChecker {
       };
       const auto before = lexical_;
       std::optional<LexicalState> here_break;
-      for (const auto &[reason, effects] : invocation) if (reason && !(case_scan && reason == 1)) {
+      for (auto &[reason, effects] : invocation) if (reason && !(case_scan && reason == 1)) {
         lexical_ = before; apply_invocation(reason, effects);
         const auto completion = Completion{reason, false};
         const bool scope_failure = immediate_scope && completion.exception() &&
