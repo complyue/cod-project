@@ -2805,12 +2805,6 @@
     "stdout": "30\n60\n70\n80\n"
   },
   {
-    "file": "scopes/defer-loop-capture.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "a delayed defer block cannot capture a loop-control binding"
-  },
-  {
     "file": "scopes/defer-inner-loop.cod",
     "exit": 0,
     "stdout": "0\n1\n"

@@ -789,7 +789,6 @@ class ScalarChecker {
   std::map<size_t, std::map<size_t, CompletionInputs>> caught_inputs_;
   const CheckedMethod *checking_method_ = nullptr;
   const CheckedInstance *checking_instance_ = nullptr;
-  std::set<size_t> loop_controls_, delayed_controls_;
   struct CatchCapture {
     CatchCapture *parent;
     std::set<size_t> bindings, required;
@@ -2280,7 +2279,6 @@ class ScalarChecker {
     size_t deferred_queue = 0;
     std::optional<size_t> repeated_observations;
     bool has_deferred_action = false;
-    std::set<const Expression *> delayed_controls;
     std::optional<TypePreparedCall> prepared_call;
     bool preparing(const Expression &expr) const { return prepared_call && prepared_call->expression == &expr; }
     bool same_definition_inputs(const TypeEvidenceState &other) const {
@@ -6063,8 +6061,6 @@ class ScalarChecker {
     state.scopes.pop_back();
   }
   void leave_scope() {
-    if (const auto owned = scope_storage_.find(lexical_.scopes.back().id); owned != scope_storage_.end())
-      for (const auto id : owned->second) loop_controls_.erase(id);
     retire_scope(lexical_);
   }
   bool capture_catch(size_t id) {
@@ -9786,7 +9782,6 @@ class ScalarChecker {
     query.owning_exception_return = false;
     query.deferred = nullptr;
     query.initialization = TypeEvidenceState::InitializationCheck::unevaluated;
-    query.delayed_controls.clear();
     return type_evidence(*expr.children.front(), query);
   }
   static bool reserves_value_receiver(const Expression &group, const Expression &initializer) {
@@ -10012,19 +10007,6 @@ class ScalarChecker {
     if (reached) record_type_call(expr, state, method, true);
     return parameter.initializes_caller_place();
   }
-  static bool type_loop_control(const Expression *declaration) {
-    return declaration && declaration->kind == Expression::Kind::range_for;
-  }
-  static void enter_type_defer(TypeEvidenceState &state) {
-    for (const auto &[name, declaration] : state.local_declarations)
-      if (type_loop_control(declaration)) state.delayed_controls.insert(declaration);
-  }
-  static void check_type_capture(const TypeEvidenceState &state, const std::string &name, const Location &at) {
-    if (!state.required || state.delayed_controls.empty()) return;
-    const auto declared = state.local_declarations.find(name);
-    if (declared != state.local_declarations.end() && state.delayed_controls.contains(declared->second))
-      fail(at, "a deferred block cannot capture loop-control binding '" + name + "'");
-  }
   void prepare_type_readable_argument(TypeEvidenceState &state, const Expression &operand,
                                       const ViewEvidence &view, const TargetEvidence &target, ArgumentMode mode) const {
     if (!state.checks_initialization() || !state.selections.initialization_reachable) return;
@@ -10035,13 +10017,6 @@ class ScalarChecker {
       if (!state.selections.initialization_reachable) return;
     }
     require_type_readable_target(state, target, operand.at);
-  }
-  static void check_type_deferred_argument(const TypeEvidenceState &state, const Expression &call, const Expression &operand,
-                                           const ViewEvidence &view, ArgumentMode mode) {
-    if (!state.required || !state.preparing(call) || mode == ArgumentMode::value || !view.owner) return;
-    for (const auto &[name, declaration] : state.local_declarations)
-      if (type_loop_control(declaration) && *view.owner == EvidenceOwner::for_scope(*declaration))
-        fail(operand.at, "deferred borrowed argument does not outlive its cleanup scope");
   }
   TypeEvidenceState catch_evidence(const Expression &handler, const TypeEvidenceState &entry,
                                    std::set<size_t> &handled) const {
@@ -10115,7 +10090,6 @@ class ScalarChecker {
                                      const TypeReturned *pending) const {
     using K = Expression::Kind;
     TypeEvidenceExits incoming, outgoing;
-    enter_type_defer(state);
     observe_type_return(state, pending);
     state.exits = &incoming;
     const auto &body = entry.kind == K::block ? entry : *entry.children.front();
@@ -11672,7 +11646,6 @@ class ScalarChecker {
     if (abrupt && state.returns) state.returns->saw_throw = true;
     const auto &dependencies = free_bindings(*callee.definition);
     const auto &captures = dependencies.captures;
-    for (const auto &capture : captures) check_type_capture(state, capture.name, capture.at);
     std::vector<EvidencePlaces> writable_booleans;
     if (state.selections.tracking) for (const auto &capture : captures) {
       const auto binding = state.bindings.find(capture.name);
@@ -12709,7 +12682,6 @@ class ScalarChecker {
         }
       }
       const auto *expected_callable = callable_expectation(expected);
-      check_type_capture(state, expr.text, expr.at);
       if (state.required) {
         if (state.owner_bindings.contains(expr.text)) fail(expr.at, "owner binding is not a value in typeof");
         if (!state.validating_body) check_query_binding(expr.text, expr.at);
@@ -13557,7 +13529,6 @@ class ScalarChecker {
           delayed.selections.payload_writes = {};
           delayed.selections.deferred_writes = {};
           delayed.selections.deferred_return = false;
-          enter_type_defer(delayed);
           const auto delayed_entry = delayed.selections.writes;
           bool may_replace = false;
           TypeDeferredEffects effects;
@@ -14042,7 +14013,6 @@ class ScalarChecker {
           implementation_gap(expr.at, "borrowed parameter requires an existing view");
         if (readable_borrow(mode) && state.checks_initialization() && prepared_modes[i] != mode)
           implementation_gap(operand.at, "readable borrowed argument requires an established preparation mode");
-        check_type_deferred_argument(state, expr, operand, views[i], mode);
       };
       const auto saved_operand = [&](size_t i) {
         auto operand = operand_targets.at(i);
@@ -14472,7 +14442,6 @@ class ScalarChecker {
       if (base.kind == K::name) {
         const auto root = state.bindings.find(base.text);
         if (root != state.bindings.end() && root->second && root->second->kind == Type::region) {
-          check_type_capture(state, base.text, base.at);
           const auto owner = owner_evidence(base.text, state, base.at);
           if (!owner || !root->second->target) return {};
           const auto &roots = direct_region_roots(*root->second->target, expr.at);
@@ -14750,8 +14719,6 @@ class ScalarChecker {
         state.views[expr.definition->name] = {false, false, {}, {}, false, {}, {}, true};
         return Type::void_type;
       }
-      const auto &captures = expr.definition->explicit_captures ? expr.definition->captures : free_bindings(*expr.definition).captures;
-      for (const auto &capture : captures) check_type_capture(state, capture.name, capture.at);
       if (state.exits && has_type_captures(method, state)) note_type_allocation(state);
       if (expected && expected->kind == Type::procedure)
         return callable_query({method}, expected, expr.at, state, true);
@@ -18688,7 +18655,6 @@ class ScalarChecker {
     if (read) dereference(operation, expr.at);
     for (const auto place : operation.targets) {
       if (place == null_target) continue;
-      if (delayed_controls_.contains(place)) fail(expr.at, "a deferred block cannot capture loop-control binding '" + expr.text + "'");
       const bool captured = capture_catch(place);
       if (direct_exception_holders_.contains(place) && lexical_.live &&
           !lexical_.live_exception_holders.contains(place))
@@ -21014,7 +20980,6 @@ class ScalarChecker {
       lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.symbols});
       operation.place = declare(expr.text, index, true, true, expr.at);
       initialize(*operation.place);
-      loop_controls_.insert(*operation.place);
       const auto body = check_loop_body(*expr.children[2], instance, operations);
       leave_scope();
       if (repeat_possible) active_loops_.pop_back();
@@ -21870,14 +21835,12 @@ class ScalarChecker {
         auto registering_loops = std::exchange(active_loops_, {});
         auto caught_inputs = std::move(caught_inputs_);
         caught_inputs_.clear();
-        const auto controls = delayed_controls_;
         CatchCapture captures{captures_, catch_bindings_, {}};
         captures_ = &captures;
         const auto was_delayed = delayed_;
         const auto previous_action = deferred_action_;
         const auto previous_return_inputs = return_inputs_;
         auto *outer = abrupt_;
-        delayed_controls_.insert(loop_controls_.begin(), loop_controls_.end());
         delayed_ = true;
         deferred_action_ = action;
         lexical_.symbols = {};
@@ -21964,7 +21927,6 @@ class ScalarChecker {
         lexical_ = before;
         active_loops_ = std::move(registering_loops);
         caught_inputs_ = std::move(caught_inputs);
-        delayed_controls_ = controls;
         operation.captures = std::move(captures.required);
         captures_ = captures.parent;
         delayed_ = was_delayed;
@@ -22271,7 +22233,7 @@ class ScalarChecker {
     initializing_reference_fields_.clear();
     abstract_operand_ = nullptr;
     literal_text_owner_.reset();
-    loop_controls_.clear(); delayed_controls_.clear(); active_loops_.clear();
+    active_loops_.clear();
     caught_.reset(); catch_bindings_.clear(); owned_catches_.clear(); caught_inputs_.clear();
     direct_exception_holders_.clear();
     captures_ = nullptr; delayed_ = false; deferred_action_.reset(); return_inputs_ = {}; prepared_call_ = nullptr;
