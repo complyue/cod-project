@@ -430,6 +430,7 @@ class ScalarChecker {
   size_t symbol_effect_round_ = 0;
   bool closing_write_effects_ = false;
   bool closing_symbol_effects_ = false;
+  bool symbol_pass_needed_ = true;
   mutable std::set<size_t> callable_effect_consumers_;
   struct LeafBehaviorPlan;
   const LeafBehaviorPlan *extracting_leaf_ = nullptr;
@@ -7226,6 +7227,9 @@ class ScalarChecker {
                 const std::vector<Type> &retained = {}, size_t query_environment = 0, const TypeEvidenceState *state = nullptr,
                 const DynamicSymbolBindings *supplied_symbols = nullptr) {
     auto &definition = program_.methods[method];
+    if (!symbol_pass_needed_ && (definition.here_inputs() || !definition.here_targets.empty() ||
+                                definition.source->supplied_scope || definition.source->supplied_group))
+      symbol_pass_needed_ = true;
     AbstractSymbolTargets abstract_targets;
     if (supplied_symbols)
       if (const auto required = abstract_effect_inputs_.find(definition.source); required != abstract_effect_inputs_.end())
@@ -19974,21 +19978,25 @@ class ScalarChecker {
       const auto &provider = program_.native_operations[*native];
       check_native_invocation_kind(checking_method_ ? checking_method_->source : nullptr,
                                    *provider.contract.source, expr.at, &expr == prepared_call_);
+      if (provider.has_here()) symbol_pass_needed_ = true;
       auto call = provider.has_here()
           ? check_native_here(expr, *native, instance, operations, read, discard)
           : check_native_call(expr, *native, instance, operations);
       return operations.insert_or_assign(&expr, std::move(call)).first->second.type;
     }
     if (expr.kind == K::here_binding) {
+      symbol_pass_needed_ = true;
       check_pipeline_binding(expr, instance, operations, operation);
       return operations.insert_or_assign(&expr, std::move(operation)).first->second.type;
     }
     if (expr.kind == K::pipeline) {
+      symbol_pass_needed_ = true;
       check_pipeline(expr, instance, operations, operation, read, discard);
       return operations.insert_or_assign(&expr, std::move(operation)).first->second.type;
     }
     if (expr.kind == K::call) if (const auto op = pipeline_operator(expr.text);
         op && op->kind == PipelineOperator::Kind::consumer && !expr.intrinsic) {
+      symbol_pass_needed_ = true;
       if (expr.children.size() != 2 || expr.has_here_body())
         fail(expr.at, "a terminal operator call requires a traversal and a sink");
       const auto &source = ungrouped_expression(*expr.children[op->reversed]);
@@ -20010,6 +20018,7 @@ class ScalarChecker {
         if (!selected) implementation_gap(expr.at, "a pipeline operation without an ordinary method or a supplied traversal");
         auto call = prepare_pipeline_method(*selected, inputs, instance, operations);
         if (op->kind == PipelineOperator::Kind::source) {
+          symbol_pass_needed_ = true;
           invoke_attachment(expr, {expr, expr.has_here_body() ? expr.children.back().get() : nullptr}, std::move(call),
               instance, operations, operation, read, discard);
         } else {
@@ -20023,10 +20032,12 @@ class ScalarChecker {
     }
     if (pipeline_expression(expr)) implementation_gap(expr.at, "pipeline role checking and bounded here bindings");
     if (expr.kind == K::call && expr.has_here_body()) if (const auto *saved = saved_pipeline(expr, operations)) {
+      symbol_pass_needed_ = true;
       check_saved_pipeline_use(expr, {expr, expr.children.back().get()}, *saved, instance, operations, operation, read, discard);
       return operations.insert_or_assign(&expr, std::move(operation)).first->second.type;
     }
     if (expr.has_here_body() || forwards_here(expr) || takes_prepared_here(expr)) {
+      symbol_pass_needed_ = true;
       check_here_receiver(expr, {expr, expr.has_here_body() ? expr.children.back().get() : nullptr},
                           instance, operations, operation, read, discard);
       return operations.insert_or_assign(&expr, std::move(operation)).first->second.type;
@@ -22282,6 +22293,7 @@ class ScalarChecker {
     checking_context_ = 0;
     checking_method_ = nullptr;
     checking_instance_ = nullptr;
+    symbol_pass_needed_ = true;
     if (program_.initializers.empty()) return;
     EntryBehaviorCheck behavior;
     struct EntryBehaviorScope {
@@ -22772,6 +22784,16 @@ class ScalarChecker {
     }
   }
 
+  static bool can_prove_empty_symbol_requirements(const CheckedInstance &instance, const CheckedMethod &method) {
+    const auto &form = *method.source;
+    return form.kind == Form::Kind::function && !form.c_linkage && !form.symbolic &&
+        !form.implicit_scope && !form.supplied_scope && !form.supplied_group && !form.explicit_captures &&
+        !method.regional_initializer && !method.parent && !method.scope_inputs && !method.here_group &&
+        !method.here_inputs() && method.here_targets.empty() && method.captures.empty() &&
+        !method.declaration_context() && instance.environment.empty() && instance.retained_types.empty() &&
+        !instance.query_environment && instance.incoming_abstract_targets.empty();
+  }
+
   void check_instance_flow(size_t i, bool distinct_bindings, const LeafBehaviorPlan *leaf,
                            std::vector<ScalarExit> *scalar_exits = nullptr) try {
     checking_context_ = i + 1;
@@ -22781,6 +22803,11 @@ class ScalarChecker {
     const ModuleLookup context(interpretation_, program_.methods[instance.method].interpretation);
     const auto &method = *program_.methods[instance.method].source;
     checking_method_ = &program_.methods[instance.method];
+    // Ordinary functions cannot access dynamic symbols or call procedures.
+    // Collect any here handoff during the existing behavior traversals, including
+    // a supplied body at a call site with no corresponding input to this function.
+    symbol_pass_needed_ = !closing_write_effects_ || distinct_binding_effects_.contains(i) ||
+        !can_prove_empty_symbol_requirements(instance, *checking_method_);
     std::vector<LeafExitEquation> leaf_exits;
     const auto record_exit = [&](size_t reason, const Location &origin, const LexicalState &state) {
       if (leaf) leaf_exits.push_back({reason, origin, state});
@@ -23253,6 +23280,8 @@ class ScalarChecker {
     replay_warnings_ = &warnings;
     const auto compare = [&](const CallEffects &expected, bool distinct) {
       auto actual = check_instance(id, distinct);
+      if (instance.symbol_requirements_known_empty && !actual.symbols.empty())
+        throw std::logic_error("function scheduled without a symbol pass has dynamic requirements");
       if (actual == expected) return;
       if (instance.effects_frozen)
         throw std::logic_error("completed leaf behavior differs from final validation");
@@ -23498,7 +23527,10 @@ class ScalarChecker {
     std::deque<size_t> pending;
     std::set<size_t> queued;
     const auto enqueue = [&](size_t context) {
-      if (context && program_.instances[context - 1].effects_frozen) return;
+      if (context) {
+        const auto &body = program_.instances[context - 1];
+        if (body.effects_frozen || (symbols && body.symbol_requirements_known_empty)) return;
+      }
       if (queued.insert(context).second) pending.push_back(context);
     };
     if (!program_.initializers.empty()) enqueue(0);
@@ -23525,6 +23557,7 @@ class ScalarChecker {
         }
         auto effects = check_instance(instance);
         auto &body = program_.instances[instance];
+        if (!symbols) body.symbol_requirements_known_empty = !symbol_pass_needed_;
         const auto changes = merge_effects(body.effects, std::move(effects), mode);
         if (changes || distinct_changes)
           for (const auto &[dependent, consumer] : effect_dependents_[instance]) {

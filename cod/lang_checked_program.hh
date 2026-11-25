@@ -626,6 +626,7 @@ struct CheckedInstance {
   std::map<std::string, size_t> lexical_bindings = {};
   bool effects_frozen = false;
   bool scalar_frame_ready = false;
+  bool symbol_requirements_known_empty = false;
 };
 struct CheckedHereContract {
   struct Component {
