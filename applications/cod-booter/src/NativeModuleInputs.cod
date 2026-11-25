@@ -33,9 +33,9 @@ export proc use_directory_name(
 export handle type BundledDirectory;
 export data BundledDirectoryException <: Exception { os_error:u64; }
 
-proc "C" BundledDirectory() throws BundledDirectoryException;
+func "C" BundledDirectory() throws BundledDirectoryException;
 
-proc "C" use_bundled_directory(
+func "C" use_bundled_directory(
     here work(path:const SourceBytes in B) -> CompilerStatus,
     handle directory:BundledDirectory in B) -> CompilerStatus where {const owner B};
 
