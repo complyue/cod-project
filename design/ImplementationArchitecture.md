@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r171 the [effect application review](../CHANGELOG.md#k-seed-apply-private-effects-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 at the two callers of the seed’s effect applicator. The [deferred exception contract](DesignAuthorityRegistry.md#d-17-defer-dispatch) governs preservation of the pending failure through cleanup.
+
 At r170 the [builtin effect review](../CHANGELOG.md#k-seed-immediate-builtin-effects-20261125) extends [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 to two builtin effect producers under the [material-consumer rule](#justifying-compiler-work-before-coding). The [deferred-call contract](DesignAuthorityRegistry.md#d-17-defer-checks) governs preparation and registration.
 
 At r169 the [call-effect lifetime review](../CHANGELOG.md#k-seed-call-effect-lifetime-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 under the [material-consumer rule](#justifying-compiler-work-before-coding). [D-17-DEFER-CHECKS](DesignAuthorityRegistry.md#d-17-defer-checks) governs when a plain deferred call prepares its operands and when the call executes.
@@ -765,6 +767,16 @@ Keep the operand and result types, builtin identity, negation predicate and earl
 When the expression is the exact `prepared_call_` child, preserve the normal entry, each declared failure reason, and the separate intrinsic failure reason with their existing pending-exception facts. Registration consumes these entries after operand preparation succeeds. Operators inside the operands still execute immediately. Other producers, including the swap branches that record destination updates, keep their existing behavior.
 
 Compare the saved specialized Lexer and ModuleIndex artifacts. The immediate overflow control exits 70 at `3:16`. The prepared addition prints `42` and then `7` before the deferred overflow is reported at `4:10` with status 70. The declared additions print `3` and `7` on their successful immediate and deferred paths. The incompatible declared result still fails at `2:5` and preserves previous outputs. Use the existing traces, diagnostics and generated artifacts under the [seed-first work order](#seed-checker-migration-and-performance-acceptance).
+
+#### Applying a private effect record
+
+At `284894ce:cod/lang_checked.hh`, both callers of `apply_effects` already own the record that needs to change. An immediate call applies each exit’s row once to its own branch state. In a case scan, the scan and result paths use separate rows. At scope exit, `finish_scope` first copies the cached outcome for the current origin, then substitutes that origin’s selections, Boolean facts and pending exception. Apply effects to this private copy in place. The cache and registered cleanup action must remain available to other origins in their original form.
+
+Remove the second copy inside `apply_effects`. Preserve the order of condition refinement, selection and payload updates, pending-return updates and failure routing. After application, `finish_call` still reads the same row’s `selections.invalidated` for target refresh and alias refinement. Keep those entries intact on every application path, including an unreachable continuation.
+
+For the immediate rows built by `invocation_effects`, omit the initialization of `Effects::thrown` with every possible incoming exception. Immediate application uses `transform_conditions`, which leaves that field alone. The actual call failure gets its category and ownership from the completion reason and the selected callee, or follows the protected `here` transfer. Prepared calls and prepared transfers still need the incoming exception for substitution at cleanup. Preserve their existing `preserve_pending` calls and declared-root handling.
+
+Use the existing immediate-call, saved-target, protected-completion, FIFO, case-scan or case-exit, and located-rejection controls. Include a drain with a write followed by a read, such as `DeferredWriteRead`, which observes `41/43/90`. Compare the supported seed artifacts for Lexer, ModuleIndex and NativeSource against their pinned outputs. The [seed-first work order](#seed-checker-migration-and-performance-acceptance) applies.
 
 #### When parallel module processing would help
 
