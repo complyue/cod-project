@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Keep declared root presence in seed cleanup analysis
+
+<a id="k-seed-declared-root-presence-20261125"></a>
+**K-SEED-DECLARED-ROOT-PRESENCE-20261125.** D-ARCH-REVIEW r158→159 continues P-682/P-683 under the [trusted-source decision](#h-trusted-seed-translation-20261125). After [removal of hypothetical deferred failures](#k-seed-deferred-coverage-removal-20261125), the remaining consumers at `e1b41cfd:cod/lang_checked.hh` and `cod/lang_completion.hh` use the presence of a root declaration. The [review](design/ImplementationArchitecture.md#tracking-presence-of-a-root-exception-declaration) clears removal of the per-expression IDs while retaining action reachability, scope summaries and actual queued occurrences.
+
 ## 2026-11-25 — Retire cross-call borrowed payload read proofs from trusted translation
 
 <a id="k-seed-borrowed-read-obligations-20261125"></a>
