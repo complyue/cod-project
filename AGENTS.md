@@ -80,9 +80,11 @@ For a heavy launch, check available memory before starting and monitor it throug
 
 ### Bootstrap and Build Configuration Safety
 
+Routine CMake regeneration of an existing build tree follows the incremental build rule. Proceed without separate approval when the selected work, including nested steps, rules out a large-scale LLVM rebuild. If a Ninja dry run shows only regeneration, run just the generator target (for example, `ninja -C build build.ninja` in the existing Ninja tree). Then inspect the regenerated plan for the intended target with `ninja -C build -n -v TARGET`. Ask before executing a large-scale LLVM rebuild or a step whose impact is still uncertain after inspection.
+
 Require explicit human authorization before any of the following:
 
-- Bootstrap or configuration work that can fully or partly rebootstrap LLVM, Clang or CoD. This includes CMake configure/generate, presets, fresh caches, new `-D` options and regeneration of the main build files.
+- Bootstrap or configuration changes that can fully or partly rebootstrap LLVM, Clang or CoD. These include fresh configurations or caches, changes to presets and new `-D` options.
 - Editing toolchain/bootstrap definitions, including `do-build-cod.*`, `prepare-*`, CMake files and presets, LLVM patches and files in `llvm-project/`. The same rule applies to installing, updating, removing or switching toolchains and SDKs.
 - Cleaning, deleting, moving, renaming, recreating or bulk-editing build trees, their metadata or install trees. Direct install, clean, LLVM toolchain (such as `llvm`, `clang` or `lld`), runtime and bootstrap stage targets also require it. The CoD seed target `cod` follows the incremental build rule above.
 

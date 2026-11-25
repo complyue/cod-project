@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Apply incremental build approval to CMake regeneration
+
+<a id="h-incremental-cmake-regeneration-20261125"></a>
+**H-INCREMENTAL-CMAKE-REGENERATION-20261125.** The project user clarified “CMake regeneration 不触发llvm大面积rebuild的情况下也不需要审批” in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). D-ARCH-REVIEW r156→157 supersedes the blanket approval for regeneration in `24572783:AGENTS.md` and its Cursor counterpart. The [standing rule](AGENTS.md#bootstrap-and-build-configuration-safety) permits routine existing-tree regeneration and requires inspecting the refreshed plan before executing any uncertain or large-scale LLVM build. The seed executable rename is the first application.
+
 ## 2026-11-25 — Remove unused pending-read propagation from seed leaf classification
 
 <a id="k-seed-pending-leaf-reads-20261125"></a>

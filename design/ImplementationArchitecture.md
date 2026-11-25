@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r157 the [project user’s build approval decision](../CHANGELOG.md#h-incremental-cmake-regeneration-20261125) applies the existing incremental build rule to CMake regeneration. [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues P-682/P-683. The [build rule](../AGENTS.md#bootstrap-and-build-configuration-safety) separates regeneration from execution of the regenerated target plan.
+
 At r156 the [borrowed-Boolean leaf review](../CHANGELOG.md#k-seed-pending-leaf-reads-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), P-682/P-683 and the r149 trusted-source cutover. Its scope is the read graph built during classification of these leaves. The completed exit facts and the ordinary call solver still have translation consumers.
 
 At r155 the [bootstrap names review](../CHANGELOG.md#h-bootstrap-tool-and-entry-names-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and the [seed-first work order](#seed-checker-migration-and-performance-acceptance). It applies [D-15-ENTRY](DesignAuthorityRegistry.md#d-15-entry) to the source root built by the seed.
