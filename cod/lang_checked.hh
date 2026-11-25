@@ -22495,13 +22495,17 @@ class ScalarChecker {
     }
   }
   struct LeafBehaviorPlan {
-    enum class Kind { borrowed_byte, scalar_predicate, byte_literal } kind = Kind::borrowed_byte;
+    enum class Kind { borrowed_byte, scalar_predicate, byte_literal, integer_result } kind = Kind::borrowed_byte;
     const Expression *primitive = nullptr;
     ScalarPredicatePlan predicate;
     const Expression *literal_result = nullptr;
+    std::vector<const Expression *> integer_operations;
   };
   static bool short_circuit_predicate(const Expression &expr) {
     return expr.kind == Expression::Kind::binary && (expr.text == "&&" || expr.text == "||");
+  }
+  static bool scalar_predicate_operation(std::string_view name) {
+    return name == "!" || name == "==" || name == "!=" || name == "<" || name == "<=" || name == ">" || name == ">=";
   }
 
   bool bind_scalar_predicate(const Expression &expr, const TypeEvidenceState &scope, ScalarPredicatePlan &plan,
@@ -22547,9 +22551,7 @@ class ScalarChecker {
         return bind_scalar_predicate(*expr.children.back(), scope, plan, right_guard);
       } else {
         const auto operation = operation_name(expr, &scope);
-        if (operation != expr.text ||
-            (operation != "!" && operation != "==" && operation != "!=" &&
-             operation != "<" && operation != "<=" && operation != ">" && operation != ">=") ||
+        if (operation != expr.text || !scalar_predicate_operation(operation) ||
             !named_family(expr, &scope).methods.empty() || has_declarations(expr.text)) return false;
       }
       break;
@@ -22563,41 +22565,60 @@ class ScalarChecker {
 
   bool bind_leaf_operations(const Expression &expr, TypeEvidenceState &scope, LeafBehaviorPlan &plan) const {
     using K = Expression::Kind;
+    const bool integer_result = plan.kind == LeafBehaviorPlan::Kind::integer_result;
     if (expr.definition || expr.receiving || expr.annotation || expr.checked_ref_argument ||
         expr.spread || expr.scoped || expr.lexical_symbol_call) return false;
     switch (expr.kind) {
     case K::name:
       return scope.bindings.contains(expr.text);
     case K::block:
-    case K::boolean: case K::integer:
-    case K::grouped: case K::return_value: case K::return_tail:
+    case K::boolean: case K::grouped:
+      break;
+    case K::integer:
+      return !integer_result || expr.text.ends_with("u64");
+    case K::return_value:
+      if (integer_result && expr.children.size() != 1) return false;
+      break;
+    case K::return_tail:
+      if (integer_result) return false;
       break;
     case K::conditional:
-      if (!expr.ordinary_braced_if()) return false;
+      if (!expr.ordinary_braced_if() && (!integer_result || expr.children[1]->kind != K::return_value)) return false;
       break;
     case K::pointer_group:
-      if (expr.declaration_kind != "val" || expr.children.size() != 1 ||
+      if (integer_result || expr.declaration_kind != "val" || expr.children.size() != 1 ||
           expr.children.front()->kind != K::pointer) return false;
       break;
     case K::pointer:
-      if (expr.declaration_kind != "val" || expr.children.size() != 1 ||
+      if (integer_result || expr.declaration_kind != "val" || expr.children.size() != 1 ||
           !expr.owner_name.empty() || !bind_leaf_operations(*expr.children.front(), scope, plan))
         return false;
       return scope.bindings.try_emplace(expr.text).second;
     case K::unary: case K::binary: {
+      if (integer_result && short_circuit_predicate(expr)) {
+        plan.integer_operations.push_back(&expr);
+        break;
+      }
       const auto operation = operation_name(expr, &scope);
       // The ordinary checker still validates the selected builtin and all
       // operand types. A visible source overload keeps this body legacy.
-      if ((operation != "!" && operation != "==") ||
-          !named_family(expr, &scope).methods.empty() || has_declarations(expr.text)) return false;
+      if (integer_result) {
+        if (operation != expr.text || (operation != "*" && !scalar_predicate_operation(operation))) return false;
+        if (const auto family = module_call_family(module_names(), expr)) {
+          const auto *methods = proven_family_methods(*family, interpretation_);
+          if (!methods || !methods->empty() || has_declarations(expr.text)) return false;
+        }
+        plan.integer_operations.push_back(&expr);
+      } else if ((operation != "!" && operation != "==") ||
+                 !named_family(expr, &scope).methods.empty() || has_declarations(expr.text)) return false;
       break;
     }
     case K::transfer:
-      if (!named_family(expr, &scope).methods.empty() || expr.children.size() != 2 ||
+      if (integer_result || !named_family(expr, &scope).methods.empty() || expr.children.size() != 2 ||
           expr.children.front()->kind != K::name) return false;
       break;
     case K::call:
-      if (expr.has_here_body() || expr.intrinsic ||
+      if (integer_result || expr.has_here_body() || expr.intrinsic ||
           text_access(text_primitive(expr, &scope)) != BuiltinOperation::text_byte ||
           plan.primitive || expr.children.size() != 2 || expr.children.front()->kind != K::string_literal)
         return false;
@@ -22618,7 +22639,8 @@ class ScalarChecker {
     const bool scalar_function = form.kind == Form::Kind::function && !form.implicit_scope &&
         !form.supplied_scope && !form.supplied_group && !form.explicit_captures;
     const bool byte_literal = scalar_function && form.result_type == Type::uint8;
-    const auto expected_result = byte_literal ? Type::uint8 : Type::boolean;
+    const bool integer_result = scalar_function && form.result_type == Type::uint64;
+    const auto expected_result = integer_result ? Type::uint64 : byte_literal ? Type::uint8 : Type::boolean;
     if ((!form.ordinary_procedure() && !scalar_function) || form.symbolic || form.c_linkage ||
         !method.operation.empty() ||
         !form.body || form.body->kind != Expression::Kind::block || lexical_methods_.contains(&form) ||
@@ -22630,8 +22652,11 @@ class ScalarChecker {
 
     if (form.body->children.empty() || form.body->children.back()->kind != Expression::Kind::return_value)
       return {};
-    if (scalar_function && (form.body->scoped || form.body->children.size() != 1 ||
+    if (scalar_function && (form.body->scoped || (!integer_result && form.body->children.size() != 1) ||
                             !method.input_owners().empty() || method.declaration_context())) return {};
+    if (integer_result && (form.case_scan_scope || instance.query_environment || !instance.retained_types.empty() ||
+                           !method.captures.empty() || abstract_effect_inputs_.contains(&form) ||
+                           (method.family && !program_.families[*method.family].declarations.empty()))) return {};
     const auto &parameters = method.input_parameters();
     if (parameters.size() != instance.arguments.size()) return {};
     LeafBehaviorPlan plan;
@@ -22648,7 +22673,8 @@ class ScalarChecker {
     }
     TypeEvidenceState scope;
     scope.method = instance.method;
-    if (scalar_function) plan.kind = LeafBehaviorPlan::Kind::scalar_predicate;
+    if (integer_result) plan.kind = LeafBehaviorPlan::Kind::integer_result;
+    else if (scalar_function) plan.kind = LeafBehaviorPlan::Kind::scalar_predicate;
     bool has_borrowed_formal = false;
     for (size_t ordinal = 0; ordinal < parameters.size(); ++ordinal) {
       const auto &parameter = parameters[ordinal];
@@ -22658,14 +22684,20 @@ class ScalarChecker {
         if (scalar_function || argument_mode(parameter) != ArgumentMode::borrowed_ref || parameter.read_only ||
             type != Type::boolean || has_borrowed_formal) return {};
         has_borrowed_formal = true;
-      } else if (type != Type::boolean && type != Type::uint8 && (scalar_function || type != Type::uint64)) return {};
+      } else if (type != Type::boolean) {
+        const bool supports_byte = !integer_result && type == Type::uint8;
+        const bool supports_wide = (integer_result || !scalar_function) && type == Type::uint64;
+        if (!supports_byte && !supports_wide) return {};
+      }
       if (!scope.bindings.emplace(parameter.name, type).second) return {};
     }
     for (const auto &owner : method.input_owners()) scope.symbol_shadows.insert(owner.name);
 
     const ModuleLookup module(module_, method.module);
     const ModuleLookup interpretation(interpretation_, method.interpretation);
-    if (scalar_function) {
+    if (integer_result) {
+      if (!bind_leaf_operations(*form.body, scope, plan)) return {};
+    } else if (scalar_function) {
       const auto &result = *form.body->children.front();
       if (result.children.size() != 1 || !bind_scalar_predicate(*result.children.front(), scope, plan.predicate)) return {};
       if (!plan.predicate.calls.empty() && (form.case_scan_scope || instance.query_environment ||
@@ -22684,16 +22716,22 @@ class ScalarChecker {
     CleanupEquations::BooleanValue result;
   };
 
-  static void check_scalar_operations(const ScalarPredicatePlan &plan, const CheckedInstance &instance) {
-    for (const auto *site : plan.operations) {
+  static void check_bound_scalar_operations(std::span<const Expression *const> sites, const CheckedInstance &instance) {
+    for (const auto *site : sites) {
       const auto &operation = instance.operations.at(site);
       const auto builtin = short_circuit_predicate(*site) ? BuiltinOperation::none :
           site->kind == Expression::Kind::unary ? BuiltinOperation::unary : BuiltinOperation::binary;
+      const bool multiply = site->text == "*";
       if (operation.callee || operation.callable_call || operation.builtin != builtin ||
           (builtin != BuiltinOperation::none && operation.builtin_name != site->text) ||
-          operation.type != Type::boolean)
-        throw std::logic_error("scalar predicate disagrees with its binding plan");
+          operation.type != (multiply ? Type::uint64 : Type::boolean) ||
+          (multiply && operation.operand_type != Type::uint64))
+        throw std::logic_error("scalar operation disagrees with its leaf binding plan");
     }
+  }
+
+  static void check_scalar_operations(const ScalarPredicatePlan &plan, const CheckedInstance &instance) {
+    check_bound_scalar_operations(plan.operations, instance);
     for (const auto &call : plan.calls) {
       const auto &operation = instance.operations.at(call.site);
       if (!operation.reads_direct_body || operation.callable_call || operation.builtin != BuiltinOperation::none ||
@@ -22707,6 +22745,8 @@ class ScalarChecker {
     const bool borrowed = leaf.kind == LeafBehaviorPlan::Kind::borrowed_byte;
     if (leaf.kind == LeafBehaviorPlan::Kind::scalar_predicate) {
       check_scalar_operations(leaf.predicate, instance);
+    } else if (leaf.kind == LeafBehaviorPlan::Kind::integer_result) {
+      check_bound_scalar_operations(leaf.integer_operations, instance);
     } else if (leaf.kind == LeafBehaviorPlan::Kind::byte_literal) {
       const auto &operation = instance.operations.at(leaf.literal_result);
       if (operation.type != Type::uint8 || operation.callee || operation.callable_call || operation.builtin != BuiltinOperation::none)
@@ -22719,8 +22759,12 @@ class ScalarChecker {
     if (!borrowed && exits.empty()) throw std::logic_error("closed scalar function has no normal exit");
     const auto bounds = Completion::failure(exception_id(ExceptionCategory::index_out_of_bounds)).reason;
     for (const auto &exit : exits) {
-      if (exit.reason && (!borrowed || exit.reason != bounds || exit.origin != leaf.primitive->at))
-        throw std::logic_error("closed leaf extraction found an unbound exit");
+      if (exit.reason) {
+        const bool byte_bounds = borrowed && exit.reason == bounds && exit.origin == leaf.primitive->at;
+        const bool arithmetic_failure = exit.reason == 2 && std::ranges::any_of(leaf.integer_operations,
+            [&](const Expression *site) { return site->text == "*" && exit.origin == site->at; });
+        if (!byte_bounds && !arithmetic_failure) throw std::logic_error("closed leaf extraction found an unbound exit");
+      }
       observe_outcome(exit.reason, exit.state);
     }
   }
