@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Extend receiver declaration sugar to functors
+
+<a id="h-functor-receiver-sugar-20261124"></a>
+**H-FUNCTOR-RECEIVER-SUGAR-20261124.** The project user requested “OO 语法糖应该扩展到 functor 语法” in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) and authorized a separate design update. D-07 r217→218 applies P-724/P-725 to the call operator. The design uses the existing `(())` name after the receiver dot. The baseline at `2d205cc5:design/DomainLanguageDesign.md` gives the receiver head and explicit first parameter in adjacent sections. The [new paired definitions](design/DomainLanguageDesign.md#functor-receivers-and-callback-arguments) preserve the selected family, access and actual owner under P-636/P-637.
+
 ## 2026-11-24 — Review initialized fixed byte-array references in the booter
 
 <a id="k-booter-fixed-byte-array-reference-20261124"></a>

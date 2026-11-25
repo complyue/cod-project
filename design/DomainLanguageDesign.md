@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 217
+Discussion revision: 218
 
 Recorded: 2026-11-24
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r218 [D-07-MEMBER-RECEIVER](DesignAuthorityRegistry.md#d-07-member-receiver) extends the receiver head to [functor call-operator declarations](#functor-receivers-and-callback-arguments) under P-724/P-725. The [user’s direction](../CHANGELOG.md#h-functor-receiver-sugar-20261124) applies the same implicit receiver, target access and explicit owner to an existing type-carried operation. Acceptance compares the two declaration heads on the same initialized receiver, including access rejection and duplicate definitions. [D-07-FUNCTOR-LOOKUP](DesignAuthorityRegistry.md#d-07-functor-lookup) governs publication and dispatch. Compiler delivery is separate.
 
 [D-07-MEMBER-RECEIVER](DesignAuthorityRegistry.md#d-07-member-receiver) covers the [receiver qualifier](../CHANGELOG.md#h-member-receiver-const-20261124) at r216 and the explicit receiver owner at r217 under P-724/P-725. [D-07-MEMBER-NAMES](DesignAuthorityRegistry.md#d-07-member-names) at r217 covers field, accessor and method name collisions under P-726/P-727. The [project user’s decision](../CHANGELOG.md#h-member-names-and-owner-20261124) settles both questions. Acceptance compares target and allocation access independently and diagnoses colliding declarations even before a member is used. [Member declarations](#receivers-in-field-accessors-and-member-methods)
 
@@ -537,13 +539,13 @@ func (const Exception in O).get_cause() -> ptr const Exception in O
 
 **One name per visible member.** For a given receiver type a spelling can denote a stored data field, a computed accessor family or a named method family. Reject any collision between these categories where the declarations first become visible together, including at module composition. For example, `data Policy { check:Threshold }` conflicts with `func const Policy.check(n:u64)` even when the data field itself supports a call operator. A declaration of `Policy.@check()` also conflicts with that stored field. Check this when establishing the member set even if nobody writes `policy.check`. Unrelated receiver types may use the same spelling. Overloads within one family follow ordinary signature and access rules.
 
-A writable accessor can change its receiver. Two evaluated reads of `counter.next` invoke the accessor twice and may produce different values. The choice between that interface and a named `counter.advance()` method belongs to the program author. Both use ordinary function, evaluation and result rules. This decision covers receiver syntax and member names. Extension permissions, setter declarations and bound method extraction have their own scope.
+A writable accessor can change its receiver. Two evaluated reads of `counter.next` invoke the accessor twice and may produce different values. The choice between that interface and a named `counter.advance()` method belongs to the program author. Both use ordinary function, evaluation and result rules. The same receiver head also applies to [the functor call operator](#functor-receivers-and-callback-arguments). Extension permissions, setter declarations and bound method extraction have their own scope.
 
 #### Functor receivers and callback arguments
 
 A functor is a here callable when its receiver supplies a compatible call operator to a here parameter. A direct call such as `limit(12u64)` invokes that operator on the data receiver. The selected method retains its own func/proc permissions. The here use grants bounded access to the receiver and carries no permission for its method body to read arbitrary caller locals.
 
-A data call-operator method requires a reference to an already initialized instance on entry. A reserved target identity alone cannot serve as its receiver. In the proposed declaration spelling, the receiver is the first parameter. The expression to the left of the call parentheses supplies its reference. Its target access is an ordinary overload constraint. A readonly target admits only methods callable through readonly access. A writable target can use either access mode. When two applicable methods differ only in receiver target access, the writable match is exact for a writable receiver. Other arguments, owner constraints, callable kind and checked failures retain their ordinary rules.
+A data call-operator method requires a reference to an already initialized instance on entry. A reserved target identity alone cannot serve as its receiver. In the explicit-parameter spelling, the receiver is the first parameter. The expression to the left of the call parentheses supplies its reference. Its target access is an ordinary overload constraint. A readonly target admits only methods callable through readonly access. A writable target can use either access mode. When two applicable methods differ only in receiver target access, the writable match is exact for a writable receiver. Other arguments, owner constraints, callable kind and checked failures retain their ordinary rules.
 
 ```cod
 data Threshold { minimum:u64; }
@@ -552,6 +554,18 @@ func (())(self:const Threshold in O, x:u64) -> bool where {const owner O} {
     return x >= self.minimum;
 }
 ```
+
+The OO spelling places the existing operator name `(())` after the receiver dot. The following definition is an alternative to the one above. Both select the same method signature in the call-operator family of `Threshold`.
+
+```cod
+func (const Threshold in O).(())(x:u64) -> bool where {const owner O} {
+    return x >= self.minimum
+}
+```
+
+When the body and signature have no need to name the receiver owner, write `func const Threshold.(())(x:u64) -> bool`. A caller writes `limit(12u64)` with either declaration. The parentheses after `(())` contain only the written arguments. For example, `proc Counter.(())(step:u64)` takes an implicit writable reference to an initialized `Counter` and one explicit argument. A second formal named `self` conflicts with the implicit formal.
+
+Defining both example bodies in one world gives a duplicate definition. Both spellings use the same overload ranking and extension permission. Publishing the receiver type carries its call-operator family. Field and named-method collisions are checked among their written member names. `make Threshold(...)` selects a constructor. Direct invocation, synchronous passage to a compatible `here` parameter and binding a selected `func` to a functor value each keep their own receiver lifetime and callable-kind checks. [Type-carried publication](ModuleWorlds.md#publication-of-type-carried-call-operators) · [Function value and functor value](CallableStorageAndHereAccess.md#function-value-and-functor-value)
 
 A method may instead declare `self:Threshold in O` when it needs writable target access. A caller with `ref limit:const Threshold in O` cannot supply that access. A caller with `const ref limit:Threshold in O` has a fixed reference slot and a writable target. The owner's allocation permission is independent of both.
 
