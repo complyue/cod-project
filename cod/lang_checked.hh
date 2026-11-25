@@ -5106,10 +5106,13 @@ class ScalarChecker {
     }
     return projected;
   }
+  enum class CallForm { ordinary, immediate_scope, installed_handler };
   void finish_call(const Expression &expr, const Type &contract, const CallEffects &summary,
       const std::set<size_t> &reasons, const std::vector<Type> &arguments,
       const std::vector<CheckedOperation> &operands, CheckedOperation &operation, bool read, bool discard,
-      size_t offset = 0, bool immediate_scope = false, std::optional<LexicalState> *case_scan = nullptr) {
+      size_t offset = 0, CallForm form = CallForm::ordinary, std::optional<LexicalState> *case_scan = nullptr) {
+    const bool immediate_scope = form == CallForm::immediate_scope;
+    const bool installed_handler = form == CallForm::installed_handler;
     if (contract.target && contract.target->kind == Type::region && contract.target->owned &&
         (&expr != region_result_initializer_ || &expr == prepared_call_ || !operation.callee ||
          !program_.instances[*operation.callee].result.owns_region()))
@@ -5216,7 +5219,7 @@ class ScalarChecker {
       if (arguments[i] != contract.parameters[i] && !widens_text(arguments[i], contract.parameters[i]))
         implementation_gap(operation.argument(expr, i + offset).at, "borrowed exception upcasts");
     }
-    for (const auto owner : summary.lexical_allocations) {
+    if (!installed_handler) for (const auto owner : summary.lexical_allocations) {
       if (immediate_scope) require_lexical_allocator(operation.scope_owners.at(owner), expr.at);
       else if (operation.callee) {
         const auto &callee = program_.methods[program_.instances[*operation.callee].method];
@@ -5225,7 +5228,7 @@ class ScalarChecker {
         else require_lexical_allocator(one_owner(views.at(first_owner_operand(callee, owner))), expr.at);
       } else require_lexical_allocator(owners.at(owner), expr.at);
     }
-    if (!summary.array_allocations.empty()) {
+    if (!installed_handler && !summary.array_allocations.empty()) {
       if (prepared || operation.callable_call || immediate_scope || !operation.callee)
         implementation_gap(expr.at, "array allocator forwarding outside a synchronous named call");
       const auto &callee = program_.methods[program_.instances[*operation.callee].method];
@@ -5449,8 +5452,8 @@ class ScalarChecker {
       };
       const std::set<size_t> no_symbol_uses;
       const auto apply_invocation = [&](size_t reason, CleanupEquations::Effects &effects) {
-        // The original call outcomes carry the callee's symbol uses.
-        const auto &symbol_uses = reasons.contains(reason) ? summary.symbols : no_symbol_uses;
+        // A scoped activation already accounts for its callee's symbol uses.
+        const auto &symbol_uses = !installed_handler && reasons.contains(reason) ? summary.symbols : no_symbol_uses;
         apply_effects(lexical_, effects, expr.at, written_targets, symbol_uses);
         if (!summary.bindings.empty()) refresh_targets(lexical_, false,
             immediate_scope || embedded_updates ? &effects.selections.invalidated : nullptr);
@@ -16419,7 +16422,8 @@ class ScalarChecker {
     const auto contract = callable_type(method, target.arguments, target.result);
     const auto &effects = read_effects(callee, invocation_symbol_use());
     auto reasons = direct_call_reasons(contract, effects);
-    finish_call(expr, contract, effects, reasons, call.arguments, call.views, operation, read, discard, 0, true);
+    finish_call(expr, contract, effects, reasons, call.arguments, call.views, operation, read, discard,
+                0, CallForm::immediate_scope);
   }
   void check_scope_call(const Expression &expr, size_t method_id, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, CheckedOperation &operation, bool read, bool discard,
@@ -16499,7 +16503,8 @@ class ScalarChecker {
       if (!exits->scan) reasons.erase(0);
       if (exits->result) reasons.insert(1);
     }
-    finish_call(expr, contract, effects, reasons, arguments, views, operation, read, discard, 0, true, case_scan);
+    finish_call(expr, contract, effects, reasons, arguments, views, operation, read, discard,
+                0, CallForm::immediate_scope, case_scan);
     if (always_throws && &expr != prepared_call_) operation.type = Type::never;
   }
   void check_value_call(const Expression &expr, const Type &contract, size_t offset, CheckedInstance *instance,
@@ -16560,11 +16565,7 @@ class ScalarChecker {
       if (installation) {
         const auto &activation = program_.instances.at(*installation->scoped_effect);
         const auto &method = program_.methods.at(activation.method);
-        CallEffects effects{read_call_behavior(*installation->scoped_effect), {}};
-        // Allocation authority was selected with the activation. Ordinary
-        // completion facts still come from the invoked lexical body.
-        effects.array_allocations.clear();
-        effects.lexical_allocations.clear();
+        const auto &effects = read_effects(*installation->scoped_effect, SymbolEffectUse::none);
         operation.argument_sources.emplace();
         for (const auto &argument : expr.children) operation.argument_sources->push_back(argument.get());
         for (size_t i = 0; i < installation->arguments.size(); ++i) {
@@ -16582,7 +16583,8 @@ class ScalarChecker {
         }
         const auto internal = callable_type(method, activation.arguments, activation.result);
         const auto reasons = direct_call_reasons(internal, effects);
-        finish_call(expr, internal, effects, reasons, arguments, views, operation, read, discard, offset);
+        finish_call(expr, internal, effects, reasons, arguments, views, operation, read, discard,
+                    offset, CallForm::installed_handler);
       } else {
         const auto *effects = target ? &read_call_behavior(*target) : nullptr;
         if (validating_ && (!effects || !effects->binding_sources.empty() || !effects->written_inputs.empty()))
@@ -19398,7 +19400,8 @@ class ScalarChecker {
       operation.argument_sources->push_back(&expr);
     }
     const auto reasons = direct_call_reasons(contract, effects);
-    finish_call(expr, contract, effects, reasons, arguments, views, operation, false, true, 0, true);
+    finish_call(expr, contract, effects, reasons, arguments, views, operation, false, true,
+                0, CallForm::immediate_scope);
     if (!lexical_.live) return;
     const auto completed = effects.initialized.find(0);
     if (completed == effects.initialized.end()) {
