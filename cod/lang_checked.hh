@@ -10,6 +10,7 @@
 #include <bit>
 #include <charconv>
 #include <cmath>
+#include <memory>
 #include <tuple>
 #include <type_traits>
 #include <variant>
@@ -18,26 +19,81 @@ namespace cod::language {
 
 using CompletionInputs = std::set<size_t>;
 
+class DynamicSymbolBindings {
+public:
+  struct Facts {
+    bool bound = false;
+    bool named_installation = false;
+    bool local_scoped = false;
+    std::optional<size_t> native_owner;
+    // The outer optional records an installation. The inner one records its proved actual owner.
+    std::optional<std::optional<size_t>> borrowed_owner;
+    std::optional<NominalTargets> abstract_targets;
+    bool operator==(const Facts &) const = default;
+  };
+
+private:
+  struct Layer {
+    std::shared_ptr<const Layer> parent;
+    size_t depth;
+    std::map<size_t, Facts> changes;
+  };
+  std::shared_ptr<Layer> leaf_;
+
+  static size_t depth(const Layer *layer) { return layer ? layer->depth : 0; }
+  static void collect_changes(std::set<size_t> &keys, const Layer *layer, const Layer *base) {
+    for (; layer != base; layer = layer->parent.get())
+      for (const auto &[symbol, facts] : layer->changes) keys.insert(symbol);
+  }
+
+public:
+  const Facts &get(size_t symbol) const {
+    for (const Layer *layer = leaf_.get(); layer; layer = layer->parent.get())
+      if (const auto found = layer->changes.find(symbol); found != layer->changes.end()) return found->second;
+    static const Facts absent;
+    return absent;
+  }
+
+  void set(size_t symbol, Facts facts) {
+    if (facts == get(symbol)) return;
+    // A saved state or child layer freezes this leaf for all of its readers.
+    if (leaf_.use_count() != 1) leaf_ = std::make_shared<Layer>(Layer{leaf_, depth(leaf_.get()) + 1, {}});
+    if (!leaf_->parent && facts == Facts{}) leaf_->changes.erase(symbol);
+    else leaf_->changes.insert_or_assign(symbol, std::move(facts)); // An empty row hides an ancestor.
+  }
+
+  template <typename Edit> void update(size_t symbol, Edit edit) {
+    auto facts = get(symbol);
+    edit(facts);
+    set(symbol, std::move(facts));
+  }
+
+  std::set<size_t> changed_keys(const DynamicSymbolBindings &other) const {
+    const Layer *left = leaf_.get(), *right = other.leaf_.get();
+    while (depth(left) > depth(right)) left = left->parent.get();
+    while (depth(right) > depth(left)) right = right->parent.get();
+    while (left != right) {
+      left = left->parent.get();
+      right = right->parent.get();
+    }
+    // A null common base visits the complete set of keys in both environments.
+    std::set<size_t> keys;
+    collect_changes(keys, leaf_.get(), left);
+    collect_changes(keys, other.leaf_.get(), left);
+    return keys;
+  }
+};
+
 struct LexicalState {
-  // A joined installation without a proved common actual owner carries no loan proof.
-  using SymbolBorrows = std::map<size_t, std::optional<size_t>>;
   struct Scope {
     size_t id;
     std::map<std::string, size_t> bindings;
     bool declarations = true;
-    std::optional<std::set<size_t>> symbol_entry = {};
-    std::map<size_t, size_t> native_symbol_entry = {};
-    SymbolBorrows borrowed_symbol_entry = {};
-    AbstractSymbolTargets abstract_symbol_entry = {};
-    std::set<size_t> local_scoped_entry = {};
-    std::set<size_t> named_installations_entry = {};
+    std::optional<DynamicSymbolBindings> symbol_entry = {};
   };
   std::vector<Scope> scopes{{0, {}}};
-  std::set<size_t> bound_symbols, required_symbols, named_installations;
-  std::set<size_t> local_scoped_symbols;
-  std::map<size_t, size_t> native_symbol_owners;
-  SymbolBorrows borrowed_symbol_owners;
-  AbstractSymbolTargets abstract_symbol_targets;
+  DynamicSymbolBindings symbols;
+  std::set<size_t> required_symbols;
   std::set<size_t> bindings_available, available, initialized, present;
   std::set<size_t> live_exception_holders;
   // Until a payload loan's full duration is proved, retain its exposure on all reaching paths.
@@ -4205,11 +4261,11 @@ class ScalarChecker {
       implementation_gap(at, "deferred access to a live scoped procedure activation");
     if (validating_ && state.live && program_.symbols[symbol].reference) {
       if (delayed_) implementation_gap(at, "deferred lookup of a borrowed symbol");
-      const auto installed = state.borrowed_symbol_owners.find(symbol);
-      if (installed != state.borrowed_symbol_owners.end() && !installed->second)
+      const auto &installed = state.symbols.get(symbol).borrowed_owner;
+      if (installed && !*installed)
         implementation_gap(at, "borrowed symbol has no proved common actual owner");
     }
-    if (!proving_ || !state.live || state.bound_symbols.contains(symbol)) return;
+    if (!proving_ || !state.live || state.symbols.get(symbol).bound) return;
     if (!delayed_ && !checking_instance_ && validating_)
       fail(at, "cannot prove an installed binding for symbol '" + program_.symbols[symbol].name + "'");
     state.required_symbols.insert(symbol);
@@ -5571,6 +5627,42 @@ class ScalarChecker {
     }
     return retained;
   }
+  DynamicSymbolBindings join_symbols(const DynamicSymbolBindings &left, const DynamicSymbolBindings &right) {
+    auto result = left;
+    const auto join_owner = [&](size_t owner, size_t alternative) {
+      if (owner == alternative) return owner;
+      const auto lifetime = std::max(owner_lifetime_scope(owner), owner_lifetime_scope(alternative));
+      const auto joined_owner = next_scope_++;
+      native_owner_scopes_.emplace(joined_owner, lifetime);
+      return joined_owner;
+    };
+    // Visit native installations from the left first, then right-only ones,
+    // in symbol order within each group.
+    std::vector<size_t> right_only;
+    const auto join_symbol = [&](size_t symbol, const auto &a, const auto &b) {
+      DynamicSymbolBindings::Facts facts;
+      facts.bound = a.bound && b.bound;
+      facts.named_installation = a.named_installation && b.named_installation;
+      facts.local_scoped = a.local_scoped && b.local_scoped;
+      if (a.borrowed_owner == b.borrowed_owner) facts.borrowed_owner = a.borrowed_owner;
+      else facts.borrowed_owner.emplace(std::nullopt);
+      if (a.abstract_targets && b.abstract_targets) {
+        facts.abstract_targets = a.abstract_targets;
+        facts.abstract_targets->insert(b.abstract_targets->begin(), b.abstract_targets->end());
+      }
+      if (a.native_owner || b.native_owner)
+        facts.native_owner = join_owner(a.native_owner.value_or(0), b.native_owner.value_or(0));
+      result.set(symbol, std::move(facts));
+    };
+    for (const auto symbol : left.changed_keys(right)) {
+      const auto &a = left.get(symbol), &b = right.get(symbol);
+      if (!a.native_owner && b.native_owner) right_only.push_back(symbol);
+      else join_symbol(symbol, a, b);
+    }
+    for (const auto symbol : right_only) join_symbol(symbol, left.get(symbol), right.get(symbol));
+    return result;
+  }
+
   void join(const LexicalState &a, bool a_exits, const LexicalState &b, bool b_exits, const Location &at) {
     a_exits = a_exits || !a.live;
     b_exits = b_exits || !b.live;
@@ -5602,32 +5694,8 @@ class ScalarChecker {
     else if (!b_exits) lexical_.exposed_exception_payloads.insert(b.exposed_exception_payloads.begin(), b.exposed_exception_payloads.end());
     if (a_exits) lexical_.started_initializers = b.started_initializers;
     else if (!b_exits) lexical_.started_initializers.insert(b.started_initializers.begin(), b.started_initializers.end());
-    lexical_.bound_symbols = a_exits ? b.bound_symbols : b_exits ? a.bound_symbols : intersect(a.bound_symbols, b.bound_symbols);
-    lexical_.named_installations = a_exits ? b.named_installations : b_exits ? a.named_installations :
-        intersect(a.named_installations, b.named_installations);
-    lexical_.local_scoped_symbols = a_exits ? b.local_scoped_symbols :
-        b_exits ? a.local_scoped_symbols : intersect(a.local_scoped_symbols, b.local_scoped_symbols);
-    if (a_exits) lexical_.borrowed_symbol_owners = b.borrowed_symbol_owners;
-    else if (!b_exits) join_symbol_borrows(lexical_.borrowed_symbol_owners, b.borrowed_symbol_owners);
-    if (a_exits) lexical_.abstract_symbol_targets = b.abstract_symbol_targets;
-    else if (!b_exits) join_abstract_symbol_targets(lexical_.abstract_symbol_targets, b.abstract_symbol_targets);
-    if (a_exits) lexical_.native_symbol_owners = b.native_symbol_owners;
-    else if (!b_exits) {
-      const auto join_installation = [&](size_t symbol, const auto &other) {
-        auto &owner = lexical_.native_symbol_owners[symbol];
-        const auto found = other.find(symbol);
-        const auto alternative = found == other.end() ? 0 : found->second;
-        if (owner == alternative) return;
-        const auto lifetime = std::max(owner_lifetime_scope(owner), owner_lifetime_scope(alternative));
-        owner = next_scope_++;
-        native_owner_scopes_.emplace(owner, lifetime);
-      };
-      for (const auto &[symbol, owner] : a.native_symbol_owners) join_installation(symbol, b.native_symbol_owners);
-      for (const auto &[symbol, owner] : b.native_symbol_owners) if (!a.native_symbol_owners.contains(symbol)) {
-        lexical_.native_symbol_owners.emplace(symbol, owner);
-        join_installation(symbol, a.native_symbol_owners);
-      }
-    }
+    if (a_exits) lexical_.symbols = b.symbols;
+    else if (!b_exits) lexical_.symbols = join_symbols(a.symbols, b.symbols);
     lexical_.required_symbols.insert(b.required_symbols.begin(), b.required_symbols.end());
     lexical_.initialized = a_exits ? b.initialized : b_exits ? a.initialized : intersect(a.initialized, b.initialized);
     lexical_.returned = a_exits ? b.returned : a.returned;
@@ -5753,14 +5821,7 @@ class ScalarChecker {
   }
   void retire_scope(LexicalState &state) {
     const auto &scope = state.scopes.back();
-    if (scope.symbol_entry) {
-      state.bound_symbols = *scope.symbol_entry;
-      state.named_installations = scope.named_installations_entry;
-      state.local_scoped_symbols = scope.local_scoped_entry;
-      state.native_symbol_owners = scope.native_symbol_entry;
-      state.borrowed_symbol_owners = scope.borrowed_symbol_entry;
-      state.abstract_symbol_targets = scope.abstract_symbol_entry;
-    }
+    if (scope.symbol_entry) state.symbols = *scope.symbol_entry;
     for (const auto &[name, id] : scope.bindings) {
       state.bindings_available.erase(id);
       state.returned.selection_bindings.erase(id);
@@ -7133,13 +7194,14 @@ class ScalarChecker {
   }
   size_t demand(size_t method, std::vector<Type> arguments, const Location &at, const std::vector<CheckedCaptureInput> &environment = {},
                 const std::vector<Type> &retained = {}, size_t query_environment = 0, const TypeEvidenceState *state = nullptr,
-                const AbstractSymbolTargets &supplied_targets = {}) {
+                const DynamicSymbolBindings *supplied_symbols = nullptr) {
     auto &definition = program_.methods[method];
     AbstractSymbolTargets abstract_targets;
-    if (!definition_pass_ && !supplied_targets.empty())
+    if (!definition_pass_ && supplied_symbols)
       if (const auto required = abstract_effect_inputs_.find(definition.source); required != abstract_effect_inputs_.end())
-        for (const auto &[symbol, types] : supplied_targets)
-          if (required->second.contains(symbol)) abstract_targets.emplace(symbol, types);
+        for (const auto symbol : required->second)
+          if (const auto &targets = supplied_symbols->get(symbol).abstract_targets)
+            abstract_targets.emplace(symbol, *targets);
     const auto declared = declared_results(definition, arguments);
     arguments = prepared_types(definition, arguments, retained);
     for (const auto &argument : arguments) require_ordinary_callable_type(argument, at);
@@ -7281,12 +7343,11 @@ class ScalarChecker {
     return demand(method, arguments, expr.at,
         family.context ? family.context->environment : family.definition ? family.definition->environment : std::vector<CheckedCaptureInput>{},
         family.retained_types(), family.context ? family.context->query_environment : family.definition ? family.definition->query : 0,
-        family.declaration, incoming_abstract_targets(expr));
+        family.declaration, incoming_symbol_bindings(expr));
   }
-  const AbstractSymbolTargets &incoming_abstract_targets(const Expression &expr) const {
-    static const AbstractSymbolTargets unknown;
+  const DynamicSymbolBindings *incoming_symbol_bindings(const Expression &expr) const {
     // Deferred execution observes the binding at cleanup, after registration.
-    return !delayed_ && &expr != prepared_call_ ? lexical_.abstract_symbol_targets : unknown;
+    return !delayed_ && &expr != prepared_call_ ? &lexical_.symbols : nullptr;
   }
   [[noreturn]] void missing_callable(const Expression &expr) const {
     if (expr.lexical_symbol_call) fail(expr.at, "callable family has no applicable implementation");
@@ -14674,9 +14735,14 @@ class ScalarChecker {
   TypeEvidenceState evidence_state(bool retained_only = false, const std::set<std::string> *names = nullptr,
                                   bool track_selection = false) const {
     TypeEvidenceState state;
-    state.abstract_symbol_targets = lexical_.abstract_symbol_targets;
-    for (const auto &[symbol, owner] : lexical_.borrowed_symbol_owners)
-      state.borrowed_symbol_owners.emplace(symbol, owner ? std::optional{EvidenceOwner{*owner}} : std::nullopt);
+    for (const auto symbol : lexical_.symbols.changed_keys({})) {
+      const auto &facts = lexical_.symbols.get(symbol);
+      if (facts.abstract_targets) state.abstract_symbol_targets.emplace(symbol, *facts.abstract_targets);
+      if (facts.borrowed_owner) {
+        const auto &owner = *facts.borrowed_owner;
+        state.borrowed_symbol_owners.emplace(symbol, owner ? std::optional{EvidenceOwner{*owner}} : std::nullopt);
+      }
+    }
     state.selections.tracking = track_selection;
     if (track_selection) state.selections.observation_decisions = std::make_shared<ObservationDecisions>();
     const auto selected = [&](const std::string &name) { return !names || names->contains(name); };
@@ -16112,7 +16178,7 @@ class ScalarChecker {
     const auto query = retain_query_environment(target_method, {}, &state,
         operation.scope_owners, std::move(selections), std::move(definitions));
     return demand(profile, call.arguments, at, {}, retained, query, &state,
-                  expr ? incoming_abstract_targets(*expr) : AbstractSymbolTargets{});
+                  expr ? incoming_symbol_bindings(*expr) : nullptr);
   }
   std::string local_effect_name(std::string_view spelling, size_t symbol_id) const {
     std::string label = "local proc @" + std::string(spelling);
@@ -16285,7 +16351,7 @@ class ScalarChecker {
     }
     const auto query = retain_query_environment(program_.methods[profile], supplied, &state, operation.scope_owners,
                                                  std::move(scope_selections), std::move(lexical_definitions));
-    const auto target = demand(profile, arguments, expr.at, {}, retained, query, &state, incoming_abstract_targets(expr));
+    const auto target = demand(profile, arguments, expr.at, {}, retained, query, &state, incoming_symbol_bindings(expr));
     operation.callee = target;
     const auto &selected = program_.instances[target];
     always_throws |= selected.always_throws;
@@ -16315,7 +16381,7 @@ class ScalarChecker {
     if (scoped && (&expr == prepared_call_ || delayed_))
       implementation_gap(expr.at, "deferred invocation of a live scoped procedure");
     const CheckedOperation *installation = nullptr;
-    if (scoped && lexical_.local_scoped_symbols.contains(*operation.symbol)) {
+    if (scoped && lexical_.symbols.get(*operation.symbol).local_scoped) {
       const auto site = scoped_installations_.at(*operation.symbol);
       const auto found = operations.find(site);
       if (found == operations.end() || !found->second.scoped_effect)
@@ -18803,16 +18869,14 @@ class ScalarChecker {
     return completes;
   }
   size_t native_symbol_owner(const LexicalState &state, size_t symbol) {
-    if (const auto installed = state.native_symbol_owners.find(symbol); installed != state.native_symbol_owners.end())
-      return installed->second;
+    if (const auto installed = state.symbols.get(symbol).native_owner) return *installed;
     const auto [incoming, first] = incoming_native_symbol_owners_.try_emplace(symbol, next_scope_);
     if (first) native_owner_scopes_.emplace(next_scope_++, 0);
     return incoming->second;
   }
   size_t borrowed_symbol_owner(size_t symbol) const {
-    const auto selected = lexical_.borrowed_symbol_owners.find(symbol);
-    if (selected == lexical_.borrowed_symbol_owners.end()) return symbol_owner_key(symbol);
-    return selected->second.value_or(symbol_owner_key(symbol));
+    const auto &selected = lexical_.symbols.get(symbol).borrowed_owner;
+    return selected ? selected->value_or(symbol_owner_key(symbol)) : symbol_owner_key(symbol);
   }
   bool stable_nominal_target(const Type &type, bool read_only) const {
     if (type.kind != Type::product) return false;
@@ -18868,10 +18932,11 @@ class ScalarChecker {
           [&](const auto &scope) { return scope.id == *owner; });
       if (target_scope != boundary)
         fail(operand.at, "reference symbol target does not outlive the installation scope");
-      lexical_.borrowed_symbol_owners.insert_or_assign(id, owner);
-      if (type.kind == Type::abstract_type)
-        lexical_.abstract_symbol_targets.insert_or_assign(id, NominalTargets{source.identity});
-      lexical_.bound_symbols.insert(id);
+      lexical_.symbols.update(id, [&](auto &facts) {
+        facts.borrowed_owner.emplace(owner);
+        if (type.kind == Type::abstract_type) facts.abstract_targets = NominalTargets{source.identity};
+        facts.bound = true;
+      });
       return;
     }
     require_symbol(lexical_, id, expr.at);
@@ -18880,8 +18945,8 @@ class ScalarChecker {
       implementation_gap(expr.at, "an abstract symbol outside direct borrowed argument preparation");
     operation.type = type;
     operation.view = true;
-    if (const auto targets = lexical_.abstract_symbol_targets.find(id); targets != lexical_.abstract_symbol_targets.end())
-      operation.nominal_targets = targets->second;
+    if (const auto &targets = lexical_.symbols.get(id).abstract_targets)
+      operation.nominal_targets = *targets;
     operation.read_only = mode.read_only;
     operation.owners = {borrowed_symbol_owner(id)};
     operation.initialization.emplace();
@@ -18903,8 +18968,10 @@ class ScalarChecker {
     const auto scope = lifetime == lexical_.scopes.rend() ? cleanup_scope_ : lifetime->id;
     const auto owner = next_scope_++;
     native_owner_scopes_.emplace(owner, scope);
-    lexical_.native_symbol_owners.insert_or_assign(*operation.symbol, owner);
-    lexical_.bound_symbols.insert(*operation.symbol);
+    lexical_.symbols.update(*operation.symbol, [&](auto &facts) {
+      facts.native_owner = owner;
+      facts.bound = true;
+    });
   }
   CheckedOperation check_attached_native_acquisition(const Expression &expr, CheckedInstance *instance,
                                                      std::map<const Expression *, CheckedOperation> &operations) {
@@ -20448,11 +20515,11 @@ class ScalarChecker {
                 if (live_effect_sites_.at(id) != body)
                   implementation_gap(expr.at, "selecting different runtime handler layouts for the same procedure symbol");
                 check_scoped_effect(expr, id, method, instance, operations, operation);
-                if (lexical_.live) {
-                  lexical_.bound_symbols.insert(id);
-                  lexical_.named_installations.erase(id);
-                  lexical_.local_scoped_symbols.insert(id);
-                }
+                if (lexical_.live) lexical_.symbols.update(id, [](auto &facts) {
+                  facts.bound = true;
+                  facts.named_installation = false;
+                  facts.local_scoped = true;
+                });
                 break;
               }
               operation = materialize_family(*implementation.family, *symbol.type, expr.at);
@@ -20469,11 +20536,10 @@ class ScalarChecker {
           }
           operation.symbol = id; operation.operand_type = operation.type; operation.type = Type::void_type;
           operation.publishes_effect = !cancelled;
-          if (!cancelled && lexical_.live) {
-            lexical_.bound_symbols.insert(id);
-            if (body) lexical_.named_installations.erase(id);
-            else lexical_.named_installations.insert(id);
-          }
+          if (!cancelled && lexical_.live) lexical_.symbols.update(id, [&](auto &facts) {
+            facts.bound = true;
+            facts.named_installation = !body;
+          });
           break;
         }
         if (symbol.type->kind == Type::procedure)
@@ -20485,7 +20551,8 @@ class ScalarChecker {
           fail(expr.at, "effect value does not satisfy the declared symbol type");
         operation.operand_type = *symbol.type;
         operation.type = source == Type::never ? Type{Type::never} : Type{Type::void_type};
-        if (!cancelled && source != Type::never && lexical_.live) lexical_.bound_symbols.insert(*operation.symbol);
+        if (!cancelled && source != Type::never && lexical_.live)
+          lexical_.symbols.update(*operation.symbol, [](auto &facts) { facts.bound = true; });
       } else {
         if (expr.kind == K::symbol && symbol.type->kind == Type::procedure)
           fail(expr.at, "an installed procedure can only be invoked with perform or behave");
@@ -20849,9 +20916,7 @@ class ScalarChecker {
       checked_scope_owners_[&expr] = iteration_scope;
       lexical_.live = lexical_.live && body_possible;
       refresh_input_facts(lexical_);
-      lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols, lexical_.native_symbol_owners,
-                                 lexical_.borrowed_symbol_owners, lexical_.abstract_symbol_targets, lexical_.local_scoped_symbols,
-                                 lexical_.named_installations});
+      lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.symbols});
       operation.place = declare(expr.text, index, true, true, expr.at);
       initialize(*operation.place);
       loop_controls_.insert(*operation.place);
@@ -20873,9 +20938,7 @@ class ScalarChecker {
       }
       lexical_ = before;
       lexical_.live = lexical_.live && empty_possible;
-      lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.bound_symbols, lexical_.native_symbol_owners,
-                                 lexical_.borrowed_symbol_owners, lexical_.abstract_symbol_targets, lexical_.local_scoped_symbols,
-                                 lexical_.named_installations});
+      lexical_.scopes.push_back({next_scope_++, {}, true, lexical_.symbols});
       const auto otherwise = expr.children.size() == 4 ? check_loop_body(*expr.children[3], instance, operations) : Type{Type::void_type};
       leave_scope();
       const auto empty_state = lexical_;
@@ -21727,12 +21790,7 @@ class ScalarChecker {
         delayed_controls_.insert(loop_controls_.begin(), loop_controls_.end());
         delayed_ = true;
         deferred_action_ = action;
-        lexical_.bound_symbols.clear();
-        lexical_.named_installations.clear();
-        lexical_.local_scoped_symbols.clear();
-        lexical_.native_symbol_owners.clear();
-        lexical_.borrowed_symbol_owners.clear();
-        lexical_.abstract_symbol_targets.clear();
+        lexical_.symbols = {};
         lexical_.required_symbols.clear();
         deferred_inputs_ = before.available;
         if (proving_) for (size_t place = 0; place < catalog_storage_.size(); ++place)
@@ -22182,7 +22240,7 @@ class ScalarChecker {
       finish_scope(entry_result, entry_flow, nullptr, 0, program_.initializers.empty() ? Location{} : program_.initializers.front().expression->at);
       if (validating_ && lexical_.live)
         for (const auto &[symbol, extension] : entry_extensions_)
-          if (!lexical_.named_installations.contains(symbol))
+          if (!lexical_.symbols.get(symbol).named_installation)
             implementation_gap(extension->at, "cannot prove an entry-scope installation for extended callable '@" + extension->name + "'");
     });
   }
@@ -22384,7 +22442,8 @@ class ScalarChecker {
     check_flow([&](bool proving) {
       begin_check(instance.storage, instance.bindings, instance.operations, proving);
       possible_terminal_failure = false;
-      lexical_.abstract_symbol_targets = instance.incoming_abstract_targets;
+      for (const auto &[symbol, targets] : instance.incoming_abstract_targets)
+        lexical_.symbols.update(symbol, [&](auto &facts) { facts.abstract_targets = targets; });
       if (const auto &group = checking_method_->here_group; group && group->supplier_return.has_value())
         (*group->supplier_return ? return_inputs_.present : return_inputs_.absent).insert(0);
       instance.frame = {};
