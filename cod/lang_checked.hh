@@ -696,7 +696,8 @@ class ScalarChecker {
       places.insert(target.targets.begin(), target.targets.end());
       origins.insert(target.origins.begin(), target.origins.end());
     }
-  } payload_writes_;
+  };
+  std::optional<PayloadWrites> outgoing_payload_writes_;
   struct ProductInput {
     enum class Role { direct, slot, referent };
     size_t parent, field;
@@ -3736,7 +3737,7 @@ class ScalarChecker {
     if (proving_) return;
     // A write can preserve the first iteration's value yet change a later one.
     // Record its destination independently of the computed postcondition.
-    payload_writes_.include(target);
+    if (outgoing_payload_writes_) outgoing_payload_writes_->include(target);
     if (!deferred) for (const auto *expr : active_loops_) loop_states_.at(expr).writes.include(target);
   }
   void write_exception_payloads(std::map<size_t, ExceptionFacts> &values,
@@ -4151,6 +4152,7 @@ class ScalarChecker {
       writes.places.insert(places.begin(), places.end());
     }
     writes.places.erase(null_target);
+    if (writes.places.empty()) return;
     const auto written = writes.places;
     for (size_t place = 0; place < storage_->size(); ++place)
       if (storage(place).borrowed && std::any_of(written.begin(), written.end(), [&](size_t target) {
@@ -4211,8 +4213,10 @@ class ScalarChecker {
         changed |= before != bound.size();
       }
     }
-    for (const auto input : call.payloads)
-      payload_writes_.places.insert(inputs[input].begin(), inputs[input].end());
+    for (const auto input : call.payloads) {
+      auto &places = outgoing_payload_writes_.value().places;
+      places.insert(inputs[input].begin(), inputs[input].end());
+    }
     return changed;
   }
   void solve_targets() {
@@ -4229,7 +4233,7 @@ class ScalarChecker {
       }
       for (const auto &call : deferred_product_writes_) changed |= discover_product_writes(call);
     } while (changed);
-    resolve_payload_writes(payload_writes_);
+    if (outgoing_payload_writes_) resolve_payload_writes(*outgoing_payload_writes_);
     for (auto &[expr, loop] : loop_states_) resolve_payload_writes(loop.writes);
   }
   void initialize(size_t id) {
@@ -4947,7 +4951,7 @@ class ScalarChecker {
     DeferredProductWrites writes{{}, fields, {}, {}, at};
     for (const auto &[destination, sources] : summary.binding_sources)
       if (destination >= operands.size()) writes.bindings.emplace(destination, sources);
-    for (const auto input : summary.written_inputs)
+    if (outgoing_payload_writes_) for (const auto input : summary.written_inputs)
       if (input >= operands.size()) writes.payloads.insert(input);
     if (!writes.bindings.empty() || !writes.payloads.empty()) {
       writes.operands.resize(operands.size());
@@ -22195,7 +22199,7 @@ class ScalarChecker {
     if (!proving) {
       possible_targets_.clear(); possible_null_sources_.clear(); target_dependencies_.clear(); catalog_storage_.clear();
       catalog_bindings_.clear();
-      rebound_.clear(); payload_writes_ = {}; loop_states_.clear(); deferred_product_writes_.clear();
+      rebound_.clear(); loop_states_.clear(); deferred_product_writes_.clear();
     }
     lexical_ = {}; cleanup_ = CleanupEquations{program_.exception_types}; scope_storage_.clear(); checked_scope_owners_.clear(); external_owners_.clear();
     native_resource_owners_.clear(); native_owner_scopes_.clear(); scope_native_owner_places_.clear(); region_owners_.clear();
@@ -22226,6 +22230,12 @@ class ScalarChecker {
       bool previous;
       ~RestoreExport() { active = previous; }
     } restore{exporting_effects_, exporting_effects_};
+    // The initial traversal can supply writes to the final comparison even
+    // when it does not export its own summary. Entry and symbol closure
+    // have no consumer for this catalog, independent of loop writes.
+    outgoing_payload_writes_.reset();
+    if (restore.previous && exports != FlowExports::none && !closing_symbol_effects_ && !applying_scalar_)
+      outgoing_payload_writes_.emplace();
     exporting_effects_ = restore.previous && exports == FlowExports::every_pass;
     validating_ = false;
     check(false);
@@ -23037,7 +23047,7 @@ class ScalarChecker {
       complete_leaf_exits(*leaf, instance, leaf_exits);
     }
     auto &observed = observe_call_behavior();
-    for (const auto place : payload_writes_.places)
+    for (const auto place : outgoing_payload_writes_.value().places)
       if (storage(place).borrowed) observed.written_inputs.insert(input_ordinal(place));
     std::erase_if(observed.uninitialized, [](const auto &entry) { return entry.second.empty(); });
     // Initializer completion uses the observed normal entry to decide
