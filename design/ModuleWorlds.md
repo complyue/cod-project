@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 81 · Recorded: 2026-11-25 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 82 · Recorded: 2026-11-25 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+At r82 the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) applies to methods defined outside the type. [D-07-FUNCTOR-LOOKUP](DesignAuthorityRegistry.md#d-07-functor-lookup) continues P-636/P-637 from r81. The two-module example checks extension grants, method identity and conflicts in the receiving world.
 
 At r81 the [bootstrap input decision](../CHANGELOG.md#h-manual-bootstrap-packages-20261125) supplies the project and its manually staged dependencies to the existing [module-path resolution](#resolving-source-module-paths). [D-15-MODULE-PATH](DesignAuthorityRegistry.md#d-15-module-path) continues P-690/P-691 for relative edges, ambiguity, bundled fallback and canonical module identity.
 
@@ -192,14 +194,14 @@ export Threshold;
 
 # checks.cod
 import "./model.cod" Threshold;
-func (())(self:const Threshold in O, n:u64) -> bool where {const owner O} {
+func (const Threshold in O).(())(n:u64) -> bool where {const owner O} {
     n >= self.minimum
 }
 export Threshold;
 
 # limits.cod
 import "./model.cod" Threshold;
-func (())(self:const Threshold in O) -> u64 where {const owner O} {
+func (const Threshold in O).(())() -> u64 where {const owner O} {
     self.minimum
 }
 export Threshold;

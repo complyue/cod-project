@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 263 · Recorded: 2026-11-24 · Phase: language/application co-design.
+Design revision: 264 · Recorded: 2026-11-25 · Phase: language/application co-design.
 
 ## Design authority
+
+At r264 the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) supplies the receiver head in the Stops example. [D-10](DesignAuthorityRegistry.md#d-10) continues the r263 call and generator semantics. Both consumer spellings visit the two IDs in order.
 
 At r263 the [normal-completion decision](../CHANGELOG.md#h-normal-completion-20261124) applies [D-24-TAIL](DesignAuthorityRegistry.md#d-24-tail) to the owner-parameter reference-symbol example. Observe one target increment and restoration of the binding when both void procedures finish naturally.
 
@@ -2234,18 +2236,18 @@ A callable container is one possible source. The [producer and transformer desig
 
 A container can model a choice among zero or more answers by offering each candidate to a caller-supplied body. The producer controls which candidates it offers and in what order. The caller decides what to do with each one. This models *enumerative nondeterminism*. Several answers can be possible even when their visit order is completely predictable. Repeated handoffs remain observable.
 
-For example, a container of two station IDs can offer both through its call operator. The two definitions below are alternative spellings of one traversal. They use the [proposed functor declaration syntax](DomainLanguageDesign.md#functor-receivers-and-callback-arguments).
+For example, a container of two station IDs can offer both through its call operator. The two definitions below are alternative spellings of one traversal. They use the [functor receiver head](DomainLanguageDesign.md#functor-receivers-and-callback-arguments).
 
 ```cod
 data Stops { first:u64; second:u64; }
 
-func (())(self:const Stops in O) yields u64 where {const owner O} {
+func (const Stops in O).(())() yields u64 where {const owner O} {
     yield(self.first);
     yield(self.second);
 }
 
 # Equivalently, write this definition in place of the one above.
-func (())(self:const Stops in O, here emit(id:u64) -> void)
+func (const Stops in O).(())(here emit(id:u64) -> void)
     -> void where {const owner O} {
     emit(self.first);
     emit(self.second);

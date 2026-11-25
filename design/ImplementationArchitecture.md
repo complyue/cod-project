@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r138 the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) sets the entry syntax and acceptance for the [OO implementation plan](#oo-call-operator-implementation-plan). [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues the r137 responsibilities and pre-code review under P-682/P-683. The work is queued for the existing OO path.
+
 At r137 the [project user’s package decision](../CHANGELOG.md#h-manual-bootstrap-packages-20261125) retires the bootstrap package manager. [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues P-682/P-683 for the seed’s directory input cutover, the [booter graph boundary](../applications/cod-booter/docs/ModuleGraph.md#standalone-package-input-crossing) and normal command verification.
 
 At r136 the [REPL retirement](../CHANGELOG.md#h-retire-cpp-repl-20261125) withdraws the entire C++ REPL and assigns future interactive work to the production compiler. [D-02](DesignAuthorityRegistry.md#d-02) records the retired scope. [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues P-682/P-683 for the seed’s source driver and the [remaining consumers](#retiring-shilos).
@@ -366,6 +368,39 @@ The design discussion interprets confirmed semantics, reviews the structure of e
 Development mainline owns the implementation from correction through production cutover. It identifies the affected commands, establishes what the previous version accepted, runs the compatibility checks against the exact candidate, fixes regressions and publishes the first checkpoint that preserves the required behavior. Mainline makes that delivery decision within the cleared scope. Fresh design review applies when the proposed architecture or contract changes.
 
 For example, if the user asks whether a redesigned AST is in production, the design discussion can inspect the public commit and ask what the production driver still needs. If the supplied results cover object emission but omit provider generation, the reviewer identifies the missing comparison and asks mainline for its result. Mainline owns the comparison, repair and implementation push. The reviewer reports the outcome or the outstanding blocker to the user.
+
+## OO call-operator implementation plan
+
+**Scheduling.** Claim these tasks in order when the development mainline’s active goal reaches OO receivers. Each task uses the ordinary member or call machinery in its responsible component. The first frontend milestone reads the final receiver head and diagnoses the old one. The [language reference](../tests/cod/language/README.md#data-call-operator-coverage) records the bootstrap observations separately.
+
+| Task and dependency | Responsible component and output | Acceptance input and observable result |
+| --- | --- | --- |
+| 1. Read the receiver head | Seed C++ parser and CoD booter declaration reader. Share the accessor/member receiver production. Record receiver type, access, optional owner, operator span and written formals on the method or promise. | Read the short and owner-named Threshold heads and a writable Counter head with and without bodies. Reject the old head in each of the four kind/body combinations below. Report the operator’s byte range, preserve the next declaration and previous artifacts. |
+| 2. Bind the receiver, after 1 | Seed and booter name, type and owner checkers. Bind one implicit reference named `self`, resolve the receiver identity and optional owner, and expose only the written parameters in caller arity. | The zero-argument Threshold lends its minimum while O is live. Reject an escaping borrow, a second formal named `self`, a readonly Counter supplied to a writable method, and allocation using only `const owner O`. A fixed slot referring to a writable Counter can supply it. |
+| 3. Register and publish, after 2 | Each compiler’s nominal method registry and module-world selection. Key the family on the defining data identity. Attach an alternative constraint to a method under its parent sum. Reuse the checked defining identity and interpretation when merging type views. | The [checks/limits/app modules](ModuleWorlds.md#publication-of-type-carried-call-operators) combine two external overloads. Using the type grants calls, importing it admits an extension. Reject extension through using alone and selection or export of the bare operator. A diamond contributes the same definition once. Two independent identical-signature bodies conflict even before use. |
+| 4. Select and prepare, after 3 | Seed and booter ordinary overload selection and call preparation. Prepare the initialized receiver first, then the ordered explicit operands. Rank applicable methods on the full dispatch signature. Keep its selected target, actual owner and access through later operand evaluation. | With minimum 10, the zero-argument borrow reads 10, `limit(12u64)` succeeds and `limit(4u64, 5u64)` is false. The [slot-rebinding call](DomainLanguageDesign.md#functor-receivers-and-callback-arguments) gives true then false. An effectful receiver is evaluated once. Through a Receipt reference, Accepted with id 42 returns 42 and Skipped returns 0. `make` selects the constructor family even at the same arity. |
+| 5. Execute direct calls and bind callable values, after 4 | The existing seed and booter call checkers and emitters consume the selected method. Bind an eligible `func` and the selected receiver to the owner-qualified functor value. | Execute both Threshold calls and the writable Counter procedure. Rebinding the original slot preserves the bound target. Reject use past its actual owner, assignment to an owner-free function value, and binding a `proc` as a functor value. |
+| 6. Supply and drive a callable receiver, after 5 | The existing synchronous `here` and generator preparation, invocation and cleanup paths in both compilers. Preserve the receiver selected by the supplier. | Direct and synchronously forwarded `test(limit, 12u64)` give the same answer. The [invoice filter](ProducersAndTransformers.md#processor-functors-in-either-direction) consumes 8000, 12050, 14099 in order, delivers 120 then 140 through the full pipeline, and stops before 16000. Check its void handoffs and the [result-bearing traversal](ProducersAndTransformers.md#composite-implementation-target) with inputs 17, 24, 25, 42. A false reply after 25 leaves the audit count at two and 42 unoffered. |
+
+For parser acceptance, check each of these invalid declarations in its own input followed by a healthy declaration. Move the original receiver into the OO head and check the rewritten file against the same signature or body. The [owner-preserving rewrite](DomainLanguageDesign.md#functor-receivers-and-callback-arguments) also exercises two ordered explicit arguments.
+
+```cod
+# Invalid signature-only declarations
+func (())(self:const Threshold in O, x:u64) -> u64 where {const owner O};
+proc (())(self:Counter in O, step:u64) -> void where {const owner O};
+
+# Invalid definitions
+func (())(self:const Threshold in O) -> u64 where {const owner O} { self.minimum }
+proc (())(self:Counter in O, step:u64) -> void where {const owner O} { self.n <- self.n + step }
+```
+
+For an ordinary operator control, use a Threshold with minimum 10. This overload must still accept `limit + 2u64` and return 12:
+
+```cod
+func (+)(base:const Threshold in O, step:u64) -> u64 where {const owner O} {
+    base.minimum + step
+}
+```
 
 ## Before coding
 

@@ -96,13 +96,13 @@ region Routing { ref retail:RouteNode; ref urgent:RouteNode; }
 
 symbol @reserve:proc(order:u64, warehouse:u64) -> bool
 
-proc (())(self:const TryWarehouse in O, order:u64) -> u64 where {const owner O} {
+proc (const TryWarehouse in O).(())(order:u64) -> u64 where {const owner O} {
     if (behave @reserve(order, self.warehouse)) { return self.warehouse }
     ref fallback = self.on_decline
     return fallback(order)
 }
 
-proc (())(self:const Backorder in O, order:u64) -> u64 where {const owner O} {
+proc (const Backorder in O).(())(order:u64) -> u64 where {const owner O} {
     return 0u64
 }
 ```

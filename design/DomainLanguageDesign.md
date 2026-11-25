@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 221
+Discussion revision: 222
 
 Recorded: 2026-11-25
 
@@ -8,13 +8,13 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
 
+At r222 the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) qualifies the sole declaration head for a data call operator under [D-07-MEMBER-RECEIVER](DesignAuthorityRegistry.md#d-07-member-receiver), P-724/P-725. It supersedes the two-source-form provision of [r218](../CHANGELOG.md#h-functor-receiver-sugar-20261124). P-636/P-637 continue for family identity and dispatch. Check both callable kinds, declarations and definitions, preserving the implicit dispatch argument, receiver access and actual owner. Ordinary operator declarations keep their own grammar. [Acceptance and implementation plan](ImplementationArchitecture.md#oo-call-operator-implementation-plan)
+
 At r221 the [project user’s severity decision](../CHANGELOG.md#h-product-field-shadow-warning-20261125) qualifies [D-07-FIELD-SHADOW-DIAGNOSTIC](DesignAuthorityRegistry.md#d-07-field-shadow-diagnostic), P-736/P-737, for the production compiler in `e-wrks/cod`. The r220 field-selection contract continues. Verify the same declaration pair with each of the three severities and check a duplicate in one product independently.
 
 At r220 [the field-shadowing decision](../CHANGELOG.md#h-product-field-shadow-20261125) corrects r219’s rejection of a child’s same-named stored field. [D-07-PRODUCT-EXTENDS](DesignAuthorityRegistry.md#d-07-product-extends) and [D-07-MEMBER-NAMES](DesignAuthorityRegistry.md#d-07-member-names) apply P-726–P-729 to two distinct field declarations on one live target. Check the two stored values through child and parent views, including a child-field write before parent construction. Ordinary method dispatch, duplicate names within one product and cross-category collisions retain their existing rules.
 
 At r219 the [project user’s product and super-call decision](../CHANGELOG.md#h-product-extends-super-20261125) qualifies [D-07-PRODUCT-EXTENDS](DesignAuthorityRegistry.md#d-07-product-extends) and [D-07-SUPER-CALL](DesignAuthorityRegistry.md#d-07-super-call), P-728–P-731. A product declares its storage parent at its definition. An OO body can explicitly reuse an ancestor implementation on its live receiver. The r218 receiver, actual-type dispatch and ownership rules continue for ordinary calls. Check inherited field identity, member conflicts, and nearest versus named ancestor calls on a three-level chain. [D-22 parent initialization](ConstructionAndAcquisition.md#initializing-the-storage-parent-of-a-product) governs constructors. Compiler delivery is separate.
-
-At r218 [D-07-MEMBER-RECEIVER](DesignAuthorityRegistry.md#d-07-member-receiver) extends the receiver head to [functor call-operator declarations](#functor-receivers-and-callback-arguments) under P-724/P-725. The [user’s direction](../CHANGELOG.md#h-functor-receiver-sugar-20261124) applies the same implicit receiver, target access and explicit owner to an existing type-carried operation. Acceptance compares the two declaration heads on the same initialized receiver, including access rejection and duplicate definitions. [D-07-FUNCTOR-LOOKUP](DesignAuthorityRegistry.md#d-07-functor-lookup) governs publication and dispatch. Compiler delivery is separate.
 
 [D-07-MEMBER-RECEIVER](DesignAuthorityRegistry.md#d-07-member-receiver) covers the [receiver qualifier](../CHANGELOG.md#h-member-receiver-const-20261124) at r216 and the explicit receiver owner at r217 under P-724/P-725. [D-07-MEMBER-NAMES](DesignAuthorityRegistry.md#d-07-member-names) at r217 covers field, accessor and method name collisions under P-726/P-727. The [project user’s decision](../CHANGELOG.md#h-member-names-and-owner-20261124) settles both questions. Acceptance compares target and allocation access independently and diagnoses colliding declarations even before a member is used. [Member declarations](#receivers-in-field-accessors-and-member-methods)
 
@@ -46,7 +46,7 @@ The [diagnostic name decision](../CHANGELOG.md#h-diagnostic-names-20261122) appl
 
 [H-ORDINARY-NAMES-20261119](../CHANGELOG.md#h-ordinary-names-20261119) covers the naming and field-selection entries at r200 under [D-10-ORDINARY-NAMES](DesignAuthorityRegistry.md#d-10-ordinary-names).
 
-- **Construction and invocation.** [H-CTOR-CALL-SEPARATION-20261119](../CHANGELOG.md#h-ctor-call-separation-20261119) and [H-CTOR-CALL-FAMILIES-20261119](../CHANGELOG.md#h-ctor-call-families-20261119) confirm the [two method families](#constructor-and-call-operator-method-families). Check identical written arguments, ctor cleanup and receiver readiness. [D-07-FUNCTOR-LOOKUP](DesignAuthorityRegistry.md#d-07-functor-lookup), P-636/P-637, records the [type-level lookup rule](#type-level-call-operator-lookup). [H-FUNCTOR-PUBLICATION-20261119](../CHANGELOG.md#h-functor-publication-20261119) confirms publication with the type and conflict-checked composition in the receiving world at r198. C-10/C-35 connect a domain operation to the nominal type visible in its module world. Check unrelated types and competing adapters. At r196 [H-SUM-RECEIVER-PARAMETER-20261119](../CHANGELOG.md#h-sum-receiver-parameter-20261119) places alternative selection in the ordinary method signature. The example uses the user’s `self:const Accepted in O` spelling. At r197 [K-SUM-RECEIVER-DISPATCH-20261119](../CHANGELOG.md#k-sum-receiver-dispatch-20261119) applies the general dispatch contract to that signature, including a call through a Receipt parameter. Wider implementation qualification remains open. [Editorial continuity](../CHANGELOG.md#k-ctor-call-organization-20261119).
+- **Construction and invocation.** [H-CTOR-CALL-SEPARATION-20261119](../CHANGELOG.md#h-ctor-call-separation-20261119) and [H-CTOR-CALL-FAMILIES-20261119](../CHANGELOG.md#h-ctor-call-families-20261119) confirm the [two method families](#constructor-and-call-operator-method-families). Check identical written arguments, ctor cleanup and receiver readiness. [D-07-FUNCTOR-LOOKUP](DesignAuthorityRegistry.md#d-07-functor-lookup), P-636/P-637, records the [type-level lookup rule](#type-level-call-operator-lookup). [H-FUNCTOR-PUBLICATION-20261119](../CHANGELOG.md#h-functor-publication-20261119) confirms publication with the type and conflict-checked composition in the receiving world at r198. C-10/C-35 connect a domain operation to the nominal type visible in its module world. Check unrelated types and competing adapters. At r196 [H-SUM-RECEIVER-PARAMETER-20261119](../CHANGELOG.md#h-sum-receiver-parameter-20261119) places alternative selection in the ordinary method signature. The current receiver head specializes on `Accepted` and binds that first dispatch argument implicitly. At r197 [K-SUM-RECEIVER-DISPATCH-20261119](../CHANGELOG.md#k-sum-receiver-dispatch-20261119) applies the general dispatch contract to that signature, including a call through a Receipt parameter. Wider implementation qualification remains open. [Editorial continuity](../CHANGELOG.md#k-ctor-call-organization-20261119).
 
 [H-CALLABLE-TAIL-20261119](../CHANGELOG.md#h-callable-tail-20261119) applies the [callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies) to a double-brace case arm at r189. Check the local result after its own defer runs. D-07-CASE retains its source-order and coverage rules.
 
@@ -600,29 +600,52 @@ A writable accessor can change its receiver. Two evaluated reads of `counter.nex
 
 A functor is a here callable when its receiver supplies a compatible call operator to a here parameter. A direct call such as `limit(12u64)` invokes that operator on the data receiver. The selected method retains its own func/proc permissions. The here use grants bounded access to the receiver and carries no permission for its method body to read arbitrary caller locals.
 
-A data call-operator method requires a reference to an already initialized instance on entry. A reserved target identity alone cannot serve as its receiver. In the explicit-parameter spelling, the receiver is the first parameter. The expression to the left of the call parentheses supplies its reference. Its target access is an ordinary overload constraint. A readonly target admits only methods callable through readonly access. A writable target can use either access mode. When two applicable methods differ only in receiver target access, the writable match is exact for a writable receiver. Other arguments, owner constraints, callable kind and checked failures retain their ordinary rules.
+Declare a data call operator with an OO receiver head followed by `.(())`. This grammar applies to both `func` and `proc`, in signature-only declarations and in definitions. The head introduces `self`, an implicit reference to the initialized receiver. It is the first internal dispatch argument. The parameter list after `.(())` contains only the caller’s explicit arguments. An explicit formal named `self` would duplicate the binding.
 
 ```cod
-data Threshold { minimum:u64; }
+data Threshold { minimum:u64 }
 
-func (())(self:const Threshold in O, x:u64) -> bool where {const owner O} {
-    return x >= self.minimum;
+func const Threshold.(())(x:u64) -> bool { x >= self.minimum }
+
+func const Threshold.(())(x:u64, y:u64) -> bool {
+    x + y >= self.minimum
+}
+
+func (const Threshold in O).(())() -> ref const u64 in O where {const owner O} {
+    self.minimum
 }
 ```
 
-The OO spelling places the existing operator name `(())` after the receiver dot. The following definition is an alternative to the one above. Both select the same method signature in the call-operator family of `Threshold`.
+These overloads admit `limit(x)`, `limit(x, y)` and `limit()` respectively. The zero-argument method names O because its result borrows a field from the selected receiver. Reading that result while the owner is live is valid. Returning or storing it where it could outlive that owner is an error. Use the same owner in a parameter when it must share the receiver’s actual owner. A short head leaves that owner unnamed.
+
+The receiver expression is evaluated once before the explicit arguments. With `limit.minimum` equal to 10 and `strict.minimum` equal to 20, `limit({{ limit = strict; return 12u64 }})` compares 12 against 10. The next `limit(12u64)` compares it against 20. A reserved, uninitialized target cannot supply the receiver. `make Threshold(...)` selects an initializer with field destinations. A direct call uses the initialized instance. Passing it synchronously to a compatible `here` parameter borrows it through the handoff. Binding a compatible `func` as a functor value retains its actual owner for every use. [Function value and functor value](CallableStorageAndHereAccess.md#function-value-and-functor-value)
+
+Put `const` before the receiver type for readonly target access. Omission requires writable access, including in a promise such as `proc Counter.(())(step:u64) -> void;`. A readonly target cannot call that procedure. A fixed reference slot can still select a writable target. For a writable target an exact writable match wins over an otherwise identical readonly overload. The `where {const owner O}` constraint independently withholds allocation authority through O. Ordinary overload, result and checked-failure rules apply.
+
+For example, this procedure updates the selected Counter. After `count(3u64)` its initial value of 2 has become 5. Calling through `view` would require writable access to the same target.
 
 ```cod
-func (const Threshold in O).(())(x:u64) -> bool where {const owner O} {
-    return x >= self.minimum
-}
+data Counter { n:u64 }
+proc Counter.(())(step:u64) { self.n <- self.n + step }
+
+ref count = make Counter { n <- 2u64 }
+ref view:const Counter = count
+count(3u64)
 ```
 
-When the body and signature have no need to name the receiver owner, write `func const Threshold.(())(x:u64) -> bool`. A caller writes `limit(12u64)` with either declaration. The parentheses after `(())` contain only the written arguments. For example, `proc Counter.(())(step:u64)` takes an implicit writable reference to an initialized `Counter` and one explicit argument. A second formal named `self` conflicts with the implicit formal.
+**Diagnostic and rewrite.** The following signature is invalid source:
 
-Defining both example bodies in one world gives a duplicate definition. Both spellings use the same overload ranking and extension permission. Publishing the receiver type carries its call-operator family. Field and named-method collisions are checked among their written member names. `make Threshold(...)` selects a constructor. Direct invocation, synchronous passage to a compatible `here` parameter and binding a selected `func` to a functor value each keep their own receiver lifetime and callable-kind checks. [Type-carried publication](ModuleWorlds.md#publication-of-type-carried-call-operators) · [Function value and functor value](CallableStorageAndHereAccess.md#function-value-and-functor-value)
+```cod
+func (())(self:const Threshold in O, x:u64, y:u64) -> bool where {const owner O};
+```
 
-A method may instead declare `self:Threshold in O` when it needs writable target access. A caller with `ref limit:const Threshold in O` cannot supply that access. A caller with `const ref limit:Threshold in O` has a fixed reference slot and a writable target. The owner's allocation permission is independent of both.
+Locate the bare operator head and suggest this declaration:
+
+```cod
+func (const Threshold in O).(())(x:u64, y:u64) -> bool where {const owner O};
+```
+
+Move the receiver type, its access and its owner into the head. Keep the callable kind, remaining arguments in order, result, constraints and any body. Apply this diagnostic to definitions as well as promises, including `proc`. The explicit owner survives even when the method returns independent bits. Ordinary operators such as `func (+)(...)` and `func (|>)(...)` keep their existing declaration syntax.
 
 For a predicate with one u64 input, `test` has **two outer parameters**. Its first parameter is itself callable.
 
@@ -672,16 +695,16 @@ func accepts(t:const Threshold in O) -> bool where {const owner O} {
 
 Only Threshold’s methods participate in this call. For extension permission and competing adapters of the *same* type, see [publication of type-carried call operators](ModuleWorlds.md#publication-of-type-carried-call-operators).
 
-**Sum alternatives in method signatures.** Express the specialization on the receiver parameter. Use the visible constructor name in the ordinary parameter annotation, as in `self:const Accepted in O`. The method name remains `(())`, and `where` declares the owner as usual.
+**Sum alternatives in method signatures.** Use the visible constructor name in the OO receiver head. Resolve it to its declaring sum before registering the call method. The implicit first dispatch argument then carries the alternative constraint.
 
 ```cod
-func (())(self:const Receipt in O) -> u64 where {const owner O} { 0u64 }
-func (())(self:const Accepted in O) -> u64 where {const owner O} { self.id }
+func const Receipt.(())() -> u64 { 0u64 }
+func const Accepted.(())() -> u64 { self.id }
 
 func read_id(r:const Receipt in O) -> u64 where {const owner O} { r() }
 ```
 
-Here `self:const Accepted in O` binds a readonly reference in O to an initialized Receipt whose active alternative is Accepted. Entering that method establishes the fact needed to read `self.id`, subject to ordinary invalidation if the alternative changes. Both methods belong to Receipt’s call-operator family. Matching uses the alternative’s identity irrespective of which initializer built the receipt. This use in a parameter needs no new nominal subtype or predicate evaluation in overload lookup.
+The `const Accepted` head binds `self` as a readonly reference with the receiver’s actual owner to an initialized Receipt whose active alternative is Accepted. Entering that method establishes the fact needed to read `self.id`, subject to ordinary invalidation if the alternative changes. Both methods belong to Receipt’s call-operator family. Matching uses the alternative’s identity irrespective of which initializer built the receipt. This use in a parameter needs no new nominal subtype or predicate evaluation in overload lookup.
 
 The receiver is an ordinary dispatch argument. For an Accepted receipt, both signatures apply and the Accepted method is more specific. For a Skipped receipt, only the Receipt method applies. Thus `read_id(r)` returns 42 for an Accepted with id 42 and zero for a Skipped, including when the alternative is known only at runtime. A caller-side `isa` test is unnecessary. The [general dispatch and coverage rules](AheadOfTimeExecutionPreparation.md#actual-type-dispatch-and-wpo-coverage) allow direct selection when the compiler proves the alternative and require a prepared path for every admitted case.
 

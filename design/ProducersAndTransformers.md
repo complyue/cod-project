@@ -1,8 +1,10 @@
 # Producers and Transformers for Nondeterministic Comprehensions
 
-Design revision: 13 · 2026-11-24
+Design revision: 14 · 2026-11-25
 
 ## Design authority
+
+At r14 the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) supplies the receiver heads for the invoice processors. [D-31](DesignAuthorityRegistry.md#d-31) continues the r13 composition and feedback contracts. Check the same upstream demand, ordered deliveries and termination through either pipeline spelling.
 
 At r13, D-32-CHAN-ENDS/P-712 adds a workload for the future formal type language. The sending end of a chan can consume typed input in one Actor's pipeline. The receiving end can produce admitted messages for another Actor's pipeline. A transformer can be composed locally on either side. Express these independent roles once CoD supports higher-kinded type synonyms. Acceptance must check the message type and the direction at each endpoint, with synchronous consumer feedback scoped to its local traversal. [Chan endpoint contract](ActorChannels.md#independent-chan-endpoints) · [Decision](../CHANGELOG.md#h-actor-region-transport-and-chan-ends-20261124)
 
@@ -53,8 +55,7 @@ func InvoiceFloor(base_cents:u32, discount_bps:u16) {
     cents <- ((base_cents : u64) * payable_bps + 9999u64) / 10000u64;
 }
 
-func (())(self:const InvoiceFloor in O, here src() yields u64)
-    yields u64 where {const owner O} {
+func const InvoiceFloor.(())(here src() yields u64) yields u64 {
     for val cents <- src() {
         if (cents >= self.cents) { yield(cents); }
     }
@@ -364,7 +365,7 @@ func InvoiceRule(cents:u64, limit:u64) {
     maximum_rows <- limit;
 }
 
-func (())(self:const InvoiceRule in R, here rows() yields u64)
+func (const InvoiceRule in R).(())(here rows() yields u64)
     yields u64 where {const owner R} {
     val left <- self.maximum_rows;
     if (left == 0u64) { return; }

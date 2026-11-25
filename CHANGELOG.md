@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Declare data call operators on their OO receiver
+
+<a id="h-oo-call-operator-head-20261125"></a>
+**H-OO-CALL-OPERATOR-HEAD-20261125.** The project user confirmed “数据接收者的调用运算符 `(())` 只支持 OO 接收者声明语法” for `func` and `proc`, signatures and definitions, in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). [D-07 r221→222](design/DomainLanguageDesign.md#functor-receivers-and-callback-arguments) supersedes the two source heads in [H-FUNCTOR-RECEIVER-SUGAR-20261124](#h-functor-receiver-sugar-20261124) at `41f82794:design/DomainLanguageDesign.md`. The owner-preserving diagnostic and the OO-only first implementation are confirmed. P-724/P-725 and P-636/P-637 continue for the first dispatch argument, target access, ownership and type-carried family. Ordinary operator syntax continues. D-15 r81→82, D-31 r13→14 and D-10 r263→264 migrate the module and generator examples. Guide r11 and the syntax showcase adopt the confirmed form. [D-ARCH-REVIEW r138](design/ImplementationArchitecture.md#oo-call-operator-implementation-plan) records the ordered future work. [Source reference r482](tests/cod/language/README.md#data-call-operator-coverage) records the separate frontend observations.
+
 ## 2026-11-25 — Correct the future package repository name
 
 <a id="h-package-repository-name-20261125"></a>
