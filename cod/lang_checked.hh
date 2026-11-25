@@ -7344,40 +7344,37 @@ class ScalarChecker {
     }
     return obligations;
   }
-  struct DeclaredResult {
-    ResultContract contract;
-    std::set<std::string> owner_roles;
-    bool covers_method;
-  };
-  std::vector<DeclaredResult> declared_results(const CheckedMethod &method, const std::vector<Type> &arguments,
-      const Access &input_access = {}, const Owners &input_owners = {}, const TypeEvidenceState *state = nullptr) const {
-    std::vector<DeclaredResult> results;
-    for (const auto &[declaration, substitutions, covers_types, covers_method] : declaration_obligations(method, arguments, input_access, input_owners, state)) {
-      auto result = declaration->result;
+  ResultContract declaration_supplied_result(const CheckedMethod &method, const std::vector<Type> &arguments) const {
+    ResultContract supplied;
+    for (const auto &obligation : declaration_obligations(method, arguments)) {
+      if (!obligation.covers_method) continue;
+      const auto &declaration = *obligation.declaration;
+      auto result = declaration.result;
       std::set<std::string> owner_roles;
-      result.type = substitute(*result.type, *declaration, substitutions, true);
-      if (nested_binder(*declaration, *result.type))
+      result.type = substitute(*result.type, declaration, obligation.result_substitutions, true);
+      if (nested_binder(declaration, *result.type))
         implementation_gap(method.source->at, "declared result type parameter is not determined by the arguments");
       if (result.borrowed()) {
-        for (size_t i = 0; i < arguments.size(); ++i) if (parameter_at(*declaration, i).owner == result.owner) {
+        for (size_t i = 0; i < arguments.size(); ++i) if (parameter_at(declaration, i).owner == result.owner) {
           const auto &mapped = method.input_parameters()[i].owner;
           if (!mapped.empty()) owner_roles.insert(mapped);
         }
         if (owner_roles.empty()) implementation_gap(method.source->at, "declared result owner is not established by a parameter");
-        // Equalities hold on this declaration's domain. They validate its
-        // result promise without changing the method's own owner roles.
+        // Map the declaration's owner equalities to the method's roles.
         size_t previous;
         do {
           previous = owner_roles.size();
           for (size_t i = 0; i < arguments.size(); ++i) for (size_t j = 0; j < arguments.size(); ++j)
-            if (same_owner(*declaration, i, j) && owner_roles.contains(method.input_parameters()[i].owner))
+            if (same_owner(declaration, i, j) && owner_roles.contains(method.input_parameters()[i].owner))
               owner_roles.insert(method.input_parameters()[j].owner);
         } while (owner_roles.size() != previous);
         result.owner = *owner_roles.begin();
       }
-      results.push_back({std::move(result), std::move(owner_roles), covers_method});
+      if (!supplied.type) supplied = std::move(result);
+      else if (!same_result(supplied, result))
+        implementation_gap(method.source->at, "declarations do not establish one result contract; provide an explicit compatible result");
     }
-    return results;
+    return supplied;
   }
   static ViewEvidence result_view(const CheckedMethod &method, const ResultContract &result, const Owners &owners) {
     ViewEvidence view{result.read_only, result.borrowed(), {}};
@@ -7401,16 +7398,6 @@ class ScalarChecker {
     // Operand hints cannot use the standalone default to select a signature.
     return probing_argument ? ResultEvidence{} : result;
   }
-  static void check_declared_results(const CheckedMethod &method, const ResultContract &result,
-                                     const std::vector<DeclaredResult> &declared) {
-    for (const auto &obligation : declared) {
-      const auto &contract = obligation.contract;
-      const bool compatible = result.mode == contract.mode && (!result.borrowed() || obligation.owner_roles.contains(result.owner)) &&
-          (!result.borrowed() ? transfers_value(*result.type, *contract.type)
-                            : result.type == contract.type && (!result.read_only || contract.read_only));
-      if (!compatible) fail(method.source->at, "implementation result does not satisfy callable declaration");
-    }
-  }
   size_t demand(size_t method, std::vector<Type> arguments, const Location &at, const std::vector<CheckedCaptureInput> &environment = {},
                 const std::vector<Type> &retained = {}, size_t query_environment = 0, const TypeEvidenceState *state = nullptr,
                 const DynamicSymbolBindings *supplied_symbols = nullptr) {
@@ -7421,7 +7408,6 @@ class ScalarChecker {
         for (const auto symbol : required->second)
           if (const auto &targets = supplied_symbols->get(symbol).abstract_targets)
             abstract_targets.emplace(symbol, *targets);
-    const auto declared = declared_results(definition, arguments);
     arguments = prepared_types(definition, arguments, retained);
     for (const auto &argument : arguments) require_ordinary_callable_type(argument, at);
     if (std::ranges::any_of(arguments, [](const auto &type) { return type.kind == Type::abstract_type; }))
@@ -7430,7 +7416,6 @@ class ScalarChecker {
       if (program_.instances[id].arguments == arguments && program_.instances[id].environment == environment &&
           program_.instances[id].retained_types == retained && program_.instances[id].query_environment == query_environment) {
         auto &instance = program_.instances[id];
-        check_declared_results(definition, instance.result, declared);
         auto joined = instance.incoming_abstract_targets;
         join_abstract_symbol_targets(joined, abstract_targets);
         if (joined != instance.incoming_abstract_targets) {
@@ -7489,7 +7474,6 @@ class ScalarChecker {
     if (text_type(*result.contract->type) &&
         (result.contract->mode != ResultMode::borrowed_ref || !result.contract->read_only))
       fail(at, "text results require a readonly, non-null owner-qualified reference");
-    check_declared_results(definition, *result.contract, declared);
     definition.contextual_result = definition.contextual_result || supplied.has_value();
     const auto id = program_.instances.size();
     auto context = arguments;
@@ -7896,11 +7880,11 @@ class ScalarChecker {
     return types;
   }
   std::set<size_t> builtin_declarations(const Expression &expr, const std::vector<Type> &arguments,
-                                      const Type &result, bool destinations = false,
+                                      bool destinations = false,
                                       const Access &access = {}, const Owners &owners = {}, const TypeEvidenceState *state = nullptr) const {
     if (expr.intrinsic || !has_declarations(expr.text)) return {};
-    // Builtins have established signatures. Declarations constrain these just
-    // as they constrain explicit methods; they cannot retarget a builtin result.
+    // Builtins keep their established signatures and collect applicable
+    // declared failures for completion.
     const auto family = module_names().callables.at(expr.text);
     const auto &identity = program_.families[family].operation;
     Form source;
@@ -7918,8 +7902,7 @@ class ScalarChecker {
       source.parameters.push_back(std::move(parameter));
     }
     CheckedMethod method;
-    method.source = &source; method.operation = identity; method.module = module_; method.family = family; method.parameters = arguments; method.result.type = result;
-    check_declared_results(method, method.result, declared_results(method, arguments, access, owners, state));
+    method.source = &source; method.operation = identity; method.module = module_; method.family = family; method.parameters = arguments;
     std::set<size_t> failures;
     for (const auto &[declaration, substitutions, covers_types, covers_method] : declaration_obligations(method, arguments, access, owners, state))
       failures.insert(declaration->throws_categories.begin(), declaration->throws_categories.end());
@@ -7928,7 +7911,7 @@ class ScalarChecker {
   void check_builtin_declarations(const Expression &expr, const std::vector<Type> &arguments,
                                   CheckedOperation &operation, bool destinations = false,
                                   const std::vector<CheckedOperation> &views = {}) {
-    const auto failures = builtin_declarations(expr, arguments, operation.type, destinations, access_of(views), owners_of(views));
+    const auto failures = builtin_declarations(expr, arguments, destinations, access_of(views), owners_of(views));
     if (failures.empty()) return;
     if (&expr != prepared_call_) {
       note_abrupt(expr.at, failures);
@@ -8343,23 +8326,11 @@ class ScalarChecker {
   ResultEvidence infer_result(size_t method, std::vector<Type> arguments, const std::vector<Type> &retained,
                              const TypeEvidenceState *state = nullptr) const {
     const auto &definition = program_.methods[method];
-    const auto input_declared = declared_results(definition, arguments);
     arguments = prepared_types(definition, arguments, retained);
     auto supplied = definition.result;
     if (supplied.type) supplied.type = substitute(*supplied.type, definition, *match(definition, arguments, retained), true);
-    const auto declared = declared_results(definition, arguments);
-    if (!supplied.type) {
-      for (const auto &obligation : declared) if (obligation.covers_method) {
-        if (supplied.type && !same_result(supplied, obligation.contract))
-          implementation_gap(definition.source->at, "declarations do not establish one result contract; provide an explicit compatible result");
-        supplied = obligation.contract;
-      }
-    }
-    if (supplied.type) {
-      check_declared_results(definition, supplied, declared);
-      check_declared_results(definition, supplied, input_declared);
-      return {supplied, ResultOrigin::supplied};
-    }
+    else supplied = declaration_supplied_result(definition, arguments);
+    if (supplied.type) return {std::move(supplied), ResultOrigin::supplied};
     // Optional call-effect proofs use established signatures. They must
     // not leave a speculative result-inference obligation in the main graph.
     if (type_call_proofs_) return {};
@@ -8396,7 +8367,6 @@ class ScalarChecker {
       if (swap_operation(definition.operation) && type != Type::void_type)
         fail(definition.source->at, "swap method must return void");
     }
-    if (result.contract) check_declared_results(definition, *result.contract, input_declared);
     return result;
   }
   ResultEvidence require_result(size_t method, const std::vector<Type> &arguments, const std::vector<Type> &retained,
@@ -12658,7 +12628,7 @@ class ScalarChecker {
     if (state.required) {
       if (expr.spread && pack_use != PackUse::spread) implementation_gap(expr.at, "spread operands in typeof");
       if (signed_minimum(expr, &state)) {
-        builtin_declarations(expr, {Type::integer}, Type::integer);
+        builtin_declarations(expr, {Type::integer});
         return Type::integer;
       }
       if (!state.validating_body) switch (expr.kind) {
@@ -14296,7 +14266,7 @@ class ScalarChecker {
           }
           if (arguments[0] != arguments[1]) fail(expr.at, "bits swap requires the exact same type");
         }
-        const auto declared = builtin_declarations(expr, arguments, Type::void_type, true, access, owners, &state);
+        const auto declared = builtin_declarations(expr, arguments, true, access, owners, &state);
         if (!invokes) {
           if (reference && operand_targets.size() == 2) {
             const auto &left = operand_targets.front().selection, &right = operand_targets.back().selection;
@@ -14377,7 +14347,7 @@ class ScalarChecker {
             const auto &test = *operand_targets.front().branches;
             target_facts.branches = PresenceBranches{test.when_false, test.when_true};
           }
-          const auto failures = builtin_declarations(expr, arguments, types.result, false, access, owners, &state);
+          const auto failures = builtin_declarations(expr, arguments, false, access, owners, &state);
           std::set<size_t> outcomes{0};
           for (const auto category : failures) outcomes.insert(Completion::failure(category).reason);
           if (types.failing) outcomes.insert(2);
@@ -25290,9 +25260,6 @@ class ScalarChecker {
     for (auto &family : program_.families)
       for (auto &declaration : family.declarations)
         declaration.throws_categories = declared_exception_categories(declaration.throws_types);
-    for (const auto &method : program_.methods)
-      if (!method.here.empty() && method.result.type && method.type_parameters.empty())
-        check_declared_results(method, method.result, declared_results(method, method.parameters));
     if (unsupported_here) implementation_gap(*unsupported_here, "this receiving pattern for a here body");
     prepare_interpretations();
     symbol_selection_ready_ = true;
