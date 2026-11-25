@@ -4882,7 +4882,9 @@ class ScalarChecker {
   bool capture_free_callable(size_t id) const {
     const auto &callable = program_.callables.at(id);
     return callable.type.pure_callable && std::ranges::all_of(callable.implementations(), [&](size_t target) {
-      return program_.instances[target].environment.empty() && read_effects(target).symbols.empty();
+      if (!program_.instances[target].environment.empty()) return false;
+      require_leaf_behavior(target);
+      return true;
     });
   }
   const std::set<size_t> *observed_callables(const Expression &expression) const {
@@ -4912,7 +4914,7 @@ class ScalarChecker {
     return std::distance(inputs.begin(), found);
   }
   CallableInvocationEffects callable_effects(const Type &contract, const std::vector<Type> &arguments,
-                                             const std::optional<std::set<size_t>> &choices, bool use_current_symbols) const {
+                                             const std::optional<std::set<size_t>> &choices, SymbolEffectUse symbol_use) const {
     if (closing_write_effects_ || closing_read_effects_)
       callable_effect_consumers_.insert(checking_context_);
     CallEffects effects;
@@ -4923,7 +4925,11 @@ class ScalarChecker {
       if (callable.type != contract || (choices && !choices->contains(id))) continue;
       ++covered;
       for (const auto &[inputs, target] : callable.alternatives(arguments)) {
-        const auto &next = read_effects(target, false, use_current_symbols ? SymbolEffectUse::all : SymbolEffectUse::none);
+        const auto &next = read_effects(target, false, symbol_use);
+        if (symbol_use == SymbolEffectUse::all) effects.symbols.insert(next.symbols.begin(), next.symbols.end());
+        else if (symbol_use == SymbolEffectUse::transport_only)
+          for (const auto symbol : next.symbols)
+            if (symbol_needs_transport_fact(symbol)) effects.symbols.insert(symbol);
         // Different definitions can declare their owners in different orders.
         // Translate each effect to the owner slot of the shared callable type.
         std::set<size_t> owners;
@@ -4933,7 +4939,6 @@ class ScalarChecker {
         }
         if (first) {
           static_cast<CallBehavior &>(effects) = next;
-          if (use_current_symbols) effects.symbols = next.symbols;
           effects.lexical_allocations = std::move(owners);
           first = false;
           continue;
@@ -4941,7 +4946,6 @@ class ScalarChecker {
         effects.lexical_allocations.merge(owners);
         effects.array_allocations.insert(next.array_allocations.begin(), next.array_allocations.end());
         effects.reads.insert(next.reads.begin(), next.reads.end());
-        if (use_current_symbols) effects.symbols.insert(next.symbols.begin(), next.symbols.end());
         effects.written_inputs.insert(next.written_inputs.begin(), next.written_inputs.end());
         effects.escaping_failures.insert(next.escaping_failures.begin(), next.escaping_failures.end());
         for (auto &[reason, known] : effects.initialized) {
@@ -15461,14 +15465,9 @@ class ScalarChecker {
   }
   CheckedOperation materialized_value(size_t id, const Location &at) {
     const auto &callable = program_.callables[id];
-    std::set<size_t> ordinary_symbols;
-    if (!callable.replay_symbols) for (const auto target : callable.implementations()) {
-      const auto &required = read_effects(target).symbols;
-      ordinary_symbols.insert(required.begin(), required.end());
-    }
-    const auto &symbols = callable.replay_symbols ? *callable.replay_symbols : ordinary_symbols;
-    if (!symbols.empty() && callable.type.pure_callable)
-      fail(at, "a storable func cannot retain dynamic bindings");
+    if (callable.type.pure_callable)
+      for (const auto target : callable.implementations()) require_leaf_behavior(target);
+    const auto &symbols = program_.captured_symbols(callable);
     for (const auto symbol : symbols) {
       const auto &type = program_.symbols[symbol].type;
       if (type && type->kind == Type::native_handle) fail(at, "an owning native symbol must be used through a direct procedure call");
@@ -16632,9 +16631,11 @@ class ScalarChecker {
         if (const auto role = signature->inputs[i].owner; role)
           require_here_owner(one_owner(views[i]), here_formal_owner(*role), operation.argument(expr, i + offset).at);
       }
+    const auto symbol_use = expr.kind == Expression::Kind::perform ? SymbolEffectUse::none :
+        checking_instance_ ? SymbolEffectUse::all : SymbolEffectUse::transport_only;
     auto [effects, closed] = callable_effects(contract, arguments,
         operation.invokes_here ? std::optional{std::set<size_t>{}} : operation.callable_choices,
-        expr.kind != Expression::Kind::perform);
+        symbol_use);
     auto reasons = closed ? direct_call_reasons(contract, effects) : call_reasons(contract);
     if (const auto callback = operation.invokes_here && proving_ ? here_target(*checking_method_, *operation.invokes_here).body : std::nullopt; callback) {
       const auto &body = read_call_behavior(*callback);
