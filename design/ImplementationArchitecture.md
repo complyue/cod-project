@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r163 the [project user’s review decision](../CHANGELOG.md#h-compiler-work-necessity-20261125) applies [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683 to [the need for compiler work](#justifying-compiler-work-before-coding). It extends r161’s ordinary reference example across proposed compiler analyses and regression gates. Each compiler retains its qualified obligations.
+
 At r162 the [type-evidence review](../CHANGELOG.md#k-seed-type-evidence-payload-reads-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), P-682/P-683 and the [trusted-source cutover](#seed-checker-migration-and-performance-acceptance). [D-28-INIT](DesignAuthorityRegistry.md#d-28-init) governs readable storage and [D-24](DesignAuthorityRegistry.md#d-24) governs callable results.
 
 At r161 the [ordinary reference write clarification](../CHANGELOG.md#k-ordinary-ref-write-facts-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and P-682/P-683. The [callee behavior review](#consuming-completed-callee-behavior) applies the established [initialization contract](ConstructionAndAcquisition.md#bounded-init-obligations-and-nullability) and [staged proof policy](RegionalAndLexicalStorageRefactor.md#two-stage-acceptance-with-invariant-soundness) to writes observed by a handler.
@@ -466,6 +468,14 @@ func (+)(base:const Threshold in O, step:u64) -> u64 where {const owner O} {
 ## Before coding
 
 Start with the intended idiomatic source and the real acceptance workload. Include the smallest coherent seed increment needed to express that source under confirmed language contracts. Use the intended source for delivery and keep temporary substitutes isolated. Send the proposed structure to the CoD design discussion and obtain explicit clearance for the identified batch before writing new code. Include tests, scripts, native glue, tooling and new code inside existing files. State which caller enters the operation, who owns its state, how results cross the boundary and what happens on failure. Group related changes that can be reviewed together. Work within a cleared proposal can proceed as one batch. Return to review before expanding it. An existing implementation, language qualification or retrospective disposition does not preapprove later additions. The design discussion settles questions within the user's principles and brings material trade-offs to the user.
+
+### Justifying compiler work before coding
+
+Identify the source case and the decision that depends on the proposed work. A summary copied into a second table has an intermediate reader. Follow it to the operation that would emit different code, accept or reject a program differently, lose a required diagnostic, or violate another qualified contract. For an added regression gate, identify the regression it would catch and whether existing acceptance already catches it. Use the source, contract and existing evidence when they settle the question.
+
+Consider what the consumer can do with a cheaper sound fact. For example, a possible write through an alias can invalidate an earlier nonnull proof. A later use can check the current target. If that satisfies the component’s contract on the actual workload, clear that approach. If a promised initialization or a use after cleanup requires stronger evidence, identify the path and destination that require it, then limit collection, storage and verification accordingly. Keep soundness, ownership, cleanup, required diagnostics and supported valid inputs in the comparison. Omit the proposal or its unsupported precision when review finds no decision that needs it. A change to a qualified obligation still follows the existing design process.
+
+For the [ordinary reference example](#consuming-completed-callee-behavior), the emitter must preserve both the store and its order relative to failure. Running the handler can test that order. A static per-exit write history needs a separate caller decision that consumes it. An `init` parameter requires proof that its promised write occurred on every successful completion. A definite-write fact for the selected destination can satisfy that obligation.
 
 ### Restarting a pass from entry
 

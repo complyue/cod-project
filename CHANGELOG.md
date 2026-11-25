@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Require a material consumer for proposed compiler work
+
+<a id="h-compiler-work-necessity-20261125"></a>
+**H-COMPILER-WORK-NECESSITY-20261125.** After the [ordinary reference write clarification](#k-ordinary-ref-write-facts-20261125), the project user asked the [design side discussion](codex://threads/01a212f2-09c5-7951-994a-e2663ec9a088) to guard against needless compiler work at review and track a repository-wide scan. D-ARCH-REVIEW r162→163 extends the [pre-code rule](AGENTS.md#before-coding) at `c4d07562:AGENTS.md` under P-682/P-683. Review traces the work to the decision it serves and clears only the precision that decision needs. The [application](design/ImplementationArchitecture.md#justifying-compiler-work-before-coding) preserves the applicable language and delivery obligations.
+
 ## 2026-11-25 — Separate payload-read diagnostics from seed type evidence
 
 <a id="k-seed-type-evidence-payload-reads-20261125"></a>
