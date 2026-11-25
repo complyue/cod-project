@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r123 review](../CHANGELOG.md#k-booter-indexed-field-demand-20261124) continues P-682/P-683 for [indexed-field demand](../applications/cod-booter/docs/ModuleGraph.md#deciding-which-bodies-need-indexed-field-checks). It separates identifying eligible field uses from proving operands in the bodies selected for checking.
+
 The [r122 review](../CHANGELOG.md#k-seed-boolean-entry-snapshot-20261124) continues P-682/P-683 for [Boolean snapshots at immediate scalar calls](#boolean-snapshots-at-immediate-scalar-calls). The seed may omit a caller snapshot when the selected call has no consumer of its contents. Argument observations, result predicates and completion checks retain their existing meaning.
 
 The [r121 review](../CHANGELOG.md#k-booter-reserve-keys-20261124) continues P-682/P-683 for [checking the module key array’s growth](../applications/cod-booter/docs/ModuleGraph.md#checking-growth-of-the-module-key-array). The ordinary source call forwards a mutable lexical slot, and the actual owner supplies allocation permission. The booter checks the helper body before publishing its source interface.

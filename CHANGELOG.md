@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-24 — Bound the body checks triggered by indexed record fields
+
+<a id="k-booter-indexed-field-demand-20261124"></a>
+**K-BOOTER-INDEXED-FIELD-DEMAND-20261124.** D-ARCH-REVIEW r122→123 and D-20-MODULE-GRAPH r86→87 continue P-680–P-683. At `015af50c:applications/cod-booter/src/CaseSchemas.cod` a file-wide scan could reject an unrelated valid field. A prepared field could also demand an enclosing body outside the new source profile in `015af50c:applications/cod-booter/src/DeclarationDemand.cod`. The [corrected review](applications/cod-booter/docs/ModuleGraph.md#deciding-which-bodies-need-indexed-field-checks) covers both causes and the corresponding indexed-destination test for local sums. The linked candidate is held for compatibility.
+
+## 2026-11-24 — Skip an unused caller Boolean snapshot in the seed
+
+<a id="k-seed-boolean-entry-release-20261124"></a>
+**K-SEED-BOOLEAN-ENTRY-RELEASE-20261124.** The [reviewed scalar-call change](design/ImplementationArchitecture.md#boolean-snapshots-at-immediate-scalar-calls) shipped at `cad15cf2:cod/lang_checked.hh`. The built seed skipped the snapshot at the lexer’s byte predicate and retained it for a borrowed Boolean. Focused comparisons covered both seed modes, diagnostics, artifacts and runtime behavior. The build-time impact on the full booter was not measured.
+
 ## 2026-11-24 — Distinguish the two slots a parameter can forward
 
 <a id="k-booter-forward-parameter-slot-20261124"></a>

@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r87 review](../../../CHANGELOG.md#k-booter-indexed-field-demand-20261124) continues P-680/P-681 for [indexed field checks in demanded bodies](#deciding-which-bodies-need-indexed-field-checks). It corrects when the declaration and provider commands initiate a body check and ties local sum discovery to its indexed transfer.
+
 The [r86 clarification](../../../CHANGELOG.md#k-booter-forward-parameter-slot-20261124) continues P-680/P-681 and distinguishes forwarding an ordinary parameter’s own slot from forwarding a caller’s slot. [Key-array growth](#checking-growth-of-the-module-key-array)
 
 The [r85 review](../../../CHANGELOG.md#k-booter-reserve-keys-20261124) continues P-680/P-681 for [growth of the module key array](#checking-growth-of-the-module-key-array). The source checker distinguishes a caller’s lexical slot, its current array and the permission to allocate a replacement in that array’s owner.
@@ -668,6 +670,16 @@ In `probe_package_roots`, the expressions `rows[row].path_first` and `rows[row].
 Prove the element is a finite bits record. Keep its defining module and declaration when the inline member reader returns the field ordinal and type. In `PackageSourceRoot`, the ordinals are 1 and 2 respectively. Bind the evidence to the actual index and field syntax in the visit frame. A writable actual may supply the readonly array loan. Its selected backing must stay live while the index is evaluated and the field is read.
 
 Evaluate each written index once. An exception from the index precedes the bounds check. An out-of-range index prevents the read and any later argument from executing. Only a successful selection supplies the independent scalar. This source check covers immediate field reads on the ordinary array formal. Whole-row reception, mutation and object emission require their own evidence. Use direct controls for distinct field values in neighboring rows, local and renamed arrays, damaged field or element evidence, and index failure. Verify the unchanged resolver and its importers through declaration checking and provider generation.
+
+### Deciding which bodies need indexed field checks
+
+Declaration and provider checking first establish which bodies require operand and completion checks. Preserve existing reasons, including called bodies reached from a required caller. An indexed field in a body already required by another operation must be checked even when the body returns `void` or `bool`. In `probe_package_roots`, the indexed sum writes and selected native call already require its body. Check both row fields there. [Indexed package fields](#reading-a-field-of-an-indexed-package-row) · [Native package probe](#checking-the-native-package-probe)
+
+An indexed field can independently require a body in the bounded ordinary callable profile with a representable signature, an independent `u64` result and a direct `u64` field of the checked record-array formal. Inspect the bound receiver, nominal schema and member. A known valid field outside that profile adds no demand of its own. If the callable and receiver qualify and the requested field is absent, diagnose the field at its use. Incomplete schema evidence cannot establish that a member is valid. Candidate discovery creates no checked operand or publishable body evidence.
+
+After demand closes, prepare the required projections against the actual source revision. Preserve other applicable operand checks. An unsupported operation in a demanded body produces a located stop before output. For local sum construction, use the binder’s exact indexed destination of a place transfer and its direct braced constructor input. A different assignment containing a constructor supplies no evidence for the indexed transfer.
+
+Check the unchanged SourceAccess, Lexer, PackageInputs and frozen ParserStorage on declaration and provider routes. Exercise a callable with mixed field types in both source orders, a missing field in an otherwise eligible reader, and an independently demanded body with a wrong index, nominal type or field shape. Check the real resolver and its dependents alongside the previously released declaration, provider, object and memory workloads. Bound these decisions by checked syntax and types across all modules.
 
 ### Checking a local sum constructor in an indexed transfer
 
