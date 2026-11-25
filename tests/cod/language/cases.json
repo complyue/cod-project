@@ -1351,12 +1351,6 @@
     "stdout": "98\n42\n98\n42\n51\n1\n71\n50\n70\n99\n42\n51\n1\n71\n52\n2\n72\ntrue\ntrue\n"
   },
   {
-    "file": "regional-sum-initializer-duplicate.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "initializer already entered for this selected target"
-  },
-  {
     "file": "regional-sum-initializer-abrupt.cod",
     "exit": 0,
     "stdout": "7\n42\n"

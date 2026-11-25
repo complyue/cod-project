@@ -252,7 +252,6 @@ struct LexicalState {
   std::set<size_t> live_exception_holders;
   // Until a payload loan's full duration is proved, retain its exposure on all reaching paths.
   std::set<size_t> exposed_exception_payloads;
-  std::set<size_t> started_initializers;
   struct InputFacts {
     std::set<size_t> initialized;
     CleanupEquations::Selections selections;
@@ -5854,8 +5853,6 @@ class ScalarChecker {
         intersect(a.live_exception_holders, b.live_exception_holders);
     if (a_exits) lexical_.exposed_exception_payloads = b.exposed_exception_payloads;
     else if (!b_exits) lexical_.exposed_exception_payloads.insert(b.exposed_exception_payloads.begin(), b.exposed_exception_payloads.end());
-    if (a_exits) lexical_.started_initializers = b.started_initializers;
-    else if (!b_exits) lexical_.started_initializers.insert(b.started_initializers.begin(), b.started_initializers.end());
     if (a_exits) lexical_.symbols = b.symbols;
     else if (!b_exits) lexical_.symbols = join_symbols(a.symbols, b.symbols);
     lexical_.required_symbols.insert(b.required_symbols.begin(), b.required_symbols.end());
@@ -19345,9 +19342,6 @@ class ScalarChecker {
         program_.methods.at(selected).source->kind == Form::Kind::procedure)
       fail(expr.at, "a function cannot invoke a procedure initializer");
     require_live_view(target, expr.at);
-    if (lexical_.live && lexical_.started_initializers.contains(root))
-      fail(expr.at, "initializer already entered for this selected target");
-    lexical_.started_initializers.insert(root);
 
     const auto callee = demand_regional_initializer(selected, expr.at);
     const auto &called = program_.instances.at(callee);
