@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Use current scalar bindings in a directly supplied here body
+
+<a id="k-seed-here-current-bindings-20261125"></a>
+**K-SEED-HERE-CURRENT-BINDINGS-20261125.** The delegated [architecture review](design/ImplementationArchitecture.md#scalar-symbol-reads-in-a-direct-here-body) continues D-ARCH-REVIEW r185→186 from `5d9531b2`. The ordinary synchronous here handoff already has a lexical frame and the independent scalar symbol load observes the active binding. [D-18](design/CallableStorageAndHereAccess.md#an-effect-in-a-here-callback) owns the literal’s lexical permission and [D-10](design/SymbolicDynamicScope.md#captured-values-and-call-behavior) owns handler replay. Acceptance compares argument-scope restoration, repeated callback reads and unwind.
+
 ## 2026-11-25 — Omit symbol-only work for eligible seed function instances
 
 <a id="k-seed-function-symbol-work-20261125"></a>

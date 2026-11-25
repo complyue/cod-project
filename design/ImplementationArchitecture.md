@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r186 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r185 under [D-18’s here permission rule](CallableStorageAndHereAccess.md#an-effect-in-a-here-callback). The [direct handoff](#scalar-symbol-reads-in-a-direct-here-body) uses the active dynamic binding each time a supplied body runs. [Review and scope](../CHANGELOG.md#k-seed-here-current-bindings-20261125)
+
 At r185 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r184 with a [symbol-pass scheduling decision](#functions-with-an-empty-outgoing-symbol-set). [D-10’s function restriction](SymbolicDynamicScope.md#callable-context-and-memory-access) supplies the empty outgoing set. [This review](../CHANGELOG.md#k-seed-function-symbol-work-20261125) retains the earlier phase and emission boundaries.
 
 At r184 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) applies the [project user’s decision](../CHANGELOG.md#h-perform-family-capture-20261125) to r183’s [module-entry consumer](#symbol-requirements-at-seed-module-entry). [Handler activation](#preparing-the-installed-familys-replay-record) consumes the installed family’s union for replay. The direct-call and handler evidence continues under the existing trusted-seed removal scope.
@@ -924,6 +926,12 @@ At `c111e60a`, the trusted seed skips the symbol pass if the fused world declare
 A function with no here parameter can supply a block to a receiver. A locally authored block obeys its defining function’s effect permissions. Native callbacks and forwarded bodies have separate call targets and transport. Retain their preparation and use the general symbol path wherever an existing binding fact leaves a handoff unresolved. Use completed facts to decide eligibility before scheduling. Inspecting every body again to select this shortcut would repeat the work it removes. Caller-side default argument evaluation belongs to the call site. An empty function summary has no effect on the set saved when a procedure handler activates.
 
 Check `ModuleIndex.find_visit` and `same_key` in a world that actually uses a runtime symbol. The functions can skip the symbol pass while their indexed accesses, calls and native interfaces retain their emitted behavior. Include an indirect function call or a same-kind full scope and a receiver of a procedural here body. Keep the existing final comparison as an invariant. [Function and here permissions](CallableStorageAndHereAccess.md#here-use-and-procedure-calls)
+
+#### Scalar symbol reads in a direct here body
+
+A proc can supply a full-scope literal to a single ordinary synchronous here formal. If its only outstanding symbols are independent numeric, Bool or enum values, the literal can load their current TLS bindings each time the receiver calls it. The supplier grants permission for that read. The receiver may call the body twice or skip it. At `5d9531b2:cod/lang_checked.hh`, confine this admission to the established supplying operation. The existing here entry and lexical frame already carry the body and its live slots. Preserve owner and completion checks and the separate guards for other handoffs. If a handler that encloses this work needs a replay binding, its family still needs a complete replay plan before activation. A direct here call adds no snapshot.
+
+With an outer binding of 7, a helper that installs 29 and returns the argument 2 restores the binding before the receiver starts. Two callback reads plus the argument give 16. Installing 29 inside each callback instead gives 60. In both cases the outer binding remains 7. A receiver that establishes 29 before invoking the supplied body distinguishes an invocation-time read from a snapshot at supply. Check cleanup with the binding visible to the body and restoration when a throw reaches the caller. A live-frame symbolic handler reached through `behave` has separate activation obligations and needs its own representation review before broadening its profile.
 
 #### First-demand union of dynamic-symbol requirements
 
