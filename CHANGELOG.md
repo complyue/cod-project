@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Review sharing of reference target bounds
+
+<a id="k-seed-reference-target-layers-20261125"></a>
+**K-SEED-REFERENCE-TARGET-LAYERS-20261125.** D-ARCH-REVIEW r147→148 continues P-682/P-683 and the [r141 scope](#h-seed-migration-completion-20261125). At `95082dcf:cod/lang_checked.hh:6251` a surviving binding may keep its target row after its owner expires. At `95082dcf:cod/lang_llvm.hh:2956` the emitted null check depends on the checked operand’s possible targets. The [review](design/ImplementationArchitecture.md#sharing-reference-target-bounds) preserves the distinction between expiration and erasure, versioned branch conditions and the existing refinement stop.
+
 ## 2026-11-25 — Review sharing of stored Boolean predicates
 
 <a id="k-seed-boolean-predicate-layers-20261125"></a>
