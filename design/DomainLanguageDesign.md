@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 220
+Discussion revision: 221
 
 Recorded: 2026-11-25
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r221 the [project user’s severity decision](../CHANGELOG.md#h-product-field-shadow-warning-20261125) qualifies [D-07-FIELD-SHADOW-DIAGNOSTIC](DesignAuthorityRegistry.md#d-07-field-shadow-diagnostic), P-736/P-737, for the production compiler in `e-wrks/cod`. The r220 field-selection contract continues. Verify the same declaration pair with each of the three severities and check a duplicate in one product independently.
 
 At r220 [the field-shadowing decision](../CHANGELOG.md#h-product-field-shadow-20261125) corrects r219’s rejection of a child’s same-named stored field. [D-07-PRODUCT-EXTENDS](DesignAuthorityRegistry.md#d-07-product-extends) and [D-07-MEMBER-NAMES](DesignAuthorityRegistry.md#d-07-member-names) apply P-726–P-729 to two distinct field declarations on one live target. Check the two stored values through child and parent views, including a child-field write before parent construction. Ordinary method dispatch, duplicate names within one product and cross-category collisions retain their existing rules.
 
@@ -294,6 +296,12 @@ For `ref c = make Child(7u64, 9u64)`, `c.id` reads 9. Bind `ref p:Parent = c` an
 Two stored declarations named `id` in the same product still conflict. Shadowing applies between ordinary stored fields on distinct levels. The existing [member-name collision rule](#receivers-in-field-accessors-and-member-methods) rejects a stored field against a computed accessor or named method of the same spelling, including across levels. Reserved intrinsic members such as the exception catch binding’s [`tip`](ExceptionControl.md#the-catch-bindings-readonly-tip-field) retain their contracts. A method specialized on the child may belong to the same family as the parent method. Ordinary visibility, extension permission and unique-best selection apply.
 
 The child constructor starts with an uninitialized embedded parent. Before reading or writing inherited fields it must explicitly complete `super(...)` on the direct parent. Successful construction requires that parent and the child’s own fields to be ready. The [parent initialization contract](ConstructionAndAcquisition.md#initializing-the-storage-parent-of-a-product) covers branches, failure and the distinction from a member call.
+
+#### Production diagnostic for a shadowed stored field
+
+When a child declares a stored field whose spelling already denotes an inherited stored field, the production compiler in `e-wrks/cod` reports a **warning by default**. Report at the child’s field name and point to the nearest ancestor declaration it hides. In the example above the primary location is `Child.id` and the related location is `Parent.id`. Report the shadow once at its declaration even if neither field is read. A grandchild that only inherits `Child.id` adds no warning.
+
+The user may explicitly select **info** to retain the finding as an informational message, or **error** to make the compilation fail. At warning or info severity the otherwise valid example compiles and its two fields keep their independent values. All three settings apply only to legal stored-field shadowing. A duplicate field within one product or a collision with a named method or computed accessor still fails its own required check. Configuration spelling is left to the production compiler. [Diagnostics by compiler stage](../applications/cod-booter/README.md#diagnostics-by-compiler-stage)
 
 #### Super-calls in OO bodies
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Warn when a derived product declares a shadowing field
+
+<a id="h-product-field-shadow-warning-20261125"></a>
+**H-PRODUCT-FIELD-SHADOW-WARNING-20261125.** In the [OO discussion](codex://threads/01a211e6-8b5f-7532-8e67-c1337ce40796), the project user required a default warning from `e-wrks/cod` for a child shadowing an ancestor’s stored field and explicit options for info or error severity. D-07 r220→221 specifies the [production diagnostic and acceptance cases](design/DomainLanguageDesign.md#production-diagnostic-for-a-shadowed-stored-field) under P-736/P-737. Field selection continues from `582b80ce:design/DomainLanguageDesign.md:279`. The seed and booter gain no new delivery requirement.
+
 ## 2026-11-25 — Allow a child to shadow a parent’s stored field
 
 <a id="h-product-field-shadow-20261125"></a>
