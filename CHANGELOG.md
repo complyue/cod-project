@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Retire the C++ REPL and its workspace commands
+
+<a id="h-retire-cpp-repl-20261125"></a>
+**H-RETIRE-CPP-REPL-20261125.** Asked about the user-visible C++ eval and interactive commands, the project user decided “C++ repl也整体砍掉吧，e-wrks/cod 再重新支持repl” and authorized cleanup of live build definitions and regeneration with no LLVM rebuild. This retires [D-02](design/DesignAuthorityRegistry.md#d-02), including its submission cache and workspace commands, and supersedes their migration disposition at `24e8db100b00c3e33e89312b83481a0f1f81ade7:design/ImplementationArchitecture.md:352`. [D-ARCH-REVIEW r136](design/ImplementationArchitecture.md#retiring-shilos) retains the CoD source driver and its native link/run path. The [production compiler](applications/cod-booter/README.md#next-stage-repositories-and-native-runtime) owns future REPL design.
+
 ## 2026-11-25 — Retire shilos and assign its remaining work by component
 
 <a id="h-retire-shilos-20261125"></a>

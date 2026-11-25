@@ -144,9 +144,9 @@ codp gc                     # clean unused cached mirrors & snapshots
 3. Stop on first satisfying branch per dependency.
 4. Detect & report cycles (by tracking the visiting stack of UUIDs).
 
-## Compile-on-Demand (future)
+## Compiler inputs
 
-- The `cod` REPL will parse `CodManifest.yaml`, map each work-tree, generate include paths and other compiler flags, then JIT/Orc-JIT the requested entry points on-demand.
+- The compiler consumes package roots prepared by `codp` for a source invocation. [Package inputs and module selection](ModuleWorlds.md#packages-namespaces-and-entry-selection)
 - Cooperating processes can share a mapped image. Its owner and publication follow the [DBMR contract](ConstructionAndAcquisition.md#publishing-a-newly-created-dbmr).
 
 ---

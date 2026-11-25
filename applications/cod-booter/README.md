@@ -119,7 +119,7 @@ All five planned repositories will live in the [e-wrks GitHub organization](http
 | --- | --- |
 | `cod-lang` | CoD language design and the authoritative language specification shared by both compilers. |
 | `cod-seed` | The C++ seed compiler, the CoD-written booter and the C-native components they use, including the region core and LLVM bindings. The booter stays in this repository after the split. |
-| `cod` | The future production CoD compiler written in CoD, including full diagnostics and the additional analysis they require. |
+| `cod` | The future production compiler written in CoD, including full diagnostics and a future CoD REPL. [REPL decision](../../CHANGELOG.md#h-retire-cpp-repl-20261125) |
 | `codup` | Toolchain version management in the role of rustup. CoD package dependency resolution and lockfiles have their own [codp design](../../design/CodProjectStructureAndPkgMgmt.md). |
 | `codmate` | The Language Server Protocol server and IDE plugins, including [reference-site doclet tooltips and navigation](../../design/DomainLanguageDesign.md#definition-doclets). |
 
