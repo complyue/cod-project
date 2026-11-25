@@ -954,9 +954,6 @@ class ScalarChecker {
   using PresenceFacts = std::map<EvidenceSlot, TargetPresence>;
   using EvidencePlaces = std::set<EvidenceSlot>;
   using SelectedProductFields = std::set<std::pair<EvidenceSlot, ProductFieldPath>>;
-  struct QueryInputReadError : std::runtime_error {
-    using std::runtime_error::runtime_error;
-  };
   using PresenceSlotMap = std::map<EvidenceSlot, EvidencePlaces>;
   using BooleanObservations = std::map<size_t, bool>;
   struct ObservationPath {
@@ -9358,23 +9355,24 @@ class ScalarChecker {
       }
     }
   }
-  void require_type_initialized(const TypeEvidenceState &state, const TargetEvidence &target,
-                                std::string_view name, const Location &at) const {
-    if (!state.checks_initialization() || !state.selections.initialization_reachable ||
-        target.places.empty()) return;
+  void require_type_readable_target(const TypeEvidenceState &state, const TargetEvidence &target,
+                                    const Location &at) const {
+    if (!state.checks_initialization() || !state.selections.initialization_reachable) return;
+    // An unresolved receiver can make a different candidate's field evidence insufficient.
+    bool inline_product = false, unresolved = false;
+    for (const auto &place : target.places) if (const auto *product = std::get_if<QueryProductPlace>(&place)) {
+      inline_product |= inline_query_product(*product).has_value();
+      unresolved |= !product->reservation && !product->enclosing;
+    }
+    if (!inline_product && !unresolved) return;
     const auto &flow = state.selections;
     const auto reaching = state.selections.outcome(state.selections.selection_outcomes(target), true);
-    // An inline field keeps its path from this selection. A required reference
-    // leads to a separate target, whose readiness needs its own evidence.
-    using Read = std::pair<EvidenceSlot, std::optional<ProductFieldPath>>;
-    std::set<Read> pending, visited;
+    // Follow required edges, keeping inline field paths and ending the path on a reference edge.
+    using Projection = std::pair<EvidenceSlot, std::optional<ProductFieldPath>>;
+    std::set<Projection> pending, visited;
     for (const auto &place : target.places) pending.emplace(place, ProductFieldPath{});
     const auto ready_fields = flow.ready_fields(target);
-    const bool selected_ready = flow.selection_initialized(target);
-    const bool unresolved = std::ranges::any_of(target.places, [](const auto &place) {
-      const auto *product = std::get_if<QueryProductPlace>(&place);
-      return product && !product->reservation && !product->enclosing;
-    });
+    const bool selected_ready = unresolved && flow.selection_initialized(target);
     while (!pending.empty()) {
       auto item = pending.extract(pending.begin());
       const auto &[place, path] = item.value();
@@ -9400,19 +9398,9 @@ class ScalarChecker {
           continue;
         }
       }
-      if (path && (path->empty() ? selected_ready : ready_fields.contains(*path))) continue;
-      if (!flow.may_read_uninitialized(place, reaching)) continue;
-      auto field_name = name;
-      if (const auto *member = std::get_if<QueryProductPlace>(&place); member && !member->path.empty()) {
-        const auto [schema, index] = member->path.back();
-        field_name = program_.schemas.at(schema).fields.at(index).source->name;
-      } else if (field_name.empty()) if (const auto *local = std::get_if<const Expression *>(&place)) field_name = (*local)->text;
-      if (unresolved) implementation_gap(at, "product field initialization with an unresolved receiver in typeof");
-      const auto message = "read of '" + std::string(field_name.empty() ? "target" : field_name) +
-          "' before definite initialization of every possible target";
-      if (state.imported_storage.contains(place))
-        throw QueryInputReadError(location_text(at) + ": " + message);
-      fail(at, message);
+      if (unresolved && !(path && (path->empty() ? selected_ready : ready_fields.contains(*path))) &&
+          flow.may_read_uninitialized(place, reaching))
+        implementation_gap(at, "product field initialization with an unresolved receiver in typeof");
     }
   }
   static EvidencePlaces query_product_fields(const QuerySelections &flow, const TargetEvidence &receiver,
@@ -9679,7 +9667,7 @@ class ScalarChecker {
           auto saved = target;
           present.selections.forget_changed(saved, revision);
           saved.presence = TargetPresence::present;
-          require_type_initialized(present, saved, {}, item.at);
+          require_type_readable_target(present, saved, item.at);
         }
       }
       const bool match_reaches = reaches_end && enter_partition(arm, matched);
@@ -9831,7 +9819,7 @@ class ScalarChecker {
     if ((reads_result || (read == EvidenceRead::discarded && (expr.kind == K::name || expr.kind == K::field))) &&
         type && *type != Type::never && *type != Type::null_ref &&
         expr.kind != K::block && expr.kind != K::conditional && expr.kind != K::try_scope) {
-      require_type_initialized(state, target, expr.kind == K::name ? expr.text : std::string_view{}, expr.at);
+      require_type_readable_target(state, target, expr.at);
       read_type_target(state, view, target);
     }
     state.exits = exits;
@@ -9955,7 +9943,7 @@ class ScalarChecker {
         if (state.value.view != true || state.value.mixed_view)
           implementation_gap(expr.at, "aggregate bits transfer requires one complete source target");
         read_type_target(state, state.value, state.target);
-        require_type_initialized(state, state.target, {}, expr.at);
+        require_type_readable_target(state, state.target, expr.at);
       }
     }
     return source;
@@ -10066,7 +10054,7 @@ class ScalarChecker {
           if (field.storage == PlaceKind::reference) {
             if (source.nullable && state.target.presence != TargetPresence::present)
               fail(at, "ref field requires a proven non-null target");
-            require_type_initialized(state, state.target, "ref field target", at);
+            require_type_readable_target(state, state.target, at);
           }
           state.selections.assign({member, {member}}, state.target);
         }
@@ -10123,8 +10111,7 @@ class ScalarChecker {
       read_type_target(state, view, target);
       if (!state.selections.initialization_reachable) return;
     }
-    const auto name = operand.kind == Expression::Kind::name ? std::string_view{operand.text} : std::string_view{};
-    require_type_initialized(state, target, name, operand.at);
+    require_type_readable_target(state, target, operand.at);
   }
   static void check_type_deferred_argument(const TypeEvidenceState &state, const Expression &call, const Expression &operand,
                                            const ViewEvidence &view, ArgumentMode mode) {
@@ -11021,12 +11008,10 @@ class ScalarChecker {
     std::set<size_t> targets, required_inputs, initialized_inputs, exact_inputs;
     std::map<size_t, QueryCallEffects> product_effects;
     std::optional<QueryProductResult> product_result;
-    std::optional<std::string> invalid_input_read;
     bool completes = false;
     bool operator==(const TypeCallSummary &) const = default;
 
     void merge(const TypeCallSummary &other) {
-      if (other.invalid_input_read) invalid_input_read = other.invalid_input_read;
       for (const auto &[reason, effects] : other.product_effects) {
         const auto [entry, inserted] = product_effects.emplace(reason, effects);
         if (!inserted) entry->second.merge(effects);
@@ -11500,10 +11485,6 @@ class ScalarChecker {
       }
       if (!result.completes) result.initialized_inputs.clear();
       return result;
-    } catch (const QueryInputReadError &error) {
-      TypeCallSummary result;
-      result.invalid_input_read = error.what();
-      return result;
     } catch (const std::runtime_error &) {
       // A declaration still supplies the result bound when its body evidence is unavailable.
       return {};
@@ -11576,7 +11557,6 @@ class ScalarChecker {
     inputs.storage = query_call_storage(program_.methods[call.method], call.arguments, call.operands, state, at);
     auto proof = prove_type_call(call.method, call.arguments, call.retained, call.result, *call.context, inputs);
     if (!proof) implementation_gap(at, "product initialization through a helper with no proved body in typeof");
-    if (proof->invalid_input_read) throw QueryInputReadError(*proof->invalid_input_read);
     return std::move(*proof);
   }
   static std::set<size_t> product_query_outcomes(const PreparedProductCall &call, const TypeCallSummary &summary) {
@@ -12476,7 +12456,7 @@ class ScalarChecker {
       if (spread) {
         if (state.required) {
           check_value_pack_spread(*type, state.value.view == true && !state.value.mixed_view, operand.at);
-          require_type_initialized(state, state.target, "value-pack spread", operand.at);
+          require_type_readable_target(state, state.target, operand.at);
         }
         if (completes) {
           note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::invalid_capacity)));
@@ -12521,7 +12501,7 @@ class ScalarChecker {
       if (!input || *input == Type::never) return input;
       if (!text_type(*input) || (state.required && state.value.view != true))
         fail(source.at, "text access requires a readable String");
-      require_type_initialized(state, state.target, {}, source.at);
+      require_type_readable_target(state, state.target, source.at);
       for (size_t i = 1; i < expr.children.size(); ++i) {
         const auto &offset = *expr.children[i];
         const auto type = type_evidence(offset, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, true, EvidenceRead::payload);
@@ -12550,7 +12530,7 @@ class ScalarChecker {
         if (state.required && i == 0 && (state.value.read_only == true ||
             (state.value.owner && readonly_evidence_owner(*state.value.owner, state))))
           fail(operand.at, "text append requires writable builder access");
-        require_type_initialized(state, state.target, {}, operand.at);
+        require_type_readable_target(state, state.target, operand.at);
       }
       note_type_allocation(state);
       return Type::void_type;
@@ -12876,7 +12856,7 @@ class ScalarChecker {
         target_facts.selection.footprint.clear();
       } else {
         if (result == GroupResult::value && source.view == true)
-          require_type_initialized(state, state.target, {}, expr.at);
+          require_type_readable_target(state, state.target, expr.at);
         if (type == Type::boolean)
           target_facts.branches = state.target.branches ? state.target.branches : state.selections.read_boolean(state.target.places);
       }
@@ -13027,8 +13007,7 @@ class ScalarChecker {
             fail(initializer.at, "ref requires a proven non-null target");
         }
         if (completes && borrowed == true && expr.declaration_kind == "ref")
-          require_type_initialized(state, state.target, initializer.kind == K::name ? initializer.text : std::string_view{},
-                                   initializer.at);
+          require_type_readable_target(state, state.target, initializer.at);
         state.bindings[declaration->text] = type;
         state.local_declarations[declaration->text] = declaration.get();
         state.definitions.erase(declaration->text);
@@ -13316,7 +13295,7 @@ class ScalarChecker {
                                            ExpectedTypeUse::materialization, true, EvidenceRead::target);
           if (!source || *source == Type::never) return source;
           if (!text_piece(*source)) fail(input->at, builder ? "text builder construction requires a text piece" : "make String requires a text operand");
-          require_type_initialized(state, state.target, {}, input->at);
+          require_type_readable_target(state, state.target, input->at);
         }
         view = {!builder, true, {}, text_owner};
         target_facts.presence = TargetPresence::present;
@@ -13411,7 +13390,7 @@ class ScalarChecker {
         else if (state.required && state.checks_initialization()) {
           TargetEvidence places;
           places.places = view.direct_text_place ? destination.selection.footprint : destination.places;
-          require_type_initialized(state, places, "direct String place", expr.at);
+          require_type_readable_target(state, places, expr.at);
         }
         view = {false, false, {}};
         return Type::void_type;
@@ -13457,7 +13436,7 @@ class ScalarChecker {
           text_installation_type(*source, expr.at);
           if (selected.nullable || state.target.presence == TargetPresence::absent)
             fail(expr.at, "a direct String place requires a non-null text target");
-          require_type_initialized(state, state.target, "String target", expr.at);
+          require_type_readable_target(state, state.target, expr.at);
         } else rebind_type(*type, *source, expr.at);
         if (proving_ && validating_ && !view.nullable && selected.nullable && state.target.presence != TargetPresence::present)
           fail(expr.at, "ref requires a proven non-null target");
@@ -13471,7 +13450,7 @@ class ScalarChecker {
         const bool first_reservation = view.reservation_slot && !view.owner && constructor &&
             regional_sum_reservation(operand, *constructor) && !state.preparing(expr);
         if (!view.nullable && !first_product_binding && !first_reservation)
-          require_type_initialized(state, state.target, {}, expr.at);
+          require_type_readable_target(state, state.target, expr.at);
         if (!selected.read_only || (!view.slot_read_only && *selected.read_only))
           implementation_gap(expr.at, "reference target access is not established");
         rebind_access(view.slot_read_only.value_or(false), *selected.read_only, expr.at);
@@ -13946,7 +13925,7 @@ class ScalarChecker {
         const auto &shape = type->kind == Type::arguments ? value_pack_index()
             : state.required ? indexed_array(*type, array.view == true && !array.mixed_view, expr.at)
                              : program_.arrays.at(type->identity);
-        require_type_initialized(state, state.target, "array operand", expr.at);
+        require_type_readable_target(state, state.target, expr.at);
         read_type_target(state, array, state.target);
         const auto index = child(1);
         if (!index || *index == Type::never) return index;
@@ -13969,7 +13948,7 @@ class ScalarChecker {
         const auto type = child(0, false, true, EvidenceRead::target);
         if (!type || type == Type::never) return type;
         if (state.required) check_array_length_type(*type, state.value.view == true && !state.value.mixed_view, expr.at);
-        require_type_initialized(state, state.target, "array operand", expr.at);
+        require_type_readable_target(state, state.target, expr.at);
         read_type_target(state, state.value, state.target);
         return Type::uint64;
       }
@@ -14014,7 +13993,7 @@ class ScalarChecker {
           target = found->second; local = true;
           if (target && target->kind == Type::procedure) {
             const auto selected = named_type_target(state, expr.text);
-            require_type_initialized(state, selected, expr.text, expr.at);
+            require_type_readable_target(state, selected, expr.at);
             read_type_target(state, state.views.at(expr.text), selected);
           }
         }
@@ -14271,7 +14250,7 @@ class ScalarChecker {
             selected.selection.slot.reset();
             selected.same_selected.clear();
             selected.presence_proof.reset();
-            require_type_initialized(state, operand_targets[i], i ? "right swap target" : "left swap target", expr.at);
+            require_type_readable_target(state, operand_targets[i], expr.at);
             read_type_target(state, views[i], selected);
           }
         if (!reference && methods.methods.empty() && operand_targets.size() == 2 && arguments.front() == Type::boolean) {
@@ -14550,7 +14529,7 @@ class ScalarChecker {
         } else if (source->kind == Type::array) shape = &program_.arrays.at(source->identity);
         else if (source->kind == Type::arguments) shape = &value_pack_index();
         if (shape) {
-          require_type_initialized(state, state.target, "array operand", expr.at);
+          require_type_readable_target(state, state.target, expr.at);
           read_type_target(state, state.value, state.target);
         }
       }
@@ -14619,7 +14598,7 @@ class ScalarChecker {
         if (read == EvidenceRead::binding_slot)
           implementation_gap(expr.at, "retaining a regional sum field slot outside its initializer");
         if (state.required && state.checks_initialization())
-          require_type_initialized(state, state.target, base.text, expr.at);
+          require_type_readable_target(state, state.target, expr.at);
         const auto &field = sum_alternative(*constructor).fields.at(selected_sum_field(*constructor, expr));
         const auto access = state.value.read_only.value_or(true) ||
             (field.stores_target() ? field.readonly_target() : readonly_field(field));
@@ -14670,7 +14649,7 @@ class ScalarChecker {
             if (read_slot && !state.selections.product_slot_initialized(selection)) {
               TargetEvidence slots;
               slots.places = selection.footprint;
-              require_type_initialized(state, slots, expr.text, expr.at);
+              require_type_readable_target(state, slots, expr.at);
             }
             target_facts = state.selections.selected_target(selection);
             if (field.direct_text_place() && read_slot)
@@ -14685,7 +14664,7 @@ class ScalarChecker {
         return field.type;
       }
       if (!type || type->kind != Type::exception) return {};
-      require_type_initialized(state, state.target, expr.children.front()->text, expr.at);
+      require_type_readable_target(state, state.target, expr.at);
       read_type_target(state, state.value, state.target);
       if (state.required) check_exception_field(expr, *type);
       return Type::uint64;
@@ -14769,7 +14748,7 @@ class ScalarChecker {
                    (contract.read_only || state.value.read_only == false) &&
                    (contract.nullable() || !state.value.nullable || state.target.presence == TargetPresence::present) &&
                    (!state.target.places.empty() || state.target.presence == TargetPresence::absent)) {
-            if (!contract.nullable()) require_type_initialized(state, state.target, {}, expr.at);
+            if (!contract.nullable()) require_type_readable_target(state, state.target, expr.at);
             returned.borrowed = TypeBorrowedReturn::capture(state.target, state.selections);
             if (state.checks_initialization() && !returned.borrowed->uninitialized.empty() &&
                 state.target.places.size() > 1 && (!state.repeated_observations || prepared_entry_target(state.target))) {
