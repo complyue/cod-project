@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Review empty replay through the real module key lookup
+
+<a id="k-seed-key-lookup-replay-20261125"></a>
+**K-SEED-KEY-LOOKUP-REPLAY-20261125.** The [implementation review](design/ImplementationArchitecture.md#collecting-replay-requirements-in-the-key-lookup) continues D-ARCH-REVIEW r192→193. After removing the scheduling shortcut, the private seed at `0bf6c449:cod/lang_checked.hh` stops at the numeric range in `ModuleIndex.find_visit`. The reviewed collector can use the already checked half-open ranges, indexed tag and by-value key fields to establish an empty inventory. The native-disposal case continues to require independent replay evidence.
+
 ## 2026-11-25 — Bound native reentry at the protected relative-path acquisition
 
 <a id="k-seed-protected-path-reentry-20261125"></a>
