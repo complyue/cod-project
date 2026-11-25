@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Keep one full view for a projected case break
+
+<a id="k-seed-case-projection-view-20261125"></a>
+**K-SEED-CASE-PROJECTION-VIEW-20261125.** D-ARCH-REVIEW r165→166 continues the [case projection review](#k-seed-case-projection-read-20261125). At `3144d6e5:cod/lang_checked.hh`, the presence check reads only the nullable-view predicate and target presence. The enclosing break record already compares the same full view. The [revised scope](design/ImplementationArchitecture.md#projecting-a-scalar-from-a-case-arm) clears removal of the duplicate view and preserves a readiness distinction observed before the outer finalizer in the R164 nested case. The existing seed acceptance inputs and language rules carry forward.
+
 ## 2026-11-25 — Retire the trusted seed’s case projection read report
 
 <a id="k-seed-case-projection-read-20261125"></a>
