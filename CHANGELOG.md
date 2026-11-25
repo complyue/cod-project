@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Decide symbol-union eligibility on first demand
+
+<a id="h-seed-symbol-union-admission-20261124"></a>
+**H-SEED-SYMBOL-UNION-ADMISSION-20261124.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user directed the seed to use precise checking from the outset whenever a later discovery could exceed the proposed union. D-ARCH-REVIEW r119→120 continues P-682/P-683 and clarifies [cache admission](design/ImplementationArchitecture.md#first-demand-union-of-dynamic-symbol-requirements) in `0c873cbf:design/ImplementationArchitecture.md`. This supersedes the proposed late invalidation and caller requeue for this optimization.
+
 ## 2026-11-24 — Collect precise gains only when needed
 
 <a id="h-measure-gains-when-needed-20261124"></a>
