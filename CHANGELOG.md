@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Retire two static predicate assertion reports from trusted translation
+
+<a id="k-seed-predicate-assertion-reports-20261125"></a>
+**K-SEED-PREDICATE-ASSERTION-REPORTS-20261125.** D-ARCH-REVIEW r167→168 continues P-682/P-683 under the [trusted-source decision](#h-trusted-seed-translation-20261125). The [review](design/ImplementationArchitecture.md#translating-a-predicate-assertion) traces the ordinary and type-query reports at `9a299525:cod/lang_checked.hh` and the runtime guard in `9a299525:cod/lang_llvm.hh`. D-10-ASSERT and H-470 retain the language rejection. The [fixture reference](tests/cod/language/README.md) r484→485 distinguishes the compile-only negative from the executable operand, failure and cleanup controls.
+
 ## 2026-11-25 — Permit a supplied here body to initialize a live scalar slot
 
 <a id="k-seed-live-here-slot-20261125"></a>

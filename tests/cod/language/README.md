@@ -1,8 +1,10 @@
 # CoD source compiler validation
 
-Reference revision: 484 · Recorded: 2026-11-25 America/Los_Angeles.
+Reference revision: 485 · Recorded: 2026-11-25 America/Los_Angeles.
 
 ## Design authority
+
+At r485 the [trusted seed assertion review](../../../CHANGELOG.md#k-seed-predicate-assertion-reports-20261125) assigns the known-false rejection expectation to the semantic checker and the archived seed. The positive predicate and regional initializer cases exercise operand evaluation, dynamic failure and cleanup under [D-10-ASSERT](../../../design/DesignAuthorityRegistry.md#d-10-assert).
 
 At r484 the [verification scope correction](../../../CHANGELOG.md#k-bootstrap-verification-scope-20261125) identifies the [deferred execution and initialization](#deferred-execution-and-initialization) fixtures that describe the archived checker. Throughout this reference, expected diagnostics for whole-drain checked-failure coverage and physical read-before-initialization proofs belong to `archive/checked-cpp-seed`. The trusted seed exercises valid-source execution and translation limits. Booter coverage is recorded for the source and command actually verified.
 
@@ -166,7 +168,7 @@ The seed compiler supports complete, fixed-arity named argument lists for the or
 
 H-463–H-466/D-10r168/D-11r35 specifies warnings unless explicit numeric conversion is proven lossless, opt-in errors and undefined behavior for actual loss or unrepresentability, with no runtime conversion enforcement. This expression conversion contract is not implemented; existing implicit numeric compatibility remains whole-type lossless. [K-717](../../../CHANGELOG.md#k-717) records that boundary.
 
-H-467–H-473 selects concrete-type numeric/assertion distinction, static assertion resolution, explicit predicate/non-null refinement and canonical built-in failure names. Both seed modes execute plain predicate assertions. They report a provably false predicate at check time, preserve evaluation effects for a provably true predicate and raise the unchecked `AssertionFailedError` for a dynamic false result. The fixtures distinguish assertion failure from an earlier checked predicate failure and verify cleanup before the caller catches the failure. Written diagnostic text has a located execution-profile limit. [Scoped assertion coverage](../../../design/ImplementationArchitecture.md#checking-a-constructor-predicate-assertion)
+H-467–H-473 selects concrete-type numeric/assertion distinction, static assertion resolution, explicit predicate/non-null refinement and canonical built-in failure names. The archived checked seed reports a provably false predicate at check time. Use that source only as a compile-time probe during the [trusted seed cutover](../../../design/ImplementationArchitecture.md#translating-a-predicate-assertion). On valid programs, the seed preserves operand effects for a provably true predicate and raises the unchecked `AssertionFailedError` for a dynamic false result. The fixtures distinguish assertion failure from an earlier checked predicate failure and verify cleanup before the caller catches the failure. Written diagnostic text has a located execution-profile limit. [Scoped assertion coverage](../../../design/ImplementationArchitecture.md#checking-a-constructor-predicate-assertion)
 
 Concrete unchecked built-ins use Error names, checked built-ins use Exception names, and the root Exception covers both. H-524–H-526 additionally requires the unchecked Error subtype root, declared Exception checked obligations and stable checkedness under adapters; the bounded declared Exception obligation is enforced independently of actual categories. New Error-root syntax and adapter conformance remain separate. Canonical imports, diagnostics and generated services share semantic identities; name/identity aliases preserve checkedness. Retired spellings are rejected. [D-17](../../../design/ExceptionControl.md#built-in-failure-names-and-assertion-responsibility) lists current category support; [K-720](../../../CHANGELOG.md#k-720) records the coordinated migration.
 
