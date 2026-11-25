@@ -20,7 +20,7 @@ export proc "C" prepare_child(handle destination:PathOwner in D, handle parent:P
                              decoded:const SourceBytes in B, used:u64)
     -> u64 where {owner D, const owner P, const owner B};
 func "C" path_ready(handle prepared:PathOwner in P) -> bool where {const owner P};
-proc "C" path_key_loan(here work(ref bytes:const SourceBytes in P) -> CompilerStatus,
+func "C" path_key_loan(here work(ref bytes:const SourceBytes in P) -> CompilerStatus,
                       handle prepared:PathOwner in P) -> CompilerStatus where {const owner P};
 
 export proc path_key(here work(bytes:const SourceBytes in P) -> CompilerStatus,
