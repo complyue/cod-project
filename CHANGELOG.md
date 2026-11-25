@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Distinguish the two slots a parameter can forward
+
+<a id="k-booter-forward-parameter-slot-20261124"></a>
+**K-BOOTER-FORWARD-PARAMETER-SLOT-20261124.** D-20-MODULE-GRAPH r85→86 continues P-680/P-681 and clarifies the [R121 acceptance workload](applications/cod-booter/docs/ModuleGraph.md#checking-growth-of-the-module-key-array) at `0deaf9c1:applications/cod-booter/docs/ModuleGraph.md`. On seed `75e196aa`, forwarding an ordinary parameter’s writable local reference slot to `reserve_keys` produced lengths 2 inside the forwarding call and 1 in its caller. Passing a freshly made array directly rejected at that operand. These controls pin the existing [parameter binding rule](design/RegionalOwnership.md#independent-binding-and-target-qualifiers).
+
 ## 2026-11-24 — Review an unused caller snapshot during seed checking
 
 <a id="k-seed-boolean-entry-snapshot-20261124"></a>
