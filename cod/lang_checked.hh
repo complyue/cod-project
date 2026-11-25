@@ -22824,30 +22824,11 @@ class ScalarChecker {
       if (field.type == Type::boolean) seed_boolean_input(place, ordinal);
     }
   }
-  struct LeafRead {
-    const Expression *site;
-    size_t guard;
-  };
-  struct LeafPendingCall {
-    const Expression *site;
-    size_t method;
-    std::vector<size_t> forwarded;
-    size_t guard;
-  };
-  // The collecting instance and its read ordinal identify the original
-  // guarded requirement. Keep the call edges to recover its path.
-  using LeafReadOrigin = std::pair<size_t, size_t>;
   struct LeafBehaviorPlan {
     enum class Kind { borrowed_byte, scalar_predicate, byte_literal } kind = Kind::borrowed_byte;
     const Expression *primitive = nullptr;
     ScalarPredicatePlan predicate;
     const Expression *literal_result = nullptr;
-    size_t borrowed_formal = null_target;
-    std::string_view borrowed_name;
-    std::vector<LeafGuard> guards;
-    std::vector<LeafRead> reads;
-    std::vector<LeafPendingCall> pending;
-    std::set<LeafReadOrigin> inherited_reads;
   };
   static bool short_circuit_predicate(const Expression &expr) {
     return expr.kind == Expression::Kind::binary && (expr.text == "&&" || expr.text == "||");
@@ -22910,37 +22891,27 @@ class ScalarChecker {
     });
   }
 
-  bool bind_leaf_operations(const Expression &expr, TypeEvidenceState &scope, LeafBehaviorPlan &plan,
-                            size_t guard, bool reads_payload = true) const {
+  bool bind_leaf_operations(const Expression &expr, TypeEvidenceState &scope, LeafBehaviorPlan &plan) const {
     using K = Expression::Kind;
     if (expr.definition || expr.receiving || expr.annotation || expr.checked_ref_argument ||
         expr.spread || expr.scoped || expr.lexical_symbol_call) return false;
     switch (expr.kind) {
     case K::name:
-      if (!scope.bindings.contains(expr.text)) return false;
-      if (reads_payload && expr.text == plan.borrowed_name) plan.reads.push_back({&expr, guard});
-      return true;
+      return scope.bindings.contains(expr.text);
     case K::block:
     case K::boolean: case K::integer:
     case K::grouped: case K::return_value: case K::return_tail:
       break;
     case K::conditional:
-      if (!expr.ordinary_braced_if() ||
-          !bind_leaf_operations(*expr.children.front(), scope, plan, guard)) return false;
-      for (const bool when : {true, false}) {
-        const auto branch_guard = plan.guards.size();
-        plan.guards.push_back({expr.children.front().get(), when, guard});
-        if (!bind_leaf_operations(*expr.children[when ? 1 : 2], scope, plan, branch_guard, reads_payload))
-          return false;
-      }
-      return true;
+      if (!expr.ordinary_braced_if()) return false;
+      break;
     case K::pointer_group:
       if (expr.declaration_kind != "val" || expr.children.size() != 1 ||
           expr.children.front()->kind != K::pointer) return false;
       break;
     case K::pointer:
       if (expr.declaration_kind != "val" || expr.children.size() != 1 ||
-          !expr.owner_name.empty() || !bind_leaf_operations(*expr.children.front(), scope, plan, guard))
+          !expr.owner_name.empty() || !bind_leaf_operations(*expr.children.front(), scope, plan))
         return false;
       return scope.bindings.try_emplace(expr.text).second;
     case K::unary: case K::binary: {
@@ -22954,39 +22925,19 @@ class ScalarChecker {
     case K::transfer:
       if (!named_family(expr, &scope).methods.empty() || expr.children.size() != 2 ||
           expr.children.front()->kind != K::name) return false;
-      return bind_leaf_operations(*expr.children.front(), scope, plan, guard, false) &&
-          bind_leaf_operations(*expr.children[1], scope, plan, guard);
-    case K::call: {
-      if (expr.has_here_body() || expr.intrinsic) return false;
-      if (text_access(text_primitive(expr, &scope)) == BuiltinOperation::text_byte) {
-        if (plan.primitive || expr.children.size() != 2 || expr.children.front()->kind != K::string_literal)
-          return false;
-        plan.primitive = &expr;
-        return bind_leaf_operations(*expr.children[1], scope, plan, guard);
-      }
-      const auto family = named_family(expr, &scope);
-      if (family.methods.size() != 1) return false;
-      const auto candidate = family.methods.front();
-      const auto &method = program_.methods[candidate];
-      const auto &parameters = method.input_parameters();
-      if (parameters.size() != expr.children.size() || expr.children.empty()) return false;
-      LeafPendingCall dependency{&expr, candidate, {}, guard};
-      for (size_t position = 0; position < parameters.size(); ++position) {
-        const auto &actual = *expr.children[position];
-        const auto mode = argument_mode(parameters[position]);
-        if (!bind_leaf_operations(actual, scope, plan, guard, mode == ArgumentMode::value)) return false;
-        const auto &selected = ungrouped_expression(actual);
-        if (mode == ArgumentMode::borrowed_ref && selected.kind == K::name && selected.text == plan.borrowed_name)
-          dependency.forwarded.push_back(position);
-      }
-      plan.pending.push_back(std::move(dependency));
-      return true;
-    }
+      break;
+    case K::call:
+      if (expr.has_here_body() || expr.intrinsic ||
+          text_access(text_primitive(expr, &scope)) != BuiltinOperation::text_byte ||
+          plan.primitive || expr.children.size() != 2 || expr.children.front()->kind != K::string_literal)
+        return false;
+      plan.primitive = &expr;
+      return bind_leaf_operations(*expr.children[1], scope, plan);
     default:
       return false;
     }
     return std::ranges::all_of(expr.children, [&](const auto &child) {
-      return bind_leaf_operations(*child, scope, plan, guard, reads_payload);
+      return bind_leaf_operations(*child, scope, plan);
     });
   }
 
@@ -23028,15 +22979,15 @@ class ScalarChecker {
     TypeEvidenceState scope;
     scope.method = instance.method;
     if (scalar_function) plan.kind = LeafBehaviorPlan::Kind::scalar_predicate;
+    bool has_borrowed_formal = false;
     for (size_t ordinal = 0; ordinal < parameters.size(); ++ordinal) {
       const auto &parameter = parameters[ordinal];
       const auto &type = instance.arguments[ordinal];
       if (parameter.automatic_conversion || parameter.variadic || parameter.selects_caller_place()) return {};
       if (argument_mode(parameter) != ArgumentMode::value) {
         if (scalar_function || argument_mode(parameter) != ArgumentMode::borrowed_ref || parameter.read_only ||
-            type != Type::boolean || plan.borrowed_formal != null_target) return {};
-        plan.borrowed_formal = ordinal;
-        plan.borrowed_name = parameter.name;
+            type != Type::boolean || has_borrowed_formal) return {};
+        has_borrowed_formal = true;
       } else if (type != Type::boolean && type != Type::uint8 && (scalar_function || type != Type::uint64)) return {};
       if (!scope.bindings.emplace(parameter.name, type).second) return {};
     }
@@ -23049,7 +23000,7 @@ class ScalarChecker {
       if (result.children.size() != 1 || !bind_scalar_predicate(*result.children.front(), scope, plan.predicate)) return {};
       if (!plan.predicate.calls.empty() && (form.case_scan_scope || instance.query_environment ||
           !instance.retained_types.empty() || abstract_effect_inputs_.contains(method.source))) return {};
-    } else if (plan.borrowed_formal == null_target || !bind_leaf_operations(*form.body, scope, plan, null_target)) return {};
+    } else if (!has_borrowed_formal || !bind_leaf_operations(*form.body, scope, plan)) return {};
     return plan;
   }
 
@@ -23677,43 +23628,14 @@ class ScalarChecker {
     }
     return changes;
   }
-  void propagate_pending_leaf_reads(std::map<size_t, LeafBehaviorPlan> &plans) const {
-    // Keep the equations symbolic. An incoming read cites the original guard
-    // and the graph still owns the ordered, guarded forwarding call sites.
-    std::map<size_t, std::vector<size_t>> callers;
-    std::deque<std::pair<size_t, LeafReadOrigin>> pending;
-    for (const auto &[id, plan] : plans) {
-      for (size_t read = 0; read < plan.reads.size(); ++read)
-        pending.emplace_back(id, LeafReadOrigin{id, read});
-      for (const auto &call : plan.pending) {
-        const auto &instances = program_.methods[call.method].instances;
-        if (instances.size() != 1) continue;
-        const auto callee = plans.find(instances.front());
-        if (callee == plans.end() || std::ranges::find(call.forwarded, callee->second.borrowed_formal) == call.forwarded.end())
-          continue;
-        callers[callee->first].push_back(id);
-      }
-    }
-    while (!pending.empty()) {
-      const auto [id, origin] = pending.front();
-      pending.pop_front();
-      const auto reached = callers.find(id);
-      if (reached == callers.end()) continue;
-      for (const auto caller : reached->second)
-        if (caller != origin.first && plans.at(caller).inherited_reads.insert(origin).second)
-          pending.emplace_back(caller, origin);
-    }
-  }
-
   void freeze_leaf_behaviors() {
     std::map<size_t, LeafBehaviorPlan> bound;
     for (size_t id = 0; id < program_.instances.size(); ++id)
       if (auto plan = bind_leaf_behavior(id)) bound.emplace(id, std::move(*plan));
-    propagate_pending_leaf_reads(bound);
     std::set<size_t> completed_literals;
     for (const auto &[id, plan] : std::as_const(bound)) {
       if ((plan.kind == LeafBehaviorPlan::Kind::borrowed_byte && !plan.primitive) ||
-          !plan.predicate.calls.empty() || !plan.pending.empty() || !plan.inherited_reads.empty()) continue;
+          !plan.predicate.calls.empty()) continue;
       struct ExtractionScope {
         ScalarChecker &checker;
         ~ExtractionScope() {
