@@ -22,6 +22,10 @@ Development mainline owns implementation, regression fixes, the compatibility ba
 - When a new confirmation conflicts with existing code, disclose sunk cost and expected rework, migrate faithfully, and remove superseded paths, assumptions and documentation. Preserve meaningful verification.
 - An authorized stage may support a sound subset with an honest unsupported-feature diagnostic. Every accepted program must keep its confirmed meaning. Changes in scope or acceptance go through review.
 
+## Passes and dependency changes
+
+Split work into passes when one stage produces facts another needs. Give each pass a distinct purpose, retain its usable results, and revisit the work that depends on a changed fact. **Restarting the same pass from entry on a local dependency change is an engineering anti-pattern. Reject it in new designs.** A loop or recursive dependency may require repeated evaluation of recorded facts until they settle. A final validation pass may traverse the complete input to check its own invariants. [Seed checker counterexample](design/ImplementationArchitecture.md#restarting-a-pass-from-entry)
+
 ## When to measure an improvement
 
 Proceed with a well-founded, maintainable improvement once its implementation scope is cleared. Verify the behavior that matters for delivery. Collect precise benefit figures only when the user requests them, a concrete decision depends on them, or an explicit acceptance requirement needs them. Use evidence already available from normal work first. Reserve additional instrumentation and benchmark runs for questions that evidence cannot answer.

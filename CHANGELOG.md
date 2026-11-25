@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Reject restarting a pass from entry on a local change
+
+<a id="h-restart-from-entry-20261124"></a>
+**H-RESTART-FROM-ENTRY-20261124.** The project user directed “该多分几遍处理的就要分，从头重来这种pattern记为工程反例，今后要杜绝” in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). D-ARCH-REVIEW r127→128 records the [project rule](AGENTS.md#passes-and-dependency-changes) under P-682/P-683. At `598a2d13:cod/lang_checked.hh:23192` a callee change can enqueue the whole caller. The [counterexample](design/ImplementationArchitecture.md#restarting-a-pass-from-entry) identifies that same-pass restart as a pattern to eliminate. Existing retries outside the R127 slice are tracked migration work. Deliberate passes and fixed-point evaluation of affected dependencies retain their proper roles.
+
 ## 2026-11-24 — Review selective rechecking at an ordinary seed call
 
 <a id="k-seed-ordinary-call-edge-replay-20261124"></a>
