@@ -449,15 +449,10 @@ struct CallEffects {
     std::string diagnostic;
     auto operator<=>(const ReadSite &) const = default;
   };
-  // Operand summaries use incoming ordinals, independent of callee storage.
   struct Read {
     // A local read can only be proved by excluding its missing-write paths.
-    std::variant<size_t, ReadSite> target;
-    std::set<size_t> initialized;
-    CleanupEquations::MissingInitialization uninitialized{};
+    ReadSite site;
     CleanupEquations::ConditionClauses when{CleanupEquations::ConditionFacts{}};
-    // Sufficient initialization of the original borrowed input targets.
-    std::optional<CleanupEquations::Initialization> initialized_inputs = {};
     auto operator<=>(const Read &) const = default;
   };
   std::set<Read> reads;
