@@ -4818,8 +4818,8 @@ class ScalarChecker {
             result.null_sources.size() == 1 && result.null_sources.contains(input));
   }
   void invocation_bindings(const CallEffects &summary, const std::vector<CheckedOperation> &views,
-                           CheckedOperation &operation, const Location &at, const InvocationSlots &slots,
-                           bool deferred, bool immediate_scope) {
+                           std::map<size_t, CleanupEquations::Effects> &invocation, const Location &at,
+                           const InvocationSlots &slots, bool deferred, bool immediate_scope) {
     if (!proving_) for (const auto &[parameter, sources] : summary.binding_sources) {
       const auto written = overlapping_slots(views.at(parameter).slots);
       lexical_.targets.each([&](size_t binding, const auto &) {
@@ -4837,7 +4837,7 @@ class ScalarChecker {
         }
       });
     }
-    for (auto &[reason, effects] : operation.invocation) {
+    for (auto &[reason, effects] : invocation) {
       const auto outcome = summary.bindings.find(reason);
       if (outcome == summary.bindings.end()) continue;
       // Payload guarantees concern entry targets. Current selections are
@@ -5379,10 +5379,11 @@ class ScalarChecker {
         }
       } else targets = views[i].targets;
     }
-    operation.invocation = invocation_effects(summary, reasons, views, prepared, invocation_slots, boolean_inputs, exception_inputs);
-    if (!immediate_scope && !summary.bindings.empty()) invocation_bindings(summary, views, operation, expr.at, invocation_slots, prepared, false);
+    auto invocation = invocation_effects(summary, reasons, views, prepared, invocation_slots, boolean_inputs, exception_inputs);
+    if (!immediate_scope && !summary.bindings.empty())
+      invocation_bindings(summary, views, invocation, expr.at, invocation_slots, prepared, false);
     std::set<size_t> ready_after_call;
-    if (!prepared_slots) for (auto &[reason, effects] : operation.invocation) {
+    if (!prepared_slots) for (auto &[reason, effects] : invocation) {
       if (!reason && summary.bindings.empty()) if (const auto known = summary.initialized.find(0); known != summary.initialized.end())
         ready_after_call = known->second;
       const auto outcome = summary.uninitialized.find(reason);
@@ -5416,12 +5417,13 @@ class ScalarChecker {
       }
       effects.resolve_initialization();
     }
-    if (immediate_scope && !summary.bindings.empty()) invocation_bindings(summary, views, operation, expr.at, invocation_slots, prepared, true);
+    if (immediate_scope && !summary.bindings.empty())
+      invocation_bindings(summary, views, invocation, expr.at, invocation_slots, prepared, true);
     if (proving_ && operation.callee && fields.empty() && !immediate_scope && summary.bindings.empty()) {
       // Per-formal summaries can lose complementary writes when a call
       // forwards or permutes its inputs. Reuse the finite source proof for
       // the shared storage, keeping the native failure and read obligations.
-      auto &normal = operation.invocation.at(0);
+      auto &normal = invocation.at(0);
       for (const auto input : prove_shared_call_initialization(expr, *operation.callee, views, ready_after_call)) {
         const auto &view = views.at(input);
         CleanupEquations::ConditionFacts absent;
@@ -5447,11 +5449,11 @@ class ScalarChecker {
       }
       if (checked_entry) {
         // An entry check can fail before the selected method mutates any slot.
-        auto &failed = operation.invocation[Completion::failure(exception_id(ExceptionCategory::null_pointer)).reason];
+        auto &failed = invocation[Completion::failure(exception_id(ExceptionCategory::null_pointer)).reason];
         failed.initialized.clear();
         failed.selections.merge({});
       }
-      for (auto &[reason, effect] : operation.invocation) effect.reads.insert(reads.begin(), reads.end());
+      for (auto &[reason, effect] : invocation) effect.reads.insert(reads.begin(), reads.end());
     }
     std::set<size_t> written_targets;
     for (const auto i : summary.written_inputs) {
@@ -5469,7 +5471,7 @@ class ScalarChecker {
       written_targets.insert(written.begin(), written.end());
       record_payload_write(target, prepared);
     }
-    for (auto &[reason, effects] : operation.invocation) {
+    for (auto &[reason, effects] : invocation) {
       effects.payload_writes = written_targets;
       auto payloads = entry_payloads;
       if (late_payloads) {
@@ -5533,15 +5535,18 @@ class ScalarChecker {
           effects.booleans[place] = value;
     }
     if (lexical_.live && declares_root(contract.throws_types)) {
-      if (prepared) for (auto &[reason, effects] : operation.invocation) effects.declared_root = true;
+      if (prepared) for (auto &[reason, effects] : invocation) effects.declared_root = true;
       else note_declared_root();
     }
-    if (!prepared) {
+    if (prepared) {
+      // Defer registration reads these effects from its prepared child.
+      operation.invocation = std::move(invocation);
+    } else {
       const auto refine_arguments = [&](size_t reason) {
         // Slot methods can replace the incoming selections. Their output
         // bindings have a separate summary; presence still names entry targets.
         if (!immediate_scope && !summary.bindings.empty()) return;
-        const auto &changed = operation.invocation.at(reason).selections.invalidated;
+        const auto &changed = invocation.at(reason).selections.invalidated;
         if (const auto outcome = summary.present.find(reason); outcome != summary.present.end())
           for (const auto parameter : outcome->second) {
             const auto &view = views.at(parameter);
@@ -5576,7 +5581,7 @@ class ScalarChecker {
       };
       const auto before = lexical_;
       std::optional<LexicalState> here_break;
-      for (const auto &[reason, effects] : operation.invocation) if (reason && !(case_scan && reason == 1)) {
+      for (const auto &[reason, effects] : invocation) if (reason && !(case_scan && reason == 1)) {
         lexical_ = before; apply_invocation(reason, effects);
         const auto completion = Completion{reason, false};
         const bool scope_failure = immediate_scope && completion.exception() &&
@@ -5599,14 +5604,14 @@ class ScalarChecker {
       }
       lexical_ = before;
       if (case_scan) {
-        if (operation.invocation.contains(0)) {
-          apply_invocation(0, operation.invocation.at(0));
+        if (invocation.contains(0)) {
+          apply_invocation(0, invocation.at(0));
           *case_scan = lexical_;
           lexical_ = before;
         }
-        if (operation.invocation.contains(1)) apply_invocation(1, operation.invocation.at(1));
+        if (invocation.contains(1)) apply_invocation(1, invocation.at(1));
         else lexical_.live = false;
-      } else apply_invocation(0, operation.invocation.at(0));
+      } else apply_invocation(0, invocation.at(0));
       if (here_break) { const auto normal = lexical_; join(normal, false, *here_break, false, expr.at); }
     }
     const auto result_owner = contract.owners.empty() ? 0 : contract.owners.back();
