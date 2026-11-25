@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Review empty replay and unused snapshot storage in live handlers
+
+<a id="k-seed-live-handler-compatibility-20261125"></a>
+**K-SEED-LIVE-HANDLER-COMPATIBILITY-20261125.** The [compatibility review](design/ImplementationArchitecture.md#live-handlers-without-scalar-snapshot-fields) continues D-ARCH-REVIEW r187→188 under [H-PERFORM-FAMILY-CAPTURE](#h-perform-family-capture-20261125). In the saved `LiveTable` workload an actual `perform` requires evidence for the entire helper family. The `ModuleGraph` handler at `96fda399:applications/cod-booter/src/ModuleGraph.cod` exercises current-context invocation. Omitting unused snapshot storage there requires both closed consumer evidence and preserved activation behavior. The assertion and failed-argument controls exercise restoration and non-entry, respectively.
+
 ## 2026-11-25 — Review scalar family replay in a live scoped handler
 
 <a id="k-seed-live-scalar-handler-replay-20261125"></a>
