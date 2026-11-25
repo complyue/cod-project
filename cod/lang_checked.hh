@@ -3601,8 +3601,6 @@ class ScalarChecker {
       if (physical.contains(id) && owners.size() > 1) fail(at, "reference rebinding cannot change the initializer-fixed owner");
       if (binding.embedded_slot && storage(*binding.embedded_slot).borrowed && owners.size() > 1)
         implementation_gap(at, "embedded slot overlap with an unproved owner equality");
-      if (binding.requires_initialized && proving_ && validating_ && lexical_.live && source.targets.contains(null_target))
-        fail(at, "ref requires a proven non-null target");
       // Any possible earlier target makes this a rebind of a potentially
       // readable object. A fresh embedded slot can establish the edge first.
       const bool first_binding = allow_first_binding && binding.embedded_slot &&
@@ -12865,9 +12863,6 @@ class ScalarChecker {
                 : "a text initializer mixing a target and an independent value");
           if (*initial != Type::never && borrowed == true)
             check_initializer_access(*declaration, state.value.read_only.value_or(false));
-          if (proving_ && validating_ && expr.declaration_kind == "ref" && *initial != Type::never &&
-              borrowed == true && state.value.nullable && state.target.presence != TargetPresence::present)
-            fail(initializer.at, "ref requires a proven non-null target");
         }
         if (completes && borrowed == true && expr.declaration_kind == "ref")
           require_type_readable_target(state, state.target, initializer.at);
@@ -13301,8 +13296,6 @@ class ScalarChecker {
             fail(expr.at, "a direct String place requires a non-null text target");
           require_type_readable_target(state, state.target, expr.at);
         } else rebind_type(*type, *source, expr.at);
-        if (proving_ && validating_ && !view.nullable && selected.nullable && state.target.presence != TargetPresence::present)
-          fail(expr.at, "ref requires a proven non-null target");
         const bool first_product_binding = !destination.selection.footprint.empty() &&
             std::ranges::all_of(destination.selection.footprint, [](const auto &slot) {
               const auto *field = std::get_if<QueryProductPlace>(&slot);
@@ -21028,10 +21021,7 @@ class ScalarChecker {
           if (lexical_.live) for (const auto owner : owners)
             if (!owner_alive(owner))
               fail(initializer.at, "reference initializer's lexical owner has ended");
-          if (expr.declaration_kind == "ref") {
-            if (proving_ && validating_ && lexical_.live && source.targets.contains(null_target)) fail(initializer.at, "ref requires a proven non-null target");
-            require_payload_access(source, initializer.at);
-          }
+          if (expr.declaration_kind == "ref") require_payload_access(source, initializer.at);
         }
         if (completes && borrowed) check_initializer_access(*declaration, source.read_only);
         const bool read_only = declaration->read_only || (value && expr.fixed_binding) || (completes && borrowed && source.read_only);
