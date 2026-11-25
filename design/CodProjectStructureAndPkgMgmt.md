@@ -26,7 +26,7 @@ Here `project` and `project/.cod/packages/vendor-a` are the two source roots. Th
 ```cod
 using "billing/rates.cod" { rate }
 using symbol "std:io" @print;
-behave @print(rate())
+behave @print(rate());
 ```
 
 `.cod/packages/vendor-a/billing/rates.cod`
@@ -41,7 +41,7 @@ For the example, a seed run should print `42`. Declaration checking, provider ge
 
 ## Cutover status
 
-At the [pre-cutover revision](https://github.com/complyue/cod-project/tree/3545f504243558aeb923ba2fadc84c6de054715b), the seed still reads project metadata in-process and the linked booter still invokes `codp compiler-inputs`. The worked example above is the acceptance case for replacing both paths. Check each frontend on the actual staged tree before treating its migration as delivered.
+The C++ seed built from `2bd8b365` ran the two files above from an unrelated working directory and printed `42`. On a copy with a second staged provider, the seed reported both claim paths and preserved the existing LLVM output. The linked booter at the [pre-cutover revision](https://github.com/complyue/cod-project/tree/3545f504243558aeb923ba2fadc84c6de054715b) still invokes `codp compiler-inputs`. Its normal declaration, provider and object commands need independent verification on this prepared tree.
 
 ## Terminology
 
