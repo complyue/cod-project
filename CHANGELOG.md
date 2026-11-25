@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-25 — Require explicit parent construction before inherited field access
+
+<a id="h-product-parent-init-20261125"></a>
+**H-PRODUCT-PARENT-INIT-20261125.** In the [OO side discussion](codex://threads/01a211e6-8b5f-7532-8e67-c1337ce40796) the project user decided “子类读写父类字段之前，要求必须显式调用过一次 `super(...)` ctor，否则认为其内嵌父类对象尚未初始化”. D-22 r72→73 qualifies [direct-parent initialization](design/ConstructionAndAcquisition.md#initializing-the-storage-parent-of-a-product) under P-734/P-735. The user also recalled that the ctor has only field initialization places and no `self`, consistent with `b9b426d6:design/DomainLanguageDesign.md:295` and line 297. A normal child result requires the initialized parent. OO member lookup and the runtime exception owner retain their existing contracts.
+
+## 2026-11-25 — Give products a storage parent and OO bodies explicit super-calls
+
+<a id="h-product-extends-super-20261125"></a>
+**H-PRODUCT-EXTENDS-SUPER-20261125.** The project user proposed single product storage inheritance and per-exception backtrace storage, accepted direct and named ancestor calls, and concluded “就只在 OO body允许 super-call 好了，不再需要 `(subobj:SupStruct).method()` 语法” in the [OO side discussion](codex://threads/01a211e6-8b5f-7532-8e67-c1337ce40796). D-07 r218→219 records [storage inheritance](design/DomainLanguageDesign.md#product-storage-inheritance) and [lexically selected super-calls](design/DomainLanguageDesign.md#super-calls-in-oo-bodies). D-17 r151→152 records the abstract root’s [per-object runtime state](design/ExceptionControl.md#runtime-base-of-an-exception). Ordinary actual-type dispatch and construction-trace timing continue from `b9b426d6:design/DomainLanguageDesign.md:714` and `b9b426d6:design/ExceptionControl.md:704`. P-728–P-733 qualify the source and object-identity scope. Compiler support and physical layout are separate.
+
 ## 2026-11-25 — Review the first seed caller of completed callee behavior
 
 <a id="k-seed-closed-leaf-behavior-20261125"></a>

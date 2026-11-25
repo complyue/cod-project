@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 218
+Discussion revision: 219
 
-Recorded: 2026-11-24
+Recorded: 2026-11-25
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r219 the [project user’s product and super-call decision](../CHANGELOG.md#h-product-extends-super-20261125) qualifies [D-07-PRODUCT-EXTENDS](DesignAuthorityRegistry.md#d-07-product-extends) and [D-07-SUPER-CALL](DesignAuthorityRegistry.md#d-07-super-call), P-728–P-731. A product declares its storage parent at its definition. An OO body can explicitly reuse an ancestor implementation on its live receiver. The r218 receiver, actual-type dispatch and ownership rules continue for ordinary calls. Check inherited field identity, member conflicts, and nearest versus named ancestor calls on a three-level chain. [D-22 parent initialization](ConstructionAndAcquisition.md#initializing-the-storage-parent-of-a-product) governs constructors. Compiler delivery is separate.
 
 At r218 [D-07-MEMBER-RECEIVER](DesignAuthorityRegistry.md#d-07-member-receiver) extends the receiver head to [functor call-operator declarations](#functor-receivers-and-callback-arguments) under P-724/P-725. The [user’s direction](../CHANGELOG.md#h-functor-receiver-sugar-20261124) applies the same implicit receiver, target access and explicit owner to an existing type-carried operation. Acceptance compares the two declaration heads on the same initialized receiver, including access rejection and duplicate definitions. [D-07-FUNCTOR-LOOKUP](DesignAuthorityRegistry.md#d-07-functor-lookup) governs publication and dispatch. Compiler delivery is separate.
 
@@ -249,7 +251,7 @@ Static abstract bounds on a selected named root do not require a runtime object 
 
 **Primary-language comparison:** Julia explicitly declares nominal subtyping, makes abstract types non-instantiable and concrete types non-subclassable, and does not generally make parametric types covariant. These are useful reference points; CoD has its own data sums, storage and ownership semantics. [Julia types](https://docs.julialang.org/en/v1/manual/types/)
 
-**Prototype implementation:** `type A;` and `type B <: A;` declare nominal abstractions; `data D { ... }` declares a region-only product, and `data D <: A;` adds explicit conformance without layout changes. An inline data parent is also supported. An adapter imports the data identity before adding a relation. Selecting that data type through the adapter carries its source-visible relations, including relations already selected by the adapter; selecting only an unrelated source method does not publish them. Type-associated methods can be selected implicitly. Abstract parameter/result checks preserve the concrete representation and its established explicit conformance while WPO specializes the call. Conditional values with the same concrete type and owner retain the most specific nominal ancestor guaranteed by both branches; this alone does not establish a child-interface claim. Concrete storage/provenance remains unchanged. `type { ... }` and `regional type` are rejected. Concrete data requires regional allocation and explicit references for stored object edges in the current syntax. The native extension/union identity and export subset is described below; compound cross-alias context/extension policies, sum constructors and generic syntax remain unfinished. Repeated identical conformance declarations and abstract stored-reference layouts are explicitly outside this subset, not selected permanent language policies.
+**Prototype implementation:** `type A;` and `type B <: A;` declare nominal abstractions; `data D { ... }` declares a region-only product, and `data D <: A;` adds explicit conformance without layout changes. The prototype also accepts an abstract conformance in the data declaration head. The new [product storage inheritance](#product-storage-inheritance) has a separate implementation scope. An adapter imports the data identity before adding a relation. Selecting that data type through the adapter carries its source-visible relations, including relations already selected by the adapter; selecting only an unrelated source method does not publish them. Type-associated methods can be selected implicitly. Abstract parameter/result checks preserve the concrete representation and its established explicit conformance while WPO specializes the call. Conditional values with the same concrete type and owner retain the most specific nominal ancestor guaranteed by both branches; this alone does not establish a child-interface claim. Concrete storage/provenance remains unchanged. `type { ... }` and `regional type` are rejected. Concrete data requires regional allocation and explicit references for stored object edges in the current syntax. The native extension/union identity and export subset is described below; compound cross-alias context/extension policies, sum constructors and generic syntax remain unfinished. Repeated identical conformance declarations and abstract stored-reference layouts are explicitly outside this subset, not selected permanent language policies.
 
 A library fold accumulator retains its explicit type guarantees and facts for its concrete value and possible stored-reference targets, including cycles. Unrelated facts visible only in a factory module do not become loop invariants. This is evidence preservation, not structural interface inference; unknown layouts cannot justify erasing required guarantees.
 
@@ -265,6 +267,34 @@ A nominal data type owns its constructor overload family. Each data constructor 
 | `r(7u64)` for `r:Receipt in batch` | Call operators for the data receiver | The receiver supplies a reference to an initialized instance with its actual owner and access. | The selected method’s ordinary result. |
 
 Adding a call operator leaves the initializer count of every constructor unchanged. A constructor overload alone cannot make a data value callable. See [named sum constructors](#named-sum-constructors) for the field contract and [functor receivers](#functor-receivers-and-callback-arguments) for receiver access and here arguments.
+
+#### Product storage inheritance
+
+`data Child extends Parent { ... }` declares a nominal product with one direct product storage parent. The definition fixes that parent, including across module selections and aliases. The chain must be acyclic. A child has the inherited fields and its declared fields in one object. It is usable through a reference to any storage ancestor and retains the ancestor’s established nominal conformance. An adapter may establish an ordinary abstract conformance under the existing import rules. It cannot add or replace a storage parent. A sum still owns its fixed alternatives.
+
+A borrow through the parent selects the original target with the same actual owner, access and lifetime. A write to an inherited field is visible through both references. Upcasting a target gives no permission to rebind a caller’s child-typed slot to a plain parent, or to use a writable array of children as an array of parents. Storage classification examines all inherited and declared fields. A new independent value follows ordinary construction and bits-transfer rules. The reference relationship supplies no implicit slicing operation or fixed native field offsets. [Reference slots](RegionalOwnership.md#reference-assignment-and-the-ownershipbits-transfer-operator) · [Construction and storage](ConstructionAndAcquisition.md#confirmed-requirements)
+
+The visible member set includes inherited names. A second stored field with an inherited spelling would make one field name designate two places and is rejected. An inherited stored field, accessor and named method obey the existing [member-name collision rule](#receivers-in-field-accessors-and-member-methods). A method specialized on the child may belong to the same family as the parent method. Ordinary visibility, extension permission and unique-best selection apply.
+
+The child constructor starts with an uninitialized embedded parent. Before reading or writing inherited fields it must explicitly complete `super(...)` on the direct parent. Successful construction requires that parent and the child’s own fields to be ready. The [parent initialization contract](ConstructionAndAcquisition.md#initializing-the-storage-parent-of-a-product) covers branches, failure and the distinction from a member call.
+
+#### Super-calls in OO bodies
+
+`super.method(args)` starts receiver lookup at the direct storage parent of the type **declaring the body**. `super(Ancestor).method(args)` starts it at the named strict storage ancestor. If that ancestor inherits the method, its inherited implementation is eligible. Resolve the name and other arguments in the ordinary selected method world. A descendant overload cannot re-enter the candidate set for this receiver. The selected body receives the original `self`. Its own ordinary calls on `self` dispatch on the actual concrete type again.
+
+```cod
+data Base { code:u64 }
+data Sub extends Base { detail:u64 }
+data Leaf extends Sub { attempt:u64 }
+
+func const Base.score() -> u64 { return self.code }
+func const Sub.score() -> u64 { return super.score() + self.detail }
+func const Leaf.score() -> u64 { return super(Base).score() + self.attempt }
+```
+
+For a leaf whose `code`, `detail` and `attempt` fields hold 10, 3 and 1 respectively, an ordinary call through a borrowed `Base` returns 11. Replacing only `super(Base)` with `super` in the leaf body gives 14. Inside `Sub.score`, `super` continues to start at `Base` even on a leaf. An assertion such as `(leaf:Base).score()` uses [ordinary concrete-type dispatch](#concrete-data-dispatch-through-abstract-parameters) and gives the same result as `leaf.score()`.
+
+A super-call requires the implicit receiver of an OO member method, field accessor or functor call-operator body. An ordinary helper taking the same reference cannot perform that call. Neither an unrelated type nor a `<:` conformance supplies the required storage ancestry. The named form rejects the declaring type itself, a sibling or a descendant. There is no first-class `super` reference to store or pass. Check receiver access and ownership, other arguments in written order, checked failures, and normal cleanup just as for the selected ordinary signature. A readonly `self` cannot invoke a writable-only ancestor method. The restriction on receiver selection ends with the call.
 
 #### Typed enums
 

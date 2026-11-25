@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 72 · Recorded: 2026-11-24 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 73 · Recorded: 2026-11-25 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+At r73 [D-22-PARENT-INIT](DesignAuthorityRegistry.md#d-22-parent-init) records the [user’s explicit parent-constructor decision](../CHANGELOG.md#h-product-parent-init-20261125), P-734/P-735. Each derived product initializes its direct parent in place before inherited field access or publication. The r72 readiness, actual-owner and failure rules continue. Check the validated ID, a skipped or repeated call, and an escaping parent failure. Runtime representation and implementation are separate.
 
 At r72 [D-22](DesignAuthorityRegistry.md#d-22) applies the [normal-completion decision](../CHANGELOG.md#h-normal-completion-20261124) to the no-payload row in result reception. [D-24](CallableResultInference.md#results-of-proc-func-and-here-bodies) governs the result and [D-17](ExceptionControl.md#return-state-inspection-and-replacement) governs its observation during cleanup.
 
@@ -590,6 +592,30 @@ own region arena:Root <- make region Root(bytes -> capacity) { ... };
 ```
 
 Completed construction must preserve initializer order and effects and publish only a valid initialized result. Bare typed reservation has the separate identity-only contract below. Existing D-17 failed acquisition cleanup does not promise rollback of effects or arbitrary reservations in an already-live region. Nested constructor naming/access, partial construction and allocator-policy interaction require review before implementing an uncovered case. Explicit owner spelling cannot bypass readonly allocation checks or same-owner stored edges.
+
+### Initializing the storage parent of a product
+
+A `Child` constructor starts with initialization places for its own declared fields and one uninitialized embedded `Parent` destination. It has no reference to the whole child. The inherited fields become accessible together when the parent is ready. Write `super(args)` to run an applicable constructor of **the direct parent**, in place, under the child’s actual owner. A normally completing call, including the parent’s cleanup, establishes parent readiness. From that point the child can read or write inherited fields under their ordinary access rules. An ordinary [OO super-call](DomainLanguageDesign.md#super-calls-in-oo-bodies) requires an initialized receiver. A constructor has field destinations and never acquires such a `self`.
+
+```cod
+data Key { id:u64 }
+func Key(raw:u64) {
+    assert raw != 0u64
+    id <- raw
+}
+
+data TaggedKey extends Key { tag:u64 }
+func TaggedKey(raw:u64, mark:u64) {
+    super(raw)
+    tag <- mark + id
+}
+```
+
+`make TaggedKey(7u64, 2u64)` establishes inherited `id` as 7 and then `tag` as 9. A zero ID fails the parent’s assertion before the tag initializer. Moving the read of `id` before `super(raw)`, or assigning `id <- raw` in its place, fails the readiness check. The same rule applies to access in a helper or deferred action at the point it runs. A constructor may prepare arguments and initialize its own independent fields before calling `super`.
+
+Check **exactly once on each normally completing construction path**. Two exclusive branches may call different applicable parent constructors. A branch that omits the call cannot join a later inherited-field read or publish a completed child. Calling a parent twice on one path rejects, even when it has no fields. Each level initializes its own direct parent, so a grandchild cannot jump over its parent constructor. Preparing a failing argument never enters the parent. An escaping parent failure leaves the embedded parent unready and retains ordinary effects and cleanup. Catching the failure alone grants no field access or permission to publish the child.
+
+Ordinary constructor selection applies to the written arguments. `super()` requires an applicable niladic constructor. The storage-parent relation supplies no positional constructor inferred from field order. A flat list of child and inherited field initializers cannot stand in for explicit parent construction. For an exception product, the exception construction operation still establishes the one [runtime base](ExceptionControl.md#runtime-base-of-an-exception) of the whole object. Calling a domain parent constructor creates no second exception, region, trace or cause.
 
 ### Initializing a regional scalar ref field
 

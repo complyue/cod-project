@@ -1,8 +1,10 @@
 # CoD exception control and regional cleanup
 
-Design revision: 151 · Recorded: 2026-11-24 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
+Design revision: 152 · Recorded: 2026-11-25 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
+
+At r152 [D-17-EXCEPTION-BASE](DesignAuthorityRegistry.md#d-17-exception-base) records the [project user’s decision](../CHANGELOG.md#h-product-extends-super-20261125) on the [runtime base of an exception](#runtime-base-of-an-exception) under P-732/P-733. H-510–H-515 and the owner and catch-binding contracts continue for construction, propagation and release. Verify distinct wrapper and cause traces under one owner and consistent identity through a borrowed product ancestor. This specifies observable storage responsibility. Native layout, trace detail and compiler delivery are separate.
 
 At r151 the [normal-completion decision](../CHANGELOG.md#h-normal-completion-20261124) qualifies [D-17-RETURN-STATE](DesignAuthorityRegistry.md#d-17-return-state) for the unbound test at each cleanup point. P-482–P-484 and [D-24-TAIL](DesignAuthorityRegistry.md#d-24-tail) preserve callable ownership, result preparation and independent deferred failures. The paired exits and ordered observations below specify acceptance.
 
@@ -159,6 +161,19 @@ data RecordRejected <: Exception { code:u64; }     # Checked.
 ```
 
 These headers use existing nominal abstraction and explicit data conformance; they do not add concrete-layout inheritance or establish the construction/owner protocol for arbitrary user exception payloads. User-defined Error types are the intended supported extension point. Source implementation, payload/trace/cause ownership and abstract-root constructibility remain within their separate contracts. Error-derived exceptions remain exceptions: root catches accept them, while Error catches accept only the unchecked branch. Both follow source-order matching and the standard-wrapper transparency rule. RethrownError and UnhandledDeferError belong to the Error branch; RethrownException belongs to the checked branch. Existing concrete built-in classifications do not change.
+
+### Runtime base of an exception
+
+`Exception` is an abstract, non-bits source type with runtime-managed state on every concrete exception. Construction establishes that object’s creation trace and its readonly, nullable immediate cause. An implementation can retain a handle to trace frames stored out of line. Propagating the same object preserves both. Constructing a wrapper in the same region gives the wrapper a fresh trace and a cause link to the earlier object with its own original trace. A single trace slot on the owner would lose one of those observations. The [trace contract](#standard-wrapper-construction-and-diagnostics) leaves frame selection, depth, optimized frames and representation open. The seed’s bounded construction-site metadata is partial evidence for that contract.
+
+```cod
+data StorageException <: Exception { code:u64 }
+data ShortWriteException extends StorageException { written:u64 }
+```
+
+`StorageException` introduces the business field and retains the ordinary checked `Exception` obligation. A `ShortWriteException` has one runtime base, one inherited `code` field and its own `written` field. Throwing it and catching `StorageException` selects the same concrete object for a direct arrival. An ordinary call through the parent reference can select a method on `ShortWriteException`. An unchecked family can use `<: Error` at its root under the same checkedness rules. No ordinary product gains trace or cause storage from using `extends` alone. [Product inheritance and super-calls](DomainLanguageDesign.md#product-storage-inheritance)
+
+The runtime initializes the base once. Application fields and initializers cannot write the trace or set the canonical cause as an ordinary field. In contrast, `e.tip` selects the incoming object of the individual catch. Two catches of the same matched business exception may have different tips. Keep that evidence with the [catch binding](#the-catch-bindings-readonly-tip-field). The existing holder owns the region and selects an object in it, including through a handoff to another callable. Borrowing the storage ancestor creates no additional owner.
 
 ### Declared handling obligations
 
