@@ -1006,67 +1006,30 @@ public:
     });
   }
   struct ReadRequirement {
-    std::set<size_t> initialized;
-    std::optional<size_t> selection = {};
-    // A sufficient cover of the actual non-null read target.
-    std::optional<std::set<size_t>> targets = {};
-    std::set<size_t> entry_initialized = {};
-    std::set<size_t> entry_nonnull = {};
+    // An engaged set marks a nonnull slot check. Otherwise this is an image check.
     std::optional<std::set<size_t>> nonnull = {};
     bool nonnull_unproved = false;
     // Registration-path guards apply only while the original binding versions remain current.
     std::map<size_t, std::set<size_t>> nonnull_versions = {};
-    // Necessary conditions on paths that still require this read to be initialized.
+    // Necessary conditions on paths that still require this check.
     ConditionClauses when{ConditionFacts{}};
-    MissingInitialization uninitialized{};
-    // Sufficient initialization of the sequence's incoming selected targets.
-    std::optional<Initialization> initialized_selections = {};
     bool operator==(const ReadRequirement &) const = default;
-    bool satisfied(std::optional<size_t> place, const std::set<size_t> &known, const Selections &selections) const {
-      if (when.empty()) return true;
-      if (!place) return false;
-      if (nonnull) return !nonnull_unproved && std::all_of(nonnull->begin(), nonnull->end(),
-          [&](size_t id) { return selections.nonnull(id); });
-      const auto ready = [&](size_t id) { return initialized.contains(id) || known.contains(id); };
-      return ready(*place) || (selection && selections.initialized.contains(*selection)) ||
-          (initialized_selections && std::all_of(initialized_selections->begin(), initialized_selections->end(),
-              [&](const auto &entry) { return entry.physical ? ready(entry.id) : !entry.frame && selections.initialized.contains(entry.id); })) ||
-          (targets && std::all_of(targets->begin(), targets->end(), ready));
+    bool satisfied(const Selections &selections) const {
+      return when.empty() || (nonnull && !nonnull_unproved && std::ranges::all_of(*nonnull,
+          [&](size_t id) { return selections.nonnull(id); }));
     }
     void substitute(const Selections &before) {
-      if (nonnull) {
-        std::set<size_t> entries;
-        for (const auto id : *nonnull) {
-          if (before.nonnull(id)) continue;
-          if (const auto target = before.targets.find(id); target != before.targets.end()) {
-            nonnull_unproved = nonnull_unproved || target->second.nullable();
-            entries.insert(target->second.entries.begin(), target->second.entries.end());
-          } else if (before.invalidated.contains(id)) nonnull_unproved = true;
-          else entries.insert(id);
-        }
-        nonnull = std::move(entries);
-        return;
+      if (!nonnull) return;
+      std::set<size_t> entries;
+      for (const auto id : *nonnull) {
+        if (before.nonnull(id)) continue;
+        if (const auto target = before.targets.find(id); target != before.targets.end()) {
+          nonnull_unproved = nonnull_unproved || target->second.nullable();
+          entries.insert(target->second.entries.begin(), target->second.entries.end());
+        } else if (before.invalidated.contains(id)) nonnull_unproved = true;
+        else entries.insert(id);
       }
-      if (initialized_selections) initialized_selections = before.initialization_requirements(*initialized_selections);
-      else if (selection) initialized_selections = before.initialization_requirements(*selection);
-      entry_initialized = before.substitute_entries(entry_initialized, entry_nonnull, initialized);
-      entry_initialized.insert(before.entry_initialized.begin(), before.entry_initialized.end());
-      std::erase_if(entry_nonnull, [&](size_t id) { return before.invalidated.contains(id); });
-      entry_nonnull.insert(before.entry_nonnull.begin(), before.entry_nonnull.end());
-      if (!selection) return;
-      if (const auto target = before.targets.find(*selection); target != before.targets.end()) {
-        if (target->second.entries.empty()) {
-          if (!targets) targets = target->second.places;
-          else std::erase_if(*targets, [&](size_t id) { return !target->second.places.contains(id); });
-        } else if (const auto entry = target->second.single_entry()) {
-          selection = entry;
-          return;
-        }
-      }
-      if (before.invalidated.contains(*selection)) selection.reset();
-    }
-    void enter_initialization(size_t frame) {
-      if (initialized_selections) initialized_selections = CleanupEquations::enter_initialization(*initialized_selections, frame);
+      nonnull = std::move(entries);
     }
     void merge(const ReadRequirement &other) {
       for (const auto &facts : other.when) add_condition(when, facts);
@@ -1077,17 +1040,7 @@ public:
           const auto found = other.nonnull_versions.find(guard.first);
           return found == other.nonnull_versions.end() || found->second != guard.second;
         });
-        return;
       }
-      combine_initialization(initialized, uninitialized, other.initialized, other.uninitialized, true);
-      std::erase_if(entry_initialized, [&](size_t id) { return !other.entry_initialized.contains(id); });
-      std::erase_if(entry_nonnull, [&](size_t id) { return !other.entry_nonnull.contains(id); });
-      if (initialized_selections && other.initialized_selections)
-        initialized_selections->insert(other.initialized_selections->begin(), other.initialized_selections->end());
-      else initialized_selections.reset();
-      if (selection != other.selection) selection.reset();
-      if (targets && other.targets) targets->insert(other.targets->begin(), other.targets->end());
-      else targets.reset();
     }
   };
   using Reads = std::map<size_t, ReadRequirement>;
@@ -1233,17 +1186,12 @@ public:
     void enter_initialization(size_t frame) {
       selections.enter_initialization(frame);
       returned.enter_initialization(frame);
-      for (auto &[read, requirement] : reads) requirement.enter_initialization(frame);
     }
     template <typename Transform> void transform_conditions(const Transform &transform) {
       for (auto &[truth, clauses] : returned.boolean) clauses = transform(clauses);
       for (auto &[truth, clauses] : returned.nullness) clauses = transform(clauses);
       for (auto &[target, value] : booleans) for (auto &[truth, clauses] : value) clauses = transform(clauses);
-      for (auto &[read, requirement] : reads) {
-        requirement.when = transform(requirement.when);
-        for (auto &[place, clauses] : requirement.uninitialized) clauses = transform(clauses);
-        CleanupEquations::resolve_initialization(requirement.initialized, requirement.uninitialized);
-      }
+      for (auto &[read, requirement] : reads) requirement.when = transform(requirement.when);
       for (auto &[place, clauses] : uninitialized) clauses = transform(clauses);
       for (auto &[capture, clauses] : uninitialized_captures) clauses = transform(clauses);
       resolve_initialization();
@@ -1309,11 +1257,11 @@ public:
     bool has_deferred_failure() const { return !pending.empty(); }
     auto operator<=>(const DrainState &) const = default;
   };
-  Targets project_observed_return(Effects &effects, const Returned &incoming, const Selections &entry) const {
+  static Targets project_observed_return(Effects &effects, const Returned &incoming, const Selections &entry) {
     auto selected = incoming.observed_selection();
     if (incoming.observed_selection_initialized(entry)) {
-      for (auto &[read, requirement] : effects.reads) if (const auto place = read_target(read)) {
-        const SelectionCondition observed{{}, pending_return_selection, *place, true};
+      const SelectionCondition observed{{}, pending_return_selection, null_target, true};
+      for (auto &[read, requirement] : effects.reads) if (requirement.nonnull) {
         std::erase_if(requirement.when, [&](const auto &facts) { return facts.conditions.terms.contains(observed); });
       }
       if (effects.returned.borrowed_selection && effects.returned.borrowed_selection->single_entry() == pending_return_selection)
@@ -1336,7 +1284,6 @@ private:
   std::set<size_t> observed_inputs_, observed_references_;
   std::span<const CheckedExceptionCategory> exception_types_;
   std::set<size_t> categories_;
-  std::vector<std::optional<size_t>> reads_;
   using Outcomes = std::map<DrainState, Effects>;
   std::map<DrainState, Outcomes> identities_;
   Effects preserve_queue(Effects effects, const DrainState &state) const {
@@ -1456,18 +1403,10 @@ private:
         [&](const auto &value) { return value.through(first.payloads, first.thrown, false, true, first.queued_failures); });
     next.transform_conditions([&](const auto &clauses) { return through_conditions(clauses, first.booleans); });
     for (const auto &[read, known] : next.reads) {
-      const auto place = read_target(read);
-      if (known.satisfied(place, first.initialized, first.selections)) continue;
-      if (!place) {
-        merge_read(result.reads, read, known);
-        continue;
-      }
+      if (known.satisfied(first.selections)) continue;
       auto before = known;
-      combine_initialization(before.initialized, before.uninitialized, first.initialized, first.uninitialized, false);
-      before.when = conjoin_conditions(before.when,
-          missing_initialization(*place, before.initialized, before.uninitialized));
       before.substitute(first.selections);
-      if (before.satisfied(place, first.initialized, {})) continue;
+      if (before.satisfied({})) continue;
       merge_read(result.reads, read, before);
     }
     combine_initialization(result.initialized, result.uninitialized, next.initialized, next.uninitialized, false);
@@ -1570,8 +1509,6 @@ public:
     auto [found, inserted] = reads.emplace(read, before);
     if (!inserted) found->second.merge(before);
   }
-  size_t read(std::optional<size_t> place) { reads_.push_back(place); return reads_.size() - 1; }
-  std::optional<size_t> read_target(size_t read) const { return reads_.at(read); }
   bool has_actions(size_t queue) const {
     std::set<size_t> seen;
     std::vector<size_t> pending{queue};

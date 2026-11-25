@@ -326,7 +326,6 @@ struct CheckedStorage {
   std::vector<size_t> fields = {};
   std::optional<SumConstructor> reserved_alternative = {};
   bool identity_only = false;
-  bool initializer_field = false;
 };
 
 enum class PlaceKind { value, reference, pointer, mixed };

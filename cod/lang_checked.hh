@@ -809,7 +809,6 @@ class ScalarChecker {
     bool projects = false;
   };
   CaseResultUse case_result_use_;
-  std::set<size_t> deferred_inputs_;
   std::optional<size_t> deferred_action_;
   struct ReturnInputs {
     CompletionInputs present, absent;
@@ -898,9 +897,9 @@ class ScalarChecker {
     if (lexical_.live && !owner_alive(*owner)) fail(at, "owner '" + name + "' has ended");
     return *owner;
   }
-  void read_view(const CheckedOperation &view, const Location &at, const std::string &name) {
+  void read_view(const CheckedOperation &view, const Location &at) {
     dereference(view, at);
-    require_initialized(view, at, name);
+    require_readable_target(view, at);
   }
   using Substitutions = std::vector<std::optional<Type>>;
   using Access = std::vector<std::optional<bool>>;
@@ -3603,7 +3602,7 @@ class ScalarChecker {
       text_installation_type(source.type, at);
       if (source.nullable_view || source.targets.contains(null_target))
         fail(at, "a direct String place requires a non-null text target");
-      require_initialized(source, at, "String target");
+      require_readable_target(source, at);
     } else rebind_type(target.type, source.type, at);
     require_live_view(source, at);
     const auto physical = physical_slots(target.slots);
@@ -3627,7 +3626,7 @@ class ScalarChecker {
           source.targets == std::set<size_t>{*source.place};
       if (binding.requires_initialized && !first_binding && !first_reservation &&
           !initializing_reference_fields_.contains(id))
-        require_initialized(source, at, "ref target");
+        require_readable_target(source, at);
     }
   }
   void record_rebinding(size_t binding, bool deferred = false) {
@@ -3667,35 +3666,24 @@ class ScalarChecker {
     reference_destination(view, at);
     return selection_state(std::move(view), at);
   }
-  size_t read_obligation(std::optional<size_t> place, CallEffects::ReadSite site) {
+  size_t read_obligation(CallEffects::ReadSite site) {
+    const auto read = read_sites_.size();
     read_sites_.push_back(std::move(site));
-    return cleanup_.read(place);
+    return read;
   }
-  CleanupEquations::Reads prepared_binding_reads(const CheckedOperation &view, const Location &at, bool nonnull) {
-    CleanupEquations::Reads reads;
-    if (!proving_) return reads;
-    const auto incoming = physical_slots(view.slots);
-    if (nonnull) {
-      const auto read = read_obligation(null_target, {at, {}});
-      auto &requirement = reads[read];
-      requirement.nonnull = incoming;
-      std::erase_if(*requirement.nonnull, [&](size_t id) { return !possible_targets_.at(id).contains(null_target); });
-      // A source version distinguishes iterations only for invariant slots.
-      lexical_.targets.each([&](size_t id, const auto &bounds) {
-        if (!bounds.places.contains(null_target) &&
-            std::none_of(active_loops_.begin(), active_loops_.end(), [&](const auto *loop) {
-              const auto &state = loop_states_.at(loop);
-              return state.first > cleanup_scope_ && state.rebound.contains(id);
-            })) requirement.nonnull_versions.emplace(id, bounds.versions);
-      });
-    }
-    for (const auto id : incoming) {
-      for (const auto place : possible_targets_.at(id)) if (place != null_target) {
-        const auto read = read_obligation(place, {at, {}});
-        reads[read].selection = view.binding ? view.binding : std::optional<size_t>{id};
-      }
-    }
-    return reads;
+  void require_prepared_nonnull(const CheckedOperation &view, const Location &at, CleanupEquations::Reads &reads) {
+    if (!proving_) return;
+    auto &requirement = reads[read_obligation({at, {}})];
+    requirement.nonnull = physical_slots(view.slots);
+    std::erase_if(*requirement.nonnull, [&](size_t id) { return !possible_targets_.at(id).contains(null_target); });
+    // A source version distinguishes iterations only for invariant slots.
+    lexical_.targets.each([&](size_t id, const auto &bounds) {
+      if (!bounds.places.contains(null_target) &&
+          std::none_of(active_loops_.begin(), active_loops_.end(), [&](const auto *loop) {
+            const auto &state = loop_states_.at(loop);
+            return state.first > cleanup_scope_ && state.rebound.contains(id);
+          })) requirement.nonnull_versions.emplace(id, bounds.versions);
+    });
   }
   void prepare_reference_swap(const CheckedOperation &left, const CheckedOperation &right,
                               CheckedOperation &operation, const Location &at) {
@@ -3719,8 +3707,7 @@ class ScalarChecker {
         }
       });
       if (!proving_ || std::none_of(written.begin(), written.end(), [&](size_t id) { return bindings_->at(id).requires_initialized; })) return;
-      const auto reads = prepared_binding_reads(source, at, true);
-      effects.reads.insert(reads.begin(), reads.end());
+      require_prepared_nonnull(source, at, effects.reads);
     };
     exchange(left, right); exchange(right, left);
   }
@@ -4615,17 +4602,6 @@ class ScalarChecker {
     state.required_symbols.insert(symbol);
     if (!delayed_) observe_effects().symbols.insert(symbol);
   }
-  static bool initialized_entry_alias(const CleanupEquations::ReadRequirement &read, const LexicalState &state) {
-    if (read.nonnull || !read.selection) return false;
-    const auto selected = state.selection_identities.find(*read.selection);
-    if (selected == state.selection_identities.end()) return false;
-    return std::all_of(read.when.begin(), read.when.end(), [&](const auto &facts) {
-      return std::any_of(read.entry_initialized.begin(), read.entry_initialized.end(), [&](size_t binding) {
-        const auto written = state.selection_identities.find(binding);
-        return written != state.selection_identities.end() && facts.same_selection(selected->second, written->second);
-      });
-    });
-  }
   size_t initialization_frame() const { return deferred_action_ ? CleanupEquations::action_frame(*deferred_action_) : 0; }
   void apply_effects(LexicalState &state, const CleanupEquations::Effects &incoming, const Location &at) {
     auto effects = incoming;
@@ -4650,42 +4626,22 @@ class ScalarChecker {
       state.predicates.set(place, boolean_predicate(value));
     for (const auto symbol : effects.symbols) require_symbol(state, symbol, at);
     if (proving_) for (const auto &[read, before] : effects.reads) {
-      const auto place = cleanup_.read_target(read);
-      if (before.satisfied(place, state.initialized, state.selections)) continue;
-      if (!place) {
+      if (before.satisfied(state.selections)) continue;
+      if (!before.nonnull) {
         if (delayed_) add_requirement(state, read, state.inputs, before);
         else require_local_read(read_sites_.at(read), before.when);
         continue;
       }
       auto known = before;
-      CleanupEquations::combine_initialization(known.initialized, known.uninitialized,
-          state.initialized, state.uninitialized, false);
-      known.when = CleanupEquations::conjoin_conditions(known.when,
-          CleanupEquations::missing_initialization(*place, known.initialized, known.uninitialized));
-      if (known.nonnull) std::erase_if(*known.nonnull, [&](size_t id) {
+      std::erase_if(*known.nonnull, [&](size_t id) {
         const auto guard = known.nonnull_versions.find(id);
         const auto current = state.targets.find(id);
         return guard != known.nonnull_versions.end() && current && guard->second == current->versions;
       });
-      if (known.satisfied(place, state.initialized, state.selections) || initialized_entry_alias(known, state)) continue;
-      known.initialized.insert(state.initialized.begin(), state.initialized.end());
+      if (known.satisfied(state.selections)) continue;
       known.substitute(state.selections);
-      known.enter_initialization(initialization_frame());
-      if (known.satisfied(place, state.initialized, {})) continue;
-      if (before.nonnull) {
-        if (!delayed_ && validating_) fail(read_sites_.at(read).at, "cannot prove a non-null target for deferred reference swap");
-        add_requirement(state, read, state.inputs, known);
-        continue;
-      }
-      if (!storage(*place).borrowed) {
-        const auto diagnostic = "cannot prove initialization of '" + storage(*place).name + "' for deferred or borrowed read";
-        if (!delayed_ && in_immediate_scope()) {
-          require_local_read({read_sites_.at(read).at, diagnostic}, known.when);
-          continue;
-        }
-        if ((!delayed_ || (!deferred_inputs_.contains(*place) && !conditional_read(known))) && validating_)
-          fail(read_sites_.at(read).at, diagnostic);
-      }
+      if (known.satisfied({})) continue;
+      if (!delayed_ && validating_) fail(read_sites_.at(read).at, "cannot prove a non-null target for deferred reference swap");
       add_requirement(state, read, state.inputs, known);
     }
     CleanupEquations::combine_initialization(state.initialized, state.uninitialized,
@@ -4807,7 +4763,7 @@ class ScalarChecker {
     if (proving_) for (const auto &[site, condition] : target.reads) {
       auto when = instantiate_conditions(condition, booleans, views, slots, exceptions);
       if (when.empty()) continue;
-      const auto read = read_obligation({}, site);
+      const auto read = read_obligation(site);
       reads[read].when = std::move(when);
     }
     std::map<size_t, CleanupEquations::Effects> effects;
@@ -4994,10 +4950,10 @@ class ScalarChecker {
   void prepare_borrow(const CheckedOperation &view, ArgumentMode mode, const Location &at) {
     if (mode == ArgumentMode::value || mode == ArgumentMode::owning_exception) return;
     if (!view.view || view.mixed_view) implementation_gap(at, "borrowed arguments require existing target views");
-    if (mode == ArgumentMode::borrowed_read) read_view(view, at, "borrowed argument");
+    if (mode == ArgumentMode::borrowed_read) read_view(view, at);
     if (mode == ArgumentMode::borrowed_ref && proving_ && validating_ && lexical_.live && view.targets.contains(null_target))
       fail(at, "ref argument requires a proven non-null target");
-    if (mode == ArgumentMode::borrowed_ref) require_initialized(view, at, "ref argument");
+    if (mode == ArgumentMode::borrowed_ref) require_readable_target(view, at);
   }
   std::optional<CheckedArgument::ReferenceStorage> prepare_display_operand(CheckedOperation &view, const Location &at) {
     if (view.view) {
@@ -5489,13 +5445,11 @@ class ScalarChecker {
       for (size_t i = 0; i < arguments.size(); ++i) {
         if (!invocation_slots.contains(i)) continue;
         const auto mode = operation.arguments.at(i).mode;
-        if (mode == ArgumentMode::borrowed_ptr) continue;
-        const auto required = prepared_binding_reads(views[i], expr.at, mode == ArgumentMode::borrowed_ref);
-        reads.insert(required.begin(), required.end());
-        const auto selected = physical_slots(views[i].slots);
-        checked_entry = checked_entry || (mode == ArgumentMode::borrowed_read &&
-            std::any_of(selected.begin(), selected.end(),
-                [&](size_t id) { return possible_targets_.at(id).contains(null_target); }));
+        if (mode == ArgumentMode::borrowed_ref)
+          require_prepared_nonnull(views[i], expr.at, reads);
+        else if (mode == ArgumentMode::borrowed_read && !checked_entry)
+          checked_entry = std::ranges::any_of(physical_slots(views[i].slots),
+              [&](size_t id) { return possible_targets_.at(id).contains(null_target); });
       }
       if (checked_entry) {
         // An entry check can fail before the selected method mutates any slot.
@@ -5720,7 +5674,7 @@ class ScalarChecker {
                                                                                   observed_slots, exception_inputs);
       if (read && !discard && &expr != prepared_call_) {
         if (operation.type.kind == Type::product) implementation_gap(expr.at, "reading a whole product as an independent value");
-        read_view(operation, expr.at, "borrowed result");
+        read_view(operation, expr.at);
       }
       if (!prepared) operation.predicate = stored_predicate(operation);
     }
@@ -5793,11 +5747,8 @@ class ScalarChecker {
         CleanupEquations::missing_initialization(place, state.initialized, state.uninitialized));
     return selected ? CleanupEquations::conjoin_conditions(missing, {*selected}) : missing;
   }
-  static bool conditional_read(const CleanupEquations::ReadRequirement &read) {
-    return read.when != CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}};
-  }
-  void require_product_initialized(size_t root, const Location &at,
-                                   const std::optional<CleanupEquations::ConditionFacts> &selected) {
+  void require_product_reference_targets(size_t root, const Location &at,
+                                         const std::optional<CleanupEquations::ConditionFacts> &selected) {
     if (!proving_ || !lexical_.live) return;
     if (selected && CleanupEquations::conjoin_conditions(path_conditions(lexical_), {*selected}).empty()) return;
     std::set<size_t> visited{root};
@@ -5809,31 +5760,25 @@ class ScalarChecker {
       const auto product = pending.back();
       pending.pop_back();
       const auto &object = storage(product);
-      if (object.reserved_alternative)
-        require_initialized(product, at, object.type.name + " constructor", {}, selected);
       const auto &fields = object.reserved_alternative ? sum_alternative(*object.reserved_alternative).fields
                                                        : product_schema(object.type, at).fields;
       for (size_t index = 0; index < object.fields.size(); ++index) {
         const auto place = object.fields[index];
         const auto &field = fields[index];
-        const auto &name = field.source->name;
         if (field.storage == PlaceKind::value && !storage(place).fields.empty()) {
           enqueue(place);
           continue;
         }
-        require_initialized(place, at, name, {}, selected);
         if (field.storage != PlaceKind::reference) continue;
         const auto slot = storage(place).binding;
         const auto targets = lexical_.targets.find(slot);
         if (!targets || targets->places.empty() || targets->places.contains(null_target)) {
-          if (validating_) implementation_gap(at, "required field '" + name + "' has no proved non-null target");
+          if (validating_) implementation_gap(at, "required field '" + field.source->name + "' has no proved non-null target");
           continue;
         }
         for (const auto target : targets->places) {
           const auto &referent = storage(target);
-          if (referent.fields.empty() && !referent.reserved_alternative)
-            require_initialized(target, at, name + " target", {}, selected);
-          else enqueue(target);
+          if (!referent.fields.empty() || referent.reserved_alternative) enqueue(target);
         }
       }
     }
@@ -5843,46 +5788,18 @@ class ScalarChecker {
       return target != null_target && storage(target).identity_only;
     });
   }
-  void require_initialized(const CheckedOperation &view, const Location &at, const std::string &name) {
+  void require_readable_target(const CheckedOperation &view, const Location &at) {
     if (lexical_.live && selects_identity_only_target(view))
       fail(at, "an identity-only constructor input cannot supply a readable target");
     const bool ready = view.initialized_target();
     if (ready && !regional_sum(view.type)) return;
     for (const auto place : view.targets) {
-      const bool reservation = place != null_target && storage(place).reserved_alternative.has_value();
+      if (place == null_target) continue;
+      const bool reservation = storage(place).reserved_alternative.has_value();
       if (!reservation && ready) continue;
-      const auto selected = selected_target(view, place, true);
-      if (reservation || (place != null_target && !storage(place).fields.empty()))
-        require_product_initialized(place, at, selected);
-      else require_initialized(place, at, name, current_binding(view), selected);
+      if (reservation || !storage(place).fields.empty())
+        require_product_reference_targets(place, at, selected_target(view, place, true));
     }
-  }
-  void require_initialized(size_t place, const Location &at, const std::string &name, std::optional<size_t> selection = {},
-      std::optional<CleanupEquations::ConditionFacts> target = {}) {
-    if (place == null_target || !proving_ || lexical_.initialized.contains(place)) return;
-    const bool requires_local_check = !storage(place).borrowed || storage(place).initializer_field;
-    if (!requires_local_check && !delayed_) return;
-    CompletionInputs missing;
-    for (const auto input : lexical_.inputs)
-      if (!lexical_.input_facts.at(input).initialized.contains(place) &&
-          (!selection || !lexical_.input_facts.at(input).selections.initialized.contains(*selection))) missing.insert(input);
-    if (missing.empty()) return;
-    CleanupEquations::ReadRequirement before{lexical_.initialized, selection};
-    before.when = missing_initialization(lexical_, place, target);
-    before.uninitialized = lexical_.uninitialized;
-    if (before.when.empty()) return;
-    if (requires_local_check) {
-      const auto diagnostic = "read of '" + name + "' before definite initialization of every possible target";
-      if (!delayed_ && in_immediate_scope()) {
-        require_local_read({at, diagnostic}, before.when);
-        return;
-      }
-      if ((!delayed_ || (!deferred_inputs_.contains(place) && !conditional_read(before))) && validating_)
-        fail(at, diagnostic);
-    }
-    const auto obligation = read_obligation(place, {at, {}});
-    before.substitute(lexical_.selections);
-    add_requirement(lexical_, obligation, missing, before);
   }
   static void refresh_input_facts(LexicalState &state) {
     std::set<size_t> established;
@@ -6554,7 +6471,7 @@ class ScalarChecker {
         for (auto &[place, value] : payloads)
           if (value.empty()) value = exception_value_categories(storage(place).type);
         auto applied = effects;
-        const auto observed_selection = cleanup_.project_observed_return(applied, state.returned, state.selections);
+        const auto observed_selection = CleanupEquations::project_observed_return(applied, state.returned, state.selections);
         applied.resolve_conditions([&](size_t binding) -> std::optional<CleanupEquations::Targets> {
           if (binding == CleanupEquations::pending_return_selection) return observed_selection;
           if (deferred_action_) return state.selections.selection_on_exit(binding);
@@ -7699,7 +7616,7 @@ class ScalarChecker {
           fail(operand.at, "ref var requires a live initialized writable array binding");
         reference_destination(view, operand.at);
         require_live_view(view, operand.at);
-        require_initialized(view, operand.at, "caller array binding");
+        require_readable_target(view, operand.at);
       }
       operation.arguments[i].binding_slot = true;
     }
@@ -8723,8 +8640,6 @@ class ScalarChecker {
       if (place == null_target) continue;
       const auto binding = storage(place).binding;
       slot.slots.insert(binding);
-      if (!write_only)
-        require_initialized(place, at, field.source->name, {}, selected_target(slot, place, true));
     }
     slot.binding = slot.slots.size() == 1 ? std::optional{*slot.slots.begin()} : std::nullopt;
     if (field.direct_text_place()) {
@@ -12313,7 +12228,7 @@ class ScalarChecker {
         const auto &view = operations.at(&operand);
         check_value_pack_spread(type, view.view && !view.mixed_view, operand.at);
         require_live_view(view, operand.at);
-        read_view(view, operand.at, "value-pack spread");
+        read_view(view, operand.at);
         note_abrupt(operand.at, {exception_id(ExceptionCategory::invalid_capacity),
                                 exception_id(ExceptionCategory::out_of_memory)});
         dynamic_count = true;
@@ -16537,7 +16452,7 @@ class ScalarChecker {
       if (fixed_scalar_input) require_slots_live(view.slots, capture.at, "scoped handler's supplying reference slot has ended");
       if (type.kind != Type::native_handle) {
         if (view.nullable_view || !one_owner(view)) fail(capture.at, "scoped handler requires one live non-null target");
-        require_initialized(view, capture.at, "scoped handler target");
+        require_readable_target(view, capture.at);
       }
     }
     scope_owner_relations(inputs, operation.scope_owners);
@@ -16741,7 +16656,7 @@ class ScalarChecker {
           auto view = argument.binding_slot ? read_binding(source, false, captured.binding) : captured;
           require_live_view(view, source.at);
           if (argument.type.kind != Type::native_handle)
-            require_initialized(view, source.at, "scoped handler input");
+            require_readable_target(view, source.at);
           arguments.push_back(view.type);
           views.push_back(std::move(view));
           operation.arguments.push_back(argument);
@@ -17083,7 +16998,7 @@ class ScalarChecker {
               "here product writes require one live initialized writable ref binding" :
               "here writes require one live initialized writable array binding");
         require_live_view(view, capture.at);
-        require_initialized(view, capture.at, writable_product ? "supplier product" : "supplier array");
+        require_readable_target(view, capture.at);
       }
       if (product) {
         // Ordinary borrowed ref inputs receive the caller's selected target in
@@ -17098,7 +17013,7 @@ class ScalarChecker {
               "here readonly product access requires a stable lexical ref under a live owner");
         if (readonly_product) {
           require_live_view(view, capture.at);
-          require_initialized(view, capture.at, "readonly supplier product");
+          require_readable_target(view, capture.at);
         }
       }
       // A receiver may enter the body zero or several times. Each invocation
@@ -18882,8 +18797,6 @@ class ScalarChecker {
            (!owned_catches_.contains(place) && !direct_exception_holders_.contains(place))))
         implementation_gap(expr.at, "use of an owned exception outside direct local field selection");
       if (captured) operation.captured_place = place;
-      if (read && !operation.initialized_target())
-        require_initialized(place, expr.at, expr.text, selected, selected_target(operation, place, true));
     }
     if (operation.type.kind == Type::exception) operation.exceptions = stored_exceptions(operation);
     if (read) operation.predicate = stored_predicate(operation);
@@ -19068,7 +18981,7 @@ class ScalarChecker {
           if (type != input.type || !view.view || view.mixed_view)
             fail(operand.at, "C provider requires a storage view of array '" + input.type.name + "'");
           require_live_view(view, operand.at);
-          read_view(view, operand.at, "C provider array operand");
+          read_view(view, operand.at);
           bind(*input.owner, one_owner(view), operand.at);
         } else transfer_type(type, input.type, operand.at);
       }
@@ -19461,7 +19374,7 @@ class ScalarChecker {
       initialize(place);
       if (type == Type::boolean) write_predicate(operation, predicate_of(operations.at(initializer)), expr.at);
     }
-    if (read) read_view(operation, expr.at, "scalar make target");
+    if (read) read_view(operation, expr.at);
     return operation;
   }
   Type check_bits_payload(const Expression &expr, const Type &destination, CheckedInstance *instance,
@@ -19476,7 +19389,7 @@ class ScalarChecker {
         if (!view.view || view.mixed_view)
           implementation_gap(expr.at, "aggregate bits transfer requires one complete source target");
         require_live_view(view, expr.at);
-        read_view(view, expr.at, "bits payload");
+        read_view(view, expr.at);
       }
     }
     return source;
@@ -19828,7 +19741,7 @@ class ScalarChecker {
         if (member.storage == PlaceKind::reference) {
           if (proving_ && validating_ && lexical_.live && source.targets.contains(null_target))
             fail(at, "ref field requires a proven non-null target");
-          require_initialized(source, at, "ref field target");
+          require_readable_target(source, at);
         }
         assign_targets(storage(place).binding, source, snapshot_selection(source, at));
       }
@@ -19882,7 +19795,6 @@ class ScalarChecker {
     if (direct_place && !parameter.selects_caller_place()) fail(expr.at, "String transfer requires a direct place parameter");
     if (initializing && !parameter.initializes_caller_place())
       fail(expr.at, "a direct String field initializer requires an init val var parameter");
-    if (direct_place && !parameter.initializes_caller_place()) require_initialized(place, expr.at, "direct String place");
     operation.arguments.back().type = input.type;
     const auto callee = demand_named(expr, family, method, arguments);
     finish_named_call(expr, arguments, views, operation, false, true, prepared_argument_completes(input), callee);
@@ -19956,7 +19868,7 @@ class ScalarChecker {
           result.owners.insert(fact->owners.begin(), fact->owners.end());
           if (!result.nullness) result.nullness.emplace();
           CleanupEquations::merge_boolean(*result.nullness, snapshot_boolean(null_predicate(*fact), lexical_, at));
-          if (read && !discard) read_view(*fact, at, "case result");
+          if (read && !discard) read_view(*fact, at);
         }
       }
       if (reception_scope) leave_scope();
@@ -20015,7 +19927,7 @@ class ScalarChecker {
       if (lexical_.live && scan.borrowed && header.case_pattern.kind == CasePattern::Kind::code &&
           (matched.present() || scan.remaining.present())) {
         refine_presence(true, item.at);
-        if (lexical_.live) require_initialized(selected, item.at, "case subject");
+        if (lexical_.live) require_readable_target(selected, item.at);
         tested_present = std::move(lexical_);
       }
       const auto after_test = [&](const CasePossibilities &choices) {
@@ -20141,7 +20053,7 @@ class ScalarChecker {
     require_live_view(source, at);
     if (proving_ && validating_ && lexical_.live && source.targets.contains(null_target))
       fail(at, "case scalar value requires a proven non-null target");
-    read_view(source, at, "case scalar result");
+    read_view(source, at);
   }
   Type check_pack_source(const Expression &source, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, PackUse use) {
@@ -20456,7 +20368,7 @@ class ScalarChecker {
         const auto &shape = type.kind == Type::arguments ? value_pack_index()
             : indexed_array(type, array.view && !array.mixed_view, expr.at);
         require_live_view(array, expr.at);
-        read_view(array, expr.at, "array operand");
+        read_view(array, expr.at);
         const auto index = child(1);
         if (index == Type::never) break;
         check_array_index(shape, index, expr.children[1]->at);
@@ -20525,7 +20437,7 @@ class ScalarChecker {
           if (left.type != right.type) fail(expr.at, "bits swap requires the exact same type");
           require_borrow_lifetime(left, expr.children[0]->at, &expr == prepared_call_);
           require_borrow_lifetime(right, expr.children[1]->at, &expr == prepared_call_);
-          read_view(left, expr.at, "left swap target"); read_view(right, expr.at, "right swap target");
+          read_view(left, expr.at); read_view(right, expr.at);
           for (auto &argument : operation.arguments) argument.mode = ArgumentMode::borrowed_read;
           check_builtin_declarations(expr, arguments, operation, true, views);
           if (&expr != prepared_call_) {
@@ -20586,7 +20498,7 @@ class ScalarChecker {
           const auto &array = operations.at(expr.children.front().get());
           check_array_length_type(type, array.view && !array.mixed_view, expr.at);
           require_live_view(array, expr.at);
-          read_view(array, expr.at, "array operand");
+          read_view(array, expr.at);
         }
         break;
       }
@@ -20899,7 +20811,7 @@ class ScalarChecker {
       }
       if (source.view && (result == GroupResult::value || (read && !discard))) {
         require_live_view(source, expr.at);
-        read_view(source, expr.at, "parenthesized result");
+        read_view(source, expr.at);
         operation.predicate = projected_predicate(source);
       } else operation.predicate = predicate_of(source);
       if (result == GroupResult::value && operation.type.kind == Type::procedure && source.view)
@@ -21035,7 +20947,7 @@ class ScalarChecker {
           binding.callable_value = pattern.operand_type.kind == Type::procedure;
           if (binding.callable_value && proving_ && lexical_.live && !capture_free_callables(observed_callables(test))) {
             // Check the prepared value on the cleanup path that actually matches.
-            const auto read = read_obligation({}, {test.at,
+            const auto read = read_obligation({test.at,
                 "micro-dispatch implementation gap: return pattern needs proof of a capture-free function value; this is not a language restriction"});
             CleanupEquations::ReadRequirement proof;
             proof.when = path_conditions(lexical_);
@@ -21068,7 +20980,7 @@ class ScalarChecker {
           const bool needs_read = !guard_arm && (!read || discard || value_join);
           if (!needs_read && fact.type != Type::boolean) return;
           lexical_ = std::move(state);
-          if (needs_read) read_view(fact, arm.at, "conditional scalar result");
+          if (needs_read) read_view(fact, arm.at);
           if (fact.type == Type::boolean) fact.predicate = projected_predicate(fact);
           state = std::move(lexical_);
         };
@@ -21327,7 +21239,7 @@ class ScalarChecker {
               fail(initializer.at, "reference initializer's lexical owner has ended");
           if (expr.declaration_kind == "ref") {
             if (proving_ && validating_ && lexical_.live && source.targets.contains(null_target)) fail(initializer.at, "ref requires a proven non-null target");
-            require_initialized(source, initializer.at, declaration->text);
+            require_readable_target(source, initializer.at);
           }
         }
         if (completes && borrowed) check_initializer_access(*declaration, source.read_only);
@@ -21488,7 +21400,7 @@ class ScalarChecker {
           operation.type = destination;
           break;
         }
-        if (read && !discard) require_initialized(selected, expr.at, expr.children[0]->text);
+        if (read && !discard) require_readable_target(selected, expr.at);
         rebind(target, selected, snapshot_selection(selected, expr.at));
         initialize_written_targets(embedded_slot_targets(target));
         operation.type = destination;
@@ -21681,7 +21593,7 @@ class ScalarChecker {
           fail(expr.at, "borrowed result does not retain its declared external owner");
         if (!contract.nullable() && proving_ && validating_ && lexical_.live && selected.targets.contains(null_target))
           fail(expr.at, "borrowed ref result requires a proven non-null target");
-        if (!contract.nullable()) require_initialized(selected, expr.at, "borrowed result");
+        if (!contract.nullable()) require_readable_target(selected, expr.at);
         operation.borrowed_result = true;
         lexical_.returned = {false, selected.targets, {}, selected.null_sources};
         lexical_.returned.initialization = selected.initialization;
@@ -21824,7 +21736,7 @@ class ScalarChecker {
             : &indexed_array(source, array.view && !array.mixed_view, expr.at);
         operation.operand_type = source;
         require_live_view(array, expr.at);
-        read_view(array, expr.at, "array operand");
+        read_view(array, expr.at);
       }
       const auto index = child(1);
       if (!shape || index == Type::never) { operation.type = Type::never; break; }
@@ -21885,7 +21797,7 @@ class ScalarChecker {
           }
         }
         if (read) {
-          require_initialized(operation, expr.at, expr.text);
+          require_readable_target(operation, expr.at);
           operation.predicate = stored_predicate(operation);
         }
         break;
@@ -21913,7 +21825,7 @@ class ScalarChecker {
       }
       const auto &parent = operations.at(expr.children.front().get());
       if (source.kind == Type::exception) {
-        read_view(parent, expr.at, expr.children.front()->text);
+        read_view(parent, expr.at);
         check_exception_field(expr, source);
         operation.type = Type::uint64;
         break;
@@ -21928,7 +21840,7 @@ class ScalarChecker {
         if (!owner || !region_owners_.contains(*owner))
           implementation_gap(expr.at, "regional sum field selection without one proved owner");
         require_live_view(parent, expr.at);
-        require_initialized(parent, expr.at, base.text);
+        require_readable_target(parent, expr.at);
         const auto constructor = *storage(*parent.place).reserved_alternative;
         const auto index = selected_sum_field(constructor, expr);
         const auto &field = sum_alternative(constructor).fields.at(index);
@@ -21969,8 +21881,8 @@ class ScalarChecker {
             (field.direct_text_place() && indexed_use == IndexedUse::transfer_destination));
       }
       if (read) {
-        if (!field.stores_target()) require_initialized(operation, expr.at, expr.text);
-        else read_view(operation, expr.at, expr.text);
+        if (!field.stores_target()) require_readable_target(operation, expr.at);
+        else read_view(operation, expr.at);
         operation.predicate = stored_predicate(operation);
       }
       break;
@@ -22080,7 +21992,6 @@ class ScalarChecker {
         CatchCapture captures{captures_, catch_bindings_, {}};
         captures_ = &captures;
         const auto was_delayed = delayed_;
-        const auto previous_inputs = deferred_inputs_;
         const auto previous_action = deferred_action_;
         const auto previous_return_inputs = return_inputs_;
         auto *outer = abrupt_;
@@ -22089,10 +22000,6 @@ class ScalarChecker {
         deferred_action_ = action;
         lexical_.symbols = {};
         lexical_.required_symbols.clear();
-        deferred_inputs_ = before.available;
-        if (proving_) for (size_t place = 0; place < catalog_storage_.size(); ++place)
-          if (std::any_of(before.scopes.begin(), before.scopes.end(), [&](const auto &scope) { return scope.id == catalog_storage_[place].scope; }))
-            deferred_inputs_.insert(place);
         refresh_targets(lexical_);
         lexical_.predicates.clear();
         lexical_.boolean_payloads.clear();
@@ -22179,7 +22086,6 @@ class ScalarChecker {
         operation.captures = std::move(captures.required);
         captures_ = captures.parent;
         delayed_ = was_delayed;
-        deferred_inputs_ = previous_inputs;
         deferred_action_ = previous_action;
         return_inputs_ = previous_return_inputs;
         abrupt_ = outer;
@@ -22477,7 +22383,7 @@ class ScalarChecker {
     initializing_reference_fields_.clear();
     abstract_operand_ = nullptr;
     literal_text_owner_.reset();
-    loop_controls_.clear(); delayed_controls_.clear(); deferred_inputs_.clear(); active_loops_.clear();
+    loop_controls_.clear(); delayed_controls_.clear(); active_loops_.clear();
     caught_.reset(); catch_bindings_.clear(); owned_catches_.clear(); caught_inputs_.clear();
     direct_exception_holders_.clear();
     captures_ = nullptr; delayed_ = false; deferred_action_.reset(); return_inputs_ = {}; prepared_call_ = nullptr;
@@ -23040,7 +22946,6 @@ class ScalarChecker {
         const auto binding = storage_->at(id).binding;
         if (reference_field) initializing_reference_fields_.insert(binding);
         storage_->at(id).identity_only = parameter.not_init_ref.has_value();
-        storage_->at(id).initializer_field = field;
         if (declared.kind == Type::abstract_type) abstract_input_bindings_.insert(binding);
         instance.frame.inputs.push_back({id, mode, live_binding || caller_place(*checking_method_, p)});
         if (const auto &profile = checking_method_->scope_inputs; profile && profile->native_owner_inputs.contains(p))
