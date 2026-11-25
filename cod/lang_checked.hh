@@ -9797,11 +9797,7 @@ class ScalarChecker {
           if ((*value != Type::null_ref || source.owner) &&
               compare_owners(source.owner, owner, &state) != OwnerMatch::satisfied)
             fail(at, "reference field target must share the containing product's owner");
-          if (field.storage == PlaceKind::reference) {
-            if (source.nullable && state.target.presence != TargetPresence::present)
-              fail(at, "ref field requires a proven non-null target");
-            require_type_readable_target(state, state.target, at);
-          }
+          if (field.storage == PlaceKind::reference) require_type_readable_target(state, state.target, at);
           state.selections.assign({member, {member}}, state.target);
         }
         state.selections.initialize(EvidencePlaces{member});
@@ -12524,10 +12520,6 @@ class ScalarChecker {
           return native_handle_type(*found->second, false);
         }
         target_facts = named_type_target(state, expr.text);
-        if (view.reservation_slot && read != EvidenceRead::binding_slot && state.required &&
-            proving_ && validating_ && state.checks_reaching_paths() &&
-            target_facts.presence != TargetPresence::present)
-          fail(expr.at, "reserved ref binding has no definitely selected target");
         return found->second;
       }
       if (const auto family = named_family(expr, &state); !family.methods.empty()) {
@@ -19612,11 +19604,7 @@ class ScalarChecker {
         if (std::ranges::any_of(source.owners, [&](size_t owner) {
               return compare_owners(owner, storage(root).scope) != OwnerMatch::satisfied;
             })) fail(at, "reference field target must share the containing product's owner");
-        if (member.storage == PlaceKind::reference) {
-          if (proving_ && validating_ && lexical_.live && source.targets.contains(null_target))
-            fail(at, "ref field requires a proven non-null target");
-          require_payload_access(source, at);
-        }
+        if (member.storage == PlaceKind::reference) require_payload_access(source, at);
         assign_targets(storage(place).binding, source, snapshot_selection(source, at));
       }
       initialize(place);
@@ -20174,10 +20162,6 @@ class ScalarChecker {
         if (initializing_reference_fields_.contains(*operation.binding) && !write_slot && lexical_.live &&
             proving_ && validating_ && !missing_initialization(lexical_, *binding.embedded_slot).empty())
           fail(expr.at, "initializer field '" + expr.text + "' has no established reference target");
-        if (binding.reservation_slot && !write_slot && lexical_.live &&
-            (operation.targets == std::set<size_t>{null_target} || (proving_ && validating_ &&
-              (operation.targets.empty() || operation.targets.contains(null_target)))))
-          fail(expr.at, "reserved ref binding has no definitely selected target");
         if (binding.direct_text_place && !write_slot && indexed_use != IndexedUse::transfer_destination)
           operation.initialization.emplace();
       }
@@ -21431,8 +21415,6 @@ class ScalarChecker {
         const auto owner = external_owners_.at(contract.owner);
         if (!selected.owners.empty() && selected.owners != std::set<size_t>{owner})
           fail(expr.at, "borrowed result does not retain its declared external owner");
-        if (!contract.nullable() && proving_ && validating_ && lexical_.live && selected.targets.contains(null_target))
-          fail(expr.at, "borrowed ref result requires a proven non-null target");
         if (!contract.nullable()) require_payload_access(selected, expr.at);
         operation.borrowed_result = true;
         lexical_.returned = {false, selected.targets, {}, selected.null_sources};

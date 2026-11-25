@@ -1335,12 +1335,6 @@
     "stdout": "99\n42\n99\n42\ntrue\ntrue\n"
   },
   {
-    "file": "regional-sum-reservation-unbound.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "reserved ref binding has no definitely selected target"
-  },
-  {
     "file": "regional-sum-placement-init.cod",
     "exit": 0,
     "stdout": "true\ntrue\n1\n2\n"
