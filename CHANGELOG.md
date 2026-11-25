@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Review completed scalar behavior for the booter lexer
+
+<a id="k-seed-lexer-predicate-behavior-20261125"></a>
+**K-SEED-LEXER-PREDICATE-BEHAVIOR-20261125.** D-ARCH-REVIEW r133→134 continues P-682/P-683 under the [phase rule](#h-completed-callee-behavior-20261125). The saved IR of the actual lexer contains five direct calls to the predicate at `957e286a:applications/cod-booter/src/Lexer.cod:415`. The [seed review](design/ImplementationArchitecture.md#completing-the-lexers-scalar-predicates) extends the frozen instance contract to checked by-value predicates with one normal exit. It preserves ordinary operator selection and short-circuit behavior. The existing solver receives its frozen-instance exclusion at `957e286a:cod/lang_checked.hh:23478`. Implementation evidence and any full-build timing remain separate.
+
 ## 2026-11-25 — Teach product inheritance and receiver interfaces in the idiom guide
 
 <a id="k-idiomatic-oo-showcase-20261125"></a>

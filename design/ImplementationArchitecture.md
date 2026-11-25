@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r134 review](../CHANGELOG.md#k-seed-lexer-predicate-behavior-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) under P-682/P-683. The [lexer predicate workload](#completing-the-lexers-scalar-predicates) applies the r131 phase rule and r132 publication boundary to ordinary by-value functions reached while compiling the booter. Source selection, failure and Boolean refinement follow the existing checker.
+
 The [r133 review](../CHANGELOG.md#k-booter-imported-literal-return-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) under P-682/P-683. It covers the [booter’s source interface for a scalar literal return](../applications/cod-booter/docs/ModuleGraph.md#checking-an-imported-function-that-returns-a-scalar-literal) under the r131 producer and consumer rule. The defining visit completes the proof before an importer can check a call.
 
 The [r132 review](../CHANGELOG.md#k-seed-closed-leaf-behavior-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) under P-682/P-683. It applies the r131 separation of fact kinds to the [first ordinary seed call](#first-seed-call-with-completed-behavior), including a borrowed write observable in a bounds handler. The existing language guarantees and the user’s authority over exceptions to the phase rule continue unchanged.
@@ -549,6 +551,16 @@ Make the contract available for the selected instance and variant before the fir
 For open or recursive selections the initial binding plan identifies the existing checking path. Collection may propagate pending dependencies around a cycle and retain their origins. Composing multiple ordinary procedure contracts is a separate review. Topological order alone does not separate collecting a procedure behavior from using the same fact kind.
 
 Verify the checked write itself on both bounds paths, using a discriminating static check or inspection of the actual completed contract and its use. Runtime output alone cannot distinguish a correct checker summary from code that happens to execute the write. Compare the original four results (`true/true/false/false`), caller-first and callee-first declarations, the skipped call, normal return and failure during operand preparation. Check rejection locations and prior artifacts, and show that a recursive dependency stays pending in the new producer while the existing path handles that program.
+
+#### Completing the lexer’s scalar predicates
+
+The booter’s `digit(byte:u8)` returns `byte >= 48u8 && byte <= 57u8`. Five direct call sites in the identifier, digit, numeral and token scanners use this predicate. `name_start` and `whitespace` use the same scalar operations. The seed’s write and read solvers each schedule these loop-free function bodies. A completed behavior available before caller checking removes those visits. The existing Boolean snapshot optimization addresses separate work at the call site. [Lexer source](../applications/cod-booter/src/Lexer.cod) · [Caller snapshots](#boolean-snapshots-at-immediate-scalar-calls)
+
+Select ordinary functions with fixed independent `u8` or `bool` parameters, an explicitly declared independent `bool` result, and one return expression. Bind the parameters, literals, builtin comparisons, negation and short-circuit operations in the selected interpretation. A default, hidden input, loan, unresolved operation or visible customization that prevents a closed proof leaves the function on its ordinary checking path. Identify eligible functions by their bound operations.
+
+Use the existing scalar transfer for those operations, including skipped and taken right operands. Freeze the resulting normal exit and the Boolean relations the checker can represent. For example, a function returning its Boolean argument preserves the predicate captured when that argument was prepared. Numeric comparisons use their ordinary result evidence. Keep the prohibition on reading another procedure’s behavior active throughout extraction, including when the selected function has no text-byte operation. The earlier borrowed-write procedure keeps its distinct bounds exit.
+
+The consumer reads the completed instance contract after its actual arguments have finished. A failure preparing an argument precedes the invocation. Preserve final validation against the same contract, diagnostic order, and the ordinary behavior of caller loops. Verify the three definitions on the unedited lexer through normal specialized checking and LLVM generation. Check original IR bytes, production call selection, and that the two legacy solvers skip each frozen body. Exercise representative bytes just inside and outside the digit, identifier and whitespace boundaries, Boolean argument correlation, a failing later argument, and an open or borrowed control. A small closure supplies this evidence without a separate full bootstrap.
 
 ### Boolean snapshots at immediate scalar calls
 
