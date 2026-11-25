@@ -15670,7 +15670,8 @@ class ScalarChecker {
     return materialize_definition(NamedFamily{family}, expected, at, definition_site);
   }
   struct ReplayCall {
-    size_t method;
+    // The selected family view is fixed throughout collection and propagation.
+    std::span<const size_t> methods;
     std::set<size_t> supplied;
   };
   struct ReplayBody {
@@ -15795,12 +15796,13 @@ class ScalarChecker {
       }
       if (!family) unsupported();
       const auto *methods = proven_family_methods(*family, interpretation_);
-      if (!methods || methods->size() != 1)
+      if (!methods || methods->empty())
         implementation_gap(expr.at, "symbolic handler replay through an unrepresented callee family");
-      const auto callee = methods->front();
-      if (expr.children.size() != program_.methods[callee].input_parameters().size()) unsupported();
+      if (std::ranges::none_of(*methods, [&](size_t callee) {
+            return expr.children.size() == program_.methods[callee].input_parameters().size();
+          })) unsupported();
       operands();
-      if (scope.continues) body.calls.push_back({callee, scope.supplied});
+      if (scope.continues) body.calls.push_back({*methods, scope.supplied});
       return;
     }
     case K::behave: case K::perform:
@@ -15839,7 +15841,7 @@ class ScalarChecker {
       collect_replay_uses(*source.body, method, scope, body);
       if (body.installation && body.deferred)
         implementation_gap(body.deferred->at, "symbolic handler replay through delayed use with local installations");
-      for (const auto &call : body.calls) pending.push_back(call.method);
+      for (const auto &call : body.calls) pending.insert(pending.end(), call.methods.begin(), call.methods.end());
     }
 
     // Propagate completed direct uses backwards along recorded calls.
@@ -15847,7 +15849,8 @@ class ScalarChecker {
     std::map<size_t, std::vector<std::pair<size_t, const ReplayCall *>>> callers;
     std::vector<std::pair<size_t, size_t>> requirements;
     for (const auto &[method, body] : bodies) {
-      for (const auto &call : body.calls) callers[call.method].emplace_back(method, &call);
+      for (const auto &call : body.calls) for (const auto callee : call.methods)
+        callers[callee].emplace_back(method, &call);
       for (const auto symbol : body.incoming) requirements.emplace_back(method, symbol);
     }
     for (size_t i = 0; i < requirements.size(); ++i) {
