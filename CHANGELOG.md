@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review the native package probe’s array and value arguments
+
+<a id="k-package-probe-value-arguments-20261124"></a>
+**K-PACKAGE-PROBE-VALUE-ARGUMENTS-20261124.** D-ARCH-REVIEW r115→116 and D-20-MODULE-GRAPH r83→84 continue P-680–P-683. The [source-checking review](applications/cod-booter/docs/ModuleGraph.md#checking-the-native-package-probe) covers the call at `b6464e46:applications/cod-booter/src/PackageModuleResolution.cod:38`. The released specialized booter rejects the isolated call in declaration checking and provider generation. Replacing just the call with the scalar `start` passes both commands. The two array loans and four value inputs follow the existing native call and H-261 widening rules.
+
 ## 2026-11-24 — Focus routine booter builds on one seed mode
 
 <a id="h-booter-build-cadence-20261124"></a>

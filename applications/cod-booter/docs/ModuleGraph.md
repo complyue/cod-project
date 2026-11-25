@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r84 review](../../../CHANGELOG.md#k-package-probe-value-arguments-20261124) covers [the native package probe](#checking-the-native-package-probe) under P-680/P-681. It combines two synchronous readonly array loans with four independent value arguments under the existing C procedure contract.
+
 The [r83 review](../../../CHANGELOG.md#k-package-row-field-read-20261124) applies the ordinary array and inline field rules to [the package row read](#reading-a-field-of-an-indexed-package-row) under P-680/P-681. Acceptance distinguishes the two adjacent scalar fields and preserves evaluation order on bounds or index failure.
 
 The [r82 review](../../../CHANGELOG.md#k-package-classifier-source-call-20261124) covers [the package path classifier](#checking-the-package-path-classifier) under P-680/P-681. Follow the ordinary array loan, the byte read and the nominal enum result through its source call.
@@ -632,6 +634,14 @@ Prove both the `u64` index and the `u8` element against the same defining array.
 Check each actual in order before entering the callee. Preserve the declared array identity, owner role and access through the call to the private helper. Preserve the defining enum identity at the imported return. A read that executes can raise the ordinary unchecked bounds error. Route that possibility with the other proved outcomes through guards, calls, catches and cleanup. A skipped operand contributes no executed read. Earlier argument failure prevents callee entry. If the checked source interface cannot carry the required evidence, diagnose the unsupported call before publication.
 
 Verify a direct byte read and the real classifier and resolver through declaration checking and provider generation. Include mismatched array identities, index kinds and result enums, malformed parameter evidence, a failure while computing an index or a later argument, and preserved artifacts. Product projections, sum construction and executable indexing have separate proofs.
+
+### Checking the native package probe
+
+`probe_package_module(paths, start, end, module, first, past)` borrows two named byte arrays and reads four scalar bounds. Resolve the selected imported C procedure to its defining declaration and validate its header and complete six-row extent within the published prefix before inspecting individual rows. The result is an independent `u64`. This source check covers a synchronous procedure with no callback and no declared checked failure. [Native declaration](../src/NativeModuleInputs.cod) · [Resolver call](../src/PackageModuleResolution.cod)
+
+In the visit frame, associate each operand with its call, revision, position and actual syntax. At positions zero and three prove the formal array’s original nominal identity, `u64` index, `u8` element, and the actual initialized backing and owner for the loan. A writable actual can supply a readonly loan. Distinct formal roles may select the same owner. A repeated role must select the same owner on each occurrence. The four value rows have no owner. Check their declared builtin `u64` and prepare each independent value once in source order. Preserve the operand’s actual type through ordinary whole-type widening, including `u8` and `u32` to `u64`. A signed `i64`, Boolean or nominal enum cannot supply these bounds implicitly. [Numeric compatibility](../../../design/ScalarUnitsAndIndexTypes.md#quantity-types-and-lossless-widening)
+
+Validate the full written argument list and interface even if an early operand cannot complete. Its failure prevents later evaluation and native entry. On normal return the caller receives the full-width result. In particular, the existing provider returns `UINT64_MAX` for an absent path through a successful native call. Check this distinction through the existing runtime control and the source side through declaration checking and provider generation. Exercise independent and shared actual owners, wrong nominal arrays, scalar preparation, malformed rows, arity and previous-file preservation. Use the unchanged resolver and its importer once earlier source prerequisites are available. Executable lowering has its own acceptance. [Native provider](../native/path_provider.c)
 
 ### Reading a field of an indexed package row
 
