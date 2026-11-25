@@ -11,10 +11,6 @@ add_clang_tool( cod
   main.cc
   )
 
-target_link_libraries( cod PRIVATE
-  shilos
-  )
-
 clang_target_link_libraries( cod PRIVATE
   clangBasic
   )

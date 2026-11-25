@@ -66,15 +66,16 @@ llvm_libdir := $(call llvm_query,--libdir)
 
 entry := src/CompilerCLI.cod
 cod_sources := $(sort $(shell find src -type f -name '*.cod'))
-# A package can shadow the library. Let the seed recheck the source closure when a project is active.
-source_project := $(shell directory=$$(dirname -- "$(or $(realpath $(entry)),$(abspath $(entry)))"); \
+# A prepared package can shadow the library. Record the marker's presence
+# so removing the package layout also invalidates a previously selected group.
+source_package_marker := $(shell directory=$$(dirname -- "$(or $(realpath $(entry)),$(abspath $(entry)))"); \
 	while :; do \
-		manifest="$$directory/CodProject.yaml"; \
-		if test -e "$$manifest" || test -L "$$manifest"; then printf yes; break; fi; \
+		marker="$$directory/.cod/packages"; \
+		if test -e "$$marker" || test -L "$$marker"; then printf '%s' "$$marker"; break; fi; \
 		test "$$directory" != / || break; \
 		directory=$$(dirname -- "$$directory"); \
 	done)
-package_recheck := $(if $(or $(source_project),$(filter --project,$(COD_SEED_FLAGS))),FORCE)
+package_recheck := $(if $(or $(source_package_marker),$(filter --project,$(COD_SEED_FLAGS))),FORCE)
 native_sources := $(sort $(wildcard native/*.c))
 generated_names := cod_providers.h cod_providers.c driver.ll
 generated := $(addprefix $(out)/,$(generated_names))
@@ -90,7 +91,7 @@ $(out) $(out)/native:
 # Preserve stamp mtimes when the effective inputs are unchanged.
 $(out)/seed.inputs: FORCE | $(out)
 	@printf '%s\n' $(call quote,$(seed)) $(call quote,$(COD_SEED_FLAGS)) \
-		$(call quote,$(seed_library)) $(if $(source_project),'project source lookup') \
+		$(call quote,$(seed_library)) $(call quote,$(source_package_marker)) \
 		$(foreach source,$(cod_sources),$(call quote,$(source))) > "$@.tmp"
 	@if cmp -s "$@.tmp" "$@"; then rm "$@.tmp"; else mv "$@.tmp" "$@"; fi
 
