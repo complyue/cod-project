@@ -22276,6 +22276,7 @@ class ScalarChecker {
     checking_context_ = 0;
     checking_method_ = nullptr;
     checking_instance_ = nullptr;
+    if (program_.initializers.empty()) return;
     EntryBehaviorCheck behavior;
     struct EntryBehaviorScope {
       EntryBehaviorCheck *&active;
@@ -22290,12 +22291,18 @@ class ScalarChecker {
       for (const auto &[module, expr] : program_.initializers) {
         const ModuleLookup lookup(module_, module);
         std::swap(lexical_.scopes.front().bindings, bindings[module_]);
+        const auto binding_count = program_.entry_bindings.size();
         behavior.initializer = expr;
         const auto type = check(*expr, nullptr, program_.entry, true, true);
         // After a blocked statement, the following checks have no reaching
         // execution facts to use. The pending diagnostic prevents publication.
         if (type == Type::never || behavior.unavailable) lexical_.live = false;
-        lexical_.scopes.front().bindings.each([&](const std::string &name, size_t) { module_names().values.insert(name); });
+        // A new name in this entry frame must come from a binding created
+        // while checking this initializer. Existing names are already known.
+        if (program_.entry_bindings.size() != binding_count)
+          lexical_.scopes.front().bindings.each([&](const std::string &name, size_t binding) {
+            if (binding >= binding_count) module_names().values.insert(name);
+          });
         std::swap(lexical_.scopes.front().bindings, bindings[module_]);
       }
       if (behavior.unavailable) require_leaf_behavior(*behavior.unavailable);
@@ -23488,7 +23495,7 @@ class ScalarChecker {
       if (context && program_.instances[context - 1].effects_frozen) return;
       if (queued.insert(context).second) pending.push_back(context);
     };
-    enqueue(0);
+    if (!program_.initializers.empty()) enqueue(0);
     size_t instances = 0, callables = program_.callables.size();
     const auto discover = [&] {
       while (instances < program_.instances.size()) enqueue(++instances);
