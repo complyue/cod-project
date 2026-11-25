@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review selective rechecking at an ordinary seed call
+
+<a id="k-seed-ordinary-call-edge-replay-20261124"></a>
+**K-SEED-ORDINARY-CALL-EDGE-REPLAY-20261124.** D-ARCH-REVIEW r126→127 continues P-682/P-683. At `039b9c7f:cod/lang_checked.hh:216` an effect read subscribes the caller instance, and a notification in `close_effects` re-enters its body checker. The [scoped implementation review](design/ImplementationArchitecture.md#rechecking-an-ordinary-call-in-one-conditional-arm) admits reuse in the proving pass for one conditional, including its ordinary continuation and typed failure handler. The compiler’s full validation and fallback still govern acceptance.
+
 ## 2026-11-24 — Extend receiver declaration sugar to functors
 
 <a id="h-functor-receiver-sugar-20261124"></a>
