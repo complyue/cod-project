@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r133 review](../CHANGELOG.md#k-booter-imported-literal-return-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) under P-682/P-683. It covers the [booter’s source interface for a scalar literal return](../applications/cod-booter/docs/ModuleGraph.md#checking-an-imported-function-that-returns-a-scalar-literal) under the r131 producer and consumer rule. The defining visit completes the proof before an importer can check a call.
+
 The [r132 review](../CHANGELOG.md#k-seed-closed-leaf-behavior-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) under P-682/P-683. It applies the r131 separation of fact kinds to the [first ordinary seed call](#first-seed-call-with-completed-behavior), including a borrowed write observable in a bounds handler. The existing language guarantees and the user’s authority over exceptions to the phase rule continue unchanged.
 
 At r131 the [project user’s correction](../CHANGELOG.md#h-completed-callee-behavior-20261125) requires each phase to separate the kinds of information it collects from the kinds it uses. The seed applies this [standing rule](../AGENTS.md#passes-and-dependency-changes) to [completed callee behavior](#consuming-completed-callee-behavior) under P-682/P-683 and charter §5.3. It supersedes R127’s proposed subscription and replay inside a caller branch. D-14, D-17 and D-10 still govern access, completion and symbol requirements.
