@@ -4607,13 +4607,16 @@ class ScalarChecker {
       if (!method.input_parameters()[p].owner.empty()) borrowed.insert(p);
     const auto fields = product_inputs(arguments, method.source->at);
     for (size_t p = 0; p < fields.size(); ++p) borrowed.insert(arguments.size() + p);
+    if (borrowed.empty() && !method.regional_initializer_fields && !caller_bindings(method)) return effects;
+    auto initialized = borrowed;
+    std::erase_if(initialized, [&](size_t p) {
+      return p < method.input_parameters().size() && method.input_parameters()[p].not_init_ref;
+    });
     const auto reasons = call_reasons(method);
     for (const auto reason : reasons) {
-      effects.initialized[reason] = borrowed;
-      effects.present[reason] = borrowed;
-      for (const auto p : borrowed)
-        if (p < method.input_parameters().size() && method.input_parameters()[p].not_init_ref)
-          effects.initialized[reason].erase(p);
+      if (!initialized.empty() || (!reason && method.regional_initializer_fields))
+        effects.initialized.emplace(reason, initialized);
+      if (!borrowed.empty()) effects.present.emplace(reason, borrowed);
     }
     // Value possibilities grow from no observed return, independently of
     // the optimistic initialization/presence guarantees above.
@@ -23133,20 +23136,20 @@ class ScalarChecker {
     for (const auto place : outgoing_payload_writes_.value().places)
       if (storage(place).borrowed) observed.written_inputs.insert(input_ordinal(place));
     std::erase_if(observed.uninitialized, [](const auto &entry) { return entry.second.empty(); });
-    // Initializer completion uses the observed normal entry to decide
-    // whether the reserved target can become ready.
-    const auto reasons = call_reasons(*checking_method_);
-    for (const auto reason : reasons) {
-      if (reason || !checking_method_->regional_initializer_fields)
-        observed.initialized.try_emplace(reason);
-      observed.present.try_emplace(reason);
-    }
+    // Keep the row through exit aggregation. Afterward an empty row only
+    // matters for pairing conditional facts or marking initializer success.
+    std::erase_if(observed.initialized, [&](const auto &entry) {
+      return entry.second.empty() && !observed.uninitialized.contains(entry.first) &&
+          (entry.first || !checking_method_->regional_initializer_fields);
+    });
+    std::erase_if(observed.present, [](const auto &entry) { return entry.second.empty(); });
     if (!instance.result.borrowed() && *instance.result.type == Type::boolean && observed.returned.boolean.empty())
       observed.returned.boolean = CleanupEquations::unknown_boolean();
     if (instance.result.nullable() && observed.returned.nullness.empty())
       observed.returned.nullness = CleanupEquations::unknown_boolean();
     // The final input frame already has the projected product fields. Only
     // payload defaults are needed here, without the solver's initial state.
+    const auto reasons = call_reasons(*checking_method_);
     const auto fill_payload_defaults = [&](size_t ordinal, const Type &type) {
       if (type == Type::boolean) for (const auto reason : reasons) {
         const auto [value, inserted] = observed.booleans[reason].try_emplace(ordinal);
@@ -23291,8 +23294,6 @@ class ScalarChecker {
 
   static CallEffects seal_scalar_caller(const std::vector<ScalarExit> &exits) {
     CallEffects effects;
-    effects.initialized.try_emplace(0);
-    effects.present.try_emplace(0);
     for (const auto &exit : exits) CleanupEquations::merge_boolean(effects.returned.boolean, exit.result);
     if (effects.returned.boolean.empty()) effects.returned.boolean = CleanupEquations::unknown_boolean();
     return effects;

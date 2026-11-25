@@ -444,6 +444,8 @@ struct CallBehavior {
   // A case-arm scope preserves normal scan and delivered return as distinct
   // exit summaries. Ordinary callables combine them under normal completion.
   std::optional<CaseScopeExits> case_scope_exits;
+  // A missing row grants no guarantee. Conditional initialization keeps its
+  // paired row, and a regional initializer's normal row also marks completion.
   std::map<size_t, std::set<size_t>> initialized;
   std::map<size_t, CleanupEquations::MissingInitialization> uninitialized;
   std::map<size_t, std::set<size_t>> present;
