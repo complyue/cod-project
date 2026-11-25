@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review seed bootstrap time in dynamic-symbol checking
+
+<a id="k-seed-bootstrap-symbol-checks-20261124"></a>
+**K-SEED-BOOTSTRAP-SYMBOL-CHECKS-20261124.** D-ARCH-REVIEW r116→117 continues P-682/P-683. The project user prioritized reducing bootstrap time in the [side discussion](codex://threads/01a210a7-c445-74e2-8dce-eeb3ddc65a21). The [review](design/ImplementationArchitecture.md#reducing-seed-bootstrap-time-in-dynamic-symbol-checks) clears instrumentation, bounded reuse of completed proof and independent sharing of checker scope snapshots at `0167b89a:cod/lang_checked.hh`. The prior completed-path experiment on a fixed compiler input saved 940 seconds and increased peak RSS by 353,716 KiB. Its timing does not establish a benefit for either new proposal.
+
 ## 2026-11-24 — Use one seed mode to build the booter at milestones
 
 <a id="k-booter-one-build-20261124"></a>
