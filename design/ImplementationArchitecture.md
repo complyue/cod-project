@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r121 review](../CHANGELOG.md#k-booter-reserve-keys-20261124) continues P-682/P-683 for [checking the module key array’s growth](../applications/cod-booter/docs/ModuleGraph.md#checking-growth-of-the-module-key-array). The ordinary source call forwards a mutable lexical slot, and the actual owner supplies allocation permission. The booter checks the helper body before publishing its source interface.
+
 The [r120 review](../CHANGELOG.md#h-seed-symbol-union-admission-20261124) requires the seed to establish [symbol union eligibility](#first-demand-union-of-dynamic-symbol-requirements) on first demand under P-682/P-683. Only a bound proved closed for the selected interpretation can supply a cached availability check.
 
 The [r119 review](../CHANGELOG.md#h-measure-gains-when-needed-20261124) applies the [project measurement rule](../AGENTS.md#when-to-measure-an-improvement) to seed optimization acceptance under P-682/P-683. Behavioral evidence supports delivery. A specific trade-off, regression or budget can justify a dedicated measurement.

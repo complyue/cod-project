@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review source checking for growth of the module key array
+
+<a id="k-booter-reserve-keys-20261124"></a>
+**K-BOOTER-RESERVE-KEYS-20261124.** D-ARCH-REVIEW r120→121 and D-20-MODULE-GRAPH r84→85 continue P-680–P-683. The [review](applications/cod-booter/docs/ModuleGraph.md#checking-growth-of-the-module-key-array) covers the scalar leaf at `a934f56b:applications/cod-booter/src/ModuleIndex.cod:103`. The released booter rejects the slot formal. Demanding private bodies with a supplied replacement separately exposes missing byte transfer and slot rebinding checks. The reviewed source path verifies the real allocation, copy and final rebind under the existing owner and completion contracts.
+
 ## 2026-11-24 — Share seed binding snapshots and bound symbol requirements on first demand
 
 <a id="k-seed-symbol-bound-release-20261124"></a>
