@@ -93,6 +93,7 @@ using "./ModuleExportStorage.cod" {
     FamilyMembership { UnprovedMembership, PromiseOnly, FixedMethods, VariadicMethod },
 };
 using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
+using "./ModuleExportStorage.cod" ByteFunctionCompletion { NoByteFunction };
 using "./ModuleExportStorage.cod" ReceiverImportCheck { NoReceiverCallables };
 
 export enum ModuleNameUse:u8 {
@@ -154,6 +155,7 @@ export data NameWorkSlot {
     imported_failure_module:u64;
     imported_kind:u8;
     imported_callable_kind:InterfaceCallableKind;
+    imported_byte_completion:ByteFunctionCompletion;
     imported_reception:u8;
     imported_target_readonly:u8;
     imported_owner_readonly:u8;
@@ -3237,6 +3239,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
         bindings[at].guarded_local_link <- no_node();
         bindings[at].handle_guard <- no_node();
         work[at].local_symbol_conflict <- no_node();
+        work[at].imported_byte_completion <- NoByteFunction;
     };
     if (!link_entries(nodes, work, tree.revision, tree.used)) return false;
     ref state = make NameState {
