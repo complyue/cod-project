@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review initialized fixed byte-array references in the booter
+
+<a id="k-booter-fixed-byte-array-reference-20261124"></a>
+**K-BOOTER-FIXED-BYTE-ARRAY-REFERENCE-20261124.** D-ARCH-REVIEW r125→126 and D-20-MODULE-GRAPH r89→90 continue P-680–P-683 under the binding and target qualifier rule H-366–H-369/P-327. The existing bare reservation at `0d6abff9:applications/cod-booter/src/ExpressionParser.cod:645` has no fixed-binding field. The [source review](applications/cod-booter/docs/ModuleGraph.md#checking-an-initialized-fixed-byte-array-reference) covers an initialized local and requires a checked target before publication. Both seed modes distinguished writing through a fixed slot from rebinding a slot with a read-only target. Linked booter acceptance remains outstanding.
+
 ## 2026-11-24 — Review how a slot body proves which failures can escape
 
 <a id="k-booter-array-slot-escape-bound-20261124"></a>

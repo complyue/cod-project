@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r126 review](../CHANGELOG.md#k-booter-fixed-byte-array-reference-20261124) continues P-682/P-683 for [fixed local byte-array references](../applications/cod-booter/docs/ModuleGraph.md#checking-an-initialized-fixed-byte-array-reference). The booter checks the binding’s initializer in its owning frame before publishing the module, even when the local is unused.
+
 The [r125 review](../CHANGELOG.md#k-booter-array-slot-escape-bound-20261124) continues P-682/P-683 for [the private array-slot header](../applications/cod-booter/docs/ModuleGraph.md#checking-growth-of-the-module-key-array). The visit frame proves which of four unchecked failures can escape a body. The graph retains that bound on successful publication. An ordinary import with an unknown bound contributes all four possibilities at an invocation the caller can reach.
 
 The [r123 review](../CHANGELOG.md#k-booter-indexed-field-demand-20261124) continues P-682/P-683 for [indexed-field demand](../applications/cod-booter/docs/ModuleGraph.md#deciding-which-bodies-need-indexed-field-checks). It separates identifying eligible field uses from proving operands in the bodies selected for checking.

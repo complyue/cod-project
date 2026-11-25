@@ -2,7 +2,7 @@
 
 ## Design authority
 
-The [r89 review](../../../CHANGELOG.md#k-booter-array-slot-escape-bound-20261124) continues P-680/P-681 for [the key-array source interface](#checking-growth-of-the-module-key-array). A clear failure field on a checked header requires evidence covering direct operations, reached helpers and ordinary imports.
+The [r90 review](../../../CHANGELOG.md#k-booter-fixed-byte-array-reference-20261124) continues P-680/P-681 for [initialized fixed byte-array references](#checking-an-initialized-fixed-byte-array-reference) under the independent binding and target qualifiers of P-327. The [r89 completion review](../../../CHANGELOG.md#k-booter-array-slot-escape-bound-20261124) governs the failure facts on the key-array source interface.
 
 The [r87 review](../../../CHANGELOG.md#k-booter-indexed-field-demand-20261124) continues P-680/P-681 for [indexed field checks in demanded bodies](#deciding-which-bodies-need-indexed-field-checks). It corrects when the declaration and provider commands initiate a body check and ties local sum discovery to its indexed transfer.
 
@@ -572,6 +572,14 @@ Verify a direct byte read, the same read through a local helper, and a caught re
 The formal owner row separately records allocation permission requirements. An imported caller still needs a proof of slot effects on each completion, including whether a rebind has already taken effect. Keep the located imported-use stop until that proof exists. Check a published all-clear header, a mix of set and clear fields, reuse for an ordinary row, and preservation of the previous published extent on failure.
 
 Verify the unedited scalar leaf through both source commands and exercise direct slot forwarding, saved target identity, copied bytes, early return and failure before and after a rebind. Use seed execution for runtime observations. Reject wrong nominal arrays, wrong owners, fixed slots, insufficient target or allocator access and escaping places. On the integrated specialized booter, report the remaining locations in ModuleIndex, LoadPackageInputs and CompilerCLI and preserve earlier artifacts on rejection.
+
+### Checking an initialized fixed byte-array reference
+
+`const ref fixed:SourceBytes in G = keys` selects the current array once. Given writable access, `fixed[0u64] <- 41u8` updates the shared array. A later rebind of `keys` leaves `fixed` selecting the original array. Both `fixed = replacement` and the slot argument in `reserve_keys(fixed, 0u64, 2u64)` require a writable slot and fail at the use. In `ref selected:const SourceBytes in G = keys`, the slot can be rebound and the selected target is read-only. [Independent binding and target qualifiers](../../../design/RegionalOwnership.md#independent-binding-and-target-qualifiers)
+
+The reader records an initialized `ReferenceLocal` with `declaration_const`, its existing binding and initializer children, and a span starting at `const`. A missing operand after `=` retains the initializer error and later items. Bare reservations and grouped fixed declarations have a separate profile boundary. Report it at the source before an ordinary bare binding or group could lose its qualifier.
+
+Declaration checking and provider generation require the owning frame to check every admitted fixed local, including an unused one. Establish the selection only on successful initialization. Check the nominal byte array, initialized non-null target, actual owner and lifetime. An omitted target annotation inherits access from the initializer. An explicit writable target requires a writable source. Carry the target facts to reads of the local and keep its slot fixed even when the initializer names a writable slot. Check target writes, direct rebind and slot forwarding, a read-only source, a different owner and a malformed initializer with a valid suffix. A rejected source preserves prior output. Object generation retains its existing profile boundary.
 
 ### Named-array transport for the first edge
 
