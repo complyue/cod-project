@@ -4441,9 +4441,14 @@ class ScalarChecker {
     const auto &binding = program_.symbols[symbol];
     return binding.reference || binding.live_scope || (binding.type && binding.type->kind == Type::native_handle);
   }
+  bool tracks_ordinary_symbol_uses() const {
+    return checking_instance_ && proving_ && exports_symbol_uses();
+  }
+  SymbolEffectUse invocation_symbol_use() const {
+    return tracks_ordinary_symbol_uses() ? SymbolEffectUse::all : SymbolEffectUse::transport_only;
+  }
   void observe_symbol_use(LexicalState &state, size_t symbol, const Location &at) {
-    // Module initialization has no outgoing capture contract.
-    if (!checking_instance_ && !symbol_needs_transport_fact(symbol)) return;
+    if (!tracks_ordinary_symbol_uses() && !symbol_needs_transport_fact(symbol)) return;
     const auto &binding = program_.symbols[symbol];
     if (delayed_ && state.live && binding.live_scope)
       implementation_gap(at, "deferred access to a live scoped procedure activation");
@@ -4606,10 +4611,11 @@ class ScalarChecker {
       if (prepared && binding && rebound_.contains(*binding)) binding.reset();
       return binding;
     };
-    std::set<size_t> entry_symbol_uses;
-    if (!checking_instance_) for (const auto symbol : target.symbols)
-      if (symbol_needs_transport_fact(symbol)) entry_symbol_uses.insert(symbol);
-    const auto &symbol_uses = checking_instance_ ? target.symbols : entry_symbol_uses;
+    std::set<size_t> transport_symbols;
+    const bool collect_ordinary_symbols = tracks_ordinary_symbol_uses();
+    if (!collect_ordinary_symbols) for (const auto symbol : target.symbols)
+      if (symbol_needs_transport_fact(symbol)) transport_symbols.insert(symbol);
+    const auto &symbol_uses = collect_ordinary_symbols ? target.symbols : transport_symbols;
     std::map<size_t, CleanupEquations::Effects> effects;
     for (const auto reason : reasons) {
       const auto found = target.initialized.find(reason);
@@ -7407,9 +7413,6 @@ class ScalarChecker {
     const bool direct_named_body = expr.kind == Expression::Kind::call &&
         !operation.callable_call && !method.scope_inputs && !method.here_group && method.here.empty();
     operation.reads_direct_body = direct_named_body && !expr.lexical_symbol_call;
-    const bool entry_invocation = !checking_context_ && direct_named_body && !expr.has_here_body() &&
-        !delayed_ && &expr != prepared_call_ && !distinct_binding_effects_.contains(*operation.callee);
-    const auto symbol_use = entry_invocation ? SymbolEffectUse::transport_only : SymbolEffectUse::all;
     // For this direct statement, the only use of Returned is to describe the
     // ignored independent Boolean value. Invocation effects are still read.
     const bool result_ignored = closing_write_effects_ && checking_instance_ &&
@@ -7435,7 +7438,7 @@ class ScalarChecker {
       operation.type = *target.result.type;
       return;
     }
-    const auto &effects = read_effects(*operation.callee, distinct_bindings, symbol_use,
+    const auto &effects = read_effects(*operation.callee, distinct_bindings, invocation_symbol_use(),
         result_ignored ? EffectUse::discarded_boolean_result : EffectUse::all,
         operation.reads_direct_body ? &expr : nullptr);
     for (size_t i = 0; i < views.size(); ++i) {
@@ -16565,8 +16568,7 @@ class ScalarChecker {
         if (const auto role = signature->inputs[i].owner; role)
           require_here_owner(one_owner(views[i]), here_formal_owner(*role), operation.argument(expr, i + offset).at);
       }
-    const auto symbol_use = expr.kind == Expression::Kind::perform ? SymbolEffectUse::none :
-        checking_instance_ ? SymbolEffectUse::all : SymbolEffectUse::transport_only;
+    const auto symbol_use = expr.kind == Expression::Kind::perform ? SymbolEffectUse::none : invocation_symbol_use();
     auto [effects, closed] = callable_effects(contract, arguments,
         operation.invokes_here ? std::optional{std::set<size_t>{}} : operation.callable_choices,
         symbol_use);
@@ -20597,7 +20599,7 @@ class ScalarChecker {
           }
           operation.symbol = id; operation.operand_type = operation.type; operation.type = Type::void_type;
           operation.publishes_effect = !cancelled;
-          if (checking_instance_ && !cancelled && lexical_.live)
+          if (tracks_ordinary_symbol_uses() && !cancelled && lexical_.live)
             lexical_.symbols.update(id, [](auto &facts) { facts.bound = true; });
           break;
         }
@@ -20610,7 +20612,7 @@ class ScalarChecker {
           fail(expr.at, "effect value does not satisfy the declared symbol type");
         operation.operand_type = *symbol.type;
         operation.type = source == Type::never ? Type{Type::never} : Type{Type::void_type};
-        if (checking_instance_ && !cancelled && source != Type::never && lexical_.live)
+        if (tracks_ordinary_symbol_uses() && !cancelled && source != Type::never && lexical_.live)
           lexical_.symbols.update(*operation.symbol, [](auto &facts) { facts.bound = true; });
       } else {
         if (expr.kind == K::symbol && symbol.type->kind == Type::procedure)
