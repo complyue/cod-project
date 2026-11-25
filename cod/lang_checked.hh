@@ -20193,8 +20193,7 @@ class ScalarChecker {
         operation.predicate = identity_predicate(left, right);
         if (expr.text == "is not") operation.predicate = predicate(Predicate::Kind::negation, operation.predicate);
       } else lexical_.live = false;
-      operations[&expr] = operation;
-      return operation.type;
+      return operations.insert_or_assign(&expr, std::move(operation)).first->second.type;
     }
     switch (expr.kind) {
     case K::integer: case K::real: operation = literal(expr); break;
@@ -22067,15 +22066,15 @@ class ScalarChecker {
         prepared_call_ = expr.children.front().get();
         const auto completed = child(0);
         prepared_call_ = prepared;
-        const auto &call = operations.at(expr.children.front().get());
+        auto &call = operations.at(expr.children.front().get());
+        auto invocation = std::exchange(call.invocation, {});
         if (completed == Type::never) { operation.type = Type::never; break; }
         require_deferred_group_result(expr, completed, call.view);
-        if (!call.invocation.empty()) {
-          for (const auto &[reason, effects] : call.invocation) {
-            auto invoked = effects;
+        if (!invocation.empty()) {
+          for (auto &[reason, effects] : invocation) {
             const Completion completion{reason};
-            if (completion.exception()) invoked.thrown = {completion.category()};
-            summary.paths.push_back({0, completion, 0, std::move(invoked)});
+            if (completion.exception()) effects.thrown = {completion.category()};
+            summary.paths.push_back({0, completion, 0, std::move(effects)});
           }
         } else summary.paths.push_back({0, {0, false}, 0, cleanup_.preserve_pending({})});
       }
@@ -22141,8 +22140,7 @@ class ScalarChecker {
     if (operation.type == Type::never) lexical_.live = false;
     if (operation.view && !operation.selection_identity) operation.selection_identity = new_selection_identity();
     operation.discarded_view = discard_view && operation.view;
-    operations[&expr] = operation;
-    return operation.type;
+    return operations.insert_or_assign(&expr, std::move(operation)).first->second.type;
   }
 
   Type check_loop_body(const Expression &body, CheckedInstance *instance,
