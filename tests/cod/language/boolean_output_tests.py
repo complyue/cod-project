@@ -57,6 +57,37 @@ case('alias_same_input_output', definitions=BORROW, setup='val ok<-p is not null
 case('failure_postcondition', definitions=SET.replace(')->void',',ptr other:i64 in O)->void throws NullPointerException').replace('out<-p is not null;', 'out<-p is not null;other;'), work='try{set(ok,p,q);}catch(e:const NullPointerException){};')
 case('loop_call', work='for(i in 0u64..3u64){set(ok,p);};')
 
+BYTE_FAILURE = """using symbol "std:io" @print;
+using "std:text-storage" utf8_byte;
+using "std:exceptions" IndexOutOfBoundsError;
+proc update(ready:bool in O, move_before_read:bool, index:u64) -> bool where {owner O} {
+    if (move_before_read) { ready <- true; {} } else {};
+    val byte <- utf8_byte("a", index);
+    if (!move_before_read) { ready <- true; {} } else {};
+    return byte == 97u8
+}
+
+
+proc insist(index:u64) -> i64 {
+    val ready <- false;
+    val payload <- 13;
+    ptr proof:i64 = null in here;
+    try {
+        update(ready, true, index);
+        return 1
+    } catch (error:const IndexOutOfBoundsError) {
+        if (ready) { proof = payload; };
+        return proof + 0
+    };
+}
+behave @print(insist(1u64));
+"""
+runner.CASES['byte_failure_after_guarded_write'] = (BYTE_FAILURE, 0, '13\n', '')
+runner.CASES['byte_failure_before_guarded_write'] = (
+    BYTE_FAILURE.replace('update(ready, true, index)', 'update(ready, false, index)'),
+    2, '', "checked exception 'NullPointerException' requires a covering catch or throws declaration",
+)
+
 MAYBE = 'func maybe(ref out:bool in B,flag:bool,change:bool)->void where {owner B}{if(change){out<-flag;{}}else{};}'
 for choice in ('true', 'false', 'q is not null'):
     for prepared in (False, True):

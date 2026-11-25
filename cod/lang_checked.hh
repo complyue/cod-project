@@ -215,6 +215,11 @@ class ScalarChecker {
   mutable std::set<size_t> callable_effect_consumers_;
   const Expression *extracting_leaf_primitive_ = nullptr;
   std::map<size_t, SyntaxDiagnostic> unavailable_leaf_behaviors_;
+  struct EntryBehaviorCheck {
+    const Expression *initializer = nullptr;
+    std::optional<size_t> unavailable;
+  };
+  EntryBehaviorCheck *entry_behavior_check_ = nullptr;
   struct UnavailableBodyProof {};
   const std::vector<bool> *unavailable_body_proofs_ = nullptr;
   // Physical binding distinctness refines the proof for the same checked body.
@@ -7586,6 +7591,15 @@ class ScalarChecker {
         target.result.mode == ResultMode::value && *target.result.type == Type::boolean &&
         !distinct_binding_effects_.contains(checking_context_ - 1) &&
         !distinct_binding_effects_.contains(*operation.callee);
+    if (entry_behavior_check_ && entry_behavior_check_->initializer == &expr && discard &&
+        unavailable_leaf_behaviors_.contains(*operation.callee)) {
+      // The direct entry statement has a checked signature and prepared
+      // operands. Keep its missing behavior pending while checking later
+      // independent entry items. No payload or completion fact is applied.
+      if (!entry_behavior_check_->unavailable) entry_behavior_check_->unavailable = *operation.callee;
+      operation.type = *target.result.type;
+      return;
+    }
     const auto &effects = read_effects(*operation.callee, distinct_bindings, symbols_covered,
         result_ignored ? EffectUse::discarded_boolean_result : EffectUse::all);
     for (size_t i = 0; i < views.size(); ++i) {
@@ -22406,6 +22420,12 @@ class ScalarChecker {
     checking_context_ = 0;
     checking_method_ = nullptr;
     checking_instance_ = nullptr;
+    EntryBehaviorCheck behavior;
+    struct EntryBehaviorScope {
+      EntryBehaviorCheck *&active;
+      ~EntryBehaviorScope() { active = nullptr; }
+    } scope{entry_behavior_check_};
+    if (!unavailable_leaf_behaviors_.empty()) entry_behavior_check_ = &behavior;
     check_flow([&](bool proving) {
       begin_check(program_.entry_storage, program_.entry_bindings, program_.entry, proving);
       AbruptFlow entry_flow{1, {}};
@@ -22414,10 +22434,15 @@ class ScalarChecker {
       for (const auto &[module, expr] : program_.initializers) {
         const ModuleLookup lookup(module_, module);
         lexical_.scopes.front().bindings.swap(bindings[module_]);
-        if (check(*expr, nullptr, program_.entry, true, true) == Type::never) lexical_.live = false;
+        behavior.initializer = expr;
+        const auto type = check(*expr, nullptr, program_.entry, true, true);
+        // After a blocked statement, the following checks have no reaching
+        // execution facts to use. The pending diagnostic prevents publication.
+        if (type == Type::never || behavior.unavailable) lexical_.live = false;
         for (const auto &[name, id] : lexical_.scopes.front().bindings) module_names().values.insert(name);
         lexical_.scopes.front().bindings.swap(bindings[module_]);
       }
+      if (behavior.unavailable) require_leaf_behavior(*behavior.unavailable);
       CheckedOperation entry_result; entry_result.type = lexical_.live ? Type{Type::void_type} : Type{Type::never};
       finish_scope(entry_result, entry_flow, nullptr, 0, program_.initializers.empty() ? Location{} : program_.initializers.front().expression->at);
       if (validating_ && lexical_.live)
