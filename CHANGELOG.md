@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Bound native reentry at the protected relative-path acquisition
+
+<a id="k-seed-protected-path-reentry-20261125"></a>
+**K-SEED-PROTECTED-PATH-REENTRY-20261125.** The [implementation review](design/ImplementationArchitecture.md#native-reentry-and-protected-path-acquisition) continues D-ARCH-REVIEW r191→192 under the [family replay](#h-perform-family-capture-20261125) and [native callable-kind](#h-native-callable-kind-20261123) decisions. A linked native procedure with only a scalar operand reenters a CoD procedure and reads its dynamic binding. The next bounded collector scope follows the real `PathOwner` acquisition, relative path preparation and cleanup in `a9804e30:applications/cod-booter/src/ModuleGraph.cod`. Opaque native reentry retains a located translation limit.
+
 ## 2026-11-25 — Apply native function permissions to the exported source revision loan
 
 <a id="k-seed-source-use-function-20261125"></a>
