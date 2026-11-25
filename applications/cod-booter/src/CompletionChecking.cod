@@ -126,7 +126,7 @@ export func unproved_caught_handoff() -> u8 { return 11u8; }
 func unproved_nonnull_argument() -> u8 { return 12u8; }
 func unproved_nonnull_binding() -> u8 { return 16u8; }
 export func unsupported_case_transfer() -> u8 { return 18u8; }
-func unproved_byte_completion() -> u8 { return 19u8; }
+func unproved_byte_completion() -> u8 { return 20u8; }
 
 func initialize_site(sites:CompletionSites in X, at:u64) -> void where {owner X} {
     sites[at].event <- 0u8;
