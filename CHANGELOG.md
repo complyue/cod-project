@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Collect precise gains only when needed
+
+<a id="h-measure-gains-when-needed-20261124"></a>
+**H-MEASURE-GAINS-WHEN-NEEDED-20261124.** The project user directed agents to proceed with well-founded improvements and avoid spending delivery time collecting precise gains without a practical use. The [project rule](AGENTS.md#when-to-measure-an-improvement) applies across tasks. D-ARCH-REVIEW r118→119 carries forward the behavioral acceptance for seed proof reuse and symbol snapshots under P-682/P-683 and supersedes routine profiling and paired cold builds in `b391f311:design/ImplementationArchitecture.md`. Established memory limits retain their acceptance checks. [Design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50)
+
 ## 2026-11-24 — Review the seed’s first-demand union of symbol requirements
 
 <a id="k-seed-first-demand-symbol-union-20261124"></a>
