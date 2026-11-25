@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Separate payload-read diagnostics from seed type evidence
+
+<a id="k-seed-type-evidence-payload-reads-20261125"></a>
+**K-SEED-TYPE-EVIDENCE-PAYLOAD-READS-20261125.** D-ARCH-REVIEW r161→162 continues P-682/P-683 under the [trusted-source decision](#h-trusted-seed-translation-20261125). At `79140a20:cod/lang_checked.hh`, the [review](design/ImplementationArchitecture.md#removing-payload-read-diagnostics-from-type-evidence) clears the physical-read diagnostic and its propagation through product call summaries. Structural selection, result and completion evidence still serve translation. The [fixture reference](tests/cod/language/README.md) r482→483 identifies historical checked-seed expectations for these reads.
+
 ## 2026-11-25 — Clarify which writes a caller must prove
 
 <a id="k-ordinary-ref-write-facts-20261125"></a>
