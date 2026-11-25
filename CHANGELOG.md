@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Check the manually staged project example with the seed
+
+<a id="k-manual-project-example-20261125"></a>
+**K-MANUAL-PROJECT-EXAMPLE-20261125.** D-03r3 continues the [manual input decision](#h-manual-bootstrap-packages-20261125). The seed built from `2bd8b365:cod/lang_modules.hh` printed 42 for the [two-file project](design/CodProjectStructureAndPkgMgmt.md#directory-layout) after adding the bootstrap reader’s top-level statement terminator to the example at `fed05fd3:design/CodProjectStructureAndPkgMgmt.md`. A second staged provider located both competing paths and preserved prior IR. These are seed observations.
+
 ## 2026-11-25 — Retire codp and stage bootstrap dependencies in each project
 
 <a id="h-manual-bootstrap-packages-20261125"></a>
