@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r144 the [per-origin state review](../CHANGELOG.md#k-seed-completion-input-layers-20261125) continues the [r141 seed migration](#seed-checker-migration-and-performance-acceptance) under P-682/P-683. It covers the lifetime of completion-input snapshots and the existing cleanup join.
+
 At r143 the [archival disposition](../CHANGELOG.md#k-shilos-dispatch-experiment-archive-20261125) continues the [shilos retirement](#retiring-shilos) under [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), P-682/P-683. The archived experiment and the stock language runner have separate dispositions.
 
 At r142 the [lexical declaration map review](../CHANGELOG.md#k-seed-lexical-declaration-layers-20261125) clears a representation change within the [r141 seed migration](#seed-checker-migration-and-performance-acceptance) under P-682/P-683. Its acceptance covers lexical lookup and join behavior. Both seed-wide completion conditions remain open.
@@ -587,6 +589,14 @@ In `LexicalState::Scope`, share the append-only map from declared spelling to bi
 The current join starts from the left state. For each aligned scope it checks every right-hand name for a conflicting binding ID, including on a departing arm, before merging availability. A common immutable ancestor proves its entries identical because neither descendant can overwrite them. Visit the right-hand additions beyond that ancestor in global spelling order and compare them against the **entire** left view. Without proved shared ancestry, visit the entire right view. Keep ordered traversal across layers for capture and retirement, including outer-to-inner capture across scopes. Keep traversal views alive through their last use and maintain sibling isolation while merging into the result.
 
 Mainline can implement and verify this unit within the r141 migration. Exercise empty and populated forks, identical and differing binding IDs, shadowing, skipped or exiting arms, nested cleanup, and independent module-entry name tables. In particular, two conflicting names introduced in different layers must still report the same first spelling as the ordered map. Check focused runtime results, original diagnostics, preserved outputs on rejection and matching generated provider and LLVM bytes for the unmodified booter Lexer. The performance comparison follows the two seed-wide completion conditions above.
+
+#### Sharing per-origin completion inputs
+
+`LexicalState::input_facts` holds initialization, selection, exception and deferred-queue facts for each completion origin. Share these rows across snapshots. Only edit a row owned exclusively by the current private layer. Sharing an ancestor can give several states access to its row even when the row has only one direct owner. Two keys remapped to the same row also need independent edits. Limit mutable access to a single operation. When seeding callable entry, keep the current origin-zero updates through owner, capture and parameter binding, and end mutable access before any helper can snapshot or replace the table.
+
+Preserve the distinct operations on the existing map: default construction seeds origin zero, clearing empties the table, checked lookup requires an existing key, and an inserting lookup may create a row with the ordinary queue defaults. Visit origins in ascending numeric order. Remapping onto the same destination keeps the first eligible source in that order. At scope exit read the selected origin and queue from the incoming path, retain the row **after** applying its effects, and reset only the drained scope’s queue. Keep the immutable source and the other exits observable. At join, even identical rows or equal queue IDs can accompany different branch readiness or conditions. Preserve the existing per-branch checks and cleanup equation construction order.
+
+Check empty and populated states, isolation after a remap or sibling write, numeric origins 2 and 10 mapping to one destination, and the same queue reached with differing saved-target readiness. The real deferred-release workload and focused normal, handler, nested-queue, loop and rejecting controls must retain their observable behavior, original locations and applicable artifacts. Account separately for nested copies on a changed row and the remaining lexical-state copies. The [seed-wide performance gate](#seed-checker-migration-and-performance-acceptance) still applies.
 
 ### Reducing seed bootstrap time in dynamic-symbol checks
 
