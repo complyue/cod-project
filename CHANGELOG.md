@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Name the seed executable and the booter entry
+
+<a id="h-bootstrap-tool-and-entry-names-20261125"></a>
+**H-BOOTSTRAP-TOOL-AND-ENTRY-NAMES-20261125.** In the [entry naming discussion](codex://threads/01a212d2-a272-7611-bc6b-775c6d307521) the project user selected `src/__main__.cod` for the booter and `cod-seed` for the seed executable, and requested implementation. At `23796b73:applications/cod-booter/Makefile` the inputs still use `bin/cod` and `src/CompilerCLI.cod`. D-20-BOOTSTRAP r38→39 applies the reserved local entry name from [H-499](#h-499) to the single executable’s [three operations](applications/cod-booter/README.md#bootstrap-executable-and-entry-names). D-ARCH-REVIEW r154→155 records [build and lookup migration](design/ImplementationArchitecture.md#naming-the-bootstrap-executables-and-source-entry). Explicit source-path invocation continues during bootstrap.
+
 ## 2026-11-25 — Separate the receiver result query from callback execution
 
 <a id="k-seed-here-query-20261125"></a>

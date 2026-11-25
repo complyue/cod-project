@@ -4,6 +4,8 @@ Roadmap revision: 38 · Recorded: 2026-11-25 · Phase: initial seed delivery thr
 
 ## Design authority
 
+At r39 the [project user’s naming decision](../../CHANGELOG.md#h-bootstrap-tool-and-entry-names-20261125) names the seed executable and applies the reserved entry name to this application. [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap) continues the r38 stage responsibilities. [D-15-ENTRY](../../design/DesignAuthorityRegistry.md#d-15-entry) governs the entry identity.
+
 At r38 the [project user’s seed decision](../../CHANGELOG.md#h-trusted-seed-translation-20261125) assigns [translation of trusted booter source](#trusted-source-and-the-seed) to the C++ seed and static soundness checking to the CoD booter. [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap) and [D-20-DIAGNOSTICS](../../design/DesignAuthorityRegistry.md#d-20-diagnostics) revise P-642/P-643 and P-627/P-628 for this division of work. The booter’s readable source, its shared C interface and the observable behavior of valid programs carry forward. The stage policy below defines which checks apply throughout the entry’s fused world.
 
 At r37 the [repository-name correction](../../CHANGELOG.md#h-package-repository-name-20261125) continues the r36 roadmap. The [manual package input decision](../../CHANGELOG.md#h-manual-bootstrap-packages-20261125) replaces the bootstrap package manager with the [project-local layout](../../design/CodProjectStructureAndPkgMgmt.md#directory-layout). The seed and booter apply the same module lookup. Package management is future work in `e-wrks/cod`.
@@ -69,6 +71,10 @@ Initial delivery requires the seed to reproducibly build and run the first CoD-w
 Representative source and invalid-input cases must behave as specified, and the booter source must pass the readability review. The booter's first self-build is a downstream milestone. DBMR persistence and broader LLVM binding coverage are separate from initial delivery.
 
 Build the initial booter with statically linked C providers generated from resolved CoD interface declarations. The seed and booter derive equivalent C contracts, including native handle constructor and destructor stubs. Separate handwritten C supplies the operations and their resource protocols. Calls in both directions use synchronous here semantics. CoD scopes the ownership of source, scratch and LLVM resources. The object writer can install the LLVM session as an owning effect for procedures that need it. See the [native handle and C record rules](docs/LLVMInterop.md#native-handles-and-c-records) for borrowed values and by-value records.
+
+### Bootstrap executable and entry names
+
+The selected name for the C++ build output is `bin/cod-seed` (`bin/cod-seed.exe` on Windows). That compiler translates `applications/cod-booter/src/__main__.cod` to build the single `cod-booter` executable. Its launcher dispatches compilation, declaration checking and provider generation to three procedures in that entry module. The bootstrap commands continue to accept explicit source paths. The build at `23796b73` still uses `bin/cod` and `src/CompilerCLI.cod`. [Implementation and cutover](../../design/ImplementationArchitecture.md#naming-the-bootstrap-executables-and-source-entry)
 
 ### Trusted source and the seed
 

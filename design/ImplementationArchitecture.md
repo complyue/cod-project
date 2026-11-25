@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r155 the [bootstrap names review](../CHANGELOG.md#h-bootstrap-tool-and-entry-names-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) and the [seed-first work order](#seed-checker-migration-and-performance-acceptance). It applies [D-15-ENTRY](DesignAuthorityRegistry.md#d-15-entry) to the source root built by the seed.
+
 At r154 the [supplied callback query review](../CHANGELOG.md#k-seed-here-query-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), P-682/P-683 and the trusted-source cutover. The [callable result rules](CallableResultInference.md#results-of-proc-func-and-here-bodies) govern callback feedback and the [seed work order](#seed-checker-migration-and-performance-acceptance) governs acceptance.
 
 At r153 the [deferred coverage review](../CHANGELOG.md#k-seed-deferred-coverage-removal-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), P-682/P-683 and the r149 trusted-source contract. [D-17-DEFER-DISPATCH](DesignAuthorityRegistry.md#d-17-defer-dispatch) governs the ordering and handling of actual exceptions. The r152 seed-first work order governs acceptance.
@@ -635,6 +637,12 @@ For an ordinary `typeof(receiver(...) {{ ... }})` query, `query_here_call` obtai
 Remove the coverage-only root flag and the throw-site spelling index after their final diagnostic use. Retain actual exception construction, source location and exit recording. Actual supplied callbacks require a frame. Bound native calls branch before the ordinary query and their bridge transports normal and protected completions.
 
 Use current `make typeof(...)` syntax in the small seed acceptance inputs. The queried callback containing a print must leave that print unexecuted, with the selected receiver result available to the initializer. Check distinct group feedback and receiver result types, a genuinely invoked callback whose receiver catches the exception, and the existing valid native translation outputs. The earlier raw fixtures using `make local typeof(...)` stopped in parsing.
+
+#### Naming the bootstrap executables and source entry
+
+Use `cod-seed` for the C++ compiler and `cod-booter` for its compiled application. Move the CoD entry from `applications/cod-booter/src/CompilerCLI.cod` to `applications/cod-booter/src/__main__.cod`. Keep the three C entry procedures in that file and their existing launcher contracts. Source locations and build dependencies follow the moved file. Historical paths and commands tied to a particular revision identify the original artifacts.
+
+Mainline owns the naming cutover. Update the seed tool definition, build and install references, staged-tool readiness, active runner lookups and command examples together. The standalone Makefile selects the new entry and defaults to the renamed executable while honoring `COD_SEED` and the library under `lib/cod`. Check the renamed tool on a small translation and inspect the normal Make plan for the seed path, entry path and final executable. Reuse the next scheduled full seed workload for the complete generation. The seed-first work order and existing build authorization apply.
 
 #### When parallel module processing would help
 
