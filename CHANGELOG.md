@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Carry the seed migration scope through review
+
+<a id="h-seed-migration-completion-20261125"></a>
+**H-SEED-MIGRATION-COMPLETION-20261125.** In the [seed performance discussion](codex://threads/01a21256-bf46-7801-ade0-9f396b479fa1) the project user specified “layering改造应该把能覆盖掉的地方都覆盖掉” and “phase rule必须全面应用了再测性能，跟layering改造一样”. Compile time takes priority. An initial RAM increase is acceptable and effective heap reuse follows separately. D-ARCH-REVIEW r140→141 applies P-682/P-683 to the [complete seed scope](design/ImplementationArchitecture.md#seed-checker-migration-and-performance-acceptance). It supersedes the six-table limit for that objective at `fbede9ed:design/ImplementationArchitecture.md`, preserves the [per-kind phase rule](#h-completed-callee-behavior-20261125), and makes the [review responsibility](AGENTS.md#review-scope-and-completion) explicit.
+
 ## 2026-11-25 — Fix the implicit OO receiver binding at entry
 
 <a id="h-fixed-self-binding-20261125"></a>

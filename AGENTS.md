@@ -28,6 +28,10 @@ Development mainline owns implementation, regression fixes, the compatibility ba
 
 For example, collect a callee’s guarded requirements and effects on each exit. Caller checking can then apply that contract to the actual arguments and produce call-site results. **Restarting the same pass from entry on a local dependency change is an engineering anti-pattern. Reject it in new designs.** If a concrete workload appears to require collecting and using the same fact kind in one phase, bring the dependency, alternatives and trade-offs to the project user and obtain an explicit decision before making an exception. [Seed checker counterexample](design/ImplementationArchitecture.md#restarting-a-pass-from-entry) · [Callee behavior](design/ImplementationArchitecture.md#consuming-completed-callee-behavior)
 
+## Review scope and completion
+
+When the user sets a rule for a whole component, carry its scope, objective and completion conditions through each implementation batch. Keep known uncovered paths in the active work. A scoped correctness result closes only that batch. Design review checks the remaining coverage before accepting completion, changing priority or authorizing a performance comparison. If a concrete case would require narrowing the user’s rule, bring it to the user. [Application to seed bootstrap time](design/ImplementationArchitecture.md#seed-checker-migration-and-performance-acceptance)
+
 ## When to measure an improvement
 
 Proceed with a well-founded, maintainable improvement once its implementation scope is cleared. Verify the behavior that matters for delivery. Collect precise benefit figures only when the user requests them, a concrete decision depends on them, or an explicit acceptance requirement needs them. Use evidence already available from normal work first. Reserve additional instrumentation and benchmark runs for questions that evidence cannot answer.
