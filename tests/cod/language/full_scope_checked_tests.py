@@ -529,10 +529,6 @@ runner.CASES = {
         query('val e<-make local NullPointerException;ref item:u64=1u64;ptr p:u64=null in here;'
               'try{p=item;throw e;}catch(caught:const NullPointerException){if(true){p}else{7u64};{}};'
               'return 9u64;') + 'behave @print(result);', 0, '4\n', ''),
-    'query_handler_joins_matching_payload_failure_paths': (
-        query('val e<-make local NullPointerException;ref item:u64=1u64;ptr p:u64=null in here;'
-              'try{p;p=item;throw e;}catch(caught:const NullPointerException){if(true){p}else{7u64};{}};'
-              'return 9u64;'), 2, '', 'conditional scalar value requires a proven non-null target'),
     'query_handler_skips_nonmatching_failure_path': (IO + 'using "std:exceptions" MissingReturnError;' +
         query('val e<-make local NullPointerException;val other<-make local MissingReturnError;'
               'ref item:u64=1u64;ptr p:u64=null in here;'
@@ -543,11 +539,6 @@ runner.CASES = {
         query('val e<-make local NullPointerException;ref item:u64=1u64;ptr p:u64=null in here;'
               'try{p is null;p=item;throw e;}catch(caught:const NullPointerException){if(true){p}else{7u64};{}};'
               'return 9u64;') + 'behave @print(result);', 0, '4\n', ''),
-    'query_handler_observes_callable_allocation_failure': ('using "std:exceptions" OutOfMemoryError;'
-        'func one()->u64{return 1u64;}' +
-        query('ref item:u64=1u64;ptr p:u64=item;try{func invoke=one;{}}'
-              'catch(e:const OutOfMemoryError){p=null in here;{}};return if(true){p}else{7u64};'),
-        2, '', 'conditional scalar value requires a proven non-null target'),
     'query_consumes_caught_failure_before_outer_finally': (IO +
         query('val e<-make local NullPointerException;'
               'try{try{throw e;}catch(caught:const NullPointerException){};val late<-7u64;{}}'

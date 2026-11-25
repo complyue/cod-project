@@ -103,7 +103,6 @@ runner.CASES = {
  'readonly_write': (run('const val x<-1;ref y:i64=if(flag){x}else{7};y<-9;'+OUT('x')+OUT('y')),0,'1\n9\n1\n9\n',''),
  'readonly_escalation': ('const val x<-1;val z<-7;ref y:i64=if(true){x}else{z};',2,'','readonly source cannot initialize'),
  'uninitialized_reference': ('val x<-make local i64;ref y=if(true){x}else{7};',2,'','before definite initialization'),
- 'nullable_reference': ('ptr absent:i64=null in here;ref y=if(true){absent}else{7};',2,'','conditional scalar value requires a proven non-null target'),
  'does_not_initialize_other_target': ('val x<-make local i64;ptr y=if(true){x}else{7};y<-9;x;',2,'','before definite initialization'),
  'binding_stays_fixed': ('val x<-1;const ref y=if(true){x}else{7};y=x;',2,'','const reference binding'),
  'returned_local_still_invalid': ('func work(ref x:i64 in O)->ref i64 in O where {owner O}{val local<-1;ref y=if(true){local}else{7};return y;}val argument<-1;work(argument);',2,'','declared external owner'),

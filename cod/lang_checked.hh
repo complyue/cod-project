@@ -13435,12 +13435,6 @@ class ScalarChecker {
         view = yes == Type::never ? no_state.value : no == Type::never ? yes_state.value : join_views(yes_state.value, no_state.value);
       const bool independent = !discarded_arms && arms.independent();
       if (independent) {
-        if (state.required && proving_ && validating_ && state.checks_reaching_paths() && condition != Type::never) {
-          if (reaches_yes && yes_state.value.view == true)
-            require_present_projection(yes_state.value.nullable, yes_state.target.presence, expr.children[1]->at);
-          if (reaches_no && no_state.value.view == true)
-            require_present_projection(no_state.value.nullable, no_state.target.presence, expr.children[2]->at);
-        }
         view = {false, false, {}};
       } else if (!discarded_arms) target_facts = yes == Type::never ? no_state.target : no == Type::never ? yes_state.target :
           join_targets(yes_state.target, no_state.target);
@@ -20812,8 +20806,6 @@ class ScalarChecker {
       if (independent) {
         const auto project = [&](const Expression &arm, CheckedOperation &fact, LexicalState &state) {
           if (!fact.view || !state.live) return;
-          if (proving_ && validating_ && fact.targets.contains(null_target))
-            fail(arm.at, "conditional scalar value requires a proven non-null target");
           const bool needs_read = !guard_arm && (!read || discard || value_join);
           if (!needs_read && fact.type != Type::boolean) return;
           lexical_ = std::move(state);

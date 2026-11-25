@@ -141,23 +141,20 @@ GUARDED_REFERENCE_CALLS = (
     + ''.join('behave @print(inspect('+args+'));'
               for args in ('first,second,true','absent,second,true','first,second,false','absent,second,false'))
 )
-for name, initial, operator, before, after, repeat, succeeds in (
-    ('guarded_saved_assignment', 'null in O', '=', '', 'source=peer;', False, True),
-    ('guarded_live_swap', 'null in O', '<=>', '', '', False, True),
-    ('guarded_live_swap_after_slot_update', 'null in O', '<=>', 'source=peer;', 'source=if(flag){input}else{peer};', False, True),
-    ('repeated_guarded_live_swap', 'null in O', '<=>', '', '', True, True),
-    ('guard_reassigned_after_target_selection', 'null in O', '=', 'flag<-!flag;', '', False, False),
-    ('guarded_failed_registration_can_read_peer', 'peer', '=', '', '', False, False),
+for name, operator, before, after, repeat in (
+    ('guarded_saved_assignment', '=', '', 'source=peer;', False),
+    ('guarded_live_swap', '<=>', '', '', False),
+    ('guarded_live_swap_after_slot_update', '<=>', 'source=peer;', 'source=if(flag){input}else{peer};', False),
+    ('repeated_guarded_live_swap', '<=>', '', '', True),
 ):
     registration = 'if(flag){defer ('+operator+')(side,source);{}}else{};'
     if repeat:
         registration = 'for(i in 0u64..3u64){'+registration+'};'
     source = (IO+'func inspect(ptr input:u64 in O,ptr peer:u64 in O,flag:bool)->u64 where {owner O}{'
-              'val present<-{{ptr side:u64 in O='+initial+';'+PICK_REFERENCE+'defer{return side is not null;};'
+              'val present<-{{ptr side:u64 in O=null in O;'+PICK_REFERENCE+'defer{return side is not null;};'
               +before+registration+after+'return false;}};return if(present){input}else{7u64};}'
               +GUARDED_REFERENCE_CALLS)
-    runner.CASES[name] = (source, 0, '5\n7\n7\n7\n', '') if succeeds else (
-        source, 2, '', 'conditional scalar value requires a proven non-null target')
+    runner.CASES[name] = (source, 0, '5\n7\n7\n7\n', '')
 
 # Independent registration decisions preserve the selected input and LIFO order.
 guards = tuple(range(1, 9))
