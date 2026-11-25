@@ -2450,19 +2450,16 @@ class ScalarChecker {
     const Expression *source;
     ViewEvidence view;
     TargetPresence presence;
-    bool initialized;
     auto operator==(const CaseProjectionEvidence &) const -> bool = default;
   };
   struct CaseBreakEvidence {
     std::optional<Type> type;
     ViewEvidence view;
     std::optional<CaseProjectionEvidence> projection;
+    // Preserve the distinction between pending exits before finally is applied.
+    bool projection_initialized = true;
     auto operator==(const CaseBreakEvidence &) const -> bool = default;
   };
-  static CaseProjectionEvidence case_projection_evidence(const Expression &source, const ViewEvidence &view,
-                                                          const TargetEvidence &target, const TypeEvidenceState &state) {
-    return {&source, view, target.presence, !state.checks_initialization() || target.places.empty() || target.initialized};
-  }
   struct TypeEvidenceExits {
     struct Path {
       std::set<size_t> reasons;
@@ -9742,7 +9739,7 @@ class ScalarChecker {
         const auto arm_view = arm.value;
         auto arm_target = arm.target;
         if (state.required && arm_view.view == true)
-          projections.push_back(case_projection_evidence(body, arm_view, arm_target, arm));
+          projections.push_back({&body, arm_view, arm_target.presence});
         leave_receiving(arm);
         complete(value, arm_view, std::move(arm_target), std::move(arm), body.at);
       }
@@ -9754,11 +9751,8 @@ class ScalarChecker {
     if (joined_view && joined_view->view == true && result && *result != Type::void_type) {
       if (joined_view->mixed_view) {
         if (value_projection) *value_projection = true;
-        if (state.required && proving_ && validating_) for (const auto &projection : projections) {
+        if (state.required && proving_ && validating_) for (const auto &projection : projections)
           require_present_projection(projection.view, projection.presence, projection.source->at);
-          if (!projection.initialized)
-            fail(projection.source->at, "case scalar result read before definite initialization of every possible target");
-        }
       } else {
         view.read_only = joined_view->read_only;
         view.view = true;
@@ -13502,11 +13496,12 @@ class ScalarChecker {
         TypeReturned prepared;
         if (view.view == true && state.selections.tracking)
           prepared.borrowed = TypeBorrowedReturn::capture(state.target, state.selections);
-        std::optional<CaseProjectionEvidence> projection;
-        if (state.required && view.view == true)
-          projection = case_projection_evidence(*expr.children.front(), view, state.target, state);
-        merge_type_exits(*state.exits, {Completion::case_break}, state, std::move(prepared),
-                         CaseBreakEvidence{type, view, projection});
+        CaseBreakEvidence result{type, view, {}};
+        if (state.required && view.view == true) {
+          result.projection.emplace(CaseProjectionEvidence{expr.children.front().get(), view, state.target.presence});
+          result.projection_initialized = !state.checks_initialization() || state.target.places.empty() || state.target.initialized;
+        }
+        merge_type_exits(*state.exits, {Completion::case_break}, state, std::move(prepared), std::move(result));
       }
       return Type::never;
     }
