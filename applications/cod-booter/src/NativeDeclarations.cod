@@ -1508,8 +1508,9 @@ func prepare_source_byte_read(nodes:const ExprNodes in N, names:const NameBindin
         views[at] <- make ReadonlyByteRead {
             array_site <- index.target; index <- index.index; formal <- formal;
             owner_site <- proof.owner_site; type_module <- proof.type_module; type_identity <- proof.type_identity
-        }
-    }
+        };
+        return
+    };
 }
 
 export func read_acquisition_failure(
