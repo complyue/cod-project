@@ -661,9 +661,11 @@ class ScalarChecker {
   std::map<const Expression *, size_t> checked_scope_owners_;
   bool proving_ = false;
   bool validating_ = false;
+  bool exporting_effects_ = true;
   CallEffects observed_;
   CallEffects &observe_effects() {
     if (applying_scalar_) throw std::logic_error("scalar application cannot collect a callable contract");
+    if (!exporting_effects_) throw std::logic_error("preliminary body traversal cannot export a callable contract");
     return observed_;
   }
   std::vector<std::set<size_t>> possible_targets_, possible_null_sources_, target_dependencies_;
@@ -841,7 +843,7 @@ class ScalarChecker {
       if (validating_) implementation_gap(at, "allocating into a caller owner through a higher-order here receiver");
       return;
     }
-    observe_effects().lexical_allocations.insert(null_target - 1 - *actual);
+    if (exporting_effects_) observe_effects().lexical_allocations.insert(null_target - 1 - *actual);
   }
   CheckedOperation::ArrayAllocator array_allocator(std::optional<size_t> actual, const Location &at) const {
     using Allocator = CheckedOperation::ArrayAllocator;
@@ -872,7 +874,7 @@ class ScalarChecker {
     implementation_gap(at, "array allocation without a proved lexical or regional allocator");
   }
   void observe_array_allocation(const CheckedOperation::ArrayAllocator &allocator) {
-    if (lexical_.live && allocator.kind == CheckedOperation::ArrayAllocator::input)
+    if (exporting_effects_ && lexical_.live && allocator.kind == CheckedOperation::ArrayAllocator::input)
       observe_effects().array_allocations.insert(allocator.place);
   }
   size_t owner_lifetime_scope(size_t owner) const {
@@ -4545,10 +4547,11 @@ class ScalarChecker {
     return checking_method_ && checking_method_->source->implicit_scope;
   }
   void require_local_read(const CallEffects::ReadSite &site, const CleanupEquations::ConditionClauses &when) {
+    if (!exporting_effects_ && !validating_) return;
     if (in_immediate_scope()) {
       auto missing = external_conditions(when, true);
       if (!CleanupEquations::unconditional(missing)) {
-        if (!missing.empty()) observe_effects().reads.insert({site, std::move(missing)});
+        if (exporting_effects_ && !missing.empty()) observe_effects().reads.insert({site, std::move(missing)});
         return;
       }
     }
@@ -4567,7 +4570,7 @@ class ScalarChecker {
     if (!delayed_ && !checking_instance_ && validating_)
       fail(at, "cannot prove an installed binding for symbol '" + program_.symbols[symbol].name + "'");
     state.required_symbols.insert(symbol);
-    if (!delayed_) observe_effects().symbols.insert(symbol);
+    if (!delayed_ && exporting_effects_) observe_effects().symbols.insert(symbol);
   }
   size_t initialization_frame() const { return deferred_action_ ? CleanupEquations::action_frame(*deferred_action_) : 0; }
   void apply_effects(LexicalState &state, CleanupEquations::Effects &effects, const Location &at) {
@@ -6042,11 +6045,10 @@ class ScalarChecker {
   void note_abrupt(const Location &at, ExceptionFacts exceptions = {}, Completion completion = {2, false},
                    bool immediate_scope_failure = false, std::optional<HereExit> here_exit = {},
                    bool receiver_transfer_pending = false, const Expression *case_result = nullptr) {
-    if (!lexical_.live) return;
+    if (!lexical_.live || (!abrupt_ && (!proving_ || !exporting_effects_))) return;
     const auto categories = exceptions.possibilities();
     if (!categories.empty()) completion.reason = Completion::failure(*categories.begin()).reason;
     if (!abrupt_) {
-      if (!proving_) return;
       if (here_exit == HereExit::return_supplier) observe_effects().returns_from_supplier = true;
       if (here_exit == HereExit::break_call) observe_effects().breaks_here_call = true;
       if (checking_method_ && (checking_method_->source->implicit_scope || checking_method_->here_group))
@@ -6068,7 +6070,7 @@ class ScalarChecker {
   }
   void note_declared_root() {
     if (abrupt_) { abrupt_->declared_root = true; return; }
-    if (proving_ && checking_method_ && (checking_method_->source->implicit_scope || checking_method_->here_group))
+    if (proving_ && exporting_effects_ && checking_method_ && (checking_method_->source->implicit_scope || checking_method_->here_group))
       observe_effects().scope_checked_failures.insert(0);
   }
   void refine_test(const CheckedOperation::NullTest &test, bool value) {
@@ -22246,8 +22248,15 @@ class ScalarChecker {
     next_boolean_observation_ = 0; conditional_selections_.clear();
   }
 
-  template <typename Check> void check_flow(const Check &check) {
+  enum class FlowExports { every_pass, final_pass };
+  template <typename Check> void check_flow(FlowExports exports, const Check &check) {
     const bool validating = validating_;
+    struct RestoreExport {
+      bool &active;
+      bool previous;
+      ~RestoreExport() { active = previous; }
+    } restore{exporting_effects_, exporting_effects_};
+    if (exports == FlowExports::final_pass) exporting_effects_ = false;
     validating_ = false;
     check(false);
     solve_targets();
@@ -22264,6 +22273,7 @@ class ScalarChecker {
     }
     validating_ = validating;
     if (validating || loop_states_.empty()) {
+      exporting_effects_ = restore.previous;
       loop_evidence_changed_ = false;
       check(true);
       if (loop_evidence_changed_) throw std::logic_error("loop evidence changed during validation");
@@ -22280,7 +22290,7 @@ class ScalarChecker {
       ~EntryBehaviorScope() { active = nullptr; }
     } scope{entry_behavior_check_};
     if (!unavailable_leaf_behaviors_.empty()) entry_behavior_check_ = &behavior;
-    check_flow([&](bool proving) {
+    check_flow(FlowExports::every_pass, [&](bool proving) {
       begin_check(program_.entry_storage, program_.entry_bindings, program_.entry, proving);
       AbruptFlow entry_flow{1, {}};
       abrupt_ = &entry_flow;
@@ -22724,7 +22734,11 @@ class ScalarChecker {
       if (leaf) leaf_exits.push_back({reason, origin, state});
       else observe_outcome(reason, state);
     };
-    check_flow([&](bool proving) {
+    // The final proving traversal replaces discovery and loop settlement's
+    // outgoing summaries. Closure still consumes its last settling iteration.
+    const auto exports = validating_ && !instance.effects_frozen && !leaf && !scalar_exits
+        ? FlowExports::final_pass : FlowExports::every_pass;
+    check_flow(exports, [&](bool proving) {
       begin_check(instance.storage, instance.bindings, instance.operations, proving);
       for (const auto &[symbol, targets] : instance.incoming_abstract_targets)
         lexical_.symbols.update(symbol, [&](auto &facts) { facts.abstract_targets = targets; });
@@ -22920,7 +22934,10 @@ class ScalarChecker {
       refresh_input_facts(lexical_);
       AbruptFlow flow{1, {}}, outcomes{1, {}};
       abrupt_ = &flow;
-      const auto incoming = lexical_;
+      std::optional<LexicalState> capture_failure_entry;
+      if (proving && exporting_effects_ && std::ranges::any_of(instance.environment,
+              [](const auto &capture) { return capture.type.kind == Type::procedure; }))
+        capture_failure_entry = lexical_;
       CheckedOperation completed;
       const bool has_feedback = checking_method_->here_group && instance.result.type != Type::void_type;
       const auto end = checking_method_->here_group && !has_feedback
@@ -22934,8 +22951,8 @@ class ScalarChecker {
       const bool returns_void_at_end = !checking_method_->regional_initializer && method.returns_void_at_end(*instance.result.type);
       const auto completion = finish_scope(completed, flow, &outcomes, 0, method.at,
                                            method.case_scan_scope ? &case_scan : nullptr, returns_void_at_end).type;
+      abrupt_ = nullptr;
       if (scalar_exits) {
-        abrupt_ = nullptr;
         if (!proving) return;
         if (case_scan || outcomes.declared_root || (completion != Type::never && lexical_.live))
           throw std::logic_error("scalar application reached an unplanned completion");
@@ -22951,17 +22968,15 @@ class ScalarChecker {
           record_warning_key(instance.method, warned_missing_return_, &ReplayWarnings::missing_return))
         record_warning({Warning::missing_return, method.at, method.ordinary_procedure()
             ? "procedure may finish without an explicit return" : "callable may finish without a result"});
-      if (proving) {
-        abrupt_ = nullptr;
+      if (proving && exporting_effects_) {
         auto &observed = observe_effects();
         if (method.case_scan_scope) observed.case_scope_exits.emplace();
         // Complete capture preparation can fail before the body registers any
         // cleanup or establishes output facts. Retain this incoming outcome
         // for deferred invocation as well as ordinary calls, independently of
         // whether a particular native body can elide the acquisition.
-        if (std::any_of(instance.environment.begin(), instance.environment.end(),
-              [](const auto &capture) { return capture.type.kind == Type::procedure; }))
-          observe_outcome(Completion::failure(exception_id(ExceptionCategory::out_of_memory)).reason, incoming);
+        if (capture_failure_entry)
+          observe_outcome(Completion::failure(exception_id(ExceptionCategory::out_of_memory)).reason, *capture_failure_entry);
         if (outcomes.declared_root) note_declared_root();
         if (case_scan) {
           observed.case_scope_exits->scan = true;
