@@ -1390,12 +1390,12 @@ private:
     const auto previous_queued = known.queued_failures;
     const auto previous_unknown_thrown = known.unknown_thrown;
     const auto previous_payloads = known.payloads;
-    const auto previous_payload_writes = known.payload_writes;
-    const auto previous_present = known.present;
+    const auto previous_payload_write_count = known.payload_writes.size();
+    const auto previous_present_count = known.present.size();
     const auto previous_booleans = known.booleans;
     const auto previous_declared_root = known.declared_root;
     const auto previous_selections = known.selections;
-    const auto previous_symbols = known.symbols;
+    const auto previous_symbol_count = known.symbols.size();
     const auto previous_reaching = known.reaching;
     const auto previous_action_reaching = known.action_reaching;
     for (const auto &path : effects.reaching) add_reaching_condition(known.reaching, path);
@@ -1436,8 +1436,9 @@ private:
     return previous_reads != known.reads || previous_initialized != known.initialized || previous_uninitialized != known.uninitialized ||
         previous_uninitialized_captures != known.uninitialized_captures ||
         previous_returned != known.returned || previous_thrown != known.thrown || previous_queued != known.queued_failures || previous_unknown_thrown != known.unknown_thrown || previous_payloads != known.payloads ||
-        previous_selections != known.selections || previous_symbols != known.symbols || previous_payload_writes != known.payload_writes ||
-        previous_present != known.present || previous_booleans != known.booleans || previous_declared_root != known.declared_root ||
+        previous_selections != known.selections || previous_symbol_count != known.symbols.size() ||
+        previous_payload_write_count != known.payload_writes.size() || previous_present_count != known.present.size() ||
+        previous_booleans != known.booleans || previous_declared_root != known.declared_root ||
         previous_reaching != known.reaching || previous_action_reaching != known.action_reaching;
   }
 public:

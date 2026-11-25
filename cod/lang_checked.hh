@@ -23187,10 +23187,9 @@ class ScalarChecker {
     replay_warnings_ = &warnings;
     const auto compare = [&](const CallEffects &expected, bool distinct) {
       auto actual = check_instance(id, distinct);
-      if (instance.effects_frozen) {
-        if (actual != expected) throw std::logic_error("completed leaf behavior differs from final validation");
-        return;
-      }
+      if (actual == expected) return;
+      if (instance.effects_frozen)
+        throw std::logic_error("completed leaf behavior differs from final validation");
       auto known = expected;
       if (merge_effects(known, std::move(actual), EffectMerge::both))
         throw std::logic_error(distinct ? "distinct binding call effects changed after validation"
