@@ -355,7 +355,6 @@ struct LexicalState {
   std::set<size_t> payload_writes;
   BindingTargets targets;
   std::map<size_t, std::set<size_t>> owners;
-  std::set<size_t> expired_bindings;
   std::map<size_t, size_t> selection_identities;
   // A finalizer may initialize a saved target and then rebind its last slot.
   std::set<size_t> observed_saved_selections;
@@ -756,8 +755,8 @@ class ScalarChecker {
     }
   };
   struct LoopState {
-    size_t first, last;
-    std::set<size_t> bindings, rebound, expired;
+    size_t first;
+    std::set<size_t> bindings, rebound;
     PayloadWrites writes;
     std::map<size_t, CleanupEquations::Initialization> initialized = {};
     std::map<size_t, CleanupEquations::Targets> header_targets = {};
@@ -3713,8 +3712,6 @@ class ScalarChecker {
     view.initialization = CleanupEquations::Initialization{};
     for (const auto id : view.slots) {
       identities.insert(lexical_.selection_identities.at(id));
-      if (lexical_.live && lexical_.expired_bindings.contains(id))
-        fail(at, "reference binding's target owner has ended or may expire across a loop backedge");
       const auto targets = lexical_.targets.at(id);
       const auto &owners = lexical_.owners.at(id);
       view.targets.insert(targets->places.begin(), targets->places.end());
@@ -4347,14 +4344,7 @@ class ScalarChecker {
     catalog_storage_ = *storage_;
     catalog_bindings_ = *bindings_;
     resolve_payload_writes(payload_writes_);
-    for (auto &[expr, loop] : loop_states_) {
-      for (const auto binding : loop.bindings)
-        if (loop.rebound.contains(binding)) for (const auto place : possible_targets_.at(binding)) if (place != null_target) {
-          const auto scope = storage(place).scope;
-          if (scope >= loop.first && scope < loop.last) loop.expired.insert(binding);
-        }
-      resolve_payload_writes(loop.writes);
-    }
+    for (auto &[expr, loop] : loop_states_) resolve_payload_writes(loop.writes);
   }
   void initialize(size_t id) {
     lexical_.initialized.insert(id);
@@ -6027,9 +6017,7 @@ class ScalarChecker {
     }
     lexical_.targets = a_exits ? b.targets : a.targets;
     lexical_.owners = a_exits ? b.owners : a.owners;
-    lexical_.expired_bindings = a_exits ? b.expired_bindings : a.expired_bindings;
     if (!a_exits && !b_exits) {
-      lexical_.expired_bindings.insert(b.expired_bindings.begin(), b.expired_bindings.end());
       for (const auto &[id, owners] : b.owners) {
         lexical_.owners[id].insert(owners.begin(), owners.end());
         if (lexical_.owners[id].size() > 1) fail(at, "reference owner differs between reaching paths");
@@ -6079,7 +6067,6 @@ class ScalarChecker {
       if (!bindings_->at(id).selection.empty()) return;
       state.targets.erase(id);
       state.owners.erase(id);
-      state.expired_bindings.erase(id);
       state.selection_identities.erase(id);
       state.selections.forget_initialization(id);
       state.selections.entry_initialized.erase(id);
@@ -6095,7 +6082,6 @@ class ScalarChecker {
           selections.null_inputs.erase(id); selections.nonnull_inputs.erase(id);
         });
     });
-    for (const auto &[id, owners] : state.owners) if (owners.contains(scope.id)) state.expired_bindings.insert(id);
     if (const auto owned = scope_storage_.find(scope.id); owned != scope_storage_.end()) for (const auto id : owned->second) {
       state.available.erase(id);
       state.live_exception_holders.erase(id);
@@ -18713,8 +18699,6 @@ class ScalarChecker {
     }
     const auto selected = slot.alias.value_or(*binding);
     require_slots_live({selected}, expr.at, "aliased binding's lexical scope has ended");
-    if (lexical_.live && lexical_.expired_bindings.contains(selected))
-      fail(expr.at, "binding '" + expr.text + "' refers to storage whose lexical owner has ended or may expire across a loop backedge");
     if (lexical_.live) for (const auto owner : lexical_.owners.at(selected))
       if (!owner_alive(owner))
         fail(expr.at, "binding '" + expr.text + "' refers to storage whose lexical owner has ended");
@@ -21038,7 +21022,7 @@ class ScalarChecker {
         });
       const auto iteration_scope = next_scope_;
       if (repeat_possible) {
-        if (!proving_) loop_states_[&expr] = {iteration_scope, iteration_scope, before.bindings_available, {}, {}, {}};
+        if (!proving_) loop_states_[&expr] = {iteration_scope, before.bindings_available, {}, {}};
         auto &loop = loop_states_.at(&expr);
         lexical_.exposed_exception_payloads.insert(loop.exposed_exception_payloads.begin(), loop.exposed_exception_payloads.end());
         refresh_targets(lexical_, true, &loop.rebound);
@@ -21056,7 +21040,6 @@ class ScalarChecker {
           }
           retain_loop_initialization(loop, before);
           for (const auto &[binding, required] : loop.initialized) assign_initialization(lexical_, binding, required);
-          lexical_.expired_bindings.insert(loop.expired.begin(), loop.expired.end());
         }
         for (const auto input : lexical_.inputs)
           lexical_.input_facts.edit_or_insert(input, [&](auto &facts) {
@@ -21076,10 +21059,7 @@ class ScalarChecker {
       loop_controls_.insert(*operation.place);
       const auto body = check_loop_body(*expr.children[2], instance, operations);
       leave_scope();
-      if (repeat_possible) {
-        active_loops_.pop_back();
-        if (!proving_) loop_states_.at(&expr).last = next_scope_;
-      }
+      if (repeat_possible) active_loops_.pop_back();
       const auto body_state = lexical_;
       if (proving_ && repeat_possible && body != Type::never && lexical_.live) {
         retain_loop_targets(loop_states_.at(&expr), body_state);
