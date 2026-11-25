@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Review the first seed caller of completed callee behavior
+
+<a id="k-seed-closed-leaf-behavior-20261125"></a>
+**K-SEED-CLOSED-LEAF-BEHAVIOR-20261125.** D-ARCH-REVIEW r131→132 continues P-682/P-683 under [the user’s phase rule](#h-completed-callee-behavior-20261125). At `48011c90:cod/lang_checked.hh:7575` the named call reads the evolving effects, and line 22995 validates against the instance’s effects directly. The [reviewed seed scope](design/ImplementationArchitecture.md#first-seed-call-with-completed-behavior) separates the bound operations, guarded equations, frozen procedure contract and call-site checks for a scalar leaf with a possible bounds failure. Acceptance includes the checker’s account of a write visible to the handler and the behavior of the emitted program. Implementation and verification remain with development mainline.
+
 ## 2026-11-25 — Separate collection and use of each kind of information
 
 <a id="h-completed-callee-behavior-20261125"></a>

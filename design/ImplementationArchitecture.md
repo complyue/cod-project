@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The [r132 review](../CHANGELOG.md#k-seed-closed-leaf-behavior-20261125) continues [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) under P-682/P-683. It applies the r131 separation of fact kinds to the [first ordinary seed call](#first-seed-call-with-completed-behavior), including a borrowed write observable in a bounds handler. The existing language guarantees and the user’s authority over exceptions to the phase rule continue unchanged.
+
 At r131 the [project user’s correction](../CHANGELOG.md#h-completed-callee-behavior-20261125) requires each phase to separate the kinds of information it collects from the kinds it uses. The seed applies this [standing rule](../AGENTS.md#passes-and-dependency-changes) to [completed callee behavior](#consuming-completed-callee-behavior) under P-682/P-683 and charter §5.3. It supersedes R127’s proposed subscription and replay inside a caller branch. D-14, D-17 and D-10 still govern access, completion and symbol requirements.
 
 The [r130 review](../CHANGELOG.md#k-booter-visit-array-growth-20261125) continues P-682/P-683 for [checking visit-table growth](../applications/cod-booter/docs/ModuleGraph.md#checking-growth-of-the-module-visit-array). It reuses the lexical slot and completion checks for a local array whose element is a nominal finite bits sum.
@@ -527,7 +529,24 @@ Show availability reuse on first demand before the callee has completed final va
 
 **Acceptance.** Put the caller before and after its callee in source order. Collection must produce equivalent descriptions. Checking must consume those descriptions without modifying them, and both orders must agree on accepted programs, located errors and output. In one callee write a borrowed Boolean before `utf8_byte("a", i)`. In a second put the write after the read. On bounds failure the handler sees the new value in the first program and the incoming value in the second. They are different programs, each with one stable callee contract. Include a caller branch that skips the call and a recursive dependency that propagates a requirement from another member during collection.
 
-The seed at `932dc122` filters one redundant wakeup for discarded Boolean results. The remaining work is to separate extraction from consumption in the real checker. Mainline supplies the concrete first producer and consumer for review before changing code. Use the existing correctness comparisons during migration.
+The seed at `932dc122` filters one redundant wakeup for discarded Boolean results. Its existing solver remains migration work.
+
+#### First seed call with completed behavior
+
+In `WriteAndFailure.cod`, `route` conditionally calls `update(ready, move_before_read, index)`. The selected procedure writes the borrowed Boolean before or after `utf8_byte("a", index)` according to its second argument. The handler can inspect `ready` on the bounds exit. This first scope covers a uniquely selected, explicitly typed scalar procedure whose only nested call is a known primitive.
+
+| Pass | Completed input | Output |
+| --- | --- | --- |
+| Bind | Syntax, visible declarations, interpretation and explicit signatures | Selected procedure instance and binding variant, formal positions, primitive identity and call sites. Reuse the ordinary selection rules. |
+| Extract | Bound operations | Ordered equations for guards, reads, writes, results and exits, with source locations. A dependency carries its formal-to-actual mapping. |
+| Complete | Equations and primitive operation rules | A frozen procedure contract giving the required reads, writes and result on each reachable exit. Preserve the Boolean guard on the bounds exit. |
+| Check the call | Frozen contract and prepared actuals | Call-site requirements checked against actual owners, access and initialization, and the state delivered to each successor or handler. A failed operand takes its own exit before the callee can write. |
+
+Make the contract available for the selected instance and variant before the first semantic call check, including module entry. Keep one authoritative value throughout that compilation. The ordinary call transfer, final body validation and checked-program readers must agree on that value. Verify the completed contract can represent the exits before admitting the selection. Existing solver resets, merges and subscriptions apply only to their legacy data. Preserve the ordinary unavailable-body and output-publication gates.
+
+For open or recursive selections the initial binding plan identifies the existing checking path. Collection may propagate pending dependencies around a cycle and retain their origins. Composing multiple ordinary procedure contracts is a separate review. Topological order alone does not separate collecting a procedure behavior from using the same fact kind.
+
+Verify the checked write itself on both bounds paths, using a discriminating static check or inspection of the actual completed contract and its use. Runtime output alone cannot distinguish a correct checker summary from code that happens to execute the write. Compare the original four results (`true/true/false/false`), caller-first and callee-first declarations, the skipped call, normal return and failure during operand preparation. Check rejection locations and prior artifacts, and show that a recursive dependency stays pending in the new producer while the existing path handles that program.
 
 ### Boolean snapshots at immediate scalar calls
 
