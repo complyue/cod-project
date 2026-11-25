@@ -2,7 +2,7 @@
 
 ## Design authority
 
-The [r124 review](../CHANGELOG.md#k-booter-array-slot-failure-row-20261124) continues P-682/P-683 for [the private array-slot header](../applications/cod-booter/docs/ModuleGraph.md#checking-growth-of-the-module-key-array). The visit frame owns the typed proof. The graph retains a checked marker and four named failure facts after successful publication.
+The [r125 review](../CHANGELOG.md#k-booter-array-slot-escape-bound-20261124) continues P-682/P-683 for [the private array-slot header](../applications/cod-booter/docs/ModuleGraph.md#checking-growth-of-the-module-key-array). The visit frame proves which of four unchecked failures can escape a body. The graph retains that bound on successful publication. An ordinary import with an unknown bound contributes all four possibilities at an invocation the caller can reach.
 
 The [r123 review](../CHANGELOG.md#k-booter-indexed-field-demand-20261124) continues P-682/P-683 for [indexed-field demand](../applications/cod-booter/docs/ModuleGraph.md#deciding-which-bodies-need-indexed-field-checks). It separates identifying eligible field uses from proving operands in the bodies selected for checking.
 

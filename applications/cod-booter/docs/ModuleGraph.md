@@ -2,7 +2,7 @@
 
 ## Design authority
 
-The [r88 review](../../../CHANGELOG.md#k-booter-array-slot-failure-row-20261124) continues P-680/P-681 for [the key-array source interface](#checking-growth-of-the-module-key-array). The completed body proof supplies a compact set of unchecked failure categories on its graph header.
+The [r89 review](../../../CHANGELOG.md#k-booter-array-slot-escape-bound-20261124) continues P-680/P-681 for [the key-array source interface](#checking-growth-of-the-module-key-array). A clear failure field on a checked header requires evidence covering direct operations, reached helpers and ordinary imports.
 
 The [r87 review](../../../CHANGELOG.md#k-booter-indexed-field-demand-20261124) continues P-680/P-681 for [indexed field checks in demanded bodies](#deciding-which-bodies-need-indexed-field-checks). It corrects when the declaration and provider commands initiate a body check and ties local sum discovery to its indexed transfer.
 
@@ -563,7 +563,13 @@ Keep actual places, backings and per-use completion facts in the visit frame. Pu
 
 Keep the typed `CheckedArraySlotBody` in the visit frame. When staging its defining callable header, copy the four named `ByteArrayFailures` fields for bounds, out-of-memory, region capacity and invalid capacity. Initialize ordinary headers and parameter rows with the checked marker clear and the fields false, including when reusing a row. Set the marker on the matching completed header. A checked header with four false fields establishes that none of those four failures escapes. A clear marker supplies no such evidence. Commit this header, its ordered parameter rows and the matching export shape through the existing successful publication step.
 
-These fields record possible escaping categories. The formal owner row separately records allocation permission requirements. An imported caller still needs a proof of slot effects on each completion, including whether a rebind has already taken effect. Keep the located imported-use stop until that proof exists. Check a published all-clear header, a mix of set and clear fields, reuse for an ordinary row, and preservation of the previous published extent on failure.
+Compute this upper bound for the slot body and the helpers it can call. Read each reachable possible or definite failure by its built-in identity and checked destination. For example, `utf8_byte("x", offset)` can raise a bounds error, and text allocation can run out of memory. Include every possible outcome of array allocation even though the completion site records only one event. Propagate a helper’s escaping categories at each reached call. Apply them after its operands are ready. If a later operand fails before entry, its own failure route still applies.
+
+A checked ordinary import with no bound on these four categories contributes all four as possible at invocation. A proved byte or native contract can supply a narrower bound. Route each category through the existing handlers, replacement and cleanup. A catch can discharge the category it handles. Failures raised by the handler take their own routes, and a deferred invocation uses the handlers in effect when it runs. Preserve a located stop if the checker cannot represent a required route. These private flags describe possible escapes from the checked body. Computing them preserves the ordinary call’s normal continuation, declared failures and slot effects.
+
+Verify a direct byte read, the same read through a local helper, and a caught read. For an ordinary import with an unknown bound, check all four flags on an unhandled call and the three remaining flags when one category is fully handled. Compare a closed byte classifier and a genuinely all-clear body.
+
+The formal owner row separately records allocation permission requirements. An imported caller still needs a proof of slot effects on each completion, including whether a rebind has already taken effect. Keep the located imported-use stop until that proof exists. Check a published all-clear header, a mix of set and clear fields, reuse for an ordinary row, and preservation of the previous published extent on failure.
 
 Verify the unedited scalar leaf through both source commands and exercise direct slot forwarding, saved target identity, copied bytes, early return and failure before and after a rebind. Use seed execution for runtime observations. Reject wrong nominal arrays, wrong owners, fixed slots, insufficient target or allocator access and escaping places. On the integrated specialized booter, report the remaining locations in ModuleIndex, LoadPackageInputs and CompilerCLI and preserve earlier artifacts on rejection.
 

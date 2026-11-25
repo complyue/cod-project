@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review how a slot body proves which failures can escape
+
+<a id="k-booter-array-slot-escape-bound-20261124"></a>
+**K-BOOTER-ARRAY-SLOT-ESCAPE-BOUND-20261124.** D-ARCH-REVIEW r124→125 and D-20-MODULE-GRAPH r88→89 continue P-680–P-683. The text-byte operation already routes a possible bounds error at `fb938b59:applications/cod-booter/src/CompletionChecking.cod:829`. The proposed header could omit that error for a direct or forwarded call. The [source-checking review](applications/cod-booter/docs/ModuleGraph.md#checking-growth-of-the-module-key-array) requires the actual routed events and a conservative four-category bound for ordinary imports whose interface supplies none. It retains the existing proof requirement for a slot rebind across modules.
+
 ## 2026-11-24 — Review failure facts on a private array-slot header
 
 <a id="k-booter-array-slot-failure-row-20261124"></a>
