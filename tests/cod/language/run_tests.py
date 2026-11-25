@@ -70,7 +70,7 @@ def main():
     if report := os.environ.get("COD_LANGUAGE_REPORT"):
         sources = [root / "cod/main.cc", root / "cod/lang_exceptions.hh", root / "cod/lang_syntax.hh", root / "cod/lang_frontend.hh",
                    root / "cod/lang_llvm.hh", root / "cod/runtime/cod_lang_runtime.c",
-                   root / "include/shilos/region.hh",
+                   root / "include/cod_region_storage.h", root / "cod/runtime/cod_lang_runtime.h",
                    root / "tests/cod/test_language.sh", directory / "run_tests.py", directory / "cases.json",
                    *sorted(directory.rglob("*.cod"))]
         evidence = {"schema_version": 2, "recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
