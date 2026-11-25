@@ -2,7 +2,7 @@
 
 ## Design authority
 
-At r3 the [project-local layout decision](../CHANGELOG.md#h-manual-bootstrap-packages-20261125) retires `codp` from the bootstrap. [D-03](DesignAuthorityRegistry.md#d-03) assigns future package management to `e-wrks/code`. [D-15-MODULE-PATH](DesignAuthorityRegistry.md#d-15-module-path) and P-690/P-691 govern how a compiler uses the supplied trees. Deterministic selection, observable ambiguity and the toolchain fallback apply to both compilers. The [prior package-manager draft](https://github.com/complyue/cod-project/blob/3545f504243558aeb923ba2fadc84c6de054715b/design/CodProjectStructureAndPkgMgmt.md) is archived.
+At r4 the [repository-name correction](../CHANGELOG.md#h-package-repository-name-20261125) identifies the production repository. The r3 scope continues. The [project-local layout decision](../CHANGELOG.md#h-manual-bootstrap-packages-20261125) retires `codp` from the bootstrap. [D-03](DesignAuthorityRegistry.md#d-03) assigns future package management to `e-wrks/cod`. [D-15-MODULE-PATH](DesignAuthorityRegistry.md#d-15-module-path) and P-690/P-691 govern how a compiler uses the supplied trees. Deterministic selection, observable ambiguity and the toolchain fallback apply to both compilers. The [prior package-manager draft](https://github.com/complyue/cod-project/blob/3545f504243558aeb923ba2fadc84c6de054715b/design/CodProjectStructureAndPkgMgmt.md) is archived.
 
 ## Directory layout
 
@@ -47,4 +47,4 @@ The C++ seed built from `2bd8b365` ran the two files above from an unrelated wor
 
 A **package** is a dependency and versioning unit. A **project root** supplies the project's own namespace tree. A **staged dependency root** supplies one more namespace tree. A **module** has its own declarations and module world. A namespace can contain several modules or an entry. [Namespace and entry selection](ModuleWorlds.md#packages-namespaces-and-entry-selection)
 
-Source acquisition and version selection happen before the bootstrap compiler runs. The user prepares the directories directly. Future package acquisition, resolution and tools belong in `e-wrks/code`. Its commands, metadata formats and version policy are future design work.
+Source acquisition and version selection happen before the bootstrap compiler runs. The user prepares the directories directly. Future package acquisition, resolution and tools belong in `e-wrks/cod`. Its commands, metadata formats and version policy are future design work.

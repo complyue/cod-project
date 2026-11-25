@@ -1,10 +1,10 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 36 · Recorded: 2026-11-25 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 37 · Recorded: 2026-11-25 · Phase: initial seed delivery through alternating booter and seed development.
 
 ## Design authority
 
-At r36 the [manual package input decision](../../CHANGELOG.md#h-manual-bootstrap-packages-20261125) replaces the bootstrap package manager with the [project-local layout](../../design/CodProjectStructureAndPkgMgmt.md#directory-layout). The seed and booter apply the same module lookup. Package management is future work in `e-wrks/code`.
+At r37 the [repository-name correction](../../CHANGELOG.md#h-package-repository-name-20261125) continues the r36 roadmap. The [manual package input decision](../../CHANGELOG.md#h-manual-bootstrap-packages-20261125) replaces the bootstrap package manager with the [project-local layout](../../design/CodProjectStructureAndPkgMgmt.md#directory-layout). The seed and booter apply the same module lookup. Package management is future work in `e-wrks/cod`.
 
 At r35 the [shilos retirement](../../CHANGELOG.md#h-retire-shilos-20261125) confirms the [native component boundary](#next-stage-repositories-and-native-runtime) under [D-20-NATIVE-C](../../design/DesignAuthorityRegistry.md#d-20-native-c). Shared support uses C. High-level features belong preferentially in CoD and the seed’s internal compiler logic uses C++.
 
@@ -125,7 +125,7 @@ The compiler and toolchain repositories are planned in the [e-wrks GitHub organi
 | `codup` | Toolchain version management in the role of rustup. |
 | `codmate` | The Language Server Protocol server and IDE plugins, including [reference-site doclet tooltips and navigation](../../design/DomainLanguageDesign.md#definition-doclets). |
 
-Future package management belongs in `e-wrks/code`. The bootstrap consumes [manually staged source roots](../../design/CodProjectStructureAndPkgMgmt.md#directory-layout).
+Future package management belongs in `e-wrks/cod`. The bootstrap consumes [manually staged source roots](../../design/CodProjectStructureAndPkgMgmt.md#directory-layout).
 
 After the split, a change to what a CoD program means belongs in `cod-lang`. Each compiler repository documents how it implements the rule, its current coverage and any known gaps.
 

@@ -99,7 +99,7 @@ Use **function value** for `func …` and **functor value** for receiver-bound `
 - Follow [CoD operation terminology](design/CallableViewsAndCaptures.md#copying-moving-and-graph-transfer) for bits transfer, reference binding, ownership transfer, callable construction/capture and graph transfer. Native byte copying and C++ moves grant no CoD permission. Callable views require lexical storage, including when part of a compound value.
 - Use the [three qualified alias concepts](design/CallableViewsAndCaptures.md#alias-terminology) in discussions, documentation, comments, diagnostics and interfaces. Distinguish declared place aliasing, runtime target aliasing and name/identity aliasing. Preserve access, owners, lifetimes and permitted overlap. A declaration can select storage at runtime, and independent references can share a target.
 - Keep YAML optional and convert it at the I/O boundary, separately from region allocation.
-- For seed and booter inputs, prepare the [project-local source tree](design/CodProjectStructureAndPkgMgmt.md#directory-layout) by hand. The project and each immediate directory under `.cod/packages/` are module roots. Future package management belongs in `e-wrks/code`.
+- For seed and booter inputs, prepare the [project-local source tree](design/CodProjectStructureAndPkgMgmt.md#directory-layout) by hand. The project and each immediate directory under `.cod/packages/` are module roots. Future package management belongs in `e-wrks/cod`.
 
 ## Documentation and repository hygiene
 

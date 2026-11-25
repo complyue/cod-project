@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Correct the future package repository name
+
+<a id="h-package-repository-name-20261125"></a>
+**H-PACKAGE-REPOSITORY-NAME-20261125.** The project user corrected a typo in the [manual bootstrap package decision](#h-manual-bootstrap-packages-20261125). Future package management belongs in `e-wrks/cod`. D-03 r3→4 and the booter roadmap r36→37 continue the hand-prepared project layout and lookup rules recorded at `41f82794:design/CodProjectStructureAndPkgMgmt.md`.
+
 ## 2026-11-25 — Check the manually staged project example with the seed
 
 <a id="k-manual-project-example-20261125"></a>
