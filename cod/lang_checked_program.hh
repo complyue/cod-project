@@ -793,6 +793,9 @@ struct CheckedCallable {
   std::optional<size_t> uniform_target = {};
   // Factored rows retain distinguishing types and the shared widening phase.
   std::optional<CallableSelectionInputs> selection_inputs = {};
+  // Symbolic activation owns a sealed replay layout for its full family view.
+  std::optional<std::set<size_t>> replay_symbols = {};
+  size_t replay_interpretation = 0;
   std::set<size_t> implementations() const {
     std::set<size_t> result;
     if (uniform_target) result.insert(*uniform_target);
@@ -952,13 +955,11 @@ struct CheckedProgram {
     }
     return false;
   }
-  std::set<size_t> captured_symbols(const CheckedCallable &value) const {
-    std::set<size_t> result;
-    for (const auto target : value.implementations()) {
-      const auto &symbols = instances[target].effects.symbols;
-      result.insert(symbols.begin(), symbols.end());
-    }
-    return result;
+  const std::set<size_t> &captured_symbols(const CheckedCallable &value) const {
+    if (value.replay_symbols) return *value.replay_symbols;
+    if (!value.type.pure_callable) throw std::logic_error("symbolic handler without a completed replay layout");
+    static const std::set<size_t> empty;
+    return empty;
   }
 };
 

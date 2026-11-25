@@ -15460,12 +15460,14 @@ class ScalarChecker {
     return id;
   }
   CheckedOperation materialized_value(size_t id, const Location &at) {
-    std::set<size_t> symbols;
-    for (const auto target : program_.callables[id].implementations()) {
+    const auto &callable = program_.callables[id];
+    std::set<size_t> ordinary_symbols;
+    if (!callable.replay_symbols) for (const auto target : callable.implementations()) {
       const auto &required = read_effects(target).symbols;
-      symbols.insert(required.begin(), required.end());
+      ordinary_symbols.insert(required.begin(), required.end());
     }
-    if (!symbols.empty() && program_.callables[id].type.pure_callable)
+    const auto &symbols = callable.replay_symbols ? *callable.replay_symbols : ordinary_symbols;
+    if (!symbols.empty() && callable.type.pure_callable)
       fail(at, "a storable func cannot retain dynamic bindings");
     for (const auto symbol : symbols) {
       const auto &type = program_.symbols[symbol].type;
@@ -15667,6 +15669,201 @@ class ScalarChecker {
   CheckedOperation materialize(const std::vector<size_t> &family, const Type *expected, const Location &at, bool definition_site = false) {
     return materialize_definition(NamedFamily{family}, expected, at, definition_site);
   }
+  struct ReplayCall {
+    size_t method;
+    std::set<size_t> supplied;
+  };
+  struct ReplayBody {
+    std::set<size_t> incoming;
+    std::vector<ReplayCall> calls;
+    const Expression *installation = nullptr;
+    const Expression *deferred = nullptr;
+  };
+  struct ReplayScope {
+    std::set<std::string> names;
+    std::set<size_t> supplied;
+    bool continues = true;
+  };
+  static bool replay_builtin(std::string_view name) {
+    return name == "+" || name == "-" || name == "*" || name == "/" || name == "%" ||
+        scalar_predicate_operation(name);
+  }
+  void collect_replay_uses(const Expression &expr, size_t method, ReplayScope &scope, ReplayBody &body) const {
+    using K = Expression::Kind;
+    if (!scope.continues) return;
+    const auto unsupported = [&] { implementation_gap(expr.at, "unrepresented use in a symbolic handler replay plan"); };
+    if (expr.definition || expr.receiving || expr.spread || expr.checked_ref_argument || expr.scoped)
+      unsupported();
+    const auto visit = [&](const Expression &child, ReplayScope &local) {
+      collect_replay_uses(child, method, local, body);
+    };
+    const auto operands = [&] {
+      for (const auto &child : expr.children) visit(*child, scope);
+    };
+    const auto symbol = [&] { return resolve_symbol(expr.text, expr.at, scope.names.contains(expr.text), method); };
+    const auto join = [&](ReplayScope alternative) {
+      if (!scope.continues) scope = std::move(alternative);
+      else if (alternative.continues) {
+        scope.supplied = intersect(scope.supplied, alternative.supplied);
+        scope.names.merge(alternative.names);
+      }
+    };
+    switch (expr.kind) {
+    case K::integer: case K::real: case K::boolean: case K::string_literal:
+      return;
+    case K::name:
+      if (!scope.names.contains(expr.text)) unsupported();
+      return;
+    case K::block: case K::grouped: case K::pointer_group:
+      operands();
+      return;
+    case K::pointer:
+      if (expr.declaration_kind != "val" || expr.binding != "<-" || expr.children.size() != 1)
+        unsupported();
+      operands();
+      scope.names.insert(expr.text);
+      return;
+    case K::symbol: case K::touch: {
+      const auto id = symbol();
+      if (!program_.symbols[id].intrinsic_print && !scope.supplied.contains(id)) body.incoming.insert(id);
+      return;
+    }
+    case K::effect: {
+      if (expr.binding != "<-" || expr.children.size() != 1) unsupported();
+      const auto id = symbol();
+      const auto &binding = program_.symbols[id];
+      if (binding.reference || !binding.type || !scalar_type(*binding.type)) unsupported();
+      body.installation = &expr;
+      operands();
+      if (scope.continues) scope.supplied.insert(id);
+      return;
+    }
+    case K::return_value: case K::raise:
+      operands();
+      scope.continues = false;
+      return;
+    case K::predicate_assertion:
+      operands();
+      if (expr.children.front()->kind == K::boolean && expr.children.front()->text == "false")
+        scope.continues = false;
+      return;
+    case K::conditional: {
+      const auto &test = *expr.children[0];
+      visit(test, scope);
+      if (!scope.continues) return;
+      if (test.kind == K::boolean) {
+        visit(*expr.children[test.text == "true" ? 1 : 2], scope);
+        return;
+      }
+      auto other = scope;
+      visit(*expr.children[1], scope);
+      visit(*expr.children[2], other);
+      join(std::move(other));
+      return;
+    }
+    case K::deferred: {
+      if (expr.children.size() != 1) unsupported();
+      if (!body.deferred) body.deferred = &expr;
+      auto delayed = scope;
+      visit(*expr.children.front(), delayed);
+      return;
+    }
+    case K::unary: case K::binary: case K::call: {
+      if (expr.kind == K::call && expr.lexical_symbol_call && program_.symbols[symbol()].intrinsic_print) {
+        operands();
+        return;
+      }
+      if (short_circuit_predicate(expr)) {
+        const auto &left = *expr.children.front();
+        visit(left, scope);
+        if (left.kind == K::boolean) {
+          if ((left.text == "true") == (expr.text == "&&")) visit(*expr.children.back(), scope);
+          return;
+        }
+        auto skipped = scope;
+        visit(*expr.children.back(), scope);
+        join(std::move(skipped));
+        return;
+      }
+      if (scope.names.contains(expr.text) || expr.has_here_body() ||
+          module_names().native_operations.contains(expr.text)) unsupported();
+      const auto family = expr.intrinsic ? std::nullopt : module_call_family(module_names(), expr);
+      if (expr.kind != K::call) {
+        if (family || !replay_builtin(expr.text)) unsupported();
+        operands();
+        return;
+      }
+      if (!family) unsupported();
+      const auto *methods = proven_family_methods(*family, interpretation_);
+      if (!methods || methods->size() != 1)
+        implementation_gap(expr.at, "symbolic handler replay through an unrepresented callee family");
+      const auto callee = methods->front();
+      if (expr.children.size() != program_.methods[callee].input_parameters().size()) unsupported();
+      operands();
+      if (scope.continues) body.calls.push_back({callee, scope.supplied});
+      return;
+    }
+    case K::behave: case K::perform:
+      if (!program_.symbols[symbol()].intrinsic_print) unsupported();
+      operands();
+      return;
+    default:
+      unsupported();
+    }
+  }
+  std::set<size_t> complete_replay_symbols(const std::vector<size_t> &family) {
+    std::map<size_t, ReplayBody> bodies;
+    auto pending = family;
+    for (size_t i = 0; i < pending.size(); ++i) {
+      const auto method = pending[i];
+      auto [entry, inserted] = bodies.try_emplace(method);
+      if (!inserted) continue;
+      const auto &checked = program_.methods[method];
+      const auto &source = *checked.source;
+      const bool private_scalar_handler = checked.local_effect_symbol &&
+          !program_.symbols[*checked.local_effect_symbol].live_scope;
+      if (!source.body || source.c_linkage || source.implicit_scope || source.supplied_scope || source.supplied_group ||
+          (checked.parent && !private_scalar_handler) || checked.regional_initializer ||
+          checked.lexical_result || checked.scope_inputs ||
+          !checked.here.empty() || !checked.type_parameters.empty() ||
+          !std::ranges::all_of(checked.parameters, scalar_type) ||
+          std::ranges::any_of(checked.input_parameters(), [](const auto &formal) {
+            return formal.automatic_conversion || formal.variadic || argument_mode(formal) != ArgumentMode::value;
+          }))
+        implementation_gap(source.at, "unrepresented method in a symbolic handler replay plan");
+      const ModuleLookup module(module_, checked.module);
+      const ModuleLookup interpretation(interpretation_, checked.interpretation);
+      auto &body = entry->second;
+      ReplayScope scope;
+      for (const auto &formal : checked.input_parameters()) scope.names.insert(formal.name);
+      collect_replay_uses(*source.body, method, scope, body);
+      if (body.installation && body.deferred)
+        implementation_gap(body.deferred->at, "symbolic handler replay through delayed use with local installations");
+      for (const auto &call : body.calls) pending.push_back(call.method);
+    }
+
+    // Propagate completed direct uses backwards along recorded calls.
+    // A local installation masks just the edges where it supplies the use.
+    std::map<size_t, std::vector<std::pair<size_t, const ReplayCall *>>> callers;
+    std::vector<std::pair<size_t, size_t>> requirements;
+    for (const auto &[method, body] : bodies) {
+      for (const auto &call : body.calls) callers[call.method].emplace_back(method, &call);
+      for (const auto symbol : body.incoming) requirements.emplace_back(method, symbol);
+    }
+    for (size_t i = 0; i < requirements.size(); ++i) {
+      const auto [method, symbol] = requirements[i];
+      if (const auto edges = callers.find(method); edges != callers.end())
+        for (const auto &[caller, call] : edges->second)
+          if (!call->supplied.contains(symbol) && bodies.at(caller).incoming.insert(symbol).second)
+            requirements.emplace_back(caller, symbol);
+    }
+    std::set<size_t> result;
+    for (const auto method : family) {
+      const auto &incoming = bodies.at(method).incoming;
+      result.insert(incoming.begin(), incoming.end());
+    }
+    return result;
+  }
   CheckedOperation materialize_symbol(const std::string &name, const Type &view, const Location &at) {
     if (view.kind != Type::procedure || view.pure_callable)
       fail(at, "a symbolic procedure family requires a procedure view");
@@ -15675,15 +15872,19 @@ class ScalarChecker {
     return materialize_family(*selected, view, at);
   }
   CheckedOperation materialize_family(size_t family_id, const Type &view, const Location &at) {
-    const auto &family = program_.families[family_id].methods;
-    if (family.empty()) fail(at, "callable family has no applicable implementation");
+    const auto replay_context = view.pure_callable ? 0 : interpretation_;
+    const auto *family = proven_family_methods(family_id, replay_context);
+    if (!family) implementation_gap(at, "unrepresented symbolic handler family interpretation");
+    if (family->empty()) fail(at, "callable family has no applicable implementation");
     const auto found = std::find_if(program_.callables.begin(), program_.callables.end(), [&](const auto &value) {
-      return value.family == family_id && value.type == view;
+      return value.family == family_id && value.type == view && value.replay_interpretation == replay_context;
     });
     const auto id = std::distance(program_.callables.begin(), found);
     if (found == program_.callables.end()) {
       CheckedCallable value{view, family_id};
-      const auto selection_inputs = cover_family(family, view, at, [&](size_t selected, const std::vector<Type> &arguments) {
+      value.replay_interpretation = replay_context;
+      if (!view.pure_callable) value.replay_symbols = complete_replay_symbols(*family);
+      const auto selection_inputs = cover_family(*family, view, at, [&](size_t selected, const std::vector<Type> &arguments) {
         const auto target = demand(selected, arguments, at);
         const auto &instance = program_.instances[target];
         check_family_contract(program_.methods[selected], arguments, instance.arguments, instance.result, view, at);
@@ -25198,7 +25399,7 @@ class ScalarChecker {
     validate_bodies();
     if (reaching_callables() != callable_choices_) throw std::logic_error("callable flow changed after validation");
     if (std::ranges::any_of(program_.symbols, &CheckedSymbol::live_scope)) for (const auto &value : program_.callables) {
-      const auto snapshots = program_.captured_symbols(value);
+      const auto &snapshots = program_.captured_symbols(value);
       if (std::ranges::any_of(snapshots, [&](size_t symbol) { return program_.symbols[symbol].live_scope; })) {
         const auto implementations = value.implementations();
         implementation_gap(program_.methods[program_.instances[*implementations.begin()].method].source->at,

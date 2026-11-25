@@ -1515,7 +1515,7 @@ class LLVMEmission {
     }
     std::vector<std::pair<size_t, llvm::Value *>> saved;
     auto *image = environment(callee);
-    const auto symbols = program_->captured_symbols(value);
+    const auto &symbols = program_->captured_symbols(value);
     if (expr.kind == Expression::Kind::perform && !symbols.empty()) {
       size_t index = program_->methods[method].captures.size();
       auto *layout = image_layout(index + symbols.size());
@@ -3341,7 +3341,7 @@ class LLVMEmission {
   }
   llvm::Value *create_callable_image(const CheckedOperation &fact, const Type &type, const Location &at) {
     auto *value = pack(integer(*fact.callable + 1), type);
-    const auto symbols = program_->captured_symbols(program_->callables[*fact.callable]);
+    const auto &symbols = program_->captured_symbols(program_->callables[*fact.callable]);
     const auto count = fact.callable_captures.size() + symbols.size();
     if (!count) return value;
     auto *layout = image_layout(count);
@@ -5569,7 +5569,7 @@ public:
     collect_operations(program.entry);
     for (const auto &value : program.callables) {
       for (const auto instance : value.implementations()) retain_method(program.instances[instance].method);
-      const auto symbols = program.captured_symbols(value);
+      const auto &symbols = program.captured_symbols(value);
       used_symbols.insert(symbols.begin(), symbols.end());
     }
     for (size_t i = 0; i < pending_methods.size(); ++i) {
