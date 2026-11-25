@@ -45,6 +45,8 @@ class ModuleLoader {
   ModuleSearchInputs search_;
   CompilationDiagnostics &diagnostics_;
   std::optional<std::vector<std::filesystem::path>> package_roots_;
+  std::optional<size_t> package_root_failure_;
+  struct UnavailablePackageRoots {};
   std::map<std::filesystem::path, size_t> paths_;
   std::set<size_t> scanning_;
   struct Pending { size_t module, next_form = 0; };
@@ -110,14 +112,22 @@ class ModuleLoader {
   }
 
   const std::vector<std::filesystem::path> &package_roots(const Location &at) {
+    if (package_root_failure_) throw UnavailablePackageRoots{};
     if (!package_roots_) {
+      const auto remember_failure = [&](SyntaxDiagnostic diagnostic) {
+        const auto finding = diagnostics_.size();
+        if (diagnostics_.append(std::move(diagnostic))) package_root_failure_ = finding;
+      };
       try {
         package_roots_ = read_package_roots(at);
       } catch (const std::bad_alloc &) {
         throw;
+      } catch (const LocatedFailure &failure) {
+        remember_failure(failure.diagnostic);
       } catch (const std::exception &error) {
-        fail(at, error.what());
+        remember_failure({at, error.what()});
       }
+      if (!package_roots_) throw UnavailablePackageRoots{};
     }
     return *package_roots_;
   }
@@ -218,6 +228,11 @@ public:
       }
       const auto *form = program_.modules[id].forms[pending.next_form++].get();
       if (form->kind == Form::Kind::syntax_error || form->path.empty() || form->path.starts_with("std:")) continue;
+      if (package_root_failure_ && !form->path.starts_with("./") && namespace_path(form->path)) {
+        diagnostics_.relate_import(*package_root_failure_, *package_root_failure_ + 1, form->at);
+        program_.modules[id].failed_edges.insert(form);
+        continue;
+      }
       if (!diagnostics_.continue_work()) break;
       // Forms retain their addresses when discovery grows either work list.
       try {
@@ -227,6 +242,8 @@ public:
         program_.modules[id].dependencies.emplace(form, dependency);
         const auto &target = program_.modules[dependency];
         diagnostics_.relate_import(target.findings_first, target.findings_past, form->at);
+      } catch (const UnavailablePackageRoots &) {
+        program_.modules[id].failed_edges.insert(form);
       } catch (const LocatedFailure &failure) {
         program_.modules[id].failed_edges.insert(form);
         diagnostics_.append(failure.diagnostic);
