@@ -4908,8 +4908,6 @@ class ScalarChecker {
     if (mode == ArgumentMode::value || mode == ArgumentMode::owning_exception) return;
     if (!view.view || view.mixed_view) implementation_gap(at, "borrowed arguments require existing target views");
     if (mode == ArgumentMode::borrowed_read) read_view(view, at);
-    if (mode == ArgumentMode::borrowed_ref && proving_ && validating_ && lexical_.live && view.targets.contains(null_target))
-      fail(at, "ref argument requires a proven non-null target");
     if (mode == ArgumentMode::borrowed_ref) require_payload_access(view, at);
   }
   std::optional<CheckedArgument::ReferenceStorage> prepare_display_operand(CheckedOperation &view, const Location &at) {
@@ -9983,9 +9981,8 @@ class ScalarChecker {
   void prepare_type_readable_argument(TypeEvidenceState &state, const Expression &operand,
                                       const ViewEvidence &view, const TargetEvidence &target, ArgumentMode mode) const {
     if (!state.checks_initialization() || !state.selections.initialization_reachable) return;
-    if (mode == ArgumentMode::borrowed_ref && view.nullable &&
+    if (mode == ArgumentMode::borrowed_ref && operand.checked_ref_argument && view.nullable &&
         state.selections.reachable(state.selections.selection_outcomes(target), false)) {
-      if (!operand.checked_ref_argument) fail(operand.at, "ref argument requires a proven non-null target");
       read_type_target(state, view, target);
       if (!state.selections.initialization_reachable) return;
     }
