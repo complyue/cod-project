@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Archive the checked C++ seed and focus the seed on LLVM translation
+
+<a id="h-trusted-seed-translation-20261125"></a>
+**H-TRUSTED-SEED-TRANSLATION-20261125.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user confirmed “阶段性收尾后打tag归档作为历史参考，然后砍掉所有不需要的checks，仅服务于理想CoD源码的 ll bitcode 生成；遇到实际工程方便性需要时，通过 opt-in 开关加有用的check。” [D-20-BOOTSTRAP and stage diagnostics](applications/cod-booter/README.md#trusted-source-and-the-seed), roadmap r37→38, assign the seed faithful translation of valid booter source and the CoD booter its semantic verification. The decision supersedes the seed’s default verification duty under [r17](#h-booter-exceptions-diagnostics-20261120) and the [r141 full-checker migration prerequisites](#h-seed-migration-completion-20261125) at `abd1d4b0:design/ImplementationArchitecture.md`. D-ARCH-REVIEW r148→149 records the [archive, removal and acceptance sequence](design/ImplementationArchitecture.md#seed-checker-migration-and-performance-acceptance). Valid-source runtime semantics, booter verification and the general per-kind phase rule continue.
+
 ## 2026-11-25 — Review sharing of reference target bounds
 
 <a id="k-seed-reference-target-layers-20261125"></a>
