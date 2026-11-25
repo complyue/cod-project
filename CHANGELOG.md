@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Permit a supplied here body to initialize a live scalar slot
+
+<a id="k-seed-live-here-slot-20261125"></a>
+**K-SEED-LIVE-HERE-SLOT-20261125.** D-ARCH-REVIEW r166→167 continues P-682/P-683 under the [trusted-source decision](#h-trusted-seed-translation-20261125). The [review](design/ImplementationArchitecture.md#supplying-a-live-scalar-slot-to-a-here-body) traces the original value-slot address through seed lowering at `fde288d7:cod/lang_checked.hh` and `fde288d7:cod/lang_llvm.hh`. It clears removal of the supply-time payload report for admitted numeric and enum value slots. D-18-HERE-STORAGE and D-28-INIT continue to govern lexical access and each executed read.
+
 ## 2026-11-25 — Keep one full view for a projected case break
 
 <a id="k-seed-case-projection-view-20261125"></a>
