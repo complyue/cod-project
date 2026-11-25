@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Teach product inheritance and receiver interfaces in the idiom guide
+
+<a id="k-idiomatic-oo-showcase-20261125"></a>
+**K-IDIOMATIC-OO-SHOWCASE-20261125.** [Guide r10](docs/IdiomaticCoD.md#choose-a-storage-parent-and-a-receiver-interface) applies the confirmed parent-construction, field-shadowing, receiver and dispatch contracts to worked examples. The [syntax showcase](toolchain/syntax/showcase.cod) collects the corresponding source forms and other single-file syntax in short excerpts. The [preview index](toolchain/syntax/README.md) describes the gallery. [D-DOC-IDIOMATICS](design/DesignAuthorityRegistry.md#d-doc-idiomatics), P-694/P-695, continues the existing writing and source-style requirements. Previous guide and showcase: `ff6b68ac70ef139ef26bb7507fbe4ca959a41f76:docs/IdiomaticCoD.md` and `ff6b68ac70ef139ef26bb7507fbe4ca959a41f76:toolchain/syntax/showcase.cod`.
+
 ## 2026-11-25 — Review imported functions with one literal return
 
 <a id="k-booter-imported-literal-return-20261125"></a>

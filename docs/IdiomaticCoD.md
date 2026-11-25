@@ -8,11 +8,13 @@ easy to follow.
 This guide is for programmers learning how to make those choices in CoD. Its small shipment, stock
 and billing examples are independent unless a section explicitly reuses a definition. Statements
 shown outside a named callable run in a full lexical scope; procedural contexts and application
-dependencies are identified where needed.
+dependencies are identified where needed. For a compact reference to the source forms used here, see the
+[syntax showcase](../toolchain/syntax/showcase.cod).
 
 ## Design authority
 
-Guide revision 9 applies the [normal-completion rule](../CHANGELOG.md#h-normal-completion-20261124), the [single-directive import](../CHANGELOG.md#h-proc-import-identity-20261124) and the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
+Guide revision 10 integrates the [confirmed OO source rules](../design/DomainLanguageDesign.md#product-storage-inheritance)
+and [direct-parent construction](../design/ConstructionAndAcquisition.md#initializing-the-storage-parent-of-a-product). It applies the [normal-completion rule](../CHANGELOG.md#h-normal-completion-20261124), the [single-directive import](../CHANGELOG.md#h-proc-import-identity-20261124) and the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
 [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics), P-694/P-695, and the
 [canonical source style](IdiomaticsGuideline.md#canonical-code-style). The
 [guide baseline](../CHANGELOG.md#k-idiomatic-cod-rewrite-20261123),
@@ -32,6 +34,7 @@ Acceptance applies the guideline's semantic, example, coverage and mandatory sty
 
 - [Model the states your program can observe](#model-the-states-your-program-can-observe)
 - [Make storage and access visible](#make-storage-and-access-visible)
+- [Choose a storage parent and a receiver interface](#choose-a-storage-parent-and-a-receiver-interface)
 - [Choose a callable by its dependencies](#choose-a-callable-by-its-dependencies)
 - [Treat absence as part of the interface](#treat-absence-as-part-of-the-interface)
 - [Choose control and cleanup boundaries](#choose-control-and-cleanup-boundaries)
@@ -341,6 +344,180 @@ See [region construction](../design/ConstructionAndAcquisition.md#region-constru
 [consumed names](../design/RegionalOwnership.md#named-owner-consumption) and
 [call entry and owning results](../design/ExceptionControl.md#e4--consuming-calls-and-results).
 
+## Choose a storage parent and a receiver interface
+
+### Share storage when an ancestor must see the same object
+
+Use `extends` when code borrowing a parent must operate on the parent part of the very same
+object. A product has at most one direct storage parent, fixed by its definition, and the chain
+must be acyclic. Use `<:` to express nominal conformance to an abstract type. If a shipment
+merely *has* a rate, give it a rate field. If every pickup rate *is usable as* a parcel rate and
+must carry its established storage, give it that storage parent.
+
+Consider three rates in a single module. A parcel adds a handling charge to the base fee.
+Customer pickup carries the parcel data, but its quote applies a pickup fee directly to the
+base fee.
+
+```cod
+data ShippingRate { base_fee:u64 }
+data ParcelRate extends ShippingRate { handling:u64 }
+data PickupRate extends ParcelRate { pickup_fee:u64 }
+
+func ShippingRate(base:u64) { base_fee <- base }
+
+func ParcelRate(base:u64, extra:u64) {
+    super(base)
+    handling <- extra
+}
+
+func PickupRate(base:u64, extra:u64, pickup:u64) {
+    super(base, extra)
+    pickup_fee <- pickup
+}
+```
+
+A constructor has field initialization places. `super(base, extra)` initializes the embedded
+**direct** parent in place. That parent initializes its own parent. On every normally completing
+construction path, exactly one direct-parent call must succeed, including its cleanup. An
+independent child field may be initialized first. An inherited field may be read or written only
+after the parent is ready. Catching a parent failure does not establish readiness. Even after
+success, the constructor works with field places and has no whole-object `self`. Write `super()`
+only when the direct parent actually supplies an applicable niladic constructor.
+
+[Product storage inheritance](../design/DomainLanguageDesign.md#product-storage-inheritance) ·
+[Parent initialization and failure](../design/ConstructionAndAcquisition.md#initializing-the-storage-parent-of-a-product)
+
+### Choose the ancestor implementation deliberately
+
+```cod
+func const ShippingRate.quote() -> u64 { self.base_fee }
+func const ParcelRate.quote() -> u64 { super.quote() + self.handling }
+func const PickupRate.quote() -> u64 { super(ShippingRate).quote() + self.pickup_fee }
+
+ref pickup = make PickupRate(10u64, 3u64, 1u64)
+ref as_shipping:ShippingRate = pickup
+val price <- as_shipping.quote()
+```
+
+`price` is **11**. The reference selects the original pickup object under the same owner.
+The ordinary call chooses the most specific applicable method for its actual type in the selected
+method family. In `PickupRate.quote`, `super(ShippingRate).quote()` starts lookup at
+`ShippingRate`, so the result is 10 + 1. If the business rule included parcel handling too,
+`super.quote()` at that same site would start at `ParcelRate` and give **14**. Inside
+`ParcelRate.quote`, its own `super` still starts at `ShippingRate`.
+
+A super-call selects the implementation for **that call**. The selected body receives the
+original `self`. A subsequent ordinary call on `self` again dispatches on the actual type.
+Write a super-call inside a member method, computed accessor or call-operator body that has
+an implicit receiver. A helper taking a parent reference can make an ordinary call.
+An assertion such as `(pickup:ShippingRate).quote()` also makes an ordinary call and gives 11.
+The named ancestor must be a strict storage ancestor and its method must accept the receiver's
+access. A parent borrow permits no slicing, replacement of a child-typed slot with a plain parent,
+or writable array covariance.
+
+[Super-calls in OO bodies](../design/DomainLanguageDesign.md#super-calls-in-oo-bodies) ·
+[Concrete dispatch](../design/DomainLanguageDesign.md#concrete-data-dispatch-through-abstract-parameters)
+
+### Give distinct stored facts distinct names
+
+When designing both types, names such as `carrier_code` and `label_code` make it clear which
+one a caller is reading. When an established interface calls both fields `code`, a child may
+shadow the inherited stored field. Each declaration still needs its own initialization.
+
+```cod
+data Label { code:u64 }
+data CarrierLabel extends Label { code:u64 }
+
+func Label(value:u64) { code <- value }
+func CarrierLabel(label_code:u64, carrier_code:u64) {
+    code <- carrier_code
+    super(label_code)
+}
+
+ref label = make CarrierLabel(7u64, 9u64)
+ref original:Label = label
+val carrier <- label.code
+val printed <- original.code
+original.code <- 11u64
+```
+
+`carrier` is 9 and `printed` is 7. After the write, `original.code` is 11 and `label.code`
+is still 9. A stored-field read starts at the product **view** of its receiver. Even a parent
+method called on a child selects its own stored fields through the parent view of `self`.
+When both views select the same inherited field declaration, writes are visible through both.
+
+The production compiler reports a legal shadow at the child declaration by default, with a
+warning pointing to the nearest ancestor field it hides. Projects may select info or error
+severity. Merely inheriting the child field adds no further warning. A repeated field in the
+same product, or a collision among a stored field, computed accessor and named method, is a
+declaration error when those members become visible together.
+
+[Stored-field selection and shadowing](../design/DomainLanguageDesign.md#product-storage-inheritance) ·
+[Production shadow diagnostic](../design/DomainLanguageDesign.md#production-diagnostic-for-a-shadowed-stored-field)
+
+### Choose a field read, a named action or a call operator
+
+A stock card exposes the number of units available and lets a caller reserve some of them.
+The card starts with at most as many reserved units as it has on hand.
+
+```cod
+data StockCard { on_hand:u64; reserved:u64 }
+
+func const StockCard.@available() -> u64 { self.on_hand - self.reserved }
+
+func StockCard.reserve(units:u64) -> bool {
+    if (units > self.available) return false
+    self.reserved <-:+ units
+    true
+}
+
+func (const StockCard in O).held_units() -> ref const u64 in O where {const owner O} {
+    return self.reserved
+}
+
+ref card = make StockCard { on_hand <- 9u64; reserved <- 2u64 }
+val before <- card.available
+ref held:const u64 = card.held_units()
+val booked <- card.reserve(3u64)
+val after <- card.available
+```
+
+`before` is 7, `booked` is true, `after` is 4 and the borrowed `held` now reads 5. The
+accessor marker `@` occurs in its declaration. The caller writes `card.available`.
+It returns independent bits. The named action `reserve` signals a state change and needs a
+writable receiver. `held_units` names the receiver owner because its result borrows a field.
+The result is readonly and its lifetime remains bounded by that actual owner.
+
+Put `const` before the receiver type for readonly access. Omitting it requires writable access,
+including for an accessor. A writable accessor can change its receiver on every read. Give
+that behavior an action name when callers should count invocations. A writable receiver alone
+grants no property setter, and a readonly receiver alone promises no purity. The target is
+selected once before the written arguments. Later rebinding of the source reference slot does
+not redirect a call already being prepared.
+
+A weight limit reads naturally as a predicate. Give the product a call operator when clients
+should apply the configured instance directly or pass it to a synchronous `here` parameter.
+
+```cod
+data WeightLimit { maximum:u64 }
+func const WeightLimit.(())(weight:u64) -> bool { weight <= self.maximum }
+func fits(here allowed(n:u64) -> bool, weight:u64) -> bool { allowed(weight) }
+
+ref limit = make WeightLimit { maximum <- 12u64 }
+val at_limit <- limit(12u64)
+val overweight <- fits(limit, 13u64)
+```
+
+`at_limit` is true and `overweight` is false. `make` constructs the instance. Both later calls
+use its initialized receiver. The OO head `.(())` declares the same call-operator method as
+the explicit `(())` spelling with the receiver as first formal. Define one body for that
+signature. To keep a selected `func` bound to the receiver for later use, give the functor
+value its actual owner and keep it live through every call.
+
+[Accessors, member names and receiver owners](../design/DomainLanguageDesign.md#receivers-in-field-accessors-and-member-methods) ·
+[Functor receivers and synchronous use](../design/DomainLanguageDesign.md#functor-receivers-and-callback-arguments) ·
+[Callable values and owner dependencies](../design/CallableStorageAndHereAccess.md#function-value-and-functor-value)
+
 ## Choose a callable by its dependencies
 
 ### Pass state explicitly, or borrow the caller's live work
@@ -350,7 +527,9 @@ call operator bound to a receiver in its owner (`func … in O`). Choose the lat
 pricing rule needs that particular receiver on every call. A function-valued holder or
 symbol accepts function values. A functor-valued one accepts functor values.
 [Function value and functor value](../design/CallableStorageAndHereAccess.md#function-value-and-functor-value)
-Its runtime state belongs in explicit inputs. For example, billing can select this calculation and
+The [weight-limit example](#choose-a-field-read-a-named-action-or-a-call-operator) supplies a
+receiver when the selected rule carries its own configuration. A capture-free selection takes
+its runtime state as explicit inputs. For example, billing can select this calculation and
 supply the fee with each call:
 
 ```cod
@@ -690,6 +869,23 @@ propagating it. Inside a catch, `throw;` forwards the incoming tip unchanged; `r
 trace-bearing standard wrapper. Public failure contracts should name the application failure that
 callers can handle. Transparent rethrow does not require exposing wrapper names as API outcomes.
 
+A storage failure can declare its checked exception kind once. A short write adds a count to
+that same kind of failure.
+
+```cod
+data StorageException <: Exception { code:u64 }
+data ShortWriteException extends StorageException { written:u64 }
+```
+
+When a `ShortWriteException` arrives directly, a catch for `StorageException` sees its inherited
+`code`. The same object retains `written`, available through its child view. Each concrete
+exception object has one runtime base, with its own creation
+trace and nullable readonly immediate cause. Initializing its domain parent creates no additional
+exception or trace. A wrapper is a new exception object with its own creation trace and cause,
+even in the same region. When the catch matches a cause, `failure.tip` still selects the
+incoming tip for this handling scope.
+[Exception runtime base](../design/ExceptionControl.md#runtime-base-of-an-exception)
+
 Honor declared checked obligations. An explicit `throws Exception` remains checked even if a
 particular implementation currently produces only unchecked errors. A runtime-type observation
 cannot silently narrow the public contract.
@@ -836,6 +1032,11 @@ These operations do not make a source module mutable. Importing a type does not 
 every same-named local function into an extension of an associated source family. Explicitly import
 the callable you intend to extend. A local shadow and an extension carry different identities and
 can lead to different dispatch.
+
+The same family selection governs an [OO receiver call](#choose-the-ancestor-implementation-deliberately).
+`with methods` explicitly selects the associated public callable families. `using` preserves their
+selected context, and `import` grants the corresponding extension permission.
+[Associated callables](../design/ModuleWorlds.md#explicit-associated-callables-with-with-methods)
 
 Treat the public declarations in the shipment example as `shipping.cod`. A consumer that uses the
 model and its query together can state that dependency in one selection:

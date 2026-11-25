@@ -1,6 +1,14 @@
 # CoD syntax preview
 
-Open [`showcase.cod`](showcase.cod) for idiomatic examples of CoD syntax. The numbered sections are independent excerpts, not one compilable module. Confirmed design targets awaiting seed migration, parser-only forms, and design-only forms are marked separately from seed examples. Keep lexer edge cases and intentionally rejected forms in the compiler fixtures.
+[`showcase.cod`](showcase.cod) is a single-file gallery for inspecting how CoD source is displayed.
+Its numbered fragments can be read independently. For programming idioms and examples across module
+boundaries, see [Idiomatic CoD](../../docs/IdiomaticCoD.md).
+
+| Sections | Syntax |
+| --- | --- |
+| 01–03 | Literals, units, operators, storage and owner annotations, data alternatives, enums, cases |
+| 04–06 | Storage parents, constructors, accessors, methods, call operators, `super`, symbols |
+| 07–09 | Control expressions, callbacks, exception and cleanup forms, generators, pipelines, text |
 
 The editor grammars follow [D-10-ORDINARY-NAMES](../../design/DesignAuthorityRegistry.md#d-10-ordinary-names) and [D-22-MAKE-OWNER](../../design/DesignAuthorityRegistry.md#d-22-make-owner) ahead of the seed migration. The released names, including `fold` and `len`, and the former `local` modifier are highlighted as ordinary identifiers. `touch` remains special, and ordinary construction is written `make`.
 
