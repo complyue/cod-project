@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Make invalid algorithms inexpressible and justify workqueues by project value
+
+<a id="h-workqueue-value-20261125"></a>
+**H-WORKQUEUE-VALUE-20261125.** The project user directed “我倾向于让错误算法无路可走的工程手段，必须要有绝对价值相关的理由，才能使用workqueue什么的机制” in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). D-ARCH-REVIEW r176→177 extends P-682/P-683 and the [material-consumer rule](#h-compiler-work-necessity-20261125) to rescheduling. The [standing rule](AGENTS.md#passes-and-dependency-changes) requires an identifiable outcome and a reason a simpler algorithm falls short. The [seed example](design/ImplementationArchitecture.md#when-a-workqueue-is-justified) applies the existing [phase decision](#h-completed-callee-behavior-20261125) to the solver’s interface. Mainline owns implementation within the agreed architecture.
+
 ## 2026-11-25 — Produce the seed’s final body effect summary after loop settlement
 
 <a id="k-seed-final-body-effect-production-20261125"></a>
