@@ -7288,15 +7288,34 @@ class ScalarChecker {
   struct DeclarationObligation {
     const CheckedMethod *declaration;
     Substitutions result_substitutions;
-    bool covers_types;
-    bool covers_method;
   };
+  enum class DeclarationUse { failures, covering_failures, result };
+  bool declaration_covers_types(const CheckedMethod &method, const CheckedMethod &declaration,
+                                std::vector<Type> domain) const {
+    // Containment retains repeated method binders while allowing independent
+    // concrete categories for copied exception values.
+    std::map<size_t, size_t> category_roles;
+    for (size_t i = 0; i < domain.size(); ++i) {
+      const auto mode = argument_mode(parameter_at(method, i));
+      const auto &parameter = method.parameters[i];
+      if (mode == ArgumentMode::value && accepts_exception(domain[i], parameter)) domain[i] = parameter;
+      if (mode == ArgumentMode::value && domain[i].kind == Type::exception && !domain[i].identity) {
+        const auto binder_index = binder(method, parameter);
+        const auto role = binder_index ? category_roles.try_emplace(*binder_index, i).first->second : i;
+        domain[i] = independent_input(domain[i], role, mode);
+      }
+      if (numeric(parameter) && widens(domain[i], parameter)) domain[i] = parameter;
+    }
+    return match(declaration, domain, {}, true).has_value();
+  }
   std::vector<DeclarationObligation> declaration_obligations(const CheckedMethod &method, const std::vector<Type> &arguments,
-      const Access &input_access = {}, const Owners &input_owners = {}, const TypeEvidenceState *state = nullptr) const {
+      DeclarationUse use, const Access &input_access = {}, const Owners &input_owners = {},
+      const TypeEvidenceState *state = nullptr) const {
     std::vector<DeclarationObligation> obligations;
     const ModuleLookup lookup(module_, method.module);
     if (lexical_methods_.contains(method.source)) return obligations;
     if (!method.family) return obligations;
+    const bool result = use == DeclarationUse::result;
     for (const auto &declaration : program_.families[*method.family].declarations) {
       if (method.here.size() != declaration.here.size()) continue;
       auto overlap = declaration_overlap(declaration, arguments);
@@ -7310,44 +7329,29 @@ class ScalarChecker {
       if (!admits_access(declaration, input_access) || match_owners(declaration, input_owners, state) == OwnerMatch::mismatch) continue;
       const auto access = access_coverage(method, declaration);
       if (access == AccessCoverage::disjoint) continue;
-      // Method-wide coverage retains independent concrete categories and
-      // equalities from repeated method binders, separately from overlap.
-      auto domain = arguments;
-      std::map<size_t, size_t> category_roles;
-      for (size_t i = 0; i < domain.size(); ++i) {
-        const auto mode = argument_mode(parameter_at(method, i));
-        if (mode == ArgumentMode::value && accepts_exception(domain[i], method.parameters[i])) domain[i] = method.parameters[i];
-        // Borrowed inputs retain their exact storage target type. Payload
-        // categories vary independently only for copied value inputs.
-        if (mode == ArgumentMode::value && domain[i].kind == Type::exception && !domain[i].identity) {
-          const auto parameter = binder(method, method.parameters[i]);
-          const auto role = parameter ? category_roles.try_emplace(*parameter, i).first->second : i;
-          domain[i] = independent_input(domain[i], role, mode);
-        }
-        if (mode != argument_mode(parameter_at(declaration, i)))
+      for (size_t i = 0; i < arguments.size(); ++i)
+        if (argument_mode(parameter_at(method, i)) != argument_mode(parameter_at(declaration, i)))
           implementation_gap(method.source->at, "declaration applicability across different parameter passing modes");
-      }
-      for (size_t i = 0; i < domain.size(); ++i)
-        if (numeric(method.parameters[i]) && widens(domain[i], method.parameters[i])) domain[i] = method.parameters[i];
-      const bool covers_types = match(declaration, domain, {}, true).has_value();
-      // Input coverage does not establish the category of a dependent result.
-      // A common view, even in a repeated method binder, cannot replace that
-      // unknown category in the declaration's result promise.
-      for (const auto index : overlap->unknown_categories) overlap->substitutions[index].reset();
       if (method.source->kind != declaration.source->kind)
         fail(method.source->at, "implementation kind does not satisfy callable declaration");
       for (const auto category : method.throws_categories)
         if (program_.exception_types[category].checked && !declaration.throws_categories.contains(category))
           fail(method.source->at, "implementation exposes a checked exception outside its callable declaration");
-      obligations.push_back({&declaration, std::move(overlap->substitutions), covers_types, covers_types &&
-          access == AccessCoverage::contained && implies_owners(method, declaration)});
+      if (use != DeclarationUse::failures && !declaration_covers_types(method, declaration, arguments)) continue;
+      if (result) {
+        if (access != AccessCoverage::contained || !implies_owners(method, declaration)) continue;
+        // Input coverage does not determine the category of a dependent result.
+        for (const auto index : overlap->unknown_categories) overlap->substitutions[index].reset();
+        obligations.push_back({&declaration, std::move(overlap->substitutions)});
+      } else {
+        obligations.push_back({&declaration, {}});
+      }
     }
     return obligations;
   }
   ResultContract declaration_supplied_result(const CheckedMethod &method, const std::vector<Type> &arguments) const {
     ResultContract supplied;
-    for (const auto &obligation : declaration_obligations(method, arguments)) {
-      if (!obligation.covers_method) continue;
+    for (const auto &obligation : declaration_obligations(method, arguments, DeclarationUse::result)) {
       const auto &declaration = *obligation.declaration;
       auto result = declaration.result;
       std::set<std::string> owner_roles;
@@ -7531,9 +7535,7 @@ class ScalarChecker {
           return match_owners(program_.methods[id], owners, state) == OwnerMatch::unknown;
         })) implementation_gap(at, "method selection requires an unproved owner equality");
     if (best.size() != 1) ambiguous_methods(at, name, best);
-    const auto selected = best.front();
-    declaration_obligations(program_.methods[selected], arguments);
-    return selected;
+    return best.front();
   }
   size_t select_family(const std::vector<size_t> &family, const std::vector<Type> &arguments, const Location &at, const std::string &name,
                        const std::vector<CheckedCaptureInput> &environment = {}, const std::vector<Type> &retained = {},
@@ -7904,8 +7906,8 @@ class ScalarChecker {
     CheckedMethod method;
     method.source = &source; method.operation = identity; method.module = module_; method.family = family; method.parameters = arguments;
     std::set<size_t> failures;
-    for (const auto &[declaration, substitutions, covers_types, covers_method] : declaration_obligations(method, arguments, access, owners, state))
-      failures.insert(declaration->throws_categories.begin(), declaration->throws_categories.end());
+    for (const auto &obligation : declaration_obligations(method, arguments, DeclarationUse::failures, access, owners, state))
+      failures.insert(obligation.declaration->throws_categories.begin(), obligation.declaration->throws_categories.end());
     return failures;
   }
   void check_builtin_declarations(const Expression &expr, const std::vector<Type> &arguments,
@@ -7940,9 +7942,9 @@ class ScalarChecker {
   }
   void add_declared_failures(Type &type, const CheckedMethod &method, const std::vector<Type> &arguments,
                              const Access &access = {}, const Owners &owners = {}, bool covering_types_only = false) const {
-    for (const auto &[declaration, substitutions, covers_types, covers_method] : declaration_obligations(method, arguments, access, owners)) {
-      if (covering_types_only && !covers_types) continue;
-      for (const auto &failure : declaration->throws_types)
+    const auto use = covering_types_only ? DeclarationUse::covering_failures : DeclarationUse::failures;
+    for (const auto &obligation : declaration_obligations(method, arguments, use, access, owners)) {
+      for (const auto &failure : obligation.declaration->throws_types)
         if (std::find(type.throws_types.begin(), type.throws_types.end(), failure) == type.throws_types.end())
           type.throws_types.push_back(failure);
     }
@@ -12448,7 +12450,7 @@ class ScalarChecker {
     const auto result = infer_result(method, parameters, family.retained_types(),
                                      family.declaration ? family.declaration : &state).contract;
     if (!result) return {};
-    if (state.exits) for (const auto &obligation : declaration_obligations(selected, parameters, {}, {}, &state))
+    if (state.exits) for (const auto &obligation : declaration_obligations(selected, parameters, DeclarationUse::failures, {}, {}, &state))
       note_type_failures(state, obligation.declaration->throws_types);
     record_type_call(expr, state, selected, true);
     return result->type;
@@ -14384,7 +14386,7 @@ class ScalarChecker {
         if (method.lexical_result) {
           if (!invokes) implementation_gap(expr.at, "a use-site result on a prepared deferred call");
           if (!product_operands.empty()) record_type_call(expr, state, method, true);
-          if (state.exits) for (const auto &obligation : declaration_obligations(method, arguments, access, owners, &state))
+          if (state.exits) for (const auto &obligation : declaration_obligations(method, arguments, DeclarationUse::failures, access, owners, &state))
             note_type_failures(state, obligation.declaration->throws_types);
           ViewEvidence next{type->read_only, true, {}, state.full_scope_owner};
           view = !result || view == next ? next : ViewEvidence{};
@@ -14396,7 +14398,7 @@ class ScalarChecker {
         if (!product_operands.empty()) {
           const auto &context = family.declaration ? *family.declaration : state;
           auto reasons = call_reasons(method);
-          for (const auto &obligation : declaration_obligations(method, arguments, access, owners, &state)) {
+          for (const auto &obligation : declaration_obligations(method, arguments, DeclarationUse::failures, access, owners, &state)) {
             for (const auto &failure : obligation.declaration->throws_types)
               for (const auto category : exception_possibilities(failure))
                 reasons.insert(Completion::failure(category).reason);
@@ -14452,7 +14454,7 @@ class ScalarChecker {
           return type->type;
         }
         if (state.exits || !invokes)
-          for (const auto &obligation : declaration_obligations(method, arguments, access, owners, &state)) {
+          for (const auto &obligation : declaration_obligations(method, arguments, DeclarationUse::failures, access, owners, &state)) {
             if (invokes) note_type_failures(state, obligation.declaration->throws_types);
             else for (const auto &failure : obligation.declaration->throws_types)
               for (const auto category : exception_possibilities(failure))
