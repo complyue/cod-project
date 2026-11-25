@@ -200,6 +200,17 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
         };
         return;
     };
+    if (facts[at].checks_array_bounds) {
+        ref index = make IndexSites { target <- no_node(); index <- no_node() };
+        if (inspect_index_selection(nodes, revision, used, at, index)) {
+            inherit_context(sites, at, index.target, guard, incoming, replacing);
+            inherit_context(sites, at, index.index, guard, incoming, replacing);
+            if (facts[index.target].kind == never_result()) {
+                (sites[index.index].event <- skipped_operand()):void
+            };
+            return
+        }
+    };
     ref inner = make u64 { no_node() };
     if (inspect_group(nodes, revision, used, at, inner) == ParenthesizedExpression) {
         inherit_context(sites, at, inner, guard, incoming, replacing);

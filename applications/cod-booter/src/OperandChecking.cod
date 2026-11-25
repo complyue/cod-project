@@ -58,7 +58,7 @@ using "./ParserStorage.cod" {
     reserves_storage, checked_ref_argument,
     RangeBounds, RangeSites, inspect_range_header, inspect_range_loop, classify_literal_range,
     inspect_logical, LogicalSites, boolean_literal, unequal_words,
-    ungrouped, native_installation_input,
+    ungrouped, native_installation_input, IndexSites, inspect_index_selection,
 };
 using "./ParserStorage.cod" DeferSyntax { DeferBody };
 using "./ParserStorage.cod" LogicalSyntax { LogicalNot, LogicalAnd, LogicalOr, InvalidLogical };
@@ -114,7 +114,7 @@ using "./NativeDeclarations.cod" {
     prepared_here_formal, prepared_native_operation, source_call_scalar,
 };
 using "./NativeDeclarations.cod" SuppliedView {
-    SuppliedArrayView, PreparedImportedNativeOperation, ImportedNativeOperand
+    SuppliedArrayView, PreparedImportedNativeOperation, ImportedNativeOperand, ReadonlyByteRead
 };
 using "./ParserStorage.cod" FormalMode { HandleFormal };
 using "./ParserStorage.cod" FormalSyntax { HereFormalSyntax };
@@ -3344,6 +3344,31 @@ func check_indexed_case_subject(nodes:const ExprNodes in N, facts:OperandFacts i
     return 0u8
 }
 
+func check_byte_read(nodes:const ExprNodes in N, names:const NameBindings in B,
+    facts:OperandFacts in F, at:u64, used:u64, revision:u64, array_site:u64, index:u64,
+    formal:u64, owner_site:u64, type_module:u64, type_identity:u64) -> u8
+    where {const owner N, const owner B, owner F} {
+    ref syntax = make IndexSites { target <- no_node(); index <- no_node() };
+    if (!inspect_index_selection(nodes, revision, used, at, syntax) ||
+        syntax.target != array_site || syntax.index != index || formal >= used ||
+        names[array_site].kind != formal_binding() || names[array_site].declaration != formal)
+        return invalid_operand_tree();
+    if (facts[array_site].kind == never_result() || facts[index].kind == never_result()) {
+        set_result(facts, at, never_result());
+        facts[at].checks_array_bounds <- true;
+        return 0u8
+    };
+    if (facts[array_site].kind != source_array_loan() || facts[array_site].reception != borrowed_ref() ||
+        facts[array_site].owner != owner_site || facts[array_site].identity_module != type_module ||
+        facts[array_site].identity != type_identity || facts[array_site].target_readonly == 0u8)
+        return unproved_operand();
+    val diagnostic <- require_typed_bits(nodes, facts, index, scalar_u64());
+    if (diagnostic != 0u8) return diagnostic;
+    set_result(facts, at, scalar_u8());
+    facts[at].checks_array_bounds <- true;
+    return 0u8
+}
+
 func check_case_receipt(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
     at:u64, used:u64, revision:u64, header:u64, pattern:u64, schema:const DeclaredType in T) -> u8
     where {const owner N, const owner B, owner F, const owner T} {
@@ -3469,6 +3494,18 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F,
         owner O, const owner X, const owner H, const owner C} {
     if (at >= used) return invalid_operand_tree();
+    if (source_only && at < intrinsic (len)(views)) {
+        case views[at] of {
+            ReadonlyByteRead {
+                val array_site <-; val index <-; val formal <-; val owner_site <-;
+                val module <- type_module; val identity <- type_identity;
+            } -> {
+                return check_byte_read(nodes, names, facts, at, used, revision, array_site, index,
+                    formal, owner_site, module, identity)
+            };
+            _ -> {}
+        }
+    };
     if (at < intrinsic (len)(cases)) {
         case cases[at] of {
             IndexedCaseSubject {
