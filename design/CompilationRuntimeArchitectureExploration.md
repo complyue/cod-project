@@ -1,8 +1,10 @@
 # CoD execution architecture: AOT micro-dispatch assessment
 
-Design revision: 17 · Recorded: 2026-11-15 America/Los_Angeles · Status: bounded experimental evidence and removal-first source migration; concrete full-language mechanisms remain separately scoped.
+Design revision: 18 · Recorded: 2026-11-25 America/Los_Angeles · Status: bounded experimental evidence and removal-first source migration; concrete full-language mechanisms remain separately scoped.
 
 ## Design authority
+
+At r18 the [archival disposition](../CHANGELOG.md#k-shilos-dispatch-experiment-archive-20261125) continues [D-25](DesignAuthorityRegistry.md#d-25) from r17. The retained observations belong to the experiment at the cited revision.
 
 - **Built-in failure naming:** [H-472/H-473](../CHANGELOG.md#h-472), [D-17-NAMES](DesignAuthorityRegistry.md#d-17-names) and P-414/P-415 preserve canonical Error/Exception names and the common root Exception. [K-720](../CHANGELOG.md#k-720) continues D-25r16→17 with the implemented vocabulary and typed-root catches recorded in [source coverage](../tests/cod/language/README.md). Type identity governs checkedness regardless of aliases. Existing propagation, owner/access, initialization and cleanup contracts remain; assertion implementation, physical representation and broader qualification are separate.
 
@@ -46,7 +48,7 @@ Type checksums now have a separate planned DBMR responsibility: associate releva
 
 ## Evidence and obstacles
 
-[Native observations](../experiments/micro-dispatch/observations.json) cover 13 selected cases: independent field choices, a different enclosing layout, crossed method selection, two interpretations, captured/current values and shared actual owners, successful/failed alias updates, acquisition/verifier failures and deferred completion. Separately compiled older-writer/newer-reader programs preserve the results and every saved byte despite added/reordered definitions; a reader with conflicting ID meanings rejects before payload access. Native symbol inspection checks one definition per generated method. Reversed method declarations preserve the full trace. Unknown/mismatched/abstract evidence, duplicate discriminator mappings, missing intersections, insufficient coverage work and missing entry installation reject for their intended reason. One emitted LLVM module executes natively and returns 313.
+[Archived native observations](https://github.com/complyue/cod-project/blob/2c1d987fcffb60bbf537b5922127555740e6c746/experiments/micro-dispatch/observations.json) cover 13 selected cases: independent field choices, a different enclosing layout, crossed method selection, two interpretations, captured/current values and shared actual owners, successful/failed alias updates, acquisition/verifier failures and deferred completion. Separately compiled older-writer/newer-reader programs preserve the results and every saved byte despite added/reordered definitions; a reader with conflicting ID meanings rejects before payload access. Native symbol inspection checks one definition per generated method. Reversed method declarations preserve the full trace. Unknown/mismatched/abstract evidence, duplicate discriminator mappings, missing intersections, insufficient coverage work and missing entry installation reject for their intended reason. One emitted LLVM module executes natively and returns 313.
 
 Real region allocation and relative links preserve readonly input across two mapping bases. Mutable cases use a separate scratch region with actual same-owner links and observe a fresh field load after alias mutation. Output has its own actual region. No regional object is copied/moved; native handles and code addresses stay outside stored graphs. The sequential field update preserves its old pair if preparation fails; concurrency is not claimed.
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Preserve the micro-dispatch experiment at its historical revision
+
+<a id="k-shilos-dispatch-experiment-archive-20261125"></a>
+**K-SHILOS-DISPATCH-EXPERIMENT-ARCHIVE-20261125.** D-21 r36→37 and D-25 r17→18 retain the [case descriptions](https://github.com/complyue/cod-project/blob/2c1d987fcffb60bbf537b5922127555740e6c746/experiments/micro-dispatch/README.md) and [recorded observations](https://github.com/complyue/cod-project/blob/2c1d987fcffb60bbf537b5922127555740e6c746/experiments/micro-dispatch/observations.json) at `2c1d987f` under the [shilos retirement decision](#h-retire-shilos-20261125). Both cited blobs match the tree at `dfb050fc`. D-ARCH-REVIEW r142→143 records the [subtree disposition and the optional language report’s header inputs](design/ImplementationArchitecture.md#retiring-shilos). Current dispatch rules and the scope of the experimental evidence continue.
+
 ## 2026-11-25 — Review shared lexical declaration maps
 
 <a id="k-seed-lexical-declaration-layers-20261125"></a>
