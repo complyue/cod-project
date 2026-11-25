@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Separate the receiver result query from callback execution
+
+<a id="k-seed-here-query-20261125"></a>
+**K-SEED-HERE-QUERY-20261125.** At `f40d4db8:cod/lang_checked.hh`, native providers return from their own type-evidence branch before `query_here_call`. The remaining uncovered-exception report reads the temporary exits of a separately invoked callback during an ordinary receiver query. This corrects the earlier attribution to native feedback. D-ARCH-REVIEW r153→154 continues P-682/P-683 and the [trusted-source decision](#h-trusted-seed-translation-20261125). The [review](design/ImplementationArchitecture.md#querying-the-result-of-a-call-with-a-supplied-callback) clears removal of that body traversal while preserving the result of the receiver, same-scope feedback, standalone full-scope inference and actual callback emission.
+
 ## 2026-11-25 — Remove hypothetical deferred failures from trusted translation
 
 <a id="k-seed-deferred-coverage-removal-20261125"></a>
