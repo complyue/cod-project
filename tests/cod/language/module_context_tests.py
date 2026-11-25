@@ -130,18 +130,10 @@ runner.CASES = {
             'prepare(0u64);behave @print(22u64);',
         'main.cod': ENTRY_EXTENSION+'effect proc @score;'+CALL_SCORE,
     }, 70, '21\n', 'division by zero'),
-    'entry_extension_requires_installation_in_entry_scope': ({
-        'base.cod': FAMILY+'effect @score;',
-        'main.cod': ENTRY_EXTENSION+'proc local()->void{effect @score;}local();',
-    }, 2, '', 'without an explicit installation'),
     'entry_extension_proves_conditional_installation': ({
         'base.cod': FAMILY+'effect @score;',
         'main.cod': ENTRY_EXTENSION+GATED_INSTALLATION+'if(@gate){effect @score;}else{effect @score;};'+CALL_SCORE,
     }, 0, '9\n', ''),
-    'entry_extension_conditional_installation_is_unproved': ({
-        'base.cod': FAMILY+'effect @score;',
-        'main.cod': ENTRY_EXTENSION+GATED_INSTALLATION+'if(@gate){effect @score;}else{};',
-    }, 2, '', 'cannot prove an entry-scope installation'),
     'entry_installation_does_not_supply_earlier_dependency_read': ({
         'base.cod': IO+FAMILY+'effect @score;'+CALL_SCORE,
         'main.cod': ENTRY_EXTENSION+'effect @score;'+CALL_SCORE,

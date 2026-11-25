@@ -23,7 +23,6 @@ class DynamicSymbolBindings {
 public:
   struct Facts {
     bool bound = false;
-    bool named_installation = false;
     bool local_scoped = false;
     std::optional<size_t> native_owner;
     // The outer optional records an installation. The inner one records its proved actual owner.
@@ -551,7 +550,7 @@ class ScalarChecker {
     bool publication_ready = false;
   };
   std::vector<ModuleNames> modules_;
-  std::map<size_t, const Form *> entry_extensions_;
+  std::set<size_t> entry_extensions_;
   mutable size_t module_ = 0;
   struct ModuleLookup {
     size_t &current;
@@ -5880,7 +5879,6 @@ class ScalarChecker {
     const auto join_symbol = [&](size_t symbol, const auto &a, const auto &b) {
       DynamicSymbolBindings::Facts facts;
       facts.bound = a.bound && b.bound;
-      facts.named_installation = a.named_installation && b.named_installation;
       facts.local_scoped = a.local_scoped && b.local_scoped;
       if (a.borrowed_owner == b.borrowed_owner) facts.borrowed_owner = a.borrowed_owner;
       else facts.borrowed_owner.emplace(std::nullopt);
@@ -20699,7 +20697,6 @@ class ScalarChecker {
                 check_scoped_effect(expr, id, method, instance, operations, operation);
                 if (lexical_.live) lexical_.symbols.update(id, [](auto &facts) {
                   facts.bound = true;
-                  facts.named_installation = false;
                   facts.local_scoped = true;
                 });
                 break;
@@ -20718,10 +20715,7 @@ class ScalarChecker {
           }
           operation.symbol = id; operation.operand_type = operation.type; operation.type = Type::void_type;
           operation.publishes_effect = !cancelled;
-          if (!cancelled && lexical_.live) lexical_.symbols.update(id, [&](auto &facts) {
-            facts.bound = true;
-            facts.named_installation = !body;
-          });
+          if (!cancelled && lexical_.live) lexical_.symbols.update(id, [](auto &facts) { facts.bound = true; });
           break;
         }
         if (symbol.type->kind == Type::procedure)
@@ -22429,10 +22423,6 @@ class ScalarChecker {
       if (behavior.unavailable) require_leaf_behavior(*behavior.unavailable);
       CheckedOperation entry_result; entry_result.type = lexical_.live ? Type{Type::void_type} : Type{Type::never};
       finish_scope(entry_result, entry_flow, nullptr, 0, program_.initializers.empty() ? Location{} : program_.initializers.front().expression->at);
-      if (validating_ && lexical_.live)
-        for (const auto &[symbol, extension] : entry_extensions_)
-          if (!lexical_.symbols.get(symbol).named_installation)
-            implementation_gap(extension->at, "cannot prove an entry-scope installation for extended callable '@" + extension->name + "'");
     });
   }
   template <typename Visit> void visit_binding_inputs(const Visit &visit) const {
@@ -23952,25 +23942,6 @@ class ScalarChecker {
     }
   }
 
-  void plan_entry_installations() {
-    if (entry_extensions_.empty()) return;
-    using K = Expression::Kind;
-    const auto &symbols = modules_.front().symbols;
-    std::set<size_t> explicit_installs;
-    const std::function<void(const Expression &)> collect = [&](const Expression &expr) {
-      if (expr.kind == K::callable || expr.kind == K::deferred) return;
-      if ((expr.kind == K::effect || expr.kind == K::procedure_effect) && !expr.definition)
-        if (const auto symbol = symbols.find(expr.text); symbol != symbols.end()) explicit_installs.insert(symbol->second);
-      const auto end = expr.kind == K::range_for ? 2 : expr.children.size();
-      for (size_t i = 0; i < end; ++i) collect(*expr.children[i]);
-    };
-    for (const auto &[module, expression] : program_.initializers)
-      if (!module) collect(*expression);
-    for (const auto &[symbol, extension] : entry_extensions_)
-      if (!explicit_installs.contains(symbol))
-        fail(extension->at, "entry module extends callable '@" + extension->name + "' without an explicit installation");
-  }
-
   void plan_initialization(const SourceProgram &source) {
     std::set<size_t> incorporated;
     struct Pending { size_t module, next_form = 0; bool execution_started = false; };
@@ -24001,7 +23972,6 @@ class ScalarChecker {
       }
       program_.initializers.push_back({module, form->body.get()});
     }
-    plan_entry_installations();
   }
 
   Type register_enum(const Form &form) {
@@ -25163,7 +25133,7 @@ class ScalarChecker {
           if (form->body) check_variadic_family_member(family.methods, prepared, form->at);
           if (form->body && family.module == module_ && family.imported_from) {
             module_names().extensions[*prepared.family].emplace(form->name, form->at);
-            if (!module_) entry_extensions_.try_emplace(*symbol, form);
+            if (!module_) entry_extensions_.insert(*symbol);
           }
         }
       } else if (!lexical) {
