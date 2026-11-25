@@ -490,14 +490,14 @@ class ScalarChecker {
       if (distinct_bindings) throw std::logic_error("frozen behavior has no binding variant");
       return body.effects;
     }
-    auto &consumer = effect_dependents_[instance][checking_context_];
     // Keep every read over the write closure. One precise use prevents
     // suppressing a result change, even if other sites discard the value.
     if (closing_write_effects_) {
+      auto &consumer = effect_dependents_[instance][checking_context_];
       consumer.reads_result |= use == EffectUse::all;
       consumer.discards_result |= use == EffectUse::discarded_boolean_result;
-    }
-    if (closing_read_effects_) {
+    } else if (closing_read_effects_) {
+      auto &consumer = effect_dependents_[instance][checking_context_];
       if (consumer.read_round != read_effect_round_) {
         consumer.read_round = read_effect_round_;
         consumer.symbols_covered = symbols_covered;
@@ -4987,7 +4987,8 @@ class ScalarChecker {
   }
   CallableInvocationEffects callable_effects(const Type &contract, const std::vector<Type> &arguments,
                                              const std::optional<std::set<size_t>> &choices) const {
-    callable_effect_consumers_.insert(checking_context_);
+    if (closing_write_effects_ || closing_read_effects_)
+      callable_effect_consumers_.insert(checking_context_);
     CallEffects effects;
     bool first = true;
     size_t covered = 0;
@@ -25209,6 +25210,8 @@ class ScalarChecker {
       if (choices == callable_choices_) break;
       callable_choices_ = std::move(choices);
     }
+    effect_dependents_.clear();
+    callable_effect_consumers_.clear();
     validate_bodies();
     if (reaching_callables() != callable_choices_) throw std::logic_error("callable flow changed after validation");
     if (std::ranges::any_of(program_.symbols, &CheckedSymbol::live_scope)) for (const auto &value : program_.callables) {
