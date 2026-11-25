@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Review scalar family replay in a live scoped handler
+
+<a id="k-seed-live-scalar-handler-replay-20261125"></a>
+**K-SEED-LIVE-SCALAR-HANDLER-REPLAY-20261125.** The delegated [architecture review](design/ImplementationArchitecture.md#replaying-scalar-bindings-in-a-live-scoped-handler) continues D-ARCH-REVIEW r186→187 under the [confirmed family replay rule](#h-perform-family-capture-20261125). The live record at `96fda399:cod/lang_llvm.hh` carries lexical inputs. The reviewed extension stores each activation's outstanding scalar bindings after those inputs and restores the caller's bindings after handler cleanup. An empty selected method summary leaves open what its family's other members need. Acceptance includes an unselected symbol-using overload, recursive activation and unwind.
+
 ## 2026-11-25 — Use current scalar bindings in a directly supplied here body
 
 <a id="k-seed-here-current-bindings-20261125"></a>
