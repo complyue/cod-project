@@ -22273,18 +22273,21 @@ class ScalarChecker {
     if (completion.failed()) observed.escaping_failures.insert(reason);
     if (completion.protected_here()) observed.propagates_here_transfer = true;
     std::set<size_t> known;
-    for (const auto id : state.initialized) if (storage(id).borrowed) known.insert(input_ordinal(id));
     CleanupEquations::MissingInitialization missing;
     const auto input_count = checking_instance_->frame.inputs.size() + input_field_places_.size();
     for (size_t p = 0; p < input_count; ++p) {
       const auto place = input_place(p);
-      if (!storage(place).borrowed || known.contains(p)) continue;
+      if (!storage(place).borrowed) continue;
+      if (state.initialized.contains(place)) {
+        known.insert(p);
+        continue;
+      }
       auto clauses = external_conditions(missing_initialization(state, place));
       if (clauses.empty()) known.insert(p);
       else if (clauses != CleanupEquations::ConditionClauses{CleanupEquations::ConditionFacts{}})
         missing.emplace(p, std::move(clauses));
     }
-    const auto [found, inserted] = observed.initialized.emplace(reason, known);
+    const auto [found, inserted] = observed.initialized.try_emplace(reason, std::move(known));
     if (inserted) observed.uninitialized[reason] = std::move(missing);
     else CleanupEquations::combine_initialization(found->second, observed.uninitialized[reason], known, missing, true);
     const auto present = input_ordinals(state.present);
