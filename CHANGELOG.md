@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Align bootstrap verification with its current consumers
+
+<a id="k-bootstrap-verification-scope-20261125"></a>
+**K-BOOTSTRAP-VERIFICATION-SCOPE-20261125.** Two documentation findings from the [compiler-work review](#h-compiler-work-necessity-20261125) concerned expectations still written as current at `c4d07562`. The [language fixture reference](tests/cod/language/README.md#deferred-execution-and-initialization) r483→484 assigns whole-drain coverage and physical read-proof diagnostics to the archived checked seed and keeps valid FIFO and cleanup behavior observable. [D-20-MODULE-GRAPH](applications/cod-booter/docs/ModuleGraph.md) r94→95 continues P-680/P-681. Its acceptance workloads apply the existing [single full-build policy](#k-booter-one-build-20261124), including the exception for a concrete whole-application mode question. Previously observed paired results retain their scope.
+
 ## 2026-11-25 — Retire two direct String place reports from trusted translation
 
 <a id="k-seed-direct-string-init-reports-20261125"></a>
