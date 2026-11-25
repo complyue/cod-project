@@ -6353,7 +6353,10 @@ class ScalarChecker {
     std::vector<AbruptPath> exits;
     std::optional<Type> normal_type;
     for (const auto &path : flow.paths) for (const auto origin : path.state.inputs) {
-      const auto queue = path.state.input_facts.at(origin).queues.at(scope);
+      const auto &entry = path.state.input_facts.at(origin);
+      const auto queue = entry.queues.at(scope);
+      std::optional<bool> queued_actions;
+      std::optional<decltype(entry.exceptions)> payloads;
       std::vector<Completion> inputs;
       // A scope scan is suspended as a no-return normal arrival while
       // this scope drains. Retain its origin across failure and recovery.
@@ -6364,19 +6367,20 @@ class ScalarChecker {
         const auto completion = outcome.completion();
         auto state = path.state;
         state.inputs = {origin};
-        state.initialized = path.state.input_facts.at(origin).initialized;
-        state.selections = path.state.input_facts.at(origin).selections;
-        state.exceptions = path.state.input_facts.at(origin).exceptions;
+        state.initialized = entry.initialized;
+        state.selections = entry.selections;
+        state.exceptions = entry.exceptions;
         for (auto &[read, requirement] : state.requirements)
           requirement.inputs = intersect(requirement.inputs, state.inputs);
         auto pending = input.exception() ? path.exceptions.restricted({input.category()}) : ExceptionFacts{};
         if (input.exception() && pending.empty()) pending = {input.category()};
-        auto payloads = state.exceptions;
-        // Empty provisional value summaries do not establish non-returning
-        // behavior. Only a substituted, explicit failure relation can exclude
-        // an exceptional outcome.
-        for (auto &[place, value] : payloads)
-          if (value.empty()) value = exception_value_categories(storage(place).type);
+        if (!payloads) {
+          // Empty provisional value summaries do not establish non-returning
+          // behavior. Only a substituted, explicit failure relation can exclude
+          // an exceptional outcome.
+          for (auto &[place, value] : payloads.emplace(entry.exceptions))
+            if (value.empty()) value = exception_value_categories(storage(place).type);
+        }
         auto applied = effects;
         const auto observed_selection = CleanupEquations::project_observed_return(applied, state.returned, state.selections);
         applied.resolve_conditions([&](size_t binding) -> std::optional<CleanupEquations::Targets> {
@@ -6401,8 +6405,8 @@ class ScalarChecker {
           }
           return selected;
         }, deferred_action_);
-        applied.transform_values([&](const auto &value) { return value.through(payloads, pending, true); },
-            [&](const auto &value) { return value.through(payloads, pending, true, true); });
+        applied.transform_values([&](const auto &value) { return value.through(*payloads, pending, true); },
+            [&](const auto &value) { return value.through(*payloads, pending, true, true); });
         CleanupEquations::BooleanValues booleans;
         const auto resolve_boolean = [&](size_t place) -> const CleanupEquations::BooleanValue * {
           if (!state.available.contains(place) || storage(place).type != Type::boolean) return nullptr;
@@ -6427,7 +6431,8 @@ class ScalarChecker {
         }
         apply_effects(state, applied, at);
         state.input_facts.retain_only(origin);
-        if (cleanup_.has_actions(queue)) {
+        if (!queued_actions.has_value()) queued_actions = queue && cleanup_.has_actions(queue);
+        if (*queued_actions) {
           refresh_targets(state, false);
           if (!state.live) continue;
         }
@@ -22248,7 +22253,7 @@ class ScalarChecker {
     next_boolean_observation_ = 0; conditional_selections_.clear();
   }
 
-  enum class FlowExports { every_pass, final_pass };
+  enum class FlowExports { none, every_pass, final_pass };
   template <typename Check> void check_flow(FlowExports exports, const Check &check) {
     const bool validating = validating_;
     struct RestoreExport {
@@ -22256,7 +22261,7 @@ class ScalarChecker {
       bool previous;
       ~RestoreExport() { active = previous; }
     } restore{exporting_effects_, exporting_effects_};
-    if (exports == FlowExports::final_pass) exporting_effects_ = false;
+    exporting_effects_ = restore.previous && exports == FlowExports::every_pass;
     validating_ = false;
     check(false);
     solve_targets();
@@ -22273,7 +22278,7 @@ class ScalarChecker {
     }
     validating_ = validating;
     if (validating || loop_states_.empty()) {
-      exporting_effects_ = restore.previous;
+      exporting_effects_ = restore.previous && exports != FlowExports::none;
       loop_evidence_changed_ = false;
       check(true);
       if (loop_evidence_changed_) throw std::logic_error("loop evidence changed during validation");
@@ -22290,7 +22295,7 @@ class ScalarChecker {
       ~EntryBehaviorScope() { active = nullptr; }
     } scope{entry_behavior_check_};
     if (!unavailable_leaf_behaviors_.empty()) entry_behavior_check_ = &behavior;
-    check_flow(FlowExports::every_pass, [&](bool proving) {
+    check_flow(FlowExports::none, [&](bool proving) {
       begin_check(program_.entry_storage, program_.entry_bindings, program_.entry, proving);
       AbruptFlow entry_flow{1, {}};
       abrupt_ = &entry_flow;
