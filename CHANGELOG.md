@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-24 — Review the seed’s first-demand union of symbol requirements
+
+<a id="k-seed-first-demand-symbol-union-20261124"></a>
+**K-SEED-FIRST-DEMAND-SYMBOL-UNION-20261124.** D-ARCH-REVIEW r117→118 continues P-682/P-683. The project user clarified in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) that the seed should compute the union when it first touches a procedure. The [review](design/ImplementationArchitecture.md#first-demand-union-of-dynamic-symbol-requirements) separates that opportunity from reusing an already validated body. At `6a054526:cod/lang_checked.hh`, `merge_effects` reports one change flag for several kinds of evidence and `close_effects` uses it to reschedule callers. Acceptance measures which actual caller rechecks a closed symbolic bound can eliminate.
+
 ## 2026-11-24 — Review seed bootstrap time in dynamic-symbol checking
 
 <a id="k-seed-bootstrap-symbol-checks-20261124"></a>
