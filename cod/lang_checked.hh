@@ -5151,6 +5151,9 @@ class ScalarChecker {
     const auto input_type = [&](size_t i) -> const Type & {
       return i < arguments.size() ? arguments[i] : views[i].type;
     };
+    const auto borrowed_boolean = [&](size_t i) {
+      return input_type(i) == Type::boolean && borrowed_input(i);
+    };
     std::vector<ExceptionFacts> exception_inputs;
     auto observed_slots = invocation_slots;
     observed_slots.all = has_invocation_time_slots;
@@ -5167,38 +5170,14 @@ class ScalarChecker {
         [&](size_t i) { return input_type(i) == Type::boolean && !readonly_input(i); });
     const bool observes_values = *contract.target == Type::boolean || !summary.booleans.empty() || writes_boolean ||
         !summary.uninitialized.empty() || conditional_local_check || conditional_nullness;
-    bool skip_entry_booleans = false;
-    if (*contract.target == Type::boolean && !prepared && !delayed_ && !immediate_scope && !case_scan &&
-        !late_payloads && offset == 0 && expr.kind == Expression::Kind::call && !expr.lexical_symbol_call &&
-        !expr.has_here_body() && operation.callee && !operation.callable_call && !operation.supplied_here &&
-        operation.here_arguments.empty() && operation.callable_captures.empty() &&
-        summary.booleans.empty() && summary.written_inputs.empty() && summary.bindings.empty() &&
-        summary.binding_sources.empty()) {
-      const auto &method = program_.methods[program_.instances[*operation.callee].method];
-      const auto supported_operand = [&](size_t i) {
-        const auto &argument = operation.arguments[i];
-        if (argument.binding_slot) return false;
-        if (argument.mode == ArgumentMode::value)
-          return !borrowed_input(i) && scalar_type(arguments[i]) && scalar_type(argument.type);
-        return (argument.mode == ArgumentMode::borrowed_ref || argument.mode == ArgumentMode::borrowed_read) &&
-            borrowed_input(i) && readonly_input(i) && views[i].view && !views[i].mixed_view &&
-            input_type(i) != Type::boolean && argument.type != Type::boolean &&
-            (argument.type.kind == Type::array || program_.bits_payload(argument.type) || text_type(argument.type));
-      };
-      skip_entry_booleans = method.source->kind == Form::Kind::function && !method.source->c_linkage &&
-          !method.scope_inputs && !method.lexical_result && !variadic(method) && method.here.empty() &&
-          method.input_parameters().size() == arguments.size() && operation.arguments.size() == arguments.size() &&
-          (contract.owners.empty() || !contract.owners.back()) &&
-          std::ranges::none_of(std::span{views}.subspan(arguments.size()), [](const auto &field) {
-            return field.type == Type::boolean;
-          });
-      for (size_t i = 0; skip_entry_booleans && i < arguments.size(); ++i)
-        skip_entry_booleans = supported_operand(i);
-    }
-    // Without Boolean loans or payload changes, no outcome uses the entry
-    // map. By-value arguments still carry their own snapshots.
-    const auto entry_booleans = !observes_values || skip_entry_booleans ? CleanupEquations::BooleanValues{} :
-        prepared ? incoming_booleans() : current_booleans(lexical_, expr.at);
+    // Borrowed Boolean operands read the entry map, and possible writes can
+    // invalidate its payloads. By-value arguments use their own observations.
+    bool needs_entry_booleans = observes_values && !summary.written_inputs.empty();
+    for (size_t i = 0; observes_values && !needs_entry_booleans && i < views.size(); ++i)
+      needs_entry_booleans = borrowed_boolean(i);
+    const auto entry_booleans = needs_entry_booleans
+        ? prepared ? incoming_booleans() : current_booleans(lexical_, expr.at)
+        : CleanupEquations::BooleanValues{};
     std::vector<CleanupEquations::BooleanValue> boolean_inputs(views.size());
     for (size_t i = 0; i < views.size(); ++i) if (observes_values && input_type(i) == Type::boolean) {
       const bool borrowed = borrowed_input(i);
@@ -5408,13 +5387,14 @@ class ScalarChecker {
           effects.payloads = payload_changes(entry_payloads(), *payloads);
         }
       }
+      if (!needs_entry_booleans) continue;
       auto booleans = entry_booleans;
       if (late_payloads) {
         for (auto &[place, value] : booleans) if (effects.payload_writes.contains(place)) value = CleanupEquations::unknown_boolean();
       } else {
         CleanupEquations::BooleanValues definite;
         for (size_t i = 0; i < views.size(); ++i) {
-          if (input_type(i) != Type::boolean || !borrowed_input(i)) continue;
+          if (!borrowed_boolean(i)) continue;
           const bool readonly = !summary.written_inputs.contains(i) || readonly_input(i);
           auto value = CleanupEquations::unknown_boolean();
           const auto outcome = summary.booleans.find(reason);
