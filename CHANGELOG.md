@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Review separate application and sealing for the lexer classifier
+
+<a id="k-seed-lexer-classifier-caller-20261125"></a>
+**K-SEED-LEXER-CLASSIFIER-CALLER-20261125.** D-ARCH-REVIEW r145→146 continues P-682/P-683 under the [per-kind phase rule](#h-completed-callee-behavior-20261125). At `08201d9b:applications/cod-booter/src/Lexer.cod:23` the short-circuit caller uses two completed literal definitions. The [reviewed structure](design/ImplementationArchitecture.md#checking-the-lexers-short-circuit-caller) separates applying their contracts, deriving the caller contract from completed exit observations, and comparing final validation. The [whole-seed completion conditions](#h-seed-migration-completion-20261125) remain open.
+
 ## 2026-11-25 — Review completed behavior for the lexer’s literal token functions
 
 <a id="k-seed-lexer-literal-contracts-20261125"></a>

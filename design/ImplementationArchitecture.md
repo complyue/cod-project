@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r146 the [classifier caller review](../CHANGELOG.md#k-seed-lexer-classifier-caller-20261125) applies the r131 per-kind rule to the [caller of two completed byte functions](#checking-the-lexers-short-circuit-caller). [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues P-682/P-683, the r145 literal contract and both [r141 completion conditions](#seed-checker-migration-and-performance-acceptance).
+
 At r145 the [lexer literal review](../CHANGELOG.md#k-seed-lexer-literal-contracts-20261125) extends the existing completed-body producer under [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), P-682/P-683. The r141 migration conditions continue for the ordinary caller and the remaining state copies.
 
 At r144 the [per-origin state review](../CHANGELOG.md#k-seed-completion-input-layers-20261125) continues the [r141 seed migration](#seed-checker-migration-and-performance-acceptance) under P-682/P-683. It covers the lifetime of completion-input snapshots and the existing cleanup join.
@@ -672,6 +674,16 @@ The ordinary `lexical_error(kind)` expression compares its input to the results 
 Compare matching provider, LLVM and bitcode output for the unedited [Lexer](../applications/cod-booter/src/Lexer.cod). Check that the two definitions are each extracted once and skip both legacy closures. For token kinds 6, 7, 14 and 15, `lexical_error` must return false, true, true and false, respectively. Keep the actual selected calls through a source-preserving rename. Verify an out-of-range literal, an unavailable body, and a valid different-width definition that remains on its ordinary path.
 
 This proves two callees for the next ordinary caller migration. The caller’s own short-circuit path and call edges still need collection and later application of completed behavior. Keep this dependency explicit in the [seed-wide scope](#seed-checker-migration-and-performance-acceptance). No token-specific effect table or constant folding is needed.
+
+#### Checking the lexer’s short-circuit caller
+
+In the [lexer's classifier](../applications/cod-booter/src/Lexer.cod), the call to `unsupported_byte()` precedes the first comparison. Only its true successor invokes `multiline_text()`. Both callees already have completed contracts for the selected instances. Process a matching ordinary scalar caller in this order:
+
+1. **Bind.** Record each original call site, selected method, interpretation, instance key and ordinary binding variant, together with the builtin operations and the conditional edge. Check eligibility against the fixed set of independently completed byte-literal functions before changing solver or instance state. A body requiring a new instance, a different variant, an open edge or an unavailable prerequisite keeps its existing checking and diagnostic path.
+2. **Apply.** At each planned call, prepare the operands and use the selected leaf’s frozen contract through the ordinary transfer. Preserve the skipped and taken paths and the Boolean result relation the checker can prove. The checked frame owns local IDs during verification. Move only validated exit facts across the boundary: reachability, completion, source provenance and the representable result predicate in terms of the formal inputs. The application path has no caller-contract writer. Keep the general effect-read fence in place for every other site, including indirect helper reads. Finish application for the entire batch before publishing any caller contract from it.
+3. **Seal.** Derive the caller’s one authoritative `CallEffects` from its completed exit facts. This step has no callee lookup, source replay or solver subscription. Only a successful receipt can publish the matching checked frame, operations and contract. On final validation apply and seal into a temporary result first. A subsequent equality check can read the original contract. A failed prerequisite or candidate retains the original finding and its precedence.
+
+Use the unmodified classifier and its real calls as acceptance. Check 6, 7, 14 and 15 against false, true, true and false, and verify that the generated right-hand call is reachable only from the successful left comparison. Compare checked provider and LLVM/bitcode bytes, and distinguish a failed operand before classifier entry from a skipped right call inside the classifier. Include a source-preserving rename, both declaration orders, an open or recursive dependency, a representable Boolean formal relation, and prior artifact preservation on error. Verify the sealed classifier skips both legacy closure visits and reaches exact final validation. Arbitrary call graphs and the rest of the checker remain in the full migration.
 
 ### Boolean snapshots at immediate scalar calls
 
