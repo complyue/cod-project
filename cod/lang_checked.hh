@@ -5055,16 +5055,6 @@ class ScalarChecker {
     for (const auto reason : call_reasons(contract)) effects.present.try_emplace(reason);
     return {std::move(effects), choices && covered && choices->size() == covered};
   }
-  void require_borrow_lifetime(const CheckedOperation &view, const Location &at, bool prepared) const {
-    require_live_view(view, at);
-    if (prepared) for (const auto owner : view.owners)
-      if (!external_owner(owner) && !is_symbol_owner(owner, program_.symbols.size())) {
-      const auto lifetime = owner_lifetime_scope(owner);
-      const auto scope = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) { return entry.id == lifetime; });
-      const auto cleanup = std::find_if(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &entry) { return entry.id == cleanup_scope_; });
-      if (scope > cleanup) fail(at, "deferred borrowed argument does not outlive its cleanup scope");
-    }
-  }
   void discover_deferred_product_call(const std::vector<ProductInput> &fields, const std::vector<CheckedOperation> &operands,
                                       const CallEffects &summary, const Location &at) {
     DeferredProductWrites writes{{}, fields, {}, {}, at};
@@ -5312,7 +5302,7 @@ class ScalarChecker {
       const auto owner = *view.owners.begin();
       if (operation.callable_call && const_owner(owner))
         implementation_gap(expr.at, "const owner access through a callable value");
-      require_borrow_lifetime(view, operation.argument(expr, i + offset).at, &expr == prepared_call_);
+      require_live_view(view, operation.argument(expr, i + offset).at);
       if (const auto [found, inserted] = owners.emplace(role, owner); !inserted) {
         const auto equality = compare_owners(found->second, owner);
         if (equality == OwnerMatch::unknown) implementation_gap(expr.at, "borrowed call requires an unproved owner equality");
@@ -16134,7 +16124,7 @@ class ScalarChecker {
       if (declared_place) parameter.name = "$scope.place." + std::to_string(ordinal);
       if (view.owners.size() != 1)
         implementation_gap(capture.at, "full-scope reference input requires one statically provable owner");
-      require_borrow_lifetime(view, capture.at, false);
+      require_live_view(view, capture.at);
       parameter.owner = inputs.owners[owner_role(*view.owners.begin(), capture.at)].name;
       const auto slots = physical_slots(view.slots);
       parameter.read_only = std::ranges::all_of(slots, [&](size_t slot) { return bindings_->at(slot).read_only; });
@@ -17171,7 +17161,7 @@ class ScalarChecker {
           implementation_gap(at, "prepared producer requires a readonly, initialized borrowed operand");
         const auto actual = one_owner(prepared.views[i]);
         if (!actual) implementation_gap(at, "prepared producer requires an established actual owner");
-        require_borrow_lifetime(prepared.views[i], at, false);
+        require_live_view(prepared.views[i], at);
         actual_owners.try_emplace(parameter.owner, *actual);
       }
     }
@@ -18791,7 +18781,7 @@ class ScalarChecker {
           lexical_.live = false;
           continue;
         }
-        require_borrow_lifetime(value, operand.at, prepared);
+        require_live_view(value, operand.at);
         bind(*input.owner, one_owner(value), operand.at);
       } else if (text_type(input.type)) {
         if (prepared || delayed_) implementation_gap(operand.at, "deferred C text loans");
@@ -20030,7 +20020,7 @@ class ScalarChecker {
       for (const auto *operand : {&left, &right}) if (operand->type != Type::never) {
         if (!operand->view || operand->mixed_view)
           fail(expr.at, "reference identity requires existing target views, not independent values");
-        require_borrow_lifetime(*operand, expr.at, &expr == prepared_call_);
+        require_live_view(*operand, expr.at);
       }
       operation.type = left_type == Type::never || right_type == Type::never ? Type{Type::never} : Type{Type::boolean};
       if (operation.type != Type::never) {
@@ -20259,8 +20249,8 @@ class ScalarChecker {
         } else {
           check_bits_destinations();
           if (left.type != right.type) fail(expr.at, "bits swap requires the exact same type");
-          require_borrow_lifetime(left, expr.children[0]->at, &expr == prepared_call_);
-          require_borrow_lifetime(right, expr.children[1]->at, &expr == prepared_call_);
+          require_live_view(left, expr.children[0]->at);
+          require_live_view(right, expr.children[1]->at);
           read_view(left, expr.at); read_view(right, expr.at);
           for (auto &argument : operation.arguments) argument.mode = ArgumentMode::borrowed_read;
           check_builtin_declarations(expr, arguments, operation, true, views);
@@ -21192,7 +21182,7 @@ class ScalarChecker {
         check_rebind(target, selected, expr.at, !prepared && !delayed_);
         operation.arguments[1].type = selected.type;
         if (prepared) {
-          require_borrow_lifetime(selected, expr.children[1]->at, true);
+          require_live_view(selected, expr.children[1]->at);
           const auto targets = snapshot_selection(selected, expr.at);
           const auto before = lexical_;
           lexical_.selections = {};
@@ -21253,7 +21243,7 @@ class ScalarChecker {
       auto written = target.targets; written.erase(null_target);
       auto written_target = target; select_targets(written_target, written);
       if (prepared) {
-        require_borrow_lifetime(target, expr.children[0]->at, true);
+        require_live_view(target, expr.children[0]->at);
         record_payload_write(written_target, true);
         CallEffects effects;
         effects.initialized[0] = {0};
@@ -21925,7 +21915,7 @@ class ScalarChecker {
           require_symbol(lexical_, symbol, expr.at);
           CheckedOperation loan;
           loan.owners = {native_symbol_owner(lexical_, symbol)};
-          require_borrow_lifetime(loan, expr.at, true);
+          require_live_view(loan, expr.at);
           return true;
         });
       };

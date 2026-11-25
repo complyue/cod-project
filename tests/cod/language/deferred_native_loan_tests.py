@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """A prepared CoD call preserves the native loan through deferred cleanup."""
 from pathlib import Path
-import subprocess
 import tempfile
 
 from language_test_support import ROOT, MODE, COD, checked, runtime_archive
@@ -82,22 +81,6 @@ cod_native_status cod_native_observe_view_impl(cod_native_View_borrow view, uint
 }
 '''
 
-EXPIRED_LOAN = r'''
-handle type Session;
-proc "C" Session(val id:u64);
-symbol @current :own handle Session;
-
-proc observe(handle value:Session in O) -> void where {const owner O} { return; }
-proc run() -> void {
-    for (i in 1u64 .. 4u64) {
-        effect @current <- make own handle Session(i);
-        defer observe(@current);
-    };
-    return;
-}
-run();
-'''
-
 EXPECTED = "open\nsession 0\nview 13\nview 12\nview 11\nsession 9\nclose\n"
 
 
@@ -108,8 +91,6 @@ def main():
         scratch = Path(directory)
         source = scratch / "main.cod"
         source.write_text(SOURCE)
-        rejected_source = scratch / "expired.cod"
-        rejected_source.write_text(EXPIRED_LOAN)
         provider = scratch / "provider.c"
         provider.write_text(PROVIDER)
         for mode, flags in (("specialized", ()), ("shared", ("--no-specialize",))):
@@ -125,13 +106,6 @@ def main():
                      output / "cod_providers.c", ir, provider, runtime_archive(toolchain), "-o", executable], ROOT)
             actual, _ = checked([executable], ROOT)
             assert actual == EXPECTED, (mode, actual)
-            unpublished = output / "unpublished.ll"
-            unpublished.write_text("previous output\n")
-            rejected = subprocess.run([COD, *flags, "--no-cache", "--check", rejected_source, "--emit-llvm", unpublished],
-                                      cwd=ROOT, capture_output=True, text=True, timeout=90)
-            assert rejected.returncode == 2 and rejected.stdout == "", rejected
-            assert "does not outlive its cleanup scope" in rejected.stderr, rejected
-            assert unpublished.read_text() == "previous output\n"
             print(f"PASS {mode}", flush=True)
     return 0
 

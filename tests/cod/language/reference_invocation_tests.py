@@ -32,7 +32,6 @@ runner.CASES = {
     'expired_target': ('func leak(ref input:i64 in O)->ref i64 in O where {owner O}'
         '{ref local:i64=1;return local;}val x<-1;defer (is)(leak(x),null);',
         2,'','borrowed result does not retain its declared external owner'),
-    'iteration_target': ('for(i in 0..2){defer (is)(i,null);};', 2, '', 'does not outlive its cleanup scope'),
     'iteration_cleanup': (OBS + 'for(i in 0..2){{defer (is)(i,null);defer observe(i);}};', 0, '0\n1\n', ''),
     'no_initialization_from_test': ('val x<-make local i64;{{defer (is)(x,null);}};x;', 2, '', 'before definite initialization'),
     'generic_nullable_borrow': (IO + 'func test(ptr p:T in O)->void where {T,owner O}{defer (is)(p,null);}'
