@@ -8,9 +8,6 @@ Each component directory under `tests/` contains a `run-all.sh` script that
 ### Quick examples
 
 ```bash
-# Build and run shilos C++ tests (default: using build/ toolchain)
-./tests/shilos/run-all.sh
-
 # Build yaml-cmp tool and run its self-check
 ./tests/yaml-cmp/run-all.sh
 
@@ -18,7 +15,7 @@ Each component directory under `tests/` contains a `run-all.sh` script that
 ./tests/codp/run-all.sh
 
 # Use pre-release toolchain from built/ directory
-COD_TEST_TOOLCHAIN=built ./tests/shilos/run-all.sh
+COD_TEST_TOOLCHAIN=built ./tests/codp/run-all.sh
 ```
 
 `run-all.sh` scripts automatically:
@@ -26,14 +23,8 @@ COD_TEST_TOOLCHAIN=built ./tests/shilos/run-all.sh
 * create a local `build/` directory and configure CMake (first invocation only);
 * perform incremental builds (`cmake --build ./build`);
 * select the appropriate toolchain based on the `COD_TEST_TOOLCHAIN` environment variable;
-* prepend required tool-chain paths to `PATH` so that tools such as `codp`, `shilos` and `yaml-cmp` are resolved;
+* prepend required tool-chain paths to `PATH` so that tools such as `codp` and `yaml-cmp` are resolved;
 * forward the exit status of each individual test, failing fast on error **so the script's own exit code accurately reflects pass/fail status**.
-
-> **Tip** – execute the entire test suite in one go from the project root:
->
-> ```bash
-> ./tests/shilos/run-all.sh && ./tests/codp/run-all.sh
-> ```
 
 All test folders **must** include a `run-all.sh` script to preserve this uniform
 interface.
@@ -51,7 +42,6 @@ For rapid development with test verification, use the default `build` toolchain 
 cmake --build ./build
 
 # Run tests directly against build/ directory (no install needed)
-./tests/shilos/run-all.sh
 ./tests/codp/run-all.sh
 ```
 
@@ -66,7 +56,6 @@ For final verification before release, use the installed toolchain:
 cmake --build ./build && ninja -C ./build install
 
 # Run tests against installed toolchain in built/
-COD_TEST_TOOLCHAIN=built ./tests/shilos/run-all.sh
 COD_TEST_TOOLCHAIN=built ./tests/codp/run-all.sh
 ```
 
@@ -88,8 +77,7 @@ Follow the patterns below when adding functionality:
 ### 1. C++ / CMake-based tests
 
 * Create `tests/<component>/` (or add to an existing one).
-* Provide source files and a `CMakeLists.txt` that respects the `COD_TEST_TOOLCHAIN` environment variable (see `tests/shilos/CMakeLists.txt` for reference).
-* Mirror the `tests/shilos` build helper if you need multiple executables.
+* Provide source files and a `CMakeLists.txt` that respects the `COD_TEST_TOOLCHAIN` environment variable.
 * Ensure your new directory contains a `run-all.sh` script that
   – sets `COD_TEST_TOOLCHAIN` default to "build",
   – configures `build/` on first run,
