@@ -2450,7 +2450,6 @@ class ScalarChecker {
     ViewEvidence view;
     // Keep projected breaks distinct while their pending finally runs.
     std::optional<CaseBreakProjection> projection;
-    bool projection_initialized = true;
     auto operator==(const CaseBreakEvidence &) const -> bool = default;
   };
   struct TypeEvidenceExits {
@@ -13215,10 +13214,8 @@ class ScalarChecker {
         if (view.view == true && state.selections.tracking)
           prepared.borrowed = TypeBorrowedReturn::capture(state.target, state.selections);
         CaseBreakEvidence result{type, view, {}};
-        if (state.required && view.view == true) {
+        if (state.required && view.view == true)
           result.projection.emplace(CaseBreakProjection{expr.children.front().get(), view.nullable, state.target.presence});
-          result.projection_initialized = !state.checks_initialization() || state.target.places.empty() || state.target.initialized;
-        }
         merge_type_exits(*state.exits, {Completion::case_break}, state, std::move(prepared), std::move(result));
       }
       return Type::never;
