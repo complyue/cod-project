@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Bound the first regional fixture migration
+
+<a id="k-shilos-native-fixture-boundary-20261125"></a>
+**K-SHILOS-NATIVE-FIXTURE-BOUNDARY-20261125.** D-ARCH-REVIEW r138→139 continues the [shilos retirement](#h-retire-shilos-20261125) at `47b60a0b:design/ImplementationArchitecture.md`. The [fixture review](design/ImplementationArchitecture.md#first-native-regional-fixture-checkpoint) pairs a relocated keyed cycle with an abrupt initializer and assigns the remaining legacy observations to separate evidence. The seed with a matching C runtime reproduced both source outputs. The instrumented observations remain pending.
+
 ## 2026-11-25 — Declare data call operators on their OO receiver
 
 <a id="h-oo-call-operator-head-20261125"></a>

@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r139 the [regional fixture review](../CHANGELOG.md#k-shilos-native-fixture-boundary-20261125) continues the [shilos retirement](#retiring-shilos) and [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review), P-682/P-683. It distinguishes the first two native runtime controls from the remaining behavior in the legacy fixtures.
+
 At r138 the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) sets the entry syntax and acceptance for the [OO implementation plan](#oo-call-operator-implementation-plan). [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues the r137 responsibilities and pre-code review under P-682/P-683. The work is queued for the existing OO path.
 
 At r137 the [project user’s package decision](../CHANGELOG.md#h-manual-bootstrap-packages-20261125) retires the bootstrap package manager. [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues P-682/P-683 for the seed’s directory input cutover, the [booter graph boundary](../applications/cod-booter/docs/ModuleGraph.md#standalone-package-input-crossing) and normal command verification.
@@ -360,6 +362,15 @@ Remove the seed’s C++ REPL as a whole, including C++ submission compilation, i
 For the seed’s first cutover, extract the existing bitcode link and process invocation used by `compileLanguage` into seed-private C++. The seed keeps the temporary-file owner. Preserve driver lookup, ordered arguments, status, diagnostics and cleanup, including a failed link. Check a small `--run`, package selection and emitted provider, IR and bitcode. An invocation without a source entry reports usage or a missing input before opening any workspace. Keep the source compilation flags used by current bootstrap commands.
 
 The project user authorized edits to the affected live CMake, link, install and toolchain-readiness definitions and regeneration of the existing build for this cleanup, provided the plan rebuilds no LLVM targets. Verify the migrated commands through their normal entry points. Check project includes, generated runner link commands, installed targets and fixture wiring for dependencies on an old toolchain copy of the library.
+
+### First native regional fixture checkpoint
+
+Use the [keyed two-node cycle](../tests/cod/language/regional-sum-placement-init.cod) and the [throwing initializer](../tests/cod/language/regional-sum-initializer-abrupt.cod) as the first executable inputs. The fixture helper compiles the production runtime once as C for that fixture, renaming only the hooks the fixture observes. Compile the observer separately with declarations matching the [runtime C interface](../cod/runtime/cod_lang_runtime.h). Link the emitted bitcode, observer and instrumented runtime so that each observed call reaches the real service exactly once. Keep any unconverted helper callers working during this stage.
+
+- **Successful initialization and relocation.** The program prints `true, true, 1, 2`. At release, record the actual reservations for the two distinct nodes. Open separate backing for the used extent, copy the used bytes, and release the original through its C service. Using only the copy and the recorded offsets, verify both active Link alternatives, keys 1 and 2 and both back-edges. Validate extents before decoding the emitted fields. Release the test-owned backing through its own protocol.
+- **Abrupt initialization.** The program prints the deferred 7 and the caught payload 42. Observe exactly one release of the acquired Graph owner on the unwind before the catch receives the failure. The unfinished Link has no readable payload. This fixture exercises cleanup without decoding that storage.
+
+Keep the independent shared payload, mutable pool, owner transfer and release-order assertions with their existing fixtures until an equivalent current input exercises each behavior. Record the first source rejection when an older input cannot reach its native observer. The two outputs above check the language path. The copied-image and release observations require the instrumented run. Implementation follows mainline’s existing retirement work.
 
 ## Design review and delivery responsibilities
 
