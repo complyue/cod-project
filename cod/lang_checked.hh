@@ -3378,14 +3378,16 @@ class ScalarChecker {
   bool selects_any_slot(const std::set<size_t> &ids, const std::set<size_t> &slots) const {
     return std::ranges::any_of(ids, [&](size_t id) { return selects_any_slot(id, slots); });
   }
-  std::set<size_t> overlapping_slots(const std::set<size_t> &slots) const {
-    auto result = physical_slots(slots);
-    const auto physical = result;
+  std::set<size_t> overlapping_physical_slots(const std::set<size_t> &physical) const {
+    auto result = physical;
     for (const auto id : physical) {
       const auto &overlaps = binding(id).overlaps;
       result.insert(overlaps.begin(), overlaps.end());
     }
     return result;
+  }
+  std::set<size_t> overlapping_slots(const std::set<size_t> &slots) const {
+    return overlapping_physical_slots(physical_slots(slots));
   }
   bool slot_is_live(size_t id) const {
     const auto &selection = binding(id).selection;
@@ -3527,18 +3529,21 @@ class ScalarChecker {
     if (body != Type::never && handler != Type::never && body != handler)
       fail(at, "try body and catch arms must have the same result type");
   }
-  bool direct_text_destination(const CheckedOperation &view) const {
-    return !view.slots.empty() && std::ranges::all_of(physical_slots(view.slots),
+  bool direct_text_destination(const std::set<size_t> &physical) const {
+    return !physical.empty() && std::ranges::all_of(physical,
         [&](size_t id) { return bindings_->at(id).direct_text_place; });
   }
   bool direct_text_field(const Expression &expr, const CheckedOperation &view) const {
     return expr.kind == Expression::Kind::field && view.product_field && view.operand_type.kind == Type::product &&
         program_.schemas[view.operand_type.identity].fields[*view.product_field].direct_text_place();
   }
-  void reference_destination(const CheckedOperation &view, const Location &at, bool text_installation = false) const {
+  std::set<size_t> reference_destination(const CheckedOperation &view, const Location &at,
+                                          bool text_installation = false) const {
     if (view.slots.empty()) fail(at, "reference operation requires a binding slot");
-    require_slots_live(view.slots, at, "reference binding's lexical scope has ended");
-    for (const auto id : physical_slots(view.slots)) {
+    auto physical = physical_slots(view.slots);
+    if (!std::ranges::all_of(physical, [&](size_t id) { return lexical_.bindings_available.contains(id); }))
+      fail(at, "reference binding's lexical scope has ended");
+    for (const auto id : physical) {
       const auto &binding = bindings_->at(id);
       if (binding.direct_text_place) {
         if (!text_installation) fail(at, "a direct String place is not a reference binding slot");
@@ -3547,19 +3552,20 @@ class ScalarChecker {
       }
       reference_slot(binding.value_binding, view.fixed_binding || binding.fixed, at);
     }
+    return physical;
   }
   void check_rebind(const CheckedOperation &target, const CheckedOperation &source, const Location &at,
                     bool allow_first_binding = false) {
-    reference_destination(target, at, true);
+    const auto physical = reference_destination(target, at, true);
     if (!source.view || source.mixed_view) implementation_gap(at, "rebinding from a fresh value without an existing target");
-    if (direct_text_destination(target)) {
+    if (direct_text_destination(physical)) {
       text_installation_type(source.type, at);
       if (source.nullable_view || source.targets.contains(null_target))
         fail(at, "a direct String place requires a non-null text target");
       require_payload_access(source, at);
     } else rebind_type(target.type, source.type, at);
-    const auto physical = physical_slots(target.slots);
-    for (const auto id : overlapping_slots(target.slots)) {
+    std::optional<bool> identity_only_source;
+    for (const auto id : overlapping_physical_slots(physical)) {
       const auto &binding = bindings_->at(id);
       rebind_access(binding.read_only, source.read_only, at);
       const auto &owners = lexical_.owners.at(id);
@@ -3568,16 +3574,22 @@ class ScalarChecker {
       if (physical.contains(id) && different_owners) fail(at, "reference rebinding cannot change the initializer-fixed owner");
       if (binding.embedded_slot && storage(*binding.embedded_slot).borrowed && different_owners)
         implementation_gap(at, "embedded slot overlap with an unproved owner equality");
+      // First binding and reservation exceptions only affect identity-only inputs.
+      if (!binding.requires_initialized || initializing_reference_fields_.contains(id)) continue;
+      if (!identity_only_source) identity_only_source = lexical_.live && selects_identity_only_target(source);
+      if (!*identity_only_source) continue;
       // Any possible earlier target makes this a rebind of a potentially
       // readable object. A fresh embedded slot can establish the edge first.
       const bool first_binding = allow_first_binding && binding.embedded_slot &&
           physical.contains(id) && lexical_.targets.at(id)->places.empty();
+      const auto only_selects = [](const std::set<size_t> &targets, size_t place) {
+        return targets.size() == 1 && targets.contains(place);
+      };
       const bool first_reservation = allow_first_binding && binding.reservation_slot && physical.contains(id) &&
-          lexical_.targets.at(id)->places == std::set<size_t>{null_target} &&
+          only_selects(lexical_.targets.at(id)->places, null_target) &&
           source.place && storage(*source.place).reserved_alternative &&
-          source.targets == std::set<size_t>{*source.place};
-      if (binding.requires_initialized && !first_binding && !first_reservation &&
-          !initializing_reference_fields_.contains(id))
+          only_selects(source.targets, *source.place);
+      if (!first_binding && !first_reservation)
         require_payload_access(source, at);
     }
   }
@@ -21334,7 +21346,7 @@ class ScalarChecker {
         if (read && !discard) dereference(operation, expr.at);
         break;
       }
-      if (direct_text_destination(target) || direct_text_field(*expr.children[0], target) ||
+      if (direct_text_destination(physical_slots(target.slots)) || direct_text_field(*expr.children[0], target) ||
           (target.type.kind == Type::product && !named_family(expr).methods.empty())) {
         check_text_transfer(expr, instance, operations, target, operation);
         break;
