@@ -20,7 +20,17 @@ export data ModuleExport {
 }
 export array ModuleExports[u64]:ModuleExport;
 
-export data DefaultExportRef { public_row:u64; nature:ResourceNature; }
+export data DefaultMemberRange {
+    first_ordinal:u64;
+    past_ordinal:u64;
+    first_byte:u64;
+    past_byte:u64;
+}
+export data DefaultExportRef {
+    public_row:u64;
+    nature:ResourceNature;
+    members:DefaultMemberRange;
+}
 export array DefaultExportRefs[u64]:DefaultExportRef;
 
 export func enum_type() -> u8 { return 26u8; }

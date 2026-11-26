@@ -43,7 +43,7 @@ using "./ModuleExportStorage.cod" {
     CallableObjectView { NoCallableObjectView },
     CallableUseProofs, CallableUseProof { UnselectedCallable },
     ReceiverImportCheck { NoReceiverCallables },
-    ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces, DefaultExportRefs
+    ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces, DefaultExportRefs, DefaultMemberRange
 };
 using "./ParserStorage.cod" FormalMode { ValueFormal };
 using "./ModuleExportStorage.cod" {
@@ -55,7 +55,7 @@ using "./ModuleExports.cod" {
     SelectedExport, SelectedExports, file_dependency_path,
     prepare_module_dependencies, ExportResolutionResult,
     resolve_enum_selections, resolve_sum_selections, verify_aggregate_selections,
-    invalid_export_tree, missing_module_export, wrong_export_kind, unproved_import_interpretation,
+    invalid_export_tree, missing_module_export, wrong_export_kind, missing_enum_member, unproved_import_interpretation,
     CheckedSelections, CheckedSelection { UnpublishedSelection, SelectedResource },
     checked_lexical_selection_kind, defining_symbol_row, symbol_export,
     StagedExportNames, StagedExportUses, SelectionSpelling { SourceSpelling, GraphSpelling },
@@ -63,9 +63,9 @@ using "./ModuleExports.cod" {
 };
 using "./ModuleDefaults.cod" {
     StagedDefaultExport, StagedDefaultExports, stage_module_defaults, reserve_defaults,
-        copy_module_defaults,
+        copy_module_defaults, measure_default_members,
     DefaultPublicationStatus { DefaultsReady, UnknownDefaultName, WrongDefaultKind,
-        DefaultStorageExhausted },
+        DefaultStorageExhausted, UnknownDefaultMember },
 };
 using "./ModuleFrontend.cod" {
     ModuleBindingResult, check_parsed_module_profile, bind_selected_module_recovering, module_read_failed, module_binding_failed,
@@ -556,7 +556,7 @@ func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
     where {const owner S, owner W, const owner G, const owner C, owner F, owner H, owner R, owner P} {
     ref members = make ExportResolutionResult { diagnostic <- 0u8; node <- no_node(); };
     if (!resolve_enum_selections(source, nodes, result.frontend.tree.used, result.frontend.tree.revision,
-                                 spellings, interfaces, interface_count, selected, members)) {
+                                 spellings, spelling_size, interfaces, interface_count, checked_selections, checked_used, selected, members)) {
         binding_diagnostic(nodes, result, module_selection_failed(), members.diagnostic, members.node);
         return false;
     } else {};
@@ -1045,26 +1045,6 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         report_scratch_error(diagnostic, 1u32);
         return ScratchFailed;
     } else {};
-    val default_count <- 0u64;
-    val default_problem <- no_node();
-    val default_result <- stage_module_defaults(
-        source, nodes, used, result.frontend.tree.revision, staged, export_names,
-        catalog_spellings, spellings, spelling_size, publication.module_identity,
-        0u64, count, defaults, default_count, default_problem);
-    if (default_result == DefaultStorageExhausted) {
-        report_scratch_error(diagnostic, 1u32);
-        return ScratchFailed
-    };
-    if (default_result != DefaultsReady) {
-        val default_code <- if (default_result == UnknownDefaultName) { missing_module_export() }
-            else { if (default_result == WrongDefaultKind) { wrong_export_kind() }
-                   else { invalid_export_tree() } };
-        delivered <- report_graph_rejection(source, lines, diagnostic, module_selection_failed(), default_code,
-                         syntax_first(nodes, used, default_problem),
-                         syntax_past(nodes, used, default_problem), no_node(), keys, key_first, key_past, run);
-        if (delivered != Complete) return delivered;
-        return Rejected
-    };
     ref interface_report = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
     val interfaces <- if (native) { 0u64 } else {
         publish_interfaces(nodes, names, selected, work, views, used, revision,
@@ -1110,6 +1090,28 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         report_scratch_error(diagnostic, 1u32);
         return ScratchFailed;
     } else {};
+    val default_count <- 0u64;
+    val default_problem <- no_node();
+    val default_result <- stage_module_defaults(
+        source, nodes, used, result.frontend.tree.revision, staged, export_names,
+        catalog_spellings, spellings, spelling_size, staged_interfaces, interfaces,
+        published_interfaces, interface_count, publication.module_identity,
+        0u64, count, defaults, default_count, default_problem);
+    if (default_result == DefaultStorageExhausted) {
+        report_scratch_error(diagnostic, 1u32);
+        return ScratchFailed
+    };
+    if (default_result != DefaultsReady) {
+        val default_code <- if (default_result == UnknownDefaultName) { missing_module_export() }
+            else { if (default_result == WrongDefaultKind) { wrong_export_kind() }
+                   else { if (default_result == UnknownDefaultMember) { missing_enum_member() }
+                          else { invalid_export_tree() } } };
+        delivered <- report_graph_rejection(source, lines, diagnostic, module_selection_failed(), default_code,
+                         syntax_first(nodes, used, default_problem),
+                         syntax_past(nodes, used, default_problem), no_node(), keys, key_first, key_past, run);
+        if (delivered != Complete) return delivered;
+        return Rejected
+    };
     progress[0u64].count <- count;
     progress[0u64].default_count <- default_count;
     progress[0u64].interface_count <- interfaces;
@@ -1335,7 +1337,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             checked_resource <- no_node(); selection_site <- no_node(); selection_public_row <- no_node();
             dependency_module <- 0u64; identity <- 0u64; kind <- 0u8; checked <- 0u8;
             origin_module <- 0u64; owner_module <- 0u64; owner_identity <- 0u64; shape <- 0u8;
-            enum_head <- no_node(); next_enum_selection <- no_node(); enum_code <- 0u64;
+            enum_head <- no_node(); enum_code <- 0u64;
             sum_head <- no_node(); next_sum_selection <- no_node();
             constructor_selection <- no_node(); constructor_row <- no_node();
         });
@@ -1513,6 +1515,9 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         if (written == no_node()) return ScratchFailed;
         val publication_capacity <- add_span(written, 0u64, selection_capacity, no_node());
         if (publication_capacity == no_node()) return ScratchFailed;
+        val extra_defaults <- measure_default_members(nodes, parsed_tree.used, parsed_tree.revision);
+        val default_capacity <- add_span(publication_capacity, 0u64, extra_defaults, no_node());
+        if (default_capacity == no_node()) return ScratchFailed;
         val interface_extra <- if (purpose == (NativeObject:GraphPurpose)) { publication_capacity } else { 0u64 };
         val staged_interface_capacity <- add_span(capacity, 0u64, interface_extra, no_node());
         if (staged_interface_capacity == no_node()) return ScratchFailed;
@@ -1545,8 +1550,11 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         });
         ref export_names = make StagedExportNames(publication_capacity,
             make SourceSpelling { span <- make SourceSpan { first <- 0u64; past <- 0u64 } });
-        ref staged_defaults = make StagedDefaultExports(publication_capacity, make StagedDefaultExport {
-            local_row <- no_node(); nature <- OrdinaryResource
+        ref staged_defaults = make StagedDefaultExports(default_capacity, make StagedDefaultExport {
+            local_row <- no_node(); nature <- OrdinaryResource;
+            members <- make DefaultMemberRange {
+                first_ordinal <- 0u64; past_ordinal <- 0u64; first_byte <- 0u64; past_byte <- 0u64
+            }
         });
         allocating <- false;
         const val binding_finding <- run[0u64].retained;

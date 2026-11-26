@@ -42,7 +42,7 @@ using "./ProviderRenderer.cod" {
 using "./CompilerStatus.cod" CompilerStatus {
     Complete, Rejected, OpenFailed, LoweringFailed, FinishFailed, ScratchFailed
 };
-using "./ModuleExportStorage.cod" { DefaultExportRef, DefaultExportRefs };
+using "./ModuleExportStorage.cod" { DefaultExportRef, DefaultExportRefs, DefaultMemberRange };
 using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 
 region GraphRoot {
@@ -159,7 +159,10 @@ proc traverse_graph(here finish(commands:const NativeCommands in G, units:const 
         owner_module <- 0u64; owner_identity <- 0u64; shape <- 0u8;
     }) in G;
     ref defaults = make DefaultExportRefs(0u64, make DefaultExportRef {
-        public_row <- no_node(); nature <- OrdinaryResource
+        public_row <- no_node(); nature <- OrdinaryResource;
+        members <- make DefaultMemberRange {
+            first_ordinal <- 0u64; past_ordinal <- 0u64; first_byte <- 0u64; past_byte <- 0u64
+        }
     }) in G;
     ref interfaces = make ModuleInterfaces(0u64, make ModuleInterfaceRow {
         defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;

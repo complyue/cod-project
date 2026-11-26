@@ -2948,7 +2948,7 @@ func resolve_plain_product(source:const SourceBytes in S, nodes:const ExprNodes 
         checked_resource <- no_node(); selection_site <- no_node(); selection_public_row <- no_node();
         dependency_module <- 0u64; identity <- 0u64; kind <- 0u8; checked <- 0u8;
         origin_module <- 0u64; owner_module <- 0u64; owner_identity <- 0u64; shape <- 0u8;
-        enum_head <- no_node(); next_enum_selection <- no_node(); enum_code <- 0u64;
+        enum_head <- no_node(); enum_code <- 0u64;
         sum_head <- no_node(); next_sum_selection <- no_node(); constructor_selection <- no_node(); constructor_row <- no_node()
     };
     val marker <- no_node();
