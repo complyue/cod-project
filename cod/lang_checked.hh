@@ -456,6 +456,8 @@ class ScalarChecker {
     std::vector<LeafGuard> guards;
     std::vector<Call> calls;
     bool readonly_loans = false;
+    const Expression *range = nullptr;
+    bool independent_locals = true;
     std::vector<std::pair<const Expression *, BuiltinOperation>> reads;
   };
   std::map<size_t, ScalarPlan> scalar_callers_;
@@ -790,6 +792,7 @@ class ScalarChecker {
   };
   std::map<const Expression *, LoopState> loop_states_;
   bool loop_evidence_changed_ = false;
+  const Expression *readonly_proving_range_ = nullptr;
   std::vector<const Expression *> active_loops_;
   struct AbruptPath {
     LexicalState state;
@@ -21031,7 +21034,8 @@ class ScalarChecker {
         });
       const auto iteration_scope = next_scope_;
       if (repeat_possible) {
-        if (!proving_) loop_states_[&expr] = {iteration_scope, before.bindings_available, {}, {}};
+        if (!proving_ || &expr == readonly_proving_range_)
+          loop_states_[&expr] = {iteration_scope, before.bindings_available, {}, {}};
         auto &loop = loop_states_.at(&expr);
         lexical_.exposed_exception_payloads.insert(loop.exposed_exception_payloads.begin(), loop.exposed_exception_payloads.end());
         refresh_targets(lexical_, true, &loop.rebound);
@@ -22343,7 +22347,8 @@ class ScalarChecker {
 
   enum class FlowExports { none, every_pass, final_pass };
   enum class TargetPreparation { discover, single_proving };
-  template <typename Check> void check_flow(FlowExports exports, TargetPreparation targets, const Check &check) {
+  template <typename Check> void check_flow(FlowExports exports, TargetPreparation targets, const Check &check,
+                                           const Expression *readonly_range = nullptr) {
     const bool validating = validating_;
     struct RestoreExport {
       bool &active;
@@ -22360,9 +22365,15 @@ class ScalarChecker {
       clear_target_discovery();
       loop_evidence_changed_ = false;
       exporting_effects_ = restore.previous && exports != FlowExports::none;
+      struct RestoreRange {
+        const Expression *&active;
+        const Expression *previous;
+        ~RestoreRange() { active = previous; }
+      } restore_range{readonly_proving_range_, std::exchange(readonly_proving_range_, readonly_range)};
       check(true);
-      if (!loop_states_.empty() || loop_evidence_changed_)
-        throw std::logic_error("single proving traversal discovered a loop");
+      if (loop_evidence_changed_ || std::ranges::any_of(loop_states_, [&](const auto &entry) {
+            return entry.first != readonly_range || !entry.second.rebound.empty();
+          })) throw std::logic_error("single proving traversal found unexpected loop state");
       return;
     }
     exporting_effects_ = restore.previous && exports == FlowExports::every_pass;
@@ -22838,12 +22849,12 @@ class ScalarChecker {
   }
 
   bool bind_readonly_operations(const Expression &expr, TypeEvidenceState &scope, ScalarPlan &plan,
-                                bool &has_range, size_t guard = null_target) const {
+                                size_t guard = null_target) const {
     using K = Expression::Kind;
     if (expr.definition || expr.receiving || expr.annotation || expr.checked_ref_argument || expr.spread ||
         expr.scoped || expr.lexical_symbol_call || expr.intrinsic) return false;
     const auto bind_child = [&](const Expression &child, size_t condition) {
-      return bind_readonly_operations(child, scope, plan, has_range, condition);
+      return bind_readonly_operations(child, scope, plan, condition);
     };
     const auto bind_children = [&] {
       return std::ranges::all_of(expr.children, [&](const auto &child) { return bind_child(*child, guard); });
@@ -22859,24 +22870,38 @@ class ScalarChecker {
     case K::block: {
       auto nested = scope;
       return std::ranges::all_of(expr.children, [&](const auto &child) {
-        return bind_readonly_operations(*child, nested, plan, has_range, guard);
+        return bind_readonly_operations(*child, nested, plan, guard);
       });
     }
     case K::grouped: return bind_children();
     case K::return_value: return expr.children.size() == 1 && bind_children();
-    case K::pointer_group:
-      return expr.declaration_kind == "val" && expr.children.size() == 1 &&
-          expr.children.front()->kind == K::pointer && bind_children();
-    case K::pointer:
-      return expr.declaration_kind == "val" && expr.owner_name.empty() && expr.children.size() == 1 &&
-          bind_children() && scope.bindings.try_emplace(expr.text, std::nullopt).second;
+    case K::pointer_group: {
+      if (expr.declaration_kind != "val" || expr.children.size() != 1 ||
+          expr.children.front()->kind != K::pointer) return false;
+      const auto &statements = program_.methods.at(*scope.method).source->body->children;
+      // Only the body's own local declarations enter the single-pass range plan.
+      if (std::ranges::none_of(statements, [&](const auto &statement) { return statement.get() == &expr; }))
+        plan.independent_locals = false;
+      return bind_children();
+    }
+    case K::pointer: {
+      if (expr.declaration_kind != "val" || !expr.owner_name.empty() || expr.children.size() != 1 ||
+          !bind_children()) return false;
+      // In the bound profile these operations produce independent scalar values.
+      switch (ungrouped_expression(*expr.children.front()).kind) {
+      case K::integer: case K::boolean: case K::field: case K::index:
+      case K::call: case K::binary: case K::unary: break;
+      default: plan.independent_locals = false;
+      }
+      return scope.bindings.try_emplace(expr.text, std::nullopt).second;
+    }
     case K::range_for: {
-      if (has_range || expr.children.size() != 3) return false;
-      has_range = true;
+      if (plan.range || expr.children.size() != 3) return false;
+      plan.range = &expr;
       auto iteration = scope;
       return bind_child(*expr.children[0], guard) && bind_child(*expr.children[1], guard) &&
           iteration.bindings.try_emplace(expr.text, std::nullopt).second &&
-          bind_readonly_operations(*expr.children[2], iteration, plan, has_range, guard);
+          bind_readonly_operations(*expr.children[2], iteration, plan, guard);
     }
     case K::conditional: {
       if (!expr.ordinary_braced_if() && expr.children[1]->kind != K::return_value) return false;
@@ -22885,11 +22910,11 @@ class ScalarChecker {
       const auto yes = plan.guards.size();
       plan.guards.push_back({&test, true, guard});
       auto then_scope = scope;
-      if (!bind_readonly_operations(*expr.children[1], then_scope, plan, has_range, yes)) return false;
+      if (!bind_readonly_operations(*expr.children[1], then_scope, plan, yes)) return false;
       const auto no = plan.guards.size();
       plan.guards.push_back({&test, false, guard});
       auto else_scope = scope;
-      return bind_readonly_operations(*expr.children[2], else_scope, plan, has_range, no);
+      return bind_readonly_operations(*expr.children[2], else_scope, plan, no);
     }
     case K::binary: case K::unary: {
       plan.operations.push_back(&expr);
@@ -23002,8 +23027,7 @@ class ScalarChecker {
             bind_scalar_call(*returned.children.front(), scope, plan.scalar, Type::boolean, null_target, true))
           return plan;
       }
-      bool has_range = false;
-      if (!bind_readonly_operations(*form.body, scope, plan.scalar, has_range) || plan.scalar.calls.empty())
+      if (!bind_readonly_operations(*form.body, scope, plan.scalar) || plan.scalar.calls.empty())
         return {};
       return plan;
     }
@@ -23185,8 +23209,25 @@ class ScalarChecker {
       return callee.effects_frozen && effects.written_inputs.empty() &&
           effects.binding_sources.empty() && effects.bindings.empty();
     };
+    const auto *readonly_range = [&]() -> const Expression * {
+      if (!scalar_exits || distinct_bindings) return nullptr;
+      const auto &plan = *applying_scalar_;
+      if (!plan.readonly_loans || !plan.range || !plan.independent_locals ||
+          std::ranges::none_of(method.body->children, [&](const auto &item) { return item.get() == plan.range; }))
+        return nullptr;
+      const auto read_only = [&](const ScalarPlan::Call &call) {
+        if ((call.kind != ScalarPlan::Call::Kind::literal && call.kind != ScalarPlan::Call::Kind::array_length) ||
+            (validating_ && module_names().values.contains(call.site->text))) return false;
+        const auto &callee = program_.instances.at(call.instance);
+        const auto &effects = callee.effects;
+        return callee.effects_frozen && callee.result.mode == ResultMode::value &&
+            effects.written_inputs.empty() && effects.binding_sources.empty() && effects.bindings.empty() &&
+            effects.lexical_allocations.empty() && effects.array_allocations.empty();
+      };
+      return std::ranges::all_of(plan.calls, read_only) ? plan.range : nullptr;
+    }();
     const bool single_proving = !distinct_bindings &&
-        ((bound_scalar && independent_scalar_frame(instance, *checking_method_)) || bound_readonly_wrapper());
+        ((bound_scalar && independent_scalar_frame(instance, *checking_method_)) || bound_readonly_wrapper() || readonly_range);
     const auto targets = single_proving ? TargetPreparation::single_proving : TargetPreparation::discover;
     check_flow(exports, targets, [&](bool proving) {
       begin_check(instance.storage, instance.bindings, instance.operations, proving);
@@ -23456,7 +23497,7 @@ class ScalarChecker {
         }
         for (const auto category : unproved_owners) observed.direct_owned_failures.erase(category);
       }
-    });
+    }, readonly_range);
     if (scalar_exits) {
       const auto &plan = *applying_scalar_;
       const bool boolean_result = instance.result.type == Type::boolean;
