@@ -345,8 +345,6 @@ class BodyExtraction {
     if (first) {
       auto &instance = bodies_.emplace_back().instance;
       instance.method = method_id;
-      instance.arguments = method.parameters;
-      instance.context = method.parameters;
       instance.result = method.result;
     }
     return row->second;
@@ -604,7 +602,6 @@ class BodyExtraction {
         if (outlined.handler) parameter.fixed_binding = source.fixed;
       }
       bind_input(parameter, parameter.type, true);
-      body_.instance.arguments.push_back(parameter.type);
       outlined.captures.push_back({&expr, original, std::move(parameter)});
     }
 
@@ -2165,10 +2162,7 @@ class BodyExtraction {
           here_.emplace(formal.name, HereFormal{&contract, owner, 0});
         }
       } else {
-        for (const auto &offered : body_.outline->parameters) {
-          bind_input(offered, offered.type);
-          body_.instance.arguments.push_back(offered.type);
-        }
+        for (const auto &offered : body_.outline->parameters) bind_input(offered, offered.type);
       }
       const auto &end = extract(*form_.body);
       expect(body_.instance.frame.owners.size() == owners().size(), form_.at,
@@ -2181,7 +2175,6 @@ class BodyExtraction {
                form_.at, "seed needs a declared result for a value tail");
         if (end.type == Type::void_type && !body_.void_exit) body_.void_exit = form_.body.get();
       }
-      if (body_.outline) body_.instance.context = body_.instance.arguments;
     }
   };
 
@@ -2308,7 +2301,6 @@ class BodyExtraction {
     method.source = outline.source;
     method.module = outline.module;
     method.definition = body.instance.method;
-    method.parameters = body.instance.arguments;
     method.result = completed_result(body, results);
     if (outline.handler) {
       auto &symbol = program.symbols.at(*outline.handler);

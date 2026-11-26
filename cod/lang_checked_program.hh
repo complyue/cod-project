@@ -56,7 +56,6 @@ inline Type text_access_result(BuiltinOperation operation, const Expression &exp
   return Type::string;
 }
 // Nominal schema identities for a selected abstract target. An empty set carries no narrowing.
-using NominalTargets = std::set<size_t>;
 inline bool eager_operation(std::string_view name) {
   return name == "+" || name == "-" || name == "*" || name == "/" || name == "%" || name == "!" ||
       name == "==" || name == "!=" || name == "<" || name == ">" || name == "<=" || name == ">=";
@@ -134,18 +133,6 @@ struct CheckedOperation {
   bool publishes_effect = true;
   bool reads_direct_body = false;
   std::optional<size_t> callee;
-  struct NominalCall {
-    std::vector<Type> inputs;
-    size_t callee;
-    bool operator==(const NominalCall &) const = default;
-  };
-  std::vector<NominalCall> nominal_calls{};
-  std::optional<size_t> callable, callable_binding, callable_place;
-  std::vector<CheckedOperation> callable_captures;
-  bool callable_call = false;
-  bool callable_nullable = false;
-  std::set<size_t> callable_targets;
-  std::optional<std::set<size_t>> callable_choices;
   std::optional<size_t> place;
   std::optional<size_t> product_field;
   std::optional<size_t> exception_owner;
@@ -178,7 +165,6 @@ struct CheckedOperation {
   bool indexed_target = false;
   // The result may retain a ptr carrier even if the current target is present.
   bool nullable_view = false;
-  NominalTargets nominal_targets;
   std::uint64_t integer = 0;
   bool enum_literal = false;
   bool enum_assertion = false;
@@ -211,7 +197,6 @@ struct CheckedOperation {
   bool case_arm_completes = false;
   bool minimum_literal = false;
   std::set<size_t> captures;
-  std::optional<size_t> captured_place;
   bool mixed_view = false;
   bool scalar_value_join = false;
   bool borrowed_result = false;
@@ -440,20 +425,17 @@ struct CheckedInput {
 };
 struct CheckedFrame {
   std::vector<CheckedInput> inputs;
-  std::vector<size_t> captures;
   // One incoming identity per input-bound owner, independent of target carriers.
   std::map<size_t, size_t> owners;
   bool operator==(const CheckedFrame &) const = default;
 };
 struct CheckedInstance {
   size_t method;
-  std::vector<Type> arguments;
   ResultContract result;
   std::map<const Expression *, CheckedOperation> operations;
   bool complete = false;
   std::vector<CheckedStorage> storage;
   std::vector<CheckedBinding> bindings;
-  std::vector<Type> context;
   CheckedFrame frame;
   // Completed capability arguments for this executable frame. An empty
   // layout is valid. A missing layout cannot supply the LLVM call ABI.
@@ -513,7 +495,6 @@ struct CheckedMethod {
   bool prepares_display_operands() const { return lexical_result && lexical_result->display_operands; }
   std::set<size_t> throws_categories;
   std::vector<Type> throws_types;
-  std::vector<Capture> captures;
   std::vector<std::string> type_parameters;
   std::optional<size_t> parent;
   std::vector<CheckedHereContract> here;
@@ -545,7 +526,6 @@ struct CheckedMethod {
     // The entry receives these owners at each handoff. Remaining owners and
     // live places come from the supplier's activation.
     size_t here_input_owners = 0;
-    std::set<size_t> here_snapshots;
     // A reference input carries the supplier's binding slot.
     std::set<size_t> live_bindings;
 
@@ -563,71 +543,6 @@ struct CheckedMethod {
   }
   const std::vector<OwnerParameter> &input_owners() const {
     return scope_inputs ? scope_inputs->owners : source->owner_parameters;
-  }
-};
-struct CallableSelectionInputs {
-  std::vector<size_t> positions;
-  // Shared inputs that can force all candidates into the lossless phase.
-  std::vector<size_t> widening_positions;
-  bool uniform() const { return positions.empty() && widening_positions.empty(); }
-  bool operator==(const CallableSelectionInputs &) const = default;
-  bool widens_shared_input(const std::vector<Type> &arguments, const std::vector<Type> &formals) const {
-    return std::any_of(widening_positions.begin(), widening_positions.end(),
-        [&](size_t input) { return arguments.at(input) != formals.at(input); });
-  }
-};
-struct CheckedCallable {
-  Type type;
-  std::optional<size_t> family = {};
-  // Actual input identities select semantic methods before parameter preparation.
-  std::vector<std::pair<std::vector<Type>, size_t>> dispatch = {};
-  // A whole-domain proof can establish one prepared implementation.
-  std::optional<size_t> uniform_target = {};
-  // Factored rows retain distinguishing types and the shared widening phase.
-  std::optional<CallableSelectionInputs> selection_inputs = {};
-  // Symbolic activation owns a sealed replay layout for its full family view.
-  std::optional<std::set<size_t>> replay_symbols = {};
-  size_t replay_interpretation = 0;
-  std::set<size_t> implementations() const {
-    std::set<size_t> result;
-    if (uniform_target) result.insert(*uniform_target);
-    for (const auto &[inputs, target] : dispatch) result.insert(target);
-    return result;
-  }
-  size_t target(const std::vector<Type> &arguments) const {
-    if (uniform_target || selection_inputs) {
-      if (arguments.size() != type.parameters.size()) throw std::logic_error("unchecked callable family invocation");
-      for (size_t i = 0; i < arguments.size(); ++i) {
-        const auto &argument = arguments[i];
-        if ((!scalar_type(argument) && argument.kind != Type::procedure) ||
-            !accepts_argument(argument, type.parameters[i], argument_mode(type, i)))
-          throw std::logic_error("unchecked callable family invocation");
-      }
-    }
-    if (uniform_target) return *uniform_target;
-    const bool shared_widening = selection_inputs && selection_inputs->widens_shared_input(arguments, type.parameters);
-    const auto found = std::find_if(dispatch.begin(), dispatch.end(), [&](const auto &entry) {
-      if (!selection_inputs) return entry.first == arguments;
-      const auto &positions = selection_inputs->positions;
-      return entry.first.size() == arguments.size() &&
-          selection_inputs->widens_shared_input(entry.first, type.parameters) == shared_widening &&
-          std::all_of(positions.begin(), positions.end(), [&](size_t input) { return entry.first.at(input) == arguments.at(input); });
-    });
-    if (found == dispatch.end()) throw std::logic_error("unchecked callable family invocation");
-    return found->second;
-  }
-  std::vector<std::pair<std::vector<Type>, size_t>> alternatives(const std::vector<Type> &arguments) const {
-    if (uniform_target || selection_inputs) return {{arguments, target(arguments)}};
-    std::vector<std::pair<std::vector<Type>, size_t>> result;
-    for (const auto &entry : dispatch) {
-      bool admitted = entry.first.size() == arguments.size();
-      for (size_t i = 0; admitted && i < arguments.size(); ++i)
-        admitted = entry.first[i] == arguments[i] ||
-            (argument_mode(type, i) == ArgumentMode::value && accepts_exception(entry.first[i], arguments[i]));
-      if (admitted) result.push_back(entry);
-    }
-    if (result.empty()) throw std::logic_error("unchecked callable family invocation");
-    return result;
   }
 };
 struct CheckedSymbol {
@@ -710,7 +625,6 @@ struct CheckedProgram {
   std::vector<CheckedNativeOperation> native_operations;
   std::vector<CheckedSymbol> symbols;
   std::deque<CheckedFamily> families;
-  std::vector<CheckedCallable> callables;
   std::vector<std::unique_ptr<Expression>> scope_operands;
   std::vector<Expr> generated_here_bodies;
   std::deque<CheckedMethod> methods;
@@ -745,12 +659,7 @@ struct CheckedProgram {
     }
     return false;
   }
-  const std::set<size_t> &captured_symbols(const CheckedCallable &value) const {
-    if (value.replay_symbols) return *value.replay_symbols;
-    if (!value.type.pure_callable) throw std::logic_error("symbolic handler without a completed replay layout");
-    static const std::set<size_t> empty;
-    return empty;
-  }
+
 };
 
 // Primitive bits and enum bits are stored without the transport envelope.
@@ -765,86 +674,5 @@ struct StorageFormat {
   auto operator<=>(const StorageFormat &) const = default;
   Type type() const { return {kind, {}, enum_identity}; }
 };
-
-struct CheckedBody {
-  struct Context {
-    const CheckedInstance *instance;
-    std::optional<std::map<const Expression *, CheckedOperation>> remapped_operations;
-    const std::map<const Expression *, CheckedOperation> &operations() const {
-      return remapped_operations ? *remapped_operations : instance->operations;
-    }
-  };
-  std::vector<CheckedStorage> storage;
-  std::vector<std::set<StorageFormat>> storage_types;
-  CheckedFrame frame;
-  // Conservative writable exposure of an invocation input. Unexposed saved
-  // payloads can be observed without acquiring another complete image.
-  std::set<size_t> writable_captures;
-  Context context;
-};
-
-inline CheckedBody checked_body(const CheckedInstance &checked) {
-  CheckedBody result;
-  std::map<size_t, size_t> places;
-  {
-    const auto retain = [&](const CheckedStorage &place) {
-      const auto [entry, inserted] = places.emplace(place.binding, result.storage.size());
-      if (inserted) {
-        result.storage.push_back(place);
-        result.storage_types.emplace_back();
-      }
-      result.storage[entry->second].borrowed &= place.borrowed;
-      result.storage_types[entry->second].emplace(place.type);
-    };
-    for (const auto &input : checked.frame.inputs) retain(checked.storage.at(input.place));
-    for (const auto capture : checked.frame.captures) retain(checked.storage.at(capture));
-    for (const auto &place : checked.storage) retain(place);
-  }
-  {
-    const auto remap = [&](size_t place) { return place == null_target ? place : places.at(checked.storage.at(place).binding); };
-    auto inputs = checked.frame;
-    for (auto &input : inputs.inputs) input.place = remap(input.place);
-    for (auto &capture : inputs.captures) capture = remap(capture);
-    result.frame = std::move(inputs);
-    bool unchanged = true;
-    for (size_t i = 0; i < checked.storage.size(); ++i) unchanged = unchanged && remap(i) == i;
-    result.context = {&checked, std::nullopt};
-    for (const auto &[expr, operation] : checked.operations) {
-      for (size_t a = 0; a < operation.arguments.size(); ++a) {
-        if (operation.arguments[a].mode == ArgumentMode::value) continue;
-        const auto &argument = checked.operations.at(&operation.argument(*expr, a));
-        for (size_t c = 0; c < checked.frame.captures.size(); ++c)
-          if (!checked.storage.at(checked.frame.captures[c]).read_only &&
-              argument.targets.contains(checked.frame.captures[c])) result.writable_captures.insert(c);
-      }
-    }
-    if (unchanged) return result;
-    const auto optional = [&](std::optional<size_t> &place) { if (place) place = remap(*place); };
-    const auto set = [&](std::set<size_t> &source) {
-      std::set<size_t> targets;
-      for (const auto place : source) targets.insert(remap(place));
-      source = std::move(targets);
-    };
-    const auto lower = [&](auto &&self, CheckedOperation &operation) -> void {
-      optional(operation.place); optional(operation.callable_place); optional(operation.captured_place);
-      optional(operation.exception_owner); optional(operation.region_holder);
-      optional(operation.regional_product_holder);
-      const auto remap_allocator = [&](CheckedOperation::ArrayAllocator &allocator) {
-        if (allocator.kind == CheckedOperation::ArrayAllocator::region) allocator.place = remap(allocator.place);
-      };
-      if (operation.array_allocator) remap_allocator(*operation.array_allocator);
-      if (operation.array_allocator_arguments) {
-        auto arguments = std::make_shared<std::map<size_t, CheckedOperation::ArrayAllocator>>(*operation.array_allocator_arguments);
-        for (auto &[role, allocator] : *arguments) remap_allocator(allocator);
-        operation.array_allocator_arguments = std::move(arguments);
-      }
-      set(operation.targets); set(operation.callable_targets); set(operation.captures);
-      for (auto &capture : operation.callable_captures) self(self, capture);
-    };
-    result.context.remapped_operations = checked.operations;
-    for (auto &[expr, operation] : *result.context.remapped_operations) lower(lower, operation);
-  }
-  return result;
-}
 
 } // namespace cod::language
