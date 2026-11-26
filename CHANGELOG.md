@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Match a slice directly in a method parameter
+
+<a id="h-slice-method-patterns-20261126"></a>
+**H-SLICE-METHOD-PATTERNS-20261126.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user proposed extending the mirrored slice pattern to method signatures and chose “Allow direct and grouped heads” for `func stride((.. by val d:i64)) -> i64 { d }`. [D-10-SLICE-METHODS](design/DesignAuthorityRegistry.md#d-10-slice-methods) composes the [confirmed slice case shape](https://github.com/complyue/cod-project/blob/234f06019c63f72bb8570fdc708f8ca8caf68d07/design/RangedForAndGenerators.md#matching-a-slice-in-a-case-arm) with [existing method selection](https://github.com/complyue/cod-project/blob/234f06019c63f72bb8570fdc708f8ca8caf68d07/design/SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch). D-10r274/D-07r228/D-29r28 preserve field identity, fixed arity, whole-tuple specificity and explicit variadic dispatch. [Examples and acceptance](design/SymbolicDynamicScope.md#slice-patterns-in-method-parameters). Compiler delivery remains separate. Registry r1349→1350.
+
 ## 2026-11-26 — Match the written slice shape in a library case arm
 
 <a id="h-mirrored-slice-case-20261126"></a>

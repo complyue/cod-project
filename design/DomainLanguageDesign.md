@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 227
+Discussion revision: 228
 
 Recorded: 2026-11-26
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r228 [D-10-SLICE-METHODS](DesignAuthorityRegistry.md#d-10-slice-methods) extends the r227 mirrored pattern to direct and grouped callable declarations. The existing public signature, case and nominal binding contracts continue. [Accepted heads and examples](SymbolicDynamicScope.md#slice-patterns-in-method-parameters)
 
 At r227 [D-07-SLICE-CASE](DesignAuthorityRegistry.md#d-07-slice-case) extends the r226 case grammar to match supplied and omitted slice fields. P-770/P-771 preserve the nominal subject, branch-local bindings, guard order and open-type coverage. [Decision and examples](RangedForAndGenerators.md#matching-a-slice-in-a-case-arm)
 
@@ -732,7 +734,7 @@ The same here signature accepts bodies using zero, one or several separately pro
 
 #### Standalone callable declarations
 
-With a complete public signature, `;` ends a declaration, `{ … }` supplies one method body, and `of { (…) => … }` supplies a group. The public parameters provide slots, labels and admitted types. Each arm may accept the full slot, refine its actual type or require a typed constant value. A body-bearing group contributes real methods to the permitted named family, including a symbolic procedure family. An `effect` with a method group instead installs its own complete anonymous family when reached. [Canonical grammar and selection](SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch) · [Method arm boundaries](SymbolicDynamicScope.md#method-arm-boundaries)
+With a complete public signature, `;` ends a declaration, `{ … }` supplies one method body, and `of { (…) => … }` supplies a group. The public parameters provide slots, labels and admitted types. Each arm may accept the full slot, refine its actual type, require a typed constant value or refine a fixed slot with a [slice pattern](SymbolicDynamicScope.md#slice-patterns-in-method-parameters). A single method may also write the slice pattern directly in its parameter list. A body-bearing group contributes real methods to the permitted named family, including a symbolic procedure family. An `effect` with a method group instead installs its own complete anonymous family when reached. [Canonical grammar and selection](SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch) · [Method arm boundaries](SymbolicDynamicScope.md#method-arm-boundaries)
 
 [D-10](SymbolicDynamicScope.md#callable-declarations-and-methods) owns callable identities, signature declarations and methods. H-258 requires explicit parameter/result signatures on a bodyless declaration. [D-24](CallableResultInference.md#establishing-a-result-contract) applies H-423: an independently established declaration can supply a definition's omitted result contract. The same rules govern func/proc and named/anonymous definitions where applicable.
 

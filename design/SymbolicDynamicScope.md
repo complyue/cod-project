@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 273 · Recorded: 2026-11-26 · Phase: language/application co-design.
+Design revision: 274 · Recorded: 2026-11-26 · Phase: language/application co-design.
 
 ## Design authority
+
+At r274 [D-10-SLICE-METHODS](DesignAuthorityRegistry.md#d-10-slice-methods) admits one mirrored slice parameter in each fixed position of a direct or grouped method. P-772/P-773 carry the r273 call and pack rules and the r27 slice schema into [method selection](#slice-patterns-in-method-parameters). The [confirmed decision](../CHANGELOG.md#h-slice-method-patterns-20261126) covers ordinary field binding and dispatch. General destructuring remains outside its scope.
 
 At r273 [D-10-VARARGS](DesignAuthorityRegistry.md#d-10-varargs) allows fixed methods and one variadic method in a family. An explicit pack expansion selects the variadic method. P-403/P-404 continue for typed elements, preparation, ownership and forwarding. [Public decision and acceptance](../CHANGELOG.md#h-selector-literals-and-pack-dispatch-20261126)
 
@@ -661,7 +663,7 @@ also uses `->` and has its own ordered matching, guards and fallthrough.
 The complete header supplies the admitted input types and slots, public argument names,
 defaults, result and owner/access contracts. Each arm refines those same slots. An arm may
 bind a parameter of its public type or a more specific admissible type, accept a slot with
-`_`, or match a constant value. When the methods instead declare their own input signatures,
+`_`, match a constant value, or use a [slice pattern](#slice-patterns-in-method-parameters). When the methods instead declare their own input signatures,
 write the common name, result and any common constraints once, as in
 `proc schedule_retry -> void { (0u8) => { close_attempt() } (n:u8) => { enqueue_retry(n) } }`.
 That form can group methods of different arities under the existing family-formation rules.
@@ -743,6 +745,29 @@ installation signature also introduces the list with `of`, as in
 `effect @score(n:u8) -> u64 of { (0u8) => 0u64; (_) => 1u64 }`. The established short
 installation below uses the same arms. Ordinary callable-kind restrictions and each
 symbol's capture, installation and invocation rules govern its use.
+
+#### Slice patterns in method parameters
+
+A fixed positional parameter of a `func` or `proc` can use the [mirrored slice pattern](RangedForAndGenerators.md#matching-a-slice-in-a-case-arm). Write it directly in a single method or in a grouped method head. The outer parentheses delimit the ordinary argument list. The inner parentheses enclose **one** selector. For example, this method accepts the builtin slice with both bounds omitted, exclusive endpoint policy and an explicit `i64` step. Calling it with the selector from `a[.. by -1]` binds `d` to −1.
+
+```cod
+func stride((.. by val d:i64)) -> i64 { d }
+```
+
+The direct pattern occupies an unnamed positional slot. Its field binders are local to the method body. A complete public header can give the whole selector an argument label, default or owner/access contract. Each arm then refines that slot under the same contract.
+
+```cod
+func stride_code(s:const Slice in S) -> i64 where {const owner S} of {
+    ((..))               => 0;
+    ((.. by val d:i64))  => d;
+    ((.. by _))          => 2;
+    (_)                  => 3
+}
+```
+
+With the selectors from `a[..]`, `a[.. by 1]` and `a[0 ..]`, these arms return 0, 1 and 3 respectively. An explicit unsigned step with the same open bounds returns 2. A different conformer of the public `Slice` type reaches the general arm. A forwarded selector makes the same choice as an inline literal. The call prepares it once. Matching reads the builtin schema, endpoint policy, presence and actual field types, preserving units and the original access and lifetime. The selected method receives the fields it binds. The ordered, guarded form for tests on a field’s value is [`case … of`](RangedForAndGenerators.md#matching-a-slice-in-a-case-arm).
+
+Apply ordinary most-specific dispatch to the accepted argument tuples. Here every selector accepted by `(.. by val d:i64)` is also accepted by `(.. by _)`. Writing `val d` without a type in place of the underscore gives the same domain, so defining both for otherwise identical slots is a duplicate. For a two-axis method, each pattern refines only its own position. If one method specializes the row and another the column, a call satisfying both requires a unique most-specific method for their intersection. Otherwise that call is ambiguous in either declaration order. An explicitly expanded `axes...` still selects the [variadic method](#runtime-array-expansion-and-one-variadic-parameter), including when it carries two matching slices.
 
 #### Method arm boundaries
 

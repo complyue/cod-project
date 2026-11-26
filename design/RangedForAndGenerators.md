@@ -1,8 +1,10 @@
 # Ranged for-loops and synchronous generators
 
-Design revision: 27 · Recorded: 2026-11-26 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
+Design revision: 28 · Recorded: 2026-11-26 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
 
 ## Design authority
+
+At r28 the [method parameter decision](DesignAuthorityRegistry.md#d-10-slice-methods) reuses the r27 slice pattern for ordinary dispatch. Case order, guards, field types and literal construction continue under P-770/P-771.
 
 At r27 [D-07-SLICE-CASE](DesignAuthorityRegistry.md#d-07-slice-case) gives library authors a case head that mirrors the slice literal. P-770/P-771 carry the r26 concrete ADT, supplied-field types and omission markers into ordinary case control. [User decision](../CHANGELOG.md#h-mirrored-slice-case-20261126)
 
@@ -107,6 +109,8 @@ Leaving out `by` matches the stored axis-default request. Writing `by val d` or 
 The test reads the already constructed selector. Forwarding it to another method preserves the match. Test the builtin schema, field presence, endpoint policy and any written type constraints before binding the fields and running the arm guard. A structural miss skips the guard. A false guard continues normal case scanning. A library-defined conformer of the open `Slice` abstraction can have its own typed arm or reach the fallback. Matching a builtin slice performs no user conversion, selector construction, axis lookup or indexing operation.
 
 Acceptance distinguishes `a[..]` from `a[.. by 1]`, `a[0 ..]` from `a[..]`, and `a[.. hi]` from `a[..= hi]`. A negative i64 step can reach the guarded reverse arm. A positive step reaches the following stride arm with its original value. Bind `u32(Row)` from a start produced by a side-effecting function and check that constructing and forwarding the selector called that function once. Confirm ordinary fallback for a different admitted `Slice` conformer and whole-file recovery on a damaged field binder. [Case control and typed binding](DomainLanguageDesign.md#case-expressions-and-branch-local-variables)
+
+The same pattern can occupy a fixed parameter in a direct or grouped method. A method family chooses the unique most-specific applicable method across all arguments. A case tests its arms in source order and may use a guard to inspect a bound step such as −1. [Slice patterns in method parameters](SymbolicDynamicScope.md#slice-patterns-in-method-parameters)
 
 ## Data and control directions
 
