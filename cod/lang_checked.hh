@@ -4501,8 +4501,12 @@ class ScalarChecker {
   size_t initialization_frame() const { return deferred_action_ ? CleanupEquations::action_frame(*deferred_action_) : 0; }
   void apply_effects(LexicalState &state, CleanupEquations::Effects &effects, const Location &at,
                      const std::set<size_t> &payload_writes, const std::set<size_t> &symbol_uses) {
-    const auto entry = path_conditions(state);
-    effects.transform_conditions([&](const auto &clauses) { return CleanupEquations::conjoin_conditions(clauses, entry); });
+    // Scalar calls with no guarded postconditions never need the caller's path facts.
+    std::optional<CleanupEquations::ConditionClauses> entry;
+    effects.transform_conditions([&](const auto &clauses) {
+      if (!entry) entry.emplace(path_conditions(state));
+      return CleanupEquations::conjoin_conditions(clauses, *entry);
+    });
     for (const auto input : state.inputs)
       state.input_facts.edit_or_insert(input, [&](auto &facts) { facts.selections.constrain(effects.selections); });
     refresh_input_facts(state);
@@ -5750,7 +5754,10 @@ class ScalarChecker {
   void join(const LexicalState &a, bool a_exits, const LexicalState &b, bool b_exits, const Location &at) {
     a_exits = a_exits || !a.live;
     b_exits = b_exits || !b.live;
-    auto left_paths = path_conditions(a), right_paths = path_conditions(b);
+    const bool both_reach = !a_exits && !b_exits;
+    // The join retains the right condition receipt when both paths exit.
+    auto left_paths = a_exits ? CleanupEquations::ConditionClauses{} : path_conditions(a);
+    auto right_paths = a_exits || both_reach ? path_conditions(b) : CleanupEquations::ConditionClauses{};
     const auto changed_targets = !a_exits && !b_exits ? a.targets.changed_keys(b.targets) : std::set<size_t>{};
     for (const auto binding : changed_targets) {
       const auto left = a.targets.find(binding), right = b.targets.find(binding);
@@ -5801,7 +5808,7 @@ class ScalarChecker {
     lexical_.selection_conditions = a_exits ? b.selection_conditions : a.selection_conditions;
     lexical_.exception_conditions = a_exits ? b.exception_conditions : a.exception_conditions;
     lexical_.uninitialized = a_exits ? b.uninitialized : a.uninitialized;
-    lexical_.predicate_conditions = a_exits ? right_paths : left_paths;
+    lexical_.predicate_conditions = both_reach ? left_paths : a_exits ? std::move(right_paths) : std::move(left_paths);
     if (!a_exits && !b_exits) {
       for (const auto &facts : right_paths) CleanupEquations::add_reaching_condition(lexical_.predicate_conditions, facts);
       std::set<size_t> candidates = a.initialized;
