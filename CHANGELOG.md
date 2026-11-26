@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Qualify protected-name diagnostics by compiler stage
+
+<a id="k-seed-protected-binder-stage-20261125"></a>
+**K-SEED-PROTECTED-BINDER-STAGE-20261125.** The [architecture review](design/ImplementationArchitecture.md#protecting-a-declared-symbol-name) continues D-ARCH-REVIEW r208→209. The [r103 lexical check](#k-runtime-symbol-declaration-check-20261124) is part of the checked seed baseline at `a0922741:cod/lang_checked.hh`. The [trusted seed](#h-trusted-seed-translation-20261125) may omit this diagnostic. The booter enforces the [source rule](#h-runtime-symbol-identity-20261124) at the conflicting declaration.
+
 ## 2026-11-25 — Require live handler evidence at installation
 
 <a id="k-seed-scoped-activation-emission-20261125"></a>
