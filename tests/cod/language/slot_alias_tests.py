@@ -96,7 +96,24 @@ runner.CASES = {
     'duplicate_alias': ('val x<-1;var a->x;var a->x;',2,'','duplicate declaration'),
     'loop_requires_explicit_scope': ('val x<-1;for(i in 0..1){var a->x;};',2,'','requires a nested per-iteration'),
     'defer_requires_explicit_scope': ('val x<-1;defer{var a->x;};',2,'','requires a nested explicit'),
-    'runtime_selected_slot': ('val x<-1,y<-2;ptr p=x,q=y;var a->if(true){p}else{q};',0,'',''),
+    'runtime_selected_slot': (IO+'''
+proc exercise_slots(flag:bool) -> void {
+    val one <- 1u64;
+    val two <- 2u64;
+    val three <- 3u64;
+    ptr left = one;
+    ptr right = two;
+    ptr var selected -> if (flag) { left } else { right };
+    ptr old = selected;
+    selected = three;
+    selected <- 9u64;
+    behave @print(old);
+    behave @print(left);
+    behave @print(right);
+}
+exercise_slots(true);
+exercise_slots(false);
+''',0,'1\n9\n2\n2\n1\n9\n',''),
     'alias_does_not_promote_cell_capture': ('proc run()->void{val x<-1;var a->x;func f=func[a]()->const i64{return a;};}run();',2,'','capture of a declared place alias'),
 }
 runner.CASE_ARGUMENTS = {}

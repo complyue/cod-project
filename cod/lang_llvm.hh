@@ -4498,7 +4498,7 @@ class LLVMEmission {
     case K::alias: {
       const bool selected = fact.binding.has_value();
       const bool value = !selected || bindings_.at(*fact.binding).value_binding;
-      auto *address = emit_expression(*expr.children.front(), value ? Projection::target : Projection::slot, true);
+      auto *address = emit_expression(*expr.children.front(), value ? Projection::target : Projection::slot, !selected);
       if (reachable() && selected) b_.CreateStore(address, bindings_.at(*fact.binding).selected_place);
       return reachable() ? empty_scalar() : nullptr;
     }
