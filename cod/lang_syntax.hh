@@ -636,8 +636,24 @@ inline bool module_keyword(std::string_view name) {
          name == "using" || name == "import" || name == "mixin" || name == "export" || name == "conversion";
 }
 
+class ParsedForms {
+  friend class Parser;
+  std::vector<std::unique_ptr<Form>> forms_;
+  bool needs_source_form_check_ = true;
+
+  ParsedForms(std::vector<std::unique_ptr<Form>> forms, bool needs_source_form_check)
+      : forms_(std::move(forms)), needs_source_form_check_(needs_source_form_check) {}
+
+public:
+  ParsedForms() = default;
+  // A tree supplied outside the parser has no proof that the forms are absent.
+  explicit ParsedForms(std::vector<std::unique_ptr<Form>> forms) : forms_(std::move(forms)) {}
+  const std::vector<std::unique_ptr<Form>> &forms() const { return forms_; }
+  bool needs_source_form_check() const { return needs_source_form_check_; }
+};
+
 struct ParsedSource {
-  std::vector<std::unique_ptr<Form>> forms;
+  ParsedForms forms;
   std::vector<SyntaxDiagnostic> reports;
 };
 
@@ -646,6 +662,7 @@ class Parser {
   std::vector<SyntaxDiagnostic> reports_;
   std::vector<Token> tokens_;
   size_t cursor_ = 0;
+  bool needs_source_form_check_ = false;
   static constexpr size_t structure_limit = 128;
   static constexpr size_t recursion_limit = 1024;
   size_t recursion_ = 0;
@@ -766,7 +783,8 @@ class Parser {
     take("own");
     expect("exception");
   }
-  static Type exception_holder(Type object) {
+  Type exception_holder(Type object) {
+    needs_source_form_check_ = true;
     Type holder{Type::exception_holder};
     holder.target = std::make_shared<Type>(std::move(object));
     return holder;
@@ -835,6 +853,7 @@ class Parser {
       auto literal = make(K::string_literal, message);
       literal->text = text_literal(message);
       assertion->children.push_back(std::move(literal));
+      needs_source_form_check_ = true;
     }
     return finish(std::move(assertion));
   }
@@ -1277,6 +1296,7 @@ class Parser {
       not_init_ref = expect("not").at;
       expect("init");
       not_init_ref->span.past = expect("ref").at.span.past;
+      needs_source_form_check_ = true;
     }
     const bool initializes = !not_init_ref && caller_places && is("init") && is("val", 1) && is("var", 2);
     if (initializes) expect("init");
@@ -1739,6 +1759,7 @@ class Parser {
   }
 
   Expr exception_construction(const Token &token) {
+    needs_source_form_check_ = true;
     auto expr = make(Expression::Kind::make_exception, token);
     const auto object = ordinary_name();
     expr->annotation = Type{Type::named, object.text};
@@ -2076,6 +2097,7 @@ class Parser {
     if (is("rethrow") && is("from", 1)) {
       expect("rethrow");
       expect("from");
+      needs_source_form_check_ = true;
       auto expr = make(Expression::Kind::rethrow_from, token);
       expr->children.push_back(expression());
       return expr;
@@ -2090,6 +2112,7 @@ class Parser {
         if (take("from")) {
           auto cause = expression(0, value->kind == Expression::Kind::name ? HereAttachment::initializer_operand : HereAttachment::immediate);
           if (value->kind == Expression::Kind::name && is("{")) {
+            needs_source_form_check_ = true;
             auto constructed = make(Expression::Kind::make_exception, token);
             constructed->annotation = Type{Type::named, value->text};
             constructed->initializer_block = true;
@@ -3149,7 +3172,7 @@ public:
         record_fault(failure.diagnostic);
       }
     }
-    return {std::move(forms), std::move(reports_)};
+    return {ParsedForms{std::move(forms), needs_source_form_check_}, std::move(reports_)};
   }
 };
 

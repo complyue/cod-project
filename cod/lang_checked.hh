@@ -23734,7 +23734,7 @@ class ScalarChecker {
   static void relate_module_findings(const SourceProgram &source, size_t module,
                                      CompilationDiagnostics &diagnostics, size_t first) {
     const auto past = diagnostics.size();
-    for (const auto &requester : source.modules) for (const auto &form : requester.forms) {
+    for (const auto &requester : source.modules) for (const auto &form : requester.forms()) {
       const auto dependency = requester.dependencies.find(form.get());
       if (dependency != requester.dependencies.end() && dependency->second == module)
         diagnostics.relate_import(first, past, form->at);
@@ -24371,7 +24371,7 @@ class ScalarChecker {
 
   void publish_module(const SourceModule &source) {
     using Resource = ModuleNames::Resource;
-    for (const auto &form : source.forms) if (form->kind == Form::Kind::export_resource || form->publishes_definition()) {
+    for (const auto &form : source.forms()) if (form->kind == Form::Kind::export_resource || form->publishes_definition()) {
       Resource resource{};
       if (form->symbolic) {
         const auto found = module_names().symbols.find(form->name);
@@ -24389,7 +24389,7 @@ class ScalarChecker {
         fail(form->at, "symbolic resource kind does not match its definition");
       publish(form->name, resource, form->at);
     }
-    for (const auto &form : source.forms) {
+    for (const auto &form : source.forms()) {
       if (form->default_exporting) {
         const auto &resource = module_names().exports.at(form->name);
         mark_default_export(form->name, publication_nature(resource), form->at);
@@ -24434,8 +24434,8 @@ class ScalarChecker {
       auto &current = pending.back();
       const auto module = current.module;
       const auto &unit = source.modules[module];
-      if (current.next_form == unit.forms.size()) { pending.pop_back(); continue; }
-      const auto &form = unit.forms[current.next_form++];
+      if (current.next_form == unit.forms().size()) { pending.pop_back(); continue; }
+      const auto &form = unit.forms()[current.next_form++];
       if (const auto dependency = unit.dependencies.find(form.get()); dependency != unit.dependencies.end()) {
         if (current.execution_started)
           implementation_gap(form->at, "source selections after execution expressions require first-reference incorporation analysis");
@@ -24502,7 +24502,7 @@ class ScalarChecker {
 
   void register_abstract_types(const SourceModule &source) {
     const auto first = program_.abstract_types.size();
-    for (const auto &form : source.forms) if (form->kind == Form::Kind::abstract_type) {
+    for (const auto &form : source.forms()) if (form->kind == Form::Kind::abstract_type) {
       const Type type{Type::abstract_type, form->name, program_.abstract_types.size()};
       if (!module_names().types.emplace(form->name, type).second)
         fail(form->at, "duplicate type binding '" + form->name + "'");
@@ -24649,7 +24649,7 @@ class ScalarChecker {
     const auto first = program_.schemas.size();
     const auto first_array = program_.arrays.size();
     const auto first_sum = program_.sums.size();
-    for (const auto &form : source.forms) {
+    for (const auto &form : source.forms()) {
       if (form->kind == Form::Kind::sum_data) {
         register_sum_type(*form);
         continue;
@@ -25019,7 +25019,7 @@ class ScalarChecker {
     if (handle.kind != Type::c_type_marker)
       implementation_gap(form.at, "a C operation without an explicit result or a fieldless CType constructor");
     const auto *declaration = program_.schemas.at(handle.identity).source;
-    if (std::ranges::none_of(source.forms, [&](const auto &candidate) { return candidate.get() == declaration; }))
+    if (std::ranges::none_of(source.forms(), [&](const auto &candidate) { return candidate.get() == declaration; }))
       implementation_gap(form.at, "C constructors declared outside their handle type's defining module");
     if (form.symbolic || form.operation || form.result_type || !form.type_parameters.empty() || form.explicit_captures)
       fail(form.at, "a C handle constructor requires a named, bodyless declaration without an explicit result or type parameters");
@@ -25179,7 +25179,7 @@ class ScalarChecker {
   }
   bool register_module(const SourceModule &source, std::optional<size_t> &print_symbol,
                        std::optional<Location> &unsupported_here, CompilationDiagnostics *diagnostics) {
-    const auto &forms = source.forms;
+    const auto &forms = source.forms();
     std::set<std::string_view> fresh_symbols;
     for (const auto &form : forms)
       if (form->kind == Form::Kind::symbol) fresh_symbols.insert(form->name);
@@ -25755,7 +25755,8 @@ class ScalarChecker {
       }
       if (!diagnostics.continue_work()) return {};
       const ModuleLookup lookup(module_, module);
-      for (const auto &form : input.forms) require_implemented_source_forms(*form);
+      if (input.syntax.needs_source_form_check())
+        for (const auto &form : input.forms()) require_implemented_source_forms(*form);
       const auto first_finding = diagnostics.size();
       if (!register_module(input, print_symbol, unsupported_here, &diagnostics)) registered = false;
       if (diagnostics.size() != first_finding) relate_module_findings(source, module, diagnostics, first_finding);

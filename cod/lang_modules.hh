@@ -16,11 +16,13 @@ struct SourceModule {
   enum class ReadState { unavailable, recovered, parsed };
   std::filesystem::path path;
   std::shared_ptr<const IndexedSource> source;
-  std::vector<std::unique_ptr<Form>> forms;
+  ParsedForms syntax;
   std::map<const Form *, size_t> dependencies;
   std::set<const Form *> failed_edges;
   ReadState read_state = ReadState::unavailable;
   size_t findings_first = 0, findings_past = 0;
+
+  const auto &forms() const { return syntax.forms(); }
 };
 
 struct SourceProgram {
@@ -195,7 +197,7 @@ class ModuleLoader {
     }
     auto parsed = Parser(source).parse();
     module.source = std::move(source);
-    module.forms = std::move(parsed.forms);
+    module.syntax = std::move(parsed.forms);
     module.read_state = parsed.reports.empty() ? SourceModule::ReadState::parsed : SourceModule::ReadState::recovered;
     std::stable_sort(parsed.reports.begin(), parsed.reports.end(), [](const auto &lhs, const auto &rhs) {
       return lhs.at.span.first < rhs.at.span.first;
@@ -220,13 +222,13 @@ public:
     while (diagnostics_.complete() && !pending_.empty()) {
       auto &pending = pending_.back();
       const auto id = pending.module;
-      if (pending.next_form == program_.modules[id].forms.size()) {
+      if (pending.next_form == program_.modules[id].forms().size()) {
         scanning_.erase(id);
         program_.construction_order.push_back(id);
         pending_.pop_back();
         continue;
       }
-      const auto *form = program_.modules[id].forms[pending.next_form++].get();
+      const auto *form = program_.modules[id].forms()[pending.next_form++].get();
       if (form->kind == Form::Kind::syntax_error || form->path.empty() || form->path.starts_with("std:")) continue;
       if (package_root_failure_ && !form->path.starts_with("./") && namespace_path(form->path)) {
         diagnostics_.relate_import(*package_root_failure_, *package_root_failure_ + 1, form->at);
