@@ -2369,8 +2369,7 @@ func register_callables(source:const SourceBytes in S, nodes:const ExprNodes in 
                 work[state.used].active <- name;
                 (state.used <- state.used + 1u64):void
             } else {
-                if (found != no_node() && bindings[found].kind == callable_binding() &&
-                    (allow_families || transfer_name(source, nodes, name))) {
+                if (found != no_node() && bindings[found].kind == callable_binding()) {
                     family <- bindings[found].declaration;
                     work[form].next_method <- work[family].next_method;
                     work[family].next_method <- form;

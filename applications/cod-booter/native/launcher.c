@@ -354,6 +354,12 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: transfer method selection requires an unproved owner equality\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 45)
         fputs(": error: selected callable has no supported native import signature\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 46)
+        fputs(": error: ambiguous ordinary method selection\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 47)
+        fputs(": error: duplicate signature in ordinary method family\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 48)
+        fputs(": error: ordinary method family is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 12)
         fputs(": error: ref argument requires a proven non-null target\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 13)

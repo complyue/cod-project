@@ -284,6 +284,10 @@ export func unsupported_transfer_signature() -> u8 { return 43u8; }
 export func unproved_transfer_owner() -> u8 { return 44u8; }
 export func unsupported_imported_call() -> u8 { return 45u8; }
 
+func ambiguous_value_call() -> u8 { return 46u8; }
+func duplicate_value_signature() -> u8 { return 47u8; }
+func unsupported_value_family() -> u8 { return 48u8; }
+
 export func unreachable_case_item() -> u8 { return 1u8; }
 export func misses_case_arm() -> u8 { return 0u8; }
 export func tests_case_arm() -> u8 { return 1u8; }
@@ -1703,11 +1707,212 @@ func check_prepared_native_loans(nodes:const ExprNodes in N, names:const NameBin
     }
 }
 
-func check_direct_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+# The family signature check uses the already completed parameter rows.
+# An unsupported method leaves the entire family outside this profile.
+func fixed_value_clauses(nodes:const ExprNodes in N, signature:u64, used:u64, revision:u64) -> bool
+    where {const owner N} {
+    ref clause = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false;
+    };
+    val item <- signature;
+    val form <- SignatureHead;
+    for (unused in 0u64 .. used) {
+        if (item == no_node()) return true;
+        form <- inspect_signature(nodes, revision, used, item, clause);
+        if (form != SignatureHead && form != ValueResultClause && form != ThrowsSignatureClause) return false;
+        (item <- clause.previous):void
+    };
+    return false
+}
+
+func supported_value_method(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
+                            definition:u64, first:u64, used:u64, revision:u64) -> bool
+    where {const owner N, const owner L, const owner F} {
+    if (facts[definition].kind != void_result() &&
+        (!scalar_kind(facts[definition].kind) || facts[definition].reception != independent_value())) return false;
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
+    if (inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable ||
+        callable.body == no_node()) return false;
+    if (!fixed_value_clauses(nodes, callable.signature, used, revision)) return false;
+    val formal <- first;
+    ref sites = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
+    for (unused in 0u64 .. used) {
+        if (formal == no_node()) return true;
+        if (inspect_formal(nodes, revision, used, formal, sites) != OrdinaryFormal ||
+            (sites.mode != ValueFormal && sites.mode != ExplicitValueFormal) ||
+            !scalar_kind(facts[formal].kind) || facts[formal].reception != local_place())
+            return false;
+        (formal <- links[formal].next):void
+    };
+    return false
+}
+
+func same_value_signature(links:const NameWork in L, facts:const OperandFacts in F,
+                          left:u64, right:u64, used:u64) -> bool
+    where {const owner L, const owner F} {
+    val a <- left;
+    val b <- right;
+    for (unused in 0u64 .. used) {
+        if (a == no_node() || b == no_node()) return a == b;
+        if (!same_operand_type(facts, a, b)) return false;
+        a <- links[a].next;
+        (b <- links[b].next):void
+    };
+    return false
+}
+
+func prior_value_signature(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
+                           family:u64, current:u64, formals:u64, used:u64, revision:u64) -> u8
+    where {const owner N, const owner L, const owner F} {
+    val earlier <- family;
+    ref parameters = make u64 { no_node() };
+    for (unused in 0u64 .. used) {
+        if (earlier == current) return 0u8;
+        if (earlier == no_node() || !callable_formals(nodes, revision, used, earlier, false, parameters))
+            return invalid_operand_tree();
+        if (same_value_signature(links, facts, formals, parameters, used)) return duplicate_value_signature();
+        (earlier <- links[earlier].next_method):void
+    };
+    return invalid_operand_tree()
+}
+
+func check_value_family(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
+                        family:u64, used:u64, revision:u64, report:OperandCheckResult in R) -> bool
+    where {const owner N, const owner L, const owner F, owner R} {
+    val function_form <- is_function(nodes, family);
+    val method <- family;
+    ref formals = make u64 { no_node() };
+    val issue <- 0u8;
+    for (unused in 0u64 .. used) {
+        if (method == no_node()) return true;
+        if (is_function(nodes, method) != function_form ||
+            !callable_formals(nodes, revision, used, method, false, formals) ||
+            !supported_value_method(nodes, links, facts, method, formals, used, revision))
+            return operand_problem(report, method, unsupported_value_family());
+        issue <- prior_value_signature(nodes, links, facts, family, method, formals, used, revision);
+        if (issue != 0u8) return operand_problem(report, method, issue);
+        (method <- links[method].next_method):void
+    };
+    return operand_problem(report, family, invalid_operand_tree())
+}
+
+enum ValueApplicability:u8 { InapplicableValue; ApplicableValue; UnrepresentedValue; }
+
+func value_applicability(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
+                         first:u64, arguments:u64, used:u64, revision:u64) -> ValueApplicability
+    where {const owner N, const owner L, const owner F} {
+    val formal <- first;
+    val argument <- arguments;
+    val actual <- no_node();
+    val unrepresented <- false;
+    for (unused in 0u64 .. used) {
+        if (formal == no_node() || argument == no_node()) {
+            if (formal != argument) return (InapplicableValue:ValueApplicability);
+            return if (unrepresented) { (UnrepresentedValue:ValueApplicability) } else { (ApplicableValue:ValueApplicability) }
+        };
+        actual <- ordinary_argument_value(nodes, used, revision, argument);
+        if (actual == no_node() || binds_local_storage(nodes, actual) || checked_ref_argument(nodes, argument))
+            return (InapplicableValue:ValueApplicability);
+        if (!same_operand_type(facts, actual, formal) && !supplies_enum_backing(facts, actual, facts[formal].kind)) {
+            # Do not drop a candidate whose whole-type numeric adaptation
+            # could matter to selection but is outside this executable slice.
+            if ((facts[actual].kind != scalar_u8() || facts[formal].kind != scalar_u64()) &&
+                facts[actual].kind != never_result() &&
+                !(facts[actual].kind == scalar_enum() && facts[actual].enum_backing == 0u8))
+                return (InapplicableValue:ValueApplicability);
+            (unrepresented <- true):void
+        };
+        formal <- links[formal].next;
+        (argument <- links[argument].next):void
+    };
+    return (UnrepresentedValue:ValueApplicability)
+}
+
+func better_value_method(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
+                         left:u64, right:u64, arguments:u64, used:u64, revision:u64) -> bool
+    where {const owner N, const owner L, const owner F} {
+    val a <- left;
+    val b <- right;
+    val arg <- arguments;
+    val actual <- no_node();
+    val a_exact <- false;
+    val b_exact <- false;
+    val strictly_better <- false;
+    for (unused in 0u64 .. used) {
+        if (arg == no_node()) return strictly_better;
+        actual <- ordinary_argument_value(nodes, used, revision, arg);
+        a_exact <- same_operand_type(facts, actual, a);
+        b_exact <- same_operand_type(facts, actual, b);
+        if (b_exact && !a_exact) return false;
+        if (a_exact && !b_exact) { (strictly_better <- true):void };
+        a <- links[a].next;
+        b <- links[b].next;
+        (arg <- links[arg].next):void
+    };
+    return false
+}
+
+data ValueMethodChoice { method:u64; formals:u64; }
+
+func find_value_candidate(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
+                           family:u64, arguments:u64, used:u64, revision:u64, result:ValueMethodChoice in R) -> u8
+    where {const owner N, const owner L, const owner F, owner R} {
+    val method <- family;
+    ref formals = make u64 { no_node() };
+    val match <- (InapplicableValue:ValueApplicability);
+    val unrepresented <- false;
+    for (unused in 0u64 .. used) {
+        if (method == no_node()) {
+            if (result.method != no_node()) return 0u8;
+            return if (unrepresented) { unsupported_value_family() } else { wrong_operand_type() }
+        };
+        if (!callable_formals(nodes, revision, used, method, false, formals)) return invalid_operand_tree();
+        match <- value_applicability(nodes, links, facts, formals, arguments, used, revision);
+        if (match == (UnrepresentedValue:ValueApplicability)) { (unrepresented <- true):void };
+        if (match == (ApplicableValue:ValueApplicability) &&
+            (result.method == no_node() || better_value_method(nodes, links, facts, formals, result.formals,
+                arguments, used, revision))) {
+            result.method <- method;
+            (result.formals <- formals):void
+        };
+        (method <- links[method].next_method):void
+    };
+    return invalid_operand_tree()
+}
+
+# Keep one candidate during the first pass. A strictly better one replaces
+# it. A second pass requires the remaining candidate to dominate every other
+# applicable method, including any incomparable candidate seen earlier.
+func select_value_method(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
+                         family:u64, arguments:u64, used:u64, revision:u64, selected:u64 in R) -> u8
+    where {const owner N, const owner L, const owner F, owner R} {
+    ref best = make ValueMethodChoice { method <- no_node(); formals <- no_node(); };
+    val issue <- find_value_candidate(nodes, links, facts, family, arguments, used, revision, best);
+    if (issue != 0u8) return issue;
+    ref formals = make u64 { no_node() };
+    val method <- family;
+    val applicability <- (InapplicableValue:ValueApplicability);
+    for (unused in 0u64 .. used) {
+        if (method == no_node()) { selected <- best.method; return 0u8 };
+        if (method != best.method) {
+            if (!callable_formals(nodes, revision, used, method, false, formals)) return invalid_operand_tree();
+            applicability <- value_applicability(nodes, links, facts, formals, arguments, used, revision);
+            if (applicability != (InapplicableValue:ValueApplicability) &&
+                !better_value_method(nodes, links, facts, best.formals, formals, arguments, used, revision)) {
+                if (applicability == (UnrepresentedValue:ValueApplicability)) return unsupported_value_family();
+                return ambiguous_value_call()
+            };
+        };
+        (method <- links[method].next_method):void
+    };
+    return invalid_operand_tree()
+}
+
+func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                        selected:const SelectedExports in E, facts:OperandFacts in F,
                        owners:CallOwners in O, views:const SuppliedViews in H, at:u64, callee:u64,
                            arguments:u64, used:u64, revision:u64, source_only:bool) -> u8
-    where {const owner N, const owner B, const owner L, const owner E, owner F, owner O,
+    where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F, owner O,
         const owner H} {
     if (names[callee].kind == ordinary_selection()) {
         val site <- names[callee].declaration;
@@ -1744,13 +1949,19 @@ func check_direct_call(nodes:const ExprNodes in N, names:const NameBindings in B
     };
     if (names[callee].kind != callable_binding()) return unproved_call_target();
     val definition <- names[callee].declaration;
-    if (links[definition].next_method != no_node()) return unsupported_transfer_signature();
-    if (!is_function(nodes, definition) && is_function(nodes, enclosing_callable(nodes, names, names[at].scope)))
-        return procedure_call_in_function();
     ref formal = make u64 { no_node() };
     ref argument = make u64 { no_node() };
-    if (!callable_formals(nodes, revision, used, definition, source_only, formal) ||
-        !first_sequence_entry(nodes, revision, used, arguments, ArgumentSequence, argument)) return invalid_operand_tree();
+    if (!first_sequence_entry(nodes, revision, used, arguments, ArgumentSequence, argument))
+        return invalid_operand_tree();
+    if (links[definition].next_method != no_node()) {
+        if (source_only || transfer_name(source, nodes, definition_name(nodes, revision, used, definition)))
+            return unsupported_transfer_signature();
+        val issue <- select_value_method(nodes, links, facts, definition, argument, used, revision, definition);
+        if (issue != 0u8) return issue
+    };
+    if (!is_function(nodes, definition) && is_function(nodes, enclosing_callable(nodes, names, names[at].scope)))
+        return procedure_call_in_function();
+    if (!callable_formals(nodes, revision, used, definition, source_only, formal)) return invalid_operand_tree();
     val result_owner <- facts[definition].owner;
     val first_formal <- formal;
     val allow_owned_loan <- source_only &&
@@ -3735,13 +3946,13 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                     if (!published_syntax_id(nodes, revision, used, callee) ||
                         !published_syntax_id(nodes, revision, used, arguments)) return invalid_operand_tree();
                     if (names[at].scope == no_node()) return 0u8;
-                    return check_direct_call(nodes, names, links, selected, facts, owners, views,
+                    return check_direct_call(source, nodes, names, links, selected, facts, owners, views,
                         at, callee.index, arguments.index, used, revision, source_only);
                 };
                 (EmptyCall { val callee <- callee; }) -> {
                     if (!published_syntax_id(nodes, revision, used, callee)) return invalid_operand_tree();
                     if (names[at].scope == no_node()) return 0u8;
-                    return check_direct_call(nodes, names, links, selected, facts, owners, views,
+                    return check_direct_call(source, nodes, names, links, selected, facts, owners, views,
                         at, callee.index, no_node(), used, revision, source_only);
                 };
                 (HereInvocation { val call <- call; }) -> {
@@ -4236,7 +4447,13 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
     for (at in 0u64 .. tree.used) {
         if (needs_signature_check(demand, at) && inspect_callable(nodes, tree.revision, tree.used,
             at, callable) == ModuleCallable && links[at].next_method != no_node()) {
-            report.diagnostic <- check_transfer_signatures(nodes, links, facts, at, tree.used, tree.revision);
+            if (source_only || transfer_name(source, nodes, definition_name(nodes, tree.revision, tree.used, at))) {
+                (report.diagnostic <- check_transfer_signatures(nodes, links, facts, at, tree.used, tree.revision)):void
+            } else {
+                if (names[at].declaration == at &&
+                    !check_value_family(nodes, links, facts, at, tree.used, tree.revision, report)) return false;
+
+            };
             if (report.diagnostic != 0u8) { report.node <- at; return false; };
         };
     };
