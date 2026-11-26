@@ -1,13 +1,13 @@
 using "./SourceStorage.cod" SourceBytes;
 using "./SourceAccess.cod" same_bytes;
 using "./ParserStorage.cod" {
-    ExprNodes, no_node, syntax_first, syntax_past, DeclarationSites, inspect_declaration,
+    ExprNodes, no_node, block_tail, ungrouped, binds_local_storage, syntax_first, syntax_past, DeclarationSites, inspect_declaration,
     SumArmSites, inspect_sum_arm, first_sequence_entry, FormalSites, inspect_formal,
-    BindingSites, inspect_binding, DeclarationSyntax { ArrayTypeDeclaration, NominalSum },
+    BindingSites, inspect_binding, DeclarationSyntax { ArrayTypeDeclaration, NominalRecord, NominalSum },
     SequenceSyntax { SumSequence }, FormalMode { ValueFormal, ExplicitValueFormal, ReferenceFormal },
     FormalSyntax { OrdinaryFormal }, BindingSyntax { TypedBinding },
     IndexSites, inspect_index_selection, owner_constraint_syntax,
-    AssignmentSites, inspect_assignment, AssignmentSyntax { PlaceTransfer },
+    AssignmentSites, inspect_assignment, AssignmentSyntax { PlaceTransfer, FieldTransfer },
     ConstructionSites, inspect_construction, ConstructionSyntax { BracedConstruction },
     OwnerConstraintSyntax { ReadonlyOwnerConstraint, NotOwnerConstraint },
     CaseSites, inspect_case, CaseArmSites, inspect_case_arm, case_pattern,
@@ -20,7 +20,7 @@ using "./ParserStorage.cod" {
 };
 using "./NameResolution.cod" {
     NameBindings, NameWork, builtin_u64, record_type, find_named_field, array_type, formal_binding,
-    owner_binding, local_binding, native_scalar
+    owner_binding, local_binding, native_scalar, record_initializer_label
 };
 using "./ModuleExports.cod" SelectedExports;
 using "./DeclarationTypes.cod" { DeclaredType, DeclaredExpressionResult, describe_type, describe_record_field, describe_record_member, local_sum_constructor };
@@ -46,7 +46,17 @@ export data ConstructorCaseFact =
     CaseProductField { receiver:UInt64; field:UInt64; ordinal:UInt64; record:DeclaredType; value_type:DeclaredType; } |
     CaseSumReceipt { receipt:UInt64; arm:UInt64; value_type:DeclaredType; } |
     CaseSumProjection { receiver:UInt64; field:UInt64; receipt:UInt64; arm:UInt64; record:DeclaredType; value_type:DeclaredType; } |
-    LocalSumConstruction { transfer:UInt64; sum:UInt64; arm:UInt64; fields:UInt64; };
+    LocalSumConstruction { transfer:UInt64; sum:UInt64; arm:UInt64; fields:UInt64; } |
+    IndexedProductDestination {
+        transfer:UInt64; array:UInt64; index:UInt64; owner_site:UInt64; array_type:UInt64; record:UInt64; index_binds_storage:bool;
+    } |
+    BitsConstruction {
+        transfer:UInt64; identity:UInt64; arm:UInt64; first_field:UInt64; last_field:UInt64;
+        first_initializer:UInt64; last_initializer:UInt64;
+    } |
+    BitsFieldInitializer {
+        construction:UInt64; field:UInt64; operand:UInt64; value_type:DeclaredType; readonly:bool; binds_storage:bool;
+    };
 export array ConstructorCaseFacts[UInt64]:ConstructorCaseFact;
 
 data IndexedCaseLoan {
@@ -58,7 +68,7 @@ data IndexedCaseLoan {
 }
 
 func describe_case_array_element(nodes:const ExprNodes in N, names:const NameBindings in B,
-    selected:const SelectedExports in E, array_declaration:UInt64, used:UInt64, revision:UInt64,
+    selected:const SelectedExports in E, array_declaration:UInt64, used:UInt64, revision:UInt64, expected_kind:UInt8,
     element:DeclaredType in T) -> bool where {const owner N, const owner B, const owner E, owner T} {
     ref array_shape = make DeclarationSites {
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
@@ -67,12 +77,12 @@ func describe_case_array_element(nodes:const ExprNodes in N, names:const NameBin
     return inspect_declaration(nodes, revision, used, array_declaration, array_shape) == ArrayTypeDeclaration &&
         names[array_shape.index_type].kind == builtin_u64() &&
         describe_type(nodes, names, selected, array_shape.value_type, 0u64, revision, used, element) &&
-        element.kind == sum_type()
+        element.kind == expected_kind
 }
 
 func describe_indexed_case_loan(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, expression:UInt64, used:UInt64, revision:UInt64,
-    loan:IndexedCaseLoan in L, element:DeclaredType in L) -> bool
+    expected_kind:UInt8, loan:IndexedCaseLoan in L, element:DeclaredType in L) -> bool
     where {const owner N, const owner B, const owner E, owner L} {
     ref indexed = make IndexSites { target <- no_node(); index <- no_node() };
     if (!inspect_index_selection(nodes, revision, used, expression, indexed) ||
@@ -90,7 +100,7 @@ func describe_indexed_case_loan(nodes:const ExprNodes in N, names:const NameBind
     if (owner_site >= used || marker >= used || names[marker].kind != array_type() ||
         owner_constraint_syntax(nodes, owner_site) == NotOwnerConstraint)
         return false;
-    if (!describe_case_array_element(nodes, names, selected, names[marker].declaration, used, revision, element))
+    if (!describe_case_array_element(nodes, names, selected, names[marker].declaration, used, revision, expected_kind, element))
         return false;
     loan.expression <- expression;
     loan.array <- indexed.target;
@@ -460,7 +470,7 @@ func prepare_indexed_sum_case(source:const SourceBytes in S, nodes:const ExprNod
     };
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
     if (!describe_indexed_case_loan(nodes, names, selected, subject.subject, used, revision,
-        loan, type) || !case_bits_type(type, aggregate, interfaces, published))
+        sum_type(), loan, type) || !case_bits_type(type, aggregate, interfaces, published))
         return case_problem(report, subject.subject, unproved_sum_subject());
     ref count = make UInt64 { 0u64 };
     if (!prepare_case_arms(source, nodes, names, selected, work, spellings, spelling_used,
@@ -701,7 +711,7 @@ func prepare_sum_case(source:const SourceBytes in S, nodes:const ExprNodes in N,
     };
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
     if (has_case_head(nodes, work, choice.items, used, revision, true) ||
-        (describe_indexed_case_loan(nodes, names, selected, choice.subject, used, revision, loan, type) &&
+        (describe_indexed_case_loan(nodes, names, selected, choice.subject, used, revision, sum_type(), loan, type) &&
          has_case_head(nodes, work, choice.items, used, revision, false))) {
         if (!prepare_indexed_sum_case(source, nodes, names, selected, work, spellings, spelling_used,
             interfaces, published, aggregate, facts, at, used, revision, report)) return false;
@@ -855,6 +865,176 @@ func prepare_local_sum_write(nodes:const ExprNodes in N, names:const NameBinding
     return true
 }
 
+func unsupported_bits_construction() -> UInt8 { return 149u8 }
+func wrong_construction_type() -> UInt8 { return 150u8 }
+func unknown_inline_field() -> UInt8 { return 151u8 }
+
+func read_inline_field_type(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, field:UInt64, used:UInt64, revision:UInt64,
+    type:DeclaredType in R, readonly:bool in R) -> bool
+    where {const owner N, const owner B, const owner E, owner R} {
+    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
+    };
+    if (inspect_formal(nodes, revision, used, field, formal) != OrdinaryFormal ||
+        (formal.mode != ValueFormal && formal.mode != ExplicitValueFormal) ||
+        inspect_binding(nodes, revision, used, formal.binding, binding) != TypedBinding ||
+        binding.owner_name != no_node() ||
+        !describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type)) return false;
+    readonly <- binding.readonly;
+    return true
+}
+
+func has_inline_aggregate_field(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W, record:UInt64, used:UInt64, revision:UInt64)
+    -> bool where {const owner N, const owner B, const owner E, const owner W} {
+    ref syntax = make DeclarationSites {
+        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
+    };
+    ref field = make UInt64 { no_node() };
+    if (inspect_declaration(nodes, revision, used, record, syntax) != NominalRecord ||
+        !first_sequence_entry(nodes, revision, used, syntax.entries, FormalSequence, field)) return false;
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    ref readonly = make bool { false };
+    for (unused in 0u64 .. used) {
+        if (field == no_node()) return false;
+        if (read_inline_field_type(nodes, names, selected, field, used, revision, type, readonly) &&
+            (type.kind == record_type() || type.kind == sum_type())) return true;
+        field <- work[field].next
+    };
+    return false
+}
+
+# A constructor supplies its own identity. The expected type comes from the
+# receiving element or field and can only check that selection.
+func prepare_bits_construction(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, facts:ConstructorCaseFacts in F, at:UInt64, transfer:UInt64,
+    expected:const DeclaredType in T, used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R)
+    -> bool where {const owner N, const owner B, const owner W, owner F, const owner T, owner R} {
+    ref syntax = make ConstructionSites {
+        requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
+        initializer <- no_node(); contents <- no_node()
+    };
+    if (at >= transfer || expected.defining_module != 0u64 ||
+        inspect_construction(nodes, revision, used, at, syntax) != BracedConstruction ||
+        syntax.requested >= at || syntax.placement != no_node() || syntax.queried_operand != no_node())
+        return case_problem(report, at, unsupported_bits_construction());
+    val chosen <- names[syntax.requested].declaration;
+    val arm <- no_node();
+    val fields <- no_node();
+    if (expected.kind == sum_type()) {
+        ref count = make UInt64 { 0u64 };
+        ref ordinal = make UInt64 { no_node() };
+        ref alternative = make SumArmSites { previous <- no_node(); name <- no_node(); fields <- no_node() };
+        if (chosen >= used || work[chosen].declaring_sum != expected.identity ||
+            local_sum_constructor(nodes, names, work, expected.identity, syntax.requested,
+                used, revision, count, ordinal) != chosen ||
+            !inspect_sum_arm(nodes, revision, used, chosen, alternative))
+            return case_problem(report, syntax.requested, wrong_construction_type());
+        arm <- chosen;
+        (fields <- alternative.fields):void
+    } else {
+        ref product = make DeclarationSites {
+            name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+            index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
+        };
+        if (expected.kind != record_type() || names[syntax.requested].kind != record_type() ||
+            chosen != expected.identity || inspect_declaration(nodes, revision, used, chosen, product) != NominalRecord)
+            return case_problem(report, syntax.requested, wrong_construction_type());
+        (fields <- product.entries):void
+    };
+    ref first_field = make UInt64 { no_node() };
+    ref first = make UInt64 { no_node() };
+    ref last = make UInt64 { no_node() };
+    if (!first_sequence_entry(nodes, revision, used, fields, FormalSequence, first_field) ||
+        !block_tail(nodes, revision, at, syntax.contents, last) ||
+        !first_sequence_entry(nodes, revision, at, last, BlockSequence, first))
+        return case_problem(report, at, unsupported_bits_construction());
+    facts[at] <- make BitsConstruction {
+        transfer <- transfer; identity <- expected.identity; arm <- arm;
+        first_field <- first_field; last_field <- fields; first_initializer <- first; last_initializer <- last;
+    };
+    return true
+}
+
+func prepare_indexed_product_write(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W, aggregate:const AggregateFacts in A,
+    facts:ConstructorCaseFacts in F, transfer:UInt64, assignment:const AssignmentSites in S,
+    construction:const ConstructionSites in S, used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R)
+    -> bool where {const owner N, const owner B, const owner E, const owner W, const owner A, owner F, const owner S, owner R} {
+    val record <- names[construction.requested].declaration;
+    # Scalar-only constructions keep their existing profile and demand rules.
+    if (!has_inline_aggregate_field(nodes, names, selected, work, record, used, revision)) return true;
+    ref loan = make IndexedCaseLoan {
+        expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node(); array_type <- no_node();
+    };
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    if (names[transfer].kind != 0u8 || names[assignment.destination].kind != 0u8 ||
+        !describe_indexed_case_loan(nodes, names, selected, assignment.destination, used, revision,
+            record_type(), loan, type) ||
+        type.defining_module != 0u64 || type.identity != record || record >= intrinsic (len)(aggregate) ||
+        (aggregate[record] != (CoDBitsAggregate:AggregateStorage) &&
+         aggregate[record] != (CLayoutBitsRecord:AggregateStorage)))
+        return case_problem(report, assignment.destination, wrong_construction_type());
+    if (!prepare_bits_construction(nodes, names, work, facts, assignment.input, transfer,
+        type, used, revision, report)) return false;
+    facts[assignment.destination] <- make IndexedProductDestination {
+        transfer <- transfer; array <- loan.array; index <- loan.index;
+        owner_site <- loan.owner_site; array_type <- loan.array_type; record <- record;
+        index_binds_storage <- binds_local_storage(nodes, loan.index);
+    };
+    return true
+}
+
+func prepare_bits_initializers(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
+    interfaces:const ModuleInterfaces in G, published:UInt64, aggregate:const AggregateFacts in A,
+    facts:ConstructorCaseFacts in F, at:UInt64, fields:UInt64, first:UInt64, last:UInt64,
+    used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R)
+    -> bool where {const owner S, const owner N, const owner B, const owner E, const owner W,
+        const owner G, const owner A, owner F, owner R} {
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- no_node() };
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    ref readonly = make bool { false };
+    ref syntax = make ConstructionSites {
+        requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
+        initializer <- no_node(); contents <- no_node()
+    };
+    val item <- first;
+    val field <- no_node();
+    val name <- no_node();
+    for (unused in 0u64 .. used) {
+        if (item == no_node()) return true;
+        if (inspect_sequence_entry(nodes, revision, at, item, entry) != BlockSequence ||
+            inspect_assignment(nodes, revision, at, entry.item, assignment) != FieldTransfer ||
+            names[assignment.destination].kind != record_initializer_label() || names[entry.item].kind != 0u8)
+            return case_problem(report, entry.item, unsupported_bits_construction());
+        name <- ungrouped(nodes, revision, used, assignment.destination);
+        field <- find_named_field(source, nodes, work, fields, name, revision, used);
+        if (field == no_node()) return case_problem(report, name, unknown_inline_field());
+        if (!read_inline_field_type(nodes, names, selected, field, used, revision, type, readonly))
+            return case_problem(report, name, unsupported_bits_construction());
+        if (type.kind == record_type() || type.kind == sum_type()) {
+            if (!case_bits_type(type, aggregate, interfaces, published))
+                return case_problem(report, name, unsupported_bits_construction());
+            if (inspect_construction(nodes, revision, at, assignment.input, syntax) == BracedConstruction &&
+                !prepare_bits_construction(nodes, names, work, facts, assignment.input, entry.item,
+                    type, used, revision, report)) return false
+        };
+        facts[item] <- make BitsFieldInitializer {
+            construction <- at; field <- field; operand <- assignment.input; value_type <- type; readonly <- readonly;
+            binds_storage <- binds_local_storage(nodes, assignment.input);
+        };
+        if (item == last) return true;
+        if (work[item].next <= item || work[item].next > last) return case_problem(report, item, unsupported_bits_construction());
+        item <- work[item].next
+    };
+    return case_problem(report, at, unsupported_bits_construction())
+}
+
 export func needs_constructor_case_plan(nodes:const ExprNodes in N, used:UInt64, revision:UInt64)
     -> bool where {const owner N} {
     ref indexed = make IndexSites { target <- no_node(); index <- no_node() };
@@ -902,11 +1082,34 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
         if (!prepare_sum_case(source, nodes, names, selected, work, spellings, spelling_used,
             interfaces, published, aggregate, facts, at, used, revision, report)) return false;
         if (work[at].case_schema_prepared && first == no_node()) { (first <- at):void };
-        if (indexed_braced_transfer(nodes, at, used, revision, assignment, construction) &&
-            names[construction.requested].kind == constructor_type()) {
-            if (!prepare_local_sum_write(nodes, names, work, aggregate, facts, at, assignment.input,
-                construction.requested, used, revision, report)) return false;
-            if (first == no_node()) { (first <- at):void }
+        if (indexed_braced_transfer(nodes, at, used, revision, assignment, construction)) {
+            if (names[construction.requested].kind == constructor_type()) {
+                if (!prepare_local_sum_write(nodes, names, work, aggregate, facts, at, assignment.input,
+                    construction.requested, used, revision, report)) return false;
+                if (first == no_node()) { (first <- at):void }
+            } else {
+                if (names[construction.requested].kind == record_type()) {
+                    if (!prepare_indexed_product_write(nodes, names, selected, work, aggregate, facts,
+                        at, assignment, construction, used, revision, report)) return false;
+                    if (first == no_node() &&
+                        (case facts[assignment.input] of { BitsConstruction -> true; _ -> false })) {
+                        (first <- at):void
+                    }
+                }
+            }
+        }
+    };
+    val site <- no_node();
+    for (offset in 0u64 .. used) {
+        site <- used - 1u64 - offset;
+        case facts[site] of {
+            BitsConstruction { val fields <- last_field; val begin <- first_initializer; val end <- last_initializer; } -> {
+                if (!prepare_bits_initializers(source, nodes, names, selected, work, interfaces, published,
+                    aggregate, facts, site, fields, begin, end, used, revision, report)) return false
+            };
+            _ -> {
+                if (work[site].inline_sum_initializer) return case_problem(report, site, unsupported_bits_construction())
+            }
         }
     };
     return first == no_node() || prepare_received_fields(source, nodes, names, selected, work,

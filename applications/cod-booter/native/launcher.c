@@ -179,6 +179,12 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: constructor is not selected for the case subject's nominal sum type\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 141)
         fputs(": error: case receipt or projection requires a checked field of the selected type\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 149)
+        fputs(": error: inline bits construction is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 150)
+        fputs(": error: construction does not match the receiving finite-bits type\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 151)
+        fputs(": error: no such initializer field in the selected construction\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 142)
         fputs(": error: declaration conflicts with a protected symbol name\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 143)

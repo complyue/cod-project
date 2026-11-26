@@ -116,7 +116,8 @@ using "./CaseSchemas.cod" {
     ConstructorCaseFacts,
     ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, ReceiptCaseSubject, CaseSumFormal,
         CaseConstructor, CaseFieldReceipt, CaseProductField, CaseSumReceipt, CaseSumProjection,
-        InlineProductFormal, InlineProductField, LocalSumConstruction }
+        InlineProductFormal, InlineProductField, LocalSumConstruction,
+        IndexedProductDestination, BitsConstruction, BitsFieldInitializer }
 }
 using "./ExceptionPayload.cod" {
     CaughtFieldUses, CaughtFieldUse { CaughtField }, unknown_exception_field
@@ -231,6 +232,7 @@ func received_product() -> UInt8 { return 16u8 }
 func received_sum() -> UInt8 { return 17u8 }
 func source_product_loan() -> UInt8 { return 18u8 }
 func independent_sum_bits() -> UInt8 { return 20u8 }
+func independent_product_bits() -> UInt8 { return 21u8 }
 
 export func immutable_text_kind(kind:UInt8) -> bool {
     return kind == string_kind() || kind == c_string_kind();
@@ -380,6 +382,10 @@ export func require_typed_bits(nodes:const ExprNodes in N, facts:OperandFacts in
     where {const owner N, owner F} {
     if (binds_local_storage(nodes, operand))
         return unproved_operand();
+    return require_prepared_typed_bits(facts, operand, kind)
+}
+
+func require_prepared_typed_bits(facts:OperandFacts in F, operand:UInt64, kind:UInt8) -> UInt8 where {owner F} {
     if (facts[operand].kind == 0u8) return unproved_operand();
     if (!scalar_kind(kind) || facts[operand].kind != kind) return wrong_operand_type();
     if (facts[operand].reception == nullable_ptr()) {
@@ -444,10 +450,15 @@ func source_scalar_kind(binding:UInt8) -> UInt8 {
 func require_source_u32(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:UInt64,
     widen:bool) -> UInt8
     where {const owner N, owner F} {
-    if (binds_local_storage(nodes, operand) || facts[operand].kind == 0u8)
-        return unproved_operand();
-    if (widen && facts[operand].kind == scalar_u8()) return require_typed_bits(nodes, facts,
-        operand, scalar_u8());
+    if (binds_local_storage(nodes, operand)) return unproved_operand();
+    return require_prepared_source_u32(facts, operand, widen)
+}
+
+func require_prepared_source_u32(facts:OperandFacts in F, operand:UInt64, widen:bool)
+    -> UInt8 where {owner F} {
+    if (facts[operand].kind == 0u8) return unproved_operand();
+    if (widen && facts[operand].kind == scalar_u8())
+        return require_prepared_typed_bits(facts, operand, scalar_u8());
     if (facts[operand].kind != source_u32()) return wrong_operand_type();
     if (facts[operand].reception != local_place() &&
         facts[operand].reception != independent_value())
@@ -961,9 +972,14 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, sele
 
 func require_array_u64(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:UInt64) -> UInt8
     where {const owner N, owner F} {
+    if (binds_local_storage(nodes, operand)) return unproved_operand();
+    return require_prepared_array_u64(facts, operand)
+}
+
+func require_prepared_array_u64(facts:OperandFacts in F, operand:UInt64) -> UInt8 where {owner F} {
     val kind <- facts[operand].kind;
-    if (kind == source_u32()) return require_source_u32(nodes, facts, operand, false);
-    return require_typed_bits(nodes, facts, operand, if (kind == scalar_u8()) { scalar_u8() } else { scalar_u64() })
+    if (kind == source_u32()) return require_prepared_source_u32(facts, operand, false);
+    return require_prepared_typed_bits(facts, operand, if (kind == scalar_u8()) { scalar_u8() } else { scalar_u64() })
 }
 
 func check_prepared_array_construction(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -4525,25 +4541,32 @@ func check_empty_sum_array_fill(nodes:const ExprNodes in N, names:const NameBind
     return 0u8
 }
 
-func check_sum_field_value(nodes:const ExprNodes in N, facts:OperandFacts in F,
-    input:UInt64, type:const DeclaredType in T) -> UInt8 where {const owner N, owner F, const owner T} {
+func check_bits_field_value(facts:OperandFacts in F, input:UInt64, type:const DeclaredType in T, binds_storage:bool)
+    -> UInt8 where {owner F, const owner T} {
     val kind <- facts[input].kind;
     if (type.kind == record_type() || type.kind == sum_type()) {
         val matches <- if (type.kind == record_type()) {
             kind == product_kind() || kind == received_product() || kind == source_product_loan()
         } else { kind == source_sum_target() || kind == received_sum() };
-        if (!matches || facts[input].identity != type.identity ||
+        val independent <- if (type.kind == record_type()) {
+            kind == independent_product_bits()
+        } else { kind == independent_sum_bits() };
+        if ((!matches && !independent) || facts[input].identity != type.identity ||
             facts[input].identity_module != type.defining_module) return wrong_operand_type();
+        if (independent)
+            return if (facts[input].reception == independent_value()) { 0u8 } else { wrong_operand_type() };
         if (facts[input].target_presence != present_target() || facts[input].owner == no_node() ||
             (facts[input].reception != borrowed_ref() && facts[input].reception != local_place()))
             return unproved_nonnull_borrow();
         return 0u8
     };
-    if (type.kind == builtin_u32()) return require_source_u32(nodes, facts, input, true);
+    if (binds_storage) return unproved_operand();
+    if (type.kind == builtin_u32()) return require_prepared_source_u32(facts, input, true);
     val result_kind <- declared_scalar(type.kind);
     if (!compatible_operand_nominal(facts, input, result_kind, type.identity, type.defining_module))
         return incompatible_enum_type();
-    return require_value_bits(nodes, facts, input, result_kind)
+    val read_kind <- if (supplies_enum_backing(facts, input, result_kind)) { scalar_enum() } else { result_kind };
+    return require_prepared_typed_bits(facts, input, read_kind)
 }
 
 func check_sum_initializer(source:const SourceBytes in S, nodes:const ExprNodes in N,
@@ -4571,7 +4594,7 @@ func check_sum_initializer(source:const SourceBytes in S, nodes:const ExprNodes 
     if (!describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type) ||
         ((type.kind == record_type() || type.kind == sum_type()) && names[initializer].kind != 0u8))
         return unsupported_product_layout();
-    val diagnostic <- check_sum_field_value(nodes, facts, write.input, type);
+    val diagnostic <- check_bits_field_value(facts, write.input, type, binds_local_storage(nodes, write.input));
     if (diagnostic != 0u8) return diagnostic;
     facts[field].last_initializer <- at;
     return 0u8
@@ -4633,6 +4656,116 @@ func check_local_sum_construction(source:const SourceBytes in S, nodes:const Exp
     return invalid_operand_tree()
 }
 
+func check_indexed_product_destination(facts:OperandFacts in F, at:UInt64, array:UInt64, index:UInt64,
+    owner_site:UInt64, array_type:UInt64, record:UInt64, index_binds_storage:bool) -> UInt8 where {owner F} {
+    if (array >= at || index >= at) return invalid_operand_tree();
+    if (facts[array].kind == never_result() || facts[index].kind == never_result()) {
+        set_result(facts, at, never_result());
+        facts[at].checks_array_bounds <- true;
+        return 0u8
+    };
+    if (facts[array].kind != source_array_loan() || facts[array].reception != borrowed_ref() ||
+        facts[array].identity_module != 0u64 || facts[array].identity != array_type ||
+        facts[array].owner != owner_site || facts[array].target_presence != present_target())
+        return unproved_nonnull_borrow();
+    if (facts[array].target_readonly != 0u8) return expected_writable_place();
+    if (index_binds_storage) return unproved_operand();
+    val diagnostic <- require_prepared_array_u64(facts, index);
+    if (diagnostic != 0u8) return diagnostic;
+    set_fact(facts, at, source_product_loan(), borrowed_ref(), owner_site, record, 0u8);
+    facts[at].selection <- at;
+    facts[at].checks_array_bounds <- true;
+    return 0u8
+}
+
+func check_bits_initializer(facts:OperandFacts in F,
+    cases:const ConstructorCaseFacts in C, at:UInt64, item:UInt64, abrupt:bool in R)
+    -> UInt8 where {owner F, const owner C, owner R} {
+    val diagnostic <- 0u8;
+    return case cases[item] of {
+        BitsFieldInitializer {
+            val parent <- construction; val field <-; val operand <-; val type <- value_type; val readonly <-; val binds_storage <-;
+        } -> {
+            if (parent != at || operand >= item || field >= intrinsic (len)(facts) || field == no_node())
+                return invalid_operand_tree();
+            if (readonly && facts[field].last_initializer == at) return repeated_readonly_initializer();
+            if (facts[operand].kind == never_result()) {
+                (abrupt <- true):void;
+                return 0u8
+            };
+            diagnostic <- check_bits_field_value(facts, operand, type, binds_storage);
+            if (diagnostic != 0u8) return diagnostic;
+            facts[field].last_initializer <- at;
+            0u8
+        };
+        _ -> invalid_operand_tree()
+    }
+}
+
+func finish_bits_construction(facts:OperandFacts in F, links:const NameWork in L,
+    at:UInt64, identity:UInt64, arm:UInt64, first:UInt64, last:UInt64, used:UInt64)
+    -> UInt8 where {owner F, const owner L} {
+    val field <- first;
+    for (unused in 0u64 .. used) {
+        if (field == no_node()) {
+            set_fact(facts, at, if (arm == no_node()) { independent_product_bits() } else { independent_sum_bits() },
+                independent_value(), no_node(), identity, 0u8);
+            return 0u8
+        };
+        if (field >= used) return invalid_operand_tree();
+        if (facts[field].last_initializer != at) return missing_product_initializer();
+        if (field == last) { (field <- no_node()):void }
+        else {
+            if (links[field].next <= field || links[field].next > last) return invalid_operand_tree();
+            (field <- links[field].next):void
+        }
+    };
+    return invalid_operand_tree()
+}
+
+func check_bits_construction(facts:OperandFacts in F, links:const NameWork in L,
+    cases:const ConstructorCaseFacts in C, at:UInt64, identity:UInt64, arm:UInt64, first_field:UInt64,
+    last_field:UInt64, begin:UInt64, last:UInt64, used:UInt64) -> UInt8
+    where {owner F, const owner L, const owner C} {
+    ref abrupt = make bool { false };
+    val item <- begin;
+    val diagnostic <- 0u8;
+    for (unused in 0u64 .. used) {
+        if (item == no_node())
+            return finish_bits_construction(facts, links, at, identity, arm, first_field, last_field, used);
+        if (item >= at) return invalid_operand_tree();
+        diagnostic <- check_bits_initializer(facts, cases, at, item, abrupt);
+        if (diagnostic != 0u8) return diagnostic;
+        if (abrupt) {
+            set_result(facts, at, never_result());
+            return 0u8
+        };
+        if (item == last)
+            return finish_bits_construction(facts, links, at, identity, arm, first_field, last_field, used);
+        if (links[item].next <= item || links[item].next > last) return invalid_operand_tree();
+        item <- links[item].next
+    };
+    return invalid_operand_tree()
+}
+
+func check_indexed_product_transfer(facts:OperandFacts in F, cases:const ConstructorCaseFacts in C,
+    at:UInt64, destination:UInt64, input:UInt64, record:UInt64) -> UInt8 where {owner F, const owner C} {
+    if (facts[at].discarded_result == 0u8) return unsupported_transfer_signature();
+    if (facts[destination].kind == never_result() || facts[input].kind == never_result()) {
+        set_result(facts, at, never_result());
+        return 0u8
+    };
+    if (facts[destination].kind != source_product_loan() || facts[destination].selection != destination ||
+        facts[destination].target_readonly != 0u8 || facts[destination].identity_module != 0u64 ||
+        facts[destination].identity != record || !facts[destination].checks_array_bounds ||
+        facts[input].kind != independent_product_bits() || facts[input].identity_module != 0u64 ||
+        facts[input].identity != record || facts[input].reception != independent_value() ||
+        (case cases[input] of { BitsConstruction { val transfer <-; } -> transfer != at; _ -> true }))
+        return wrong_operand_type();
+    only_void(facts, at);
+    return 0u8
+}
+
 func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                    selected:const SelectedExports in E, facts:OperandFacts in F, owners:CallOwners in O,
                    fields:const CaughtFieldUses in X, views:const SuppliedViews in H,
@@ -4668,6 +4801,20 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     };
     if (at < intrinsic (len)(cases)) {
         case cases[at] of {
+            IndexedProductDestination {
+                val array <-; val index <-; val owner_site <-; val declared_array <- array_type; val record <-; val index_binds_storage <-;
+            } -> {
+                if (!source_only) return unsupported_product_layout();
+                return check_indexed_product_destination(facts, at, array, index, owner_site, declared_array, record, index_binds_storage)
+            };
+            BitsConstruction {
+                val type <- identity; val arm <-; val first_field <-; val last_field <-;
+                val begin <- first_initializer; val last <- last_initializer;
+            } -> {
+                if (!source_only) return unsupported_product_layout();
+                return check_bits_construction(facts, links, cases, at, type, arm, first_field, last_field,
+                    begin, last, used)
+            };
             LocalSumConstruction { val transfer <-; val sum <-; val arm <-; val fields <-; } -> {
                 if (!source_only) return unsupported_product_layout();
                 return check_local_sum_construction(source, nodes, names, links, selected, facts,
@@ -4880,6 +5027,15 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     if (mode == PlaceTransfer || mode == FieldTransfer) {
         val destination <- assignment.destination;
         val input <- assignment.input;
+        if (source_only && mode == PlaceTransfer && destination < intrinsic (len)(cases)) {
+            case cases[destination] of {
+                IndexedProductDestination { val transfer <-; val record <-; } -> {
+                    if (transfer != at) return invalid_operand_tree();
+                    return check_indexed_product_transfer(facts, cases, at, destination, input, record)
+                };
+                _ -> {}
+            }
+        };
         if (source_only && mode == PlaceTransfer && destination < intrinsic (len)(views) &&
             facts[destination].checks_array_bounds) {
             case views[destination] of {
@@ -5068,7 +5224,7 @@ func inherit_result_use(facts:OperandFacts in F, parent:UInt64, child:UInt64) ->
     return;
 }
 
-func discard_sum_statement(nodes:const ExprNodes in N, cases:const ConstructorCaseFacts in C,
+func discard_aggregate_statement(nodes:const ExprNodes in N, cases:const ConstructorCaseFacts in C,
     facts:OperandFacts in F, written:UInt64, used:UInt64, revision:UInt64) -> void
     where {const owner N, const owner C, owner F} {
     val at <- ungrouped(nodes, revision, used, written);
@@ -5077,6 +5233,9 @@ func discard_sum_statement(nodes:const ExprNodes in N, cases:const ConstructorCa
         assignment.input >= intrinsic (len)(cases)) return;
     case cases[assignment.input] of {
         LocalSumConstruction { val transfer <-; } -> {
+            if (transfer == at) { discard_result(facts, at, explicit_discard()) }
+        };
+        BitsConstruction { val transfer <-; } -> {
             if (transfer == at) { discard_result(facts, at, explicit_discard()) }
         };
         _ -> {}
@@ -5353,7 +5512,7 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
         if (source_only && intrinsic (len)(cases) != 0u64) {
             if (links[at].next < tree.used &&
                 inspect_sequence_entry(nodes, tree.revision, tree.used, at, entry) == BlockSequence) {
-                discard_sum_statement(nodes, cases, facts, entry.item, tree.used, tree.revision)
+                discard_aggregate_statement(nodes, cases, facts, entry.item, tree.used, tree.revision)
             };
             if (facts[at].kind == void_result()) {
                 form <- inspect_callable(nodes, tree.revision, tree.used, at, callable);
@@ -5363,7 +5522,7 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
                     !is_scope_block(nodes, callable.body) &&
                     block_tail(nodes, tree.revision, tree.used, callable.body, tail) &&
                     inspect_sequence_entry(nodes, tree.revision, tree.used, tail, entry) == BlockSequence) {
-                    discard_sum_statement(nodes, cases, facts, entry.item, tree.used, tree.revision)
+                    discard_aggregate_statement(nodes, cases, facts, entry.item, tree.used, tree.revision)
                 }
             }
         };
