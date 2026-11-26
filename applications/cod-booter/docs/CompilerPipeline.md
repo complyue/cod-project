@@ -97,6 +97,8 @@ For an ordinary fixed family defined in the same revision, bind the complete vis
 
 Record the selected method and its argument conversions. Prepare its arguments once in source order. A failing operand preserves its original failure and prevents entry. The selected method supplies the result, completion and emitted call target. The calls `select(LF)` and `select(10u8)` must reach the `ASCII` and `u8` methods respectively in either declaration order. With two `ASCII` actuals, overloads taking `(ASCII, u8)` and `(u8, ASCII)` remain ambiguous. This scope covers ordinary positional value arguments and leaves transfer-operator selection under its existing contract.
 
+The Linux linked check prints `2/1` for the enum and backing calls in both declaration orders. Crossed matches reject with a located ambiguity even when one method uses fewer conversions overall. Duplicate signatures reject at the repeated declaration. A numeric widening that could change the choice reports the profile limit. A reached failure in the second operand preserves both operand effects and prevents entry into the selected method. The existing String transfer family emits the same object and linked output.
+
 ## Design from compiler work
 
 A lexer classifies source spans; a parser constructs typed syntax; an analyzer establishes identities, resolves selected definitions and checks demanded operations. Represent those results in CoD's own data and methods. Keep LLVM objects at native emission boundaries rather than putting LLVM pointers into syntax or semantic records.
