@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Clarify component sourcing for domain-specific databases
+
+<a id="h-dsds-package-sourcing-20261126"></a>
+**H-DSDS-PACKAGE-SOURCING-20261126.** The project user clarified that index maintenance, compatibility, concurrency protocols and recovery may be provided as modular CoD packages and outsourced. The [paper](papers/DSDS.md#who-maintains-the-database-components) and [guide](docs/BuildingADatabaseServiceInCoD.md#choose-the-packages-and-their-maintainers) apply that choice to the last-foldout reservation. [D-DBMR-SERVICE-RESEARCH](design/DesignAuthorityRegistry.md#d-dbmr-service-research) continues from the [first-draft scope](https://github.com/complyue/cod-project/blob/fc03ae9d6c83cc09c4eaa1863afe01902d5ba51e/papers/DSDS.md) with distinct deployment and shared-provider costs. The database service's ACID and convergence obligations still follow its domain contract.
+
 ## 2026-11-26 — Open the domain-specific database paper and application guide
 
 <a id="h-domain-specific-dbmr-services-20261126"></a>

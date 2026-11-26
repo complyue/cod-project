@@ -1,10 +1,10 @@
 # Building a Database Service in CoD — From Indexed DBMR Reads to DML Packets
 
-*Design-stage application guide.* Build a facsimile fulfillment service that answers “Which sheets make up edition E42?” and accepts “Reserve one complete set for order 100.” The first question needs a shared catalog. The second changes stock and creates an obligation to one customer. The exercise specifies expected observations for a local interpreter and a future Actor service. [Companion working paper](../papers/DSDS.md)
+*Design-stage application guide, draft 2.* Build a facsimile fulfillment service that answers “Which sheets make up edition E42?” and accepts “Reserve one complete set for order 100.” The first question needs a shared catalog. The second changes stock and creates an obligation to one customer. The exercise specifies expected observations for a local interpreter and a future Actor service. [Companion working paper](../papers/DSDS.md)
 
 ## 1. Publish the catalog that both readers need
 
-Define edition and sheet keys, constituent occurrences and the catalog root in a shared CoD vocabulary module. Build a B+ tree from edition key to edition. Give each edition an ordered sequence of occurrences. Each occurrence records its position and refers to its canonical sheet in the same region. For E42, put foldout F between plates A and B. Add a fixture in which F occurs twice. A distinct-sheet report must list F once. A packing list for that fixture must request two copies.
+Define edition and sheet keys, constituent occurrences and the catalog root in a shared CoD vocabulary module. Supply the edition-key ordering to an index package and use it to build the B+ tree from key to edition. Give each edition an ordered sequence of occurrences. Each occurrence records its position and refers to its canonical sheet in the same region. For E42, put foldout F between plates A and B. Add a fixture in which F occurs twice. A distinct-sheet report must list F once. A packing list for that fixture must request two copies.
 
 Publish catalog revision 17 and open it read-only in the fulfillment and editorial applications. Query through both openings and compare the ordered keys with the source records. Each application holds its own owner, even when both map the same file. Preserve the catalog revision and edition key on an order that needs later explanation. Resolve those keys under the selected opening. [DBMR publication and reopening](../design/ConstructionAndAcquisition.md#dbmr-modes) · [Shared catalog example](../papers/AlgebraicEffectsIsAllYouNeed.md#shared-ontology-packages-and-dbmr-databases)
 
@@ -17,6 +17,10 @@ Publish catalog revision 17 and open it read-only in the fulfillment and editori
 | Incoming DML, execution scratch and outgoing result | Separate regions. Build the returned receipt or shortage in the response owner so it can survive disposal of the request and scratch. |
 
 Start the local exercise with private writable working storage. The proposed advanced DBMR interface would let database servers reopen mutable backing and coordinate writers across processes. Its mapping, synchronization, flush and recovery contracts still need design and implementation. Document the failure model your service can actually support when offering durable receipts. [Update and history contracts](../design/DomainLanguageDesign.md#dl-06)
+
+### Choose the packages and their maintainers
+
+Keep the edition vocabulary and reservation rule in the domain package. Index maintenance, schema and packet compatibility, multiprocess concurrency control, and crash recovery can come from CoD packages maintained by other teams or a contracted database specialist. For this service, choose a transaction provider whose commit and recovery contract covers stock, reservations and request outcomes together. A specialist can supply and operate that whole component. Record which schema revisions its compatibility tools accept and which failures its durable receipt survives. When replacing or upgrading a provider, use the two-order race and lost-reply exercise below to accept the assembled service.
 
 ## 3. Run one data manipulation program locally, then send it
 
