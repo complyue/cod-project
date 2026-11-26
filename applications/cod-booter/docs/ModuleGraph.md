@@ -2,7 +2,7 @@
 
 ## Design authority
 
-At r99 [D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph) continues r98 and P-680/P-681 for [aggregate field classification](#checking-aggregate-fields-before-publication). The [booter rewrite](CompilerPipeline.md#replacing-the-booter-pipeline) separates collecting bound dependencies from completing their storage facts. The published interface, its consumers and the first reported error retain their existing contract.
+At r100 [D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph) continues P-680/P-681. The [r99 aggregate classifier](#checking-aggregate-fields-before-publication) completes storage facts from bound dependencies. The [r100 indexed record write](#checking-an-indexed-record-with-inline-fields) consumes those facts for a concrete declaration and provider workload. The [booter rewrite](CompilerPipeline.md#replacing-the-booter-pipeline) preserves nominal identity, operand order, first diagnostic and output publication.
 
 At r98 [D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph) continues P-680/P-681 for structural publication. The [mixed-family decision](../../../CHANGELOG.md#h-selector-literals-and-pack-dispatch-20261126) changes the permitted membership from r97.
 
@@ -733,6 +733,12 @@ Keep the checked construction site, nominal identities, field schema and written
 For the builtin indexed write, check the initialized writable array formal, its actual backing and owner, and the index. Select the element once and account for bounds failure before evaluating the RHS. Match the completed payload’s nominal parent to the element type. Only normal RHS completion performs the final store. Earlier effects remain visible if evaluation throws. The package resolver discards the readonly destination view produced by the transfer. Transfer checking requires a discarded result. In `mark_failed_visit` the case reads the selected element with readonly access and receives the scalar fields by value. The later write uses the array formal's separate writable view and copies the nested `VisitFailure` into the new payload.
 
 Verify the four `PackageResolution` alternatives on the package resolver and its importer through declaration checking and provider generation. Check a wrong parent with identical fields, a non-bits sibling, an initializer overload, field initialization, access and failure order. Preserve previous artifacts on rejection. Executable sum construction in the booter requires a separate lowering proof.
+
+### Checking an indexed record with inline fields
+
+In `ModuleExportStorage.write_sum_row`, `interfaces[row] <- make ModuleInterfaceRow { … }` prepares three distinct inline values. The field `sum_payload` reads an existing `SumInterfacePayload`, `object_view` constructs the fieldless `NoCallableObjectView` alternative, and `array_slot_failures` constructs a `ByteArrayFailures` product. Declaration checking and provider generation share the bound write. For a local finite-bits record, bind the selected builtin transfer, array formal, owner and index once. Bind each written initializer to its field ordinal on its own nominal type in the defining revision. A nested braced construction selects its own constructor under the [ordinary initializer-family rule](../../../design/DomainLanguageDesign.md#publishing-and-selecting-data-constructors).
+
+Operand checking reads these selections, completed storage schemas and ordered child results. It applies the field readiness and completion rules above to each fresh value. A readable finite-bits payload under owner P can supply a by-value field of a row under owner I. P and I may differ. The builtin selects the backing and checks the index once before evaluating the RHS. Only a completed RHS commits the whole-row store. If a later field exits abruptly, earlier operand effects survive, including any write through an alias of the destination. This source profile covers a discarded transfer result. Object emission requires its own lowering evidence. [Bits transfer](../../../design/ConstructionAndAcquisition.md#storage-eligibility-and-payload-transfer)
 
 ## Reentry and completion
 

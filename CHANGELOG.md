@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Check inline record construction at its indexed destination
+
+<a id="k-booter-indexed-inline-record-20261126"></a>
+**K-BOOTER-INDEXED-INLINE-RECORD-20261126.** **Continued** under [D-20-MODULE-GRAPH](design/DesignAuthorityRegistry.md#d-20-module-graph), P-680/P-681. The [actual interface row writer](https://github.com/complyue/cod-project/blob/420b187ead84ade35f457248affc58689f6fd065/applications/cod-booter/src/ModuleExportStorage.cod#L205-L227) supplies an existing readonly sum, a fresh sum alternative and a fresh product. The [r100 source-checking boundary](applications/cod-booter/docs/ModuleGraph.md#checking-an-indexed-record-with-inline-fields) applies the r99 completed storage facts and the existing indexed transfer semantics to this write on declaration and provider routes. Object lowering has separate acceptance. Registry r1356→1357.
+
 ## 2026-11-26 — Separate aggregate binding from storage classification
 
 <a id="k-booter-bound-aggregate-schemas-20261126"></a>
