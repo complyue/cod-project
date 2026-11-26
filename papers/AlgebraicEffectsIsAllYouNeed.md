@@ -322,6 +322,8 @@ same knowledge to both selects the same published revision. Authority to read th
 catalog grants neither stock-reservation nor publication authority.
 [Typed identity and version selection](../design/DomainLanguageDesign.md#dl-08)
 
+What happens when two warehouses try to reserve the last foldout? The [database working paper](DSDS.md) follows the order from the shared catalog into the stock transaction and back to a lagging availability display.
+
 ## A second instruction set with a cycle
 
 The proposed `hlvm-basic` application supplies a small independent check. Let its frontend

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Open the domain-specific database paper and application guide
+
+<a id="h-domain-specific-dbmr-services-20261126"></a>
+**H-DOMAIN-SPECIFIC-DBMR-SERVICES-20261126.** In the CoD project discussion the project user commissioned the [DSDS working paper](papers/DSDS.md) and [application guide](docs/BuildingADatabaseServiceInCoD.md). The direction combines direct access to indexed regional graphs with native CoD DML programs and results carried in separate Actor packets. Domain services may combine multiple read-only ontology DBMRs, writable OLTP databases and memory-only regions. The user called for an advanced DBMR interface for server authors responsible for multiprocess transaction coordination, explicit ACID guarantees and the option of eventual consistency. The [research scope](design/DesignAuthorityRegistry.md#d-dbmr-service-research) builds on the [existing immutable-image contract](https://github.com/complyue/cod-project/blob/6ca6183a1dd72405b8eac235acfd3defb5ae1fdf/design/ConstructionAndAcquisition.md#dbmr-modes). The interface, recovery protocol and lower lifetime cost require design and evidence.
+
 ## 2026-11-26 — Study the marginal cost of composition and introduce the scoped-effects guide
 
 <a id="k-marginal-cost-and-scoped-effects-guide-20261126"></a>

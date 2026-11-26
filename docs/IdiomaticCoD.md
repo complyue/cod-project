@@ -13,7 +13,7 @@ dependencies are identified where needed. For a compact reference to the source 
 
 ## Design authority
 
-Guide revision 17 links the [scoped effect composition guide](ScopedEffectComposition.md) at the integration-boundary example. Revision 16 links the [companion guide to reusable domain operations](BuildingReusableDomainOperations.md) from the pipeline example. Revision 15 illustrates the [default ASCII vocabulary](../CHANGELOG.md#k-ascii-vocabulary-20261125) and uppercase named constants. Revision 14 applies [enum backing coercion](../design/TypedEnums.md#using-an-enum-as-its-backing-value)
+Guide revision 18 links the [DBMR database service guide](BuildingADatabaseServiceInCoD.md) from the stock ownership example. Revision 17 links the [scoped effect composition guide](ScopedEffectComposition.md) at the integration-boundary example. Revision 16 links the [companion guide to reusable domain operations](BuildingReusableDomainOperations.md) from the pipeline example. Revision 15 illustrates the [default ASCII vocabulary](../CHANGELOG.md#k-ascii-vocabulary-20261125) and uppercase named constants. Revision 14 applies [enum backing coercion](../design/TypedEnums.md#using-an-enum-as-its-backing-value)
 to [ASCII members in a byte scanner](#ascii-members-in-a-byte-scanner). Revision 13 applies the [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125)
 to [tariff dispatch](#put-type-and-value-specializations-in-one-method-group) and [method arm boundaries](#use-canonical-source-form).
 It retains revision 12's [fixed receiver binding](../CHANGELOG.md#h-fixed-self-binding-20261125) in the member examples. Revision 11 applies the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) to direct calls and borrowed results. It continues the revision 10 guidance on the [confirmed OO source rules](../design/DomainLanguageDesign.md#product-storage-inheritance)
@@ -382,6 +382,8 @@ not, by itself, transfer the owner to a callee that was never entered.
 An interior `ref` or an ordinary whole-region borrow grants neither release responsibility nor a
 longer lifetime. Return a borrowed view only under an owner that remains valid after the call. When
 the result must carry the resource's lifetime responsibility, use the owning result contract.
+
+The [DBMR database service guide](BuildingADatabaseServiceInCoD.md) extends this choice to a shared catalog, mutable stock and a receipt that belongs to the caller after the request ends.
 
 See [region construction](../design/ConstructionAndAcquisition.md#region-construction-and-named-root-initializers),
 [region declarations](../design/RegionalOwnership.md#region-as-a-declaration-keyword-throughout-the-language),
