@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Omit target discovery for already bound independent scalar frames
+
+<a id="k-seed-independent-scalar-proving-20261125"></a>
+**K-SEED-INDEPENDENT-SCALAR-PROVING-20261125.** The [architecture review](design/ImplementationArchitecture.md#target-discovery-in-independent-scalar-frames) continues D-ARCH-REVIEW r195→196 under [H-COMPILER-WORK-NECESSITY](#h-compiler-work-necessity-20261125) and the [completed-callee rule](#h-completed-callee-behavior-20261125). At `d4f2dae8:cod/lang_checked.hh`, eligible scalar producers and applications still enter discovery before proving. The reviewed schedule retains the proving frame, arithmetic exits and established diagnostics. Its eligibility depends on all places being available in that frame and all selected callee inputs already being complete.
+
 ## 2026-11-25 — Review local handler selection during recursive visits
 
 <a id="k-seed-recursive-local-selection-20261125"></a>
