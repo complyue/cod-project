@@ -4860,10 +4860,8 @@ class ScalarChecker {
     if (mode == ArgumentMode::borrowed_ref) require_payload_access(view, at);
   }
   std::optional<CheckedArgument::ReferenceStorage> prepare_display_operand(CheckedOperation &view, const Location &at) {
-    if (view.view) {
-      require_live_view(view, at);
-      if (view.owners.size() != 1) fail(at, "reference initializer requires one statically provable owner");
-    }
+    if (view.view && view.owners.size() != 1)
+      fail(at, "reference initializer requires one statically provable owner");
     view.read_only = true;
     if (view.view && !view.mixed_view) return {};
     if (!scalar_type(view.type)) implementation_gap(at, "materializing a non-scalar display operand");
@@ -12034,7 +12032,6 @@ class ScalarChecker {
         if (type == Type::never) continue;
         const auto &view = operations.at(&operand);
         check_value_pack_spread(type, view.view && !view.mixed_view, operand.at);
-        require_live_view(view, operand.at);
         read_view(view, operand.at);
         note_abrupt(operand.at, {exception_id(ExceptionCategory::invalid_capacity),
                                 exception_id(ExceptionCategory::out_of_memory)});
@@ -19362,7 +19359,6 @@ class ScalarChecker {
         const auto &view = operations.at(&expr);
         if (!view.view || view.mixed_view)
           implementation_gap(expr.at, "aggregate bits transfer requires one complete source target");
-        require_live_view(view, expr.at);
         read_view(view, expr.at);
       }
     }
@@ -19706,7 +19702,6 @@ class ScalarChecker {
           implementation_gap(at, "reference field initialization requires an existing target or null");
         rebind_type(member.type, supplied, at);
         rebind_access(member.source->read_only, source.read_only, at);
-        require_live_view(source, at);
         if (std::ranges::any_of(source.owners, [&](size_t owner) {
               return compare_owners(owner, storage(root).scope) != OwnerMatch::satisfied;
             })) fail(at, "reference field target must share the containing product's owner");
@@ -19815,11 +19810,10 @@ class ScalarChecker {
       lexical_ = std::move(state);
       if (viewed) {
         if (projects) {
-          if (!prepared) require_case_projection(*fact, at);
+          if (!prepared) read_view(*fact, at);
         } else {
           if (reception_scope && fact->owners.contains(*reception_scope))
             fail(at, "case result borrows branch-local receiving storage");
-          require_live_view(*fact, at);
           auto readiness = fact->initialization;
           if (std::ranges::all_of(fact->targets, [&](size_t target) {
                 return target == null_target || lexical_.initialized.contains(target);
@@ -19890,8 +19884,6 @@ class ScalarChecker {
       const auto matched = scan.match(header.case_pattern);
       const auto before = lexical_;
       std::optional<LexicalState> tested_present;
-      if (lexical_.live && scan.borrowed && header.case_pattern.kind != CasePattern::Kind::any)
-        require_live_view(selected, item.at);
       if (lexical_.live && scan.borrowed && header.case_pattern.kind == CasePattern::Kind::code &&
           (matched.present() || scan.remaining.present())) {
         refine_presence(true, item.at);
@@ -20017,10 +20009,6 @@ class ScalarChecker {
     return result;
   }
 
-  void require_case_projection(const CheckedOperation &source, const Location &at) {
-    require_live_view(source, at);
-    read_view(source, at);
-  }
   Type check_pack_source(const Expression &source, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, PackUse use) {
     return check(source, instance, operations, false, false, nullptr, ExpectedTypeUse::materialization,
@@ -20394,8 +20382,6 @@ class ScalarChecker {
         } else {
           check_bits_destinations();
           if (left.type != right.type) fail(expr.at, "bits swap requires the exact same type");
-          require_live_view(left, expr.children[0]->at);
-          require_live_view(right, expr.children[1]->at);
           read_view(left, expr.at); read_view(right, expr.at);
           for (auto &argument : operation.arguments) argument.mode = ArgumentMode::borrowed_read;
           check_builtin_declarations(expr, arguments, operation, true, views);
@@ -20478,7 +20464,6 @@ class ScalarChecker {
         if (prepared.type == Type::never) { operation.type = Type::never; break; }
         if (!text_type(prepared.type)) fail(source.at, "text access requires a readable String");
         prepare_borrow(prepared, ArgumentMode::borrowed_ref, source.at);
-        if (*access == BuiltinOperation::text_slice) require_live_view(prepared, source.at);
         for (size_t i = 1; i < expr.children.size(); ++i) {
           const auto &offset = *expr.children[i];
           const auto type = check(offset, instance, operations, true);
@@ -20512,7 +20497,6 @@ class ScalarChecker {
           if (i == 0 ? !program_.builder_type(prepared.type) : !text_piece(prepared.type))
             fail(operand.at, i == 0 ? "text append requires a lexical text builder target" : "text append requires a text piece");
           prepare_borrow(prepared, ArgumentMode::borrowed_ref, operand.at);
-          require_live_view(prepared, operand.at);
           const auto owner = one_owner(prepared);
           if (!owner) implementation_gap(operand.at, "text append requires one proved actual owner per operand");
           if (i == 0 && (prepared.read_only || const_owner(*owner))) fail(operand.at, "text append requires writable builder access");
@@ -20778,7 +20762,6 @@ class ScalarChecker {
         if (type == Type::never) break;
         if (!text_type(type)) fail(expr.at, "CString assertion requires String text");
         prepare_borrow(operation, ArgumentMode::borrowed_ref, operand.at);
-        require_live_view(operation, operand.at);
         operation.slots.clear();
         operation.fixed_binding = false;
         operation.type = annotation;
@@ -20820,7 +20803,7 @@ class ScalarChecker {
         const auto &source = operations.at(&operand);
         operation.borrowed_result = use.borrowed && source.view && !source.mixed_view;
         operation.scalar_value_join = use.projects;
-        if (use.projects && source.view) require_case_projection(source, operand.at);
+        if (use.projects && source.view) read_view(source, operand.at);
       }
       if (operation.operand_type != Type::never)
         note_abrupt(expr.at, {}, {Completion::case_break}, false, {}, false, &expr);
@@ -21637,7 +21620,6 @@ class ScalarChecker {
           if (!text_piece(source)) fail(input.at, builder ? "text builder construction requires a text piece" : "make String requires a text operand");
           const auto &selected = operations.at(&input);
           prepare_borrow(selected, ArgumentMode::borrowed_ref, input.at);
-          require_live_view(selected, input.at);
           if (program_.builder_type(source)) allocation.builder_inputs |= 1u << i;
         }
         if (!builder && allocation.builder_inputs) allocation.kind = Allocation::builder_snapshot;
@@ -21790,7 +21772,6 @@ class ScalarChecker {
       const auto &field = schema.fields[index];
       if (!parent.view || parent.mixed_view) implementation_gap(expr.at, "field selection requires an existing product target");
       if (read && field.type.kind == Type::product) implementation_gap(expr.at, "reading a whole product as an independent value");
-      require_live_view(parent, expr.at);
       dereference(parent, expr.at);
       operation = project_product(parent, index, expr.at);
       if (std::ranges::any_of(parent.owners, [&](size_t owner) { return region_owners_.contains(owner); })) {
