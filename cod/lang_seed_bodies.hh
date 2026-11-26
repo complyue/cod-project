@@ -82,16 +82,20 @@ class BodyExtraction {
 
   static size_t input_owner(size_t role) { return null_target - 1 - role; }
 
-  static size_t readonly_array_owner(const CheckedHereContract &contract, const Location &at) {
+  static size_t here_input_owner(const CheckedHereContract &contract, const Location &at) {
     expect(!contract.labelled && !contract.inputs.empty() && contract.here.empty() &&
            !contract.feedback && !contract.throws_root && contract.throws_categories.empty() &&
            !contract.result.owner && contract.result.mode == ArgumentMode::value && scalar_type(contract.result.type),
-           at, "replacement seed needs ordered array offers and independent scalar here feedback");
-    const auto owner = contract.inputs.front().owner;
-    expect(owner && *owner && std::ranges::all_of(contract.inputs, [&](const auto &offer) {
-      return offer.type.kind == Type::array && offer.mode == ArgumentMode::borrowed_ref &&
-             offer.read_only && offer.owner == owner;
-    }), at, "replacement seed needs readonly array offers from one established here owner");
+           at, "replacement seed needs ordered here offers and independent scalar feedback");
+    std::optional<size_t> owner;
+    for (const auto &offer : contract.inputs) {
+      if (offer.mode == ArgumentMode::value && !offer.owner && scalar_type(offer.type)) continue;
+      expect(offer.type.kind == Type::array && offer.mode == ArgumentMode::borrowed_ref &&
+             offer.read_only && offer.owner && *offer.owner && (!owner || owner == offer.owner),
+             at, "replacement seed needs independent scalar offers or readonly arrays from one established here owner");
+      owner = offer.owner;
+    }
+    expect(owner.has_value(), at, "replacement seed needs an established here input owner");
     return *owner;
   }
 
@@ -102,7 +106,7 @@ class BodyExtraction {
       type.parameters.push_back(offer.type);
       type.argument_modes.push_back(offer.mode);
       type.const_views.push_back(offer.read_only);
-      type.owners.push_back(1);
+      type.owners.push_back(offer.owner ? 1 : 0);
     }
     type.owners.push_back(0);
     type.target = std::make_shared<Type>(contract.result.type);
@@ -160,10 +164,14 @@ class BodyExtraction {
       expect(parameter.type == Type::void_type && parameter.declaration_kind.empty() && parameter.owner.empty() &&
              !parameter.read_only && !parameter.fixed_binding, parameter.at,
              "replacement seed needs an inferred here reception");
-      parameter.type = offers[i].type;
-      parameter.declaration_kind = "ref";
-      parameter.read_only = parameter.fixed_binding = true;
-      parameter.owner = handed_owner;
+      const auto &offer = offers[i];
+      parameter.type = offer.type;
+      parameter.read_only = offer.read_only;
+      if (offer.owner) {
+        parameter.declaration_kind = "ref";
+        parameter.fixed_binding = true;
+        parameter.owner = handed_owner;
+      } else parameter.declaration_kind = "val";
     }
     auto &body = bodies_.emplace_back();
     body.instance.method = declarations_.declarations_.methods.size() + literal_count_++;
@@ -385,7 +393,7 @@ class BodyExtraction {
       const auto &source = found->second;
       expect(source.owner == literal.owner, expr.at, "borrowed here input has a different actual owner from its contract");
       auto rebased = *source.contract;
-      for (auto &input : rebased.inputs) input.owner = 1;
+      for (auto &input : rebased.inputs) if (input.owner) input.owner = 1;
       const auto slot = literal.lexical_here.size();
       literal.lexical_here.push_back({expr.text, invocation_type(rebased), std::move(rebased), {}});
       literal.here_sources.push_back(source.slot);
@@ -395,7 +403,7 @@ class BodyExtraction {
     CheckedOperation invoke_here(const Expression &expr, const HereFormal &formal) {
       const auto &offers = formal.contract->inputs;
       expect(!expr.has_here_body() && expr.children.size() == offers.size(),
-             expr.at, "here call requires an argument for every ordered array offer");
+             expr.at, "here call requires an argument for every ordered offer");
       CheckedOperation operation;
       operation.type = formal.contract->result.type;
       operation.operand_type = invocation_type(*formal.contract);
@@ -404,9 +412,12 @@ class BodyExtraction {
         const auto &input = operand(expr, i);
         const auto &offer = offers[i];
         const auto &at = expr.children[i]->at;
-        expect(input.type == offer.type && input.view, at, "here call needs the declared nominal array view");
-        if (single_owner(input, at) != formal.owner)
-          fail(at, "borrowed here input has a different actual owner from its contract");
+        if (offer.mode == ArgumentMode::value) takes_value(input, offer.type, at);
+        else {
+          expect(input.type == offer.type && input.view, at, "here call needs the declared nominal array view");
+          if (single_owner(input, at) != formal.owner)
+            fail(at, "borrowed here input has a different actual owner from its contract");
+        }
         operation.arguments.push_back({offer.mode, offer.type});
       }
       return operation;
@@ -491,7 +502,7 @@ class BodyExtraction {
       }
       if (native.has_here()) {
         const auto &contract = native.contract.here.front();
-        const auto owner = owners.find(readonly_array_owner(contract, expr.at) - 1);
+        const auto owner = owners.find(here_input_owner(contract, expr.at) - 1);
         expect(owner != owners.end(), expr.at, "native here loan needs the prepared actual owner");
         supply_here(expr, contract, op.type, owner->second, op);
       }
@@ -572,7 +583,7 @@ class BodyExtraction {
       op.callee = callee;
       if (expr.has_here_body()) {
         const auto &contract = target.here.front();
-        const auto owner = actual_owners.find(readonly_array_owner(contract, expr.at) - 1);
+        const auto owner = actual_owners.find(here_input_owner(contract, expr.at) - 1);
         expect(owner != actual_owners.end(), expr.at, "here loan needs a prepared actual owner");
         supply_here(expr, contract, op.type, owner->second, op);
         op.here_arguments.resize(1);
@@ -1142,7 +1153,7 @@ class BodyExtraction {
         for (size_t i = 0; i < parameters.size(); ++i) bind_input(parameters[i], method_->parameters[i]);
         if (!method_->here.empty()) {
           const auto &contract = method_->here.front();
-          const auto role = readonly_array_owner(contract, form_.at);
+          const auto role = here_input_owner(contract, form_.at);
           expect(role <= owners().size(), form_.at, "here declaration has no established owner");
           const auto owner = input_owner(role - 1);
           const auto &formal = form_.parameters.front();
