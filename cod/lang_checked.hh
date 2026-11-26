@@ -22560,6 +22560,9 @@ class ScalarChecker {
   static bool scalar_predicate_operation(std::string_view name) {
     return name == "!" || name == "==" || name == "!=" || name == "<" || name == "<=" || name == ">" || name == ">=";
   }
+  static bool leaf_integer_arithmetic(const Expression &expr) {
+    return expr.kind == Expression::Kind::binary && (expr.text == "+" || expr.text == "*");
+  }
 
   bool bind_scalar_predicate(const Expression &expr, const TypeEvidenceState &scope, ScalarPredicatePlan &plan,
                              size_t guard = null_target) const {
@@ -22656,7 +22659,8 @@ class ScalarChecker {
       // The ordinary checker still validates the selected builtin and all
       // operand types. A visible source overload keeps this body legacy.
       if (integer_result) {
-        if (operation != expr.text || (operation != "*" && !scalar_predicate_operation(operation))) return false;
+        if (operation != expr.text || (!leaf_integer_arithmetic(expr) && !scalar_predicate_operation(operation)))
+          return false;
         if (const auto family = module_call_family(module_names(), expr)) {
           const auto *methods = proven_family_methods(*family, interpretation_);
           if (!methods || !methods->empty() || has_declarations(expr.text)) return false;
@@ -22774,11 +22778,11 @@ class ScalarChecker {
       const auto &operation = instance.operations.at(site);
       const auto builtin = short_circuit_predicate(*site) ? BuiltinOperation::none :
           site->kind == Expression::Kind::unary ? BuiltinOperation::unary : BuiltinOperation::binary;
-      const bool multiply = site->text == "*";
+      const bool arithmetic = leaf_integer_arithmetic(*site);
       if (operation.callee || operation.callable_call || operation.builtin != builtin ||
           (builtin != BuiltinOperation::none && operation.builtin_name != site->text) ||
-          operation.type != (multiply ? Type::uint64 : Type::boolean) ||
-          (multiply && operation.operand_type != Type::uint64))
+          operation.type != (arithmetic ? Type::uint64 : Type::boolean) ||
+          (arithmetic && operation.operand_type != Type::uint64))
         throw std::logic_error("scalar operation disagrees with its leaf binding plan");
     }
   }
@@ -22815,7 +22819,7 @@ class ScalarChecker {
       if (exit.reason) {
         const bool byte_bounds = borrowed && exit.reason == bounds && exit.origin == leaf.primitive->at;
         const bool arithmetic_failure = exit.reason == 2 && std::ranges::any_of(leaf.integer_operations,
-            [&](const Expression *site) { return site->text == "*" && exit.origin == site->at; });
+            [&](const Expression *site) { return leaf_integer_arithmetic(*site) && exit.origin == site->at; });
         if (!byte_bounds && !arithmetic_failure) throw std::logic_error("closed leaf extraction found an unbound exit");
       }
       observe_outcome(exit.reason, exit.state);
