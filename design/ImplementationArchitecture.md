@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r221 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r220 for [preparing a current reference-symbol argument](#preparing-a-current-reference-symbol-argument). The [review](../CHANGELOG.md#k-seed-current-symbol-argument-20261126) applies [D-10-OWNER-SYMBOL](DesignAuthorityRegistry.md#d-10-owner-symbol) to an ordinary synchronous call on the existing ABI.
+
 At r220 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r219 for [returning a case with a full-scope arm](#returning-a-case-with-a-full-scope-arm). The [review](../CHANGELOG.md#k-seed-case-arm-result-20261126) applies the existing case, full-scope and result contracts to two successive consumers of a sealed result.
 
 At r219 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r218 for [statement calls with an omitted result](#statement-calls-with-an-omitted-result). The [review](../CHANGELOG.md#k-seed-omitted-statement-result-20261126) applies D-24-TAIL and D-10-DISCARD to the existing extraction and emission boundary.
@@ -803,6 +805,14 @@ In [`report_symbol_binder`](../applications/cod-booter/src/ModuleGraph.cod), `re
 Extract the subject, patterns, receptions, arm operands and their control destinations once. The outer return ends its lexical path even while the case result is pending. Seal the full scope’s contract from its own return evidence. A case-result producer then reads the completed arm contracts and the established coverage to determine the normal result. A later consumer reads that result, checks the enclosing return and assembles the backend operations. Neither interface can revisit a body or alter its inputs. This fixed order suffices for a directly returned exhaustive case with independent, exactly matching scalar or enum results. The [ordinary case rules](DomainLanguageDesign.md#case-expressions-and-branch-local-variables) govern other joins.
 
 At runtime, evaluate the indexed subject once. Prepare the received values and enter the full scope only on its matching arm. A local return prepares its payload before scope cleanup. The case receives the outcome after cleanup. An abrupt exit propagates through the enclosing cleanup without delivering an arm value. Verify distinguishable enum members on normal arms, the returned call using a received field, and the order of cleanup on a failing selected arm. Retain prior outputs when an independently established result cannot satisfy the required transfer.
+
+#### Preparing a current reference-symbol argument
+
+The [provider renderer](../applications/cod-booter/src/ProviderRenderer.cod) installs its lexical `StringBuilder` as `@sout` while writing a name. The bundled [`emit`](../cod/library/string.cod) then calls `writeUtf8(@sout, piece)`. The bound call identifies the canonical symbol, the selected method in its interpretation, and the input that supplies the method’s owner role. For this first profile, the frozen declarations must cover every concrete target the input admits for the abstract reference and establish a single nominal conformer. Resolve the whole argument list with ordinary overload selection. Aliases of the same identity add no new conformer. An open or non-singleton domain leaves the translation unsupported at its source site.
+
+At the symbol operand’s written position, load its current binding once. Prepare the borrowed target and its actual owner from that descriptor and keep the pair with this invocation while later operands execute. The callee receives the prepared target and its owner through its existing ABI. Earlier selected incoming views keep their own owner. A later failed operand prevents entry, and leaving the installing scope restores its previous binding through normal or exceptional cleanup. The first use covers a writable, non-null borrow with one independently identified owner role. The borrowed owner conveys no allocator capability.
+
+A distinguishing control gives the binding at entry and the binding at the read different owners. Inspect both operands at the emitted call, including after a nested invocation, and check the publisher’s actual header and stubs on success and failure. The binding at entry and the binding at the read often coincide in `emit`, so correct output bytes alone cannot establish owner provenance. The [output protocol](StringBuilding.md#one-formatter-and-two-destinations) supplies the library acceptance case.
 
 #### Extracting the path-key callback
 
