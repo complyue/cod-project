@@ -1736,13 +1736,17 @@ class BodyExtraction {
       BoundCase input{&expr, {}};
       for (const auto &entry : std::span(expr.children).subspan(1)) {
         const auto &arm = *entry;
-        expect(arm.kind == Kind::case_arm && !arm.case_resumes && arm.children.size() == 1, arm.at,
-               "replacement seed needs an unguarded case arm");
+        expect(arm.kind == Kind::case_arm && !arm.case_resumes &&
+               (arm.children.size() == 1 || arm.children.size() == 2), arm.at,
+               "replacement seed needs a case arm without resumption");
+        const bool guarded = arm.children.size() == 2;
         const auto pattern = bind_case_pattern(declarations(), subject.type, arm, names().constructors);
         std::vector<size_t> payload_fields;
         expect(pattern.kind != CasePattern::Kind::null, arm.at, "replacement seed needs a non-null case pattern");
-        if (pattern.kind == CasePattern::Kind::any) catch_all = true;
-        else covered.insert(pattern.code);
+        if (!guarded) {
+          if (pattern.kind == CasePattern::Kind::any) catch_all = true;
+          else covered.insert(pattern.code);
+        }
         scopes_.emplace_back();
         if (arm.receiving) {
           const auto constructor = *pattern.constructor;
@@ -1763,7 +1767,15 @@ class BodyExtraction {
             remember(receiver, std::move(binding));
           }
         }
-        const auto &value = *arm.children.front();
+        if (guarded) {
+          const auto &guard = *arm.children.front();
+          expect(extract(guard).type == Type::boolean, guard.at,
+                 "replacement seed needs a Boolean result for the case guard");
+          // A declining guard can change a borrowed subject through an alias.
+          // Only the following tests can establish coverage of its new tag.
+          if (subject.view) covered.clear();
+        }
+        const auto &value = *arm.children.back();
         if (allow_scope && implicit_scope_call(value)) {
           require_executable_expression(value);
           const auto method = call_full_scope(value, true);
@@ -1803,7 +1815,7 @@ class BodyExtraction {
       if (body_.outline || !body_.instance.result.type || !scalar_type(*body_.instance.result.type) ||
           value.kind != Kind::case_expression) return false;
       if (std::ranges::none_of(std::span(value.children).subspan(1), [](const auto &arm) {
-            return arm->kind == Kind::case_arm && arm->children.size() == 1 && implicit_scope_call(*arm->children.front());
+            return arm->kind == Kind::case_arm && !arm->children.empty() && implicit_scope_call(*arm->children.back());
           })) return false;
       require_executable_expression(value);
       auto input = bind_case(value, true);
