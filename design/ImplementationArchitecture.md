@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r216 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r215 and extends the r214 callback extraction to [ordered readonly arrays with one actual owner](#ordered-array-loans-from-one-native-owner). The [review](../CHANGELOG.md#k-seed-pipeline-ordered-catalog-loans-20261126) preserves the existing native provider ABI, synchronous lifetime and completion rules.
+
 At r215 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r214 under the [replacement pipeline decision](../CHANGELOG.md#h-compiler-pipeline-replacement-20261125). The [direct lexical handle review](#direct-native-handle-acquisition-in-the-replacement-seed) applies [D-20-C-HANDLES](DesignAuthorityRegistry.md#d-20-c-handles) to root opening, owner identity and cleanup on the existing LLVM interface. [Review record](../CHANGELOG.md#k-seed-pipeline-lexical-native-handles-20261126)
 
 At r214 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r213 for the [synchronous path-key callback in the replacement seed](#extracting-the-path-key-callback). The [review](../CHANGELOG.md#k-seed-pipeline-path-key-callback-20261125) applies the existing supplied-body, native loan and completion contracts to phase-owned inputs for the LLVM backend.
@@ -777,6 +779,14 @@ In [`ModuleIndex.fill_path`](../applications/cod-booter/src/ModuleIndex.cod) the
 Complete the mapping from those uses to captured places, owners and lexical `here` descriptors before supplying the existing LLVM frame. `first` and `length` keep their readonly access. `keys` still selects writable backing under G. The offered byte view is bounded by the selected `PathOwner` under P and the synchronous handoff. The relay captures the existing `work` descriptor. The receiver invokes that descriptor through its declared signature and can serve different literals with the same ABI. Neither capture completion nor invocation schedules another traversal of the supplier.
 
 The [provider](../applications/cod-booter/native/path_provider.c) lends the selected path bytes and reports native status separately from callback completion. `Complete` and `ScratchFailed` are both ordinary `CompilerStatus` feedback. A protected exit carries its original payload and cleanup through the bridge. An invalid native response retains its boundary failure. Verify a ready insertion, ordinary failed feedback, and a reached abrupt callback. An unready path throws `PathNotReadyException` with status 1 before a loan begins. A failure of the second reserve happens even earlier and retains the first rebind. Preserve these distinctions in the linked result and retain prior outputs on a translation failure. This review covers the direct synchronous relay on this path.
+
+#### Ordered array loans from one native owner
+
+The [CLI](../applications/cod-booter/src/__main__.cod) borrows two arrays from [`catalog_use`](../applications/cod-booter/src/NativeCatalog.cod). Position zero carries spelling bytes. Position one carries nominal export rows, with its extent measured in rows. The [catalog provider](../applications/cod-booter/native/catalog_provider.c) validates each base and element count against the resource before its callback enters CoD.
+
+Use the completed positional `here` signature to extract each offered parameter in declaration order. Each offer keeps its array type, readonly access and position, including unused offers. The bridge passes all the array views, then one actual owner and the descriptor context. Later frame assembly maps the full ordered reception before the supplier’s captures. When a CoD relay calls its lexical `here` formal, prepare each actual in source order and establish its type, access and common owner before invoking the descriptor. The two-argument [`with_source` relay](../applications/cod-booter/src/NativeSourceUse.cod) gives a direct forwarding workload. The r214 single-visit extraction, lifetime and completion boundaries continue for every admitted arity.
+
+Verify that each catalog extent and element can independently change the ordinary feedback and that a thrown record-derived payload reaches the catch without producing an ordinary callback value. Catalog sizes belong to the input revision. Keep wrong-owner or incompatible reception failures located before output publication. The scope covers full positional reception of nonempty, readonly, single-owner offers. Catalog translation alone leaves full CLI entry translation open.
 
 #### Direct native handle acquisition in the replacement seed
 
