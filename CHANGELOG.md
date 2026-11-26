@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Match the written slice shape in a library case arm
+
+<a id="h-mirrored-slice-case-20261126"></a>
+**H-MIRRORED-SLICE-CASE-20261126.** Asked how a library receiving a slice should express `case some_slice of`, the project user chose “Mirror the literal — `(.. by val d) -> use(d)`” in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). [D-07-SLICE-CASE](design/DesignAuthorityRegistry.md#d-07-slice-case) extends the [previous case grammar](https://github.com/complyue/cod-project/blob/ad1f2e29e028e2aaa5e7865778cb860c9c01f534/design/DomainLanguageDesign.md#case-expressions-and-branch-local-variables) with a consumer of the [canonical slice ADT](https://github.com/complyue/cod-project/blob/ad1f2e29e028e2aaa5e7865778cb860c9c01f534/design/RangedForAndGenerators.md#concrete-types-of-range-and-slice-literals). D-07r227/D-29r27 preserve actual field types, default versus explicit step, existing case control and library axis policy. See the [example and acceptance cases](design/RangedForAndGenerators.md#matching-a-slice-in-a-case-arm). Frontend support remains a delivery item. Registry r1348→1349.
+
 ## 2026-11-26 — Select the pack body on explicit expansion and bind selector literals to concrete ADTs
 
 <a id="h-selector-literals-and-pack-dispatch-20261126"></a>

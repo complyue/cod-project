@@ -1,8 +1,10 @@
 # Ranged for-loops and synchronous generators
 
-Design revision: 26 · Recorded: 2026-11-26 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
+Design revision: 27 · Recorded: 2026-11-26 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
 
 ## Design authority
+
+At r27 [D-07-SLICE-CASE](DesignAuthorityRegistry.md#d-07-slice-case) gives library authors a case head that mirrors the slice literal. P-770/P-771 carry the r26 concrete ADT, supplied-field types and omission markers into ordinary case control. [User decision](../CHANGELOG.md#h-mirrored-slice-case-20261126)
 
 At r26 [D-29-SELECTOR-LITERALS](DesignAuthorityRegistry.md#d-29-selector-literals) gives bounded progressions and open-axis requests concrete, typed ADT values before call selection. P-768/P-769 preserve the r25 progression, the scalar domain and library array policy. [Decision](../CHANGELOG.md#h-selector-literals-and-pack-dispatch-20261126)
 
@@ -76,11 +78,35 @@ CoD defines two builtin ADT schemas. Each application of a schema to canonical f
 
 For `RangeValue`, determine a common coordinate type for the endpoints using their established identities and ordinary whole-type lossless rules. Preserve named units. If that evidence does not identify a unique coordinate, the source must disambiguate it. Retain the explicit step's type and check that the domain supports that advance. For a bounded ordinary integer range the omitted step is the unitless forward count `1` of type `i64`. A measured coordinate needs an established default advance for that domain if the author omits the step. No physical displacement is inferred from the receiving collection. The observable members are `start`, `stop`, `step` and `stop_inclusive`. The flag describes the written limit even when the progression never reaches it.
 
-For `SliceValue`, type each supplied endpoint and step independently. The absent slots are represented by fieldless alternatives. An omitted step requests the axis default. Preserve the written endpoint policy. A library can inspect the alternatives before reading a present field. The full-axis selector needs no invented coordinate type, numeric sentinel or backing address. Its contact with an actual axis occurs in the selected library operation.
+For `SliceValue`, type each supplied endpoint and step independently. The absent slots are represented by fieldless alternatives. An omitted step requests the axis default. Preserve the written endpoint policy. A library can [match the written shape](#matching-a-slice-in-a-case-arm) and bind a present field in the arm. The full-axis selector needs no invented coordinate type, numeric sentinel or backing address. Its contact with an actual axis occurs in the selected library operation.
 
 Literal identity uses the canonical builtin schema and canonical field types, including UoM. Endpoint values, the inclusion flag, module-local aliases, import spelling, source site and receiving array do not enter that identity. Dynamic operands of established types produce the same ADT as literal operands of those types. Determine these facts before overload selection. Evaluate the supplied fields once in written order, then pass the result as one argument. The compiler can eliminate temporary storage while preserving the selected type, observations and effects. No general user-defined parametric ADT facility or erased storage representation is required by these two schemas.
 
 Acceptance distinguishes direct and forwarded occurrences, different arrays receiving the same range, half-open and inclusive limits with identical field types, signed descent and coordinate units. Exercise the common abstract formal and both typed case arms, including a library conformer taking the open fallback. A bare integer still binds an ordinary numeric subscript. [Nominal conformance](DomainLanguageDesign.md#abstract-types-and-data-declarations) · [Typed case](DomainLanguageDesign.md#case-expressions-and-branch-local-variables) · [Per-axis arguments](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads)
+
+### Matching a slice in a case arm
+
+An overload receiving an axis-relative selector can match it directly with a parenthesized pattern that mirrors its spelling in brackets. In this example the library supplies `axis` and the selection functions.
+
+```cod
+return case some_slice of {
+    (..)                           -> whole_axis(axis);
+    (.. by val d:i64) | d == -1    -> reverse_axis(axis);
+    (.. by val d)                  -> stride_axis(axis, d);
+    (val lo ..)                    -> from_index(axis, lo);
+    (.. val hi)                    -> before_index(axis, hi);
+    (..= val hi)                   -> through_index(axis, hi);
+    _                              -> other_slice(axis, some_slice)
+}
+```
+
+A blank endpoint matches the omitted bound in the concrete `SliceValue`. A written `val name` matches a present field and introduces a branch-local value of its actual type, including its unit. An annotation such as `val d:i64` additionally tests type membership under ordinary typed-pattern rules. A type mismatch proceeds to the next arm. An underscore in a field position matches a supplied field of any admitted type without binding it. For example, `(val lo .. by _)` requires a written start and step. The whole-arm wildcard `_ ->` accepts any remaining subject. In the example, `a[0 ..]` reaches `from_index(axis, lo)` with `lo` equal to zero. A guard can test a particular coordinate or step value.
+
+Leaving out `by` matches the stored axis-default request. Writing `by val d` or `by _` requires an explicit step, even when its value equals the axis default. The separator `..` or `..=` tests the stored endpoint policy. Keep at least one endpoint blank in an axis-relative pattern. Both endpoints supplied describe a bounded [Range](#concrete-types-of-range-and-slice-literals), whose fields are available after a typed match.
+
+The test reads the already constructed selector. Forwarding it to another method preserves the match. Test the builtin schema, field presence, endpoint policy and any written type constraints before binding the fields and running the arm guard. A structural miss skips the guard. A false guard continues normal case scanning. A library-defined conformer of the open `Slice` abstraction can have its own typed arm or reach the fallback. Matching a builtin slice performs no user conversion, selector construction, axis lookup or indexing operation.
+
+Acceptance distinguishes `a[..]` from `a[.. by 1]`, `a[0 ..]` from `a[..]`, and `a[.. hi]` from `a[..= hi]`. A negative i64 step can reach the guarded reverse arm. A positive step reaches the following stride arm with its original value. Bind `u32(Row)` from a start produced by a side-effecting function and check that constructing and forwarding the selector called that function once. Confirm ordinary fallback for a different admitted `Slice` conformer and whole-file recovery on a damaged field binder. [Case control and typed binding](DomainLanguageDesign.md#case-expressions-and-branch-local-variables)
 
 ## Data and control directions
 
