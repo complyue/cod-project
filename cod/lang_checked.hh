@@ -22435,6 +22435,11 @@ class ScalarChecker {
     CleanupEquations::MissingInitialization missing;
     std::set<size_t> present;
   };
+  bool may_have_borrowed_input_storage() const {
+    // Binding a borrowed formal records its owner. Inline product inputs
+    // also have their own projected places.
+    return !checking_instance_->frame.owners.empty() || !input_field_places_.empty();
+  }
   InputReadiness project_input_readiness(const LexicalState &state) const {
     InputReadiness result;
     const auto input_count = checking_instance_->frame.inputs.size() + input_field_places_.size();
@@ -22507,18 +22512,23 @@ class ScalarChecker {
     const auto completion = Completion{reason};
     if (completion.failed()) observed.escaping_failures.insert(reason);
     if (completion.protected_here()) observed.propagates_here_transfer = true;
-    merge_input_readiness(observed, reason, project_input_readiness(state));
-    const auto input_count = checking_instance_->frame.inputs.size() + input_field_places_.size();
-    for (size_t p = 0; p < input_count; ++p) {
-      const auto place = input_place(p);
-      if (storage(place).borrowed && storage(place).type == Type::boolean) {
-        auto value = snapshot_boolean(state.predicates.get(place), state, checking_method_->source->at);
-        CleanupEquations::merge_boolean(observed.booleans[reason][p], external_boolean(value));
+    // Initializers use a normal readiness row to record successful completion.
+    if (may_have_borrowed_input_storage() || !state.present.empty() || checking_method_->regional_initializer_fields) {
+      merge_input_readiness(observed, reason, project_input_readiness(state));
+      const auto input_count = checking_instance_->frame.inputs.size() + input_field_places_.size();
+      for (size_t p = 0; p < input_count; ++p) {
+        const auto place = input_place(p);
+        const auto &input = storage(place);
+        if (!input.borrowed) continue;
+        if (input.type == Type::boolean) {
+          auto value = snapshot_boolean(state.predicates.get(place), state, checking_method_->source->at);
+          CleanupEquations::merge_boolean(observed.booleans[reason][p], external_boolean(value));
+        }
+        if (input.type.kind != Type::exception) continue;
+        const auto value = state.exceptions.find(place);
+        observed.payloads[reason][p].merge(value == state.exceptions.end()
+            ? ExceptionFacts{exception_value_categories(input.type)} : value->second);
       }
-      if (!storage(place).borrowed || storage(place).type.kind != Type::exception) continue;
-      const auto value = state.exceptions.find(place);
-      observed.payloads[reason][p].merge(value == state.exceptions.end()
-          ? ExceptionFacts{exception_value_categories(storage(place).type)} : value->second);
     }
     visit_binding_inputs([&](size_t p, size_t binding) {
       const auto [result, first] = observed.bindings[reason].try_emplace(p);
@@ -23998,26 +24008,32 @@ class ScalarChecker {
       observed.returned.nullness = CleanupEquations::unknown_boolean();
     // The final input frame already has the projected product fields. Only
     // payload defaults are needed here, without the solver's initial state.
-    const auto reasons = call_reasons(*checking_method_);
+    std::optional<std::set<size_t>> default_reasons;
+    const auto reasons = [&]() -> const std::set<size_t> & {
+      if (!default_reasons) default_reasons.emplace(call_reasons(*checking_method_));
+      return *default_reasons;
+    };
     const auto fill_payload_defaults = [&](size_t ordinal, const Type &type) {
-      if (type == Type::boolean) for (const auto reason : reasons) {
+      if (type == Type::boolean) for (const auto reason : reasons()) {
         const auto [value, inserted] = observed.booleans[reason].try_emplace(ordinal);
         if (inserted) value->second = CleanupEquations::unknown_boolean();
       }
       if (type.kind == Type::exception)
-        for (const auto reason : reasons) observed.payloads[reason].try_emplace(ordinal);
+        for (const auto reason : reasons()) observed.payloads[reason].try_emplace(ordinal);
     };
-    const auto &parameters = checking_method_->input_parameters();
-    for (size_t i = 0; i < parameters.size(); ++i)
-      if (!parameters[i].owner.empty()) fill_payload_defaults(i, instance.arguments[i]);
-    for (size_t i = 0; i < input_field_places_.size(); ++i)
-      fill_payload_defaults(instance.arguments.size() + i, storage(input_field_places_[i]).type);
+    if (may_have_borrowed_input_storage()) {
+      const auto &parameters = checking_method_->input_parameters();
+      for (size_t i = 0; i < parameters.size(); ++i)
+        if (!parameters[i].owner.empty()) fill_payload_defaults(i, instance.arguments[i]);
+      for (size_t i = 0; i < input_field_places_.size(); ++i)
+        fill_payload_defaults(instance.arguments.size() + i, storage(input_field_places_[i]).type);
+    }
     project_binding_sources(observed.binding_sources, method.at);
     if (caller_bindings(*checking_method_) && !instance.arguments.empty()) {
       // Recursive closure retains conservative absent outcomes, while a slot
       // with no possible mutation preserves its entry selection on every exit.
       std::optional<CallBindings> defaults;
-      for (const auto reason : reasons) {
+      for (const auto reason : reasons()) {
         if (observed.bindings.contains(reason)) continue;
         if (!defaults) {
           defaults = initial_call_bindings(*checking_method_, instance.arguments);
