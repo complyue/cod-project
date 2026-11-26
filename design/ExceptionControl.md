@@ -1,8 +1,10 @@
 # CoD exception control and regional cleanup
 
-Design revision: 152 · Recorded: 2026-11-25 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
+Design revision: 153 · Recorded: 2026-11-26 · Status: confirmed bounded exception, lifecycle, scope, defer and return contracts; full-scope control and live lexical input contracts; current implementation availability is recorded in the source capability reference.
 
 ## Design authority
+
+At r153 [D-11-NUMERIC-CONVERSION](DesignAuthorityRegistry.md#d-11-numeric-conversion) names the unchecked failure of an inexact integer conversion. [The conversion site and its caller](ScalarUnitsAndIndexTypes.md#explicit-scalar-numeric-conversions) use the r152 Error root, ordinary catch and cleanup. Payload layout and implementation are outside this decision.
 
 At r152 [D-17-EXCEPTION-BASE](DesignAuthorityRegistry.md#d-17-exception-base) records the [project user’s decision](../CHANGELOG.md#h-product-extends-super-20261125) on the [runtime base of an exception](#runtime-base-of-an-exception) under P-732/P-733. H-510–H-515 and the owner and catch-binding contracts continue for construction, propagation and release. Verify distinct wrapper and cause traces under one owner and consistent identity through a borrowed product ancestor. This specifies observable storage responsibility. Native layout, trace detail and compiler delivery are separate.
 
@@ -132,6 +134,7 @@ For currently implemented categories, the [compiler descriptors](../cod/lang_exc
 | Exception | Checked declaration contract; general root including Error | Common-root values/catches and separate declared-obligation enforcement; new Error-root integration remains separate |
 | Error | Unchecked root; Error <: Exception | Design only; root/conformance integration unimplemented |
 | AssertionFailedError | Unchecked predicate failure | Predicate assert construct not implemented |
+| InexactError | Unchecked failure of an explicit conversion to an integer outside its exact domain | Language contract, compiler delivery pending |
 | TypeAssertionFailedError | Unchecked type-assertion mismatch | Expression type assertion not implemented |
 | OutOfMemoryError | Unchecked | Callable, deferred-record and cause allocation failures |
 | RegionCapacityExceededError | Unchecked | Category/vocabulary; source regional construction remains outside the current compiler slice |
@@ -870,6 +873,10 @@ Acceptance covers direct/module and callee-boundary rejection, explicit propagat
 Generic syntax or valid uninterpreted passage alone creates no unknown-type obligation. A voluntary `throws StaticallyUnknownTypeException` declaration retains the fixed caller obligation, including known-type calls whose bodies succeed. Selected exception types, callable views, handlers and deferred invocations preserve this contract. Acceptance includes declaration coverage, retained categories and causes, ordered failure routing and exact release in specialized and shared native execution.
 
 The source capability reference distinguishes category/declaration support from outside-catalog input and required-interpretation detection. This integration selects no new input validation protocol, carrier, permanent ABI, dynamic cast or runtime compilation mechanism; those D-26 boundaries remain separately scoped.
+
+## Numeric conversion failures
+
+An explicit builtin scalar conversion to an integer raises `InexactError` if the value cannot be represented exactly. It can be caught as `InexactError`, `Error` or `Exception`. The conversion expression supplies the failing site. Normal and exceptional exits keep ordinary operand order, propagation and cleanup. [Numeric operation and acceptance](ScalarUnitsAndIndexTypes.md#explicit-scalar-numeric-conversions)
 
 ## Nonnumeric type assertion failures
 

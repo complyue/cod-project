@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Give explicit scalar conversions Julia-compatible results and failures
+
+<a id="h-julia-numeric-conversions-20261126"></a>
+**H-JULIA-NUMERIC-CONVERSIONS-20261126.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user instructed “2 按往Julia靠的原则能决定的现在就决定” after reviewing the rounding and inexact-integer cases. Under that delegation, [D-11-NUMERIC-CONVERSION](design/DesignAuthorityRegistry.md#d-11-numeric-conversion) replaces the [r40 exactness precondition, warning and undefined behavior](https://github.com/complyue/cod-project/blob/ae53eee87569c91964d8d8eea5e9d1ee7d64bb6e/design/ScalarUnitsAndIndexTypes.md#explicit-numeric-conversion-and-loss-warnings) of H-463–H-466 for explicit dimensionless builtin scalar conversions. D-11r41 / D-10r275 / D-17r153 and the Julia study r4 specify direct destination rounding, optional precision advice, exact integer conversion or catchable InexactError, and ordinary ordering through cleanup. H-261 implicit conversion and H-470 nonnumeric assertions continue. Compiler delivery and indexing-family identity are separate. [Acceptance](design/ScalarUnitsAndIndexTypes.md#explicit-scalar-numeric-conversions). Registry r1350→1351.
+
 ## 2026-11-26 — Match a slice directly in a method parameter
 
 <a id="h-slice-method-patterns-20261126"></a>

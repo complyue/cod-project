@@ -1,16 +1,18 @@
 # Porting Julia packages to CoD with `julia.cod`
 
-Research WIP · revision 3 · 2026-11-26
+Research WIP · revision 4 · 2026-11-26
 
 An agent porting a one-sample t-test should be able to recognize the sample, compute the same statistic and ask for the same tail probability in CoD. A second agent porting a distance function should be able to reuse those array operations without learning which C library supplies a probability. These two ports test whether a small CoD package can make important Julia algorithms economical to bring over and maintain.
 
 ## Design authority
 
+At r4 [D-11-NUMERIC-CONVERSION](DesignAuthorityRegistry.md#d-11-numeric-conversion) applies the project user’s Julia-alignment direction to explicit scalar conversions, P-774/P-775. The r3 array and operator selections and both port workloads continue. Provider and package implementation remain research. [Decision and scope](ScalarUnitsAndIndexTypes.md#explicit-scalar-numeric-conversions)
+
 At r3 [D-29-STEPPED-RANGES](DesignAuthorityRegistry.md#d-29-stepped-ranges) and [D-30-TYPED-SUBSCRIPTS](DesignAuthorityRegistry.md#d-30-typed-subscripts) settle the porting notation and per-axis call boundary. The r2 decisions on library array policy, CoD colon syntax and type names carry forward. [User confirmation](../CHANGELOG.md#h-ranges-and-typed-subscripts-20261126)
 
-At r2 the project user delegated the concrete library boundaries and confirmed distinct signed and unsigned integer identities and manual porting of Julia ranges. [D-30-ARRAY-POLICY](DesignAuthorityRegistry.md#d-30-array-policy), [D-10-LIBRARY-FIXITY](DesignAuthorityRegistry.md#d-10-library-fixity) and [D-07-TYPE-SYNONYMS](DesignAuthorityRegistry.md#d-07-type-synonyms) cover the decisions below. P-758–P-763 connect them to reviewable domain operations and their prerequisites. The two port workloads and the open numeric conversion policy carry forward from r1. [Decision and scope](../CHANGELOG.md#h-library-arrays-fixity-and-type-names-20261126)
+At r2 the project user delegated the concrete library boundaries and confirmed distinct signed and unsigned integer identities and manual porting of Julia ranges. [D-30-ARRAY-POLICY](DesignAuthorityRegistry.md#d-30-array-policy), [D-10-LIBRARY-FIXITY](DesignAuthorityRegistry.md#d-10-library-fixity) and [D-07-TYPE-SYNONYMS](DesignAuthorityRegistry.md#d-07-type-synonyms) cover the decisions below. P-758–P-763 connect them to reviewable domain operations and their prerequisites. The two port workloads carry forward from r1. [Decision and scope](../CHANGELOG.md#h-library-arrays-fixity-and-type-names-20261126)
 
-The project user commissioned research on native C access to Julia's Rmath library and a Julia-like array interface for agent-assisted ports. Direct compilation of Julia source is outside the goal. The user also invited alignment in CoD itself wherever Julia's semantics fit and specifically reopened `x : f64` for that purpose. This preference applies when choosing ordinary CoD operations as well as package APIs. The concrete rounding policy, provider extension and numerical package APIs below remain proposals. The confirmed r2 boundaries govern the array and source-vocabulary examples. No port has been executed for this revision. [User decision](../CHANGELOG.md#h-julia-package-portability-20261126) · [Registry and scope](DesignAuthorityRegistry.md#d-julia-pkg-research)
+The project user commissioned research on native C access to Julia's Rmath library and a Julia-like array interface for agent-assisted ports. Direct compilation of Julia source is outside the goal. The user also invited alignment in CoD itself wherever Julia's semantics fit and specifically reopened `x : f64` for that purpose. This preference applies when choosing ordinary CoD operations as well as package APIs. The numerical conversion rule is specified. The provider extension and numerical package APIs below remain proposals. The confirmed r2 boundaries govern the array and source-vocabulary examples. No port has been executed for this revision. [User decision](../CHANGELOG.md#h-julia-package-portability-20261126) · [Registry and scope](DesignAuthorityRegistry.md#d-julia-pkg-research)
 
 The charter calls for local, reviewable edits by people and agents. Reusing a checked operation across packages lets a reviewer inspect the domain algorithm and check its assumptions about values, storage and lifetimes. The candidate value path is P-756. P-757 identifies the conversion, owner, collection and native-call contracts that constrain the two workloads. [Charter §§1, 4.3 and 8](RegionalSemanticPlatformCharter.md) · [Regional arrays](CollectionsAndBuiltinContainers.md#fold-and-array-access) · [Native C providers](../applications/cod-booter/docs/LLVMInterop.md#generated-c-providers-for-the-first-booter)
 
@@ -20,11 +22,9 @@ For each recurring Julia operation, write down an input that distinguishes its b
 
 ### Explicit conversion to binary64
 
-Consider an `i64` sample count of 9,007,199,254,740,993. Julia's `Float64(x)` in its default rounding mode gives 9,007,199,254,740,992. CoD's published rule requires an exactly representable result for a defined execution of `x : f64`. It also requires a warning unless losslessness is proved. That means a spelling an agent would naturally choose for this port has a different meaning precisely when the rounding matters. [Julia numerical conversions](https://docs.julialang.org/en/v1/manual/mathematical-operations/#Numerical-Conversions) · [Julia rounding modes](https://docs.julialang.org/en/v1/manual/integers-and-floating-point-numbers/#Rounding-modes) · [CoD explicit conversion contract](ScalarUnitsAndIndexTypes.md#explicit-numeric-conversion-and-loss-warnings)
+For an `i64` sample count of 9,007,199,254,740,993, Julia's `Float64(x)` and CoD's explicit `x : double` specify 9,007,199,254,740,992. Both round directly to binary64 with ties to even. The converse conversion to a builtin integer requires an exact result and can raise `InexactError`. These are ordinary CoD operations available to every library. [Julia numerical conversions](https://docs.julialang.org/en/v1/manual/mathematical-operations/#Numerical-Conversions) · [Julia rounding modes](https://docs.julialang.org/en/v1/manual/integers-and-floating-point-numbers/#Rounding-modes) · [CoD destination rules](ScalarUnitsAndIndexTypes.md#explicit-scalar-numeric-conversions)
 
-**Candidate language rule.** For an explicitly converted, dimensionless `i64` or `u64` operand, let `x : f64` produce the nearest binary64 value, resolving a tie toward the even significand. Give any CoD caller the same operation. These inputs distinguish an exact conversion, both directions of a tie, the signed case and the upper unsigned boundary.
-
-| Integer input | Proposed `f64` result, written as its exact mathematical value |
+| Integer input | Specified `f64` result, written as its exact mathematical value |
 | --- | --- |
 | `2^53 − 1` | `2^53 − 1` |
 | `2^53 + 1` | `2^53` |
@@ -32,7 +32,7 @@ Consider an `i64` sample count of 9,007,199,254,740,993. Julia's `Float64(x)` in
 | `−(2^53 + 1)` | `−2^53` |
 | `2^64 − 1` as `u64` | `2^64` |
 
-For a language decision, compare the binary64 bits from a folded constant and a runtime parameter against Julia's `reinterpret(UInt64, Float64(x))`. Decide separately whether a possible loss of precision should produce an advisory. Under the candidate rule, a diagnostic claiming that this rounding causes undefined behavior would be wrong. Implicit widening affects overload selection even when no explicit conversion is written. Float-to-integer conversion, nominal units, nonnumeric type assertions and planned fractions each have different consumers. A later extension to those operations needs its own distinguishing example. [Whole-type lossless compatibility](NamedQuantitiesAndNumericCompatibility.md#whole-type-lossless-compatibility) · [Planned fractions](FixedWidthFractions.md)
+For delivery, compare folded and runtime operands against the bits from Julia’s `reinterpret(UInt64, Float64(x))`. Check exact and inexact integer destinations, including failure before a later operand. Precision advice for explicit floating rounding is opt-in. [Scalar acceptance](ScalarUnitsAndIndexTypes.md#explicit-scalar-numeric-conversions) · [Implicit compatibility](NamedQuantitiesAndNumericCompatibility.md#whole-type-lossless-compatibility)
 
 ## Library-defined arrays and the native C boundary
 
