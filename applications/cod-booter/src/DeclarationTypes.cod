@@ -43,7 +43,7 @@ using "./ParserStorage.cod" {
 };
 using "./NameResolution.cod" {
     NameBindings, NameWork, locate_record_field, formal_binding, local_binding,
-    ordinary_selection, record_type, native_scalar, enum_value, find_enum_member,
+    ordinary_selection, record_type, native_scalar, enum_value, find_enum_member, find_enum_code,
     is_lexical_builder, lexical_builder_record, lexical_builder_type,
     builtin_u64, builtin_u32, builtin_u8, builtin_bool, builtin_string, builtin_c_string, text_type, owner_binding,
 };
@@ -371,6 +371,54 @@ func bind_enum_spelling(source:const SourceBytes in S, nodes:const ExprNodes in 
     return 0u8;
 }
 
+func integer_code(nodes:const ExprNodes in N, used:u64, revision:u64, at:u64, code:u64 in C)
+    -> bool where {const owner N, owner C} {
+    val literal <- ungrouped(nodes, revision, used, at);
+    if (literal >= used || literal >= intrinsic (len)(nodes)) return false;
+    return case nodes[literal] of {
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (IntegerLiteral { val value <- magnitude; }) -> { (code <- value):void; true };
+                (_) -> { false };
+            }
+        };
+        (_) -> { false };
+    }
+}
+
+func bind_enum_code(nodes:const ExprNodes in N, names:NameBindings in B, work:NameWork in W,
+                    interfaces:const ModuleInterfaces in I, interface_count:u64, code:u64,
+                    destination:u64, type:const DeclaredType in T, revision:u64, used:u64) -> u8
+    where {const owner N, owner B, owner W, const owner I, const owner T} {
+    if (type.defining_module == 0u64) {
+        ref domain = make DeclarationSites {
+            name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+            index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
+        };
+        if (inspect_declaration(nodes, revision, used, type.identity, domain) != EnumTypeDeclaration)
+            return unproved_type_assertion();
+        val member <- find_enum_code(nodes, names, work, domain.entries, code, revision, used);
+        if (member == no_node()) return missing_enum_member();
+        names[destination].declaration <- member;
+        work[destination].enum_code <- code;
+        return 0u8
+    };
+    val head <- find_interface(interfaces, interface_count, type.defining_module, type.identity);
+    if (head == no_node() || interfaces[head].interface_kind != enum_type())
+        return unproved_type_assertion();
+    val width <- interfaces[head].entry_count;
+    if (width >= interface_count - head) return unproved_type_assertion();
+    for (row in head + 1u64 .. head + 1u64 + width) {
+        if (interfaces[row].value_kind != enum_type()) return unproved_type_assertion();
+        if (interfaces[row].enum_code == code) {
+            names[destination].declaration <- interfaces[row].declaration;
+            work[destination].enum_code <- code;
+            return 0u8
+        }
+    };
+    return missing_enum_member()
+}
+
 func remember_type(work:NameWork in W, at:u64, type:const DeclaredType in T) -> void
     where {owner W, const owner T} {
     work[at].value_kind <- type.kind;
@@ -455,10 +503,16 @@ func check_type_assertion(source:const SourceBytes in S, nodes:const ExprNodes i
     } else {};
     if (wanted.kind != enum_type())
         return declared_expression_failure(report, unproved_type_assertion(), annotation);
-    if (name_syntax(nodes, used, operand) == OrdinaryName && names[operand].kind == 0u8) {
-        val code <- bind_enum_spelling(source, nodes, names, work, spellings, interfaces, interface_count, operand, at, wanted, revision, used);
-        if (code == missing_enum_member()) return declared_expression_failure(report, code, operand);
-        if (code != 0u8) return declared_expression_failure(report, code, annotation);
+    ref code = make u64 { 0u64 };
+    val numeric <- integer_code(nodes, used, revision, operand, code);
+    if (numeric || (name_syntax(nodes, used, operand) == OrdinaryName && names[operand].kind == 0u8)) {
+        val problem <- if (numeric) {
+            bind_enum_code(nodes, names, work, interfaces, interface_count, code, at, wanted, revision, used)
+        } else {
+            bind_enum_spelling(source, nodes, names, work, spellings, interfaces, interface_count, operand, at, wanted, revision, used)
+        };
+        if (problem == missing_enum_member()) return declared_expression_failure(report, problem, operand);
+        if (problem != 0u8) return declared_expression_failure(report, problem, annotation);
         (names[at].kind <- enum_value()):void;
     } else {
         if (!trace_type(source, nodes, names, selected, work, spellings, interfaces, interface_count, operand, used, revision, actual))

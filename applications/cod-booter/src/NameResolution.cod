@@ -2806,16 +2806,16 @@ export func find_enum_member(source:const SourceBytes in S, nodes:const ExprNode
     return no_node();
 }
 
-func enum_code_used(nodes:const ExprNodes in N, bindings:const NameBindings in B, work:const NameWork in W,
-                    prior:u64, code:u64, revision:u64, used:u64) -> bool where {const owner N, const owner B, const owner W} {
+export func find_enum_code(nodes:const ExprNodes in N, bindings:const NameBindings in B, work:const NameWork in W,
+                    prior:u64, code:u64, revision:u64, used:u64) -> u64 where {const owner N, const owner B, const owner W} {
     val member <- prior;
     ref sites = make EnumMemberSites { name <- no_node(); previous <- no_node(); initializer <- no_node(); };
     for (unused in 0u64 .. used) {
-        if (!inspect_enum_member(nodes, revision, used, member, sites)) return false;
-        if (bindings[member].declaration == member && work[member].enum_code == code) return true;
+        if (!inspect_enum_member(nodes, revision, used, member, sites)) return no_node();
+        if (bindings[member].declaration == member && work[member].enum_code == code) return member;
         member <- sites.previous;
     };
-    return false;
+    return no_node();
 }
 
 data EnumNumbering {
@@ -2871,7 +2871,7 @@ func resolve_enum_member(source:const SourceBytes in S, nodes:const ExprNodes in
         };
     };
     if (canonical == member) {
-        if (enum_code_used(nodes, bindings, work, prior, code, state.syntax_revision, state.syntax_used)) {
+        if (find_enum_code(nodes, bindings, work, prior, code, state.syntax_revision, state.syntax_used) != no_node()) {
             reject_name(state, name, repeated_enum_code());
             return;
         } else {};

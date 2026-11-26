@@ -156,15 +156,6 @@ export func parse_integer_magnitude(source:const SourceBytes in S, token:const T
     return number;
 }
 
-func parse_literal(source:const SourceBytes in S, token:const Token in T,
-                   result:ParseResult in R, width:u64) -> u64 where {const owner S, const owner T, owner R} {
-    if (width == 0u64) {
-        result.diagnostic <- expected_u64();
-        return 0u64;
-    } else {};
-    return parse_integer_magnitude(source, token, result, width);
-}
-
 func outer_invocation(nodes:const ExprNodes in A, result:const ParseResult in R, root:u64) -> u64
     where {const owner A, const owner R} {
     val selected <- ungrouped(nodes, result.revision, result.used, root);
@@ -1740,7 +1731,11 @@ func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
     } else {};
     if (tokens[at].kind == integer_literal()) {
         val width <- integer_width(source, tokens[at]);
-        val number <- parse_literal(source, tokens[at], result, width);
+        if (width == 0u64 && punct_at(source, tokens, at + 1u64, past) != COLON) {
+            result.diagnostic <- expected_u64();
+            return;
+        };
+        val number <- parse_integer_magnitude(source, tokens[at], result, width);
         if (result.diagnostic != 0u8) return;
         append_syntax_node(nodes, result, first, tokens[at].past, make IntegerLiteral {
             magnitude <- number;
