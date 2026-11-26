@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Complete an ordered byte transfer before its callers
+
+<a id="k-seed-overlapping-byte-transfer-20261125"></a>
+**K-SEED-OVERLAPPING-BYTE-TRANSFER-20261125.** The [architecture review](design/ImplementationArchitecture.md#completing-an-overlapping-byte-transfer) continues D-ARCH-REVIEW r206→207. At `4d0158a7:applications/cod-booter/src/LoadPackageInputs.cod`, `copy_path` has a writable output loan and no ordinary callees. Its callers can consume a completed result and exit contract while the emitted loop retains the source-visible order of reads and writes to overlapping storage.
+
 ## 2026-11-25 — Bind product fill fields in writable array growth
 
 <a id="k-seed-array-growth-product-fill-20261125"></a>
