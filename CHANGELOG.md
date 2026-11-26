@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Use the default scalar names in selector examples
+
+<a id="k-selector-scalar-spellings-20261126"></a>
+**K-SELECTOR-SCALAR-SPELLINGS-20261126.** **Continued** under [D-07-SCALAR-NAMES](design/DesignAuthorityRegistry.md#d-07-scalar-names). The [published naming decision](https://github.com/complyue/cod-project/blob/421d26afcd8392b122b5198b4c40f40889a61f5f/design/JuliaPackagePortability.md#scalar-names-and-transparent-type-synonyms) applies to source annotations in the [range and slice schemas](design/RangedForAndGenerators.md#concrete-types-of-range-and-slice-literals), [method heads](design/SymbolicDynamicScope.md#slice-patterns-in-method-parameters) and expression conversion example. D-29r28→29 and D-10r275→276 denote the same types and preserve the written numeric suffixes. Registry r1352→1353.
+
 ## 2026-11-26 — Use Julia’s fixed-width numeric type names in CoD source
 
 <a id="h-builtin-numeric-names-20261126"></a>
