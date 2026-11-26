@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Accept completed seed results at the existing LLVM interface
+
+<a id="k-replacement-seed-llvm-handoff-20261125"></a>
+**K-REPLACEMENT-SEED-LLVM-HANDOFF-20261125.** D-ARCH-REVIEW r211→212 continues P-682/P-683 under the [project user’s pipeline decision](#h-compiler-pipeline-replacement-20261125). At `d46a2bbf` the [LLVM emitter](https://github.com/complyue/cod-project/blob/d46a2bbf44e2d4cf153bd4064eb5d2fecdbb6333/cod/lang_llvm.hh#L5533) and [C provider generator](https://github.com/complyue/cod-project/blob/d46a2bbf44e2d4cf153bd4064eb5d2fecdbb6333/cod/lang_c_provider.hh#L178) take a const program. The [first adapter](design/ImplementationArchitecture.md#replacement-seed-pipeline) may supply that shape from the new producers, with the matching parsed source alive through emission. The first two-reserve workload and cutover gate continue. This approves the interface for implementation.
+
 ## 2026-11-25 — Replace the seed pipeline and make compiler stages selectable
 
 <a id="h-compiler-pipeline-replacement-20261125"></a>
