@@ -26,7 +26,7 @@ namespace cod::language {
 inline constexpr size_t null_target = std::numeric_limits<size_t>::max();
 
 [[noreturn]] inline void implementation_gap(const Location &at, const std::string &detail) {
-  fail(at, "micro-dispatch implementation gap: " + detail + "; this is not a language restriction");
+  fail(at, "seed translation limit: " + detail);
 }
 
 inline bool scalar_type(const Type &type) { return numeric(type) || type == Type::boolean || type.kind == Type::enumeration; }
@@ -35,11 +35,10 @@ inline bool nominal_exception(const Type &type) {
 }
 inline bool owning_exception(const Type &type) { return type.kind == Type::exception && owning_failure(type.identity); }
 inline bool bits_type(const Type &type) { return scalar_type(type) || (type.kind == Type::exception && !owning_exception(type)); }
-inline bool lexical_value_type(const Type &type) { return bits_type(type) || type.kind == Type::procedure; }
 inline bool inline_aggregate_type(const Type &type) { return type.kind == Type::product || type.kind == Type::sum; }
 enum class BuiltinOperation {
   none, unary, binary, identity, array_length, array_transfer, reference_swap, bits_swap, print,
-  builder_append, lexical_result, text_size, text_byte, text_slice
+  builder_append, text_size, text_byte, text_slice
 };
 inline std::optional<BuiltinOperation> text_access(std::optional<cod_lang_export_kind> primitive) {
   if (primitive == COD_LANG_TEXT_SIZE_EXPORT) return BuiltinOperation::text_size;
@@ -64,11 +63,6 @@ struct CheckedArgument {
   ArgumentMode mode;
   Type type;
   bool binding_slot = false;
-  struct ReferenceStorage {
-    size_t place, owner;
-    auto operator<=>(const ReferenceStorage &) const = default;
-  };
-  std::optional<ReferenceStorage> reference_storage = {};
   std::optional<size_t> current_reference_symbol = {};
   bool operator==(const CheckedArgument &) const = default;
 };
@@ -81,9 +75,6 @@ inline ArgumentMode argument_mode(const Parameter &parameter) {
   if (parameter.declaration_kind == "ptr") return ArgumentMode::borrowed_ptr;
   if (parameter.declaration_kind == "ref") return ArgumentMode::borrowed_ref;
   return ArgumentMode::borrowed_read;
-}
-inline ArgumentMode argument_mode(const Type &view, size_t position) {
-  return view.argument_modes.empty() ? ArgumentMode::value : view.argument_modes.at(position);
 }
 // A here invocation transports one owner identity per role, in first-use order.
 inline std::vector<size_t> here_owner_inputs(const Type &invocation) {
@@ -131,7 +122,6 @@ struct CheckedOperation {
   std::optional<size_t> symbol;
   std::optional<size_t> scoped_effect;
   bool publishes_effect = true;
-  bool reads_direct_body = false;
   std::optional<size_t> callee;
   std::optional<size_t> place;
   std::optional<size_t> product_field;
@@ -185,7 +175,6 @@ struct CheckedOperation {
   };
   std::optional<ArrayAllocator> array_allocator;
   std::shared_ptr<const std::map<size_t, ArrayAllocator>> array_allocator_arguments;
-  std::optional<size_t> lexical_result_owner;
   std::optional<SumConstructor> sum_constructor;
   bool invokes_regional_initializer = false;
   std::vector<size_t> sum_initializers;
@@ -196,53 +185,19 @@ struct CheckedOperation {
   bool case_scope_resumes = false;
   bool case_arm_completes = false;
   bool minimum_literal = false;
-  std::set<size_t> captures;
   bool mixed_view = false;
   bool scalar_value_join = false;
   bool borrowed_result = false;
   enum class CheckedRefPresence { proven, possible_absence, definite_absence };
   CheckedRefPresence checked_ref_presence = CheckedRefPresence::proven;
-  struct ReturnFilter {
-    bool can_match = true;
-    std::optional<std::pair<size_t, size_t>> owner_comparison;
-    auto operator<=>(const ReturnFilter &) const = default;
-  } return_filter;
   BuiltinOperation builtin = BuiltinOperation::none;
   std::string builtin_name; // Selected eager operation, independent of source spelling.
   // Destination calls select every address before checking entry-read promises.
   bool destination_arguments = false;
   std::vector<CheckedArgument> arguments;
-  struct ValuePack {
-    enum class Operand { fixed, value, spread, empty };
-    size_t fixed_count;
-    std::vector<Operand> operands;
-    auto operator<=>(const ValuePack &) const = default;
-  };
-  std::optional<ValuePack> value_pack;
   // Checked operand sources can differ from the children of the source call.
   std::optional<std::vector<const Expression *>> argument_sources;
-  struct OperandPreparation {
-    enum class Kind { ordinary, here } kind;
-    size_t slot;
-    auto operator<=>(const OperandPreparation &) const = default;
-  };
-  // An empty schedule uses ordinary parameter order. A supplied body is bound at entry.
-  std::vector<OperandPreparation> operand_preparation;
   std::vector<size_t> scope_owners;
-  struct PreparedProducer {
-    size_t instance;
-    std::vector<size_t> owners; // Actual owners in the producer's declared owner order.
-    auto operator<=>(const PreparedProducer &) const = default;
-  };
-  std::optional<PreparedProducer> prepared_producer;
-  struct PipelinePreparation {
-    std::vector<const Expression *> written;
-    // Leaves from a lexical binding can be absent from this use's written operands.
-    std::vector<const Expression *> traversal;
-    std::optional<size_t> lexical_source;
-    auto operator<=>(const PipelinePreparation &) const = default;
-  };
-  std::optional<PipelinePreparation> pipeline_preparation;
   size_t argument_count(const Expression &expr) const {
     return argument_sources ? argument_sources->size() : expr.children.size();
   }
@@ -254,31 +209,10 @@ struct CheckedOperation {
     std::vector<const Expression *> places;
     std::vector<size_t> owners;
     std::vector<size_t> lexical_here;
-    struct ReturningProfile {
-      size_t body, receiver;
-      auto operator<=>(const ReturningProfile &) const = default;
-    };
-    std::optional<ReturningProfile> returning;
     auto operator<=>(const SuppliedHere &) const = default;
   };
   std::optional<SuppliedHere> supplied_here;
-  struct SavedPipeline {
-    std::vector<const Expression *> stages;
-    const Expression *source = nullptr;
-    std::optional<SuppliedHere> terminal;
-  };
-  std::optional<SavedPipeline> saved_pipeline;
-  std::optional<std::vector<const Expression *>> open_pipeline_operands;
-  struct HereArgument {
-    std::optional<size_t> lexical;
-    const Expression *source = nullptr;
-    std::optional<PipelinePreparation> traversal = {};
-    auto operator<=>(const HereArgument &) const = default;
-  };
-  std::vector<HereArgument> here_arguments;
   std::optional<size_t> invokes_here;
-  std::optional<size_t> opened_source;
-  std::optional<size_t> opened_pipeline_stages;
   std::vector<size_t> scope_here;
   std::optional<HereExit> here_exit;
   std::set<size_t> nullable_arguments;
@@ -291,24 +225,11 @@ struct CheckedStorage {
   bool read_only;
   bool borrowed = false;
   size_t binding = 0;
-  bool subobject = false;
-  std::vector<size_t> fields = {};
-  std::optional<SumConstructor> reserved_alternative = {};
-  bool identity_only = false;
 };
 
-enum class PlaceKind { value, reference, pointer, mixed };
+enum class PlaceKind { value, reference, pointer };
 inline PlaceKind place_kind(bool value, bool exact_reference) {
   return value ? PlaceKind::value : exact_reference ? PlaceKind::reference : PlaceKind::pointer;
-}
-inline std::string place_kind_name(PlaceKind kind) {
-  switch (kind) {
-  case PlaceKind::value: return "val";
-  case PlaceKind::reference: return "ref";
-  case PlaceKind::pointer: return "ptr";
-  case PlaceKind::mixed: return "mixed";
-  }
-  throw std::logic_error("unknown storage place kind");
 }
 
 struct CheckedSchema {
@@ -380,27 +301,7 @@ struct CheckedBinding {
   bool value_binding;
   bool fixed;
   bool requires_initialized = false;
-  std::optional<size_t> owner_binding = {};
-  bool callable_value = false;
-  // A definition has lexical identity but no runtime value slot.
-  std::optional<size_t> definition = {};
-  // A reference slot has its own lifetime, separate from its selected target.
-  std::set<size_t> place_owners = {};
-  std::optional<size_t> embedded_slot = {};
-  // A fixed alias carries access restrictions and uses its selection's proof state.
-  std::optional<size_t> alias = {};
-  // A selected alias keeps one physical slot from this finite set for its whole lifetime.
-  std::set<size_t> selection = {};
-  // A scalar element selected from stable lexical array backing.
-  std::optional<size_t> indexed_element_owner = {};
-  // Caller-slot inputs can denote the same binding in an activation.
-  std::set<size_t> overlaps = {};
   bool nullable = false;
-  const Expression *pipeline = nullptr;
-  bool direct_text_place = false;
-  bool native_borrow_slot = false;
-  bool reservation_slot = false;
-  PlaceKind kind() const { return place_kind(value_binding, requires_initialized); }
 };
 
 enum class ResultMode { value, borrowed_ref, borrowed_ptr, borrowed_handle, owned_region, owned_exception };
@@ -480,34 +381,15 @@ struct CheckedMethod {
   std::string operation; // Semantic operation identity, independent of the local alias.
   size_t module = 0, interpretation = 0, definition = null_target;
   std::optional<SumConstructor> regional_initializer;
-  std::optional<size_t> regional_initializer_fields;
-  std::optional<size_t> family, local_effect_symbol;
+  std::optional<size_t> family;
   std::optional<size_t> instance;
   std::vector<Type> parameters;
   ResultContract result;
-  struct LexicalResult {
-    const Expression *marker;
-    size_t owner;
-    const Expression *display_operands = nullptr;
-    bool marks(const Expression &expr) const { return marker == &expr || display_operands == &expr; }
-  };
-  std::optional<LexicalResult> lexical_result;
-  bool prepares_display_operands() const { return lexical_result && lexical_result->display_operands; }
   std::set<size_t> throws_categories;
   std::vector<Type> throws_types;
   std::vector<std::string> type_parameters;
-  std::optional<size_t> parent;
   std::vector<CheckedHereContract> here;
-  // Concrete body or prepared producer bound to each formal.
-  std::vector<CheckedHereTarget> here_targets;
-  struct HereGroupResults {
-    std::optional<Type> supplier;
-    Type receiving_call;
-    std::optional<bool> supplier_return;
-    bool binds_return_payload = false;
-    bool operator==(const HereGroupResults &) const = default;
-  };
-  std::optional<HereGroupResults> here_group;
+  bool here_group = false;
   struct ScopeInputs {
     struct NamedEntry {
       size_t explicit_parameters;
@@ -596,7 +478,6 @@ struct CheckedEnum {
 };
 
 struct CheckedProgram {
-  bool deferred_aggregates = false;
   std::vector<CheckedExceptionCategory> exception_types = intrinsic_exception_types();
   Type exception_type(size_t category) const {
     return {Type::exception, std::string(exception_types.at(category).name), category};

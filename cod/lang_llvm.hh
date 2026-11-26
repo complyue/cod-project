@@ -34,7 +34,6 @@
 namespace cod::language {
 
 class LLVMEmission {
-  enum class CleanupBoundary { ordinary_finally, deferred };
   enum CompletionKind : std::uint8_t { case_break = 4, case_scan = 5 };
   struct ResourceSession {
     cod_llvm_session handles{};
@@ -56,8 +55,6 @@ class LLVMEmission {
   // scope-owned images; they are not regional-storable bits.
   llvm::StructType *exception_ = llvm::StructType::get(context_, std::vector<llvm::Type *>(5, b_.getInt64Ty()));
   llvm::StructType *scalar_ = llvm::StructType::create(context_, {b_.getInt64Ty(), b_.getInt32Ty()}, "cod.scalar");
-  llvm::StructType *value_pack_segment_ = llvm::StructType::get(context_, {b_.getPtrTy(), b_.getInt64Ty()});
-  llvm::StructType *value_pack_ = llvm::StructType::get(context_, {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
   enum class ArrayBacking { inline_elements, foreign_loan };
   llvm::StructType *array_header_ =
       llvm::StructType::create(context_, {b_.getInt64Ty(), b_.getInt8Ty()}, "cod.array.header");
@@ -105,24 +102,21 @@ class LLVMEmission {
   std::vector<llvm::Function *> methods_;
   struct HereEntry { llvm::Function *entry; llvm::StructType *activation; bool group; };
   std::map<size_t, HereEntry> here_entries_;
-  std::map<size_t, llvm::Function *> prepared_source_entries_;
   std::vector<llvm::GlobalVariable *> symbols_;
-  // Operation facts retain the checked interpretation that justifies them.
-  struct EmissionContext {
+  // Operation facts belong to the selected body's frozen frame.
+  struct BoundOperations {
     const std::map<const Expression *, CheckedOperation> *operations;
     const CheckedOperation &at(const Expression *expression) const { return operations->at(expression); }
   };
-  EmissionContext checked_{};
+  BoundOperations checked_{};
   std::vector<llvm::Value *> arguments_;
   std::vector<llvm::AllocaInst *> storage_;
   std::vector<StorageFormat> storage_formats_;
   // A checked place role and its native slots describe one lexical binding.
-  // Context-dependent type/access facts stay in EmissionContext; physical
-  // payload storage has its own indices, independently of bindings.
+  // Each payload place has its own index, independently of bindings.
   struct EmissionBinding {
     bool value_binding;
     llvm::Value *reference_slot = nullptr;
-    llvm::AllocaInst *selected_place = nullptr;
     llvm::Value *direct_place = nullptr;
   };
   std::vector<EmissionBinding> bindings_;
@@ -135,11 +129,7 @@ class LLVMEmission {
   llvm::AllocaInst *exception_result_destination_ = nullptr;
   llvm::AllocaInst *pending_exception_result_ = nullptr;
   std::vector<llvm::Value *> here_arguments_;
-  std::map<const Expression *, llvm::AllocaInst *> pipeline_operands_;
   llvm::Value *here_destination_ = nullptr;
-  struct SeenReturn {
-    llvm::Value *present{}, *value{};
-  } suspended_return_;
   llvm::Function *function_ = nullptr;
   llvm::BasicBlock *finish_ = nullptr;
   // Live slots and suspended values share the complete pending state. Native
@@ -167,22 +157,14 @@ class LLVMEmission {
   llvm::Function *named_exception_site_ = nullptr;
   enum class Projection { value, target, slot, receiver };
   static bool carries_value(Projection projection) { return projection == Projection::value || projection == Projection::receiver; }
-  struct DeferredInputs {
-    size_t count;
-    std::map<size_t, size_t> handle_arguments;
-    auto operator<=>(const DeferredInputs &) const = default;
-  };
   struct CleanupAction {
     const Expression *action;
     llvm::StructType *layout;
-    std::set<size_t> captures;
     std::optional<size_t> native_constructor = {};
     llvm::AllocaInst *activation_record = nullptr;
     std::optional<size_t> native_symbol = {};
-    std::optional<DeferredInputs> inputs = {};
     bool region_release = false;
     bool exception_release = false;
-    bool release_only() const { return native_constructor.has_value() || region_release || exception_release; }
   };
   struct Control {
     Control *parent;
@@ -201,7 +183,7 @@ class LLVMEmission {
   struct EagerOperation {
     std::vector<Type> inputs;
     const CheckedOperation *operation;
-    };
+  };
 
   llvm::ConstantInt *integer(std::uint64_t value) { return b_.getInt64(value); }
   llvm::Constant *null_pointer() { return llvm::ConstantPointerNull::get(b_.getPtrTy()); }
@@ -214,15 +196,10 @@ class LLVMEmission {
   }
   llvm::Value *load(llvm::AllocaInst *place) { return b_.CreateLoad(place->getAllocatedType(), place); }
   llvm::Value *binding_slot(size_t id) {
-    const auto &binding = bindings_.at(id);
-    return binding.selected_place ? load(binding.selected_place) : binding.reference_slot;
+    return bindings_.at(id).reference_slot;
   }
   llvm::Value *binding_address(size_t id, std::optional<size_t> place) {
     const auto &binding = bindings_.at(id);
-    if (binding.selected_place) {
-      auto *selected = load(binding.selected_place);
-      return binding.value_binding ? selected : b_.CreateLoad(b_.getPtrTy(), selected);
-    }
     if (binding.reference_slot) return b_.CreateLoad(b_.getPtrTy(), binding.reference_slot);
     if (binding.direct_place) return binding.direct_place;
     return storage_.at(*place);
@@ -503,70 +480,61 @@ class LLVMEmission {
     auto *count_value = emit_expression(length);
     if (!reachable()) return nullptr;
 
-    using Plan = std::tuple<CheckedOperation::ArrayAllocator, size_t, StorageFormat, StorageFormat>;
-    std::optional<Plan> alternatives;
-    do {
-      const auto &context = checked_;
-      const auto &fact = context.at(&expr);
-      if (context.at(&length).type == Type::never) break;
-      alternatives.emplace(Plan{*fact.array_allocator, fact.operand_type.identity, StorageFormat{context.at(&length).type},
-                    StorageFormat{context.at(&fill).type}});
-    } while (false);
-    auto *view = lower_prepared(expr, alternatives, [&](const auto &selection) -> llvm::Value * {
-      const auto &[allocator, schema, length_format, fill_format] = selection;
-      const auto &array = program_->arrays.at(schema);
-      const bool aggregate = inline_aggregate_type(array.element);
-      auto *fill_value = emit_expression(fill, aggregate ? Projection::target : Projection::value);
-      if (!reachable()) return nullptr;
-      if (aggregate) fill_value = checked_address(fill_value, fill, fill.at);
-      auto *element = inline_layout(array.element);
-      const auto &layout = module_.getDataLayout();
-      const auto element_alignment = layout.getABITypeAlign(element);
-      const auto alignment = std::max(element_alignment, layout.getABITypeAlign(array_header_));
-      const auto stride = layout.getTypeAllocSize(element).getFixedValue();
-      const auto prefix = array_prefix(element);
-      constexpr auto limit = std::uint64_t{std::numeric_limits<std::ptrdiff_t>::max()};
-      if (alignment.value() > alignof(std::max_align_t) || !stride || prefix > limit)
-        implementation_gap(expr.at, "target layout for array backing");
+    const auto &fact = checked_.at(&expr);
+    const auto &allocator = fact.array_allocator.value();
+    const auto &array = program_->arrays.at(fact.operand_type.identity);
+    const StorageFormat length_format{checked_.at(&length).type};
+    const StorageFormat fill_format{checked_.at(&fill).type};
+    const bool aggregate = inline_aggregate_type(array.element);
+    auto *fill_value = emit_expression(fill, aggregate ? Projection::target : Projection::value);
+    if (!reachable()) return nullptr;
+    if (aggregate) fill_value = checked_address(fill_value, fill, fill.at);
+    auto *element = inline_layout(array.element);
+    const auto &layout = module_.getDataLayout();
+    const auto element_alignment = layout.getABITypeAlign(element);
+    const auto alignment = std::max(element_alignment, layout.getABITypeAlign(array_header_));
+    const auto stride = layout.getTypeAllocSize(element).getFixedValue();
+    const auto prefix = array_prefix(element);
+    constexpr auto limit = std::uint64_t{std::numeric_limits<std::ptrdiff_t>::max()};
+    if (alignment.value() > alignof(std::max_align_t) || !stride || prefix > limit)
+      implementation_gap(expr.at, "target layout for array backing");
 
-      auto *count = convert(count_value, length_format.type(), Type::uint64);
-      auto *capability = array_capability(allocator);
-      auto *fits = block("array.size.valid"), *overflow = block("array.size.overflow");
-      b_.CreateCondBr(b_.CreateICmpULE(count, integer((limit - prefix) / stride)), fits, overflow);
-      b_.SetInsertPoint(overflow);
-      auto *invalid = block("array.region.unrepresentable"), *unavailable = block("array.lexical.unrepresentable");
-      b_.CreateCondBr(b_.CreateExtractValue(capability, 0), invalid, unavailable);
-      b_.SetInsertPoint(invalid);
-      fail_path(ExceptionCategory::invalid_capacity, expr.at);
-      b_.SetInsertPoint(unavailable);
-      fail_path(ExceptionCategory::out_of_memory, expr.at);
-      b_.SetInsertPoint(fits);
-      auto *bytes = b_.CreateAdd(integer(prefix), b_.CreateMul(count, integer(stride)));
-      auto *storage = allocate_array(capability, bytes, alignment.value(), expr.at);
-      auto *ready = b_.GetInsertBlock();
-      auto *data = b_.CreateGEP(b_.getInt8Ty(), storage, integer(prefix));
-      auto *value = aggregate ? fill_value : fill_format.kind == Type::enumeration ? unpack(fill_value, array.element)
-          : convert(fill_value, fill_format.type(), array.element);
-      auto *test = block("array.fill.test"), *store = block("array.fill.store"), *complete = block("array.initialized");
-      b_.CreateBr(test);
-      b_.SetInsertPoint(test);
-      auto *index = b_.CreatePHI(b_.getInt64Ty(), 2, "array.fill.index");
-      index->addIncoming(integer(0), ready);
-      b_.CreateCondBr(b_.CreateICmpULT(index, count), store, complete);
-      b_.SetInsertPoint(store);
-      auto *place = b_.CreateGEP(element, data, index);
-      if (aggregate) b_.CreateCall(bits_transfer(array.element), {place, value});
-      else b_.CreateStore(value, place);
-      auto *next = b_.CreateAdd(index, integer(1));
-      index->addIncoming(next, store);
-      b_.CreateBr(test);
-      b_.SetInsertPoint(complete);
-      b_.CreateStore(count, b_.CreateStructGEP(array_header_, storage, 0));
-      b_.CreateStore(b_.getInt8(static_cast<unsigned>(ArrayBacking::inline_elements)),
-                     b_.CreateStructGEP(array_header_, storage, 1));
-      return storage;
-    });
-    return discard ? empty_scalar() : view;
+    auto *count = convert(count_value, length_format.type(), Type::uint64);
+    auto *capability = array_capability(allocator);
+    auto *fits = block("array.size.valid"), *overflow = block("array.size.overflow");
+    b_.CreateCondBr(b_.CreateICmpULE(count, integer((limit - prefix) / stride)), fits, overflow);
+    b_.SetInsertPoint(overflow);
+    auto *invalid = block("array.region.unrepresentable"), *unavailable = block("array.lexical.unrepresentable");
+    b_.CreateCondBr(b_.CreateExtractValue(capability, 0), invalid, unavailable);
+    b_.SetInsertPoint(invalid);
+    fail_path(ExceptionCategory::invalid_capacity, expr.at);
+    b_.SetInsertPoint(unavailable);
+    fail_path(ExceptionCategory::out_of_memory, expr.at);
+    b_.SetInsertPoint(fits);
+    auto *bytes = b_.CreateAdd(integer(prefix), b_.CreateMul(count, integer(stride)));
+    auto *storage = allocate_array(capability, bytes, alignment.value(), expr.at);
+    auto *ready = b_.GetInsertBlock();
+    auto *data = b_.CreateGEP(b_.getInt8Ty(), storage, integer(prefix));
+    auto *value = aggregate ? fill_value : fill_format.kind == Type::enumeration ? unpack(fill_value, array.element)
+        : convert(fill_value, fill_format.type(), array.element);
+    auto *test = block("array.fill.test"), *store = block("array.fill.store"), *complete = block("array.initialized");
+    b_.CreateBr(test);
+    b_.SetInsertPoint(test);
+    auto *index = b_.CreatePHI(b_.getInt64Ty(), 2, "array.fill.index");
+    index->addIncoming(integer(0), ready);
+    b_.CreateCondBr(b_.CreateICmpULT(index, count), store, complete);
+    b_.SetInsertPoint(store);
+    auto *place = b_.CreateGEP(element, data, index);
+    if (aggregate) b_.CreateCall(bits_transfer(array.element), {place, value});
+    else b_.CreateStore(value, place);
+    auto *next = b_.CreateAdd(index, integer(1));
+    index->addIncoming(next, store);
+    b_.CreateBr(test);
+    b_.SetInsertPoint(complete);
+    b_.CreateStore(count, b_.CreateStructGEP(array_header_, storage, 0));
+    b_.CreateStore(b_.getInt8(static_cast<unsigned>(ArrayBacking::inline_elements)),
+                   b_.CreateStructGEP(array_header_, storage, 1));
+    return discard ? empty_scalar() : storage;
   }
   llvm::Value *pack(llvm::IRBuilder<> &builder, llvm::Value *value, const Type &type) {
     if (type.kind == Type::exception) {
@@ -727,22 +695,6 @@ class LLVMEmission {
   }
   void save_return(llvm::Value *value) {
     save_local_completion(value, 1, !here_destination_);
-  }
-  llvm::Value *observed_return() {
-    if (!suspended_return_.present) throw std::logic_error("return inspection has no suspended completion");
-    return b_.CreateOr(suspended_return_.present, load(completion_.has_return));
-  }
-  llvm::StructType *here_return_header() {
-    return llvm::StructType::get(context_, {here_transfer_, scalar_});
-  }
-  llvm::Value *protected_return_value() {
-    auto *packet = b_.CreateLoad(outcome_, b_.CreateStructGEP(here_transfer_, here_destination_, 1));
-    return b_.CreateExtractValue(packet, 0);
-  }
-  llvm::Value *observed_return_value() {
-    if (!suspended_return_.value) throw std::logic_error("return binding has no suspended result");
-    auto *prepared = here_destination_ ? protected_return_value() : load(completion_.value);
-    return b_.CreateSelect(load(completion_.has_return), prepared, suspended_return_.value);
   }
   void fail_path(ExceptionCategory category, const Location &at, llvm::Value *fatal = nullptr) {
     save_abrupt(outcome(empty_scalar(), integer(exception_id(category)), integer(site(at)), fatal ? fatal : null_pointer()));
@@ -920,26 +872,14 @@ class LLVMEmission {
     if (fact.owners.size() != 1) throw std::logic_error("unchecked reference owner reached native transport");
     return owner_identity(*fact.owners.begin(), expr.at);
   }
-  llvm::Value *prepare_here(const CheckedOperation::SuppliedHere &body, const Location &at,
-                            llvm::Value *returning = nullptr) {
+  llvm::Value *prepare_here(const CheckedOperation::SuppliedHere &body, const Location &at) {
     const auto &entry = here_entries_.at(body.instance);
-    llvm::Value *invoke = entry.entry;
-    if (body.returning) {
-      const auto &alternate = here_entries_.at(body.returning->body);
-      if (!returning || alternate.activation != entry.activation || alternate.entry->getFunctionType() != entry.entry->getFunctionType())
-        throw std::logic_error("supplied here return state changed the activation layout");
-      invoke = b_.CreateSelect(returning, alternate.entry, entry.entry);
-    }
-    auto *value = b_.CreateInsertValue(llvm::UndefValue::get(here_), invoke, 0);
+    auto *value = b_.CreateInsertValue(llvm::UndefValue::get(here_), entry.entry, 0);
     if (!entry.group && body.places.empty() && body.owners.empty() && body.lexical_here.empty())
       return b_.CreateInsertValue(value, null_pointer(), 1);
     auto *activation = slot(entry.activation, "here.activation");
     const auto &method = program_->methods[program_->instances[body.instance].method];
     if (entry.group && owned_failures_) b_.CreateStore(llvm::Constant::getNullValue(here_transfer_), activation);
-    if (method.here_group && method.here_group->binds_return_payload) {
-      if (!owned_failures_) b_.CreateStore(llvm::Constant::getNullValue(here_transfer_), activation);
-      b_.CreateStore(observed_return_value(), b_.CreateStructGEP(here_return_header(), activation, 1));
-    }
     const auto &inputs = *method.scope_inputs;
     const auto first_capture = inputs.here_reception->selected.size();
     for (size_t i = 0; i < body.places.size(); ++i) {
@@ -970,10 +910,9 @@ class LLVMEmission {
     auto *converted = convert(value, checked_.at(&operand).type, type);
     return type == Type::boolean ? b_.CreateZExt(converted, c_scalar_type(type)) : converted;
   }
-  llvm::Value *emit_native_call(const Expression &expr, const std::vector<llvm::Value *> *prepared = nullptr) {
-    std::optional<size_t> alternatives;
-    alternatives.emplace(*checked_.at(&expr).native_call);
-    return lower_prepared(expr, alternatives, [&](size_t id) -> llvm::Value * {
+  llvm::Value *emit_native_call(const Expression &expr) {
+    {
+      const size_t id = *checked_.at(&expr).native_call;
       const auto &native = program_->native_operations.at(id);
       std::vector<llvm::Value *> arguments;
       std::vector<llvm::Type *> types;
@@ -981,10 +920,7 @@ class LLVMEmission {
         const auto &input = native.inputs[i];
         const auto &operand = *expr.children[i];
         llvm::Value *argument;
-        if (prepared) {
-          argument = input.owner ? view_address(prepared->at(i)) : unpack(prepared->at(i), input.type);
-          if (input.type == Type::boolean) argument = b_.CreateZExt(argument, b_.getInt8Ty());
-        } else if (input.owner) {
+        if (input.owner) {
           argument = emit_expression(operand, Projection::target);
           if (!reachable()) return nullptr;
         } else {
@@ -1015,7 +951,7 @@ class LLVMEmission {
       auto *native_result = load(value);
       if (result == Type::boolean) return pack(b_.CreateTrunc(native_result, b_.getInt1Ty()), result);
       return pack(native_result, result);
-    });
+    }
   }
   llvm::Function *native_here_bridge(const CheckedNativeOperation &native, llvm::StructType *frame) {
     const auto name = native_operation_name(native) + "_bridge";
@@ -1063,10 +999,9 @@ class LLVMEmission {
   }
   llvm::Value *emit_native_here(const Expression &expr) {
     using Call = std::pair<size_t, std::optional<CheckedOperation::SuppliedHere>>;
-    std::optional<Call> alternatives;
     const auto &fact = checked_.at(&expr);
-    alternatives.emplace(Call{*fact.native_call, fact.supplied_here});
-    return lower_prepared(expr, alternatives, [&](const auto &selected) -> llvm::Value * {
+    {
+      const Call selected = Call{*fact.native_call, fact.supplied_here};
       const auto &[id, supplied] = selected;
       const auto &operand = *expr.children.front();
       auto *borrow = emit_expression(operand, Projection::target);
@@ -1107,10 +1042,10 @@ class LLVMEmission {
       if (here_entries_.at(body.instance).group)
         completed = consume_here_transfer(result, b_.CreateExtractValue(callback, 1));
       return propagate(completed);
-    });
+    }
   }
   llvm::Value *native_call(const Expression &expr, llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared,
-                           llvm::AllocaInst *here_site = nullptr, const std::vector<llvm::Value *> &here_values = {},
+                           llvm::AllocaInst *here_site = nullptr,
                            std::span<llvm::Value *const> current_owners = {}) {
     const auto &layout = call_layouts_.at(method);
     if (prepared.size() != layout.operands) throw std::logic_error("unchecked native call arity");
@@ -1120,14 +1055,10 @@ class LLVMEmission {
     if (instance.method != method) throw std::logic_error("native call disagrees with its selected method");
     const auto &definition = program_->methods[method];
     for (const auto &[owner, input] : instance.frame.owners) {
-      if (definition.lexical_result && owner == null_target - 1 - definition.lexical_result->owner) {
-        prepared.push_back(owner_identity(invocation.lexical_result_owner.value(), expr.at));
-      } else if (definition.scope_inputs) {
+      if (definition.scope_inputs) {
         prepared.push_back(owner_identity(invocation.scope_owners.at(null_target - 1 - owner), expr.at));
       } else if (!current_owners.empty() && current_owners[input]) {
         prepared.push_back(current_owners[input]);
-      } else if (const auto &storage = invocation.arguments.at(input).reference_storage) {
-        prepared.push_back(owner_identity(storage->owner, expr.at));
       } else {
         prepared.push_back(selected_owner(invocation.argument(expr, input)));
       }
@@ -1153,30 +1084,18 @@ class LLVMEmission {
       if (!exception_result_destination_) throw std::logic_error("owning call without its checked exception result destination");
       prepared.push_back(exception_result_destination_);
     }
-    llvm::Value *callee = target;
-    if (here_values.size() != layout.here_formals)
+    if (size_t(invocation.supplied_here.has_value()) != layout.here_formals)
       throw std::logic_error("native call disagrees with its here parameter roles");
     if (invocation.supplied_here) {
-      const auto &supplied = *invocation.supplied_here;
-      llvm::Value *argument;
-      if (supplied.returning) {
-        auto *returning = observed_return();
-        const auto id = supplied.returning->receiver;
-        auto *alternate = methods_.at(program_->instances[id].method);
-        if (!alternate || target->getFunctionType() != alternate->getFunctionType())
-          throw std::logic_error("supplied here return state changed the receiver layout");
-        callee = b_.CreateSelect(returning, alternate, target);
-        argument = prepare_here(supplied, expr.at, returning);
-      } else argument = prepare_here(supplied, expr.at);
+      auto *argument = prepare_here(*invocation.supplied_here, expr.at);
       if (here_site) b_.CreateStore(b_.CreateExtractValue(argument, 1), here_site);
       prepared.push_back(argument);
     }
-    prepared.insert(prepared.end(), here_values.begin() + invocation.supplied_here.has_value(), here_values.end());
     for (size_t slot = 0; slot < layout.lexical_here; ++slot)
       prepared.push_back(here_arguments_.at(invocation.scope_here.at(slot)));
     if (!target || prepared.size() != layout.parameter_count() || target->arg_size() != layout.parameter_count())
       throw std::logic_error("native call disagrees with its parameter roles");
-    llvm::Value *result = b_.CreateCall(target->getFunctionType(), callee, prepared);
+    llvm::Value *result = b_.CreateCall(target, prepared);
     if (destination) result = b_.CreateInsertValue(result, load(destination), 0);
     return result;
   }
@@ -1199,49 +1118,22 @@ class LLVMEmission {
     return outcome(empty_scalar(), integer(0), integer(0), null_pointer());
   }
   llvm::Value *invoke(const Expression &expr, const std::vector<llvm::Value *> &arguments, llvm::AllocaInst *here_site = nullptr,
-                      const std::vector<llvm::Value *> &here_values = {},
                       std::span<llvm::Value *const> current_owners = {}) {
     const auto &fact = checked_.at(&expr);
     if (fact.invokes_here) {
       auto *argument = here_arguments_.at(*fact.invokes_here);
-      if (fact.opened_pipeline_stages) {
-        const auto count = *fact.opened_pipeline_stages;
-        auto *backing = b_.CreateExtractValue(argument, 1);
-        auto *layout = llvm::ArrayType::get(here_, count);
-        argument = here_values.at(0);
-        for (size_t i = 0; i < count; ++i) {
-          auto *address = b_.CreateInBoundsGEP(layout, backing, {b_.getInt32(0), b_.getInt64(i)});
-          argument = connect_prepared_stage(b_.CreateLoad(here_, address), argument);
-        }
-      }
-      llvm::Value *entry = nullptr;
       auto prepared = arguments;
       std::vector<llvm::Type *> parameters(arguments.size(), scalar_);
       for (const auto input : here_owner_inputs(fact.operand_type)) {
         prepared.push_back(selected_owner(fact.argument(expr, input)));
         parameters.push_back(b_.getPtrTy());
       }
-      if (fact.supplied_here) {
-        std::optional<CheckedOperation::SuppliedHere> entries;
-        entries.emplace(checked_.at(&expr).supplied_here.value());
-        auto *supplied = lower_prepared(expr, entries, [&](const auto &body) {
-          return prepare_here(body, expr.at);
-        });
-        if (here_site) b_.CreateStore(b_.CreateExtractValue(supplied, 1), here_site);
-        prepared.push_back(supplied);
-        parameters.push_back(here_);
-        std::optional<size_t> sources;
-        sources.emplace(checked_.at(&expr).opened_source.value());
-        entry = lower_prepared(expr, sources, [&](size_t source) -> llvm::Value * {
-          return prepared_source_entries_.at(source);
-        });
-      }
       prepared.push_back(b_.CreateExtractValue(argument, 1));
-      if (!entry) entry = b_.CreateExtractValue(argument, 0);
+      auto *entry = b_.CreateExtractValue(argument, 0);
       parameters.push_back(b_.getPtrTy());
       return b_.CreateCall(llvm::FunctionType::get(outcome_, parameters, false), entry, prepared);
     }
-    if ((checked_.at(&expr).builtin == BuiltinOperation::reference_swap)) return swap_builtin(arguments, BuiltinOperation::reference_swap);
+    if (fact.builtin == BuiltinOperation::reference_swap) return swap_builtin(arguments, BuiltinOperation::reference_swap);
     if (fact.builtin == BuiltinOperation::identity) {
       auto *left_owner = selected_owner(*expr.children[0]);
       auto *right_owner = selected_owner(*expr.children[1]);
@@ -1258,7 +1150,7 @@ class LLVMEmission {
     }
     if (fact.callee) {
       const auto method = program_->instances[*fact.callee].method;
-      return native_call(expr, methods_[method], method, arguments, here_site, here_values, current_owners);
+      return native_call(expr, methods_[method], method, arguments, here_site, current_owners);
     }
     if (fact.builtin == BuiltinOperation::unary || fact.builtin == BuiltinOperation::binary) {
       EagerOperation operation{{}, &fact};
@@ -1318,116 +1210,70 @@ class LLVMEmission {
   void collect_cleanup(const Expression &expr, Scope &scope, bool only_native_effects = false,
                        bool nested_iteration = false) {
     using K = Expression::Kind;
-    if (expr.kind != K::deferred || !only_native_effects)
-      for (size_t i = 0; i < expr.children.size(); ++i)
-        collect_cleanup(*expr.children[i], scope, only_native_effects,
-                        nested_iteration || (expr.kind == K::range_for && i >= 2));
+    for (size_t i = 0; i < expr.children.size(); ++i)
+      collect_cleanup(*expr.children[i], scope, only_native_effects,
+                      nested_iteration || (expr.kind == K::range_for && i >= 2));
     if (expr.kind == K::effect && !nested_iteration) {
       const auto effect = checked_.operations->find(&expr);
       if (effect != checked_.operations->end() && effect->second.native_acquisition) {
         const auto &op = effect->second;
         auto *layout = llvm::StructType::get(context_, {cleanup_header_, native_handle_pair(), scalar_});
-        scope.actions.push_back({&expr, layout, {}, op.native_acquisition->constructor,
+        scope.actions.push_back({&expr, layout, op.native_acquisition->constructor,
                                  slot(layout, "native.effect.record"), op.symbol});
       }
     }
     if (only_native_effects) return;
     if (expr.kind == K::region_binding) {
       auto *layout = llvm::StructType::get(context_, {cleanup_header_, b_.getPtrTy()});
-      scope.actions.push_back({&expr, layout, {}, {}, slot(layout, "region.cleanup"), {}, {}, true});
+      scope.actions.push_back({&expr, layout, {}, slot(layout, "region.cleanup"), {}, true});
       return;
     }
     if (expr.kind == K::exception_binding) {
       auto *layout = llvm::StructType::get(context_, {cleanup_header_, b_.getPtrTy()});
-      scope.actions.push_back({&expr, layout, {}, {}, slot(layout, "exception.cleanup"), {}, {}, false, true});
+      scope.actions.push_back({&expr, layout, {}, slot(layout, "exception.cleanup"), {}, false, true});
       return;
     }
     if (expr.kind == Expression::Kind::native_handle_binding && expr.binding == "<-") {
       const auto operation = checked_.operations->find(&expr);
       if (operation != checked_.operations->end() && operation->second.native_acquisition)
         scope.actions.push_back({&expr, llvm::StructType::get(context_, {cleanup_header_, b_.getInt64Ty()}),
-                                 {}, operation->second.native_acquisition->constructor});
-      return;
+                                 operation->second.native_acquisition->constructor});
     }
-    if (expr.kind != Expression::Kind::deferred) return;
-    const auto &body = *expr.children.front();
-    const auto inputs = deferred_inputs(body, checked_.at(&body));
-    if (body.kind != K::block && !inputs) return;
-    const auto &captures = checked_.at(&expr).captures;
-    std::vector<llvm::Type *> fields{cleanup_header_, deferred_failure_layout()};
-    if (inputs) {
-      for (size_t i = 0; i < inputs->count; ++i)
-        fields.push_back(inputs->handle_arguments.contains(i) ? native_handle_pair() : scalar_);
-    } else fields.insert(fields.end(), captures.size(), scalar_);
-    auto *layout = llvm::StructType::get(context_, fields);
-    auto *backing = expr.repeated_defer_registration ? nullptr : slot(layout, "defer.record");
-    scope.actions.push_back({&expr, layout, captures, {}, backing, {}, inputs});
   }
   void prepare_cleanup_record(Scope &scope, llvm::Value *record, size_t action) {
     b_.CreateStore(load(scope.head), b_.CreateStructGEP(cleanup_header_, record, 0));
     b_.CreateStore(integer(action), b_.CreateStructGEP(cleanup_header_, record, 1));
   }
-  llvm::Value *complete_cleanup(const std::function<void()> &emit, CleanupBoundary boundary,
-                                llvm::Value *entered_failure = nullptr) {
+  void complete_cleanup(const std::function<void()> &emit) {
     // Suspend the pending completion while cleanup executes its own control flow.
     auto pending = completion_.transform([&](auto *place) { return load(place); });
-    const bool handles_failure = entered_failure != nullptr;
-    if (!entered_failure) entered_failure = b_.getFalse();
-    b_.CreateStore(b_.CreateSelect(entered_failure, b_.getInt8(2), b_.getInt8(0)), completion_.kind);
-    b_.CreateStore(b_.CreateSelect(entered_failure, pending.category, integer(0)), completion_.category);
-    b_.CreateStore(b_.CreateSelect(entered_failure, pending.fatal, null_pointer()), completion_.fatal);
-    if (owned_failures_) {
-      // A guarding action receives the failure. Otherwise its owner remains suspended.
-      b_.CreateStore(b_.CreateSelect(entered_failure, pending.failure_owner, null_pointer()), completion_.failure_owner);
-      pending.failure_owner = b_.CreateSelect(entered_failure, null_pointer(), pending.failure_owner);
-    }
+    b_.CreateStore(b_.getInt8(0), completion_.kind);
+    b_.CreateStore(integer(0), completion_.category);
+    b_.CreateStore(null_pointer(), completion_.fatal);
+    if (owned_failures_) b_.CreateStore(null_pointer(), completion_.failure_owner);
     b_.CreateStore(b_.getFalse(), completion_.has_return);
     if (protected_outcomes_) b_.CreateStore(null_pointer(), completion_.transfer);
     Control action{control_, block("cleanup.completed")};
     control_ = &action;
-    const auto outer_return = suspended_return_;
-    auto *prepared = pending.value;
-    if (here_destination_) prepared = outer_return.value ? protected_return_value() : nullptr;
-    suspended_return_ = {
-        outer_return.present ? b_.CreateOr(outer_return.present, pending.has_return) : pending.has_return,
-        outer_return.value ? b_.CreateSelect(pending.has_return, prepared, outer_return.value) : prepared};
     emit();
-    suspended_return_ = outer_return;
     if (reachable()) b_.CreateBr(action.exit);
     b_.SetInsertPoint(action.exit);
     control_ = action.parent;
     auto *restore = block("cleanup.preserve"), *replace = block("cleanup.replace"), *done = block("cleanup.done");
     auto *kind = load(completion_.kind);
     auto *normal = b_.CreateICmpEQ(kind, b_.getInt8(0));
-    auto *replaces_body = b_.CreateOr(load(completion_.has_return),
-        b_.CreateAnd(b_.CreateNot(normal), b_.CreateICmpNE(kind, b_.getInt8(2))));
     b_.CreateCondBr(normal, restore, replace);
     b_.SetInsertPoint(restore);
     const auto places = completion_.fields();
     const auto values = pending.fields();
     for (size_t i = 0; i < places.size(); ++i) if (places[i]) b_.CreateStore(values[i], places[i]);
-    if (handles_failure) {
-      auto *resumed = b_.CreateSelect(pending.has_return, b_.getInt8(1), b_.getInt8(0));
-      b_.CreateStore(b_.CreateSelect(entered_failure, resumed, pending.kind), completion_.kind);
-      b_.CreateStore(b_.CreateSelect(entered_failure, integer(0), pending.category), completion_.category);
-      b_.CreateStore(b_.CreateSelect(entered_failure, null_pointer(), pending.fatal), completion_.fatal);
-    }
     b_.CreateBr(done);
     b_.SetInsertPoint(replace);
     release_failure_owner(b_, pending.failure_owner);
-    if (boundary == CleanupBoundary::deferred) {
-      auto *retain = block("cleanup.retain.return"), *replaced = block("cleanup.replaced.return");
-      b_.CreateCondBr(b_.CreateAnd(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2)), b_.CreateNot(load(completion_.has_return))), retain, replaced);
-      b_.SetInsertPoint(retain);
-      b_.CreateStore(pending.value, completion_.value);
-      b_.CreateStore(pending.has_return, completion_.has_return);
-      b_.CreateBr(done);
-      b_.SetInsertPoint(replaced);
-    }
     b_.CreateBr(done);
     b_.SetInsertPoint(done);
     auto *transfer = pending.transfer;
-    if (boundary == CleanupBoundary::ordinary_finally && here_destination_) {
+    if (here_destination_) {
       // A failure in the supplying group's own finally cancels its pending
       // outward transfer. Receiver cleanup keeps the destination for delivery.
       auto *replaced = b_.CreateAnd(b_.CreateICmpEQ(pending.kind, b_.getInt8(3)),
@@ -1437,286 +1283,10 @@ class LLVMEmission {
       discard_transfer_failure(pending.transfer, transfer);
     }
     preserve_transfer(transfer);
-    return replaces_body;
   }
-  struct DeferredFailures {
-    llvm::AllocaInst *head, *tail;
-  };
-  enum DeferredFailureField { failure_next, failure_backing, failure_outcome };
-  static constexpr unsigned first_deferred_operand = 2;
-  llvm::StructType *deferred_failure_layout() {
-    return llvm::StructType::get(context_, {b_.getPtrTy(), b_.getPtrTy(), outcome_});
-  }
-  llvm::Value *deferred_failure_field(llvm::Value *node, unsigned index) {
-    return b_.CreateStructGEP(deferred_failure_layout(), node, index);
-  }
-  void clear_deferred_failures(const DeferredFailures &queue) {
-    b_.CreateStore(null_pointer(), queue.head);
-    b_.CreateStore(null_pointer(), queue.tail);
-  }
-  DeferredFailures deferred_failures() {
-    DeferredFailures queue{slot(b_.getPtrTy(), "defer.failures.head"), slot(b_.getPtrTy(), "defer.failures.tail")};
-    clear_deferred_failures(queue);
-    return queue;
-  }
-  void append_deferred_failures(const DeferredFailures &queue, llvm::Value *first, llvm::Value *last) {
-    auto *extend = block("defer.failures.extend"), *start = block("defer.failures.start"), *done = block("defer.failures.appended");
-    auto *tail = load(queue.tail);
-    b_.CreateCondBr(b_.CreateIsNull(tail), start, extend);
-    b_.SetInsertPoint(start);
-    b_.CreateStore(first, queue.head);
-    b_.CreateBr(done);
-    b_.SetInsertPoint(extend);
-    b_.CreateStore(first, deferred_failure_field(tail, failure_next));
-    b_.CreateBr(done);
-    b_.SetInsertPoint(done);
-    b_.CreateStore(last, queue.tail);
-  }
-  void retire_deferred_failure(llvm::Value *node) {
-    auto *backing = b_.CreateLoad(b_.getPtrTy(), deferred_failure_field(node, failure_backing));
-    auto *release = block("defer.record.release"), *done = block("defer.record.released");
-    b_.CreateCondBr(b_.CreateIsNull(backing), done, release);
-    b_.SetInsertPoint(release);
-    b_.CreateCall(runtime("cod_lang_defer_free", b_.getVoidTy(), {b_.getPtrTy()}), {backing});
-    b_.CreateBr(done);
-    b_.SetInsertPoint(done);
-  }
-  void finish_deferred_phase(const DeferredFailures &queue, llvm::Value *node) {
-    auto *failed = block("defer.failure.save"), *normal = block("defer.phase.normal"), *done = block("defer.phase.done");
-    b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2)), failed, normal);
-    b_.SetInsertPoint(failed);
-    auto *owner = owned_failures_ ? take_failure_owner(b_, completion_.failure_owner) : nullptr;
-    auto *failure = outcome(empty_scalar(), load(completion_.category), load(completion_.site), load(completion_.fatal),
-                            load(completion_.requested), load(completion_.available), load(completion_.cause), nullptr, owner);
-    b_.CreateStore(failure, deferred_failure_field(node, failure_outcome));
-    b_.CreateStore(null_pointer(), deferred_failure_field(node, failure_next));
-    auto *kind = b_.CreateSelect(load(completion_.has_return), b_.getInt8(1), b_.getInt8(0));
-    if (protected_outcomes_)
-      kind = b_.CreateSelect(b_.CreateIsNotNull(load(completion_.transfer)), b_.getInt8(3), kind);
-    b_.CreateStore(kind, completion_.kind);
-    b_.CreateStore(integer(0), completion_.category);
-    b_.CreateStore(null_pointer(), completion_.fatal);
-    append_deferred_failures(queue, node, node);
-    b_.CreateBr(done);
-    b_.SetInsertPoint(normal);
-    retire_deferred_failure(node);
-    b_.CreateBr(done);
-    b_.SetInsertPoint(done);
-  }
-  llvm::Value *matches_deferred_handler(const Expression &entry, llvm::Value *failure) {
-    auto *category = b_.CreateExtractValue(failure, 1);
-    llvm::Value *matches = b_.getFalse();
-    for (const auto &clause : std::span{entry.children}.subspan(1)) {
-      if (clause->kind != Expression::Kind::handler) break;
-      auto *selected = catch_matches(category, checked_.at(clause.get()).type.identity);
-      matches = b_.CreateOr(matches, selected);
-    }
-    return b_.CreateAnd(matches, b_.CreateAnd(b_.CreateICmpNE(category, integer(0)),
-                        b_.CreateIsNull(b_.CreateExtractValue(failure, 3))));
-  }
-  void visit_deferred_failures(const Expression &entry, const DeferredFailures &queue, const auto &run_action) {
-    auto *incoming = slot(b_.getPtrTy(), "defer.visit.incoming");
-    b_.CreateStore(load(queue.head), incoming);
-    clear_deferred_failures(queue);
-    const auto outgoing = deferred_failures();
-    auto *scan = block("defer.visit.next"), *test = block("defer.visit.match"), *done = block("defer.visit.done");
-    b_.CreateBr(scan);
-    b_.SetInsertPoint(scan);
-    auto *node = load(incoming);
-    b_.CreateCondBr(b_.CreateIsNull(node), done, test);
-    b_.SetInsertPoint(test);
-    b_.CreateStore(b_.CreateLoad(b_.getPtrTy(), deferred_failure_field(node, failure_next)), incoming);
-    auto *failure = b_.CreateLoad(outcome_, deferred_failure_field(node, failure_outcome));
-    auto *handle = block("defer.visit.handle"), *keep = block("defer.visit.keep");
-    b_.CreateCondBr(matches_deferred_handler(entry, failure), handle, keep);
-    b_.SetInsertPoint(keep);
-    b_.CreateStore(null_pointer(), deferred_failure_field(node, failure_next));
-    append_deferred_failures(queue, node, node);
-    b_.CreateBr(scan);
-    b_.SetInsertPoint(handle);
-    save_abrupt(failure);
-    run_action([&] { emit_finally(entry, Projection::value, true); }, b_.getTrue());
-    finish_deferred_phase(outgoing, node);
-    b_.CreateBr(scan);
-    b_.SetInsertPoint(done);
-    auto *first = load(outgoing.head);
-    auto *append = block("defer.visit.outputs"), *next = block("defer.visit.completed");
-    b_.CreateCondBr(b_.CreateIsNull(first), next, append);
-    b_.SetInsertPoint(append);
-    append_deferred_failures(queue, first, load(outgoing.tail));
-    b_.CreateBr(next);
-    b_.SetInsertPoint(next);
-  }
-  void finish_deferred_residuals(const DeferredFailures &queue, const Location &at, llvm::AllocaInst *body_pending,
-                                 const CompletionState<llvm::Value *> &body) {
-    auto *current = slot(b_.getPtrTy(), "defer.residual.current");
-    auto *terminal = slot(b_.getPtrTy(), "defer.residual.terminal");
-    auto *count = slot(b_.getInt64Ty(), "defer.residual.count");
-    auto *aggregate = slot(b_.getPtrTy(), "defer.residual.aggregate");
-    b_.CreateStore(load(queue.head), current);
-    b_.CreateStore(null_pointer(), terminal);
-    b_.CreateStore(null_pointer(), aggregate);
-    b_.CreateStore(integer(0), count);
-    auto *scan = block("defer.residual.scan"), *inspect = block("defer.residual.inspect"), *classify = block("defer.residual.classify");
-    auto *retire = block("defer.residual.retire"), *release = block("defer.residual.release"), *done = block("defer.residual.done");
-    b_.CreateCondBr(b_.CreateIsNull(load(current)), done, scan);
-    b_.SetInsertPoint(scan);
-    auto *node = load(current);
-    b_.CreateCondBr(b_.CreateIsNull(node), classify, inspect);
-    b_.SetInsertPoint(inspect);
-    auto *failure = b_.CreateLoad(outcome_, deferred_failure_field(node, failure_outcome));
-    auto *fatal = b_.CreateIsNotNull(b_.CreateExtractValue(failure, 3));
-    b_.CreateStore(b_.CreateSelect(fatal, node, load(terminal)), terminal);
-    b_.CreateStore(b_.CreateAdd(load(count), b_.CreateZExt(b_.CreateNot(fatal), b_.getInt64Ty())), count);
-    b_.CreateStore(b_.CreateLoad(b_.getPtrTy(), deferred_failure_field(node, failure_next)), current);
-    b_.CreateBr(scan);
-
-    b_.SetInsertPoint(classify);
-    auto *last_terminal = load(terminal);
-    auto *deliver_fatal = block("defer.residual.fatal"), *test_body = block("defer.residual.body");
-    b_.CreateCondBr(b_.CreateIsNotNull(last_terminal), deliver_fatal, test_body);
-    b_.SetInsertPoint(deliver_fatal);
-    save_abrupt(b_.CreateLoad(outcome_, deferred_failure_field(last_terminal, failure_outcome)));
-    b_.CreateBr(retire);
-    b_.SetInsertPoint(test_body);
-    auto *publish = block("defer.residual.publish");
-    auto *local_body = load(body_pending);
-    auto *terminal_body = b_.CreateAnd(local_body, b_.CreateIsNotNull(body.fatal));
-    llvm::Value *body_transfer = nullptr;
-    if (protected_outcomes_) {
-      // The supplier failure bypasses deferred catches. Only the completed
-      // owning pass can retain it as the aggregate's body exception.
-      auto *test_transfer = block("defer.residual.transfer"), *inspect_transfer = block("defer.residual.inspect.transfer");
-      b_.CreateCondBr(terminal_body, retire, test_transfer);
-      b_.SetInsertPoint(test_transfer);
-      auto *transfer = load(completion_.transfer);
-      b_.CreateCondBr(b_.CreateAnd(b_.CreateNot(local_body), b_.CreateIsNotNull(transfer)), inspect_transfer, publish);
-      b_.SetInsertPoint(inspect_transfer);
-      auto *kind = b_.CreateLoad(b_.getInt8Ty(), b_.CreateStructGEP(here_transfer_, transfer, 0));
-      auto *is_failure = b_.CreateICmpEQ(kind, b_.getInt8(static_cast<unsigned>(HereExit::failure)));
-      auto *payload = b_.CreateLoad(outcome_, here_payload_slot(b_, transfer));
-      auto *is_terminal = b_.CreateAnd(is_failure, b_.CreateIsNotNull(b_.CreateExtractValue(payload, 3)));
-      auto *selected = b_.CreateSelect(is_failure, transfer, null_pointer());
-      b_.CreateCondBr(is_terminal, retire, publish);
-      b_.SetInsertPoint(publish);
-      auto *incoming = b_.CreatePHI(b_.getPtrTy(), 2);
-      incoming->addIncoming(null_pointer(), test_transfer);
-      incoming->addIncoming(selected, inspect_transfer);
-      body_transfer = incoming;
-    } else b_.CreateCondBr(terminal_body, retire, publish);
-
-    const auto cancel_transfer = [&] {
-      if (!protected_outcomes_) return;
-      discard_transfer_failure(load(completion_.transfer), null_pointer());
-      b_.CreateStore(null_pointer(), completion_.transfer);
-    };
-
-    const auto retain = [&](llvm::Value *owner, bool member, llvm::Value *category, llvm::Value *where,
-                            llvm::Value *requested, llvm::Value *available, llvm::Value *cause, llvm::Value *child) {
-      std::vector<llvm::Type *> types{b_.getPtrTy()};
-      types.insert(types.end(), 6, b_.getInt64Ty());
-      types.push_back(b_.getPtrTy());
-      b_.CreateCall(runtime("cod_lang_retain_deferred_failure", b_.getVoidTy(), types),
-                    {owner, integer(member), category, where, requested, available, cause, child});
-    };
-    b_.SetInsertPoint(publish);
-    if (program_->deferred_aggregates) {
-      auto *status = slot(b_.getInt64Ty(), "defer.residual.status");
-      auto acquire = runtime("cod_lang_acquire_deferred_aggregate", b_.getPtrTy(), {b_.getInt64Ty(), b_.getPtrTy()});
-      auto *owner = b_.CreateCall(acquire, {load(count), status});
-      auto *ready = block("defer.residual.ready"), *unavailable = block("defer.residual.unavailable");
-      auto *where = integer(site(at));
-      b_.CreateCondBr(b_.CreateIsNotNull(owner), ready, unavailable);
-      b_.SetInsertPoint(unavailable);
-      cancel_transfer();
-      save_abrupt(outcome(empty_scalar(), load(status), where, null_pointer()));
-      b_.CreateBr(retire);
-      b_.SetInsertPoint(ready);
-      b_.CreateStore(owner, aggregate);
-      auto *attach_body = block("defer.residual.attach.body"), *deliver = block("defer.residual.deliver");
-      auto *attach_supplier = body_transfer ? block("defer.residual.supplier") : deliver;
-      b_.CreateCondBr(local_body, attach_body, attach_supplier);
-      b_.SetInsertPoint(attach_body);
-      retain(owner, false, body.category, body.site, body.requested, body.available, body.cause, body.failure_owner);
-      b_.CreateStore(b_.getFalse(), body_pending);
-      b_.CreateBr(deliver);
-      if (body_transfer) {
-        b_.SetInsertPoint(attach_supplier);
-        auto *attach = block("defer.residual.attach.supplier");
-        b_.CreateCondBr(b_.CreateIsNotNull(body_transfer), attach, deliver);
-        b_.SetInsertPoint(attach);
-        auto *payload = b_.CreateLoad(outcome_, here_payload_slot(b_, body_transfer));
-        auto *child = take_failure_owner(b_, transfer_failure_slot(b_, body_transfer));
-        retain(owner, false, b_.CreateExtractValue(payload, 1), b_.CreateExtractValue(payload, 2), b_.CreateExtractValue(payload, 4),
-               b_.CreateExtractValue(payload, 5), b_.CreateExtractValue(payload, 6), child);
-        // A later receiver that catches the aggregate must not resume this transfer.
-        b_.CreateStore(null_pointer(), completion_.transfer);
-        b_.CreateBr(deliver);
-      }
-      b_.SetInsertPoint(deliver);
-      cancel_transfer();
-      save_abrupt(outcome(empty_scalar(), integer(deferred_aggregate_id), where, null_pointer(),
-                          nullptr, nullptr, nullptr, nullptr, owner));
-    } else save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::unsound_runtime_typing)), integer(0), null_pointer()));
-    b_.CreateBr(retire);
-
-    b_.SetInsertPoint(retire);
-    auto *pending = load(queue.head);
-    b_.CreateCondBr(b_.CreateIsNull(pending), done, release);
-    b_.SetInsertPoint(release);
-    b_.CreateStore(b_.CreateLoad(b_.getPtrTy(), deferred_failure_field(pending, failure_next)), queue.head);
-    if (owned_failures_) {
-      auto *old = b_.CreateLoad(outcome_, deferred_failure_field(pending, failure_outcome));
-      auto *child = b_.CreateExtractValue(old, failure_owner_field());
-      if (program_->deferred_aggregates) {
-        auto *owner = load(aggregate);
-        auto *retain_member = block("defer.residual.attach.member"), *drop = block("defer.residual.drop");
-        auto *retained = block("defer.residual.retained");
-        b_.CreateCondBr(b_.CreateIsNotNull(owner), retain_member, drop);
-        b_.SetInsertPoint(retain_member);
-        retain(owner, true, b_.CreateExtractValue(old, 1), b_.CreateExtractValue(old, 2), b_.CreateExtractValue(old, 4),
-               b_.CreateExtractValue(old, 5), b_.CreateExtractValue(old, 6), child);
-        b_.CreateBr(retained);
-        b_.SetInsertPoint(drop);
-        release_failure_owner(b_, child);
-        b_.CreateBr(retained);
-        b_.SetInsertPoint(retained);
-      } else release_failure_owner(b_, child);
-    }
-    retire_deferred_failure(pending);
-    b_.CreateBr(retire);
-    b_.SetInsertPoint(done);
-  }
-  void drain(Scope &scope, const Location &at) {
+  void drain(Scope &scope) {
     b_.SetInsertPoint(scope.cleanup);
     if (scope.actions.empty()) return;
-    auto *next_entry = scope.cleanup;
-    llvm::AllocaInst *body_pending = nullptr;
-    CompletionState<llvm::Value *> body_outcome;
-    DeferredFailures failures{};
-    if (std::ranges::any_of(scope.actions, [](const auto &entry) { return !entry.release_only(); })) {
-      // Suspend the ordinary failure for the whole pass. The active failure
-      // during the pass always comes from an invoked cleanup action.
-      body_outcome = completion_.transform([&](auto *place) { return load(place); });
-      body_pending = slot(b_.getInt1Ty(), "defer.body.pending");
-      auto *failed = b_.CreateICmpEQ(body_outcome.kind, b_.getInt8(2));
-      b_.CreateStore(failed, body_pending);
-      b_.CreateStore(b_.CreateSelect(failed, b_.getInt8(0), body_outcome.kind), completion_.kind);
-      b_.CreateStore(integer(0), completion_.category);
-      b_.CreateStore(null_pointer(), completion_.fatal);
-      if (owned_failures_) b_.CreateStore(null_pointer(), completion_.failure_owner);
-      failures = deferred_failures();
-      next_entry = block("defer.next");
-      b_.CreateBr(next_entry);
-      b_.SetInsertPoint(next_entry);
-    }
-    const auto run_action = [&](const auto &emit, llvm::Value *arrives = nullptr) {
-      auto *replaces_body = complete_cleanup(emit, CleanupBoundary::deferred, arrives);
-      auto *pending = load(body_pending);
-      if (owned_failures_)
-        release_failure_owner(b_, b_.CreateSelect(b_.CreateAnd(pending, replaces_body), body_outcome.failure_owner, null_pointer()));
-      b_.CreateStore(b_.CreateAnd(pending, b_.CreateNot(replaces_body)), body_pending);
-    };
     auto *pop = block("defer.pop"), *done = block("defer.done"), *invalid = block("defer.invalid");
     auto *record = load(scope.head);
     b_.CreateCondBr(b_.CreateICmpEQ(record, null_pointer()), done, pop);
@@ -1725,9 +1295,6 @@ class LLVMEmission {
     auto *action = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(cleanup_header_, record, 1));
     b_.CreateStore(previous, scope.head);
     auto *dispatch = b_.CreateSwitch(action, invalid, scope.actions.size());
-    const auto release_heap_record = [&] {
-      b_.CreateCall(runtime("cod_lang_defer_free", b_.getVoidTy(), {b_.getPtrTy()}), {record});
-    };
     for (size_t i = 0; i < scope.actions.size(); ++i) {
       const auto &descriptor = scope.actions[i];
       if (descriptor.region_release) {
@@ -1736,7 +1303,7 @@ class LLVMEmission {
         b_.SetInsertPoint(destroy);
         auto *owner = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(descriptor.layout, record, 1));
         b_.CreateCall(runtime("cod_lang_region_release", b_.getVoidTy(), {b_.getPtrTy()}), {owner});
-        b_.CreateBr(next_entry);
+        b_.CreateBr(scope.cleanup);
         continue;
       }
       if (descriptor.exception_release) {
@@ -1745,7 +1312,7 @@ class LLVMEmission {
         b_.SetInsertPoint(destroy);
         auto *holder = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(descriptor.layout, record, 1));
         release_failure_owner(b_, take_failure_owner(b_, holder));
-        b_.CreateBr(next_entry);
+        b_.CreateBr(scope.cleanup);
         continue;
       }
       if (descriptor.native_constructor) {
@@ -1761,97 +1328,15 @@ class LLVMEmission {
         auto *resource = b_.CreateLoad(b_.getInt64Ty(), resource_address);
         const auto &handle = program_->native_constructors.at(*descriptor.native_constructor).handle;
         b_.CreateCall(runtime(native_destroy_name(handle), b_.getVoidTy(), {b_.getInt64Ty()}), {resource});
-        b_.CreateBr(next_entry);
+        b_.CreateBr(scope.cleanup);
         continue;
       }
-      const auto &body = *descriptor.action->children.front();
-      auto *run = block("defer.invoke");
-      dispatch->addCase(integer(i), run);
-      b_.SetInsertPoint(run);
-      auto *failure_node = b_.CreateStructGEP(descriptor.layout, record, 1);
-      b_.CreateStore(descriptor.activation_record ? null_pointer() : record, deferred_failure_field(failure_node, failure_backing));
-      const auto run_entry = [&](const auto &emit) {
-        run_action(emit);
-        finish_deferred_phase(failures, failure_node);
-        b_.CreateBr(next_entry);
-      };
-      if (body.kind == Expression::Kind::block) {
-        std::vector<std::pair<size_t, llvm::AllocaInst *>> bindings;
-        size_t field = first_deferred_operand;
-        for (const auto id : descriptor.captures) {
-          auto *captured = slot(scalar_, "defer.caught");
-          b_.CreateStore(b_.CreateLoad(scalar_, b_.CreateStructGEP(descriptor.layout, record, field++)), captured);
-          bindings.emplace_back(id, storage_.at(id));
-          storage_[id] = captured;
-        }
-        if (descriptor.action->deferred_catch()) {
-          visit_deferred_failures(*descriptor.action, failures, run_action);
-          if (const auto *finalizer = descriptor.action->deferred_finalizer())
-            run_entry([&] { emit_expression(*finalizer, Projection::value, true); });
-          else {
-            retire_deferred_failure(failure_node);
-            b_.CreateBr(next_entry);
-          }
-        } else run_entry([&] {
-          if (descriptor.action->children.size() == 1) emit_expression(body, Projection::value, true);
-          else emit_finally(*descriptor.action, Projection::value, true);
-        });
-        for (const auto &[id, place] : bindings) storage_[id] = place;
-        continue;
-      }
-      std::vector<llvm::Value *> arguments;
-      for (size_t j = 0; j < descriptor.inputs->count; ++j) {
-        auto *field = descriptor.layout->getElementType(j + first_deferred_operand);
-        auto *value = b_.CreateLoad(field, b_.CreateStructGEP(descriptor.layout, record, j + first_deferred_operand));
-        if (field == native_handle_pair()) {
-          auto *loan = slot(field, "defer.native.loan");
-          b_.CreateStore(value, loan);
-          const auto argument = descriptor.inputs->handle_arguments.at(j);
-          arguments.push_back(pack_view(loan, checked_.at(&body).argument(body, argument)));
-        } else arguments.push_back(value);
-      }
-      if (checked_.at(&body).native_call) {
-        run_entry([&] { emit_native_call(body, &arguments); });
-        continue;
-      }
-      if (body.kind == Expression::Kind::transfer || body.kind == Expression::Kind::rebind) {
-        run_entry([&] { assign_prepared(body, arguments); });
-        continue;
-      }
-      run_entry([&] {
-        if ([&] { const auto &call = checked_.at(&body);
-              return call.destination_arguments && std::any_of(call.arguments.begin(), call.arguments.end(),
-                  [](const auto &argument) { return argument.binding_slot && argument.mode == ArgumentMode::borrowed_read; }); }()) check_destination_arguments(body, arguments, true);
-        auto *result = invoke(body, arguments);
-        auto *replace = block("defer.failed"), *done = block("defer.completed");
-        b_.CreateCondBr(abrupt_outcome(result), replace, done);
-        b_.SetInsertPoint(replace); save_abrupt(result); b_.CreateBr(done);
-        b_.SetInsertPoint(done);
-      });
+      throw std::logic_error("missing compiled cleanup operation");
     }
     b_.SetInsertPoint(invalid);
-    if (std::ranges::none_of(scope.actions, [](const auto &action) { return action.native_constructor || action.activation_record; }))
-      release_heap_record();
     save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::unsound_runtime_typing)), integer(0), null_pointer()));
-    b_.CreateBr(next_entry);
+    b_.CreateBr(scope.cleanup);
     b_.SetInsertPoint(done);
-    if (body_pending) {
-      finish_deferred_residuals(failures, at, body_pending, body_outcome);
-      auto *resume = block("defer.resume.body"), *discard = block("defer.discard.body"), *completed = block("defer.completed");
-      auto *deferred_failure = b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(2));
-      b_.CreateCondBr(b_.CreateAnd(load(body_pending), b_.CreateNot(deferred_failure)), resume, discard);
-      b_.SetInsertPoint(resume);
-      const auto places = completion_.failure_fields();
-      const auto values = body_outcome.failure_fields();
-      for (size_t i = 0; i < places.size(); ++i) if (places[i]) b_.CreateStore(values[i], places[i]);
-      b_.CreateStore(b_.getInt8(2), completion_.kind);
-      b_.CreateBr(completed);
-      b_.SetInsertPoint(discard);
-      if (owned_failures_)
-        release_failure_owner(b_, b_.CreateSelect(load(body_pending), body_outcome.failure_owner, null_pointer()));
-      b_.CreateBr(completed);
-      b_.SetInsertPoint(completed);
-    }
   }
   llvm::Value *sequence(const std::vector<const Expression *> &expressions, Projection projection = Projection::value, bool discard_last = false) {
     llvm::Value *value = empty_scalar();
@@ -1912,7 +1397,7 @@ class LLVMEmission {
     auto *value = emit_expression(expr, Projection::value, discard);
     if (reachable()) { b_.CreateStore(value, result); b_.CreateBr(control.exit); }
     b_.SetInsertPoint(control.exit);
-    if (!native.actions.empty()) drain(native, expr.at);
+    if (!native.actions.empty()) drain(native);
     native_effect_scope_ = outer_native;
     restore_effects(saved);
     control_ = control.parent;
@@ -1966,7 +1451,7 @@ class LLVMEmission {
       b_.CreateBr(draining);
       scope.cleanup = draining;
     }
-    drain(scope, at); restore_effects(effects);
+    drain(scope); restore_effects(effects);
     if (lexical_allocations_) {
       auto *head = load(lexical_allocations_);
       auto *release_storage = block("storage.release"), *done = block("storage.released");
@@ -2183,80 +1668,75 @@ class LLVMEmission {
     auto *capacity_value = emit_expression(input);
     if (!reachable()) return nullptr;
     auto *capacity = convert(capacity_value, checked_.at(&input).type, Type::uint64);
-    using Plan = std::pair<size_t, std::vector<size_t>>;
-    std::optional<Plan> plans;
     const auto &fact = checked_.at(&make);
-    if (checked_.at(&input).type != Type::never)
-      plans.emplace(Plan{fact.operand_type.identity, fact.region_initializers});
-    return lower_prepared(make, plans, [&](const Plan &plan) -> llvm::Value * {
-      const auto &[schema_id, order] = plan;
-      auto *layout = product_layout(schema_id);
-      const auto &roots = program_->schemas.at(schema_id).fields;
-      const auto &target = module_.getDataLayout();
-      const auto bytes = roots.empty() ? 0 : target.getTypeAllocSize(layout).getFixedValue();
-      const auto alignment = target.getABITypeAlign(layout).value();
-      constexpr auto limit = std::uint64_t{std::numeric_limits<std::ptrdiff_t>::max()};
-      if (bytes > limit || alignment > alignof(std::max_align_t))
-        implementation_gap(make.at, "target layout for region roots");
+    const auto schema_id = fact.operand_type.identity;
+    const auto &order = fact.region_initializers;
+    auto *layout = product_layout(schema_id);
+    const auto &roots = program_->schemas.at(schema_id).fields;
+    const auto &target = module_.getDataLayout();
+    const auto bytes = roots.empty() ? 0 : target.getTypeAllocSize(layout).getFixedValue();
+    const auto alignment = target.getABITypeAlign(layout).value();
+    constexpr auto limit = std::uint64_t{std::numeric_limits<std::ptrdiff_t>::max()};
+    if (bytes > limit || alignment > alignof(std::max_align_t))
+      implementation_gap(make.at, "target layout for region roots");
 
-      auto *valid = block("region.capacity.valid"), *invalid = block("region.capacity.invalid");
-      b_.CreateCondBr(b_.CreateICmpULE(capacity, integer(limit)), valid, invalid);
-      b_.SetInsertPoint(invalid);
-      fail_path(ExceptionCategory::invalid_capacity, make.at);
-      b_.SetInsertPoint(valid);
-      auto *allocate = block("region.allocate"), *full = block("region.capacity.full");
-      b_.CreateCondBr(b_.CreateICmpULE(integer(bytes), capacity), allocate, full);
-      b_.SetInsertPoint(full);
-      save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::region_capacity_exceeded)),
-                          integer(site(make.at)), null_pointer(), integer(bytes), capacity));
-      b_.CreateBr(control_->exit);
-      b_.SetInsertPoint(allocate);
-      auto acquire = runtime("cod_lang_region_acquire", b_.getPtrTy(), {b_.getInt64Ty()});
-      auto *owner = b_.CreateCall(acquire, {capacity}, "region.owner");
-      auto *ready = block("region.acquired"), *unavailable = block("region.unavailable");
-      b_.CreateCondBr(b_.CreateIsNotNull(owner), ready, unavailable);
-      b_.SetInsertPoint(unavailable);
-      fail_path(ExceptionCategory::out_of_memory, make.at);
-      b_.SetInsertPoint(ready);
+    auto *valid = block("region.capacity.valid"), *invalid = block("region.capacity.invalid");
+    b_.CreateCondBr(b_.CreateICmpULE(capacity, integer(limit)), valid, invalid);
+    b_.SetInsertPoint(invalid);
+    fail_path(ExceptionCategory::invalid_capacity, make.at);
+    b_.SetInsertPoint(valid);
+    auto *allocate = block("region.allocate"), *full = block("region.capacity.full");
+    b_.CreateCondBr(b_.CreateICmpULE(integer(bytes), capacity), allocate, full);
+    b_.SetInsertPoint(full);
+    save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::region_capacity_exceeded)),
+                        integer(site(make.at)), null_pointer(), integer(bytes), capacity));
+    b_.CreateBr(control_->exit);
+    b_.SetInsertPoint(allocate);
+    auto acquire = runtime("cod_lang_region_acquire", b_.getPtrTy(), {b_.getInt64Ty()});
+    auto *owner = b_.CreateCall(acquire, {capacity}, "region.owner");
+    auto *ready = block("region.acquired"), *unavailable = block("region.unavailable");
+    b_.CreateCondBr(b_.CreateIsNotNull(owner), ready, unavailable);
+    b_.SetInsertPoint(unavailable);
+    fail_path(ExceptionCategory::out_of_memory, make.at);
+    b_.SetInsertPoint(ready);
 
-      Control construction{control_, block("region.abandoned")};
-      control_ = &construction;
-      auto reserve = runtime("cod_lang_region_reserve", b_.getInt64Ty(),
-          {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
-      auto *offset = b_.CreateCall(reserve, {owner, integer(bytes), integer(alignment)}, "region.root.offset");
-      auto *reserved = block("region.root.reserved"), *failed = block("region.root.failed");
-      b_.CreateCondBr(b_.CreateICmpEQ(offset, integer(0)), reserved, failed);
-      b_.SetInsertPoint(failed);
-      fail_path(ExceptionCategory::unsound_runtime_typing, make.at);
-      b_.SetInsertPoint(reserved);
-      const auto items = make.initializer_items();
-      if (!items.empty()) {
-        auto *root = region_address(owner, offset, integer(bytes));
-        for (size_t i = 0; i < order.size(); ++i) {
-          const auto &value = *items[i]->children.back();
-          const auto &type = roots[order[i]].type;
-          const bool aggregate = inline_aggregate_type(type);
-          auto *operand = emit_expression(value, aggregate ? Projection::target : Projection::value);
-          if (!reachable()) break;
-          auto *destination = b_.CreateStructGEP(layout, root, order[i]);
-          if (aggregate) b_.CreateCall(bits_transfer(type), {destination, checked_address(operand, value, value.at)});
-          else {
-            auto *prepared = convert_value(operand, checked_.at(&value).type, type);
-            store_place(destination, prepared, StorageFormat{type});
-          }
+    Control construction{control_, block("region.abandoned")};
+    control_ = &construction;
+    auto reserve = runtime("cod_lang_region_reserve", b_.getInt64Ty(),
+        {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
+    auto *offset = b_.CreateCall(reserve, {owner, integer(bytes), integer(alignment)}, "region.root.offset");
+    auto *reserved = block("region.root.reserved"), *failed = block("region.root.failed");
+    b_.CreateCondBr(b_.CreateICmpEQ(offset, integer(0)), reserved, failed);
+    b_.SetInsertPoint(failed);
+    fail_path(ExceptionCategory::unsound_runtime_typing, make.at);
+    b_.SetInsertPoint(reserved);
+    const auto items = make.initializer_items();
+    if (!items.empty()) {
+      auto *root = region_address(owner, offset, integer(bytes));
+      for (size_t i = 0; i < order.size(); ++i) {
+        const auto &value = *items[i]->children.back();
+        const auto &type = roots[order[i]].type;
+        const bool aggregate = inline_aggregate_type(type);
+        auto *operand = emit_expression(value, aggregate ? Projection::target : Projection::value);
+        if (!reachable()) break;
+        auto *destination = b_.CreateStructGEP(layout, root, order[i]);
+        if (aggregate) b_.CreateCall(bits_transfer(type), {destination, checked_address(operand, value, value.at)});
+        else {
+          auto *prepared = convert_value(operand, checked_.at(&value).type, type);
+          store_place(destination, prepared, StorageFormat{type});
         }
       }
-      control_ = construction.parent;
-      auto *completed = reachable() ? block("region.initialized") : nullptr;
-      if (completed) b_.CreateBr(completed);
-      b_.SetInsertPoint(construction.exit);
-      b_.CreateCall(runtime("cod_lang_region_release", b_.getVoidTy(), {b_.getPtrTy()}), {owner});
-      b_.CreateBr(control_->exit);
-      if (!completed) return nullptr;
-      b_.SetInsertPoint(completed);
+    }
+    control_ = construction.parent;
+    auto *completed = reachable() ? block("region.initialized") : nullptr;
+    if (completed) b_.CreateBr(completed);
+    b_.SetInsertPoint(construction.exit);
+    b_.CreateCall(runtime("cod_lang_region_release", b_.getVoidTy(), {b_.getPtrTy()}), {owner});
+    b_.CreateBr(control_->exit);
+    if (!completed) return nullptr;
+    b_.SetInsertPoint(completed);
 
-      return owner;
-    });
+    return owner;
   }
   llvm::Value *acquire_region(const Expression &binding) {
     const auto *initializer = binding.children.front().get();
@@ -2270,30 +1750,25 @@ class LLVMEmission {
       owner = b_.CreateIntToPtr(b_.CreateExtractValue(result, 0), b_.getPtrTy());
     }
     if (!reachable()) return nullptr;
-    std::optional<size_t> holders;
-    const auto &fact = checked_.at(&binding);
-    if (fact.region_holder) holders.emplace(*fact.region_holder);
-    return lower_prepared(binding, holders, [&](size_t holder) -> llvm::Value * {
-      const auto action = std::ranges::find_if(scope_->actions, [&](const auto &entry) {
-        return entry.region_release && entry.action == &binding;
-      });
-      if (action == scope_->actions.end()) throw std::logic_error("uncollected region release");
-      auto *record = action->activation_record;
-      prepare_cleanup_record(*scope_, record, std::distance(scope_->actions.begin(), action));
-      b_.CreateStore(owner, b_.CreateStructGEP(action->layout, record, 1));
-      b_.CreateStore(record, scope_->head);
-      b_.CreateStore(owner, storage_.at(holder));
-      return empty_scalar();
+    const auto holder = checked_.at(&binding).region_holder.value();
+    const auto action = std::ranges::find_if(scope_->actions, [&](const auto &entry) {
+      return entry.region_release && entry.action == &binding;
     });
+    if (action == scope_->actions.end()) throw std::logic_error("uncollected region release");
+    auto *record = action->activation_record;
+    prepare_cleanup_record(*scope_, record, std::distance(scope_->actions.begin(), action));
+    b_.CreateStore(owner, b_.CreateStructGEP(action->layout, record, 1));
+    b_.CreateStore(record, scope_->head);
+    b_.CreateStore(owner, storage_.at(holder));
+    return empty_scalar();
   }
   llvm::Value *receive_exception_holder(const Expression &binding) {
     using Reception = std::pair<size_t, std::optional<size_t>>;
-    std::optional<std::optional<Reception>> choices;
     const auto &fact = checked_.at(&binding);
     const auto plan = fact.type == Type::never ? std::optional<Reception>{}
         : std::optional{Reception{fact.place.value(), fact.exception_owner}};
-    choices.emplace(plan);
-    return lower_prepared(binding, choices, [&](const auto &selected) {
+    {
+      const std::optional<Reception> selected = plan;
       if (!selected) return emit_expression(*binding.children.front());
       const auto [place, source] = *selected;
       auto [destination, inserted] = exception_holder_slots_.try_emplace(place, nullptr);
@@ -2320,14 +1795,13 @@ class LLVMEmission {
       b_.CreateStore(destination->second, b_.CreateStructGEP(action->layout, record, 1));
       b_.CreateStore(record, scope_->head);
       return static_cast<llvm::Value *>(empty_scalar());
-    });
+    }
   }
   llvm::Value *install_native_effect(const Expression &effect) {
     using Plan = std::pair<size_t, CheckedOperation::NativeAcquisition>;
-    std::optional<Plan> plans;
     const auto &operation = checked_.at(&effect);
-    plans.emplace(Plan{*operation.symbol, *operation.native_acquisition});
-    return lower_prepared(effect, plans, [&](const Plan &plan) -> llvm::Value * {
+    {
+      const Plan plan = Plan{*operation.symbol, *operation.native_acquisition};
       const auto &[symbol, acquisition] = plan;
       auto &scope = *native_effect_scope_;
       const auto action = std::ranges::find_if(scope.actions, [&](const auto &item) {
@@ -2347,12 +1821,11 @@ class LLVMEmission {
       b_.CreateStore(selected, binding);
       b_.CreateStore(record, scope.head);
       return empty_scalar();
-    });
+    }
   }
   llvm::Value *emit_attached_native_handle(const Expression &expr) {
-    std::optional<CheckedOperation::NativeAcquisition> plans;
-    plans.emplace(*checked_.at(&expr).native_acquisition);
-    return lower_prepared(expr, plans, [&](const auto &plan) -> llvm::Value * {
+    {
+      const CheckedOperation::NativeAcquisition plan = *checked_.at(&expr).native_acquisition;
       auto *owner = plan.parent_borrow ? binding_address(*plan.parent_borrow, plan.parent_place)
                                       : native_reborrow(load(storage_.at(*plan.parent_place)));
       auto *pair = native_handle_pair();
@@ -2361,7 +1834,7 @@ class LLVMEmission {
       if (!call_native_constructor(plan, b_.CreateStructGEP(pair, child, 0), owner)) return nullptr;
       b_.CreateStore(owner_word, b_.CreateStructGEP(pair, child, 1));
       return child;
-    });
+    }
   }
   llvm::Value *catch_matches(llvm::Value *category, size_t identity) {
     if (!identity) return b_.getTrue();
@@ -2389,7 +1862,7 @@ class LLVMEmission {
     for (size_t i = 1; i < expr.children.size(); ++i) {
       const auto &handler = *expr.children[i];
       if (handler.kind == Expression::Kind::block) {
-        if (!expr.deferred_catch()) finalizer = &handler;
+        finalizer = &handler;
         break;
       }
       const auto &fact = checked_.at(&handler);
@@ -2427,7 +1900,7 @@ class LLVMEmission {
     }
     b_.CreateBr(handled);
     b_.SetInsertPoint(handled);
-    if (finalizer) complete_cleanup([&] { emit_expression(*finalizer); }, CleanupBoundary::ordinary_finally);
+    if (finalizer) complete_cleanup([&] { emit_expression(*finalizer); });
     auto *done = block("try.continue");
     b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0)), done, control_->exit);
     b_.SetInsertPoint(done);
@@ -2447,28 +1920,12 @@ class LLVMEmission {
   llvm::Value *checked_address(llvm::Value *address, const Expression &expr, const Location &at) {
     return checked_address(address, (checked_.at(&expr).targets.contains(null_target)), at);
   }
-  static std::optional<DeferredInputs> deferred_inputs(const Expression &expr, const CheckedOperation &fact) {
-    if (expr.kind == Expression::Kind::block || fact.type == Type::never) return {};
-    DeferredInputs result{fact.argument_count(expr), {}};
-    for (size_t i = 0; i < fact.arguments.size(); ++i)
-      if (fact.arguments[i].mode == ArgumentMode::borrowed_handle)
-        result.handle_arguments.emplace(i, i);
-    return result;
-  }
   llvm::Value *prepare_value(const Expression &expr, size_t index, llvm::Value *value) {
     const auto &context = checked_;
     const auto &call = context.at(&expr);
     const auto &from = context.at(&call.argument(expr, index)).type;
     const auto &to = call.arguments.at(index).type;
     return from == to || from == Type::never ? value : convert_value(value, from, to);
-  }
-  template <typename Key, typename Emit>
-  llvm::Value *lower_prepared(const Expression &expr, const std::optional<Key> &plan, const Emit &emit) {
-    if (!plan) {
-      fail_path(ExceptionCategory::unsound_runtime_typing, expr.at);
-      return nullptr;
-    }
-    return emit(*plan);
   }
   llvm::Value *prepare_argument(const Expression &expr, size_t index,
                                 std::vector<llvm::Value *> *current_owners = nullptr) {
@@ -2483,242 +1940,63 @@ class LLVMEmission {
       (*current_owners)[index] = b_.CreateExtractValue(selected, 1, "effect.argument.owner");
       return b_.CreateExtractValue(selected, 0, "effect.argument.selection");
     }
-    const bool owning = call.arguments.at(index).mode == ArgumentMode::owning_exception;
-    if (owning) {
-      std::optional<std::pair<size_t, unsigned>> holders;
-      const auto &argument = checked_.at(&expr).arguments.at(index);
-      const auto &operand = checked_.at(&child);
+    const auto &argument = call.arguments.at(index);
+    const auto &operand = checked_.at(&child);
+    if (argument.mode == ArgumentMode::owning_exception) {
       if (!operand.exception_owner)
         throw std::logic_error("an owning exception argument lacks its checked holder");
-      holders.emplace(std::pair<size_t, unsigned>{*operand.exception_owner, tag(argument.type)});
-      return lower_prepared(child, holders, [&](const auto &selected) {
-        const auto &[holder, type_tag] = selected;
-        auto *layout = exception_input_layout();
-        auto *input = slot(layout, "exception.input");
-        b_.CreateStore(storage_.at(holder), b_.CreateStructGEP(layout, input, 0));
-        b_.CreateStore(exception_holder_slots_.at(holder), b_.CreateStructGEP(layout, input, 1));
-        auto *carrier = b_.CreateInsertValue(empty_scalar(), b_.CreatePtrToInt(input, b_.getInt64Ty()), 0);
-        return b_.CreateInsertValue(carrier, b_.getInt32(type_tag), 1);
-      });
+      const auto holder = *operand.exception_owner;
+      auto *layout = exception_input_layout();
+      auto *input = slot(layout, "exception.input");
+      b_.CreateStore(storage_.at(holder), b_.CreateStructGEP(layout, input, 0));
+      b_.CreateStore(exception_holder_slots_.at(holder), b_.CreateStructGEP(layout, input, 1));
+      auto *carrier = b_.CreateInsertValue(empty_scalar(), b_.CreatePtrToInt(input, b_.getInt64Ty()), 0);
+      return b_.CreateInsertValue(carrier, b_.getInt32(tag(argument.type)), 1);
     }
-    using Preparation = std::tuple<ArgumentMode, bool, std::optional<size_t>, bool>;
-    const auto prepare = [&](const Preparation &plan) -> llvm::Value * {
-      const auto [mode, binding_slot, reference_storage, mixed] = plan;
-      if (reference_storage) {
-        auto *storage = storage_.at(*reference_storage);
-        const auto construct = [&](llvm::Value *value) { store_incoming(*reference_storage, value); };
-        llvm::Value *target = storage;
-        if (mixed)
-          target = initialize_reference_target(child, storage, construct);
-        else {
-          auto *value = emit_expression(child);
-          if (!reachable()) return nullptr;
-          construct(value);
-        }
-        return reachable() ? pack_view(target, child) : nullptr;
-      }
-      if (checked_.at(&child).type.kind == Type::abstract_type) {
-        const auto *source = &child;
-        while (source->kind == Expression::Kind::grouped) source = source->children.front().get();
-        auto *binding = symbols_.at(*checked_.at(source).symbol);
-        auto *selected = b_.CreateLoad(binding->getValueType(), binding, "effect.current");
-        return b_.CreateExtractValue(selected, 0, "effect.selection");
-      }
-      auto *value = emit_expression(child, binding_slot ? Projection::slot : mode == ArgumentMode::value ? Projection::value : Projection::target);
-      if (!reachable()) return nullptr;
-      if (mode != ArgumentMode::value) {
-        if ((mode == ArgumentMode::borrowed_read && !checked_.at(&expr).destination_arguments) ||
-            (expr.kind == Expression::Kind::transfer && index == 0))
-          value = checked_address(value, child, child.at);
-        return pack_view(value, child);
-      }
-      value = prepare_value(expr, index, value);
-      return value;
-    };
-    std::optional<Preparation> alternatives;
-    const auto &argument = checked_.at(&expr).arguments.at(index);
-    const auto &storage = argument.reference_storage;
-    alternatives.emplace(Preparation{argument.mode, argument.binding_slot, storage ? std::optional{storage->place} : std::nullopt,
-                  storage && checked_.at(&child).mixed_view});
-    return lower_prepared(child, alternatives, prepare);
+    if (operand.type.kind == Type::abstract_type) {
+      const auto *source = &child;
+      while (source->kind == Expression::Kind::grouped) source = source->children.front().get();
+      auto *binding = symbols_.at(*checked_.at(source).symbol);
+      auto *selected = b_.CreateLoad(binding->getValueType(), binding, "effect.current");
+      return b_.CreateExtractValue(selected, 0, "effect.selection");
+    }
+    const auto projection = argument.binding_slot ? Projection::slot
+        : argument.mode == ArgumentMode::value ? Projection::value : Projection::target;
+    auto *value = emit_expression(child, projection);
+    if (!reachable()) return nullptr;
+    if (argument.mode == ArgumentMode::value) return prepare_value(expr, index, value);
+    if ((argument.mode == ArgumentMode::borrowed_read && !call.destination_arguments) ||
+        (expr.kind == Expression::Kind::transfer && index == 0))
+      value = checked_address(value, child, child.at);
+    return pack_view(value, child);
   }
-  std::vector<llvm::Value *> prepare_arguments(const Expression &expr,
-                                               std::span<llvm::Value *> here_values = {}, llvm::Value *first_place = nullptr,
+  std::vector<llvm::Value *> prepare_arguments(const Expression &expr, llvm::Value *first_place = nullptr,
                                                std::vector<llvm::Value *> *current_owners = nullptr) {
-    using Preparation = CheckedOperation::OperandPreparation;
-    std::vector<llvm::Value *> arguments;
     const auto &fact = checked_.at(&expr);
-    arguments.resize(fact.argument_count(expr));
-    const auto &schedule = fact.operand_preparation;
-    const auto count = schedule.empty() ? fact.argument_count(expr) : schedule.size();
-    for (size_t written = 0; written < count; ++written) {
-      const auto [kind, slot] = schedule.empty() ? Preparation{Preparation::Kind::ordinary, written} : schedule[written];
-      if (kind == Preparation::Kind::here) {
-        if (slot >= here_values.size()) throw std::logic_error("missing checked here operand slot");
-        here_values[slot] = prepare_here_argument(expr, slot);
-      } else if (first_place && slot == 0) arguments.front() = pack_view(first_place, fact.argument(expr, 0));
-      else arguments[slot] = prepare_argument(expr, slot, current_owners);
+    std::vector<llvm::Value *> arguments(fact.argument_count(expr));
+    for (size_t i = 0; i < arguments.size(); ++i) {
+      if (first_place && i == 0) arguments[i] = pack_view(first_place, fact.argument(expr, i));
+      else arguments[i] = prepare_argument(expr, i, current_owners);
       if (!reachable()) return {};
     }
     check_destination_arguments(expr, arguments);
     return arguments;
   }
   llvm::Value *emit_text_transfer(const Expression &expr, llvm::Value *destination = nullptr) {
-    const auto arguments = prepare_arguments(expr, {}, destination);
+    const auto arguments = prepare_arguments(expr, destination);
     return reachable() ? propagate(invoke(expr, arguments)) : nullptr;
   }
-  llvm::StructType *prepared_producer_layout(size_t operands, size_t owners) {
-    std::vector<llvm::Type *> fields(operands, scalar_);
-    fields.insert(fields.end(), owners, b_.getPtrTy());
-    return llvm::StructType::get(context_, fields);
-  }
-  llvm::StructType *prepared_connection_layout() {
-    return llvm::StructType::get(context_, {b_.getPtrTy(), here_});
-  }
-  template <typename Emit>
-  llvm::Value *with_prepared_producer(const Expression &expr, const Emit &emit) {
-    std::optional<CheckedOperation::PreparedProducer> producers;
-    producers.emplace(checked_.at(&expr).prepared_producer.value());
-    return lower_prepared(expr, producers, [&](const auto &producer) {
-      const auto method = program_->instances[producer.instance].method;
-      return emit(producer, input_frame(method));
-    });
-  }
-  llvm::Value *prepare_source(const Expression &expr) {
-    if (checked_.at(&expr).open_pipeline_operands) {
-      const auto &operands = *checked_.at(&expr).open_pipeline_operands;
-      auto *layout = llvm::ArrayType::get(here_, operands.size());
-      auto *backing = slot(layout, "here.open.stages");
-      for (size_t i = 0; i < operands.size(); ++i) {
-        auto *address = b_.CreateInBoundsGEP(layout, backing, {b_.getInt32(0), b_.getInt64(i)});
-        b_.CreateStore(load(pipeline_operand_slot(*operands[i])), address);
-      }
-      return b_.CreateInsertValue(llvm::Constant::getNullValue(here_), backing, 1);
-    }
-    if (checked_.at(&expr).pipeline_preparation) {
-      std::optional<CheckedOperation::PipelinePreparation> plans;
-      plans.emplace(checked_.at(&expr).pipeline_preparation.value());
-      return lower_prepared(expr, plans, [&](const auto &plan) {
-        return prepare_traversal(plan);
-      });
-    }
-    return with_prepared_producer(expr, [&](const auto &producer, const auto &frame) -> llvm::Value * {
-      const auto operands = prepare_arguments(expr);
-      if (!reachable()) return nullptr;
-      const auto &owners = frame.owners;
-      llvm::Value *activation = null_pointer();
-      if (!operands.empty() || !owners.empty()) {
-        auto *storage = prepared_producer_layout(operands.size(), owners.size());
-        activation = slot(storage, "here.source.operands");
-        for (size_t i = 0; i < operands.size(); ++i)
-          b_.CreateStore(operands[i], b_.CreateStructGEP(storage, activation, i));
-        auto i = operands.size();
-        for (const auto &[owner, input] : owners) {
-          const auto actual = producer.owners.at(null_target - 1 - owner);
-          b_.CreateStore(owner_identity(actual, expr.at), b_.CreateStructGEP(storage, activation, i++));
-        }
-      }
-      // The opening call selects the checked entry for its actual consumer.
-      return b_.CreateInsertValue(llvm::Constant::getNullValue(here_), activation, 1);
-    });
-  }
-  llvm::Value *connect_prepared_stage(llvm::Value *stage, llvm::Value *upstream) {
-    auto *layout = prepared_connection_layout();
-    auto *connection = slot(layout, "here.connection");
-    b_.CreateStore(b_.CreateExtractValue(stage, 1), b_.CreateStructGEP(layout, connection, 0));
-    b_.CreateStore(upstream, b_.CreateStructGEP(layout, connection, 1));
-    return b_.CreateInsertValue(stage, connection, 1);
-  }
-  llvm::Value *connect_prepared_pipeline(std::span<const Expression *const> traversal, const auto &operand) {
-    auto *upstream = operand(traversal.front());
-    for (const auto *stage : traversal.subspan(1)) upstream = connect_prepared_stage(operand(stage), upstream);
-    return upstream;
-  }
-  llvm::Value *prepare_traversal(const CheckedOperation::PipelinePreparation &plan) {
-    std::map<const Expression *, llvm::Value *> prepared;
-    for (const auto *operand : plan.written) {
-      auto *value = plan.lexical_source && operand == plan.traversal.front()
-          ? here_arguments_.at(*plan.lexical_source) : prepare_source(*operand);
-      if (!reachable()) return nullptr;
-      prepared.emplace(operand, value);
-    }
-    return connect_prepared_pipeline(plan.traversal, [&](const Expression *operand) {
-      const auto found = prepared.find(operand);
-      return found == prepared.end() ? load(pipeline_operand_slot(*operand)) : found->second;
-    });
-  }
-  llvm::AllocaInst *pipeline_operand_slot(const Expression &expr) {
-    auto [position, inserted] = pipeline_operands_.try_emplace(&expr, nullptr);
-    if (inserted) position->second = slot(here_, "here.saved.operand");
-    return position->second;
-  }
-  std::vector<llvm::Value *> load_prepared_operands(const Expression &expr, llvm::Value *prepared) {
-    // The consumer always runs in the supplying activation, which has the original owner evidence.
-    const auto &fact = checked_.at(&expr);
-    auto *backing = b_.CreateExtractValue(prepared, 1);
-    std::vector<llvm::Value *> operands(fact.argument_count(expr));
-    auto *layout = prepared_producer_layout(operands.size(), 0);
-    for (size_t i = 0; i < operands.size(); ++i) {
-      auto *address = b_.CreateStructGEP(layout, backing, i);
-      operands[i] = b_.CreateLoad(scalar_, address);
-    }
-    return operands;
-  }
-  llvm::Value *save_pipeline_operands(const CheckedOperation::PipelinePreparation &plan) {
-    for (const auto *operand : plan.written) {
-      auto *value = prepare_source(*operand);
-      if (!reachable()) return nullptr;
-      b_.CreateStore(value, pipeline_operand_slot(*operand));
-    }
-    return empty_scalar();
-  }
-  std::vector<llvm::Value *> prepare_pipeline(const Expression &expr,
-      const CheckedOperation::PipelinePreparation &plan, std::span<llvm::Value *> here_values) {
-    const auto *receiver = plan.traversal.back();
-    std::map<const Expression *, llvm::Value *> prepared;
-    std::vector<llvm::Value *> arguments;
-    bool fresh_receiver = false;
-    for (const auto *operand : plan.written) {
-      if (operand == receiver) { arguments = prepare_arguments(expr); fresh_receiver = true; }
-      else if (operand == plan.traversal.front() && plan.lexical_source) prepared.emplace(operand, here_arguments_.at(*plan.lexical_source));
-      else prepared.emplace(operand, prepare_source(*operand));
-      if (!reachable()) return {};
-    }
-    const auto stored = [&](const Expression *operand) {
-      const auto found = prepared.find(operand);
-      return found == prepared.end() ? load(pipeline_operand_slot(*operand)) : found->second;
-    };
-    if (!fresh_receiver) arguments = load_prepared_operands(expr, stored(receiver));
-    if (plan.traversal.size() > 1) {
-      const auto upstream = std::span{plan.traversal}.first(plan.traversal.size() - 1);
-      here_values[1] = connect_prepared_pipeline(upstream, stored);
-    }
-    return arguments;
-  }
-  llvm::Value *prepare_here_argument(const Expression &expr, size_t slot) {
-    std::optional<CheckedOperation::HereArgument> arguments;
-    arguments.emplace(checked_.at(&expr).here_arguments.at(slot));
-    return lower_prepared(expr, arguments, [&](const auto &input) {
-      if (input.traversal) return prepare_traversal(*input.traversal);
-      if (input.source) return prepare_source(*input.source);
-      return here_arguments_.at(input.lexical.value());
-    });
-  }
-  void check_destination_arguments(const Expression &expr, const std::vector<llvm::Value *> &arguments,
-                                   bool deferred = false) {
-    if (checked_.at(&expr).destination_arguments) for (size_t i = 0; i < expr.children.size(); ++i) {
-      std::optional<bool> alternatives;
-      alternatives.emplace(checked_.at(&expr).arguments.at(i).mode == ArgumentMode::borrowed_read);
-      lower_prepared(*expr.children[i], alternatives, [&](bool read) {
-        if (read) {
-          auto *address = view_address(arguments[i]);
-          if (checked_.at(&expr).arguments[i].binding_slot) {
-            address = b_.CreateLoad(b_.getPtrTy(), address);
-            checked_address(address, deferred || (checked_.at(&expr).nullable_arguments.contains(i)), expr.at);
-          } else checked_address(address, *expr.children[i], expr.at);
-        }
-        return b_.getTrue();
-      });
+  void check_destination_arguments(const Expression &expr, const std::vector<llvm::Value *> &arguments) {
+    const auto &call = checked_.at(&expr);
+    if (!call.destination_arguments) return;
+    for (size_t i = 0; i < expr.children.size(); ++i) {
+      const auto &argument = call.arguments.at(i);
+      if (argument.mode != ArgumentMode::borrowed_read) continue;
+      auto *address = view_address(arguments[i]);
+      if (argument.binding_slot) {
+        address = b_.CreateLoad(b_.getPtrTy(), address);
+        checked_address(address, call.nullable_arguments.contains(i), expr.at);
+      } else checked_address(address, *expr.children[i], expr.at);
     }
   }
   llvm::Value *assign_prepared(const Expression &expr, const std::vector<llvm::Value *> &arguments) {
@@ -2728,13 +2006,12 @@ class LLVMEmission {
       return destination;
     }
     auto *target = view_address(arguments[1]);
-    std::optional<std::optional<size_t>> owners;
-    owners.emplace(checked_.at(expr.children.front().get()).regional_product_holder);
-    return lower_prepared(expr, owners, [&](const auto &holder) {
+    {
+      const std::optional<size_t> holder = checked_.at(expr.children.front().get()).regional_product_holder;
       if (holder) b_.CreateStore(regional_scalar_locator(load(storage_.at(*holder)), target), destination);
       else b_.CreateStore(target, destination);
       return target;
-    });
+    }
   }
   template <typename Construct>
   llvm::Value *initialize_reference_target(const Expression &source, llvm::Value *storage, const Construct &initialize) {
@@ -2752,12 +2029,11 @@ class LLVMEmission {
     return selected;
   }
   llvm::Value *declare_local(const Expression &declaration) {
-    std::optional<std::tuple<bool, bool, bool>> alternatives;
     const auto &binding = checked_.at(&declaration);
     const auto &source = checked_.at(declaration.children.front().get());
     const bool same_place = binding.place && binding.place == source.place;
-    alternatives.emplace(std::tuple<bool, bool, bool>{binding.view, binding.mixed_view, same_place});
-    return lower_prepared(declaration, alternatives, [&](auto mode) {
+    {
+      const std::tuple<bool, bool, bool> mode = std::tuple<bool, bool, bool>{binding.view, binding.mixed_view, same_place};
       const auto [borrowed, mixed, same_place] = mode;
       const auto &binding = checked_.at(&declaration);
       llvm::Value *address = binding.place ? static_cast<llvm::Value *>(storage_.at(*binding.place)) : null_pointer();
@@ -2778,7 +2054,7 @@ class LLVMEmission {
       }
       if (auto *slot = bindings_.at(*binding.binding).reference_slot) b_.CreateStore(address, slot);
       return empty_scalar();
-    });
+    }
   }
   llvm::Value *emit_text_access(const Expression &expr, BuiltinOperation operation, bool discard) {
     auto *view = emit_expression(*expr.children[0], Projection::target);
@@ -2807,12 +2083,7 @@ class LLVMEmission {
     if (!reachable()) return nullptr;
     past = unpack(past, Type::uint64);
     auto *result = slot(b_.getPtrTy(), "text.slice");
-    std::optional<size_t> owners;
-    const auto &access = checked_.at(&expr);
-    if (access.type != Type::never) owners.emplace(access.lexical_allocation->owner);
-    auto *owner = lower_prepared(expr, owners, [&](size_t actual) {
-      return owner_identity(actual, expr.at);
-    });
+    auto *owner = owner_identity(checked_.at(&expr).lexical_allocation.value().owner, expr.at);
     auto slice = runtime("cod_lang_lexical_text_slice", b_.getInt32Ty(),
         {b_.getPtrTy(), b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy()});
     auto *status = b_.CreateCall(slice, {owner, view, first, past, result});
@@ -2830,12 +2101,11 @@ class LLVMEmission {
   llvm::Value *emit_expression(const Expression &expr, Projection projection = Projection::value, bool discard = false) {
     if (discard && projection == Projection::value &&
         (checked_.at(&expr).discarded_view)) {
-      std::optional<bool> alternatives;
-      alternatives.emplace(checked_.at(&expr).discarded_view);
-      return lower_prepared(expr, alternatives, [&](bool view_only) -> llvm::Value * {
+      {
+        const bool view_only = checked_.at(&expr).discarded_view;
         emit_expression(expr, view_only ? Projection::target : Projection::value, true);
         return reachable() ? empty_scalar() : nullptr;
-      });
+      }
     }
     const bool abrupt = (checked_.at(&expr).type == Type::never);
     // An abrupt mixed branch has no target/slot result. Retain its intermediate
@@ -2845,10 +2115,9 @@ class LLVMEmission {
       projection = Projection::receiver;
     llvm::Value *value;
     if (projection == Projection::receiver) {
-      std::optional<unsigned> alternatives;
       const auto &fact = checked_.at(&expr);
-      alternatives.emplace(fact.mixed_view ? 2u : fact.view ? 1u : 0u);
-      value = lower_prepared(expr, alternatives, [&](unsigned kind) -> llvm::Value * {
+      const unsigned alternatives = fact.mixed_view ? 2u : fact.view ? 1u : 0u;
+      value = [&](unsigned kind) -> llvm::Value * {
         if (!kind) return emit_expression(expr, Projection::value, discard);
         if (kind == 2) return emit_checked_expression(expr, projection, discard);
         auto *target = emit_expression(expr, Projection::target, discard);
@@ -2856,7 +2125,7 @@ class LLVMEmission {
         // Receiver-only target encoding: no value type or owned payload. Valid
         // materialized values have nonzero tags and keep normal payload cleanup.
         return b_.CreateInsertValue(empty_scalar(), b_.CreatePtrToInt(target, b_.getInt64Ty()), 0);
-      });
+      }(alternatives);
     } else value = emit_checked_expression(expr, projection, discard);
     if (abrupt) {
       if (reachable()) b_.CreateUnreachable();
@@ -2864,15 +2133,14 @@ class LLVMEmission {
     }
     if (expr.checked_ref_argument && projection == Projection::target && reachable()) {
       using Presence = CheckedOperation::CheckedRefPresence;
-      std::optional<Presence> alternatives;
-      alternatives.emplace(checked_.at(&expr).checked_ref_presence);
-      return lower_prepared(expr, alternatives, [&](Presence presence) -> llvm::Value * {
+      {
+        const Presence presence = checked_.at(&expr).checked_ref_presence;
         if (presence == Presence::definite_absence) {
           fail_path(ExceptionCategory::null_pointer, *expr.checked_ref_argument);
           return nullptr;
         }
         return checked_address(value, presence == Presence::possible_absence, *expr.checked_ref_argument);
-      });
+      }
     }
     return value;
   }
@@ -2900,13 +2168,9 @@ class LLVMEmission {
     return selected;
   }
   llvm::Value *emit_joined_bits(const Expression &join, const Expression &arm, bool discard) {
-    std::optional<Projection> alternatives;
     const auto &fact = checked_.at(&arm);
     const auto source = checked_.at(&join).scalar_value_join ? result_source(fact) : Projection::value;
-    alternatives.emplace(source);
-    return lower_prepared(arm, alternatives, [&](Projection source) {
-      return emit_projected_value(arm, source, discard);
-    });
+    return emit_projected_value(arm, source, discard);
   }
   llvm::Value *emit_case_scope(const Expression &body) {
     const auto arguments = prepare_arguments(body);
@@ -3037,9 +2301,8 @@ class LLVMEmission {
           }
         } else {
           emit_case_item(breaking, item.case_resumes ? next : nullptr, [&] {
-            std::optional<bool> paths;
-            paths.emplace(checked_.at(&item).case_arm_completes);
-            auto *value = lower_prepared(body, paths, [&](bool completes) -> llvm::Value * {
+            const bool paths = checked_.at(&item).case_arm_completes;
+            auto *value = [&](bool completes) -> llvm::Value * {
               if (!completes) {
                 emit_expression(body, Projection::value, true);
                 if (reachable()) b_.CreateUnreachable();
@@ -3048,7 +2311,7 @@ class LLVMEmission {
               if (!result_view) return emit_joined_bits(expr, body, discard);
               auto *address = emit_expression(body, Projection::target, discard);
               return reachable() ? case_view(address) : nullptr;
-            });
+            }(paths);
             if (reachable()) {
               incoming.emplace_back(value, b_.GetInsertBlock());
               b_.CreateBr(join);
@@ -3095,201 +2358,6 @@ class LLVMEmission {
     b_.CreateBr(control_->exit);
     b_.SetInsertPoint(valid);
   }
-  llvm::Value *pack_total(llvm::Value *descriptor) {
-    return b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(value_pack_, descriptor, 2));
-  }
-  llvm::Value *pack_segment(llvm::Value *segments, llvm::Value *number) {
-    return b_.CreateGEP(value_pack_segment_, segments, number);
-  }
-  void copy_pack_values(llvm::Value *source, llvm::Value *destination, llvm::Value *length) {
-    auto *start = b_.GetInsertBlock();
-    auto *loop = block("pack.copy.next"), *element = block("pack.copy.element"), *done = block("pack.copy.done");
-    b_.CreateBr(loop);
-    b_.SetInsertPoint(loop);
-    auto *index = b_.CreatePHI(b_.getInt64Ty(), 2);
-    index->addIncoming(integer(0), start);
-    b_.CreateCondBr(b_.CreateICmpULT(index, length), element, done);
-    b_.SetInsertPoint(element);
-    auto *type = b_.getInt64Ty();
-    auto *value = b_.CreateLoad(type, b_.CreateGEP(type, source, index));
-    b_.CreateStore(value, b_.CreateGEP(type, destination, index));
-    index->addIncoming(b_.CreateAdd(index, integer(1)), element);
-    b_.CreateBr(loop);
-    b_.SetInsertPoint(done);
-  }
-  void snapshot_forwarded_pack(llvm::Value *source, llvm::Value *destination) {
-    auto *segments = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(value_pack_, source, 0));
-    auto *count = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(value_pack_, source, 1));
-    auto *start = b_.GetInsertBlock();
-    auto *loop = block("pack.forward.next"), *element = block("pack.forward.segment"), *done = block("pack.forward.done");
-    b_.CreateBr(loop);
-    b_.SetInsertPoint(loop);
-    auto *number = b_.CreatePHI(b_.getInt64Ty(), 2);
-    auto *offset = b_.CreatePHI(b_.getInt64Ty(), 2);
-    number->addIncoming(integer(0), start);
-    offset->addIncoming(integer(0), start);
-    b_.CreateCondBr(b_.CreateICmpULT(number, count), element, done);
-    b_.SetInsertPoint(element);
-    auto *segment = pack_segment(segments, number);
-    auto *data = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(value_pack_segment_, segment, 0));
-    auto *length = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(value_pack_segment_, segment, 1));
-    copy_pack_values(data, b_.CreateGEP(b_.getInt64Ty(), destination, offset), length);
-    auto *next = b_.GetInsertBlock();
-    number->addIncoming(b_.CreateAdd(number, integer(1)), next);
-    offset->addIncoming(b_.CreateAdd(offset, length), next);
-    b_.CreateBr(loop);
-    b_.SetInsertPoint(done);
-  }
-  void check_pack_capacity(llvm::Value *valid, const Location &at) {
-    auto *ready = block("pack.capacity.valid"), *invalid = block("pack.capacity.invalid");
-    b_.CreateCondBr(valid, ready, invalid);
-    b_.SetInsertPoint(invalid);
-    fail_path(ExceptionCategory::invalid_capacity, at);
-    b_.SetInsertPoint(ready);
-  }
-  llvm::Value *pack_count_after(llvm::Value *total, llvm::Value *length, const Location &at) {
-    auto *next = b_.CreateAdd(total, length);
-    check_pack_capacity(b_.CreateICmpUGE(next, total), at);
-    return next;
-  }
-  llvm::Value *snapshot_pack_operand(const Expression &operand, llvm::Value *source, bool forwarded,
-      llvm::Value *length, llvm::AllocaInst *head) {
-    const auto &layout = module_.getDataLayout();
-    auto *element = b_.getInt64Ty();
-    const auto stride = layout.getTypeAllocSize(element).getFixedValue();
-    const auto address_bits = std::min(64u, layout.getPointerSizeInBits());
-    const auto byte_limit = UINT64_MAX >> (64 - address_bits);
-    check_pack_capacity(b_.CreateICmpULE(length, integer(byte_limit / stride)), operand.at);
-    auto *start = b_.GetInsertBlock();
-    auto *copy = block("pack.snapshot"), *ready = block("pack.snapshot.ready");
-    b_.CreateCondBr(b_.CreateICmpNE(length, integer(0)), copy, ready);
-    b_.SetInsertPoint(copy);
-    auto allocate = runtime("cod_lang_lexical_extent_allocate", b_.getPtrTy(),
-        {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
-    auto *storage = b_.CreateCall(allocate, {head, b_.CreateMul(length, integer(stride)),
-                                            integer(layout.getABITypeAlign(element).value())});
-    auto *allocated = block("pack.extent.allocated"), *oom = block("pack.extent.oom");
-    b_.CreateCondBr(b_.CreateIsNotNull(storage), allocated, oom);
-    b_.SetInsertPoint(oom);
-    fail_path(ExceptionCategory::out_of_memory, operand.at);
-    b_.SetInsertPoint(allocated);
-    if (forwarded) snapshot_forwarded_pack(source, storage);
-    else copy_pack_values(array_data(source, element), storage, length);
-    auto *copied = b_.GetInsertBlock();
-    b_.CreateBr(ready);
-    b_.SetInsertPoint(ready);
-    auto *result = b_.CreatePHI(b_.getPtrTy(), 2);
-    result->addIncoming(null_pointer(), start);
-    result->addIncoming(storage, copied);
-    return result;
-  }
-  llvm::Value *emit_value_pack_call(const Expression &expr, size_t callee, const CheckedOperation::ValuePack &plan) {
-    const auto &instance = program_->instances[callee];
-    auto *head = slot(b_.getPtrTy(), "pack.extents");
-    auto *descriptor = slot(value_pack_, "pack.descriptor");
-    const auto segment_count = plan.operands.size() - plan.fixed_count;
-    auto *segments = slot(llvm::ArrayType::get(value_pack_segment_, std::max(size_t{1}, segment_count)), "pack.segments");
-    auto *result = slot(scalar_, "pack.result");
-    Control preparation{control_, block("pack.release")};
-    control_ = &preparation;
-    b_.CreateStore(null_pointer(), head);
-    llvm::Value *total = integer(0);
-    std::vector<llvm::Value *> arguments;
-    using Operand = CheckedOperation::ValuePack::Operand;
-    for (size_t i = 0; i < plan.operands.size(); ++i) {
-      const auto mode = plan.operands[i];
-      const auto &operand = *expr.children[i];
-      if (mode == Operand::fixed) {
-        arguments.push_back(prepare_argument(expr, i));
-        if (!reachable()) break;
-        continue;
-      }
-      llvm::Value *length = integer(0), *storage = null_pointer();
-      if (mode == Operand::value) {
-        auto *value = emit_expression(operand);
-        if (!reachable()) break;
-        value = convert(value, checked_.at(&operand).type, Type::uint64);
-        length = integer(1);
-        total = pack_count_after(total, length, operand.at);
-        storage = slot(b_.getInt64Ty(), "pack.scalar");
-        b_.CreateStore(value, storage);
-      } else if (mode == Operand::spread) {
-        auto *source = emit_expression(operand, Projection::target);
-        if (!reachable()) break;
-        source = checked_address(source, operand, operand.at);
-        std::optional<bool> shapes;
-        const auto type = checked_.at(&operand).type.kind;
-        if (type != Type::never) shapes.emplace(type == Type::arguments);
-        auto *extent = lower_prepared(operand, shapes, [&](bool forwarded) -> llvm::Value * {
-          auto *selected = forwarded ? view_address(b_.CreateLoad(scalar_, source)) : source;
-          auto *count = forwarded ? pack_total(selected) : array_length(selected);
-          auto *next = pack_count_after(total, count, operand.at);
-          auto *backing = snapshot_pack_operand(operand, selected, forwarded, count, head);
-          auto *segment = b_.CreateStructGEP(value_pack_, descriptor, 2);
-          b_.CreateStore(next, segment);
-          auto *selection = b_.CreateInsertValue(llvm::PoisonValue::get(value_pack_segment_), backing, 0);
-          return b_.CreateInsertValue(selection, count, 1);
-        });
-        total = pack_total(descriptor);
-        storage = b_.CreateExtractValue(extent, 0);
-        length = b_.CreateExtractValue(extent, 1);
-      }
-      auto *entry = pack_segment(segments, integer(i - plan.fixed_count));
-      b_.CreateStore(storage, b_.CreateStructGEP(value_pack_segment_, entry, 0));
-      b_.CreateStore(length, b_.CreateStructGEP(value_pack_segment_, entry, 1));
-    }
-    if (reachable()) {
-      b_.CreateStore(segments, b_.CreateStructGEP(value_pack_, descriptor, 0));
-      b_.CreateStore(integer(segment_count), b_.CreateStructGEP(value_pack_, descriptor, 1));
-      b_.CreateStore(total, b_.CreateStructGEP(value_pack_, descriptor, 2));
-      arguments.push_back(pack(b_.CreatePtrToInt(descriptor, b_.getInt64Ty()), Type::uint64));
-      auto *target = methods_[instance.method];
-      auto *value = propagate(native_call(expr, target, instance.method, std::move(arguments)));
-      if (reachable()) b_.CreateStore(value, result);
-    }
-    const bool completed = reachable();
-    if (completed) b_.CreateBr(preparation.exit);
-    b_.SetInsertPoint(preparation.exit);
-    auto release = runtime("cod_lang_lexical_allocations_release", b_.getVoidTy(), {b_.getPtrTy()});
-    b_.CreateCall(release, {load(head)});
-    control_ = preparation.parent;
-    if (!completed) {
-      b_.CreateBr(control_->exit);
-      return nullptr;
-    }
-    auto *done = block("pack.completed");
-    b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0)), done, control_->exit);
-    b_.SetInsertPoint(done);
-    return load(result);
-  }
-  llvm::Value *pack_element_address(llvm::Value *descriptor, llvm::Value *index, const Location &at) {
-    if (bounds_checks_) check_index_bounds(index, pack_total(descriptor), false, at);
-    auto *segments = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(value_pack_, descriptor, 0));
-    auto *count = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(value_pack_, descriptor, 1));
-    auto *start = b_.GetInsertBlock();
-    auto *search = block("pack.index.search"), *candidate = block("pack.index.segment");
-    auto *next = block("pack.index.next"), *found = block("pack.index.found"), *invalid = block("pack.index.invalid");
-    b_.CreateBr(search);
-    b_.SetInsertPoint(search);
-    auto *number = b_.CreatePHI(b_.getInt64Ty(), 2);
-    auto *remaining = b_.CreatePHI(b_.getInt64Ty(), 2);
-    number->addIncoming(integer(0), start);
-    remaining->addIncoming(index, start);
-    b_.CreateCondBr(b_.CreateICmpULT(number, count), candidate, invalid);
-    b_.SetInsertPoint(candidate);
-    auto *segment = pack_segment(segments, number);
-    auto *length = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(value_pack_segment_, segment, 1));
-    b_.CreateCondBr(b_.CreateICmpULT(remaining, length), found, next);
-    b_.SetInsertPoint(next);
-    number->addIncoming(b_.CreateAdd(number, integer(1)), next);
-    remaining->addIncoming(b_.CreateSub(remaining, length), next);
-    b_.CreateBr(search);
-    b_.SetInsertPoint(invalid);
-    b_.CreateUnreachable();
-    b_.SetInsertPoint(found);
-    auto *data = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(value_pack_segment_, segment, 0));
-    return b_.CreateGEP(b_.getInt64Ty(), data, remaining);
-  }
   llvm::Value *emit_indexed_address(const Expression &expr) {
     const auto &array = *expr.children[0];
     auto *view = emit_expression(array, Projection::target);
@@ -3298,34 +2366,21 @@ class LLVMEmission {
     const auto &index_expr = *expr.children[1];
     auto *index_value = emit_expression(index_expr);
     if (!reachable()) return nullptr;
-    std::optional<std::pair<std::optional<size_t>, Type::Kind>> alternatives;
-    do {
-      const auto &type = checked_.at(&array).type;
-      const auto index = checked_.at(&index_expr).type.kind;
-      if (index == Type::never) break;
-      if (type.kind == Type::array) alternatives.emplace(std::pair<std::optional<size_t>, Type::Kind>{type.identity, index});
-      else if (type.kind == Type::arguments) alternatives.emplace(std::pair<std::optional<size_t>, Type::Kind>{std::nullopt, index});
-    } while (false);
-    return lower_prepared(expr, alternatives, [&](const auto &selection) -> llvm::Value * {
-      const auto &[schema, index_kind] = selection;
-      if (!schema) {
-        auto *descriptor = view_address(b_.CreateLoad(scalar_, view));
-        return pack_element_address(descriptor, convert(index_value, Type{index_kind}, Type::uint64), expr.at);
-      }
-      const auto &shape = program_->arrays.at(*schema);
-      auto *index = b_.CreateZExtOrTrunc(convert(index_value, Type{index_kind}, shape.index), b_.getInt64Ty());
-      if (bounds_checks_) check_index_bounds(index, array_length(view), shape.index == Type::integer, expr.at);
-      auto *element = inline_layout(shape.element);
-      return b_.CreateGEP(element, array_data(view, element), index);
-    });
+    const auto &array_type = checked_.at(&array).type;
+    if (array_type.kind != Type::array) throw std::logic_error("indexed place without a checked array type");
+    const auto &shape = program_->arrays.at(array_type.identity);
+    const auto &index_type = checked_.at(&index_expr).type;
+    auto *index = b_.CreateZExtOrTrunc(convert(index_value, index_type, shape.index), b_.getInt64Ty());
+    if (bounds_checks_) check_index_bounds(index, array_length(view), shape.index == Type::integer, expr.at);
+    auto *element = inline_layout(shape.element);
+    return b_.CreateGEP(element, array_data(view, element), index);
   }
   llvm::Value *emit_regional_initializer(const Expression &expr, llvm::Value *destination, size_t written) {
     using Plan = std::tuple<size_t, size_t, size_t, std::optional<size_t>>;
-    std::optional<Plan> plans;
     const auto &operation = checked_.at(&expr);
     const auto constructor = *operation.sum_constructor;
-    plans.emplace(Plan{constructor.sum, constructor.alternative, *operation.regional_sum_holder, operation.callee});
-    return lower_prepared(expr, plans, [&](const Plan &plan) -> llvm::Value * {
+    {
+      const Plan plan = Plan{constructor.sum, constructor.alternative, *operation.regional_sum_holder, operation.callee};
       const auto [sum, alternative, holder, callee] = plan;
       const SumConstructor constructor{sum, alternative};
       const auto &description = program_->sums.at(sum).alternatives.at(alternative);
@@ -3364,22 +2419,21 @@ class LLVMEmission {
       for (const auto &[selection, field] : edges)
         b_.CreateStore(regional_scalar_locator(owner, load(selection)), field);
       return destination;
-    });
+    }
   }
   llvm::Value *emit_checked_expression(const Expression &expr, Projection projection, bool discard) {
     const bool read = carries_value(projection);
     using K = Expression::Kind;
     const auto &fact = checked_.at(&expr);
     if (expr.kind == K::call && (checked_.at(&expr).builtin == BuiltinOperation::array_transfer)) {
-      std::optional<std::tuple<bool, Type::Kind, size_t>> alternatives;
       const auto &operation = checked_.at(&expr);
       const bool builtin = operation.builtin == BuiltinOperation::array_transfer;
       auto element = Type{Type::void_type};
       if (builtin && operation.operand_type.kind == Type::array)
         element = program_->arrays.at(operation.operand_type.identity).element;
       if (!inline_aggregate_type(element)) element = Type{Type::void_type};
-      alternatives.emplace(std::tuple<bool, Type::Kind, size_t>{builtin, element.kind, element.identity});
-      return lower_prepared(expr, alternatives, [&](const auto &selected) -> llvm::Value * {
+      {
+        const std::tuple<bool, Type::Kind, size_t> selected = std::tuple<bool, Type::Kind, size_t>{builtin, element.kind, element.identity};
         const auto [builtin, kind, identity] = selected;
         if (!builtin) return emit_checked_expression(expr, projection, discard);
         auto *address = emit_indexed_address(expr);
@@ -3393,42 +2447,26 @@ class LLVMEmission {
           b_.CreateCall(bits_transfer(Type{kind, {}, identity}), {address, value});
         } else assign_place(address, convert_result(expr, source, value, &CheckedOperation::type), expr);
         return !read ? address : discard ? empty_scalar() : load_place(address, expr);
-      });
+      }
     }
-    if (fact.enum_literal) {
-      std::optional<std::pair<size_t, std::uint64_t>> alternatives;
-      const auto &member = checked_.at(&expr);
-      alternatives.emplace(std::pair<size_t, std::uint64_t>{member.type.identity, member.integer});
-      return lower_prepared(expr, alternatives, [&](const auto &member) {
-        const auto &[id, code] = member;
-        const Type type{Type::enumeration, program_->enums[id].source->name, id};
-        return pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(type)), code), type);
-      });
-    }
-    if (expr.kind == K::typed_expression &&
-        (checked_.at(&expr).enum_decode)) {
-      std::optional<std::optional<size_t>> domains;
-      const auto &checked = checked_.at(&expr);
-      domains.emplace(checked.enum_decode ? std::optional{checked.type.identity} : std::nullopt);
-      return lower_prepared(expr, domains, [&](auto id) -> llvm::Value * {
-        const auto &operand = *expr.children.front();
-        if (!id) return emit_expression(operand, projection, discard);
-        auto *value = emit_expression(operand);
-        if (!reachable()) return nullptr;
-        const auto &domain = program_->enums.at(*id);
-        auto *code = unpack(value, domain.backing);
-        auto *valid = block("enum.code.valid"), *invalid = block("enum.code.invalid");
-        auto *match = b_.CreateSwitch(code, invalid);
-        for (size_t i = 0; i < domain.members.size(); ++i) {
-          const auto &member = domain.members[i];
-          if (member.canonical == i)
-            match->addCase(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(code->getType()), member.code), valid);
-        }
-        b_.SetInsertPoint(invalid);
-        fail_path(ExceptionCategory::type_assertion_failed, expr.at);
-        b_.SetInsertPoint(valid);
-        return discard ? empty_scalar() : pack(code, checked_.at(&expr).type);
-      });
+    if (fact.enum_literal)
+      return pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(fact.type)), fact.integer), fact.type);
+    if (expr.kind == K::typed_expression && fact.enum_decode) {
+      auto *value = emit_expression(*expr.children.front());
+      if (!reachable()) return nullptr;
+      const auto &domain = program_->enums.at(fact.type.identity);
+      auto *code = unpack(value, domain.backing);
+      auto *valid = block("enum.code.valid"), *invalid = block("enum.code.invalid");
+      auto *match = b_.CreateSwitch(code, invalid);
+      for (size_t i = 0; i < domain.members.size(); ++i) {
+        const auto &member = domain.members[i];
+        if (member.canonical == i)
+          match->addCase(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(code->getType()), member.code), valid);
+      }
+      b_.SetInsertPoint(invalid);
+      fail_path(ExceptionCategory::type_assertion_failed, expr.at);
+      b_.SetInsertPoint(valid);
+      return discard ? empty_scalar() : pack(code, fact.type);
     }
     if (fact.enum_assertion) return emit_expression(*expr.children.front(), projection, discard);
     if (fact.native_call)
@@ -3445,27 +2483,24 @@ class LLVMEmission {
     }
     if (fact.scoped_effect) return install_scoped_effect(expr, fact);
     switch (expr.kind) {
-    case K::here_binding: return save_pipeline_operands(fact.pipeline_preparation.value());
     case K::grouped: {
       const auto &operand = *expr.children.front();
       if (projection != Projection::value) return emit_expression(operand, projection, discard);
-      std::optional<Projection> alternatives;
       const auto source = result_source(checked_.at(&operand));
-      alternatives.emplace(source);
-      return lower_prepared(expr, alternatives, [&](const auto &mode) -> llvm::Value * {
+      {
+        const Projection mode = source;
         const auto source = mode;
         auto *value = emit_projected_value(operand, source, discard);
         return value;
-      });
+      }
     }
     case K::typed_expression: {
       const auto &operand = *expr.children.front();
       if (fact.type == Type::c_string) {
         auto *view = emit_expression(operand, Projection::target);
         if (!reachable()) return nullptr;
-        std::optional<bool> checks;
-        checks.emplace(checked_.at(&expr).check_c_string);
-        return lower_prepared(expr, checks, [&](bool check) -> llvm::Value * {
+        {
+          const bool check = checked_.at(&expr).check_c_string;
           if (check) {
             auto *bytes = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(text_view_, view, 0));
             auto *size = b_.CreateLoad(b_.getInt64Ty(), b_.CreateStructGEP(text_view_, view, 1));
@@ -3478,14 +2513,13 @@ class LLVMEmission {
             b_.SetInsertPoint(ready);
           }
           return discard ? empty_scalar() : view;
-        });
+        }
       }
-      std::optional<Projection> alternatives;
-      alternatives.emplace(result_source(checked_.at(&operand)));
-      return lower_prepared(expr, alternatives, [&](Projection source) -> llvm::Value * {
+      {
+        const Projection source = result_source(checked_.at(&operand));
         emit_expression(operand, source);
         return reachable() ? empty_scalar() : nullptr;
-      });
+      }
     }
     case K::callable: return empty_scalar();
     case K::null_ref: return null_pointer();
@@ -3527,9 +2561,8 @@ class LLVMEmission {
     case K::predicate_assertion: {
       auto *value = emit_expression(*expr.children.front());
       if (!reachable()) return nullptr;
-      std::optional<bool> checks;
-      checks.emplace(checked_.at(&expr).check_predicate_assertion);
-      return lower_prepared(expr, checks, [&](bool check) {
+      {
+        const bool check = checked_.at(&expr).check_predicate_assertion;
         if (check) {
           auto *ready = block("assertion.satisfied"), *failed = block("assertion.failed");
           b_.CreateCondBr(unpack(value, Type::boolean), ready, failed);
@@ -3538,20 +2571,7 @@ class LLVMEmission {
           b_.SetInsertPoint(ready);
         }
         return empty_scalar();
-      });
-    }
-    case K::return_test: {
-      std::optional<CheckedOperation::ReturnFilter> alternatives;
-      alternatives.emplace(checked_.at(&expr).return_filter);
-      return lower_prepared(expr, alternatives, [&](const auto &filter) {
-        if (!filter.can_match) return pack(b_.getFalse(), Type::boolean);
-        auto *matches = observed_return();
-        if (filter.owner_comparison) {
-          const auto [result_owner, expected_owner] = *filter.owner_comparison;
-          matches = b_.CreateAnd(matches, b_.CreateICmpEQ(owner_identity(result_owner, expr.at), owner_identity(expected_owner, expr.at)));
-        }
-        return pack(matches, Type::boolean);
-      });
+      }
     }
     case K::real: {
       auto text = expr.text;
@@ -3590,8 +2610,6 @@ class LLVMEmission {
     case K::value_call: case K::call: case K::behave: case K::perform: case K::pipeline: case K::processor_composition: {
       if (fact.symbol && program_->symbols[*fact.symbol].live_scope)
         return invoke_scoped_effect(expr, *fact.symbol);
-      if (fact.builtin == BuiltinOperation::lexical_result)
-        return emit_expression(*expr.children.front(), projection, discard);
       if (fact.builtin == BuiltinOperation::text_size || fact.builtin == BuiltinOperation::text_byte ||
           fact.builtin == BuiltinOperation::text_slice)
         return emit_text_access(expr, fact.builtin, discard);
@@ -3601,14 +2619,10 @@ class LLVMEmission {
         if (!reachable()) return nullptr;
         auto *piece = emit_expression(source, Projection::target);
         if (!reachable()) return nullptr;
-        std::optional<bool> modes;
-        const auto &type = checked_.at(&source).type;
-        if (type != Type::never) modes.emplace(program_->builder_type(type));
-        auto *status = lower_prepared(expr, modes, [&](bool from_builder) -> llvm::Value * {
-          const auto name = from_builder ? "cod_lang_builder_append_builder" : "cod_lang_builder_append_text";
-          auto append = runtime(name, b_.getInt32Ty(), {b_.getPtrTy(), b_.getPtrTy()});
-          return b_.CreateCall(append, {builder, piece});
-        });
+        const auto name = program_->builder_type(checked_.at(&source).type)
+            ? "cod_lang_builder_append_builder" : "cod_lang_builder_append_text";
+        auto append = runtime(name, b_.getInt32Ty(), {b_.getPtrTy(), b_.getPtrTy()});
+        auto *status = b_.CreateCall(append, {builder, piece});
         auto *ready = block("builder.ready"), *failed = block("builder.failed");
         b_.CreateCondBr(b_.CreateIsNotNull(status), ready, failed);
         b_.SetInsertPoint(failed);
@@ -3625,27 +2639,15 @@ class LLVMEmission {
         auto *length = array_length(address);
         return pack(length, Type::uint64);
       }
-      if (fact.value_pack) {
-        using Invocation = std::pair<size_t, CheckedOperation::ValuePack>;
-        std::optional<Invocation> calls;
-        const auto &call = checked_.at(&expr);
-        if (call.value_pack && call.callee) calls.emplace(Invocation{*call.callee, *call.value_pack});
-        return lower_prepared(expr, calls, [&](const Invocation &call) {
-          return emit_value_pack_call(expr, call.first, call.second);
-        });
-      }
-      // An entry-time supplied body leaves its slot empty during preparation.
-      std::vector<llvm::Value *> here_values(fact.here_arguments.size());
       std::vector<llvm::Value *> current_owners;
-      const auto arguments = fact.pipeline_preparation ? prepare_pipeline(expr, *fact.pipeline_preparation, here_values)
-                                                      : prepare_arguments(expr, here_values, nullptr, &current_owners);
+      const auto arguments = prepare_arguments(expr, nullptr, &current_owners);
       if (!reachable()) return nullptr;
       llvm::AllocaInst *here_site = nullptr;
       if (fact.supplied_here && program_->methods[program_->instances[fact.supplied_here->instance].method].here_group) {
         here_site = slot(b_.getPtrTy(), "here.call.destination");
         b_.CreateStore(null_pointer(), here_site);
       }
-      auto *result = invoke(expr, arguments, here_site, here_values, current_owners);
+      auto *result = invoke(expr, arguments, here_site, current_owners);
       if (here_site) result = consume_here_transfer(result, load(here_site));
       auto *value = propagate(result);
       if (!fact.borrowed_result) return value;
@@ -3654,29 +2656,27 @@ class LLVMEmission {
     }
     case K::case_expression: {
       const auto *subject = expr.children.front().get();
-      std::optional<std::tuple<Type::Kind, size_t, bool, bool, bool, bool, bool>> layouts;
       const auto &input = checked_.at(subject), &result = checked_.at(&expr);
-      layouts.emplace(std::tuple<Type::Kind, size_t, bool, bool, bool, bool, bool>{input.type.kind, input.type.identity, input.view, result.case_subject_may_be_null,
-               result.case_reaches_end, result.view, result.scalar_value_join});
-      return lower_prepared(expr, layouts, [&](const auto &layout) {
+      {
+        const std::tuple<Type::Kind, size_t, bool, bool, bool, bool, bool> layout = std::tuple<Type::Kind, size_t, bool, bool, bool, bool, bool>{input.type.kind, input.type.identity, input.view, result.case_subject_may_be_null,
+               result.case_reaches_end, result.view, result.scalar_value_join};
         const auto &[kind, identity, borrowed, nullable, reaches_end, result_view, projects] = layout;
         return emit_case(expr, Type{kind, {}, identity}, borrowed, nullable, reaches_end, result_view, projects, projection, discard);
-      });
+      }
     }
     case K::case_break: case K::case_fallthrough: {
       llvm::Value *value = empty_scalar();
       if (!expr.children.empty()) {
         const auto &operand = *expr.children.front();
-        std::optional<std::pair<bool, Projection>> preparations;
         const auto &exit = checked_.at(&expr);
         const auto source = exit.scalar_value_join ? result_source(checked_.at(&operand)) : Projection::value;
-        preparations.emplace(std::pair<bool, Projection>{exit.borrowed_result, source});
-        value = lower_prepared(expr, preparations, [&](const auto &preparation) -> llvm::Value * {
+        const std::pair<bool, Projection> preparations = std::pair<bool, Projection>{exit.borrowed_result, source};
+        value = [&](const auto &preparation) -> llvm::Value * {
           const auto [borrow, source] = preparation;
           if (!borrow) return emit_projected_value(operand, source, false);
           auto *address = emit_expression(operand, Projection::target);
           return reachable() ? case_view(address) : nullptr;
-        });
+        }(preparations);
       }
       if (!reachable()) return nullptr;
       const auto kind = expr.kind == K::case_break ? CompletionKind::case_break : CompletionKind::case_scan;
@@ -3697,24 +2697,8 @@ class LLVMEmission {
       for (size_t i = 1; i < 3; ++i) {
         b_.SetInsertPoint(i == 1 ? yes : no);
         const auto &arm = *expr.children[i];
-        const bool binds_return = i == 1 && test.kind == K::return_test && !test.binding.empty();
-        const auto emit = [&]() -> llvm::Value * {
-          if (binds_return) {
-            std::optional<std::pair<std::optional<size_t>, std::optional<size_t>>> destinations;
-            const auto &pattern = checked_.at(&test);
-            const bool matches = pattern.return_filter.can_match;
-            destinations.emplace(std::pair<std::optional<size_t>, std::optional<size_t>>{matches ? pattern.place : std::nullopt, matches ? pattern.binding : std::nullopt});
-            lower_prepared(test, destinations, [&](const auto &destination) {
-              const auto [place, binding] = destination;
-              if (place) store_incoming(*place, observed_return_value());
-              if (binding) b_.CreateStore(view_address(observed_return_value()), binding_slot(*binding));
-              return empty_scalar();
-            });
-          }
-          return projection == Projection::value ? emit_joined_bits(expr, arm, discard)
-                                                 : emit_expression(arm, projection, discard);
-        };
-        auto *value = emit();
+        auto *value = projection == Projection::value ? emit_joined_bits(expr, arm, discard)
+                                                      : emit_expression(arm, projection, discard);
         if (reachable()) { incoming.emplace_back(value, b_.GetInsertBlock()); b_.CreateBr(join); }
       }
       b_.SetInsertPoint(join);
@@ -3762,10 +2746,7 @@ class LLVMEmission {
       return empty_scalar();
     }
     case K::alias: {
-      const bool selected = fact.binding.has_value();
-      const bool value = !selected || bindings_.at(*fact.binding).value_binding;
-      auto *address = emit_expression(*expr.children.front(), value ? Projection::target : Projection::slot, !selected);
-      if (reachable() && selected) b_.CreateStore(address, bindings_.at(*fact.binding).selected_place);
+      emit_expression(*expr.children.front(), Projection::target, true);
       return reachable() ? empty_scalar() : nullptr;
     }
     case K::pointer_group: {
@@ -3822,13 +2803,12 @@ class LLVMEmission {
       llvm::Value *value = empty_scalar();
       if (fact.exception_owner) {
         if (!pending_exception_result_) throw std::logic_error("exception return without a pending owner slot");
-        std::optional<size_t> holders;
-        holders.emplace(*checked_.at(&expr).exception_owner);
-        value = lower_prepared(expr, holders, [&](size_t holder) {
+        const size_t holders = *checked_.at(&expr).exception_owner;
+        value = [&](size_t holder) -> llvm::Value * {
           auto *owner = take_failure_owner(b_, exception_holder_slots_.at(holder));
           b_.CreateStore(owner, pending_exception_result_);
           return load(storage_.at(holder));
-        });
+        }(holders);
       } else if (fact.operand_type.kind == Type::region && fact.operand_type.owned) {
         const auto *make = expr.children.front().get();
         while (make->kind == K::grouped) make = make->children.front().get();
@@ -3874,29 +2854,17 @@ class LLVMEmission {
     }
     case K::field: {
       if (fact.region_holder) {
-        std::optional<std::tuple<size_t, size_t, size_t>> projections;
-        const auto &field = checked_.at(&expr);
-        if (field.region_holder)
-          projections.emplace(std::tuple<size_t, size_t, size_t>{field.operand_type.identity, *field.region_holder, *field.product_field});
-        auto *member = lower_prepared(expr, projections, [&](const auto &selection) {
-          const auto [schema, holder, index] = selection;
-          auto *layout = product_layout(schema);
-          auto *owner = load(storage_.at(holder));
-          auto *address = region_address(owner, integer(0), llvm::ConstantExpr::getSizeOf(layout));
-          return b_.CreateStructGEP(layout, address, index);
-        });
+        auto *layout = product_layout(fact.operand_type.identity);
+        auto *owner = load(storage_.at(*fact.region_holder));
+        auto *address = region_address(owner, integer(0), llvm::ConstantExpr::getSizeOf(layout));
+        auto *member = b_.CreateStructGEP(layout, address, *fact.product_field);
         if (!read) return member;
         return discard ? empty_scalar() : load_place(member, expr);
       }
       if (fact.exception_owner) {
-        std::optional<std::tuple<size_t, size_t, size_t>> projections;
-        const auto &field = checked_.at(&expr);
-        if (field.exception_owner) projections.emplace(std::tuple<size_t, size_t, size_t>{field.operand_type.identity, *field.exception_owner, *field.product_field});
-        auto *member = lower_prepared(expr, projections, [&](const auto &selection) -> llvm::Value * {
-          const auto &[category, holder, index] = selection;
-          auto *layout = product_layout(*program_->exception_types.at(category).schema);
-          return b_.CreateStructGEP(layout, exception_payload(load(exception_holder_slots_.at(holder))), index);
-        });
+        auto *layout = product_layout(*program_->exception_types.at(fact.operand_type.identity).schema);
+        auto *payload = exception_payload(load(exception_holder_slots_.at(*fact.exception_owner)));
+        auto *member = b_.CreateStructGEP(layout, payload, *fact.product_field);
         if (!read) return member;
         return discard ? empty_scalar() : load_place(member, expr);
       }
@@ -3904,21 +2872,16 @@ class LLVMEmission {
         const auto &parent = *expr.children.front();
         auto *address = emit_expression(parent, Projection::target);
         if (!reachable()) return nullptr;
-        using Field = std::tuple<size_t, size_t, size_t, size_t>;
-        std::optional<Field> projections;
-        const auto &field = checked_.at(&expr);
-        if (field.regional_sum_holder)
-          projections.emplace(Field{field.sum_constructor->sum, field.sum_constructor->alternative,
-                       *field.product_field, *field.regional_sum_holder});
-        auto *target = lower_prepared(expr, projections, [&](const Field &member) {
-          const auto [sum, alternative, field, holder] = member;
-          auto *slot = sum_field_address(address, {sum, alternative}, field);
-          const auto &description = program_->sums.at(sum).alternatives.at(alternative).fields.at(field);
-          if (!description.stores_target()) return static_cast<llvm::Value *>(slot);
-          auto *owner = load(storage_.at(holder));
+        const auto constructor = fact.sum_constructor.value();
+        const auto field = fact.product_field.value();
+        auto *slot = sum_field_address(address, constructor, field);
+        const auto &description = program_->sums.at(constructor.sum).alternatives.at(constructor.alternative).fields.at(field);
+        llvm::Value *target = slot;
+        if (description.stores_target()) {
+          auto *owner = load(storage_.at(*fact.regional_sum_holder));
           auto *offset = b_.CreateLoad(b_.getInt64Ty(), slot);
-          return regional_scalar_target(owner, offset, sum_layout(description.type.identity).storage);
-        });
+          target = regional_scalar_target(owner, offset, sum_layout(description.type.identity).storage);
+        }
         return !read ? target : discard ? empty_scalar() : load_place(target, expr);
       }
       if (fact.product_field) {
@@ -3926,26 +2889,20 @@ class LLVMEmission {
         auto *address = emit_expression(parent, Projection::target);
         if (!reachable()) return nullptr;
         address = checked_address(address, parent, expr.at);
-        using Field = std::tuple<size_t, size_t, std::optional<size_t>>;
-        std::optional<Field> projections;
-        const auto &member_fact = checked_.at(&expr);
-        if (member_fact.product_field)
-          projections.emplace(Field{member_fact.operand_type.identity, *member_fact.product_field, member_fact.regional_product_holder});
-        auto *field = lower_prepared(expr, projections, [&](const Field &member) -> llvm::Value * {
-          const auto [schema, number, holder] = member;
-          auto *layout = holder ? regional_product_layout(schema) : product_layout(schema);
-          auto *slot = b_.CreateStructGEP(layout, address, number);
-          const auto &description = program_->schemas[schema].fields[number];
-          if (projection != Projection::slot && description.stores_target()) {
-            if (holder) {
-              auto *owner = load(storage_.at(*holder));
-              auto *offset = b_.CreateLoad(b_.getInt64Ty(), slot);
-              return regional_scalar_target(owner, offset, native_type(description.type));
-            }
-            return b_.CreateLoad(b_.getPtrTy(), slot);
-          }
-          return slot;
-        });
+        const auto schema = fact.operand_type.identity;
+        const auto number = *fact.product_field;
+        const auto holder = fact.regional_product_holder;
+        auto *layout = holder ? regional_product_layout(schema) : product_layout(schema);
+        auto *slot = b_.CreateStructGEP(layout, address, number);
+        const auto &description = program_->schemas[schema].fields[number];
+        llvm::Value *field = slot;
+        if (projection != Projection::slot && description.stores_target()) {
+          if (holder) {
+            auto *owner = load(storage_.at(*holder));
+            auto *offset = b_.CreateLoad(b_.getInt64Ty(), slot);
+            field = regional_scalar_target(owner, offset, native_type(description.type));
+          } else field = b_.CreateLoad(b_.getPtrTy(), slot);
+        }
         if (!read) return field;
         field = checked_address(field, expr, expr.at);
         return discard ? empty_scalar() : load_place(field, expr);
@@ -3967,41 +2924,23 @@ class LLVMEmission {
       if (expr.binding == "=") {
         auto *source = emit_expression(*expr.children.front(), Projection::target);
         if (!reachable()) return nullptr;
-        std::optional<size_t> alternatives;
-        if (const auto place = checked_.at(&expr).place) alternatives.emplace(*place);
-        auto *pair = native_handle_pair();
-        auto *value = b_.CreateLoad(pair, source);
-        return lower_prepared(expr, alternatives, [&](size_t place) {
-          b_.CreateStore(value, storage_.at(place));
-          return empty_scalar();
-        });
+        auto *value = b_.CreateLoad(native_handle_pair(), source);
+        b_.CreateStore(value, storage_.at(fact.place.value()));
+        return empty_scalar();
       }
-      std::optional<std::pair<size_t, CheckedOperation::NativeAcquisition>> plans;
-      const auto &acquisition = checked_.at(&expr);
-      plans.emplace(std::pair<size_t, CheckedOperation::NativeAcquisition>{*acquisition.place, *acquisition.native_acquisition});
-      return lower_prepared(expr, plans, [&](const auto &selected) {
-        return acquire_native_handle(expr, selected.first, selected.second);
-      });
+      return acquire_native_handle(expr, fact.place.value(), fact.native_acquisition.value());
     }
     case K::make_borrowed_handle:
       return emit_attached_native_handle(expr);
     case K::make_object: {
       if (fact.array_allocator) return emit_array_construction(expr, discard);
       if (fact.regional_sum_holder) {
-        using Destination = std::tuple<size_t, size_t, size_t>;
-        std::optional<Destination> placements;
-        const auto &item = checked_.at(&expr);
-        if (item.regional_sum_holder)
-          placements.emplace(Destination{item.sum_constructor->sum, item.sum_constructor->alternative, *item.regional_sum_holder});
-        auto *address = lower_prepared(expr, placements, [&](const Destination &destination) {
-          const auto &[sum, alternative, holder] = destination;
-          auto *owner = load(storage_.at(holder));
-          const auto &layout = sum_layout(sum);
-          auto *target = reserve_regional_row(owner, layout.storage, expr.at);
-          const auto tag = layout.alternatives.at(alternative).tag;
-          b_.CreateStore(integer(tag), b_.CreateStructGEP(layout.storage, target, 0));
-          return target;
-        });
+        const auto constructor = fact.sum_constructor.value();
+        auto *owner = load(storage_.at(*fact.regional_sum_holder));
+        const auto &layout = sum_layout(constructor.sum);
+        auto *address = reserve_regional_row(owner, layout.storage, expr.at);
+        const auto tag = layout.alternatives.at(constructor.alternative).tag;
+        b_.CreateStore(integer(tag), b_.CreateStructGEP(layout.storage, address, 0));
         if (fact.invokes_regional_initializer && reachable())
           address = emit_regional_initializer(expr, address, expr.children.size());
         if (!reachable()) return nullptr;
@@ -4035,22 +2974,20 @@ class LLVMEmission {
           operands.push_back(emit_expression(*piece, Projection::target));
           if (!reachable()) return nullptr;
         }
-        std::optional<Allocation> destinations;
-        const auto &construction = checked_.at(&expr);
-        if (construction.type != Type::never) destinations.emplace(construction.lexical_allocation.value());
-        auto *value = lower_prepared(expr, destinations, [&](const Allocation &plan) -> llvm::Value * {
-          auto *owner = owner_identity(plan.owner, expr.at);
-          if (plan.kind == Allocation::builder) {
-            auto create = runtime("cod_lang_lexical_builder_create", b_.getPtrTy(),
-                {b_.getPtrTy(), b_.getPtrTy(), b_.getPtrTy(), b_.getInt32Ty()});
-            auto *left = operands.empty() ? null_pointer() : operands[0];
-            auto *right = operands.empty() ? null_pointer() : operands[1];
-            return b_.CreateCall(create, {owner, left, right, b_.getInt32(plan.builder_inputs)});
-          }
+        const auto &plan = *fact.lexical_allocation;
+        auto *owner = owner_identity(plan.owner, expr.at);
+        llvm::Value *value;
+        if (plan.kind == Allocation::builder) {
+          auto create = runtime("cod_lang_lexical_builder_create", b_.getPtrTy(),
+              {b_.getPtrTy(), b_.getPtrTy(), b_.getPtrTy(), b_.getInt32Ty()});
+          auto *left = operands.empty() ? null_pointer() : operands[0];
+          auto *right = operands.empty() ? null_pointer() : operands[1];
+          value = b_.CreateCall(create, {owner, left, right, b_.getInt32(plan.builder_inputs)});
+        } else {
           const auto name = plan.kind == Allocation::builder_snapshot ? "cod_lang_lexical_builder_finish" : "cod_lang_lexical_text_create";
           auto create = runtime(name, b_.getPtrTy(), {b_.getPtrTy(), b_.getPtrTy()});
-          return b_.CreateCall(create, {owner, operands.front()});
-        });
+          value = b_.CreateCall(create, {owner, operands.front()});
+        }
         auto *ready = block("allocation.ready"), *failed = block("allocation.failed");
         b_.CreateCondBr(b_.CreateIsNotNull(value), ready, failed);
         b_.SetInsertPoint(failed);
@@ -4059,17 +2996,9 @@ class LLVMEmission {
         return discard ? empty_scalar() : value;
       }
       if (fact.regional_product_holder) {
-        using Destination = std::pair<size_t, size_t>;
-        std::optional<Destination> placements;
-        const auto &item = checked_.at(&expr);
-        if (item.regional_product_holder)
-          placements.emplace(Destination{item.operand_type.identity, *item.regional_product_holder});
-        auto *address = lower_prepared(expr, placements, [&](const Destination &destination) {
-          auto *owner = load(storage_.at(destination.second));
-          auto *row = reserve_regional_row(owner, regional_product_layout(destination.first), expr.at);
-          emit_product_initializers(expr, row, owner);
-          return row;
-        });
+        auto *owner = load(storage_.at(*fact.regional_product_holder));
+        auto *address = reserve_regional_row(owner, regional_product_layout(fact.operand_type.identity), expr.at);
+        emit_product_initializers(expr, address, owner);
         return discard ? empty_scalar() : address;
       }
       auto *address = storage_.at(*fact.place);
@@ -4084,13 +3013,7 @@ class LLVMEmission {
       return discard || fact.operand_type.kind == Type::product ? empty_scalar() : load_place(address, expr);
     }
     case K::raise: {
-      if (expr.annotation) {
-        std::optional<size_t> alternatives;
-        alternatives.emplace(checked_.at(&expr).operand_type.identity);
-        return lower_prepared(expr, alternatives, [&](size_t category) {
-          return construct_exception(expr, category);
-        });
-      }
+      if (expr.annotation) return construct_exception(expr, fact.operand_type.identity);
       llvm::Value *value = fact.place ? load(storage_.at(*fact.place)) : emit_expression(*expr.children[0]);
       if (!reachable()) return nullptr;
       value = unpack(value, program_->exception_type(0));
@@ -4117,39 +3040,6 @@ class LLVMEmission {
       return nullptr;
     }
     case K::try_scope: return emit_finally(expr, projection, discard);
-    case K::deferred: {
-      const auto &body = *expr.children.front();
-      const auto inputs = deferred_inputs(body, checked_.at(&body));
-      std::vector<llvm::Value *> arguments;
-      if (body.kind == K::block) for (const auto id : fact.captures) arguments.push_back(load(storage_.at(id)));
-      else arguments = prepare_arguments(body);
-      if (!reachable()) return nullptr;
-      auto record = std::find_if(scope_->actions.begin(), scope_->actions.end(), [&](const CleanupAction &entry) {
-        return entry.action == &expr && entry.captures == fact.captures && entry.inputs == inputs;
-      });
-      if (record == scope_->actions.end()) throw std::logic_error("uncollected deferred action");
-      llvm::Value *prepared = record->activation_record;
-      if (!prepared) {
-        auto *status = slot(b_.getInt64Ty(), "defer.status");
-        b_.CreateStore(integer(0), status);
-        const auto bytes = module_.getDataLayout().getTypeAllocSize(record->layout).getFixedValue();
-        const auto allocate = runtime("cod_lang_defer_allocate", b_.getPtrTy(), {b_.getInt64Ty(), b_.getPtrTy()});
-        prepared = b_.CreateCall(allocate, {integer(bytes), status});
-        auto *ready = block("defer.prepared"), *failed = block("defer.allocation_failed");
-        b_.CreateCondBr(b_.CreateICmpEQ(prepared, null_pointer()), failed, ready);
-        b_.SetInsertPoint(failed); fail_path(ExceptionCategory::out_of_memory, expr.at);
-        b_.SetInsertPoint(ready);
-      }
-      prepare_cleanup_record(*scope_, prepared, std::distance(scope_->actions.begin(), record));
-      for (size_t i = 0; i < arguments.size(); ++i) {
-        auto *field = record->layout->getElementType(i + first_deferred_operand);
-        auto *destination = b_.CreateStructGEP(record->layout, prepared, i + first_deferred_operand);
-        if (field == native_handle_pair()) b_.CreateStore(b_.CreateLoad(field, view_address(arguments[i])), destination);
-        else b_.CreateStore(arguments[i], destination);
-      }
-      b_.CreateStore(prepared, scope_->head);
-      return empty_scalar();
-    }
     default: throw std::logic_error("unchecked expression reached LLVM emission");
     }
   }
@@ -4164,9 +3054,8 @@ class LLVMEmission {
       const bool direct = member.storage == PlaceKind::value;
       if (regional_owner && !direct) {
         auto *slot = b_.CreateStructGEP(layout, address, index);
-        std::optional<bool> preparations;
-        preparations.emplace(checked_.at(initializer.get()).allocates_scalar_field);
-        lower_prepared(*initializer, preparations, [&](bool fresh) -> llvm::Value * {
+        const bool preparations = checked_.at(initializer.get()).allocates_scalar_field;
+        [&](bool fresh) -> llvm::Value * {
           llvm::Value *offset;
           if (fresh) {
             auto *scalar = native_type(member.type);
@@ -4184,7 +3073,7 @@ class LLVMEmission {
           }
           b_.CreateStore(offset, slot);
           return b_.getTrue();
-        });
+        }(preparations);
       } else if (member.direct_text_place()) {
         emit_text_transfer(*initializer, b_.CreateStructGEP(layout, address, index));
       } else if (direct && member.type.kind == Type::product) {
@@ -4216,34 +3105,6 @@ class LLVMEmission {
     return llvm::Function::Create(llvm::FunctionType::get(outcome_, parameters, false),
         llvm::GlobalValue::InternalLinkage, name, module_);
   }
-  void declare_prepared_source(size_t id) {
-    const auto &instance = program_->instances.at(id);
-    const auto &layout = call_layouts_.at(instance.method);
-    if (layout.has_result_destination() ||
-        !layout.here_formals || layout.here_formals > 2 || layout.lexical_here || layout.here_group)
-      throw std::logic_error("unexpected parameter role in prepared producer");
-    auto *entry = llvm::Function::Create(llvm::FunctionType::get(outcome_, {here_, b_.getPtrTy()}, false),
-        llvm::GlobalValue::InternalLinkage, "cod.here.source." + std::to_string(id), module_);
-    prepared_source_entries_.emplace(id, entry);
-    llvm::IRBuilder<> body(llvm::BasicBlock::Create(context_, "entry", entry));
-    auto *storage = prepared_producer_layout(layout.operands, layout.owners);
-    llvm::Value *backing = entry->getArg(1);
-    llvm::Value *upstream = nullptr;
-    if (layout.here_formals == 2) {
-      auto *connection = prepared_connection_layout();
-      upstream = body.CreateLoad(here_, body.CreateStructGEP(connection, backing, 1));
-      backing = body.CreateLoad(b_.getPtrTy(), body.CreateStructGEP(connection, backing, 0));
-    }
-    std::vector<llvm::Value *> arguments;
-    for (size_t i = 0; i < layout.operands; ++i)
-      arguments.push_back(body.CreateLoad(scalar_, body.CreateStructGEP(storage, backing, i)));
-    for (size_t i = 0; i < layout.owners; ++i)
-      arguments.push_back(body.CreateLoad(b_.getPtrTy(), body.CreateStructGEP(storage, backing, layout.operands + i)));
-    arguments.push_back(entry->getArg(0));
-    if (upstream) arguments.push_back(upstream);
-    auto *target = methods_.at(instance.method);
-    body.CreateRet(body.CreateCall(target, arguments));
-  }
   void declare_here_entry(size_t id) {
     const auto &instance = program_->instances.at(id);
     const auto &method = program_->methods.at(instance.method);
@@ -4258,7 +3119,7 @@ class LLVMEmission {
     // The activation starts with the transfer record. Its address identifies
     // the originating call across every forwarding receiver.
     std::vector<llvm::Type *> fields;
-    if (method.here_group) fields.push_back(method.here_group->binds_return_payload ? here_return_header() : here_transfer_);
+    if (method.here_group) fields.push_back(here_transfer_);
     fields.insert(fields.end(), places, scalar_);
     fields.insert(fields.end(), layout.owners - handed_owners, b_.getPtrTy());
     fields.insert(fields.end(), layout.lexical_here, here_);
@@ -4306,8 +3167,7 @@ class LLVMEmission {
   }
   void begin(llvm::Function *function, const std::vector<CheckedStorage> &storage, const std::vector<CheckedBinding> &bindings,
              const CheckedFrame &frame) {
-    function_ = function; arguments_.clear(); here_arguments_.clear(); pipeline_operands_.clear(); here_destination_ = nullptr;
-    suspended_return_ = {};
+    function_ = function; arguments_.clear(); here_arguments_.clear(); here_destination_ = nullptr;
     for (size_t i = 0; i < frame.inputs.size(); ++i) arguments_.push_back(function->getArg(i));
     b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr; control_ = nullptr;
     owner_identities_.clear();
@@ -4347,7 +3207,7 @@ class LLVMEmission {
         layout = binding.type.owned ? static_cast<llvm::Type *>(b_.getInt64Ty()) : native_handle_pair();
       else if (binding.type.kind == Type::region) layout = b_.getPtrTy();
       else if (format.kind != Type::void_type) layout = native_type(format.type());
-      auto *place = binding.borrowed || binding.subobject ? nullptr : slot(layout, binding.name + ".storage");
+      auto *place = binding.borrowed ? nullptr : slot(layout, binding.name + ".storage");
       storage_.push_back(place);
     }
     bindings_.clear();
@@ -4357,10 +3217,8 @@ class LLVMEmission {
     for (size_t i = 0; i < bindings.size(); ++i) {
       auto &binding = bindings_[i];
       const auto &declaration = bindings[i];
-      if (!binding.reference_slot && !declaration.value_binding && !declaration.embedded_slot && !declaration.alias && declaration.selection.empty())
+      if (!binding.reference_slot && !declaration.value_binding)
         binding.reference_slot = slot(b_.getPtrTy(), "reference.target");
-      if (!declaration.selection.empty() || declaration.indexed_element_owner)
-        binding.selected_place = slot(b_.getPtrTy(), "alias.selection");
     }
     for (size_t i = 0; i < arguments_.size(); ++i) {
       const auto &input = frame.inputs[i];
@@ -4386,7 +3244,7 @@ class LLVMEmission {
         continue;
       }
       store_incoming(place, arguments_[i]);
-      if (auto *slot = bindings_.at(binding).reference_slot) b_.CreateStore(storage_.at(place), slot);
+      if (auto *reference = bindings_.at(binding).reference_slot) b_.CreateStore(storage_.at(place), reference);
     }
   }
   void body(llvm::Function *function, const CheckedMethod &method, const CheckedInstance &layout) {
@@ -4403,10 +3261,6 @@ class LLVMEmission {
     if (case_scan_request_) b_.CreateStore(b_.getFalse(), case_scan_request_);
     for (size_t i = 0; i < call.here_count(); ++i) here_arguments_.push_back(function->getArg(call.here_index() + i));
     if (call.here_group) here_destination_ = function->getArg(call.here_index() + call.here_count());
-    if (method.here_group && method.here_group->supplier_return.has_value())
-      suspended_return_.present = b_.getInt1(*method.here_group->supplier_return);
-    if (method.here_group && method.here_group->binds_return_payload)
-      suspended_return_.value = b_.CreateLoad(scalar_, b_.CreateStructGEP(here_return_header(), here_destination_, 1));
     checked_ = {&layout.operations};
     auto *requires_return = !method.regional_initializer && method.source->completion_requires_return(*layout.result.type)
         ? b_.getTrue() : nullptr;
@@ -4592,7 +3446,7 @@ public:
       return allocates_lexically(instance.operations);
     });
     protected_outcomes_ = std::ranges::any_of(program.methods, [](const auto &method) { return method.here_group && method.instance.has_value(); });
-    owned_failures_ = program.deferred_aggregates || program.exception_types.size() > exception_categories.size();
+    owned_failures_ = program.exception_types.size() > exception_categories.size();
     case_scope_outcomes_ = std::ranges::any_of(program.methods, [](const auto &method) {
       return method.source->case_scan_scope && method.instance.has_value();
     });
@@ -4616,13 +3470,12 @@ public:
     // Scoped profiles can be created by provisional or restricted proofs.
     // Emit them when the final operations need their executable body.
     for (size_t i = 0; i < program.methods.size(); ++i)
-      if (!program.methods[i].scope_inputs && program.methods[i].here_targets.empty() &&
+      if (!program.methods[i].scope_inputs &&
           !program.methods[i].has_higher_order_here() && program.methods[i].instance)
         retain_method(i);
     for (const auto &entry : program.native_entries) retain_method(entry.method);
     std::set<size_t> used_symbols;
     std::set<size_t> here_instances;
-    std::set<size_t> prepared_sources;
     const auto collect_operations = [&](const auto &operations) {
       for (const auto &[expr, operation] : operations) {
         if (operation.callee) retain_method(program.instances[*operation.callee].method);
@@ -4632,18 +3485,9 @@ public:
           if (operation.publishes_effect)
             used_symbols.insert(target.scoped_replay_bindings.begin(), target.scoped_replay_bindings.end());
         }
-        if (operation.opened_source) {
-          prepared_sources.insert(*operation.opened_source);
-          retain_method(program.instances[*operation.opened_source].method);
-        }
         if (operation.supplied_here) {
           here_instances.insert(operation.supplied_here->instance);
           retain_method(program.instances[operation.supplied_here->instance].method);
-          if (const auto &returning = operation.supplied_here->returning) {
-            here_instances.insert(returning->body);
-            retain_method(program.instances[returning->body].method);
-            retain_method(program.instances[returning->receiver].method);
-          }
         }
         const bool installation = expr->kind == Expression::Kind::effect || expr->kind == Expression::Kind::procedure_effect;
         if (operation.symbol && (expr->kind == Expression::Kind::symbol || (installation && operation.publishes_effect) ||
@@ -4685,7 +3529,7 @@ public:
       const auto &method = program.methods[i];
       const auto &frame = input_frame(i);
       call_layouts_[i] = {frame.inputs.size(), frame.owners.size(),
-          false, false, method.here.size(), method.here_group.has_value(),
+          false, false, method.here.size(), method.here_group,
           method.here_inputs() - method.here.size()};
       auto &call = call_layouts_[i];
       std::set<size_t> array_owners;
@@ -4722,7 +3566,6 @@ public:
       methods_[i] = declare(prefix + ".native", layout);
     }
     for (const auto instance : here_instances) declare_here_entry(instance);
-    for (const auto instance : prepared_sources) declare_prepared_source(instance);
     for (size_t i = 0; i < program.methods.size(); ++i) {
       if (!emitted_methods[i]) continue;
       const auto &method = program.methods[i];

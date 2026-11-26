@@ -169,7 +169,7 @@ class ModuleLoader {
     if (error) fail(at, "cannot resolve CoD source '" + path.string() + "'");
     if (const auto found = paths_.find(resolved); found != paths_.end()) {
       if (scanning_.contains(found->second))
-        fail(at, "micro-dispatch implementation gap: cyclic module construction remains unproved; this is not a language restriction");
+        fail(at, "seed translation limit: cyclic module construction remains unproved");
       return found->second;
     }
     const auto id = program_.modules.size();

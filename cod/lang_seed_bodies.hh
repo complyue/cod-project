@@ -114,7 +114,6 @@ class BodyExtraction {
   };
   struct HereSupply {
     const Expression *call;
-    Type receiving_result;
     size_t owner;
     std::vector<CheckedLexicalHere> lexical_here;
     std::vector<size_t> here_sources;
@@ -333,8 +332,8 @@ class BodyExtraction {
     const auto &method = declarations_.method(method_id);
     const auto &source = *method.source;
     expect(source.body && !source.implicit_scope && !source.supplied_scope && !source.supplied_group &&
-           !source.case_scan_scope && !source.symbolic && !method.interpretation && !method.local_effect_symbol &&
-           !method.parent && !method.regional_initializer && method.operation.empty() &&
+           !source.case_scan_scope && !source.symbolic && !method.interpretation &&
+           !method.regional_initializer && method.operation.empty() &&
            method.here.size() <= 1 && method.type_parameters.empty() && source.captures.empty() &&
            (method.result.type ?
             method.result.owns_region() || (method.result.mode == ResultMode::value &&
@@ -681,13 +680,13 @@ class BodyExtraction {
       return operation;
     }
 
-    void supply_here(const Expression &call, const CheckedHereContract &contract, const Type &receiving_result,
+    void supply_here(const Expression &call, const CheckedHereContract &contract,
                      size_t owner, CheckedOperation &operation) {
       expect(!body_.outline, call.at, "seed does not supply a here body from an outlined body");
       const auto &site = *call.children.back();
       expect(bool(site.definition), site.at, "seed needs a supplied here definition");
       auto outlined = outline(*site.definition);
-      outlined.here = HereSupply{&call, receiving_result, owner, {}, {}};
+      outlined.here = HereSupply{&call, owner, {}, {}};
       const auto target = extraction_.bodies_.size();
       extraction_.add_literal(std::move(outlined), site, contract);
       body_.replay_calls.push_back({target, supplied_});
@@ -853,7 +852,7 @@ class BodyExtraction {
         const auto &contract = native.contract.here.front();
         const auto owner = owners.find(here_input_owner(contract, expr.at) - 1);
         expect(owner != owners.end(), expr.at, "native here loan needs the prepared actual owner");
-        supply_here(expr, contract, op.type, owner->second, op);
+        supply_here(expr, contract, owner->second, op);
       }
       return op;
     }
@@ -1152,7 +1151,7 @@ class BodyExtraction {
                  at, "seed needs a separate ordinary owner role for a current reference symbol");
           expect(inserted || first->second == owner, at, "one formal owner needs the same actual owner");
         }
-        op.arguments.push_back({mode, formal, parameter.selects_caller_ref_slot(), {}, current_symbol});
+        op.arguments.push_back({mode, formal, parameter.selects_caller_ref_slot(), current_symbol});
       }
       BoundCall edge{&expr, callee, {}};
       edge.supplied = supplied_;
@@ -1171,8 +1170,7 @@ class BodyExtraction {
         const auto &contract = target.here.front();
         const auto owner = actual_owners.find(here_input_owner(contract, expr.at) - 1);
         expect(owner != actual_owners.end(), expr.at, "here loan needs a prepared actual owner");
-        supply_here(expr, contract, op.type, owner->second, op);
-        op.here_arguments.resize(1);
+        supply_here(expr, contract, owner->second, op);
       }
       return op;
     }
@@ -2314,7 +2312,7 @@ class BodyExtraction {
     CheckedOperation::SuppliedHere *supplied = nullptr;
     if (auto &here = outline.here) {
       auto &handoff = supplier.instance.operations.at(here->call).supplied_here;
-      handoff = CheckedOperation::SuppliedHere{id, {}, {}, std::move(here->here_sources), {}};
+      handoff = CheckedOperation::SuppliedHere{id, {}, {}, std::move(here->here_sources)};
       supplied = &*handoff;
       supplied->owners.assign(std::next(outline.owners.begin()), outline.owners.end());
       const auto offered = scope.parameters.size();
@@ -2323,7 +2321,7 @@ class BodyExtraction {
       scope.here_reception = CheckedMethod::ScopeInputs::HereReception{offered, std::move(positions)};
       scope.here_input_owners = 1;
       scope.lexical_here = std::move(here->lexical_here);
-      method.here_group = CheckedMethod::HereGroupResults{completed_result(supplier, results).type, here->receiving_result, {}, false};
+      method.here_group = true;
     } else {
       scope.named = CheckedMethod::ScopeInputs::NamedEntry{scope.parameters.size()};
     }
