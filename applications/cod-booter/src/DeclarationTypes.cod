@@ -45,7 +45,7 @@ using "./NameResolution.cod" {
     NameBindings, NameWork, locate_record_field, formal_binding, local_binding,
     ordinary_selection, record_type, native_scalar, enum_value, find_enum_member, find_enum_code,
     is_lexical_builder, lexical_builder_record, lexical_builder_type,
-    builtin_u64, builtin_u32, builtin_u8, builtin_bool, builtin_string, builtin_c_string, text_type, owner_binding,
+    builtin_i64, builtin_u64, builtin_u32, builtin_u8, builtin_bool, builtin_string, builtin_c_string, text_type, owner_binding,
 };
 using "./ModuleExports.cod" {
     SelectedExports, record_export, enum_export, enum_spelling, sum_export
@@ -232,7 +232,9 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
                 };
                 (IntegerLiteral { val width <- width; }) -> {
                     result.kind <- if (width == 8u64) { builtin_u8() } else {
-                        if (width == 32u64) { builtin_u32() } else { builtin_u64() }
+                        if (width == 32u64) { builtin_u32() } else {
+                            if (width == 0u64) { builtin_i64() } else { builtin_u64() }
+                        }
                     };
                     result.defining_module <- 0u64;
                     result.identity <- 0u64;
@@ -397,6 +399,8 @@ func bind_enum_code(nodes:const ExprNodes in N, names:NameBindings in B, work:Na
         };
         if (inspect_declaration(nodes, revision, used, type.identity, domain) != EnumTypeDeclaration)
             return unproved_type_assertion();
+        if (names[domain.value_type].kind == builtin_i64() && code > 9223372036854775807u64)
+            return missing_enum_member();
         val member <- find_enum_code(nodes, names, work, domain.entries, code, revision, used);
         if (member == no_node()) return missing_enum_member();
         names[destination].declaration <- member;
@@ -408,6 +412,8 @@ func bind_enum_code(nodes:const ExprNodes in N, names:NameBindings in B, work:Na
         return unproved_type_assertion();
     val width <- interfaces[head].entry_count;
     if (width >= interface_count - head) return unproved_type_assertion();
+    if (interfaces[head].element_kind == builtin_i64() && code > 9223372036854775807u64)
+        return missing_enum_member();
     for (row in head + 1u64 .. head + 1u64 + width) {
         if (interfaces[row].value_kind != enum_type()) return unproved_type_assertion();
         if (interfaces[row].enum_code == code) {

@@ -31,7 +31,7 @@ func prove_initialization(code:const NativeCommands in C, plan:const NativePlan 
     };
     val capacity <- spare - extent;
     ref operations = make InitializationOperations(used, make InitializationOperation {
-        activation <- no_node(); first <- no_node(); second <- no_node(); labels <- false;
+        activation <- no_node(); first <- no_node(); second <- no_node(); labels <- false; pending_guard <- false;
         access <- NoAccess; tag <- 0u64; site <- no_node();
         writes <- KeepFlags; write_slot <- no_node(); write_input <- no_node();
         guard_slot <- no_node(); guard_expected <- no_node(); known_guard <- no_node()

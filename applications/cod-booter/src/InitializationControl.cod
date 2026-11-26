@@ -137,7 +137,8 @@ export func complete_initialization_control(
         known <- operations[at].known_guard;
         if (known == no_node() && operations[at].guard_slot != no_node()) {
             known <- flag_value(flags, history, operations[at].guard_slot);
-            if (known == unknown_failure_category() && operations[at].guard_expected != 0u64)
+            if (known == unknown_failure_category() && operations[at].pending_guard &&
+                operations[at].guard_expected != 0u64)
                 { (known <- no_node()):void }
         };
         if (second != no_node() && known != no_node()) {

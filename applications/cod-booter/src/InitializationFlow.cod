@@ -15,6 +15,7 @@ export data InitializationOperation {
     first:u64;
     second:u64;
     labels:bool;
+    pending_guard:bool;
     access:InitializationAccess;
     tag:u64;
     site:u64;
@@ -60,8 +61,10 @@ func read_edges(opcode:u8, a:u64, b:u64, c:u64, d:u64, previous_slot:u64, previo
         op.first <- c;
         op.second <- d;
         op.guard_expected <- b;
-        if (opcode == branch_on_flow_flag() || a == pending_category()) { (op.guard_slot <- a):void };
-        if (opcode == branch_equal() && a == previous_slot) { (op.known_guard <- previous_value):void };
+        op.pending_guard <- opcode == branch_equal() && a == pending_category();
+        if (opcode == branch_on_flow_flag() || op.pending_guard) { (op.guard_slot <- a):void };
+        if (opcode == branch_equal() && a == previous_slot && previous_slot != no_node())
+            { (op.known_guard <- previous_value):void };
     }
 }
 
