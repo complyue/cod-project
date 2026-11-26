@@ -86,7 +86,7 @@ def main():
                     'source_sha256': {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
                                       for p in [root / 'cod/lang_syntax.hh', root / 'cod/lang_frontend.hh',
                                                 root / 'cod/lang_llvm.hh', root / 'cod/runtime/cod_lang_runtime.c',
-                                                root / 'include/shilos/region.hh',
+                                                root / 'include/cod_region_storage.h', root / 'cod/runtime/cod_lang_runtime.h',
                                                 Path(__file__).resolve()]}}
         if report := os.environ.get('COD_NUMERIC_REPORT'):
             Path(report).write_text(json.dumps(evidence, indent=2) + '\n')

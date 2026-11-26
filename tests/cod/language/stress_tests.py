@@ -324,7 +324,8 @@ export score;
 
     if report := os.environ.get('COD_LANGUAGE_STRESS_REPORT'):
         sources = [root / 'cod/lang_exceptions.hh', root / 'cod/lang_syntax.hh', root / 'cod/lang_frontend.hh', root / 'cod/lang_llvm.hh',
-                   root / 'cod/runtime/cod_lang_runtime.c', root / 'include/shilos/region.hh', Path(__file__).resolve()]
+                   root / 'cod/runtime/cod_lang_runtime.c', root / 'include/cod_region_storage.h',
+                   root / 'cod/runtime/cod_lang_runtime.h', Path(__file__).resolve()]
         Path(report).write_text(json.dumps({
             'schema_version': 2, 'recorded_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'platform': platform.platform(), 'results': results,

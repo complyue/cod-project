@@ -873,6 +873,8 @@ The native-fixture support suite checks all 130 fixture declarations in forward,
 
 ## Focused validation
 
+The [regional placement runner](regional_placement_runtime_tests.py) compiles the runtime and observer separately as C. It verifies a two-node cycle from copied backing after the original is released and a single Graph release before the catch on abrupt initialization. Both cases run in specialized and shared seed modes. The former shilos layout observers and runners that shared their C++ harness are available in [the archived test tree](https://github.com/complyue/cod-project/tree/76e7429142242a394dcf419b208c6cdf70451b94/tests/cod/language). Native fixture harnesses that still include the runtime as C++ need migration to the current C interface before their runtime results can be reverified.
+
 Prepare the [shared C runtime archive](../../../applications/cod-booter/README.md#build-and-run-on-linux)
 for the selected toolchain before running native source checks.
 

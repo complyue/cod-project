@@ -92,7 +92,7 @@ def main():
     count = sum(result['passed'] for result in results)
     if report := os.environ.get('COD_LANGUAGE_REPORT'):
         sources = [Path(__file__).with_name("language_test_support.py"), ROOT/'cod/main.cc', *sorted((ROOT/'cod').glob('lang_*.hh')), Path(__file__),
-                   Path(__file__).with_name('foundation_tests.py'), Path(__file__).with_name('regional_runtime_tests.py'), *EXTRA_SOURCES]
+                   Path(__file__).with_name('foundation_tests.py'), *EXTRA_SOURCES]
         Path(report).write_text(json.dumps(dict(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             toolchain=MODE, passed=count, total=len(results), results=results,
             executable_sha256=hashlib.sha256(COD.read_bytes()).hexdigest(),
