@@ -483,8 +483,10 @@ class ScalarChecker {
     std::vector<std::pair<const Expression *, BuiltinOperation>> reads;
     std::optional<IndexedCase> indexed_case;
     std::optional<ArrayGrowth> array_growth;
+    const Expression *byte_transfer = nullptr;
 
-    bool requires_application() const { return readonly_loans || !calls.empty(); }
+    bool requires_application() const { return readonly_loans || byte_transfer || !calls.empty(); }
+    bool projects_input_readiness() const { return readonly_loans || byte_transfer || array_growth.has_value(); }
   };
   std::map<size_t, ScalarPlan> scalar_callers_;
   const ScalarPlan *applying_scalar_ = nullptr;
@@ -22717,7 +22719,8 @@ class ScalarChecker {
     }
   }
   struct LeafBehaviorPlan {
-    enum class Kind { borrowed_byte, scalar_predicate, scalar_literal, integer_result, array_length, array_growth } kind = Kind::borrowed_byte;
+    enum class Kind { borrowed_byte, scalar_predicate, scalar_literal, integer_result, array_length, array_growth,
+                      byte_transfer } kind = Kind::borrowed_byte;
     const Expression *primitive = nullptr;
     ScalarPlan scalar;
     const Expression *literal_result = nullptr;
@@ -23047,7 +23050,7 @@ class ScalarChecker {
     }
     case K::call:
       if (array_length_query(expr)) {
-        // Array entries in this scope are the original readonly formals.
+        // Length observes the array extent, including on a writable formal.
         if (expr.children.size() != 1 || !readonly_base(Type::array)) return false;
         plan.reads.emplace_back(&expr, BuiltinOperation::array_length);
         return bind_children();
@@ -23071,6 +23074,73 @@ class ScalarChecker {
   static bool bare_name(const Expression &expr, std::string_view name) {
     return expr.kind == Expression::Kind::name && !expr.annotation && !expr.intrinsic && !expr.checked_ref_argument &&
         !expr.spread && expr.text == name;
+  }
+
+  bool bind_byte_transfer(const CheckedInstance &instance, const Form &form, ScalarPlan &plan) const {
+    using K = Expression::Kind;
+    const auto &method = program_.methods[instance.method];
+    const auto parameters = method.input_parameters();
+    const auto owners = method.input_owners();
+    const auto &types = instance.arguments;
+    if (types.size() != 4 || !plain_block(*form.body, 4) || types[0].kind != Type::array ||
+        types[0] != types[2] || owners.size() != 2 || !readonly_loan(parameters[0])) return false;
+    const auto &output = parameters[2];
+    if (argument_mode(output) != ArgumentMode::borrowed_ref || output.read_only || output.not_init_ref ||
+        output.selects_caller_place() || output.automatic_conversion || output.variadic) return false;
+    const auto role = [&](size_t i) { return std::ranges::find(owners, parameters[i].owner, &OwnerParameter::name); };
+    const auto source_owner = role(0), destination_owner = role(2);
+    if (source_owner == owners.end() || !source_owner->read_only ||
+        destination_owner == owners.end() || destination_owner->read_only) return false;
+    for (const auto i : {1u, 3u}) {
+      const auto &value = parameters[i];
+      if (types[i] != Type::uint64 || argument_mode(value) != ArgumentMode::value || !value.owner.empty() ||
+          value.not_init_ref || value.selects_caller_place() || value.automatic_conversion || value.variadic) return false;
+    }
+    const auto &array = program_.arrays.at(types[0].identity);
+    if (array.index != Type::uint64 || array.element != Type::uint8) return false;
+
+    TypeEvidenceState scope;
+    scope.method = instance.method;
+    for (size_t i = 0; i < types.size(); ++i)
+      if (!scope.bindings.emplace(parameters[i].name, types[i]).second) return false;
+    for (const auto &owner : owners) scope.symbol_shadows.insert(owner.name);
+    const ModuleLookup module(module_, method.module);
+    const ModuleLookup interpretation(interpretation_, method.interpretation);
+    const auto &body = form.body->children;
+    const auto &capacity = *body[0];
+    if (capacity.kind != K::pointer_group || capacity.children.size() != 1 ||
+        capacity.children.front()->children.size() != 1) return false;
+    const auto &length = *capacity.children.front()->children.front();
+    if (!array_length_query(length) || length.children.size() != 1 || !bare_name(*length.children.front(), output.name) ||
+        !bind_readonly_operations(capacity, scope, plan)) return false;
+    const auto returns_bool = [](const Expression &expr, std::string_view value) {
+      return expr.kind == K::return_value && expr.children.size() == 1 &&
+          expr.children.front()->kind == K::boolean && expr.children.front()->text == value && !expr.children.front()->annotation;
+    };
+    const auto &guard = *body[1];
+    if (guard.kind != K::conditional || guard.children.size() != 3 || !returns_bool(*guard.children[1], "false") ||
+        !plain_block(*guard.children[2], 0) || !bind_readonly_operations(guard, scope, plan) ||
+        !returns_bool(*body.back(), "true")) return false;
+    if (plan.reads.size() != 2 || plan.reads.back().second != BuiltinOperation::array_length ||
+        !bare_name(*plan.reads.back().first->children.front(), parameters[0].name)) return false;
+
+    const auto &range = *body[2];
+    if (range.kind != K::range_for || range.children.size() != 3 || !plain_block(*range.children[2], 1) ||
+        range.children[0]->kind != K::integer || range.children[0]->text != "0u64" || range.children[0]->annotation ||
+        !bare_name(*range.children[1], parameters[1].name) || !scope.bindings.emplace(range.text, Type::uint64).second)
+      return false;
+    const auto &transfer = *range.children[2]->children.front();
+    if (transfer.kind != K::call || transfer.children.size() != 3 || transfer.annotation ||
+        !builtin_indexed_transfer(transfer, operation_name(transfer, &scope), &scope) ||
+        !bare_name(*transfer.children[0], output.name)) return false;
+    const auto &source = *transfer.children[2];
+    if (source.kind != K::index || source.children.size() != 2 ||
+        !bare_name(*source.children[0], parameters[0].name) || !bare_name(*source.children[1], range.text) ||
+        !bind_readonly_operations(*transfer.children[1], scope, plan) ||
+        !bind_readonly_operations(source, scope, plan) || !plan.calls.empty()) return false;
+    plan.range = &range;
+    plan.byte_transfer = &transfer;
+    return true;
   }
 
   std::optional<SumConstructor> bind_empty_sum_fill(const Expression &expr, const Type &type) const {
@@ -23327,8 +23397,12 @@ class ScalarChecker {
     if (scalar_function && !method.input_owners().empty()) {
       if (form.body->scoped || form.case_scan_scope || method.declaration_context() ||
           instance.query_environment || !instance.retained_types.empty() || !method.captures.empty() ||
-          abstract_effect_inputs_.contains(&form) ||
-          !std::ranges::all_of(method.input_owners(), &OwnerParameter::read_only)) return {};
+          abstract_effect_inputs_.contains(&form)) return {};
+      if (!std::ranges::all_of(method.input_owners(), &OwnerParameter::read_only)) {
+        if (expected_result != Type::boolean || !bind_byte_transfer(instance, form, plan.scalar)) return {};
+        plan.kind = LeafBehaviorPlan::Kind::byte_transfer;
+        return plan;
+      }
       TypeEvidenceState scope;
       scope.method = instance.method;
       bool has_value_inputs = false;
@@ -23466,7 +23540,7 @@ class ScalarChecker {
       const auto &operation = instance.operations.at(site);
       const auto builtin = short_circuit_predicate(*site) ? BuiltinOperation::none :
           site->kind == Expression::Kind::unary ? BuiltinOperation::unary : BuiltinOperation::binary;
-      const bool arithmetic = plan.readonly_loans ? readonly_arithmetic(*site) : leaf_integer_arithmetic(*site);
+      const bool arithmetic = plan.readonly_loans || plan.byte_transfer ? readonly_arithmetic(*site) : leaf_integer_arithmetic(*site);
       if (operation.callee || operation.callable_call || operation.builtin != builtin ||
           (builtin != BuiltinOperation::none && operation.builtin_name != site->text) ||
           operation.type != (arithmetic ? operation.operand_type : Type{Type::boolean}) ||
@@ -23480,6 +23554,22 @@ class ScalarChecker {
           (site->kind == Expression::Kind::index && (!operation.indexed_target || !operation.read_only)) ||
           (site->kind == Expression::Kind::field && (!operation.product_field || !operation.read_only)))
         throw std::logic_error("read-only operation disagrees with its binding plan");
+    }
+    if (const auto *site = plan.byte_transfer) {
+      const auto &transfer = instance.operations.at(site);
+      const auto &source = instance.operations.at(site->children[2].get());
+      const auto exact_loan = [&](const Expression &operand, size_t input, bool read_only) {
+        const auto &actual = instance.operations.at(&operand);
+        const auto &formal = instance.frame.inputs.at(input);
+        return actual.type == instance.arguments[input] && actual.view && actual.read_only == read_only &&
+            !actual.mixed_view && !actual.nullable_view && formal.mode == ArgumentMode::borrowed_ref &&
+            !formal.binding_slot && actual.binding == instance.storage.at(formal.place).binding;
+      };
+      if (transfer.callee || transfer.callable_call || transfer.builtin != BuiltinOperation::array_transfer ||
+          !transfer.indexed_target || transfer.operand_type != instance.arguments[2] || transfer.type != Type::uint8 ||
+          source.operand_type != instance.arguments[0] || source.type != Type::uint8 ||
+          !exact_loan(*site->children.front(), 2, false) || !exact_loan(*site->children[2]->children.front(), 0, true))
+        throw std::logic_error("byte transfer disagrees with the bound array operands");
     }
     if (plan.indexed_case) {
       const auto &bound = *plan.indexed_case;
@@ -23552,7 +23642,8 @@ class ScalarChecker {
   static bool planned_arithmetic_failure(const ScalarPlan &plan, size_t reason, const Location &origin) {
     return reason == 2 && std::ranges::any_of(plan.operations,
         [&](const Expression *site) {
-          return (plan.readonly_loans ? readonly_arithmetic(*site) : leaf_integer_arithmetic(*site)) && origin == site->at;
+          return (plan.readonly_loans || plan.byte_transfer ? readonly_arithmetic(*site) : leaf_integer_arithmetic(*site)) &&
+              origin == site->at;
         });
   }
 
@@ -23614,7 +23705,8 @@ class ScalarChecker {
     };
     // The final proving traversal replaces discovery and loop settlement's
     // outgoing summaries. Closure still consumes its last settling iteration.
-    const auto exports = array_growth_observations_ ? FlowExports::none :
+    const bool writable_application = array_growth_observations_ || (applying_scalar_ && applying_scalar_->byte_transfer);
+    const auto exports = writable_application ? FlowExports::none :
         validating_ && !instance.effects_frozen && !leaf && !scalar_exits ? FlowExports::final_pass : FlowExports::every_pass;
     // A late call-name collision returns to the ordinary validation schedule.
     const bool bound_scalar = leaf ? leaf->kind != LeafBehaviorPlan::Kind::borrowed_byte
@@ -23942,9 +24034,10 @@ class ScalarChecker {
             });
         const bool copy_bounds = plan.array_growth && reason == bounds &&
             (path.at == plan.array_growth->copy->at || path.at == plan.array_growth->copy->children[2]->at);
-        const bool planned_bounds = (plan.readonly_loans || copy_bounds) && reason == bounds &&
+        const bool transfer_bounds = plan.byte_transfer && path.at == plan.byte_transfer->at;
+        const bool planned_bounds = (plan.readonly_loans || plan.byte_transfer || copy_bounds) && reason == bounds &&
             path.exceptions.possibilities() == std::set<size_t>{bounds_category} &&
-            (copy_bounds || inherited_failure || std::ranges::any_of(plan.reads, [&](const auto &read) {
+            (copy_bounds || transfer_bounds || inherited_failure || std::ranges::any_of(plan.reads, [&](const auto &read) {
               return path.at == read.first->at && (read.first->kind == Expression::Kind::index ||
                                                   read.second == BuiltinOperation::text_byte);
             }));
@@ -23958,7 +24051,7 @@ class ScalarChecker {
           throw std::logic_error("scalar application reached an unplanned exit");
         scalar_exits->push_back({reason, path.at,
             !reason && boolean_result ? returned_boolean(path.state) : CleanupEquations::BooleanValue{},
-            plan.readonly_loans || plan.array_growth ? project_input_readiness(path.state) : InputReadiness{}});
+            plan.projects_input_readiness() ? project_input_readiness(path.state) : InputReadiness{}});
         if (array_growth_observations_) {
           const auto &input = instance.frame.inputs.at(0);
           if (!input.binding_slot) throw std::logic_error("array growth lost its input slot");
@@ -24115,10 +24208,10 @@ class ScalarChecker {
     for (const auto &exit : observations.exits) for (const auto &[truth, clauses] : exit.result) for (const auto &facts : clauses) {
       CleanupEquations::ConditionFacts formal;
       formal.inputs = facts.inputs;
-      if (plan.readonly_loans) {
+      if (plan.projects_input_readiness()) {
         const auto formal_count = instance.frame.inputs.size() + input_field_places_.size();
         if (std::ranges::any_of(facts.present, [&](size_t input) { return input >= formal_count; }))
-          throw std::logic_error("read-only application retained nonformal presence");
+          throw std::logic_error("scalar application retained nonformal presence");
         formal.present = facts.present;
       }
       if (facts != formal || std::ranges::any_of(facts.inputs, [&](const auto &input) {
@@ -24129,9 +24222,8 @@ class ScalarChecker {
     return observations;
   }
 
-  static CallEffects seal_scalar_caller(ApplicationObservations observations, const Type &result, bool readonly_loans) {
+  static CallEffects seal_scalar_caller(ApplicationObservations observations, const Type &result, bool project_inputs) {
     CallEffects effects;
-    const bool project_inputs = readonly_loans || observations.growth.has_value();
     for (auto &exit : observations.exits) {
       if (project_inputs) merge_input_readiness(effects, exit.reason, std::move(exit.inputs));
       if (exit.array_slot) {
@@ -24186,7 +24278,7 @@ class ScalarChecker {
     };
     if (const auto plan = scalar_callers_.find(id); plan != scalar_callers_.end()) {
       auto observations = apply_scalar_caller(id, plan->second);
-      const auto actual = seal_scalar_caller(std::move(observations), *instance.result.type, plan->second.readonly_loans);
+      const auto actual = seal_scalar_caller(std::move(observations), *instance.result.type, plan->second.projects_input_readiness());
       if (actual != instance.effects) throw std::logic_error("completed scalar caller differs from final validation");
     } else {
       if (const auto it = distinct_binding_effects_.find(id); it != distinct_binding_effects_.end())
@@ -24416,7 +24508,8 @@ class ScalarChecker {
         auto &plan = bound.at(id);
         const bool frame_ready = independent_scalar_frame(instance, program_.methods[instance.method]);
         const bool readonly_loans = plan.scalar.readonly_loans;
-        auto completed = seal_scalar_caller(std::move(application.observations), *instance.result.type, readonly_loans);
+        auto completed = seal_scalar_caller(
+            std::move(application.observations), *instance.result.type, plan.scalar.projects_input_readiness());
         if (readonly_loans && plan.scalar.range && plan.scalar.calls.empty() && plan.kind == LeafBehaviorPlan::Kind::scalar_predicate)
           completed_readonly_ranges.insert(id);
         scalar_callers_.emplace(id, std::move(plan.scalar));
