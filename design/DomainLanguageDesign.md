@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 224
+Discussion revision: 225
 
-Recorded: 2026-11-25
+Recorded: 2026-11-26
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r225 [D-07-TYPE-SYNONYMS](DesignAuthorityRegistry.md#d-07-type-synonyms), P-762/P-763, adds an early transparent naming form, `type Name = ExistingType`. Synonyms preserve canonical identity, dispatch, permissions and ABI across module selections. Distinct signed and unsigned identities may share an LLVM representation. [Scalar spelling, examples and acceptance](JuliaPackagePortability.md#scalar-names-and-transparent-type-synonyms)
 
 At r224 the [grouped-method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125) extends [standalone callable declarations](#standalone-callable-declarations) through [D-10-METHOD-GROUPS](DesignAuthorityRegistry.md#d-10-method-groups), P-740/P-741. Check value and actual-type refinements across one open method family and an equivalent installed family. The r223 owner, receiver and module visibility contracts continue. [Method groups and value dispatch](SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch)
 

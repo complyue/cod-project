@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 270 · Recorded: 2026-11-25 · Phase: language/application co-design.
+Design revision: 271 · Recorded: 2026-11-26 · Phase: language/application co-design.
 
 ## Design authority
+
+At r271 [D-10-LIBRARY-FIXITY](DesignAuthorityRegistry.md#d-10-library-fixity), P-760/P-761, assigns expression-operator grouping to selected library vocabularies. Maximal token spans, fixed structural grammar, definition-site meaning and operand preparation remain governed by their existing contracts. [Scope and acceptance](JuliaPackagePortability.md#operator-grouping-belongs-to-the-selected-vocabulary)
 
 At r270 the [named-constant decision](../CHANGELOG.md#h-named-method-constants-20261125) specifies `=name` under [D-10-METHOD-GROUPS](DesignAuthorityRegistry.md#d-10-method-groups), P-740/P-741. Check a constant shadowed by a method formal, duplicate typed values and the [enum-to-backing value coercion](TypedEnums.md#using-an-enum-as-its-backing-value) in a byte slot. Public argument preparation and method ordering continue from r269.
 
@@ -2183,6 +2185,8 @@ The parser and source tools must preserve the parenthesized expression boundary 
 **Acceptance and remaining work:** distinguish bare/parenthesized scalar places and returned readonly/writable views; preserve snapshots across later writes; retain operator-result views for unparenthesized chains; reject scalar projected destinations/identity operands; distinguish nested grouping from call/type/operator-name delimiters. Preserve target-read readiness, actual owners, numeric/UoM/fraction validity, callable value rules and D-17 cleanup. Source policy is selected; typed group representation, complete generic/non-bits carrier integration and checker/native migration are not established by older parser evidence that erases parentheses.
 
 ### Symbolic operator tokens
+
+The [selected library vocabulary](JuliaPackagePortability.md#operator-grouping-belongs-to-the-selected-vocabulary) supplies precedence and associativity for its expression operators. Grouping precedes method selection and is stable across changes in operand types. The production compiler applies the selected rules to recorded tokens. The existing bootstrap reader covers its working vocabulary.
 
 At the start of a symbolic token, the lexer consumes the longest contiguous run of operator characters. Its spelling and source span are fixed before grammar, module lookup or type checking. The current alphabet is `!`, `$`, `%`, `&`, `*`, `+`, `-`, `.`, `/`, `:`, `<`, `=`, `>` and `|`. Whitespace (including a newline), identifiers and structural delimiters `()[]{};,` end a run. Symbol names beginning with `@`, comments beginning with `#`, quoted text and numeric literals follow their own lexical rules. In particular, `1e-3` has an exponent sign, `1.5` has a decimal point, and `1..3` has a range token between two integers.
 
