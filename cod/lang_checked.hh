@@ -532,7 +532,8 @@ class ScalarChecker {
       auto &consumer = effect_dependents_[instance][checking_context_];
       consumer.reads_result |= use == EffectUse::all;
       consumer.discards_result |= use == EffectUse::discarded_boolean_result;
-    } else if (closing_symbol_effects_) {
+    } else if (closing_symbol_effects_ && !body.symbol_requirements_known_empty) {
+      // A callee excluded from this pass cannot notify readers of symbol changes.
       auto &consumer = effect_dependents_[instance][checking_context_];
       if (consumer.read_round != symbol_effect_round_) {
         consumer.read_round = symbol_effect_round_;
@@ -24494,16 +24495,19 @@ class ScalarChecker {
         auto &body = program_.instances[instance];
         if (!symbols) body.symbol_requirements_known_empty = !symbol_pass_needed_;
         const auto changes = merge_effects(body.effects, std::move(effects), mode);
-        if (changes || distinct_changes)
-          for (const auto &[dependent, consumer] : effect_dependents_[instance]) {
-            if (!changes.other && !distinct_changes) {
-              if (changes.symbols && !changes.returned && consumer.read_round == symbol_effect_round_ &&
-                  (consumer.symbols == SymbolEffectUse::none ||
-                   (consumer.symbols == SymbolEffectUse::transport_only && !changes.transport_symbols))) continue;
-              if (changes.returned && !changes.symbols && consumer.discards_result && !consumer.reads_result) continue;
+        if (changes || distinct_changes) {
+          if (const auto readers = effect_dependents_.find(instance); readers != effect_dependents_.end()) {
+            for (const auto &[dependent, consumer] : readers->second) {
+              if (!changes.other && !distinct_changes) {
+                if (changes.symbols && !changes.returned && consumer.read_round == symbol_effect_round_ &&
+                    (consumer.symbols == SymbolEffectUse::none ||
+                     (consumer.symbols == SymbolEffectUse::transport_only && !changes.transport_symbols))) continue;
+                if (changes.returned && !changes.symbols && consumer.discards_result && !consumer.reads_result) continue;
+              }
+              enqueue(dependent);
             }
-            enqueue(dependent);
           }
+        }
       }
       // New obligations must establish their write guarantees before any read
       // closure can rely on them. Callable choices can also change guarantees.
