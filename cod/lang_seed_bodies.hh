@@ -3,6 +3,8 @@
 
 #include "lang_checked.hh"
 
+#include <numeric>
+
 namespace cod::language::seed {
 
 class BodyExtraction;
@@ -58,7 +60,7 @@ class BodyExtraction {
     std::vector<Capture> captures;
     std::vector<CheckedLexicalHere> lexical_here;
     std::vector<size_t> here_sources;
-    Parameter offered;
+    std::vector<Parameter> offered;
   };
   struct BoundBody {
     CheckedInstance instance;
@@ -80,26 +82,29 @@ class BodyExtraction {
 
   static size_t input_owner(size_t role) { return null_target - 1 - role; }
 
-  static const CheckedHereContract::Component &array_offer(const CheckedHereContract &contract, const Location &at) {
-    expect(!contract.labelled && contract.inputs.size() == 1 && contract.here.empty() &&
+  static size_t readonly_array_owner(const CheckedHereContract &contract, const Location &at) {
+    expect(!contract.labelled && !contract.inputs.empty() && contract.here.empty() &&
            !contract.feedback && !contract.throws_root && contract.throws_categories.empty() &&
            !contract.result.owner && contract.result.mode == ArgumentMode::value && scalar_type(contract.result.type),
-           at, "replacement seed needs one readonly array and independent scalar here feedback");
-    const auto &offer = contract.inputs.front();
-    expect(offer.type.kind == Type::array && offer.mode == ArgumentMode::borrowed_ref &&
-           offer.read_only && offer.owner && *offer.owner,
-           at, "replacement seed needs a readonly array from an established here owner");
-    return offer;
+           at, "replacement seed needs ordered array offers and independent scalar here feedback");
+    const auto owner = contract.inputs.front().owner;
+    expect(owner && *owner && std::ranges::all_of(contract.inputs, [&](const auto &offer) {
+      return offer.type.kind == Type::array && offer.mode == ArgumentMode::borrowed_ref &&
+             offer.read_only && offer.owner == owner;
+    }), at, "replacement seed needs readonly array offers from one established here owner");
+    return *owner;
   }
 
-  static Type invocation_type(const CheckedHereContract &contract, const Location &at) {
-    const auto &offer = array_offer(contract, at);
+  static Type invocation_type(const CheckedHereContract &contract) {
     Type type{Type::procedure};
     type.pure_callable = type.value_result = true;
-    type.parameters = {offer.type};
-    type.argument_modes = {offer.mode};
-    type.const_views = {true};
-    type.owners = {1, 0};
+    for (const auto &offer : contract.inputs) {
+      type.parameters.push_back(offer.type);
+      type.argument_modes.push_back(offer.mode);
+      type.const_views.push_back(offer.read_only);
+      type.owners.push_back(1);
+    }
+    type.owners.push_back(0);
     type.target = std::make_shared<Type>(contract.result.type);
     return type;
   }
@@ -140,21 +145,25 @@ class BodyExtraction {
 
   void add_literal(Literal literal) {
     const auto &site = *literal.site;
-    const auto &offer = array_offer(*literal.contract, site.at);
+    const auto &offers = literal.contract->inputs;
     expect(site.definition && site.definition->supplied_group && !site.scoped && site.receiving &&
            site.receiving->shape == ReceivingHeader::Shape::ordered && !site.receiving->from_for &&
-           site.definition->parameters.size() == 1,
-           site.at, "replacement seed needs a single-brace here body with one ordered reception");
-    auto &parameter = literal.offered = site.definition->parameters.front();
-    expect(parameter.type == Type::void_type && parameter.declaration_kind.empty() && parameter.owner.empty() &&
-           !parameter.read_only && !parameter.fixed_binding, parameter.at,
-           "replacement seed needs an inferred here reception");
-    parameter.type = offer.type;
-    parameter.declaration_kind = "ref";
-    parameter.read_only = parameter.fixed_binding = true;
-    parameter.owner = "$here.owner.0";
+           site.definition->parameters.size() == offers.size(),
+           site.at, "replacement seed needs a single-brace here body receiving every offer in order");
+    literal.offered = site.definition->parameters;
     literal.owners.push_back(literal.owner);
-    literal.owner_parameters.push_back({parameter.owner, {}, site.at, false, true});
+    const std::string handed_owner = "$here.owner.0";
+    literal.owner_parameters.push_back({handed_owner, {}, site.at, false, true});
+    for (size_t i = 0; i < offers.size(); ++i) {
+      auto &parameter = literal.offered[i];
+      expect(parameter.type == Type::void_type && parameter.declaration_kind.empty() && parameter.owner.empty() &&
+             !parameter.read_only && !parameter.fixed_binding, parameter.at,
+             "replacement seed needs an inferred here reception");
+      parameter.type = offers[i].type;
+      parameter.declaration_kind = "ref";
+      parameter.read_only = parameter.fixed_binding = true;
+      parameter.owner = handed_owner;
+    }
     auto &body = bodies_.emplace_back();
     body.instance.method = declarations_.declarations_.methods.size() + literal_count_++;
     body.instance.result.type = literal.contract->result.type;
@@ -360,26 +369,30 @@ class BodyExtraction {
       const auto &source = found->second;
       expect(source.owner == literal.owner, expr.at, "borrowed here input has a different actual owner from its contract");
       auto rebased = *source.contract;
-      rebased.inputs.front().owner = 1;
+      for (auto &input : rebased.inputs) input.owner = 1;
       const auto slot = literal.lexical_here.size();
-      literal.lexical_here.push_back({expr.text, invocation_type(rebased, expr.at), std::move(rebased), {}});
+      literal.lexical_here.push_back({expr.text, invocation_type(rebased), std::move(rebased), {}});
       literal.here_sources.push_back(source.slot);
       return &here_.emplace(expr.text, HereFormal{source.contract, input_owner(0), slot}).first->second;
     }
 
     CheckedOperation invoke_here(const Expression &expr, const HereFormal &formal) {
-      const auto &offer = array_offer(*formal.contract, expr.at);
-      expect(!expr.has_here_body() && expr.children.size() == 1, expr.at, "here call requires one array argument");
-      const auto &input = operand(expr, 0);
-      expect(input.type == offer.type && input.view, expr.children.front()->at,
-             "here call needs the declared nominal array view");
-      if (single_owner(input, expr.children.front()->at) != formal.owner)
-        fail(expr.children.front()->at, "borrowed here input has a different actual owner from its contract");
+      const auto &offers = formal.contract->inputs;
+      expect(!expr.has_here_body() && expr.children.size() == offers.size(),
+             expr.at, "here call requires an argument for every ordered array offer");
       CheckedOperation operation;
       operation.type = formal.contract->result.type;
-      operation.operand_type = invocation_type(*formal.contract, expr.at);
+      operation.operand_type = invocation_type(*formal.contract);
       operation.invokes_here = formal.slot;
-      operation.arguments.push_back({offer.mode, offer.type});
+      for (size_t i = 0; i < offers.size(); ++i) {
+        const auto &input = operand(expr, i);
+        const auto &offer = offers[i];
+        const auto &at = expr.children[i]->at;
+        expect(input.type == offer.type && input.view, at, "here call needs the declared nominal array view");
+        if (single_owner(input, at) != formal.owner)
+          fail(at, "borrowed here input has a different actual owner from its contract");
+        operation.arguments.push_back({offer.mode, offer.type});
+      }
       return operation;
     }
 
@@ -461,8 +474,7 @@ class BodyExtraction {
       }
       if (native.has_here()) {
         const auto &contract = native.contract.here.front();
-        const auto &offer = array_offer(contract, expr.at);
-        const auto owner = owners.find(*offer.owner - 1);
+        const auto owner = owners.find(readonly_array_owner(contract, expr.at) - 1);
         expect(owner != owners.end(), expr.at, "native here loan needs the prepared actual owner");
         supply_here(expr, contract, op.type, owner->second, op);
       }
@@ -542,8 +554,7 @@ class BodyExtraction {
       op.callee = callee;
       if (expr.has_here_body()) {
         const auto &contract = target.here.front();
-        const auto &offer = array_offer(contract, expr.at);
-        const auto owner = actual_owners.find(*offer.owner - 1);
+        const auto owner = actual_owners.find(readonly_array_owner(contract, expr.at) - 1);
         expect(owner != actual_owners.end(), expr.at, "here loan needs a prepared actual owner");
         supply_here(expr, contract, op.type, owner->second, op);
         op.here_arguments.resize(1);
@@ -1047,17 +1058,18 @@ class BodyExtraction {
         for (size_t i = 0; i < parameters.size(); ++i) bind_input(parameters[i], method_->parameters[i]);
         if (!method_->here.empty()) {
           const auto &contract = method_->here.front();
-          const auto &offer = array_offer(contract, form_.at);
-          expect(*offer.owner <= owners().size(), form_.at, "here declaration has no established owner");
-          const auto owner = input_owner(*offer.owner - 1);
+          const auto role = readonly_array_owner(contract, form_.at);
+          expect(role <= owners().size(), form_.at, "here declaration has no established owner");
+          const auto owner = input_owner(role - 1);
           const auto &formal = form_.parameters.front();
           expect(!find(formal.name), formal.at, "duplicate here parameter name");
           here_.emplace(formal.name, HereFormal{&contract, owner, 0});
         }
       } else {
-        const auto &offered = body_.literal->offered;
-        bind_input(offered, offered.type);
-        body_.instance.arguments.push_back(offered.type);
+        for (const auto &offered : body_.literal->offered) {
+          bind_input(offered, offered.type);
+          body_.instance.arguments.push_back(offered.type);
+        }
       }
       const auto &end = extract(*form_.body);
       expect(body_.instance.frame.owners.size() == owners().size(), form_.at,
@@ -1131,9 +1143,12 @@ class BodyExtraction {
     supplied.owners.assign(std::next(literal.owners.begin()), literal.owners.end());
     CheckedMethod::ScopeInputs scope{};
     scope.lexical_method = body.instance.method;
-    scope.parameters.push_back(std::move(literal.offered));
+    scope.parameters = std::move(literal.offered);
     scope.owners = std::move(literal.owner_parameters);
-    scope.here_reception = CheckedMethod::ScopeInputs::HereReception{1, {0}};
+    const auto offered = scope.parameters.size();
+    std::vector<size_t> positions(offered);
+    std::iota(positions.begin(), positions.end(), size_t{0});
+    scope.here_reception = CheckedMethod::ScopeInputs::HereReception{offered, std::move(positions)};
     scope.here_input_owners = 1;
     scope.lexical_here = std::move(literal.lexical_here);
     for (auto &capture : literal.captures) {
