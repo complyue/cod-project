@@ -6274,7 +6274,7 @@ class ScalarChecker {
   CheckedOperation finish_scope(CheckedOperation result, AbruptFlow &flow, AbruptFlow *outer,
                                 size_t scope, const Location &at, std::optional<LexicalState> *case_scan = nullptr,
                                 bool returns_void_at_end = false) {
-    const auto body = lexical_;
+    auto body = lexical_;
     if (result.type != Type::never && lexical_.live) {
       const auto completion = returns_void_at_end ? Completion{1, true} : Completion{};
       flow.paths.push_back({lexical_, {}, at, completion});
@@ -6286,7 +6286,16 @@ class ScalarChecker {
       const auto &entry = path.state.input_facts.at(origin);
       const auto queue = entry.queues.at(scope);
       std::optional<bool> queued_actions;
-      std::optional<decltype(entry.exceptions)> payloads;
+      std::map<size_t, ExceptionFacts> provisional_payloads;
+      const auto payload_at = [&](size_t place) -> const ExceptionFacts * {
+        const auto found = entry.exceptions.find(place);
+        if (found == entry.exceptions.end()) return nullptr;
+        if (!found->second.empty()) return &found->second;
+        // An empty provisional value cannot rule out a cleanup exit.
+        const auto [value, inserted] = provisional_payloads.try_emplace(place);
+        if (inserted) value->second = exception_value_categories(storage(place).type);
+        return &value->second;
+      };
       std::vector<Completion> inputs;
       // A scope scan is suspended as a no-return normal arrival while
       // this scope drains. Retain its origin across failure and recovery.
@@ -6302,13 +6311,6 @@ class ScalarChecker {
         state.exceptions = entry.exceptions;
         auto pending = input.exception() ? path.exceptions.restricted({input.category()}) : ExceptionFacts{};
         if (input.exception() && pending.empty()) pending = {input.category()};
-        if (!payloads) {
-          // Empty provisional value summaries do not establish non-returning
-          // behavior. Only a substituted, explicit failure relation can exclude
-          // an exceptional outcome.
-          for (auto &[place, value] : payloads.emplace(entry.exceptions))
-            if (value.empty()) value = exception_value_categories(storage(place).type);
-        }
         auto applied = effects;
         const auto observed_selection = CleanupEquations::project_observed_return(applied, state.returned, state.selections);
         applied.resolve_conditions([&](size_t binding) -> std::optional<CleanupEquations::Targets> {
@@ -6333,8 +6335,8 @@ class ScalarChecker {
           }
           return selected;
         }, deferred_action_);
-        applied.transform_values([&](const auto &value) { return value.through(*payloads, pending, true); },
-            [&](const auto &value) { return value.through(*payloads, pending, true, true); });
+        applied.transform_values([&](const auto &value) { return value.through_payloads(payload_at, pending, true, false); },
+            [&](const auto &value) { return value.through_payloads(payload_at, pending, true, true); });
         CleanupEquations::BooleanValues booleans;
         const auto resolve_boolean = [&](size_t place) -> const CleanupEquations::BooleanValue * {
           if (!state.available.contains(place) || storage(place).type != Type::boolean) return nullptr;
@@ -6402,9 +6404,11 @@ class ScalarChecker {
       for (size_t i = 1; i < scans.size(); ++i) { const auto previous = lexical_; join(previous, false, scans[i], false, at); }
       *case_scan = std::move(lexical_);
     }
-    lexical_ = body;
-    if (normals.empty()) { lexical_.live = false; result.type = Type::never; }
-    else {
+    if (normals.empty()) {
+      lexical_ = std::move(body);
+      lexical_.live = false;
+      result.type = Type::never;
+    } else {
       join(body, true, normals.front(), false, at);
       for (size_t i = 1; i < normals.size(); ++i) { const auto previous = lexical_; join(previous, false, normals[i], false, at); }
       result.type = *normal_type;

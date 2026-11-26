@@ -179,9 +179,10 @@ struct ExceptionFacts {
     return result;
   }
   // Empty provisional summaries cannot exclude a conditional read path.
-  ExceptionFacts through(const std::map<size_t, ExceptionFacts> &values, const ExceptionFacts &failure,
-                         bool closed = false, bool conservative = false,
-                         std::span<const ExceptionFacts> deferred = {}) const {
+  template <typename Resolve>
+  ExceptionFacts through_payloads(const Resolve &payload_at, const ExceptionFacts &failure,
+                                  bool closed, bool conservative,
+                                  std::span<const ExceptionFacts> deferred = {}) const {
     ExceptionFacts result;
     for (const auto &[origin, categories] : terms) {
       if (origin.kind == Origin::Kind::arrival && !origin.action) result.merge((conservative && failure.empty() ? ExceptionFacts{categories} : failure).restricted(categories).guarded(origin.conditions));
@@ -190,13 +191,22 @@ struct ExceptionFacts {
         result.merge((conservative && value.empty() ? ExceptionFacts{categories} : value).restricted(categories).guarded(origin.conditions));
       }
       else if (origin.kind == Origin::Kind::payload && !origin.action) {
-        const auto found = values.find(origin.index);
-        if (found != values.end()) result.merge((conservative && found->second.empty() ? ExceptionFacts{categories} : found->second).restricted(categories).guarded(origin.conditions));
+        if (const auto *value = payload_at(origin.index))
+          result.merge((conservative && value->empty() ? ExceptionFacts{categories} : *value).restricted(categories).guarded(origin.conditions));
         else if (closed) result.merge(ExceptionFacts{categories}.guarded(origin.conditions));
         else result.add(origin, categories);
       } else result.add(origin, categories);
     }
     return result;
+  }
+  ExceptionFacts through(const std::map<size_t, ExceptionFacts> &values, const ExceptionFacts &failure,
+                         bool closed = false, bool conservative = false,
+                         std::span<const ExceptionFacts> deferred = {}) const {
+    const auto payload_at = [&](size_t place) -> const ExceptionFacts * {
+      const auto found = values.find(place);
+      return found == values.end() ? nullptr : &found->second;
+    };
+    return through_payloads(payload_at, failure, closed, conservative, deferred);
   }
   ExceptionFacts enter(size_t action, const ExceptionFacts &failure) const {
     ExceptionFacts result;
