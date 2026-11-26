@@ -5693,6 +5693,10 @@ class ScalarChecker {
   static CleanupEquations::ConditionClauses path_conditions(const LexicalState &state) {
     return CleanupEquations::conjoin_conditions(state.predicate_conditions, {path_facts(state)});
   }
+  static bool has_reaching_path(const LexicalState &state) {
+    return !state.predicate_conditions.empty() &&
+        CleanupEquations::has_conjoined_condition(state.predicate_conditions, path_facts(state));
+  }
   static CleanupEquations::ConditionClauses missing_initialization(const LexicalState &state, size_t place,
       const std::optional<CleanupEquations::ConditionFacts> &selected = {}) {
     auto missing = CleanupEquations::conjoin_conditions(path_conditions(state),
@@ -6093,7 +6097,7 @@ class ScalarChecker {
     if (null) record_return_readiness(lexical_, test.binding);
     lexical_.live = lexical_.live && has_targets && lexical_.selections.possible;
     if (!null) record_presence(lexical_.targets.at(test.binding)->places);
-    lexical_.live = lexical_.live && !path_conditions(lexical_).empty();
+    lexical_.live = lexical_.live && has_reaching_path(lexical_);
   }
   void refine_known_bindings() {
     const auto paths = path_conditions(lexical_);
@@ -6274,7 +6278,7 @@ class ScalarChecker {
       lexical_.live = lexical_.live && lexical_.selection_conditions.possible;
       for (const auto &[binding, versions] : facts.bindings) refine_test({binding, versions}, false);
       for (const auto &[binding, versions] : facts.absent_bindings) refine_test({binding, versions}, true);
-      lexical_.live = lexical_.live && !path_conditions(lexical_).empty();
+      lexical_.live = lexical_.live && has_reaching_path(lexical_);
       visit();
     }
     lexical_ = before;

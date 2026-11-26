@@ -385,35 +385,39 @@ public:
   using ConditionClauses = std::set<ConditionFacts>;
   using BooleanValue = std::map<bool, ConditionClauses>;
   using BooleanValues = std::map<size_t, BooleanValue>;
-  static void add_condition(ConditionClauses &clauses, ConditionFacts facts) {
+  static bool normalize_condition(ConditionFacts &facts) {
     const auto contradictory = [](const auto &truths) {
       return std::adjacent_find(truths.begin(), truths.end(), [](const auto &a, const auto &b) {
         return a.first == b.first && a.second != b.second;
       }) != truths.end();
     };
-    if (!facts.conditions.possible || contradictory(facts.inputs) || contradictory(facts.payloads)) return;
+    if (!facts.conditions.possible || contradictory(facts.inputs) || contradictory(facts.payloads)) return false;
     facts.resolve_bindings();
-    if (!facts.conditions.possible) return;
-    if (std::any_of(facts.absent.begin(), facts.absent.end(), [&](size_t input) { return facts.present.contains(input); })) return;
-    if (std::any_of(facts.absent_bindings.begin(), facts.absent_bindings.end(), [&](const auto &binding) { return facts.bindings.contains(binding); })) return;
+    if (!facts.conditions.possible) return false;
+    if (std::any_of(facts.absent.begin(), facts.absent.end(), [&](size_t input) { return facts.present.contains(input); })) return false;
+    if (std::any_of(facts.absent_bindings.begin(), facts.absent_bindings.end(), [&](const auto &binding) { return facts.bindings.contains(binding); })) return false;
     // Filters constrain one immutable origin. Constant alternatives and
     // different sources do not establish an identity correlation.
     std::map<ExceptionFacts::Origin, std::set<size_t>> categories;
     std::set<ExceptionFacts> retained;
     for (const auto &value : facts.exceptions) {
-      if (value.empty()) return;
+      if (value.empty()) return false;
       const auto &[origin, possible] = *value.terms.begin();
       if (value.terms.size() != 1 || origin.kind == ExceptionFacts::Origin::Kind::constant) {
         retained.insert(value); continue;
       }
       const auto [found, inserted] = categories.emplace(origin, possible);
       if (!inserted) std::erase_if(found->second, [&](size_t category) { return !possible.contains(category); });
-      if (found->second.empty()) return;
+      if (found->second.empty()) return false;
     }
     for (auto &[origin, possible] : categories) {
       ExceptionFacts value; value.add(origin, possible); retained.insert(std::move(value));
     }
     facts.exceptions = std::move(retained);
+    return true;
+  }
+  static void add_condition(ConditionClauses &clauses, ConditionFacts facts) {
+    if (!normalize_condition(facts)) return;
     if (std::any_of(clauses.begin(), clauses.end(), [&](const auto &known) { return facts.implies(known); })) return;
     std::erase_if(clauses, [&](const auto &known) { return known.implies(facts); });
     clauses.insert(std::move(facts));
@@ -446,6 +450,13 @@ public:
       auto facts = a; facts.append(b); add_condition(result, std::move(facts));
     }
     return result;
+  }
+  static bool has_conjoined_condition(const ConditionClauses &paths, const ConditionFacts &required) {
+    return std::ranges::any_of(paths, [&](const ConditionFacts &path) {
+      auto facts = path;
+      facts.append(required);
+      return normalize_condition(facts);
+    });
   }
   static bool unconditional(const ConditionClauses &clauses) {
     return clauses.size() == 1 && *clauses.begin() == ConditionFacts{};
