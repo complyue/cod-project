@@ -1,8 +1,12 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 44 · Recorded: 2026-11-25 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 45 · Recorded: 2026-11-25 · Phase: initial seed delivery through alternating booter and seed development.
+
+**Compiler design target.** The default `cod` invocation compiles and runs an entry without leaving a user-facing executable. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** Seed and booter development prioritize Go-like compile speed with moderate runtime performance. High-quality optimizing builds belong to the production compiler roadmap. [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
 
 ## Design authority
+
+At r45 [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap) continues r44’s trusted translation boundary and identifies the persistent booter executable as the seed’s default bootstrap output. The [compiler modes decision](../../CHANGELOG.md#h-default-run-and-optimized-build-20261125) sets the fast compilation target for both bootstrap compilers and the production roadmap under [D-20-COMPILER-MODES](../../design/DesignAuthorityRegistry.md#d-20-compiler-modes).
 
 At r44 [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap) continues r43's trusted input, runtime and self-check boundaries. The [replacement seed decision](../../CHANGELOG.md#h-compiler-pipeline-replacement-20261125) assigns the new translator to mainline. [D-20-STAGE-CONTROLS](../../design/DesignAuthorityRegistry.md#d-20-stage-controls) sets the bootstrap goals and production requirement, with separate acceptance for each stage.
 
@@ -141,7 +145,7 @@ The program prints `1` on three lines. Use `TOOLCHAIN` for a ready toolchain pre
 
 The seed processes the booter sources and emits the provider header, C stubs and LLVM IR into `OUT`. The grouped build tracks the library selected by the resolved seed executable. A seed in its CoD CMake development tree can use that checkout's `cod/library` when the installed library directory is absent. When an active project can supply a package override, the standalone build rechecks the source graph before reuse. Clang compiles the generated files and handwritten C adapters, then links the CoD archives and the shared libraries reported by `llvm-config`. The SDK library directory is recorded for the loader. The prepared inputs are read-only. The bootstrap input contract uses the [hand-prepared project directory](../../design/CodProjectStructureAndPkgMgmt.md#directory-layout).
 
-After building the runtime, the development seed uses it for `./build/bin/cod-seed --run FILE`. An installed toolchain can provide `lib/libcod-runtime.a` under its prefix. Set the `COD_RUNTIME_ARCHIVE` environment variable to select a different compatible archive. Link seed-emitted objects or bitcode with the same archive when building an executable outside the seed.
+The current bootstrap CLIs use explicit operations. Run a program with `./build/bin/cod-seed --run FILE` after building the runtime. The current booter takes `cod-booter SOURCE OUTPUT` to emit an object, or an explicit declarations or provider request. An installed toolchain can provide `lib/libcod-runtime.a` under its prefix. Set the `COD_RUNTIME_ARCHIVE` environment variable to select a different compatible archive. Link seed-emitted objects or bitcode with the same archive when building an executable outside the seed.
 
 ## Next-stage repositories and native runtime
 
@@ -151,7 +155,7 @@ The compiler and toolchain repositories are planned in the [e-wrks GitHub organi
 | --- | --- |
 | `cod-lang` | CoD language design and the authoritative language specification shared by both compilers. |
 | `cod-seed` | The C++ translator for trusted booter source, the CoD-written checking compiler and their C-native components, including the region core and LLVM bindings. The booter stays in this repository after the split. |
-| `cod` | The future production compiler written in CoD, including full diagnostics, [independent check and emission controls for editors and builds](docs/CompilerPipeline.md#independently-selectable-compiler-operations), and a future CoD REPL. [REPL decision](../../CHANGELOG.md#h-retire-cpp-repl-20261125) |
+| `cod` | The future production compiler written in CoD. The first release targets fast compile-and-run and experiments with optimizing builds. Version 2.0 formally supports the optimizing mode. The compiler also provides full diagnostics, [independent check and emission controls for editors and builds](docs/CompilerPipeline.md#independently-selectable-compiler-operations), and a future CoD REPL. [REPL decision](../../CHANGELOG.md#h-retire-cpp-repl-20261125) |
 | `codup` | Toolchain version management in the role of rustup. |
 | `codmate` | The Language Server Protocol server and IDE plugins, including [reference-site doclet tooltips and navigation](../../design/DomainLanguageDesign.md#definition-doclets). |
 

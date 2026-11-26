@@ -2,6 +2,10 @@
 
 Respond in English unless the user explicitly asks otherwise.
 
+## Compiler design target
+
+Design the default `cod` invocation to compile and run a program with `go run` semantics, leaving no executable as a user output. The seed’s default bootstrap job produces the `cod-booter` executable. Favor Go-like compile speed and moderate runtime performance in the seed, booter and first production release. The separate optimizing mode builds a high-quality executable for later use by default. It is planned as experimental in the first release of `e-wrks/cod` and formally supported in 2.0. [Compiler modes and acceptance](applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds)
+
 ## Design discussion and development mainline
 
 The design discussion maintains the language contracts, confirms major program structure and algorithm choices before implementation, and records its decisions. It may inspect source and existing evidence, challenge a delay or a gap in coverage, and ask mainline for the failing command, input, or missing evidence. It brings unresolved design trade-offs to the project user. The design discussion owns the external review backlog. When a design leaves an observable choice open, record the concrete question, the governing source and the next discussion or decision trigger there. Check existing authority first, bring genuine choices to the user promptly, and remove settled items after updating their contract. Track missing implementation evidence separately. Long-term topics may point to their existing repository entry.
