@@ -78,6 +78,7 @@ class BodyExtraction {
     BoundBody &body_;
     const CheckedMethod &method_;
     std::vector<std::map<std::string, Local>> scopes_{1};
+    std::set<size_t> caught_places_;
     using Kind = Expression::Kind;
 
     const Local *find(const std::string &name) const {
@@ -210,6 +211,41 @@ class BodyExtraction {
       return op;
     }
 
+    CheckedOperation provider_call(const Expression &expr, size_t id) {
+      const auto &native = declarations().native_operations.at(id);
+      const auto &form = *native.contract.source;
+      expect(!native.has_here() && !expr.has_here_body(), expr.at, "replacement seed needs a bound native here body");
+      expect(expr.children.size() == native.inputs.size(), expr.at, "arguments do not match the C provider declaration");
+      if (method_.source->kind == Form::Kind::function && form.kind != Form::Kind::function)
+        fail(expr.at, "a function cannot invoke a procedure");
+      CheckedOperation op;
+      op.type = *native.contract.result.type;
+      op.native_call = id;
+      std::map<size_t, size_t> owners;
+      for (size_t i = 0; i < native.inputs.size(); ++i) {
+        const auto &input = native.inputs[i];
+        const auto &at = expr.children[i]->at;
+        const auto &actual = operand(expr, i);
+        if (!input.owner) {
+          takes_value(actual, input.type, at);
+          op.arguments.push_back({ArgumentMode::value, input.type});
+          continue;
+        }
+        const bool handle = input.type.kind == Type::c_type_marker;
+        expect(handle ? matches_native_handle(actual.type, input.type) && !actual.type.owned :
+               input.type.kind == Type::array && actual.type == input.type,
+               at, "C provider needs a loan of the declared nominal type");
+        const auto owner = single_owner(actual, at);
+        const auto &role = form.owner_parameters.at(*input.owner);
+        if (!role.read_only && (actual.read_only || !can_allocate(owner)))
+          fail(at, "readonly loan cannot supply a writable C provider owner");
+        const auto [first, inserted] = owners.emplace(*input.owner, owner);
+        if (!inserted && first->second != owner) fail(at, "C provider arguments for one owner need the same actual owner");
+        op.arguments.push_back({handle ? ArgumentMode::borrowed_handle : ArgumentMode::borrowed_ref, actual.type});
+      }
+      return op;
+    }
+
     CheckedOperation call(const Expression &expr) {
       CheckedOperation op;
       if (expr.text == "[]<-" && expr.children.size() == 3) {
@@ -231,6 +267,10 @@ class BodyExtraction {
         op.type = Type::uint64;
         op.builtin = BuiltinOperation::array_length;
         return op;
+      }
+      if (!expr.intrinsic && !find(expr.text)) {
+        const auto native = names().native_operations.find(expr.text);
+        if (native != names().native_operations.end()) return provider_call(expr, native->second);
       }
       const auto *selected = family(expr.text);
       expect(!expr.intrinsic && !find(expr.text) && selected && !selected->symbol &&
@@ -404,17 +444,62 @@ class BodyExtraction {
         const auto type = names().types.find(handler->annotation->name);
         expect(type != names().types.end() && type->second.kind == Type::exception, handler->at,
                "catch needs a resolved exception category");
+        if (nominal_exception(type->second)) scalar_exception_schema(declarations(), type->second, handler->at);
         scopes_.emplace_back();
         const auto local = declare(handler->at, handler->text, type->second, true, true, true, 0);
         CheckedOperation receipt;
         receipt.type = type->second;
         receipt.place = local.place;
         body_.instance.operations.emplace(handler.get(), std::move(receipt));
+        caught_places_.insert(*local.place);
         terminates = check_body(*handler->children.front()) && terminates;
+        caught_places_.erase(*local.place);
         scopes_.pop_back();
       }
       CheckedOperation op;
       if (terminates) op.type = Type::never;
+      return op;
+    }
+
+    CheckedOperation braced_throw(const Expression &expr) {
+      expect(expr.annotation && expr.annotation->kind == Type::named,
+             expr.at, "replacement seed needs a braced throw with a named exception");
+      const auto type = names().types.find(expr.annotation->name);
+      expect(type != names().types.end(), expr.at, "throw needs a resolved exception category");
+      const auto &schema = scalar_exception_schema(declarations(), type->second, expr.at);
+      const auto fields = product_initializers(schema, expr);
+      expect(std::set(fields.begin(), fields.end()).size() == schema.fields.size(), expr.at,
+             "replacement seed needs a complete exception payload");
+      for (size_t i = 0; i < fields.size(); ++i) {
+        const auto &item = *expr.children[i];
+        const auto &field = schema.fields[fields[i]];
+        const auto &value = operand(item, 0);
+        if (value.type != Type::never) takes_value(value, field.type, item.at);
+        CheckedOperation write;
+        write.type = value.type == Type::never ? value.type : field.type;
+        write.operand_type = field.type;
+        write.product_field = fields[i];
+        body_.instance.operations.emplace(&item, std::move(write));
+        if (value.type == Type::never) break;
+      }
+      CheckedOperation op;
+      op.type = Type::never;
+      op.operand_type = type->second;
+      return op;
+    }
+
+    CheckedOperation exception_field(const Expression &expr) {
+      const auto &base = operand(expr, 0);
+      expect(expr.children.front()->kind == Kind::name && base.place && caught_places_.contains(*base.place) &&
+             nominal_exception(base.type), expr.at, "replacement seed needs a field read from the active nominal catch");
+      const auto &schema = scalar_exception_schema(declarations(), base.type, expr.at);
+      const auto index = product_field(schema, expr);
+      CheckedOperation op;
+      op.type = schema.fields[index].type;
+      op.operand_type = base.type;
+      op.product_field = index;
+      op.exception_owner = base.place;
+      op.read_only = true;
       return op;
     }
 
@@ -431,6 +516,8 @@ class BodyExtraction {
       case Kind::call: return call(expr);
       case Kind::make_object: return make(expr);
       case Kind::index: return index(expr);
+      case Kind::field: return exception_field(expr);
+      case Kind::raise: return braced_throw(expr);
       case Kind::try_scope: return try_statement(expr);
       case Kind::rebind: case Kind::transfer: return assign(expr);
       case Kind::grouped: return operand(expr, 0);

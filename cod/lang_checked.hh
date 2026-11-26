@@ -3,6 +3,7 @@
 
 #include "lang_checked_program.hh"
 #include "lang_scalar_operations.hh"
+#include "lang_schema_binding.hh"
 #include "lang_modules.hh"
 #include "lang_callable_flow.hh"
 #include "native/provider_names.h"
@@ -3563,7 +3564,7 @@ class ScalarChecker {
   void check_catch_category(const Type &type, std::set<size_t> &handled, const Expression &handler) const {
     if (type.kind != Type::exception) fail(handler.at, "catch requires a selected exception type");
     if (!handled.insert(type.identity).second) fail(handler.at, "duplicate exception category in catch clauses");
-    if (nominal_exception(type)) scalar_exception_schema(type, handler.at);
+    if (nominal_exception(type)) scalar_exception_schema(program_, type, handler.at);
     else if (type.identity != error_root_id && !owning_exception(type) && handler.annotation && !handler.read_only)
       implementation_gap(handler.at, "writable catch of an intrinsic exception");
   }
@@ -6585,9 +6586,6 @@ class ScalarChecker {
     marker.owned = owned;
     return marker;
   }
-  static bool matches_native_handle(const Type &type, const Type &marker) {
-    return type.kind == Type::native_handle && type.identity == marker.identity;
-  }
   static void check_native_rebind_operands(const Type &destination, const Type &source,
       std::optional<bool> destination_readonly, std::optional<bool> source_readonly, const Location &at) {
     if (source.owned || !matches_native_handle(source, destination))
@@ -8399,22 +8397,6 @@ class ScalarChecker {
     if (type.kind != Type::product) implementation_gap(at, "ordinary construction requires a supported product type");
     return program_.schemas.at(type.identity);
   }
-  const CheckedSchema &scalar_exception_schema(const Type &type, const Location &at) const {
-    if (!nominal_exception(type)) fail(at, "braced throw requires a concrete library-defined exception type");
-    const auto &schema = program_.schemas.at(*program_.exception_types.at(type.identity).schema);
-    if (!std::ranges::all_of(schema.fields, [](const auto &field) {
-          return field.storage == PlaceKind::value && scalar_type(field.type);
-        })) implementation_gap(at, "owned exception fields other than direct scalar bits");
-    return schema;
-  }
-  static size_t product_field(const CheckedSchema &schema, const Expression &member) {
-    for (size_t i = 0; i < schema.fields.size(); ++i)
-      if (schema.fields[i].source->name == member.text) return i;
-    fail(member.at, "unknown field '" + member.text + "' of '" + schema.source->name + "'");
-  }
-  static bool readonly_field(const CheckedSchema::Field &field) {
-    return field.source->read_only || field.source->fixed_binding;
-  }
   static void check_aggregate_owner_roles(const CheckedMethod &method, const std::vector<Type> &types) {
     // Lexical scopes retain the supplying activation's owner capabilities.
     if (method.scope_inputs) return;
@@ -8462,7 +8444,7 @@ class ScalarChecker {
   }
   CheckedOperation project_product(const CheckedOperation &parent, size_t index, const Location &at,
                                     bool preserve_null = false) {
-    const auto &schema = nominal_exception(parent.type) ? scalar_exception_schema(parent.type, at) : product_schema(parent.type, at);
+    const auto &schema = nominal_exception(parent.type) ? scalar_exception_schema(program_, parent.type, at) : product_schema(parent.type, at);
     return project_aggregate_field(parent, schema.fields.at(index), index, at, preserve_null);
   }
   CheckedOperation project_aggregate_field(const CheckedOperation &parent, const CheckedSchema::Field &field,
@@ -8542,31 +8524,6 @@ class ScalarChecker {
       selected.selection_identity = target.embedded_slot_selection;
     }
     return selected;
-  }
-  static std::vector<size_t> product_initializers(const CheckedSchema &schema, const Expression &expr) {
-    std::set<size_t> single_initialization;
-    std::vector<size_t> order;
-    for (const auto &item : expr.initializer_items()) {
-      const auto *label = item->initializer_field_label();
-      if (!label) fail(item->at, "product make requires named field initializers");
-      const auto index = product_field(schema, *label);
-      const auto &field = schema.fields[index];
-      const bool direct = field.storage == PlaceKind::value;
-      const bool rebind = item->kind == Expression::Kind::rebind || item->binding == "=";
-      if (field.direct_text_place() && rebind)
-        fail(label->at, "a direct String field initializer uses a selected '<-' method");
-      if (direct && rebind) fail(label->at, "a direct product field requires bits transfer '<-'");
-      if (!direct && !rebind) fail(label->at, "a reference field initializer requires binding '='");
-      const bool readonly = direct ? readonly_field(field) : field.source->fixed_binding;
-      const bool inline_product = direct && field.type.kind == Type::product;
-      if ((readonly || inline_product) && !single_initialization.insert(index).second) {
-        if (readonly)
-          fail(label->at, "readonly field '" + label->text + "' is initialized more than once");
-        implementation_gap(label->at, "repeated inline product initialization");
-      }
-      order.push_back(index);
-    }
-    return order;
   }
   static const Expression &inline_product_initializer(const Expression &item) {
     const auto &input = *item.children.back();
@@ -14402,7 +14359,7 @@ class ScalarChecker {
           if (state.required) implementation_gap(expr.at, "exception field selection requires a local catch binding");
           return {};
         }
-        const auto &schema = scalar_exception_schema(*type, expr.at);
+        const auto &schema = scalar_exception_schema(program_, *type, expr.at);
         const auto &field = schema.fields.at(product_field(schema, expr));
         const auto parent = state.value;
         view = {parent.read_only.value_or(true) || readonly_field(field), true, true, parent.owner};
@@ -14605,7 +14562,7 @@ class ScalarChecker {
       if (expr.annotation) {
         const auto type = evidence_annotation(*expr.annotation, state);
         if (!nominal_exception(type) && !state.required) return Type::never;
-        const auto &schema = scalar_exception_schema(type, expr.at);
+        const auto &schema = scalar_exception_schema(program_, type, expr.at);
         const auto order = product_initializers(schema, expr);
         note_type_allocation(state);
         note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::region_capacity_exceeded)));
@@ -18809,7 +18766,7 @@ class ScalarChecker {
 
   void declare_direct_exception_fields(size_t place, const Type &type, bool readonly, const Location &at) {
     if (!nominal_exception(type)) return;
-    for (const auto &field : scalar_exception_schema(type, at).fields) {
+    for (const auto &field : scalar_exception_schema(program_, type, at).fields) {
       const auto selected = declare("$exception." + std::to_string(place) + "." + field.source->name,
                                     field.type, readonly || readonly_field(field), true, field.source->at, false);
       (*storage_)[selected].subobject = true;
@@ -21661,7 +21618,7 @@ class ScalarChecker {
       if (base.kind == K::name) if (const auto binding = lexical_.lookup(base.text);
           binding && nominal_exception(bindings_->at(*binding).type)) {
         const auto parent = read_binding(base, false, binding, BindingUse::exception_field);
-        const auto &schema = scalar_exception_schema(parent.type, expr.at);
+        const auto &schema = scalar_exception_schema(program_, parent.type, expr.at);
         const auto index = product_field(schema, expr);
         operations.insert_or_assign(&base, parent);
         operation = project_product(parent, index, expr.at);
@@ -21766,7 +21723,7 @@ class ScalarChecker {
     case K::raise: {
       if (expr.annotation) {
         const auto type = resolve_annotation(*expr.annotation, instance);
-        const auto &schema = scalar_exception_schema(type, expr.at);
+        const auto &schema = scalar_exception_schema(program_, type, expr.at);
         const auto order = product_initializers(schema, expr);
         note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory), exception_id(ExceptionCategory::region_capacity_exceeded)});
         bool completes = true;
@@ -25557,7 +25514,7 @@ class ScalarChecker {
     if (!form.throws_types.empty()) {
       const auto type = resolve_type(form.throws_types.front());
       if (!nominal_exception(type)) implementation_gap(form.at, "C constructor failures other than a concrete library-defined exception");
-      const auto &schema = scalar_exception_schema(type, form.at);
+      const auto &schema = scalar_exception_schema(program_, type, form.at);
       if (schema.has_enum_storage)
         implementation_gap(form.at, "C constructor failure payload with enumeration storage");
       for (const auto &field : schema.fields)
