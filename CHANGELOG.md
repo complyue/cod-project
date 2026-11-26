@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Assign cross-builds to cfe and distribute the production LLVM toolchain with codup
+
+<a id="h-production-cross-build-20261126"></a>
+**H-PRODUCTION-CROSS-BUILD-20261126.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user directed “cross-build 能力只规划给 cfe 入口，cod还是直接宿主运行就行” and “通过 codup 管理CoD安装，不要依赖系统的llvm实例”. The user endorsed static musl for hosted Linux, permitted CRT linkage for packages with C components, and identified SoC development as the primary motivation for a CRT-free path. D-20-COMPILER-MODES and D-20-REPOSITORIES continue the [prior command contract](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds). [D-20-TARGET-TOOLCHAIN](design/DesignAuthorityRegistry.md#d-20-target-toolchain), P-754/P-755, records the new distribution and target runtime scope at pipeline r13 and roadmap r52. The user raised `brk` as an example for discussion. No allocator interface, system call or board was selected. Registry r1340→1341.
+
 ## 2026-11-26 — Give the booter one practical code-generation mode
 
 <a id="h-booter-single-codegen-mode-20261126"></a>

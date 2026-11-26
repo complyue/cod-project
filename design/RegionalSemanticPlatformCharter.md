@@ -5,7 +5,7 @@
 
 本文用于指导语言、存储、运行时、编译器和开发工具的共同演进。核心目标是确定的；具体类型理论、二进制布局、文本语法、事务算法和工具协议仍需专门设计。文中的伪签名和操作名称仅用于说明语义，不是已经发布的 API。
 
-**设计依据。** [D-00](DesignAuthorityRegistry.md#d-00) 记录原纲领的确认范围。2026-11-25 新增的第七项核心原则由[项目用户确认](../CHANGELOG.md#h-default-run-and-optimized-build-20261125)。生产编译器的 `cfe` 入口由[后续决定](../CHANGELOG.md#h-cfe-output-directory-20261126)确认。适用范围和验收见[编译模式约定](../applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds)。
+**设计依据。** [D-00](DesignAuthorityRegistry.md#d-00) 记录原纲领的确认范围。2026-11-25 新增的第七项核心原则由[项目用户确认](../CHANGELOG.md#h-default-run-and-optimized-build-20261125)。生产编译器的 `cfe` 入口及其交叉构建职责见[入口决定](../CHANGELOG.md#h-cfe-output-directory-20261126)和[目标平台决定](../CHANGELOG.md#h-production-cross-build-20261126)。适用范围和验收见[编译模式约定](../applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds)。
 
 ## 1. 项目定位
 
@@ -23,7 +23,7 @@
 4. **语义层级与计算阶段分离。** value、type、kind 可以分别由 regions 承载，并按阶段规则共同参与一次运行时集成。
 5. **结构化存取与源码可读性兼得。** DBMR 不是不可理解的二进制黑箱；文本与 IDE 是语义图的一等交互界面。
 6. **编辑也是受检查的语义操作。** 人类和智能体使用同一套身份、版本、校验和发布规则，不靠任意改写持久内存来维护程序。
-7. **默认快速编译并直接运行。** 命令行上的 `cod`（Compile on Demand）默认采用 `go run` 语义，按本次运行的需要编译并执行程序，不向用户交付可执行文件。seed 的默认自举任务则生成并保留 `cod-booter` 可执行文件。seed、booter 和首版 `e-wrks/cod` 以 Go 式快速编译和中等运行时性能的机器码为目标。`e-wrks/cod` 的优化编译入口 `cfe`（Compile for Ever）以高质量机器码为目标，默认保存可执行文件，供用户稍后运行。`cfe` 在首版实验，2.0 正式提供。
+7. **默认快速编译并直接运行。** 命令行上的 `cod`（Compile on Demand）默认采用 `go run` 语义，为当前宿主编译并直接执行程序，不向用户交付可执行文件。seed 的默认自举任务则生成并保留 `cod-booter` 可执行文件。seed、booter 和首版 `e-wrks/cod` 以 Go 式快速编译和中等运行时性能的机器码为目标。`e-wrks/cod` 的优化编译入口 `cfe`（Compile for Ever）负责本机构建与交叉构建，以高质量机器码为目标，默认保存可执行文件，供用户稍后运行。`cfe` 在首版实验，2.0 正式提供。
 
 ## 2. 统一表示与职责分层
 
