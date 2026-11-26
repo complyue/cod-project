@@ -25,6 +25,40 @@ public:
   const SourceProgram &source() const { return source_; }
 };
 
+// Completion reads only these extracted facts. It has no body or frame visitor.
+struct BodyDependencies {
+  using Role = std::pair<size_t, size_t>;
+  struct Requirements {
+    std::set<size_t> allocations;
+    bool open_replay;
+  };
+  std::vector<Requirements> direct;
+  std::map<Role, std::vector<Role>> allocating_callers;
+  std::vector<std::vector<size_t>> replay_callers;
+
+  std::vector<Requirements> complete() const {
+    auto result = direct;
+    std::vector<Role> roles;
+    for (size_t body = 0; body < direct.size(); ++body)
+      for (const auto role : direct[body].allocations) roles.emplace_back(body, role);
+    for (size_t next = 0; next < roles.size(); ++next) {
+      const auto callers = allocating_callers.find(roles[next]);
+      if (callers == allocating_callers.end()) continue;
+      for (const auto &[body, role] : callers->second)
+        if (result[body].allocations.insert(role).second) roles.emplace_back(body, role);
+    }
+
+    // Replay follows even the edges that supply an allocator locally.
+    std::vector<size_t> open;
+    for (size_t body = 0; body < replay_callers.size(); ++body)
+      if (direct[body].open_replay) open.push_back(body);
+    for (size_t next = 0; next < open.size(); ++next)
+      for (const auto caller : replay_callers[open[next]])
+        if (!std::exchange(result[caller].open_replay, true)) open.push_back(caller);
+    return result;
+  }
+};
+
 class BodyExtraction {
   using Allocator = CheckedOperation::ArrayAllocator;
   using Declarations = ScalarChecker::ModuleDeclarations;
@@ -80,11 +114,7 @@ class BodyExtraction {
     std::set<size_t> allocations;
     std::vector<BoundCall> calls;
     std::optional<Outline> outline;
-    const Expression *open_replay_boundary = nullptr;
-  };
-  struct CompletedBody {
-    std::set<size_t> allocations;
-    const Expression *open_replay_boundary;
+    bool open_replay = false;
   };
 
   const Declarations &declarations_;
@@ -215,7 +245,9 @@ class BodyExtraction {
     };
     std::vector<LexicalScope> scopes_{1};
     std::map<std::string, HereFormal> here_;
-    std::set<size_t> caught_places_;
+    struct ActiveCatch { size_t place, protected_depth; };
+    std::vector<ActiveCatch> catches_;
+    size_t protected_depth_ = 0;
     std::map<size_t, size_t> writable_regions_;
     bool in_iteration_ = false;
     using Kind = Expression::Kind;
@@ -1181,7 +1213,9 @@ class BodyExtraction {
                "replacement seed needs an effect-only protected body");
         return result.type == Type::never;
       };
+      ++protected_depth_;
       bool terminates = check_body(*expr.children.front());
+      --protected_depth_;
       for (const auto &handler : std::span(expr.children).subspan(1)) {
         expect(handler->kind == Kind::handler && handler->annotation && handler->annotation->kind == Type::named,
                handler->at, "replacement seed needs a named exception catch");
@@ -1195,9 +1229,9 @@ class BodyExtraction {
         receipt.type = type->second;
         receipt.place = local.place;
         body_.instance.operations.emplace(handler.get(), std::move(receipt));
-        caught_places_.insert(*local.place);
+        catches_.push_back({*local.place, protected_depth_});
         terminates = check_body(*handler->children.front()) && terminates;
-        caught_places_.erase(*local.place);
+        catches_.pop_back();
         scopes_.pop_back();
       }
       CheckedOperation op;
@@ -1232,8 +1266,23 @@ class BodyExtraction {
       return op;
     }
 
+    CheckedOperation throw_exception(const Expression &expr) {
+      if (expr.annotation || !expr.children.empty()) return braced_throw(expr);
+      if (catches_.empty()) fail(expr.at, "bare throw requires an active catch");
+      const auto &caught = catches_.back();
+      // The existing transfer takes the holder from this catch. A nested
+      // interception would need proof that the original holder is still usable.
+      expect(caught.protected_depth == protected_depth_, expr.at,
+             "replacement seed cannot transfer a caught exception across an intervening protected body");
+      CheckedOperation op;
+      op.type = Type::never;
+      op.place = op.exception_owner = caught.place;
+      return op;
+    }
+
     CheckedOperation exception_field(const Expression &expr, const CheckedOperation &base) {
-      expect(expr.children.front()->kind == Kind::name && base.place && caught_places_.contains(*base.place) &&
+      expect(expr.children.front()->kind == Kind::name && base.place &&
+             std::ranges::find(catches_, *base.place, &ActiveCatch::place) != catches_.end() &&
              nominal_exception(base.type), expr.at, "replacement seed needs a field read from the active nominal catch");
       const auto &schema = scalar_exception_schema(declarations(), base.type, expr.at);
       const auto index = product_field(schema, expr);
@@ -1426,7 +1475,7 @@ class BodyExtraction {
       case Kind::case_failure:
         op.type = Type::never;
         return op;
-      case Kind::raise: return braced_throw(expr);
+      case Kind::raise: return throw_exception(expr);
       case Kind::try_scope: return try_statement(expr);
       case Kind::rebind: case Kind::transfer: return assign(expr);
       case Kind::grouped: return operand(expr, 0);
@@ -1508,10 +1557,10 @@ class BodyExtraction {
     const CheckedOperation &remember(const Expression &expr, CheckedOperation op) {
       // Calls with a here operand are open until the receiver-to-body
       // dependency is represented. Native disposal has its own contract.
-      if (!body_.open_replay_boundary &&
+      if (!body_.open_replay &&
           (op.native_acquisition || op.native_call || op.invokes_here || expr.has_here_body() ||
            (expr.kind == Kind::symbol && op.symbol)))
-        body_.open_replay_boundary = &expr;
+        body_.open_replay = true;
       if (op.view && !scalar_type(op.type) && op.type != Type::exception)
         op.discarded_view = true;
       const auto [row, first] = body_.instance.operations.emplace(&expr, std::move(op));
@@ -1574,45 +1623,23 @@ class BodyExtraction {
     return owner ? Allocator{Allocator::input, null_target - 1 - owner} : Allocator{Allocator::lexical};
   }
 
-  // Complete collected dependencies without entering any source body.
-  std::vector<CompletedBody> complete_dependencies() const {
-    std::vector<CompletedBody> completed;
-    for (const auto &body : bodies_) completed.push_back({body.allocations, body.open_replay_boundary});
-    std::vector<bool> complete(bodies_.size()), active(bodies_.size());
-    struct Pending { size_t body; size_t call = 0; };
-    std::vector<Pending> stack;
+  BodyDependencies freeze_dependencies() const {
+    BodyDependencies graph;
+    if (!handler_layouts_.empty()) graph.replay_callers.resize(bodies_.size());
     for (size_t id = 0; id < bodies_.size(); ++id) {
-      if (complete[id]) continue;
-      active[id] = true;
-      stack.push_back({id});
-      while (!stack.empty()) {
-        auto &current = stack.back();
-        const auto &body = bodies_[current.body];
-        if (current.call == body.calls.size()) {
-          complete[current.body] = true;
-          active[current.body] = false;
-          stack.pop_back();
-          continue;
-        }
-        const auto &call = body.calls[current.call];
-        expect(!active[call.callee], call.site->at, "replacement seed has no completed recursive allocator contract");
-        if (!complete[call.callee]) {
-          active[call.callee] = true;
-          stack.push_back({call.callee});
-          continue;
-        }
-        auto &caller = completed[current.body];
-        const auto &callee = completed[call.callee];
-        if (!caller.open_replay_boundary) caller.open_replay_boundary = callee.open_replay_boundary;
-        for (const auto role : callee.allocations) {
+      const auto &body = bodies_[id];
+      graph.direct.push_back({body.allocations, body.open_replay});
+      for (const auto &call : body.calls) {
+        if (!graph.replay_callers.empty()) graph.replay_callers[call.callee].push_back(id);
+        for (const auto &[owner, input] : bodies_[call.callee].instance.frame.owners) {
+          const auto role = null_target - 1 - owner;
           const auto actual = call_allocator(call, role);
-          expect(actual.has_value(), call.site->at, "required allocation has no prepared owner capability");
-          if (actual->kind == Allocator::input) caller.allocations.insert(actual->place);
+          if (actual && actual->kind == Allocator::input)
+            graph.allocating_callers[{call.callee, role}].emplace_back(id, actual->place);
         }
-        ++current.call;
       }
     }
-    return completed;
+    return graph;
   }
 
   void extract() {
@@ -1696,7 +1723,7 @@ class BodyExtraction {
   }
 
   void seal(CheckedProgram &program) {
-    const auto completed = complete_dependencies();
+    const auto completed = freeze_dependencies().complete();
     for (const auto &entry : program.native_entries)
       expect(completed[selected_.at(entry.method)].allocations.empty(), program.methods[entry.method].source->at,
              "a C entry cannot import an array allocator capability");
@@ -1710,13 +1737,17 @@ class BodyExtraction {
       for (const auto &call : body.calls) {
         auto &operation = body.instance.operations.at(call.site);
         const auto &callee = completed[call.callee];
-        if (call.installs_handler && callee.open_replay_boundary)
+        if (call.installs_handler && callee.open_replay)
           implementation_gap(call.site->at, "replacement seed cannot complete a live handler's empty replay inventory");
         if (const auto &outline = bodies_[call.callee].outline; outline && !outline->here)
           prepare_local_captures(program, call, operation);
         if (callee.allocations.empty()) continue;
         auto arguments = std::make_shared<std::map<size_t, Allocator>>();
-        for (const auto role : callee.allocations) arguments->emplace(role, *call_allocator(call, role));
+        for (const auto role : callee.allocations) {
+          const auto actual = call_allocator(call, role);
+          expect(actual.has_value(), call.site->at, "required allocation has no prepared owner capability");
+          arguments->emplace(role, *actual);
+        }
         operation.array_allocator_arguments = std::move(arguments);
       }
       body.instance.array_allocator_roles = completed[i].allocations;
