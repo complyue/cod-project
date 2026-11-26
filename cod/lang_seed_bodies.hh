@@ -703,7 +703,7 @@ class BodyExtraction {
     void call_full_scope(const Expression &expr) {
       const auto &callable = *expr.children.front();
       const auto &source = *callable.definition;
-      expect(body_.instance.result.type && !source.case_scan_scope && source.parameters.empty(), expr.at,
+      expect(!body_.outline && body_.instance.result.type && !source.case_scan_scope && source.parameters.empty(), expr.at,
              "replacement seed needs an ordinary intermediate full-scope statement");
       const auto callee = extraction_.bodies_.size();
       extraction_.add_outline(outline(source), {});
@@ -1588,7 +1588,7 @@ class BodyExtraction {
       return op;
     }
 
-    CheckedOperation operation(const Expression &expr) {
+    CheckedOperation operation(const Expression &expr, bool discard_iteration_result) {
       CheckedOperation op;
       switch (expr.kind) {
       case Kind::integer: case Kind::real: return numeric_literal(expr);
@@ -1623,7 +1623,7 @@ class BodyExtraction {
       case Kind::raise: return throw_exception(expr);
       case Kind::try_scope: return try_statement(expr);
       case Kind::rebind: case Kind::transfer: return assign(expr);
-      case Kind::grouped: return operand_result(operand(expr, 0));
+      case Kind::grouped: return operand_result(extract(*expr.children.front(), discard_iteration_result));
       case Kind::typed_expression: return typed_expression(expr);
       case Kind::block:
         expect(!expr.scoped, expr.at, "replacement seed has no extracted full-scope body");
@@ -1644,7 +1644,7 @@ class BodyExtraction {
             if (!call_operation) continue;
             op.type = remember(item, std::move(*call_operation)).type;
           } else {
-            op.type = extract(item).type;
+            op.type = extract(item, discard_iteration_result).type;
           }
           if (op.type == Type::never) break;
         }
@@ -1659,11 +1659,15 @@ class BodyExtraction {
       case Kind::conditional: {
         expect(operand(expr, 0).type == Type::boolean, expr.at, "conditional requires a Boolean operand");
         scopes_.emplace_back();
-        const auto yes = operand(expr, 1).type;
+        const auto yes = extract(*expr.children[1], discard_iteration_result).type;
         scopes_.pop_back();
         scopes_.emplace_back();
-        const auto no = operand(expr, 2).type;
+        const auto no = extract(*expr.children[2], discard_iteration_result).type;
         scopes_.pop_back();
+        if (discard_iteration_result) {
+          op.type = yes == Type::never && no == Type::never ? Type::never : Type::void_type;
+          return op;
+        }
         expect(yes == no || yes == Type::never || no == Type::never,
                expr.at, "replacement seed needs compatible conditional results");
         op.type = yes == Type::never ? no : yes;
@@ -1678,7 +1682,7 @@ class BodyExtraction {
         scopes_.emplace_back();
         op.place = declare(expr.at, expr.text, first.type, true, true, true, 0).place;
         const auto enclosing_iteration = std::exchange(in_iteration_, true);
-        operand(expr, 2);
+        extract(*expr.children[2], true);
         in_iteration_ = enclosing_iteration;
         scopes_.pop_back();
         return op;
@@ -1745,9 +1749,9 @@ class BodyExtraction {
              expr.at, "replacement seed has no extracted transport for this expression");
     }
 
-    const CheckedOperation &extract(const Expression &expr) {
+    const CheckedOperation &extract(const Expression &expr, bool discard_iteration_result = false) {
       require_executable_expression(expr);
-      return remember(expr, operation(expr));
+      return remember(expr, operation(expr, discard_iteration_result));
     }
 
   public:
