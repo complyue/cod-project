@@ -129,8 +129,9 @@ class BodyExtraction {
            !source.case_scan_scope && !source.symbolic && !method.interpretation && !method.local_effect_symbol &&
            !method.parent && !method.regional_initializer && method.operation.empty() &&
            method.here.size() <= 1 && method.type_parameters.empty() && source.captures.empty() &&
-           method.result.type && method.result.mode == ResultMode::value &&
-           (scalar_type(*method.result.type) || method.result.type == Type::void_type),
+           method.result.type &&
+           (method.result.owns_region() || (method.result.mode == ResultMode::value &&
+            (scalar_type(*method.result.type) || method.result.type == Type::void_type))),
            at, "replacement seed needs a fixed ordinary callable body");
     const auto [row, first] = selected_.try_emplace(method_id, bodies_.size());
     if (first) {
@@ -180,6 +181,7 @@ class BodyExtraction {
     std::vector<std::map<std::string, Local>> scopes_{1};
     std::map<std::string, HereFormal> here_;
     std::set<size_t> caught_places_;
+    std::map<size_t, size_t> writable_regions_;
     bool in_iteration_ = false;
     using Kind = Expression::Kind;
 
@@ -233,12 +235,13 @@ class BodyExtraction {
       return owner > first_symbol_owner && owners().at(null_target - 1 - owner).read_only;
     }
 
-    bool can_allocate(size_t owner) const {
-      return !owner || (owner > first_symbol_owner && !const_input_owner(owner));
-    }
-
-    static Allocator capability(size_t owner) {
-      return owner ? Allocator{Allocator::input, null_target - 1 - owner} : Allocator{Allocator::lexical};
+    std::optional<Allocator> allocator_for(size_t owner) const {
+      if (!owner) return Allocator{Allocator::lexical};
+      if (const auto region = writable_regions_.find(owner); region != writable_regions_.end())
+        return Allocator{Allocator::region, region->second};
+      if (owner > first_symbol_owner && !const_input_owner(owner))
+        return Allocator{Allocator::input, null_target - 1 - owner};
+      return {};
     }
 
     const auto &names() const { return extraction_.declarations_.modules_.at(module_); }
@@ -319,6 +322,8 @@ class BodyExtraction {
       expect(!source.nullable &&
              (array || incoming_loan || (scalar_type(source.type) && (source.value_binding || source.fixed))),
              expr.at, "replacement seed needs a stable scalar place, array view or incoming text or handle loan in a here capture");
+      expect(!original.owner || original.owner > first_symbol_owner, expr.at,
+             "replacement seed has no capture of a locally owned region view");
       const auto known = std::ranges::find(literal.owners, original.owner);
       const auto role = static_cast<size_t>(known - literal.owners.begin());
       if (known == literal.owners.end()) {
@@ -479,7 +484,7 @@ class BodyExtraction {
                  at, "C provider needs a loan of the declared type and access");
         const auto owner = handle ? native_loan(actual, input.type, at) : single_owner(actual, at);
         const auto &role = form.owner_parameters.at(*input.owner);
-        if (!role.read_only && (actual.read_only || (handle ? const_input_owner(owner) : !can_allocate(owner))))
+        if (!role.read_only && (actual.read_only || (handle ? const_input_owner(owner) : !allocator_for(owner))))
           fail(at, "readonly loan cannot supply a writable C provider owner");
         bind_native_owner(owners, *input.owner, owner, at);
         op.arguments.push_back({handle ? ArgumentMode::borrowed_handle : ArgumentMode::borrowed_ref, actual.type});
@@ -493,7 +498,7 @@ class BodyExtraction {
       return op;
     }
 
-    CheckedOperation call(const Expression &expr) {
+    CheckedOperation call(const Expression &expr, bool region_receiver = false) {
       CheckedOperation op;
       if (expr.text == "[]<-" && expr.children.size() == 3) {
         confirm_intrinsic(expr, expr.text);
@@ -524,6 +529,8 @@ class BodyExtraction {
              expr.at, "replacement seed needs an unambiguous ordinary source call");
       const auto method_id = selected->methods.front();
       const auto &target = extraction_.declarations_.method(method_id);
+      expect(target.result.owns_region() == region_receiver, expr.at,
+             "an owning region result requires a direct owning declaration");
       if (form_.kind == Form::Kind::function && target.source->kind != Form::Kind::function)
         fail(expr.at, "a function cannot invoke a procedure");
       const auto callee = extraction_.select_body(method_id, expr.at);
@@ -558,9 +565,8 @@ class BodyExtraction {
         op.arguments.push_back({mode, formal, parameter.selects_caller_ref_slot()});
       }
       BoundCall edge{&expr, callee, {}};
-      for (const auto &[role, owner] : actual_owners)
-        if (!target.input_owners()[role].read_only && can_allocate(owner))
-          edge.owners.emplace(role, capability(owner));
+      for (const auto &[role, owner] : actual_owners) if (!target.input_owners()[role].read_only)
+        if (const auto allocator = allocator_for(owner)) edge.owners.emplace(role, *allocator);
       body_.calls.push_back(std::move(edge));
       op.type = *target.result.type;
       op.callee = callee;
@@ -579,6 +585,60 @@ class BodyExtraction {
       const auto found = names().types.find(annotation.name);
       if (found == names().types.end()) fail(at, "unknown type '" + annotation.name + "'");
       return found->second;
+    }
+
+    CheckedOperation fresh_region(const Expression &expr) {
+      expect(!body_.literal && expr.annotation && expr.initializer_block, expr.at,
+             "replacement seed needs a named region with explicit root initializers");
+      const auto schema = resolve_annotation(*expr.annotation, expr.at);
+      const auto &roots = direct_region_roots(declarations(), schema, expr.at);
+      auto order = region_initializers(roots, expr);
+      expect(order.size() == roots.fields.size() && std::set(order.begin(), order.end()).size() == order.size(),
+             expr.at, "replacement seed needs one initializer for each region root");
+
+      takes_value(operand(expr, 0), Type::uint64, expr.children.front()->at);
+      const auto items = expr.initializer_items();
+      for (size_t i = 0; i < order.size(); ++i) {
+        const auto &input = *items[i]->children.back();
+        takes_payload(extract(input), roots.fields[order[i]].type, input.at);
+      }
+      CheckedOperation op;
+      op.type = owned_region_type(schema);
+      op.operand_type = schema;
+      op.region_initializers = std::move(order);
+      return op;
+    }
+
+    CheckedOperation bind_region(const Expression &expr) {
+      expect(!body_.literal && !in_iteration_ && expr.annotation && expr.annotation->owned &&
+             expr.annotation->target && expr.children.size() == 1, expr.at,
+             "replacement seed needs a fixed lexical owning region declaration");
+      const auto schema = resolve_annotation(*expr.annotation->target, expr.at);
+      const auto &initializer = ungrouped_expression(*expr.children.front());
+      expect(initializer.kind == Kind::make_region ||
+             (initializer.kind == Kind::call && !initializer.intrinsic && !initializer.has_here_body()),
+             initializer.at, "replacement seed needs a fresh region or a direct owning region factory");
+      const auto &value = remember(initializer, initializer.kind == Kind::make_region
+          ? fresh_region(initializer) : call(initializer, true));
+      if (value.type != owned_region_type(schema))
+        fail(initializer.at, "constructed region does not match the declared root schema");
+
+      CheckedOperation op;
+      const auto owner = body_.instance.bindings.size() + 1;
+      op.region_holder = declare(expr.at, expr.text, value.type, true, expr.read_only, true, owner).place;
+      if (!expr.read_only) writable_regions_.emplace(owner, *op.region_holder);
+      return op;
+    }
+
+    size_t array_owner(const Expression &expr) const {
+      if (expr.owner_name.empty()) return 0;
+      if (const auto *local = find(expr.owner_name)) {
+        const auto &type = body_.instance.bindings.at(local->binding).type;
+        expect(type.kind == Type::region && type.owned && local->place,
+               expr.at, "array allocation needs an owning region or an input owner");
+        return local->owner;
+      }
+      return input_owner(owner_role(expr.owner_name, expr.at));
     }
 
     CheckedOperation::NativeAcquisition native_acquisition(const Expression &initializer, const Type &declared) {
@@ -728,8 +788,9 @@ class BodyExtraction {
              expr.children.size() == 2 && !family(spelling),
              expr.at, "replacement seed needs an ordinary array constructor");
       expect(!body_.literal, expr.at, "replacement seed does not allocate arrays inside a here literal");
-      const auto owner = expr.owner_name.empty() ? size_t{0} : null_target - 1 - owner_role(expr.owner_name, expr.at);
-      expect(can_allocate(owner) && (owner || scopes_.size() == 2), expr.at,
+      const auto owner = array_owner(expr);
+      const auto allocator = allocator_for(owner);
+      expect(allocator && (owner || scopes_.size() == 2), expr.at,
              "replacement seed needs an admitted array allocation owner");
       const auto &array = declarations().arrays.at(type->second.identity);
       expect(declarations().bits_payload(array.element), expr.at, "array fill requires a finite bits element");
@@ -739,8 +800,8 @@ class BodyExtraction {
       op.type = op.operand_type = type->second;
       op.view = true;
       op.owners.insert(owner);
-      op.array_allocator = capability(owner);
-      if (owner) body_.allocations.insert(op.array_allocator->place);
+      op.array_allocator = allocator;
+      if (allocator->kind == Allocator::input) body_.allocations.insert(allocator->place);
       return op;
     }
 
@@ -878,15 +939,18 @@ class BodyExtraction {
     CheckedOperation field(const Expression &expr) {
       const auto &base = operand(expr, 0);
       if (base.type.kind == Type::exception) return exception_field(expr, base);
-      expect(base.type.kind == Type::product && base.view && declarations().bits_payload(base.type), expr.at,
-             "replacement seed needs an inline field of a bits product view");
-      const auto &schema = declarations().schemas.at(base.type.identity);
+      const bool region_root = base.type.kind == Type::region && base.type.owned && base.type.target && base.place;
+      expect(region_root || (base.type.kind == Type::product && base.view && declarations().bits_payload(base.type)),
+             expr.at, "replacement seed needs an inline field of a bits product or owned region");
+      const auto &type = region_root ? *base.type.target : base.type;
+      const auto &schema = declarations().schemas.at(type.identity);
       const auto index = product_field(schema, expr);
       const auto &member = schema.fields[index];
       CheckedOperation op;
       op.type = member.type;
-      op.operand_type = base.type;
+      op.operand_type = type;
       op.product_field = index;
+      if (region_root) op.region_holder = base.place;
       op.view = op.indexed_target = true;
       op.read_only = base.read_only || readonly_field(member);
       op.owners = base.owners;
@@ -972,6 +1036,7 @@ class BodyExtraction {
       case Kind::unary: case Kind::binary: return eager(expr);
       case Kind::call: return call(expr);
       case Kind::make_object: return make(expr);
+      case Kind::region_binding: return bind_region(expr);
       case Kind::native_handle_binding: return bind_native_handle(expr);
       case Kind::make_borrowed_handle: return attach_native_handle(expr);
       case Kind::index: return index(expr);
@@ -1033,7 +1098,13 @@ class BodyExtraction {
       case Kind::return_value: case Kind::continue_value:
         expect(bool(body_.literal) == (expr.kind == Kind::continue_value), expr.at,
                "replacement seed needs an ordinary return or a local here continue");
-        if (expr.children.empty()) expect(body_.instance.result.type == Type::void_type, expr.at, "return needs a value");
+        if (body_.instance.result.owns_region()) {
+          expect(expr.children.size() == 1, expr.at, "return needs a fresh region");
+          const auto &value = ungrouped_expression(*expr.children.front());
+          expect(value.kind == Kind::make_region, value.at, "replacement seed needs a direct fresh region return");
+          if (remember(value, fresh_region(value)).type != *body_.instance.result.type)
+            fail(value.at, "constructed region does not match the declared root schema");
+        } else if (expr.children.empty()) expect(body_.instance.result.type == Type::void_type, expr.at, "return needs a value");
         else takes_value(operand(expr, 0), *body_.instance.result.type, expr.at);
         op.type = Type::never;
         op.operand_type = *body_.instance.result.type;

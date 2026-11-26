@@ -8531,18 +8531,10 @@ class ScalarChecker {
     if (value.kind != K::make_region || !value.owner_name.empty() || has_deferred_region_return_action(value))
       implementation_gap(value.at, "an owning region result requires fresh construction without pending callee cleanup");
   }
-  const CheckedSchema &direct_region_roots(const Type &schema, const Location &at) const {
-    if (schema.kind != Type::region_schema) fail(at, "make region requires a named region root schema");
-    const auto &roots = program_.schemas.at(schema.identity);
-    for (const auto &root : roots.fields)
-      if (root.stores_target() || !program_.bits_payload(root.type))
-        implementation_gap(root.source->at, "region roots outside direct bits storage");
-    return roots;
-  }
   void require_region_root_schema(const Type &actual, const Type &expected, const Location &at) const {
     if (actual == expected) return;
-    const auto &source = direct_region_roots(actual, at);
-    const auto &target = direct_region_roots(expected, at);
+    const auto &source = direct_region_roots(program_, actual, at);
+    const auto &target = direct_region_roots(program_, expected, at);
     for (const auto &root : target.fields) {
       const auto found = std::ranges::find_if(source.fields, [&](const auto &field) {
         return field.source->name == root.source->name;
@@ -8552,18 +8544,6 @@ class ScalarChecker {
         fail(at, "constructed region does not match the declared root schema");
     }
     implementation_gap(at, "handing off an owning region across different structurally compatible root schemas");
-  }
-  static std::vector<size_t> region_initializers(const CheckedSchema &roots, const Expression &expr) {
-    for (const auto &item : expr.initializer_items())
-      if (!item->initializer_field_label())
-        implementation_gap(item->at, "region initialization outside the direct root initializer form");
-    return product_initializers(roots, expr);
-  }
-  static Type owned_region_type(const Type &schema) {
-    Type type{Type::region};
-    type.owned = true;
-    type.target = std::make_shared<Type>(schema);
-    return type;
   }
   size_t reserve_lexical_construction(const Type &type, const Location &at, const Expression *receiver = nullptr) {
     const auto name = receiver ? receiver->text : "$make." + std::to_string(storage_->size());
@@ -9736,7 +9716,7 @@ class ScalarChecker {
   std::optional<Type> type_fresh_region(const Expression &make, TypeEvidenceState &state) const {
     const auto schema = evidence_annotation(*make.annotation, state);
     if (!state.required && schema.kind != Type::region_schema) return {};
-    const auto &roots = direct_region_roots(schema, make.at);
+    const auto &roots = direct_region_roots(program_, schema, make.at);
     const auto capacity = type_evidence(*make.children.front(), state);
     if (!capacity || *capacity == Type::never) return capacity;
     transfer_type(*capacity, Type::uint64, make.children.front()->at);
@@ -14286,7 +14266,7 @@ class ScalarChecker {
         if (root != state.bindings.end() && root->second && root->second->kind == Type::region) {
           const auto owner = owner_evidence(base.text, state, base.at);
           if (!owner || !root->second->target) return {};
-          const auto &roots = direct_region_roots(*root->second->target, expr.at);
+          const auto &roots = direct_region_roots(program_, *root->second->target, expr.at);
           const auto &field = roots.fields[product_field(roots, expr)];
           view = {state.views.at(base.text).read_only.value_or(true) || readonly_field(field), true, true, owner};
           view.storage_kind = PlaceKind::value;
@@ -19406,7 +19386,7 @@ class ScalarChecker {
   CheckedOperation check_fresh_region(const Expression &make, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations) {
     const auto schema = resolve_annotation(*make.annotation, instance);
-    const auto &roots = direct_region_roots(schema, make.at);
+    const auto &roots = direct_region_roots(program_, schema, make.at);
     const auto order = region_initializers(roots, make);
     CheckedOperation operation;
     operation.operand_type = schema;
@@ -19462,7 +19442,7 @@ class ScalarChecker {
     }
     if (expr.annotation->target)
       require_region_root_schema(schema, resolve_annotation(*expr.annotation->target, instance), initializer.at);
-    const auto &roots = direct_region_roots(schema, initializer.at);
+    const auto &roots = direct_region_roots(program_, schema, initializer.at);
     const auto place = declare(expr.text, owned_region_type(schema), expr.read_only, true, expr.at);
     const auto owner = next_scope_++;
     checked_scope_owners_[&expr] = owner;
@@ -21536,7 +21516,7 @@ class ScalarChecker {
         const auto owner = named_owner(base.text, base.at);
         const auto &region = region_owners_.at(owner);
         const auto &schema = *bindings_->at(*binding).type.target;
-        const auto &roots = direct_region_roots(schema, expr.at);
+        const auto &roots = direct_region_roots(program_, schema, expr.at);
         const auto index = product_field(roots, expr);
         const auto &field = roots.fields[index];
         operation.type = field.type;
@@ -25846,7 +25826,7 @@ class ScalarChecker {
             implementation_gap(form->at, "an owning region result outside an ordinary named CoD factory");
           if (!prepared.result.type->target) fail(form->at, "an owning region result requires a root schema");
           const auto schema = resolve_signature(*prepared.result.type->target);
-          direct_region_roots(schema, form->at);
+          direct_region_roots(program_, schema, form->at);
           prepared.result.type = owned_region_type(schema);
           if (scope == DeclarationScope::whole_source) require_direct_region_return(*form);
           prepared.result.mode = ResultMode::owned_region;

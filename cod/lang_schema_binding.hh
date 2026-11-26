@@ -126,4 +126,26 @@ std::vector<CaseField> bind_case_fields(const CheckedProgram &program, const Exp
   return result;
 }
 
+inline const CheckedSchema &direct_region_roots(const CheckedProgram &program, const Type &schema, const Location &at) {
+  if (schema.kind != Type::region_schema) fail(at, "make region requires a named region root schema");
+  const auto &roots = program.schemas.at(schema.identity);
+  for (const auto &root : roots.fields)
+    if (root.stores_target() || !program.bits_payload(root.type))
+      implementation_gap(root.source->at, "region roots outside direct bits storage");
+  return roots;
+}
+
+inline std::vector<size_t> region_initializers(const CheckedSchema &roots, const Expression &expr) {
+  for (const auto &item : expr.initializer_items())
+    if (!item->initializer_field_label())
+      implementation_gap(item->at, "region initialization outside the direct root initializer form");
+  return product_initializers(roots, expr);
+}
+inline Type owned_region_type(const Type &schema) {
+  Type type{Type::region};
+  type.owned = true;
+  type.target = std::make_shared<Type>(schema);
+  return type;
+}
+
 } // namespace cod::language
