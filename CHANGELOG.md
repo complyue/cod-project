@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Complete writable array growth before its callers
+
+<a id="k-seed-array-growth-contract-20261125"></a>
+**K-SEED-ARRAY-GROWTH-CONTRACT-20261125.** The [architecture review](design/ImplementationArchitecture.md#completing-the-writable-array-growth-procedures) continues D-ARCH-REVIEW r204→205 under the [completed-callee rule](#h-completed-callee-behavior-20261125). At `78adf259:applications/cod-booter/src/ModuleIndex.cod`, two reserve procedures allocate in the same owner through distinct caller slots. The reviewed seed schedule preserves discovery of writes, settled slot outcomes and the allocator role consumed by LLVM. The batch publishes each procedure's contract only after its observations are complete.
+
 ## 2026-11-25 — Apply the completed module key comparison to a visit lookup
 
 <a id="k-seed-module-visit-contract-20261125"></a>
