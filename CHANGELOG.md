@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Apply the completed module key comparison to a visit lookup
+
+<a id="k-seed-module-visit-contract-20261125"></a>
+**K-SEED-MODULE-VISIT-CONTRACT-20261125.** The [architecture review](design/ImplementationArchitecture.md#applying-the-completed-key-comparison-in-a-visit-lookup) continues D-ARCH-REVIEW r203→204 under the [completed-callee rule](#h-completed-callee-behavior-20261125) and [case reception contract](#h-case-contract-20261119). At `2eeadd72:applications/cod-booter/src/ModuleIndex.cod`, the four nonempty visit alternatives supply independent endpoints to the same completed comparator. The existing second batch can establish the lookup's contract while preserving the runtime index result, actual loans and failure origins.
+
 ## 2026-11-25 — Complete the seed contract for the module key comparison
 
 <a id="k-seed-module-key-range-20261125"></a>
