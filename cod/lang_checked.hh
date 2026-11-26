@@ -6067,6 +6067,11 @@ class ScalarChecker {
     note_abrupt(path.at, path.exceptions, path.completion, path.immediate_scope_failure, path.here_exit,
                 path.receiver_transfer_pending, path.case_result);
   }
+  void forward_completed_path(AbruptPath &&path) {
+    if (!path.state.live) return;
+    if (abrupt_) append_abrupt(*abrupt_, std::move(path));
+    else observe_scope_exit(path.here_exit, path.exceptions);
+  }
   static bool declares_root(const std::vector<Type> &types) {
     return std::any_of(types.begin(), types.end(), [](const Type &type) { return type.kind == Type::exception && !type.identity; });
   }
@@ -6472,10 +6477,7 @@ class ScalarChecker {
     }
     abrupt_ = outer;
     if (flow.declared_root) note_declared_root();
-    for (auto &path : exits) if (path.state.live) {
-      if (outer) append_abrupt(*outer, std::move(path));
-      else observe_scope_exit(path.here_exit, path.exceptions);
-    }
+    for (auto &path : exits) forward_completed_path(std::move(path));
     if (!scans.empty()) {
       join(body, true, scans.front(), false, at);
       for (size_t i = 1; i < scans.size(); ++i) { const auto previous = lexical_; join(previous, false, scans[i], false, at); }
@@ -18447,7 +18449,7 @@ class ScalarChecker {
     abrupt_ = &incoming;
     const auto body = check_arm(*expr.children[0]);
     if (read && !discard && body.kind == Type::procedure) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
-    const auto body_state = lexical_;
+    auto body_state = lexical_;
     std::vector<AbruptPath> control_inputs;
     for (const auto &path : incoming.paths) if (path.exceptions.empty()) control_inputs.push_back(path);
     std::vector<LexicalState> normals;
@@ -18484,7 +18486,6 @@ class ScalarChecker {
           category_inputs[category].insert(path.state.inputs.begin(), path.state.inputs.end());
         path.exceptions = path.exceptions.without(selected.possibilities());
       }
-      lexical_ = body_state;
       if (entries.empty()) join(body_state, true, before, false, handler.at);
       else {
         join(body_state, true, entries.front(), false, handler.at);
@@ -18533,18 +18534,22 @@ class ScalarChecker {
         }
       }
       if (!entries.empty()) {
-        outgoing.paths.insert(outgoing.paths.end(), handler_exits.paths.begin(), handler_exits.paths.end());
-        if (resumes_protected_transfer) for (auto path : handler_exits.paths) {
-          // A receiver catch can recover its local failure while the
-          // supplier's transfer still has to leave the receiver.
-          if (path.completion.failed()) path.receiver_transfer_pending = true;
-          else path.completion.reason = Completion::protected_transfer;
-          (path.exceptions.empty() ? control_inputs : outgoing.paths).push_back(std::move(path));
+        if (resumes_protected_transfer) {
+          outgoing.paths.insert(outgoing.paths.end(), handler_exits.paths.begin(), handler_exits.paths.end());
+          for (auto &path : handler_exits.paths) {
+            // A receiver catch can recover its local failure while the
+            // supplier's transfer still has to leave the receiver.
+            if (path.completion.failed()) path.receiver_transfer_pending = true;
+            else path.completion.reason = Completion::protected_transfer;
+            (path.exceptions.empty() ? control_inputs : outgoing.paths).push_back(std::move(path));
+          }
+        } else {
+          for (auto &path : handler_exits.paths) outgoing.paths.push_back(std::move(path));
         }
         outgoing.declared_root |= handler_exits.declared_root;
       }
     }
-    for (auto &path : incoming.paths) if (!path.exceptions.empty()) outgoing.paths.push_back(path);
+    for (auto &path : incoming.paths) if (!path.exceptions.empty()) outgoing.paths.push_back(std::move(path));
     // Empty-category paths include returns and terminal numeric failures; catches cannot handle them.
     std::vector<LexicalState> continuations;
     Type cleanup = Type::void_type;
@@ -18722,13 +18727,12 @@ class ScalarChecker {
       }
     } else {
       abrupt_ = outer;
-      for (const auto *paths : {&outgoing.paths, &control_inputs}) for (const auto &path : *paths) {
-        lexical_ = path.state;
-        refresh_input_facts(lexical_);
-        forward_abrupt(path);
+      for (auto *paths : {&outgoing.paths, &control_inputs}) for (auto &path : *paths) {
+        refresh_input_facts(path.state);
+        forward_completed_path(std::move(path));
       }
-      continuations = normals;
-      lexical_ = body_state;
+      continuations = std::move(normals);
+      lexical_ = std::move(body_state);
     }
     if ((cleanup != Type::never || expr.kind == Expression::Kind::deferred) &&
         (incoming.declared_root || outgoing.declared_root)) note_declared_root();
@@ -18738,7 +18742,7 @@ class ScalarChecker {
     }
     if (cleanup == Type::never || continuations.empty()) lexical_.live = false;
     CheckedOperation result;
-    result.type = cleanup == Type::never || normals.empty() ? Type{Type::never} :
+    result.type = cleanup == Type::never || views.empty() ? Type{Type::never} :
         discarded_arms || expr.kind == Expression::Kind::deferred ? Type{Type::void_type} : result_type;
     if (discarded_arms) return result;
     if (!views.empty()) {
