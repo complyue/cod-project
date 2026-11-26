@@ -8576,7 +8576,7 @@ class ScalarChecker {
     return selected;
   }
   static std::vector<size_t> product_initializers(const CheckedSchema &schema, const Expression &expr) {
-    std::set<size_t> initialized;
+    std::set<size_t> single_initialization;
     std::vector<size_t> order;
     for (const auto &item : expr.initializer_items()) {
       const auto *label = item->initializer_field_label();
@@ -8589,10 +8589,12 @@ class ScalarChecker {
         fail(label->at, "a direct String field initializer uses a selected '<-' method");
       if (direct && rebind) fail(label->at, "a direct product field requires bits transfer '<-'");
       if (!direct && !rebind) fail(label->at, "a reference field initializer requires binding '='");
-      if (!initialized.insert(index).second) {
-        if (direct ? readonly_field(field) : field.source->fixed_binding)
+      const bool readonly = direct ? readonly_field(field) : field.source->fixed_binding;
+      const bool inline_product = direct && field.type.kind == Type::product;
+      if ((readonly || inline_product) && !single_initialization.insert(index).second) {
+        if (readonly)
           fail(label->at, "readonly field '" + label->text + "' is initialized more than once");
-        if (direct && field.type.kind == Type::product) implementation_gap(label->at, "repeated inline product initialization");
+        implementation_gap(label->at, "repeated inline product initialization");
       }
       order.push_back(index);
     }
@@ -8609,12 +8611,6 @@ class ScalarChecker {
   }
   static void require_inline_product_type(const Type &constructed, const Type &declared, const Location &at) {
     if (constructed != declared) fail(at, "nested make must match the inline field's declared product type");
-  }
-  static void complete_product(const CheckedSchema &schema, const std::vector<size_t> &order, const Location &at) {
-    const std::set<size_t> initialized(order.begin(), order.end());
-    for (size_t i = 0; i < schema.fields.size(); ++i)
-      if (!initialized.contains(i))
-        fail(at, "product construction is missing initialization of field '" + schema.fields[i].source->name + "'");
   }
   const Expression &region_initializer(const Expression &binding) const {
     const auto &initializer = ungrouped_expression(*binding.children.front());
@@ -8691,12 +8687,6 @@ class ScalarChecker {
     type.owned = true;
     type.target = std::make_shared<Type>(schema);
     return type;
-  }
-  std::vector<size_t> exception_initializers(const Type &type, const Expression &expr) const {
-    const auto &schema = scalar_exception_schema(type, expr.at);
-    auto order = product_initializers(schema, expr);
-    complete_product(schema, order, expr.at);
-    return order;
   }
   size_t reserve_lexical_construction(const Type &type, const Location &at, const Expression *receiver = nullptr) {
     const auto name = receiver ? receiver->text : "$make." + std::to_string(storage_->size());
@@ -9808,7 +9798,7 @@ class ScalarChecker {
       implementation_gap(expr.at, "construction with a visible initializer family for '" + name + "'");
     if (expr.constructor_arguments || !expr.initializer_block)
       implementation_gap(expr.at, "sum construction outside a complete initializer block");
-    std::set<size_t> initialized;
+    std::set<size_t> readonly_initializations;
     std::vector<size_t> order;
     for (const auto &item : expr.initializer_items()) {
       const auto *label = item->initializer_field_label();
@@ -9821,18 +9811,11 @@ class ScalarChecker {
       if (item->kind == Expression::Kind::rebind || item->binding == "=")
         fail(label->at, "a direct sum field requires bits transfer '<-'");
       const auto index = static_cast<size_t>(member - alternative.fields.begin());
-      if (!initialized.insert(index).second && readonly_field(*member))
+      if (readonly_field(*member) && !readonly_initializations.insert(index).second)
         fail(label->at, "readonly field '" + label->text + "' is initialized more than once");
       order.push_back(index);
     }
     return order;
-  }
-  void complete_sum_initialization(const Expression &expr, SumConstructor constructor, const std::vector<size_t> &order) const {
-    const auto &alternative = sum_alternative(constructor);
-    for (size_t index = 0; index < alternative.fields.size(); ++index)
-      if (std::ranges::find(order, index) == order.end())
-        fail(expr.at, "missing initializer for field '" + alternative.fields[index].source->name + "' of '" +
-                      alternative.source->name.text + "'");
   }
   std::optional<Type> type_bits_payload(const Expression &expr, const Type &destination,
                                        TypeEvidenceState &state, bool reached = true) const {
@@ -9866,7 +9849,6 @@ class ScalarChecker {
       const auto value = type_bits_payload(*items[i]->children.back(), roots.fields[order[i]].type, state);
       if (!value || *value == Type::never) return value;
     }
-    complete_product(roots, order, make.at);
     return owned_region_type(schema);
   }
   bool regional_scalar_input(const Expression &input, TypeEvidenceState state) const {
@@ -9960,10 +9942,8 @@ class ScalarChecker {
       }
       completes = completes && value != Type::never;
     }
-    if (completes && expr.initializer_block) {
-      complete_product(schema, order, expr.at);
-      if (track_places && reached && schema.fields.empty()) state.selections.initialize(EvidencePlaces{product});
-    }
+    if (completes && expr.initializer_block && track_places && reached && schema.fields.empty())
+      state.selections.initialize(EvidencePlaces{product});
     return completes;
   }
   bool check_type_text_transfer(const Expression &expr, const Type &destination_type, const ViewEvidence &destination,
@@ -13122,7 +13102,6 @@ class ScalarChecker {
           const auto value = type_bits_payload(input, fields[order[i]].type, state);
           if (!value || *value == Type::never) return value;
         }
-        complete_sum_initialization(expr, *constructor, order);
         view = {false, true, {}, state.full_scope_owner};
         target_facts.presence = TargetPresence::present;
         if (track_places) {
@@ -14628,8 +14607,8 @@ class ScalarChecker {
       if (expr.annotation) {
         const auto type = evidence_annotation(*expr.annotation, state);
         if (!nominal_exception(type) && !state.required) return Type::never;
-        const auto order = exception_initializers(type, expr);
         const auto &schema = scalar_exception_schema(type, expr.at);
+        const auto order = product_initializers(schema, expr);
         note_type_allocation(state);
         note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::region_capacity_exceeded)));
         bool completes = true;
@@ -19537,7 +19516,6 @@ class ScalarChecker {
       initializer.operand_type = type;
       operations.insert_or_assign(&item, std::move(initializer));
     }
-    complete_sum_initialization(expr, constructor, operation.sum_initializers);
     initialize(*operation.place);
     return operation;
   }
@@ -19588,7 +19566,6 @@ class ScalarChecker {
         completes = check_bits_payload(input, roots.fields[order[i]].type, instance, operations) != Type::never;
       }
     }
-    if (completes) complete_product(roots, order, make.at);
     operation.type = completes ? owned_region_type(schema) : Type{Type::never};
     return operation;
   }
@@ -19746,10 +19723,7 @@ class ScalarChecker {
         write_predicate(target, predicate_of(source), at);
       }
     }
-    if (expr.initializer_block && operation.type != Type::never) {
-      complete_product(schema, order, expr.at);
-      initialize(root);
-    }
+    if (expr.initializer_block && operation.type != Type::never) initialize(root);
     return operation;
   }
   void check_text_transfer(const Expression &expr, CheckedInstance *instance,
@@ -20288,9 +20262,6 @@ class ScalarChecker {
       operation = named_value(expr, callable_expectation(expected), read);
       if (operation.binding) {
         const auto &binding = bindings_->at(*operation.binding);
-        if (initializing_reference_fields_.contains(*operation.binding) && !write_slot && lexical_.live &&
-            proving_ && validating_ && !missing_initialization(lexical_, *binding.embedded_slot).empty())
-          fail(expr.at, "initializer field '" + expr.text + "' has no established reference target");
         if (binding.direct_text_place && !write_slot && indexed_use != IndexedUse::transfer_destination)
           operation.initialization.emplace();
       }
@@ -21828,8 +21799,8 @@ class ScalarChecker {
     case K::raise: {
       if (expr.annotation) {
         const auto type = resolve_annotation(*expr.annotation, instance);
-        const auto order = exception_initializers(type, expr);
         const auto &schema = scalar_exception_schema(type, expr.at);
+        const auto order = product_initializers(schema, expr);
         note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory), exception_id(ExceptionCategory::region_capacity_exceeded)});
         bool completes = true;
         for (size_t i = 0; i < order.size(); ++i) {

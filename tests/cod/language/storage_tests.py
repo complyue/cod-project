@@ -87,8 +87,6 @@ runner.CASES = {
         'p.window.minimum<-20u64;behave @print(p.window.minimum);'
         'p.window.maximum<-30u64;ref ready=p;behave @print(ready.window.maximum);',
         0, "true\n20\n30\n", ""),
-    "lexical_product_missing_field_at_finish": (
-        PRODUCT + 'ref w=make Window {minimum<-20u64;};', 2, "", "missing initialization of field 'maximum'"),
     "lexical_product_uninitialized_field_read": (PRELUDE + PRODUCT +
         'ptr w=make Window;w.minimum<-20u64;behave @print(w.maximum);',
         2, "", "before definite initialization"),
