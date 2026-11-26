@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Complete read-only lexer calls from settled exits
+
+<a id="k-seed-readonly-lexer-contracts-20261125"></a>
+**K-SEED-READONLY-LEXER-CONTRACTS-20261125.** The [architecture review](design/ImplementationArchitecture.md#completing-read-only-calls-in-the-lexer) continues D-ARCH-REVIEW r197→198 under the [completed-callee decision](#h-completed-callee-behavior-20261125). At `dd92531f:applications/cod-booter/src/Lexer.cod`, `word_is` calls `SourceAccess.len` before its byte comparison loop. The reviewed seed producer completes the length leaf first and seals the caller from settled exits expressed in its formal arguments. The existing loan, bounds, loop and final validation rules continue.
+
 ## 2026-11-25 — Apply a completed predicate in the next group of scalar callers
 
 <a id="k-seed-second-scalar-application-20261125"></a>
