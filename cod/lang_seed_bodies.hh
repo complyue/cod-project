@@ -68,6 +68,7 @@ class BodyExtraction {
     size_t callee;
     std::map<size_t, Allocator> owners;
     bool installs_handler = false;
+    std::optional<std::vector<CheckedArgument>> pending_result_arguments = {};
   };
   struct Local {
     size_t binding;
@@ -115,6 +116,7 @@ class BodyExtraction {
     std::vector<BoundCall> calls;
     std::optional<Outline> outline;
     bool open_replay = false;
+    const Expression *void_exit = nullptr;
   };
 
   const Declarations &declarations_;
@@ -176,16 +178,17 @@ class BodyExtraction {
     return op;
   }
 
-  size_t select_body(size_t method_id, const Location &at) {
+  size_t select_body(size_t method_id, const Location &at, bool allow_omitted_void = false) {
     const auto &method = declarations_.method(method_id);
     const auto &source = *method.source;
     expect(source.body && !source.implicit_scope && !source.supplied_scope && !source.supplied_group &&
            !source.case_scan_scope && !source.symbolic && !method.interpretation && !method.local_effect_symbol &&
            !method.parent && !method.regional_initializer && method.operation.empty() &&
            method.here.size() <= 1 && method.type_parameters.empty() && source.captures.empty() &&
-           method.result.type &&
-           (method.result.owns_region() || (method.result.mode == ResultMode::value &&
-            (scalar_type(*method.result.type) || method.result.type == Type::void_type))),
+           (method.result.type ?
+            method.result.owns_region() || (method.result.mode == ResultMode::value &&
+              (scalar_type(*method.result.type) || method.result.type == Type::void_type)) :
+            allow_omitted_void && !source.c_linkage && method.here.empty() && method.result.mode == ResultMode::value),
            at, "replacement seed needs a fixed ordinary callable body");
     const auto [row, first] = selected_.try_emplace(method_id, bodies_.size());
     if (first) {
@@ -788,7 +791,8 @@ class BodyExtraction {
       fail(expr.at, "no applicable method for " + call_name());
     }
 
-    CheckedOperation call(const Expression &expr, bool region_receiver = false) {
+    std::optional<CheckedOperation> call(const Expression &expr, bool region_receiver = false,
+                                         bool intermediate_statement = false) {
       CheckedOperation op;
       if (expr.text == "[]<-" && expr.children.size() == 3) {
         confirm_intrinsic(expr, expr.text);
@@ -831,7 +835,9 @@ class BodyExtraction {
              "an owning region result requires a direct owning declaration");
       if (form_.kind == Form::Kind::function && target.source->kind != Form::Kind::function)
         fail(expr.at, "a function cannot invoke a procedure");
-      const auto callee = extraction_.select_body(method_id, expr.at);
+      const bool allow_omitted_void = intermediate_statement && body_.instance.result.type &&
+          !region_receiver && !expr.has_here_body();
+      const auto callee = extraction_.select_body(method_id, expr.at, allow_omitted_void);
       const auto parameters = target.input_parameters();
       expect(target.here.size() == size_t{expr.has_here_body()} &&
              parameters.size() + expr.has_here_body() == expr.children.size(),
@@ -867,6 +873,11 @@ class BodyExtraction {
       BoundCall edge{&expr, callee, {}};
       for (const auto &[role, owner] : actual_owners) if (!target.input_owners()[role].read_only)
         if (const auto allocator = allocator_for(owner)) edge.owners.emplace(role, *allocator);
+      if (!target.result.type) {
+        edge.pending_result_arguments.emplace(std::move(op.arguments));
+        body_.calls.push_back(std::move(edge));
+        return {};
+      }
       body_.calls.push_back(std::move(edge));
       op.type = *target.result.type;
       op.callee = callee;
@@ -1009,7 +1020,7 @@ class BodyExtraction {
              (initializer.kind == Kind::call && !initializer.intrinsic && !initializer.has_here_body()),
              initializer.at, "replacement seed needs a fresh region or a direct owning region factory");
       const auto &value = remember(initializer, initializer.kind == Kind::make_region
-          ? fresh_region(initializer) : call(initializer, true));
+          ? fresh_region(initializer) : call(initializer, true).value());
       if (value.type != owned_region_type(schema))
         fail(initializer.at, "constructed region does not match the declared root schema");
 
@@ -1568,7 +1579,7 @@ class BodyExtraction {
       case Kind::name: return name(expr);
       case Kind::callable: return define_local(expr);
       case Kind::unary: case Kind::binary: return eager(expr);
-      case Kind::call: return call(expr);
+      case Kind::call: return call(expr).value();
       case Kind::make_object: return make(expr);
       case Kind::region_binding: return bind_region(expr);
       case Kind::native_handle_binding: return bind_native_handle(expr);
@@ -1592,8 +1603,17 @@ class BodyExtraction {
       case Kind::block:
         expect(!expr.scoped, expr.at, "replacement seed has no extracted full-scope body");
         scopes_.emplace_back();
-        for (const auto &item : expr.children) {
-          op.type = extract(*item).type;
+        for (size_t i = 0; i < expr.children.size(); ++i) {
+          const auto &item = *expr.children[i];
+          if (i + 1 < expr.children.size() && item.kind == Kind::call) {
+            require_executable_expression(item);
+            auto call_operation = call(item, false, true);
+            // Later statements consume no result from a pending call.
+            if (!call_operation) continue;
+            op.type = remember(item, std::move(*call_operation)).type;
+          } else {
+            op.type = extract(item).type;
+          }
           if (op.type == Type::never) break;
         }
         scopes_.pop_back();
@@ -1637,6 +1657,8 @@ class BodyExtraction {
         const auto &tail = operand(expr, 0);
         op.type = tail.type;
         if (tail.type != Type::never && tail.type != Type::void_type) {
+          expect(body_.instance.result.type.has_value(), expr.at,
+                 "replacement seed needs a declared result for a value tail");
           const auto &result = *body_.instance.result.type;
           takes_value(tail, result, expr.at);
           op.type = Type::never;
@@ -1647,6 +1669,13 @@ class BodyExtraction {
       case Kind::return_value: case Kind::continue_value:
         expect(supplied_body() == (expr.kind == Kind::continue_value), expr.at,
                "replacement seed needs an ordinary return or a local here continue");
+        if (!body_.instance.result.type) {
+          expect(expr.children.empty(), expr.at, "replacement seed needs a declared result for a value return");
+          body_.void_exit = &expr;
+          op.type = Type::never;
+          op.operand_type = Type::void_type;
+          return op;
+        }
         if (body_.instance.result.owns_region()) {
           expect(expr.children.size() == 1, expr.at, "return needs a fresh region");
           const auto &value = ungrouped_expression(*expr.children.front());
@@ -1677,11 +1706,15 @@ class BodyExtraction {
       return row->second;
     }
 
-    const CheckedOperation &extract(const Expression &expr) {
+    static void require_executable_expression(const Expression &expr) {
       expect(!expr.checked_ref_argument && !expr.spread && !expr.lexical_symbol_call &&
              (expr.definition ? expr.kind == Kind::callable || expr.kind == Kind::effect ||
                                  expr.kind == Kind::procedure_effect : expr.kind != Kind::callable) && !expr.receiving,
              expr.at, "replacement seed has no extracted transport for this expression");
+    }
+
+    const CheckedOperation &extract(const Expression &expr) {
+      require_executable_expression(expr);
       return remember(expr, operation(expr));
     }
 
@@ -1714,8 +1747,14 @@ class BodyExtraction {
       const auto &end = extract(*form_.body);
       expect(body_.instance.frame.owners.size() == owners().size(), form_.at,
              "replacement seed needs an input for every formal owner");
-      expect(end.type == Type::never || body_.instance.result.type == Type::void_type,
-             form_.at, "replacement seed needs a reachable return for this result");
+      if (body_.instance.result.type) {
+        expect(end.type == Type::never || body_.instance.result.type == Type::void_type,
+               form_.at, "replacement seed needs a reachable return for this result");
+      } else {
+        expect(end.type == Type::void_type || end.type == Type::never,
+               form_.at, "replacement seed needs a declared result for a value tail");
+        if (end.type == Type::void_type && !body_.void_exit) body_.void_exit = form_.body.get();
+      }
       if (body_.outline) body_.instance.context = body_.instance.arguments;
     }
   };
@@ -1831,8 +1870,21 @@ class BodyExtraction {
     }
   }
 
-  void seal(CheckedProgram &program) {
+  std::map<size_t, ResultContract> complete_results() const {
+    std::map<size_t, ResultContract> results;
+    for (const auto &body : bodies_) {
+      if (body.instance.result.type) continue;
+      const auto method = body.instance.method;
+      expect(body.void_exit, declarations_.method(method).source->at,
+             "replacement seed needs independent evidence of a normal no-value exit");
+      results.emplace(method, ResultContract{Type{Type::void_type}});
+    }
+    return results;
+  }
+
+  void seal(CheckedProgram &program, const std::map<size_t, ResultContract> &results) {
     const auto completed = freeze_dependencies().complete();
+    for (const auto &[method, result] : results) program.methods.at(method).result = result;
     for (const auto &entry : program.native_entries)
       expect(completed[selected_.at(entry.method)].allocations.empty(), program.methods[entry.method].source->at,
              "a C entry cannot import an array allocator capability");
@@ -1843,7 +1895,17 @@ class BodyExtraction {
     }
     for (size_t i = 0; i < bodies_.size(); ++i) {
       auto &body = bodies_[i];
+      if (!body.instance.result.type) body.instance.result = results.at(body.instance.method);
       for (const auto &call : body.calls) {
+        if (call.pending_result_arguments) {
+          const auto target = bodies_[call.callee].instance.method;
+          CheckedOperation operation;
+          operation.type = *results.at(target).type;
+          operation.callee = call.callee;
+          operation.arguments = *call.pending_result_arguments;
+          if (!body.instance.operations.emplace(call.site, std::move(operation)).second)
+            throw std::logic_error("pending call already has a typed operation");
+        }
         auto &operation = body.instance.operations.at(call.site);
         const auto &callee = completed[call.callee];
         if (call.installs_handler && callee.open_replay)
@@ -1870,8 +1932,9 @@ public:
   static ExecutableProgram bind(Declarations declarations) {
     BodyExtraction extraction(declarations);
     extraction.extract();
+    const auto results = extraction.complete_results();
     auto program = std::move(declarations.declarations_);
-    extraction.seal(program);
+    extraction.seal(program, results);
     return {std::move(declarations.source_), std::move(program)};
   }
 };
