@@ -1,10 +1,12 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 51 · Recorded: 2026-11-26 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 52 · Recorded: 2026-11-26 · Phase: initial seed delivery through alternating booter and seed development.
 
-**Compiler design target.** On the command line, `cod` (Compile on Demand) compiles the entry for this run and executes it immediately, leaving no user-facing executable. The planned production command `cfe` (Compile for Ever) spends more time optimizing the program and saves the executable for later runs. The booter provides one practical code-generation mode. Both bootstrap compilers prioritize Go-like compile speed with moderate runtime performance. User-selectable performance options belong to `cfe`. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
+**Compiler design target.** On the command line, `cod` (Compile on Demand) compiles the entry for the host and executes it immediately, leaving no user-facing executable. The planned production command `cfe` (Compile for Ever) builds optimized executables for the host or a supported cross target and saves them for later use. The booter provides one practical code-generation mode. Both bootstrap compilers prioritize Go-like compile speed with moderate runtime performance. User-selectable performance options belong to `cfe`. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
 
 ## Design authority
+
+At r52 the [production target decision](../../CHANGELOG.md#h-production-cross-build-20261126) extends the `codup` distribution role under [D-20-REPOSITORIES](../../design/DesignAuthorityRegistry.md#d-20-repositories). It preserves r51’s single booter mode and assigns [cross-builds](docs/CompilerPipeline.md#production-cross-builds-and-target-runtimes) to `cfe`.
 
 At r51 [D-20-COMPILER-MODES](../../design/DesignAuthorityRegistry.md#d-20-compiler-modes) records the [user’s decision](../../CHANGELOG.md#h-booter-single-codegen-mode-20261126) on booter performance options. The command outputs and checking responsibilities carry forward.
 
@@ -214,7 +216,7 @@ The compiler and toolchain repositories are planned in the [e-wrks GitHub organi
 | `cod-lang` | CoD language design and the authoritative language specification shared by both compilers. |
 | `cod-seed` | The C++ translator for trusted booter source, the CoD-written checking compiler and their C-native components, including the region core and LLVM bindings. The booter stays in this repository after the split. |
 | `cod` | The future production compiler written in CoD. The first release targets fast compile-and-run and introduces the experimental `cfe` optimizing CLI. Version 2.0 formally supports `cfe`. Its [output-directory contract](docs/CompilerPipeline.md#default-execution-and-optimized-builds) governs the generated executable. The compiler also provides full diagnostics, [independent check and emission controls for editors and builds](docs/CompilerPipeline.md#independently-selectable-compiler-operations), and a future CoD REPL. [REPL decision](../../CHANGELOG.md#h-retire-cpp-repl-20261125) |
-| `codup` | Toolchain version management in the role of rustup. |
+| `codup` | Installs and manages CoD toolchain versions, including the LLVM components they use and the tooling for supported `cfe` targets. [Production distribution contract](docs/CompilerPipeline.md#production-cross-builds-and-target-runtimes) |
 | `codmate` | The Language Server Protocol server and IDE plugins, including [reference-site doclet tooltips and navigation](../../design/DomainLanguageDesign.md#definition-doclets). |
 
 The `e-wrks/cod` toolchain will bundle `pcl.cod`, the parser combinator library that implements the parsing HLVM. The production CoD parser is one of its applications. Its DBMR grammar program ships as `cod.grammar` and runs on `pcl.cod` on the compiler’s normal source path. [Installed-toolchain workload](../../design/ParserCombinatorLibSupport.md#packaged-production-parser) · [CoD parser application case study](../../papers/AlgebraicEffectsIsAllYouNeed.md#the-cod-parser-as-an-application-of-the-parsing-hlvm)

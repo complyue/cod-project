@@ -1,8 +1,10 @@
 # Compiler modes, selectable stages and persistent stage reuse
 
-Revision 12 · 2026-11-26 · Compiler modes and stage controls confirmed. Persistent artifact design remains a planning draft.
+Revision 13 · 2026-11-26 · Compiler modes and stage controls confirmed. Persistent artifact design remains a planning draft.
 
 ## Design authority
+
+At r13 the [production target decision](../../../CHANGELOG.md#h-production-cross-build-20261126) assigns host execution to `cod`, cross-builds to `cfe` and installation of the required LLVM components to `codup`. [D-20-COMPILER-MODES](../../../design/DesignAuthorityRegistry.md#d-20-compiler-modes) continues the r12 performance and output contracts. [D-20-TARGET-TOOLCHAIN](../../../design/DesignAuthorityRegistry.md#d-20-target-toolchain) covers hosted C packages and freestanding SoC targets.
 
 At r12 the project user confirmed [one booter code-generation mode](../../../CHANGELOG.md#h-booter-single-codegen-mode-20261126). [D-20-COMPILER-MODES](../../../design/DesignAuthorityRegistry.md#d-20-compiler-modes) retains the fast bootstrap goal and assigns performance tuning to the production optimizing entry.
 
@@ -29,8 +31,8 @@ At r8 [D-20-COMPILER-MODES](../../../design/DesignAuthorityRegistry.md#d-20-comp
 
 | Mode | User-visible result on a successful invocation | Compilation goal and availability |
 | --- | --- | --- |
-| `cod` (Compile on Demand), invoked on a program entry | Compile and run it immediately, as with `go run`. Leave no executable as a user output. | Aim for Go-like fast compilation and machine code with moderate runtime performance in the seed, booter and first release of `e-wrks/cod`. |
-| `cfe` (Compile for Ever) in `e-wrks/cod` | Build an optimized executable for later use. Save it in `~/.local/bin/` by default. The user can set the output directory in `~/.cod/config.yaml`. | Spend more compile time on high-quality machine code. Experimental in the first release of `e-wrks/cod`, formally supported in 2.0. |
+| `cod` (Compile on Demand), invoked on a program entry | Compile for the host and run it immediately, as with `go run`. Leave no executable as a user output. | Aim for Go-like fast compilation and machine code with moderate runtime performance in the seed, booter and first release of `e-wrks/cod`. |
+| `cfe` (Compile for Ever) in `e-wrks/cod` | Build an optimized executable for the host or a supported cross target for later use. Save it in `~/.local/bin/` by default. The user can set the output directory in `~/.cod/config.yaml`. | Spend more compile time on high-quality machine code. Experimental in the first release of `e-wrks/cod`, formally supported in 2.0. |
 | Default seed bootstrap build | Produce the `cod-booter` executable and keep it for subsequent invocations. | Use the fast compilation path. The seed build can request intermediate bitcode and provider files and link them into the tool. |
 
 The booter ships one practical code-generation mode for fast compilation and moderate runtime performance. It can improve that default internally. User-selectable optimization levels and performance trade-offs belong to `cfe` in `e-wrks/cod`. A client can still request declaration checking, provider generation or object emission, and select the available checking stages. These choices determine what work to perform and which result to deliver.
@@ -38,6 +40,14 @@ The booter ships one practical code-generation mode for fast compilation and mod
 The ordinary edit–run cycle gives priority to the time from invoking the compiler to entering the program. Any executable needed internally for a run is a compiler implementation detail. Explicit requests for a binary, object, bitcode or provider files have their own output contract. The seed uses the fast path to build its persistent executable. A parse-only or check-only request ends at its selected operation.
 
 Programs built with `cfe` preserve the observable semantics and applicable runtime checks of ordinary `cod` execution. For acceptance, use an entry that prints a recognizable value. An ordinary `cod` invocation prints it once and leaves no new or replaced user executable. Verify the seed default separately by invoking the resulting `cod-booter` in a subsequent process. Run `cfe` with the output directory unset and verify the executable appears in `~/.local/bin/`. Set the output directory to another location in `~/.cod/config.yaml` and build again. Verify the new executable appears in the configured directory. In both cases the build leaves the entry unexecuted. Launching either executable then prints the same value. A compilation failure prevents launch. Go-like compilation speed and moderate runtime performance are qualitative design targets. Backend settings and numeric targets remain open.
+
+### Production cross-builds and target runtimes
+
+Only `cfe` offers cross-builds. `codup` manages the production CoD installation and its compatible LLVM components so a developer can use it on a host without a system LLVM installation. Both commands use that toolchain. Building a final executable needs a linker. LLD can supply it as a bundled executable or an embedded library. Building a package that supplies C source also needs a C frontend and the selected target’s headers. Code generation, C ABI layout, startup objects, compiler builtins and linked libraries must agree on the target. Platform SDK requirements belong to each supported target. [LLD](https://lld.llvm.org/) · [Clang cross-compilation](https://clang.llvm.org/docs/CrossCompilation.html)
+
+A hosted package may link a compatible C runtime. Static musl is the preferred option for a self-contained Linux executable when the package’s native dependencies support it. For a freestanding SoC, startup, memory and any output the program actually uses can come from the board runtime. For example, a board can provide a bounded, aligned RAM span for region storage and a serial writer for diagnostics. Region reservations must preserve capacity, offset alignment, owner lifetime, failure before publication and release through the provider that owns the backing. The system call, allocator API, board list and package layout remain implementation choices. [Region storage contract](../../../design/RegionalOwnership.md) · [Current native reservation](../../../include/cod_region_storage.h)
+
+For hosted acceptance, use a `codup` installation on a host without system LLVM. Run a small program locally with `cod`. Use `cfe` to build a CoD package with a C component for another supported target and run the saved artifact there. For a freestanding target, exercise region exhaustion and an observable board output, and inspect the final link inputs and symbols for a CRT dependency. A static executable can contain libc. Cross-target delivery dates and the first supported board remain open.
 
 ## Independently selectable compiler operations
 
