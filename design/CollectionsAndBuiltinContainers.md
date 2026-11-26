@@ -1,8 +1,10 @@
 # Collections and builtin containers
 
-Design revision 8 · 2026-11-26 · Source design draft
+Design revision 9 · 2026-11-26 · Source design draft
 
 ## Design authority
+
+At r9 [D-30-TYPED-SUBSCRIPTS](DesignAuthorityRegistry.md#d-30-typed-subscripts) puts the assigned value or target before the positional indices in the method signature. P-766/P-767 continue for bracket evaluation order, units and owner. [Literal ADTs](RangedForAndGenerators.md#concrete-types-of-range-and-slice-literals) and [explicit expansion](SymbolicDynamicScope.md#runtime-array-expansion-and-one-variadic-parameter) determine which typed operands the library receives.
 
 At r8 [D-30-TYPED-SUBSCRIPTS](DesignAuthorityRegistry.md#d-30-typed-subscripts) supplies each axis to the library overload in source order, including ordinary unitless indices and nominal coordinates. P-766/P-767 preserve library array policy, receiver access, actual owners and UoM identity. [Decision and acceptance](../CHANGELOG.md#h-ranges-and-typed-subscripts-20261126)
 
@@ -60,14 +62,14 @@ Commas inside brackets separate positional arguments to **one** indexing operati
 | Written use | Selected call |
 | --- | --- |
 | `m[r, c]` | `([])(m, r, c)` |
-| `m[rows, c] <- value` | `([]<-)(m, rows, c, value)` |
-| `m[r, c] = target` | `([]=)(m, r, c, target)` when the receiver supports reference binding |
+| `m[rows, c] <- value` | `([]<-)(m, value, rows, c)` |
+| `m[r, c] = target` | `([]=)(m, target, r, c)` when the receiver supports reference binding |
 
-For `m[1 ..= 6 by 2, 3]` the getter receives a range with start 1, written inclusive bound 6 and step 2, followed by the scalar 3. Its last visited row is 5. For `m[.. by -1, 3]` the first selector has two absent bounds and an explicit step of −1. The overload can distinguish a scalar, a bounded progression and an axis-relative selector, and use the coordinate and step types in method selection. The actual numbers and endpoint policy are available to the selected body. This contract leaves the public names and representation of selector types open.
+For `m[1 ..= 6 by 2, 3]` the getter receives a range with start 1, written inclusive bound 6 and step 2, followed by the scalar 3. Its last visited row is 5. For `m[.. by -1, 3]` the first selector has two absent bounds and an explicit step of −1. The overload can distinguish a scalar, a bounded progression and an axis-relative selector, and use the coordinate and step types in method selection. The actual numbers and endpoint policy are available to the selected body. The [literal type contract](RangedForAndGenerators.md#concrete-types-of-range-and-slice-literals) gives both selectors concrete ADT identities before overload selection.
 
 `m[r][c]` performs two lookups and may have a different meaning. Each family uses ordinary visible overloads, arity, parameter modes and specificity. For example, a two-scalar getter and a range-plus-scalar getter can return an element and a column selection respectively. A rank mismatch with no applicable method is a normal call error. One composite index explicitly passed in brackets remains one argument. Scalar indices, a full-axis selector (`..`), and omitted ends (`lo ..`, `.. hi`, `.. by -1`) stay distinguishable. The library supplies an omitted bound from the corresponding axis and direction. Copies, borrowed views, bounds policy, result rank and memory strides follow the selected operation.
 
-Prepare the receiver first, then each selector left to right, then any written RHS. Complete each argument's evaluation and required conversions before the next. A failure during preparation skips subsequent operands and method entry. An indexed writer receives the original receiver and selectors directly. Any check performed inside a user-defined setter runs at its ordinary point after argument preparation. Preserve the established destination-before-RHS checks of the builtin indexed transfer. The result, mutation and allowed access follow the chosen operation, including its owner and cleanup obligations.
+Prepare the receiver first, then each selector left to right, then any written RHS. Complete each argument's evaluation and required conversions before the next. A failure during preparation skips subsequent operands and method entry. The writer binds the prepared RHS immediately after the receiver, leaving a final index pack available. Thus `m[next_row(), next_col()] <- produce()` evaluates both selectors before `produce()`. The explicitly written call `([]<-)(m, produce(), next_row(), next_col())` prepares its actuals in its own written order. An explicit expansion in `m[axes...] <- value` supplies the index pack, including at a length for which a fixed writer exists. Unitless integers still bind integer formals directly. A pack mixing integers and selectors needs an element contract that admits both. Any check performed inside a user-defined setter runs at its ordinary point after argument preparation. Preserve the established destination-before-RHS checks of the builtin indexed transfer. The result, mutation and allowed access follow the chosen operation, including its owner and cleanup obligations.
 
 ### Unitless and unit-bearing axes
 

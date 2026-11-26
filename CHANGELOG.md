@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Select the pack body on explicit expansion and bind selector literals to concrete ADTs
+
+<a id="h-selector-literals-and-pack-dispatch-20261126"></a>
+**H-SELECTOR-LITERALS-AND-PACK-DISPATCH-20261126.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user supported fixed specializations plus a variadic implementation and answered the two-index witness “9 — writing an expansion explicitly selects the variadic body”. [D-10-VARARGS r273](design/SymbolicDynamicScope.md#runtime-array-expansion-and-one-variadic-parameter) supersedes the [fixed-plus-variadic formation ban](#h-variadic-method-family-20261123). Distinct variadic implementations still conflict. Element reception, failures and forwarded-pack rules continue. The requested setter order leaves the indices at the tail and preserves bracket evaluation order. The user asked for “一个公共的 abs 父类型” and delegated how each literal obtains a concrete ADT. [D-29r26](design/RangedForAndGenerators.md#concrete-types-of-range-and-slice-literals) names AxisSelector, Range and Slice and defines the builtin literal instantiations. The [previous selector contract](https://github.com/complyue/cod-project/blob/cb2d45c4c4dc95848e7a14837c201ae6bbf8c204/design/CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads) supplies the unit, progression and preparation baseline. D-30r9/D-14r138, D-07r226/D-11r40, D-ARCH r227 and D-20-MODULE-GRAPH r98 trace the affected consumers. Implementation and generalized type-application syntax remain separate. Registry r1347→1348.
+
 ## 2026-11-26 — Give stepped ranges and typed axis arguments to library subscripts
 
 <a id="h-ranges-and-typed-subscripts-20261126"></a>
