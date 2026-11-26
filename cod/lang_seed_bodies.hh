@@ -390,6 +390,7 @@ class BodyExtraction {
     BodyExtraction &extraction_;
     BoundBody &body_;
     size_t id_;
+    bool executable_;
     const CheckedMethod *method_;
     const Form &form_;
     size_t module_;
@@ -1245,8 +1246,10 @@ class BodyExtraction {
                  &Parameter::type) && std::ranges::equal(source.throws_types, contract.throws_types, {},
                  [&](const Type &type) { return resolve_annotation(type, source.at); }), expr.at,
              "live handler must implement the selected symbol's exact contract");
-      const auto added = extraction_.handler_layouts_.insert(id).second;
-      expect(added, expr.at, "replacement seed needs one live handler layout per symbol");
+      if (executable_) {
+        const auto added = extraction_.handler_layouts_.insert(id).second;
+        expect(added, expr.at, "replacement seed needs one live handler layout per symbol");
+      }
 
       const auto callee = extraction_.bodies_.size();
       extraction_.add_outline(std::move(outlined), result);
@@ -2138,8 +2141,8 @@ class BodyExtraction {
     }
 
   public:
-    Frame(BodyExtraction &extraction, size_t id)
-        : extraction_(extraction), body_(extraction.bodies_[id]), id_(id),
+    Frame(BodyExtraction &extraction, size_t id, bool executable)
+        : extraction_(extraction), body_(extraction.bodies_[id]), id_(id), executable_(executable),
           method_(body_.outline ? nullptr : &extraction.declarations_.method(body_.instance.method)),
           form_(method_ ? *method_->source : *body_.outline->source),
           module_(method_ ? method_->module : body_.outline->module) {}
@@ -2190,38 +2193,78 @@ class BodyExtraction {
     return owner ? Allocator{Allocator::input, null_target - 1 - owner} : Allocator{Allocator::lexical};
   }
 
-  BodyDependencies freeze_dependencies() const {
-    BodyDependencies graph;
-    const auto foreign = bodies_.size();
-    if (!handler_layouts_.empty()) graph.replay_callers.resize(foreign + 1);
-    for (size_t id = 0; id < bodies_.size(); ++id) {
-      const auto &body = bodies_[id];
-      graph.direct.push_back({body.allocations, body.incoming, body.unbound_replay});
-      if (!graph.replay_callers.empty()) {
-        for (const auto &call : body.replay_calls)
-          graph.replay_callers[call.callee].push_back({id, call.supplied});
-        for (const auto &supplied : body.foreign_calls)
-          graph.replay_callers[foreign].push_back({id, supplied});
-        if (body.foreign_release) graph.replay_callers[foreign].push_back({id, {}});
-        // A callback descriptor can remain live across opaque reentry. All
-        // attached bodies bound any synchronous callback and its relays.
-        if (body.outline && body.outline->here)
-          graph.replay_callers[id].push_back({foreign, {}});
-      }
+  void collect_replay_edges(BodyDependencies &graph, size_t executable) {
+    if (handler_layouts_.empty()) return;
+    std::vector<size_t> pending;
+    std::vector<bool> seen(executable);
+    std::vector<BodyDependencies::ReplayEdge> foreign_callers;
+    std::vector<size_t> foreign_targets;
+    const auto demand = [&](size_t body) {
+      if (body >= seen.size()) seen.resize(bodies_.size());
+      if (seen[body]) return;
+      seen[body] = true;
+      pending.push_back(body);
+    };
+    const auto edge = [&](size_t callee, size_t caller, const SymbolBindings &supplied) {
+      if (callee >= graph.replay_callers.size()) graph.replay_callers.resize(bodies_.size());
+      graph.replay_callers[callee].push_back({caller, supplied});
+      demand(callee);
+    };
+    const auto &program = declarations_.declarations_;
+    for (size_t id = 0; id < executable; ++id)
+      if (const auto &outline = bodies_[id].outline; outline && outline->handler) demand(id);
+
+    for (size_t i = 0; i < pending.size(); ++i) {
+      const auto id = pending[i];
+      // The executable closure is already bound. Other members of a
+      // reached family contribute uses without creating executable rows.
+      if (id >= executable) Frame(*this, id, false).extract_body();
+      auto &body = bodies_[id];
+      for (const auto &call : body.replay_calls) edge(call.callee, id, call.supplied);
       for (const auto &call : body.calls) {
-        if (!graph.replay_callers.empty()) {
-          graph.replay_callers[call.callee].push_back({id, call.supplied});
-          if (call.family) {
-            for (const auto method : call.family->methods) {
-              if (method == bodies_[call.callee].instance.method) continue;
-              const auto target = selected_.find(method);
-              if (target != selected_.end() && declarations_.method(method).here.empty())
-                graph.replay_callers[target->second].push_back({id, call.supplied});
-              else if (!graph.direct.back().unbound_replay)
-                graph.direct.back().unbound_replay = &declarations_.method(method).source->at;
-            }
+        edge(call.callee, id, call.supplied);
+        if (!call.family) continue;
+        for (const auto method : call.family->methods) {
+          if (method == bodies_[call.callee].instance.method) continue;
+          const auto &source = declarations_.method(method);
+          if (!source.here.empty()) {
+            if (!body.unbound_replay) body.unbound_replay = &source.source->at;
+            continue;
           }
+          edge(select_body(method, source.source->at, true), id, call.supplied);
         }
+      }
+
+      if (body.foreign_calls.empty() && !body.foreign_release) continue;
+      if (foreign_callers.empty()) {
+        // Native code can reach the generated C entries and the live
+        // synchronous descriptors of this output. No TLS accessor is exported.
+        for (const auto &entry : program.native_entries) foreign_targets.push_back(selected_.at(entry.method));
+        for (size_t target = 0; target < executable; ++target)
+          if (const auto &outline = bodies_[target].outline; outline && outline->here)
+            foreign_targets.push_back(target);
+        for (const auto target : foreign_targets) demand(target);
+      }
+      for (const auto &supplied : body.foreign_calls) foreign_callers.push_back({id, supplied});
+      if (body.foreign_release) foreign_callers.push_back({id, {}});
+    }
+    const auto foreign = bodies_.size();
+    graph.replay_callers.resize(foreign + !foreign_callers.empty());
+    if (!foreign_callers.empty()) {
+      for (const auto target : foreign_targets) graph.replay_callers[target].push_back({foreign, {}});
+      graph.replay_callers[foreign] = std::move(foreign_callers);
+    }
+  }
+
+  BodyDependencies freeze_dependencies(size_t executable) {
+    BodyDependencies graph;
+    collect_replay_edges(graph, executable);
+    for (const auto &body : bodies_)
+      graph.direct.push_back({body.allocations, body.incoming, body.unbound_replay});
+    if (graph.replay_callers.size() > bodies_.size()) graph.direct.emplace_back();
+
+    for (size_t id = 0; id < executable; ++id) {
+      for (const auto &call : bodies_[id].calls) {
         for (const auto &[owner, input] : bodies_[call.callee].instance.frame.owners) {
           const auto role = null_target - 1 - owner;
           const auto actual = call_allocator(call, role);
@@ -2229,13 +2272,6 @@ class BodyExtraction {
             graph.allocating_callers[{call.callee, role}].emplace_back(id, actual->place);
         }
       }
-    }
-    if (!graph.replay_callers.empty()) {
-      graph.direct.emplace_back();
-      // This output exposes CoD procedures through its generated C entry
-      // adapters and synchronous descriptors. The TLS cells are private.
-      for (const auto &entry : declarations_.declarations_.native_entries)
-        graph.replay_callers[selected_.at(entry.method)].push_back({foreign, {}});
     }
     return graph;
   }
@@ -2250,7 +2286,7 @@ class BodyExtraction {
     for (const auto &entry : program.native_entries) select_body(entry.method, program.methods[entry.method].source->at);
     // Demand a source body once. A discovered dependency only adds its own
     // binding work; it cannot restart a caller or publish a callee summary.
-    for (size_t i = 0; i < bodies_.size(); ++i) Frame(*this, i).extract_body();
+    for (size_t i = 0; i < bodies_.size(); ++i) Frame(*this, i, true).extract_body();
   }
 
   static const ResultContract &completed_result(const BoundBody &body, const CompletedResults &results) {
@@ -2325,9 +2361,10 @@ class BodyExtraction {
     }
   }
 
-  CompletedResults complete_results() const {
+  CompletedResults complete_results(size_t executable) const {
     CompletedResults results;
-    for (const auto &body : bodies_) {
+    for (size_t id = 0; id < executable; ++id) {
+      const auto &body = bodies_[id];
       if (body.instance.result.type) continue;
       const auto method = body.instance.method;
       const auto &source = body.outline ? *body.outline->source : *declarations_.method(method).source;
@@ -2353,27 +2390,27 @@ class BodyExtraction {
 
   using CompletedCases = std::map<const Expression *, CaseResult>;
 
-  CompletedCases complete_case_returns(const CompletedResults &results) const {
+  CompletedCases complete_case_returns(size_t executable, const CompletedResults &results) const {
     CompletedCases cases;
-    for (const auto &body : bodies_)
-      for (const auto &pending : body.case_returns)
+    for (size_t id = 0; id < executable; ++id)
+      for (const auto &pending : bodies_[id].case_returns)
         cases.emplace(pending.site, complete_case(pending.input, results));
     return cases;
   }
 
-  void seal(CheckedProgram &program, const CompletedResults &results, const CompletedCases &cases,
+  void seal(CheckedProgram &program, size_t executable, const CompletedResults &results, const CompletedCases &cases,
             const std::vector<BodyDependencies::Requirements> &completed) {
     for (const auto &[method, result] : results)
       if (method < program.methods.size()) program.methods[method].result = result;
     for (const auto &entry : program.native_entries)
       expect(completed[selected_.at(entry.method)].allocations.empty(), program.methods[entry.method].source->at,
              "a C entry cannot import an array allocator capability");
-    for (size_t i = 0; i < bodies_.size(); ++i) if (const auto &outline = bodies_[i].outline) {
+    for (size_t i = 0; i < executable; ++i) if (const auto &outline = bodies_[i].outline) {
       expect(outline->handler || completed[i].allocations.empty(), outline->source->at,
              "replacement seed needs an ordinary outlined body without imported allocators");
       seal_outline(program, i, results);
     }
-    for (size_t i = 0; i < bodies_.size(); ++i) {
+    for (size_t i = 0; i < executable; ++i) {
       auto &body = bodies_[i];
       if (!body.instance.result.type) body.instance.result = results.at(body.instance.method);
       if (body.outline && body.outline->handler)
@@ -2429,11 +2466,12 @@ public:
   static ExecutableProgram bind(Declarations declarations) {
     BodyExtraction extraction(declarations);
     extraction.extract();
-    const auto results = extraction.complete_results();
-    const auto cases = extraction.complete_case_returns(results);
-    const auto dependencies = extraction.freeze_dependencies().complete();
+    const auto executable = extraction.bodies_.size();
+    const auto results = extraction.complete_results(executable);
+    const auto cases = extraction.complete_case_returns(executable, results);
+    const auto dependencies = extraction.freeze_dependencies(executable).complete();
     auto program = std::move(declarations.declarations_);
-    extraction.seal(program, results, cases, dependencies);
+    extraction.seal(program, executable, results, cases, dependencies);
     return {std::move(declarations.source_), std::move(program)};
   }
 };
