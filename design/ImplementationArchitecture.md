@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r218 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r217 under the [replacement pipeline decision](../CHANGELOG.md#h-compiler-pipeline-replacement-20261125). The [recursive allocator review](../CHANGELOG.md#k-seed-recursive-allocator-20261126) applies P-682/P-683 to capability completion and the separate empty-replay prerequisite.
+
 At r217 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r216 for [borrowing CLI entry inputs in a catalog callback](#borrowing-cli-entry-inputs-in-a-catalog-callback). The [review](../CHANGELOG.md#k-seed-cli-input-loans-20261126) applies [D-07-UTF8](DesignAuthorityRegistry.md#d-07-utf8) and [D-20-C-HANDLES](DesignAuthorityRegistry.md#d-20-c-handles) at the C entry and its synchronous forwarding call.
 
 At r216 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r215 and extends the r214 callback extraction to [ordered readonly arrays with one actual owner](#ordered-array-loans-from-one-native-owner). The [review](../CHANGELOG.md#k-seed-pipeline-ordered-catalog-loans-20261126) preserves the existing native provider ABI, synchronous lifetime and completion rules.
@@ -773,6 +775,14 @@ Give each fact kind a producer and each later reader a completed, revision-appro
 For the first LLVM handoff, the new producers can seal the existing `CheckedProgram` representation for the operations this backend reads. Keep the matching parsed revision alive for its source and operation pointers. `LLVMEmission::emit` and `emit_native_providers` take the sealed program by const reference. The LLVM pass may traverse that source to emit control flow and derive its private layouts from completed instance data. A missing prerequisite must surface before output publication. This adapter has no entry to the old checker and requires no verifier facts merely to populate legacy fields.
 
 Structure the seed around the [independently selectable compiler operations](../applications/cod-booter/docs/CompilerPipeline.md#independently-selectable-compiler-operations). Development mainline owns implementation, verification and cutover. The real entry and its native interfaces determine completion. Focused comparisons during development answer correctness questions. The full-build performance decision follows the removal gate below.
+
+#### Completing allocator roles across recursive calls
+
+A recursive procedure can forward a writable array under owner `G` to itself, then call [`reserve_visits`](../applications/cod-booter/src/ModuleIndex.cod) at depth zero. Its LLVM signature must carry the allocator needed by that leaf. A recursive call can also exchange two owner arguments. One pass in callee-first order cannot complete a cycle, and combining requirements by body alone loses which actual owner supplies each formal.
+
+After body extraction, start at the selected bodies and input-owner ordinals used by actual allocations. Follow the recorded call and installation edges backwards through their prepared owner substitutions. Expand each reached `(body, input owner ordinal)` once. A prepared lexical or region allocator supplies that site locally. Keep its identity for emission. Retain the site of a missing substitution for validation against the completed demands. The traversal takes sealed graph records and has no operation to revisit source or schedule a body. A later pass reads the completed roles, checks each demanded actual and supplies the existing signatures, handler frames and call operands.
+
+The empty-replay check follows body dependencies independently, including installations and calls supplied by local allocators. A publishing installation can use the empty layout only when its entire admitted closure is represented and reaches neither an incoming symbol nor an open boundary. Preserve the existing native lifecycle and callback limits. Verify the linked growth result and the actual capability operands around a cycle that exchanges two roles. A missing demanded capability or an opaque dependency in a recursive handler must retain the located failure and prior outputs. The production recursive handler has its own eligibility check.
 
 #### Extracting the path-key callback
 
