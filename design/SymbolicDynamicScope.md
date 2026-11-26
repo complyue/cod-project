@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 275 · Recorded: 2026-11-26 · Phase: language/application co-design.
+Design revision: 276 · Recorded: 2026-11-26 · Phase: language/application co-design.
 
 ## Design authority
+
+At r276 the [slice method heads](#slice-patterns-in-method-parameters) and numeric conversion example use [D-07-SCALAR-NAMES](DesignAuthorityRegistry.md#d-07-scalar-names). The actual scalar types, received values and method selection continue from r275.
 
 At r275 [D-11-NUMERIC-CONVERSION](DesignAuthorityRegistry.md#d-11-numeric-conversion) supersedes the numeric branch of expression typing. The r274 distinction between a value conversion and an assertion, and H-470 for nonnumeric assertions, continue. [Scalar conversion contract](ScalarUnitsAndIndexTypes.md#explicit-scalar-numeric-conversions)
 
@@ -750,26 +752,26 @@ symbol's capture, installation and invocation rules govern its use.
 
 #### Slice patterns in method parameters
 
-A fixed positional parameter of a `func` or `proc` can use the [mirrored slice pattern](RangedForAndGenerators.md#matching-a-slice-in-a-case-arm). Write it directly in a single method or in a grouped method head. The outer parentheses delimit the ordinary argument list. The inner parentheses enclose **one** selector. For example, this method accepts the builtin slice with both bounds omitted, exclusive endpoint policy and an explicit `i64` step. Calling it with the selector from `a[.. by -1]` binds `d` to −1.
+A fixed positional parameter of a `func` or `proc` can use the [mirrored slice pattern](RangedForAndGenerators.md#matching-a-slice-in-a-case-arm). Write it directly in a single method or in a grouped method head. The outer parentheses delimit the ordinary argument list. The inner parentheses enclose **one** selector. For example, this method accepts the builtin slice with both bounds omitted, exclusive endpoint policy and an explicit `Int64` step. Calling it with the selector from `a[.. by -1]` binds `d` to −1.
 
 ```cod
-func stride((.. by val d:i64)) -> i64 { d }
+func stride((.. by val d:Int64)) -> Int64 { d }
 ```
 
 The direct pattern occupies an unnamed positional slot. Its field binders are local to the method body. A complete public header can give the whole selector an argument label, default or owner/access contract. Each arm then refines that slot under the same contract.
 
 ```cod
-func stride_code(s:const Slice in S) -> i64 where {const owner S} of {
-    ((..))               => 0;
-    ((.. by val d:i64))  => d;
-    ((.. by _))          => 2;
-    (_)                  => 3
+func stride_code(s:const Slice in S) -> Int64 where {const owner S} of {
+    ((..))                 => 0;
+    ((.. by val d:Int64))  => d;
+    ((.. by _))            => 2;
+    (_)                    => 3
 }
 ```
 
 With the selectors from `a[..]`, `a[.. by 1]` and `a[0 ..]`, these arms return 0, 1 and 3 respectively. An explicit unsigned step with the same open bounds returns 2. A different conformer of the public `Slice` type reaches the general arm. A forwarded selector makes the same choice as an inline literal. The call prepares it once. Matching reads the builtin schema, endpoint policy, presence and actual field types, preserving units and the original access and lifetime. The selected method receives the fields it binds. The ordered, guarded form for tests on a field’s value is [`case … of`](RangedForAndGenerators.md#matching-a-slice-in-a-case-arm).
 
-Apply ordinary most-specific dispatch to the accepted argument tuples. Here every selector accepted by `(.. by val d:i64)` is also accepted by `(.. by _)`. Writing `val d` without a type in place of the underscore gives the same domain, so defining both for otherwise identical slots is a duplicate. For a two-axis method, each pattern refines only its own position. If one method specializes the row and another the column, a call satisfying both requires a unique most-specific method for their intersection. Otherwise that call is ambiguous in either declaration order. An explicitly expanded `axes...` still selects the [variadic method](#runtime-array-expansion-and-one-variadic-parameter), including when it carries two matching slices.
+Apply ordinary most-specific dispatch to the accepted argument tuples. Here every selector accepted by `(.. by val d:Int64)` is also accepted by `(.. by _)`. Writing `val d` without a type in place of the underscore gives the same domain, so defining both for otherwise identical slots is a duplicate. For a two-axis method, each pattern refines only its own position. If one method specializes the row and another the column, a call satisfying both requires a unique most-specific method for their intersection. Otherwise that call is ambiguous in either declaration order. An explicitly expanded `axes...` still selects the [variadic method](#runtime-array-expansion-and-one-variadic-parameter), including when it carries two matching slices.
 
 #### Method arm boundaries
 
@@ -1481,10 +1483,10 @@ Reference review: official Julia documentation and the v1.12.0 core implementati
 **Concrete-type selection (H-468/H-471).** Resolve the operation using concrete type evidence within the semantic specialization; an unconstrained type-parameter spelling does not force the assertion path. For example:
 
 ```cod
-func cast(x:T) -> u64 where {T} {
-    return x : u64;
+func cast(x:T) -> UInt64 where {T} {
+    return x : UInt64;
 }
-cast(7u32);     # Concrete u32 -> u64: lossless conversion, result 7.
+cast(7u32);     # Concrete UInt32 -> UInt64: lossless conversion, result 7.
 cast(3.5f64);   # Raises InexactError at the conversion inside cast.
 ```
 

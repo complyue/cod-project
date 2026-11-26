@@ -1,8 +1,10 @@
 # Ranged for-loops and synchronous generators
 
-Design revision: 28 · Recorded: 2026-11-26 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
+Design revision: 29 · Recorded: 2026-11-26 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
 
 ## Design authority
+
+At r29 the [concrete selector examples](#concrete-types-of-range-and-slice-literals) use [D-07-SCALAR-NAMES](DesignAuthorityRegistry.md#d-07-scalar-names) for coordinates and steps. Field presence, units, literal suffixes and matching continue from r28.
 
 At r28 the [method parameter decision](DesignAuthorityRegistry.md#d-10-slice-methods) reuses the r27 slice pattern for ordinary dispatch. Case order, guards, field types and literal construction continue under P-770/P-771.
 
@@ -72,13 +74,13 @@ CoD defines two builtin ADT schemas. Each application of a schema to canonical f
 
 | Expression | Concrete type of the selector | Observable content |
 | --- | --- | --- |
-| `1 ..= 6 by 2` | `RangeValue[i64, i64]` | Start 1, inclusive stop 6, step 2. Last visited value 5. |
-| `9u64 .. 1u64 by -2` | `RangeValue[u64, i64]` | Unsigned coordinates, signed step, exclusive stop. |
+| `1 ..= 6 by 2` | `RangeValue[Int64, Int64]` | Start 1, inclusive stop 6, step 2. Last visited value 5. |
+| `9u64 .. 1u64 by -2` | `RangeValue[UInt64, Int64]` | Unsigned coordinates, signed step, exclusive stop. |
 | `m[.., j]` | `SliceValue[omitted, omitted, default]` on the first axis | No written bounds or step. |
-| `m[.. by -1, j]` | `SliceValue[omitted, omitted, i64]` on the first axis | Both bounds omitted, signed step −1. |
-| `m[lo .., j]` for `lo:u32(Row)` | `SliceValue[u32(Row), omitted, default]` on the first axis | The written start keeps its row unit. |
+| `m[.. by -1, j]` | `SliceValue[omitted, omitted, Int64]` on the first axis | Both bounds omitted, signed step −1. |
+| `m[lo .., j]` for `lo:UInt32(Row)` | `SliceValue[UInt32(Row), omitted, default]` on the first axis | The written start keeps its row unit. |
 
-For `RangeValue`, determine a common coordinate type for the endpoints using their established identities and ordinary whole-type lossless rules. Preserve named units. If that evidence does not identify a unique coordinate, the source must disambiguate it. Retain the explicit step's type and check that the domain supports that advance. For a bounded ordinary integer range the omitted step is the unitless forward count `1` of type `i64`. A measured coordinate needs an established default advance for that domain if the author omits the step. No physical displacement is inferred from the receiving collection. The observable members are `start`, `stop`, `step` and `stop_inclusive`. The flag describes the written limit even when the progression never reaches it.
+For `RangeValue`, determine a common coordinate type for the endpoints using their established identities and ordinary whole-type lossless rules. Preserve named units. If that evidence does not identify a unique coordinate, the source must disambiguate it. Retain the explicit step's type and check that the domain supports that advance. For a bounded ordinary integer range the omitted step is the unitless forward count `1` of type `Int64`. A measured coordinate needs an established default advance for that domain if the author omits the step. No physical displacement is inferred from the receiving collection. The observable members are `start`, `stop`, `step` and `stop_inclusive`. The flag describes the written limit even when the progression never reaches it.
 
 For `SliceValue`, type each supplied endpoint and step independently. The absent slots are represented by fieldless alternatives. An omitted step requests the axis default. Preserve the written endpoint policy. A library can [match the written shape](#matching-a-slice-in-a-case-arm) and bind a present field in the arm. The full-axis selector needs no invented coordinate type, numeric sentinel or backing address. Its contact with an actual axis occurs in the selected library operation.
 
@@ -93,7 +95,7 @@ An overload receiving an axis-relative selector can match it directly with a par
 ```cod
 return case some_slice of {
     (..)                           -> whole_axis(axis);
-    (.. by val d:i64) | d == -1    -> reverse_axis(axis);
+    (.. by val d:Int64) | d == -1  -> reverse_axis(axis);
     (.. by val d)                  -> stride_axis(axis, d);
     (val lo ..)                    -> from_index(axis, lo);
     (.. val hi)                    -> before_index(axis, hi);
@@ -102,13 +104,13 @@ return case some_slice of {
 }
 ```
 
-A blank endpoint matches the omitted bound in the concrete `SliceValue`. A written `val name` matches a present field and introduces a branch-local value of its actual type, including its unit. An annotation such as `val d:i64` additionally tests type membership under ordinary typed-pattern rules. A type mismatch proceeds to the next arm. An underscore in a field position matches a supplied field of any admitted type without binding it. For example, `(val lo .. by _)` requires a written start and step. The whole-arm wildcard `_ ->` accepts any remaining subject. In the example, `a[0 ..]` reaches `from_index(axis, lo)` with `lo` equal to zero. A guard can test a particular coordinate or step value.
+A blank endpoint matches the omitted bound in the concrete `SliceValue`. A written `val name` matches a present field and introduces a branch-local value of its actual type, including its unit. An annotation such as `val d:Int64` additionally tests type membership under ordinary typed-pattern rules. A type mismatch proceeds to the next arm. An underscore in a field position matches a supplied field of any admitted type without binding it. For example, `(val lo .. by _)` requires a written start and step. The whole-arm wildcard `_ ->` accepts any remaining subject. In the example, `a[0 ..]` reaches `from_index(axis, lo)` with `lo` equal to zero. A guard can test a particular coordinate or step value.
 
 Leaving out `by` matches the stored axis-default request. Writing `by val d` or `by _` requires an explicit step, even when its value equals the axis default. The separator `..` or `..=` tests the stored endpoint policy. Keep at least one endpoint blank in an axis-relative pattern. Both endpoints supplied describe a bounded [Range](#concrete-types-of-range-and-slice-literals), whose fields are available after a typed match.
 
 The test reads the already constructed selector. Forwarding it to another method preserves the match. Test the builtin schema, field presence, endpoint policy and any written type constraints before binding the fields and running the arm guard. A structural miss skips the guard. A false guard continues normal case scanning. A library-defined conformer of the open `Slice` abstraction can have its own typed arm or reach the fallback. Matching a builtin slice performs no user conversion, selector construction, axis lookup or indexing operation.
 
-Acceptance distinguishes `a[..]` from `a[.. by 1]`, `a[0 ..]` from `a[..]`, and `a[.. hi]` from `a[..= hi]`. A negative i64 step can reach the guarded reverse arm. A positive step reaches the following stride arm with its original value. Bind `u32(Row)` from a start produced by a side-effecting function and check that constructing and forwarding the selector called that function once. Confirm ordinary fallback for a different admitted `Slice` conformer and whole-file recovery on a damaged field binder. [Case control and typed binding](DomainLanguageDesign.md#case-expressions-and-branch-local-variables)
+Acceptance distinguishes `a[..]` from `a[.. by 1]`, `a[0 ..]` from `a[..]`, and `a[.. hi]` from `a[..= hi]`. A negative Int64 step can reach the guarded reverse arm. A positive step reaches the following stride arm with its original value. Bind `UInt32(Row)` from a start produced by a side-effecting function and check that constructing and forwarding the selector called that function once. Confirm ordinary fallback for a different admitted `Slice` conformer and whole-file recovery on a damaged field binder. [Case control and typed binding](DomainLanguageDesign.md#case-expressions-and-branch-local-variables)
 
 The same pattern can occupy a fixed parameter in a direct or grouped method. A method family chooses the unique most-specific applicable method across all arguments. A case tests its arms in source order and may use a guard to inspect a bound step such as −1. [Slice patterns in method parameters](SymbolicDynamicScope.md#slice-patterns-in-method-parameters)
 
