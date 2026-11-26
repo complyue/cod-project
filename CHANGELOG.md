@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Complete the seed contract for the module key comparison
+
+<a id="k-seed-module-key-range-20261125"></a>
+**K-SEED-MODULE-KEY-RANGE-20261125.** The [architecture review](design/ImplementationArchitecture.md#completing-the-module-key-comparison) continues D-ARCH-REVIEW r202→203 under the [completed-callee rule](#h-completed-callee-behavior-20261125). At `0b01b2d1:applications/cod-booter/src/ModuleIndex.cod`, the read-only range in `same_key` has two independent endpoints and two explicit intrinsic length reads. The seed may seal its contract from the existing read-only application batch before `find_visit` needs it. Argument preparation and separate final validation retain their ordinary roles.
+
 ## 2026-11-25 — Skip the seed source-form walk when the relevant syntax is absent
 
 <a id="k-seed-source-form-walk-20261125"></a>
