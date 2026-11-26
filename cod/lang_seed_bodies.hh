@@ -1290,6 +1290,10 @@ class BodyExtraction {
       expect(!constructor.retained_parent, initializer.at,
              "replacement seed has no C handle acquisition with a retained parent");
       check_native_invocation_kind(&form_, *constructor.source, initializer.at);
+      // A borrowed attachment invokes only the constructor. Owning
+      // acquisition also registers a foreign release on success.
+      if (initializer.kind != Kind::make_borrowed_handle || constructor.source->kind != Form::Kind::function)
+        body_.open_replay = true;
 
       std::map<size_t, size_t> owners;
       for (size_t i = 0; i < constructor.inputs.size(); ++i) {
@@ -2028,10 +2032,8 @@ class BodyExtraction {
     }
 
     const CheckedOperation &remember(const Expression &expr, CheckedOperation op) {
-      // Native disposal has its own contract. A runtime symbolic read or
-      // installation also lies outside this empty-inventory profile.
-      if (op.native_acquisition ||
-          ((expr.kind == Kind::symbol || (expr.kind == Kind::effect && !expr.definition)) && op.symbol))
+      // Runtime symbolic reads and installations lie outside the empty-inventory profile.
+      if (op.symbol && (expr.kind == Kind::symbol || (expr.kind == Kind::effect && !expr.definition)))
         body_.open_replay = true;
       if (op.view && !scalar_type(op.type) && op.type != Type::exception)
         op.discarded_view = true;
