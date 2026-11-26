@@ -463,9 +463,16 @@ class ScalarChecker {
       std::vector<CaseArm> arms;
     };
     struct ArrayGrowth {
+      struct Field {
+        const Expression *site;
+        size_t ordinal;
+        std::optional<SumConstructor> constructor;
+        std::optional<std::uint64_t> enum_code;
+      };
       const Expression *allocation, *copy, *rebind;
       size_t array;
-      std::optional<SumConstructor> fill;
+      std::optional<SumConstructor> fill_constructor;
+      std::vector<Field> fill_fields;
     };
     std::vector<const Expression *> operations;
     std::vector<LeafGuard> guards;
@@ -23054,6 +23061,68 @@ class ScalarChecker {
         !expr.spread && expr.text == name;
   }
 
+  std::optional<SumConstructor> bind_empty_sum_fill(const Expression &expr, const Type &type) const {
+    if (expr.kind != Expression::Kind::make_object || !expr.construction_initializer() ||
+        expr.constructor_arguments || !expr.owner_name.empty() || !expr.initializer_items().empty() ||
+        type.kind != Type::sum || !program_.bits_payload(type)) return {};
+    const auto constructor = sum_constructor(expr);
+    if (!constructor || constructor->sum != type.identity) return {};
+    const auto &alternative = sum_alternative(*constructor);
+    if (!alternative.fields.empty() || !alternative.initializers.empty()) return {};
+    return constructor;
+  }
+
+  bool bind_product_fill(const Expression &expr, const Type &type, const TypeEvidenceState &scope,
+                         ScalarPlan &plan, std::vector<ScalarPlan::ArrayGrowth::Field> &fields) const {
+    using K = Expression::Kind;
+    if (expr.kind != K::make_object || !expr.construction_initializer() || expr.constructor_arguments ||
+        expr.construction_type_query || !expr.annotation || !expr.owner_name.empty() ||
+        construction_type(expr, scope) != type || program_.builder_type(type)) return false;
+    const auto &schema = program_.schemas.at(type.identity);
+    const auto order = product_initializers(schema, expr);
+    const auto items = expr.initializer_items();
+    if (order.size() != schema.fields.size()) return false;
+    std::set<size_t> initialized;
+    for (size_t i = 0; i < order.size(); ++i) {
+      const auto ordinal = order[i];
+      const auto &member = schema.fields[ordinal];
+      const auto &item = *items[i];
+      const auto &value = *item.children.back();
+      if (!initialized.insert(ordinal).second || member.storage != PlaceKind::value ||
+          (value.kind != K::make_object && value.annotation) || value.intrinsic || value.checked_ref_argument ||
+          value.spread || value.lexical_symbol_call) return false;
+      ScalarPlan::ArrayGrowth::Field field{&item, ordinal, {}, {}};
+      switch (value.kind) {
+      case K::integer: case K::real:
+        transfer_type(literal(value).type, member.type, value.at);
+        break;
+      case K::boolean:
+        if (member.type != Type::boolean) return false;
+        break;
+      case K::name: {
+        if (symbol_shadowed(value.text, scope) || scope.definitions.contains(value.text) ||
+            !named_family(value, &scope).methods.empty() || has_declarations(value.text) ||
+            module_names().symbols.contains(value.text)) return false;
+        const auto selected = selected_enum_member(value.text, &scope);
+        if (!selected || selected->type != member.type) return false;
+        field.enum_code = enum_literal(*selected).integer;
+        break;
+      }
+      case K::make_object:
+        field.constructor = bind_empty_sum_fill(value, member.type);
+        if (!field.constructor) return false;
+        break;
+      case K::call:
+        if (member.type != Type::uint64 || !value.children.empty() ||
+            !bind_scalar_call(value, scope, plan, Type::uint64, null_target)) return false;
+        break;
+      default: return false;
+      }
+      fields.push_back(std::move(field));
+    }
+    return true;
+  }
+
   bool bind_array_growth(const CheckedInstance &instance, const Form &form, ScalarPlan &plan) const try {
     using K = Expression::Kind;
     const auto &method = program_.methods[instance.method];
@@ -23071,7 +23140,8 @@ class ScalarChecker {
           inputs[i].variadic || inputs[i].automatic_conversion || inputs[i].not_init_ref) return false;
     const auto &array = program_.arrays.at(types[0].identity);
     if (array.index != Type::uint64 || (array.element != Type::uint8 &&
-        (array.element.kind != Type::sum || !program_.bits_payload(array.element)))) return false;
+        ((array.element.kind != Type::sum && array.element.kind != Type::product) ||
+         !program_.bits_payload(array.element)))) return false;
 
     const ModuleLookup module(module_, method.module);
     const ModuleLookup interpretation(interpretation_, method.interpretation);
@@ -23106,18 +23176,18 @@ class ScalarChecker {
     const auto &allocation = *replacement->children.front();
     if (allocation.kind != K::make_object || !allocation.constructor_arguments || allocation.children.size() != 2 ||
         allocation.construction_type_query || !allocation.annotation || allocation.owner_name != owners.front().name ||
-        evidence_annotation(*allocation.annotation, scope) != types[0] ||
+        construction_type(allocation, scope) != types[0] ||
         !bind_scalar_call(*allocation.children[0], scope, plan, Type::uint64, null_target, false, {}, capacity)) return false;
     const auto &fill = *allocation.children[1];
     std::optional<SumConstructor> constructor;
+    std::vector<ScalarPlan::ArrayGrowth::Field> fields;
     if (array.element == Type::uint8) {
       if (fill.kind != K::integer || fill.annotation || !fill.text.ends_with("u8")) return false;
+    } else if (array.element.kind == Type::product) {
+      if (!bind_product_fill(fill, array.element, scope, plan, fields)) return false;
     } else {
-      if (fill.kind != K::make_object || !fill.construction_initializer() || fill.constructor_arguments ||
-          !fill.owner_name.empty() || !fill.initializer_items().empty()) return false;
-      constructor = sum_constructor(fill);
-      if (!constructor || constructor->sum != array.element.identity || !sum_alternative(*constructor).fields.empty() ||
-          !sum_alternative(*constructor).initializers.empty()) return false;
+      constructor = bind_empty_sum_fill(fill, array.element);
+      if (!constructor) return false;
     }
     if (!scope.bindings.emplace(replacement->text, types[0]).second) return false;
 
@@ -23135,7 +23205,8 @@ class ScalarChecker {
     const auto &rebind = *items[4];
     if (rebind.kind != K::rebind || rebind.children.size() != 2 || !bare_name(*rebind.children[0], inputs[0].name) ||
         !bare_name(*rebind.children[1], replacement->text)) return false;
-    plan.array_growth = ScalarPlan::ArrayGrowth{&allocation, &copy, &rebind, types[0].identity, constructor};
+    plan.array_growth = ScalarPlan::ArrayGrowth{
+        &allocation, &copy, &rebind, types[0].identity, constructor, std::move(fields)};
     return true;
   } catch (const LocatedFailure &) {
     return false;
@@ -23422,8 +23493,24 @@ class ScalarChecker {
           allocation.array_allocator != Allocator{Allocator::input, 0})
         throw std::logic_error("array growth changed its allocation");
       const auto &fill = instance.operations.at(growth.allocation->children.back().get());
-      if (fill.type != array.element || fill.sum_constructor != growth.fill)
+      if (fill.type != array.element || fill.sum_constructor != growth.fill_constructor)
         throw std::logic_error("array growth changed its fill");
+      if (array.element.kind == Type::product) {
+        const auto &schema = program_.schemas.at(array.element.identity);
+        if (!fill.place || fill.regional_product_holder || schema.fields.size() != growth.fill_fields.size())
+          throw std::logic_error("array growth changed its product construction");
+        for (const auto &field : growth.fill_fields) {
+          const auto &member = schema.fields.at(field.ordinal);
+          const auto &checked = instance.operations.at(field.site);
+          const auto &value = instance.operations.at(field.site->children.back().get());
+          if (checked.product_field != field.ordinal || checked.operand_type != member.type ||
+              checked.type != member.type || checked.callee || checked.callable_call || checked.allocates_scalar_field ||
+              value.sum_constructor != field.constructor || value.enum_literal != field.enum_code.has_value() ||
+              (field.enum_code && (value.integer != *field.enum_code || value.type != member.type)) ||
+              (field.constructor && (!value.place || !value.view || value.mixed_view || value.type != member.type)))
+            throw std::logic_error("array growth changed a product initializer");
+        }
+      }
       const auto exact_element = [&](const Expression *item, BuiltinOperation builtin) {
         const auto &indexed = instance.operations.at(item);
         return indexed.indexed_target && !indexed.callee && !indexed.callable_call && indexed.builtin == builtin &&
