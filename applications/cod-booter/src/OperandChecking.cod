@@ -107,7 +107,7 @@ using "./ModuleExportStorage.cod" ByteFunctionCompletion {
 using "./ExceptionTypes.cod" { ExceptionType, resolve_exception_type };
 using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check, needs_signature_check };
 using "./NameResolution.cod" EnumAssertion { FoldedEnumOperand, ConstantEnumAssertion, ValueEnumAssertion };
-using "./DeclarationTypes.cod" { type_module, type_identity, DeclaredType };
+using "./DeclarationTypes.cod" { type_module, type_identity, DeclaredType, describe_type };
 using "./CaseSchemas.cod" {
     ConstructorCaseFacts,
     ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, ReceiptCaseSubject, CaseSumFormal,
@@ -774,9 +774,9 @@ func check_signature(nodes:const ExprNodes in N, names:const NameBindings in B, 
     (report.diagnostic <- unproved_result_contract()):void
 }
 
-func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
-                  at:u64, used:u64, revision:u64, local:const LocalBindingSites in L) -> u8
-    where {const owner N, const owner B, owner F, const owner L} {
+func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
+                  facts:OperandFacts in F, at:u64, used:u64, revision:u64, local:const LocalBindingSites in L) -> u8
+    where {const owner N, const owner B, const owner E, owner F, const owner L} {
     ref binding = make BindingSites {
         name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
     };
@@ -789,6 +789,17 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, fact
     if (value_binding && binding.owner_name != no_node()) return unproved_operand();
     val required_owner <- if (binding.owner_name == no_node()) { no_node() } else { (names[binding.owner_name].declaration) };
     val declared_kind <- if (type_name == no_node()) { 0u8 } else { declared_borrow(names, facts, type_name) };
+    val identity <- if (type_name == no_node()) { (facts[initializer].identity) } else { nominal_identity(names, type_name) };
+    val module <- if (type_name == no_node()) { (facts[initializer].identity_module) } else { 0u64 };
+    if (value_binding && type_name != no_node() && names[type_name].kind == ordinary_selection()) {
+        ref resolved = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
+        if (describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, resolved) &&
+            resolved.kind == enum_type() && resolved.defining_module != 0u64 && resolved.identity != no_node()) {
+            declared_kind <- scalar_enum();
+            identity <- resolved.identity;
+            (module <- resolved.defining_module):void
+        }
+    };
     if (declared_kind == product_kind() || facts[initializer].kind == product_kind()) {
         if (value_binding || pointer) return unsupported_product_layout();
     };
@@ -796,9 +807,8 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, fact
         if (value_binding || pointer) return unsupported_text_operation();
     };
     if (declared_kind == 0u8 && type_name != no_node()) return unproved_operand();
-    val identity <- if (type_name == no_node()) { (facts[initializer].identity) } else { nominal_identity(names, type_name) };
     if (declared_kind == scalar_enum() && facts[initializer].kind == scalar_enum() &&
-        !compatible_operand_nominal(facts, initializer, declared_kind, identity, 0u64))
+        !compatible_operand_nominal(facts, initializer, declared_kind, identity, module))
         return incompatible_enum_type();
     if (facts[initializer].kind == never_result()) {
         ref construction = make ConstructionSites {
@@ -819,6 +829,7 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, fact
         if (reserves_storage(nodes, revision, used, initializer)) {
             if (facts[initializer].kind != value_kind) return wrong_operand_type();
             set_fact(facts, at, value_kind, local_place(), names[at].scope, identity, 0u8);
+            if (value_kind == scalar_enum()) { (facts[at].identity_module <- module):void };
             facts[at].target_readonly <- readonly;
             facts[at].reservation <- initializer;
             return 0u8;
@@ -826,7 +837,7 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, fact
         val diagnostic <- require_value_bits(nodes, facts, initializer, value_kind);
         if (diagnostic != 0u8) return diagnostic;
         set_fact(facts, at, value_kind, local_place(), names[at].scope, identity, 0u8);
-        if (value_kind == scalar_enum()) { (facts[at].identity_module <- facts[initializer].identity_module):void };
+        if (value_kind == scalar_enum()) { (facts[at].identity_module <- module):void };
         facts[at].target_readonly <- readonly;
         return 0u8;
     } else {};
@@ -4155,7 +4166,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     };
     ref local = make LocalBindingSites { binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false; };
     if (inspect_local_binding(nodes, revision, used, at, local) && local.mode != ExceptionLocal)
-        return check_local(nodes, names, facts, at, used, revision, local);
+        return check_local(nodes, names, selected, facts, at, used, revision, local);
     ref field = make FieldSelectionSites { receiver <- no_node(); field <- no_node(); };
     if (inspect_field_selection(nodes, revision, used, at, field))
         return check_field_access(source, nodes, names, links, facts, fields, at, used, revision,
