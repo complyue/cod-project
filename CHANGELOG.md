@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Separate aggregate binding from storage classification
+
+<a id="k-booter-bound-aggregate-schemas-20261126"></a>
+**K-BOOTER-BOUND-AGGREGATE-SCHEMAS-20261126.** **Continued** under [D-20-MODULE-GRAPH](design/DesignAuthorityRegistry.md#d-20-module-graph) and the [booter rewrite](applications/cod-booter/docs/CompilerPipeline.md#replacing-the-booter-pipeline). The [previous walker](https://github.com/complyue/cod-project/blob/18e5658cca52e6dd054013d674092ba778e6040b/applications/cod-booter/src/AggregateSchemas.cod#L213-L235) returned to the parent field’s source after completing its inline child. The reviewed [r99 phase boundary](applications/cod-booter/docs/ModuleGraph.md#checking-aggregate-fields-before-publication) keeps traversal over frozen dependency and terminal records. The r98 storage distinctions, diagnostic order and publication requirements continue under P-680/P-681. Mainline owns implementation and linked acceptance. Registry r1355→1356.
+
 ## 2026-11-26 — Reuse abstract indexing defaults before visible free operators
 
 <a id="h-index-defaults-and-free-methods-20261126"></a>
