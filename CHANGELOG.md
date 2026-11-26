@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Compare lexical connections and independently owned parser plans
+
+<a id="k-parser-owned-plan-study-20261126"></a>
+**K-PARSER-OWNED-PLAN-STUDY-20261126.** The project user requested a feasibility comparison and identified ADT functors in an independent owner as the promising storage direction. The [r4 WIP](design/ParserCombinatorLibSupport.md#lexical-composition-or-an-independently-owned-plan) extends the [r3 storage alternatives](https://github.com/complyue/cod-project/blob/cac10f6204e5d2665a914088e93a533ca43c8cf2/design/ParserCombinatorLibSupport.md#reusable-rules-and-the-scope-of-language-support) with a lifetime counterexample, a mutation witness, a construction-cost comparison and an acceptance workload. The [research scope](design/DesignAuthorityRegistry.md#d-parser-combinator-research) distinguishes the candidate representation from the existing owner and synchronous invocation contracts.
+
 ## 2026-11-26 — Compose fare and event stages before attaching endpoints
 
 <a id="k-papers-open-operator-composition-20261126"></a>
