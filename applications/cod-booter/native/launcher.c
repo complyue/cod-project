@@ -376,6 +376,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: duplicate signature in ordinary method family\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 48)
         fputs(": error: ordinary method family is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 49)
+        fputs(": error: imported reference-slot call requires a checked rebind contract\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 12)
         fputs(": error: ref argument requires a proven non-null target\n", stderr);
     else if (diagnostic->stage == 5 && diagnostic->code == 13)

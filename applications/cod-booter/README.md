@@ -187,7 +187,13 @@ An initialized `const ref` local selects a supported scalar target once. The fix
 
 An ordinary scalar reference local can rebind to an existing initialized target with the same type and owner and compatible access. A failed right operand leaves the old target selected. The assignment result exposes the destination target with its declared access. A fixed reference taken before the rebind keeps the earlier target. The source commands check the body containing a fixed reference, including an unused binding.
 
-The declaration and C provider commands also check fixed locals initialized from a named byte-array loan with a `u64` index. The loan can be an ordinary reference formal or a previously checked local. The checker requires the exact nominal array and owner. A writable target supports indexed byte stores and ordinary mutable loans. Rebinding an ordinary slot under that owner leaves earlier selections intact. The byte-array object route, fixed groups and bare declarations, and forwarded `ref var` slots retain their profile limits. [Binding and target qualifiers](../../design/RegionalOwnership.md#independent-binding-and-target-qualifiers)
+The declaration and C provider commands also check fixed locals initialized from a named byte-array loan with a `u64` index. The loan can be an ordinary reference formal or a previously checked local. The checker requires the exact nominal array and owner. A writable target supports indexed byte stores and ordinary mutable loans. Rebinding an ordinary slot under that owner leaves earlier selections intact. Byte-array object emission, grouped fixed references and bare fixed declarations retain their profile limits. [Binding and target qualifiers](../../design/RegionalOwnership.md#independent-binding-and-target-qualifiers)
+
+### Byte-array growth and reference-slot calls
+
+The declaration and C provider commands check `reserve_keys` with its original `SourceBytes` type and `growth_capacity` helper. Within the same module, a `ref var` formal can forward the caller's initialized writable slot. An ordinary reference formal lends its own local slot. Rebinding requires the same nominal array and actual owner, and construction separately requires a writable allocator role. Fixed slots, readonly targets and temporary arrays cannot supply a writable reference slot.
+
+The checker records the possible escaping bounds and allocation failures of a completed slot body. A failed argument prevents callee entry. The staged interface records the formal modes, owner roles and allocation requirements. Imported reference-slot calls still require a cross-module rebind contract before they can be checked. Visit-array growth and object emission have separate profiles. [Key-array checking contract](docs/ModuleGraph.md#checking-growth-of-the-module-key-array)
 
 ### Predicate assertions
 

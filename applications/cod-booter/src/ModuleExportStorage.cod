@@ -40,6 +40,14 @@ export func constructor_type() -> u8 { return 40u8; }
 export enum AggregateStorage:u8 { UnprovedAggregate; CoDBitsAggregate; CLayoutBitsRecord; NonBitsAggregate; }
 export enum InterfaceCallableKind:u8 { NoCallableKind; CheckedFunction; CheckedProcedure; }
 export enum ByteFunctionCompletion:u8 { NoByteFunction; CheckedByteFunction; ByteFunctionMayFailBounds; }
+
+export data ByteArrayFailures {
+    bounds:bool;
+    out_of_memory:bool;
+    region_capacity:bool;
+    invalid_capacity:bool;
+}
+
 export enum ExceptionSchema:u8 { OrdinarySchema; CheckedExceptionSchema; UncheckedExceptionSchema; }
 
 # Every membership header already identifies its defining source row. In
@@ -144,6 +152,10 @@ export data ModuleInterfaceRow {
     scalar_object_body:bool;
     byte_completion:ByteFunctionCompletion;
     object_view:CallableObjectView;
+    array_slot_checked:bool;
+    array_slot_failures:ByteArrayFailures;
+    # A source parameter may require its substituted owner to allocate.
+    source_allocates:bool;
 }
 export array ModuleInterfaces[u64]:ModuleInterfaceRow;
 
@@ -179,6 +191,12 @@ export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:
     row.field_mode <- ValueFormal;
     row.scalar_object_body <- false;
     row.byte_completion <- (NoByteFunction:ByteFunctionCompletion);
+    row.array_slot_checked <- false;
+    row.array_slot_failures.bounds <- false;
+    row.array_slot_failures.out_of_memory <- false;
+    row.array_slot_failures.region_capacity <- false;
+    row.array_slot_failures.invalid_capacity <- false;
+    row.source_allocates <- false;
     return;
 }
 
@@ -199,6 +217,10 @@ export func write_sum_row(interfaces:ModuleInterfaces in I, row:u64, module:u64,
         aggregate_storage <- (UnprovedAggregate:AggregateStorage);
         exception_schema <- (OrdinarySchema:ExceptionSchema); field_mode <- ValueFormal;
         scalar_object_body <- false; byte_completion <- (NoByteFunction:ByteFunctionCompletion); object_view <- make NoCallableObjectView {};
+        array_slot_checked <- false; source_allocates <- false;
+        array_slot_failures <- make ByteArrayFailures {
+            bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
+        }
     };
     return;
 }
@@ -217,7 +239,11 @@ export func write_object_view(interfaces:ModuleInterfaces in I, at:u64, publishe
         aggregate_storage <- (UnprovedAggregate:AggregateStorage);
         exception_schema <- (OrdinarySchema:ExceptionSchema); field_mode <- ValueFormal;
         scalar_object_body <- false; byte_completion <- (NoByteFunction:ByteFunctionCompletion);
-        object_view <- view
+        object_view <- view;
+        array_slot_checked <- false; source_allocates <- false;
+        array_slot_failures <- make ByteArrayFailures {
+            bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
+        }
     };
     return
 }

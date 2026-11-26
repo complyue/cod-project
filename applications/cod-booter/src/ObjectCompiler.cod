@@ -1,3 +1,4 @@
+using "./ModuleExportStorage.cod" ByteArrayFailures;
 using "./ModuleExportStorage.cod" ByteFunctionCompletion { NoByteFunction };
 using "std:exceptions" { OutOfMemoryError, RegionCapacityExceededError };
 using "string.cod" StringBuilder;
@@ -176,7 +177,11 @@ proc traverse_graph(here finish(commands:const NativeCommands in G, units:const 
         membership <- UnprovedMembership;
         sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
         exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-        scalar_object_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {}
+        scalar_object_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
+        array_slot_checked <- false; source_allocates <- false;
+        array_slot_failures <- make ByteArrayFailures {
+            bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
+        }
     }) in G;
     ref commands = make NativeCommands(0u64,
         make NativeCommand { opcode <- 0u8; a <- 0u64; b <- 0u64; c <- 0u64; d <- 0u64; }) in G;

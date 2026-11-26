@@ -1,4 +1,6 @@
 using "./ParserStorage.cod" NodeLink { NoLink };
+using "./NameResolution.cod" unsupported_reference_slot_formal;
+using "./ModuleExportStorage.cod" ByteArrayFailures;
 using "./ModuleExportStorage.cod" ByteFunctionCompletion { NoByteFunction };
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
@@ -96,7 +98,6 @@ func unsupported_nominal_sum() -> u8 { return 114u8; }
 func unsupported_named_region() -> u8 { return 116u8; }
 func unsupported_const_local() -> u8 { return 117u8; }
 func unsupported_constructor_case() -> u8 { return 120u8; }
-func unsupported_reference_slot_formal() -> u8 { return 121u8; }
 func unsupported_fixed_formal() -> u8 { return 122u8; }
 func unsupported_procedure_symbol() -> u8 { return 123u8; }
 func unsupported_scoped_procedure() -> u8 { return 124u8; }
@@ -295,7 +296,9 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64,
                 ReferenceIdentity -> unsupported_reference_identity();
                 ReturningCondition -> unsupported_returning_condition();
                 (Formal { val mode <- mode; val fixed <- binding_const; }) -> {
-                    if (mode == ReferenceSlotFormal) return unsupported_reference_slot_formal();
+                    # The graph's source route validates this reception against a bound callable.
+                    if (mode == ReferenceSlotFormal && (emit_object || !publish_defaults))
+                        return unsupported_reference_slot_formal();
                     if (mode == IdentityOnlyRefFormal) return unsupported_identity_reference();
                     if (fixed) return unsupported_fixed_formal();
                     if (mode == ExceptionFormal) { 29u8 } else { 0u8 }
@@ -503,6 +506,10 @@ export func bind_module(source:const SourceBytes in S, tokens:Tokens in T, nodes
         native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
         aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
         scalar_object_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
+        array_slot_checked <- false; source_allocates <- false;
+        array_slot_failures <- make ByteArrayFailures {
+            bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
+        }
     });
     ref facts = make AggregateFacts(result.frontend.tree.used, UnprovedAggregate);
     ref no_selections = make CheckedSelections(0u64, make UnpublishedSelection {});
@@ -540,6 +547,10 @@ export func analyze_module_operands(source:const SourceBytes in S, tokens:Tokens
         native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
         aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
         scalar_object_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
+        array_slot_checked <- false; source_allocates <- false;
+        array_slot_failures <- make ByteArrayFailures {
+            bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
+        }
     });
     return analyze_bound_operands(source, nodes, selected, bindings, work, interfaces, 0u64, facts, owners, result);
 }
@@ -567,7 +578,7 @@ export func analyze_bound_operands(source:const SourceBytes in S, nodes:const Ex
     ref executable = make DeclarationDemands(0u64, make DeclarationDemand {
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
         pending <- no_node(); receipt_pending <- no_node(); declared_failure <- no_node();
-        receipt_body <- false; signature <- false; body <- false;
+        receipt_body <- false; slot_body <- false; signature <- false; body <- false;
     });
     if (!check_module_operands(source, nodes, result.frontend.tree, bindings, work, selected, 1u64,
         facts, interfaces, interface_count, owners,
@@ -597,7 +608,7 @@ export func analyze_bound_completion(nodes:const ExprNodes in N, bindings:const 
     ref executable = make DeclarationDemands(0u64, make DeclarationDemand {
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
         pending <- no_node(); receipt_pending <- no_node(); declared_failure <- no_node();
-        receipt_body <- false; signature <- false; body <- false;
+        receipt_body <- false; slot_body <- false; signature <- false; body <- false;
     });
     ref no_native_loans = make SuppliedViews(0u64, make NoSuppliedView {});
     return analyze_bound_declaration_completion(

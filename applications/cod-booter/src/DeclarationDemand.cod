@@ -13,7 +13,7 @@ using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField }
 using "./ExceptionTypes.cod" ExceptionType;
 using "./NativeDeclarations.cod" {
     SuppliedViews, read_acquisition_failure, has_imported_native_loan, source_handle_callable,
-    prepared_byte_function
+    prepared_byte_function, prepared_byte_array_construction, prepared_byte_array_slot_signature
 };
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" sum_type;
@@ -29,6 +29,7 @@ export data DeclarationDemand {
     receipt_pending:u64;
     declared_failure:u64;
     receipt_body:bool;
+    slot_body:bool;
     signature:bool;
     body:bool;
 }
@@ -94,7 +95,7 @@ func family_needs_checked_operands(links:const NameWork in W, demand:const Decla
     for (unused in 0u64 .. used) {
         if (definition == no_node()) return false;
         if (definition >= used || demand[definition].declared_failure != no_node() ||
-            links[definition].sum_loan_formals) return true;
+            links[definition].sum_loan_formals || demand[definition].slot_body) return true;
         (definition <- links[definition].next_method):void
     };
     return true
@@ -200,6 +201,13 @@ export func discover_declaration_demand(
                 return false
             };
             demand[site].declared_failure <- clause;
+            if (prepared_byte_array_slot_signature(nodes, links, views, callable.signature, used, revision)) {
+                demand[site].slot_body <- true;
+                if (!require_receipt_body(demand, site, count, receipt_count, used)) {
+                    problem <- site;
+                    return false
+                }
+            };
             if ((clause != no_node() || links[site].sum_loan_formals || prepared_byte_function(views, site, true) ||
                  source_handle_callable(nodes, names, selected, links, site, used, revision)) &&
                 !require_body(demand, site, count, used, true)) {
@@ -262,6 +270,12 @@ export func discover_declaration_demand(
                 (checked_call <- true):void
             }
         };
+        if (prepared_byte_array_construction(views, site) &&
+            (!local_body(nodes, revision, used, scope, callable) ||
+             !require_receipt_body(demand, scope, count, receipt_count, used))) {
+            problem <- site;
+            return false
+        };
         if (links[site].case_schema_prepared || selects_caught_field(fields, site) || checked_call ||
             has_imported_native_loan(views, site) || read_acquisition_failure(views, site, failure) ||
             inspect_named_throw(nodes, revision, used, site, construction) ||
@@ -274,8 +288,8 @@ export func discover_declaration_demand(
             }
         };
     };
-    # A local callee can forward a loan, so check the reached bodies before
-    # accepting the receiver's nonretaining contract.
+    # Reached bodies can forward a loan or determine allocation operands.
+    # Check them before accepting the receiving body's contract.
     val failed <- no_node();
     for (item in 0u64 .. used) {
         if (item < receipt_count) {

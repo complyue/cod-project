@@ -34,7 +34,7 @@ using "./ParserStorage.cod" SignatureSyntax {
     TypeSignatureClause, OwnerSignatureClause, InvalidSignature, OtherSignatureSyntax,
 };
 using "./ParserStorage.cod" BindingSyntax { InvalidBindingSyntax, TypedBinding };
-using "./ParserStorage.cod" FormalMode { ValueFormal, PlaceFormal, InitializingPlaceFormal, HandleFormal };
+using "./ParserStorage.cod" FormalMode { ValueFormal, PlaceFormal, InitializingPlaceFormal, HandleFormal, ReferenceSlotFormal };
 using "./ParserStorage.cod" FormalSyntax { InvalidFormal, OrdinaryFormal, HereFormalSyntax };
 using "./ParserStorage.cod" HandleBindingSyntax { OwnHandleBinding, BorrowHandleBinding };
 using "./ParserStorage.cod" HandleConstructionSyntax { OwnHandleMake, BorrowHandleMake };
@@ -147,6 +147,7 @@ export data NameWorkSlot {
     enclosing_case_arm:u64;
     arm_case:u64;
     sum_loan_formals:bool;
+    byte_array_construction:bool;
     product_type_diagnostic:u8;
     product_type_site:u64;
     # Reaching installation at expression entry. The syntax count denotes
@@ -194,6 +195,7 @@ data NameState {
     first:u64;
     module_names:u64;
     module_candidates:bool;
+    source_only:bool;
     runtime_floor:u64;
     transfer_binding:u64;
     transfer_resolved:bool;
@@ -285,6 +287,7 @@ export func declaration_in_deferred_group() -> u8 { return 11u8; }
 func dynamic_symbol_in_function() -> u8 { return 12u8; }
 export func unsupported_module_declaration() -> u8 { return 13u8; }
 export func unsupported_ordinary_construction() -> u8 { return 37u8; }
+export func unsupported_reference_slot_formal() -> u8 { return 121u8; }
 func unsupported_initializer_rebind() -> u8 { return 46u8; }
 func unsupported_repeated_defer() -> u8 { return 47u8; }
 func unsupported_repeated_construction() -> u8 { return 48u8; }
@@ -818,6 +821,7 @@ func link_entries(nodes:const ExprNodes in N, work:NameWork in W, revision:u64, 
         work[at].enclosing_case_arm <- no_node();
         work[at].arm_case <- no_node();
         work[at].sum_loan_formals <- false;
+        work[at].byte_array_construction <- false;
         work[at].product_type_diagnostic <- 0u8;
         work[at].product_type_site <- no_node();
         work[at].imported_interface <- no_node();
@@ -1410,6 +1414,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
     val record_initializer <- false;
     val text_initializer <- false;
     val builder_initializer <- false;
+    val byte_array_initializer <- false;
     if (construction.queried_operand != no_node()) {
         resolve_expression(source, nodes, bindings, work, state, construction.queried_operand);
     } else {
@@ -1421,7 +1426,12 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         builder_initializer <- is_lexical_builder(nodes, bindings, requested, state.syntax_revision, state.syntax_used);
         record_initializer <- (kind == record_type() && !has_exception_parent(nodes, bindings, definition, state.syntax_revision, state.syntax_used)) ||
             (kind == ordinary_selection() && bindings[definition].imported_kind == record_export());
-        if (!text_initializer && !builder_initializer && !record_initializer &&
+        byte_array_initializer <- state.source_only && shape == PositionalConstruction &&
+            !text_initializer && !builder_initializer && !record_initializer &&
+            construction.placement != no_node() && (kind == array_type() ||
+            (kind == ordinary_selection() && (bindings[definition].imported_kind == array_export() ||
+                bindings[requested].module_use == (SelectedType:ModuleNameUse))));
+        if (!text_initializer && !builder_initializer && !record_initializer && !byte_array_initializer &&
             !native_scalar(kind) && kind != builtin_void() && kind != enum_type()) {
             reject_name(state, at, unsupported_ordinary_construction());
             return;
@@ -1442,11 +1452,15 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         };
         val valid_count <- if (builder_initializer) {
             first == no_node() || (first != tail && work[first].next == tail)
-        } else { text_initializer && first != no_node() && first == tail };
+        } else {
+            if (byte_array_initializer) { first < tail && work[first].next == tail }
+            else { text_initializer && first != no_node() && first == tail }
+        };
         if (shape != PositionalConstruction || !valid_count) {
             reject_name(state, at, unsupported_ordinary_construction());
             return;
         } else {};
+        work[at].byte_array_construction <- byte_array_initializer;
         resolve_list(source, nodes, bindings, work, state, tail);
         return;
     } else {};
@@ -2794,7 +2808,10 @@ func resolve_ordinary_formal(source:const SourceBytes in S, nodes:const ExprNode
         append_declared_name(bindings, work, state, binding.name, parameter, formal_binding());
         return
     };
-    declare_name(source, nodes, bindings, work, state, binding.name, parameter, formal_binding(), duplicate_binding())
+    declare_name(source, nodes, bindings, work, state, binding.name, parameter, formal_binding(), duplicate_binding());
+    if (state.diagnostic == 0u8 && formal.mode == ReferenceSlotFormal) {
+        (bindings[parameter].scope <- state.scope_node):void
+    }
 }
 
 func resolve_formals(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
@@ -3021,6 +3038,7 @@ func resolve_lexical_callable(source:const SourceBytes in S, nodes:const ExprNod
         syntax_revision <- state.syntax_revision; syntax_used <- state.syntax_used;
         used <- state.used; first <- state.used; module_names <- state.module_names; scope_node <- definition;
         module_candidates <- state.module_candidates;
+        source_only <- state.source_only;
         runtime_floor <- if (is_function(nodes, definition)) { mark } else { (state.runtime_floor) };
         transfer_binding <- no_node(); transfer_resolved <- false; native_installation <- no_node();
         delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
@@ -3500,6 +3518,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
         syntax_revision <- tree.revision; syntax_used <- tree.used;
         used <- 0u64; first <- 0u64; module_names <- 0u64; runtime_floor <- 0u64; scope_node <- tree.root;
         module_candidates <- selected_used != 0u64;
+        source_only <- declarations_only;
         transfer_binding <- no_node(); transfer_resolved <- false; native_installation <- no_node();
         delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
         here_group <- false; handoff <- no_node(); case_target <- no_node(); case_arm <- no_node();
