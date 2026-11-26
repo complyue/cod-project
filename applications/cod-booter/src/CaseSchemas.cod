@@ -21,7 +21,7 @@ using "./NameResolution.cod" {
     owner_binding, local_binding, native_scalar
 };
 using "./ModuleExports.cod" SelectedExports;
-using "./DeclarationTypes.cod" { DeclaredType, DeclaredExpressionResult, describe_type, describe_record_field, describe_record_member };
+using "./DeclarationTypes.cod" { DeclaredType, DeclaredExpressionResult, describe_type, describe_record_field, describe_record_member, local_sum_constructor };
 using "./AggregateSchemas.cod" AggregateFacts;
 using "./ModuleExportStorage.cod" {
     ModuleInterfaces, find_interface, sum_type, enum_type, constructor_type, checked_sum_constructor, checked_aggregate_storage,
@@ -201,36 +201,6 @@ func sum_case_extent(nodes:const ExprNodes in N, work:const NameWork in W,
         (arm <- work[arm].next):void
     };
     return 0u64
-}
-
-func local_case_constructor(nodes:const ExprNodes in N, names:const NameBindings in B,
-    work:const NameWork in W, sum:u64, spelling:u64, used:u64, revision:u64,
-    count:u64 in C, ordinal:u64 in C) -> u64 where {const owner N, const owner B, const owner W, owner C} {
-    ref shape = make DeclarationSites {
-        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
-        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false
-    };
-    if (inspect_declaration(nodes, revision, used, sum, shape) != NominalSum ||
-        spelling >= used || names[spelling].kind != constructor_type()) return no_node();
-    val chosen <- names[spelling].declaration;
-    ref first = make u64 { no_node() };
-    if (!first_sequence_entry(nodes, revision, used, shape.entries, SumSequence, first)) return no_node();
-    ref sites = make SumArmSites { previous <- no_node(); name <- no_node(); fields <- no_node() };
-    val arm <- first;
-    val selected_arm <- no_node();
-    for (index in 0u64 .. used) {
-        if (!inspect_sum_arm(nodes, revision, used, arm, sites)) return no_node();
-        if (arm == chosen) {
-            selected_arm <- arm;
-            (ordinal <- index):void
-        };
-        if (arm == shape.entries) {
-            count <- index + 1u64;
-            return selected_arm
-        };
-        arm <- work[arm].next
-    };
-    return no_node()
 }
 
 func published_case_constructor(selected:const SelectedExports in E,
@@ -447,7 +417,7 @@ func prepare_case_arms(source:const SourceBytes in S, nodes:const ExprNodes in N
                     if (mode != NamedCaseMember) return case_problem(report, arm.pattern, 94u8);
                 };
                 selected_constructor <- if (module == 0u64) {
-                    local_case_constructor(nodes, names, work, sum.identity, spelling, used, revision,
+                    local_sum_constructor(nodes, names, work, sum.identity, spelling, used, revision,
                                            extent, ordinal)
                 } else {
                     published_case_constructor(selected, interfaces, published, sum, spelling, extent,

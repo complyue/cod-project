@@ -86,8 +86,8 @@ using "./NameResolution.cod" {
 };
 using "./NativeDeclarations.cod" {
     ModulePublication, NativeDeclarationResult, prepare_module_calls, check_module_interfaces,
-    publish_interfaces, first_source_handle_callable, first_byte_function, finish_byte_function, first_byte_array_work,
-    finish_byte_array_slot_body,
+    publish_interfaces, first_source_handle_callable, first_byte_function, finish_byte_function, first_array_slot_work,
+    finish_array_slot_body,
     publish_module_exports, SuppliedViews, SuppliedView { NoSuppliedView },
 };
 using "./NameResolution.cod" EnumAssertion { NoEnumAssertion };
@@ -588,7 +588,7 @@ func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
     };
     if (native) return true;
     ref checked = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
-    if (!prepare_module_calls(nodes, names, selected, interfaces, interface_count, work, views,
+    if (!prepare_module_calls(nodes, names, selected, interfaces, interface_count, facts, work, views,
         used, result.frontend.tree.revision, checked)) {
         binding_diagnostic(nodes, result, module_binding_failed(), checked.diagnostic, checked.node);
         return false;
@@ -769,7 +769,7 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
             finish_byte_function(views, at, sites[at].byte_completion)
         };
         if (!executable && demand[at].slot_body &&
-            !finish_byte_array_slot_body(views, at, sites[at].array_failures)) {
+            !finish_array_slot_body(views, at, sites[at].array_failures)) {
             binding_diagnostic(nodes, result, module_operands_failed(), 1u8, at);
             return false
         }
@@ -991,7 +991,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         first_source_handle_callable(nodes, names, selected, work, used, revision)
     };
     val byte_function <- if (native) { no_node() } else { first_byte_function(views, used) };
-    val byte_array_work <- if (native) { no_node() } else { first_byte_array_work(views, used) };
+    val array_slot_work <- if (native) { no_node() } else { first_array_slot_work(views, used) };
     ref required = make u64 { no_node() };
     ref operands = make OperandCheckResult { diagnostic <- 0u8; node <- no_node(); };
     if (!prepare_imported_calls(nodes, names, selected, work, published_interfaces, interface_count,
@@ -1021,7 +1021,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     };
     if (constructed != no_node() || caught_field != no_node() ||
         (!native && (first_case != no_node() || declared != no_node() || required != no_node() || source_helper != no_node() ||
-                     native_body_evidence != no_node() || byte_function != no_node() || byte_array_work != no_node() ||
+                     native_body_evidence != no_node() || byte_function != no_node() || array_slot_work != no_node() ||
                      result.requires_operand_checks))) {
         if (!check_graph_exception_body(source, nodes, selected, names, work, spellings,
             spelling_size,
@@ -1080,7 +1080,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         if (delivered != Complete) return delivered;
         return Rejected
     };
-    if (interfaces != no_node() && byte_array_work != no_node()) {
+    if (interfaces != no_node() && array_slot_work != no_node()) {
         (interfaces <- append_array_slot_interfaces(nodes, names, work, facts, views, staged, count,
             staged_interfaces, publication.module_identity, interfaces, used, revision, operands)):void
     };
@@ -1376,7 +1376,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             native_installation <- no_node();
             case_schema_prepared <- false;
             enclosing_case_arm <- no_node(); arm_case <- no_node();
-            sum_loan_formals <- false; byte_array_construction <- false;
+            sum_loan_formals <- false; slot_array_construction <- false;
             product_type_diagnostic <- 0u8; product_type_site <- no_node();
             active <- no_node(); module_selection <- no_node(); module_kind <- 0u8; module_scalar <- 0u8;
             local_symbol_conflict <- no_node();
@@ -1396,7 +1396,8 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         ref facts = make OperandFacts(capacity, make OperandFact {
             kind <- 0u8; reception <- 0u8; checked_exception <- 0u8; identity_module <- 0u64;
                 target_readonly <- 0u8; needs_target <- 0u8;
-            reaches_constructed_throw <- false; loans_owning_handle <- false; checks_array_bounds <- false; byte_array <- false; loans_array_slot <- false; array_slot <- no_node();
+            reaches_constructed_throw <- false; loans_owning_handle <- false; checks_array_bounds <- false;
+            byte_array <- false; array_sum <- no_node(); loans_array_slot <- false; array_slot <- no_node();
             loans_case_receipt <- false; case_receipt <- no_node();
             target_presence <- 0u8; selection <- no_node(); discarded_result <- 0u8; arm_result <- 0u8;
             case_item <- 0u8; case_match <- 0u8; case_body <- 0u8; case_guard <- 0u8; case_resume <- 0u8;

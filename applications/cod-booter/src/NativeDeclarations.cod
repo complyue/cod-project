@@ -12,7 +12,8 @@ using "./ParserStorage.cod" {
     ungrouped,
     is_function, ConstructionSites, inspect_construction, AssignmentSites, inspect_assignment,
     AssignmentSyntax { PlaceTransfer },
-    ConstructionSyntax { PositionalConstruction }, local_resource_name, IndexSites, inspect_index_selection,
+    ConstructionSyntax { PositionalConstruction, BracedConstruction }, local_resource_name, IndexSites, inspect_index_selection,
+    SumArmSites, inspect_sum_arm, block_tail,
 };
 using "./ParserStorage.cod" HereSyntax { HereReady, InvalidHere };
 using "./ParserStorage.cod" DirectInvocationSyntax { DirectInvocationReady, InvalidInvocation };
@@ -45,7 +46,7 @@ using "./ParserStorage.cod" SignatureSyntax {
     SignatureHead, ValueResultClause, BorrowedResultClause, OwningRegionResultClause, ThrowsSignatureClause,
     OwnerSignatureClause, InvalidSignature, OtherSignatureSyntax,
 };
-using "./ParserStorage.cod" OwnerConstraintSyntax { NotOwnerConstraint, ReadonlyOwnerConstraint, WritableOwnerConstraint };
+using "./ParserStorage.cod" OwnerConstraintSyntax { NotOwnerConstraint, ReadonlyOwnerConstraint };
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, BooleanLiteral, BindSymbolEffect, InstallSymbolEffect, ArrayDefinition
@@ -88,10 +89,10 @@ using "./ModuleExportStorage.cod" {
     CallableObjectView { NoCallableObjectView },
     CallableUseProofs, checked_callable_context,
     ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header, enum_type, sum_type,
-    SumInterfacePayload { NoSumInterface },
+    SumInterfacePayload { NoSumInterface }, constructor_type,
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, CLayoutBitsRecord, NonBitsAggregate },
 };
-using "./DeclarationTypes.cod" { type_module, type_identity, interior_nul_in_c_string };
+using "./DeclarationTypes.cod" { DeclaredType, describe_type, type_module, type_identity, interior_nul_in_c_string, local_sum_constructor };
 using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind, CheckedFunction,
     CheckedProcedure };
 using "./ExceptionTypes.cod" { ExceptionType, resolve_exception_type };
@@ -1438,11 +1439,14 @@ func check_here_receiver(nodes:const ExprNodes in N, names:const NameBindings in
     return true;
 }
 
-data ByteArrayBinding {
+data ArraySlotType {
     owner_site:u64;
     type_module:u64;
     type_identity:u64;
+    element_sum:u64;
 }
+
+export enum ArraySlotElement:u8 { ByteArrayElement; SumArrayElement; }
 
 export data SuppliedView =
     NoSuppliedView {} |
@@ -1460,18 +1464,20 @@ export data SuppliedView =
         target_readonly:bool; owner_readonly:bool; } |
     ReadonlyByteRead { array_site:u64; index:u64; formal:u64; owner_site:u64;
         type_module:u64; type_identity:u64; } |
-    ByteArrayFormal { owner_site:u64; type_module:u64; type_identity:u64; slot:bool; } |
+    ArraySlotFormal { owner_site:u64; type_module:u64; type_identity:u64; slot:bool; element:ArraySlotElement; element_sum:u64; } |
     CheckedArraySlotBody { failures:ByteArrayFailures; } |
-    IndexedByteDestination { assignment:u64; target:u64; index:u64; } |
-    ByteArrayConstruction { requested:u64; placement:u64; length:u64; fill:u64;
-        owner_site:u64; type_module:u64; type_identity:u64; } |
+    IndexedArrayDestination { assignment:u64; target:u64; index:u64; } |
+    IndexedArraySource { assignment:u64; target:u64; index:u64; } |
+    PreparedArrayConstruction { requested:u64; placement:u64; length:u64; fill:u64;
+        owner_site:u64; type_module:u64; type_identity:u64; element:ArraySlotElement; element_sum:u64; } |
+    EmptySumArrayFill { construction:u64; sum:u64; arm:u64; } |
     PreparedByteFunction { enum_result:bool; completion:ByteFunctionCompletion; } |
     PreparedAcquisitionFailure { nominal:ExceptionType; };
 export array SuppliedViews[u64]:SuppliedView;
 
 func describe_byte_array_formal(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:u64,
-    formal:u64, used:u64, revision:u64, readonly_only:bool, proof:ByteArrayBinding in F) -> bool
+    formal:u64, used:u64, revision:u64, proof:ArraySlotType in F) -> bool
     where {const owner N, const owner B, const owner E, const owner C, owner F} {
     ref shape = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
     ref binding = make BindingSites {
@@ -1484,31 +1490,39 @@ func describe_byte_array_formal(nodes:const ExprNodes in N, names:const NameBind
     val owner_site <- names[binding.owner_name].declaration;
     val marker <- binding.target_type;
     if (owner_site >= used || marker >= used) return false;
-    val constraint <- owner_constraint_syntax(nodes, owner_site);
-    if (constraint != ReadonlyOwnerConstraint && constraint != WritableOwnerConstraint) return false;
-    if (readonly_only && (!binding.readonly || constraint != ReadonlyOwnerConstraint)) return false;
+    if (!binding.readonly || owner_constraint_syntax(nodes, owner_site) != ReadonlyOwnerConstraint) return false;
     if (!describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, proof))
         return false;
     proof.owner_site <- owner_site;
     return true
 }
 
+func describe_local_u64_array_element(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, declaration:u64, used:u64, revision:u64,
+    element:DeclaredType in T) -> bool
+    where {const owner N, const owner B, const owner E, owner T} {
+    ref schema = make DeclarationSites {
+        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false
+    };
+    return used <= intrinsic (len)(names) &&
+        inspect_declaration(nodes, revision, used, declaration, schema) == ArrayTypeDeclaration &&
+        schema.index_type < used && schema.value_type < used &&
+        names[schema.index_type].kind == builtin_u64() &&
+        describe_type(nodes, names, selected, schema.value_type, 0u64, revision, used, element)
+}
+
 func describe_byte_array(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:u64,
-    marker:u64, used:u64, revision:u64, proof:ByteArrayBinding in F) -> bool
+    marker:u64, used:u64, revision:u64, proof:ArraySlotType in F) -> bool
     where {const owner N, const owner B, const owner E, const owner C, owner F} {
     if (marker >= used) return false;
     val module <- type_module(names, selected, marker, 0u64);
     val declaration <- type_identity(names, selected, marker);
     if (names[marker].kind == array_type()) {
-        ref schema = make DeclarationSites {
-            name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
-            index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false
-        };
-        if (inspect_declaration(nodes, revision, used, declaration, schema) != ArrayTypeDeclaration ||
-            schema.index_type >= used || schema.value_type >= used ||
-            names[schema.index_type].kind != builtin_u64() ||
-            names[schema.value_type].kind != builtin_u8()) return false
+        ref element = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+        if (!describe_local_u64_array_element(nodes, names, selected, declaration, used, revision, element) ||
+            element.kind != builtin_u8()) return false
     } else {
         if (names[marker].kind != ordinary_selection() || names[marker].declaration >= used ||
             selected[names[marker].declaration].kind != array_export() ||
@@ -1519,11 +1533,37 @@ func describe_byte_array(nodes:const ExprNodes in N, names:const NameBindings in
     };
     proof.type_module <- module;
     proof.type_identity <- declaration;
+    proof.element_sum <- no_node();
     return true
 }
 
+func describe_slot_array(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:u64,
+    aggregate:const AggregateFacts in A, marker:u64, used:u64, revision:u64,
+    proof:ArraySlotType in F) -> u8
+    where {const owner N, const owner B, const owner E, const owner C, const owner A, owner F} {
+    if (marker >= used || used > intrinsic (len)(names)) return 0u8;
+    if (names[marker].kind != array_type()) {
+        if (!describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, proof))
+            return 0u8;
+        return builtin_u8()
+    };
+    val declaration <- names[marker].declaration;
+    ref element = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    if (!describe_local_u64_array_element(nodes, names, selected, declaration, used, revision, element))
+        return 0u8;
+    if (element.kind != builtin_u8() &&
+        (element.kind != sum_type() || element.defining_module != 0u64 || element.identity >= used ||
+         element.identity >= intrinsic (len)(aggregate) ||
+         aggregate[element.identity] != (CoDBitsAggregate:AggregateStorage))) return 0u8;
+    proof.type_module <- 0u64;
+    proof.type_identity <- declaration;
+    proof.element_sum <- if (element.kind == sum_type()) { (element.identity) } else { no_node() };
+    return (element.kind)
+}
+
 func source_slot_parameter(nodes:const ExprNodes in N, work:const NameWork in W,
-    definition:u64, member:u64, used:u64, revision:u64) -> bool
+    definition:u64, member:u64, used:u64, revision:u64, single_slot:bool) -> bool
     where {const owner N, const owner W} {
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
     val form <- inspect_callable(nodes, revision, used, definition, callable);
@@ -1531,10 +1571,18 @@ func source_slot_parameter(nodes:const ExprNodes in N, work:const NameWork in W,
     ref header = make u64 { no_node() };
     ref at = make u64 { no_node() };
     if (!signature_formals(nodes, revision, used, callable.signature, header, at)) return false;
+    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
+    val seen <- false;
     val next <- no_node();
     for (unused in 0u64 .. used) {
-        if (at >= used || at > member) return false;
-        if (at == member) return true;
+        if (at == no_node()) return seen;
+        if (at >= used || (!single_slot && at > member)) return false;
+        if (at == member && !single_slot) return true;
+        if (single_slot && inspect_formal(nodes, revision, used, at, formal) == OrdinaryFormal &&
+            formal.mode == ReferenceSlotFormal) {
+            if (at != member || seen) return false;
+            (seen <- true):void
+        };
         next <- work[at].next;
         if (next <= at) return false;
         (at <- next):void
@@ -1542,11 +1590,16 @@ func source_slot_parameter(nodes:const ExprNodes in N, work:const NameWork in W,
     return false
 }
 
-func prepare_byte_array_formal(nodes:const ExprNodes in N, names:const NameBindings in B,
+func slot_element(kind:u8) -> ArraySlotElement {
+    if (kind == builtin_u8()) return (ByteArrayElement:ArraySlotElement);
+    return (SumArrayElement:ArraySlotElement)
+}
+
+func prepare_array_slot_formal(nodes:const ExprNodes in N, names:const NameBindings in B,
     work:const NameWork in W, selected:const SelectedExports in E, contracts:const ModuleInterfaces in C,
-    published:u64, views:SuppliedViews in V, at:u64, used:u64, revision:u64,
-    report:NativeDeclarationResult in R) -> bool
-    where {const owner N, const owner B, const owner W, const owner E, const owner C, owner V, owner R} {
+    published:u64, aggregate:const AggregateFacts in A, views:SuppliedViews in V, at:u64, used:u64,
+    revision:u64, report:NativeDeclarationResult in R) -> bool
+    where {const owner N, const owner B, const owner W, const owner E, const owner C, const owner A, owner V, owner R} {
     ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
     if (inspect_formal(nodes, revision, used, at, formal) != OrdinaryFormal) return true;
     val slot <- formal.mode == ReferenceSlotFormal;
@@ -1555,21 +1608,26 @@ func prepare_byte_array_formal(nodes:const ExprNodes in N, names:const NameBindi
         name <- no_node(); annotation <- no_node(); target_type <- no_node();
         owner_name <- no_node(); readonly <- false
     };
-    ref proof = make ByteArrayBinding {
-        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node()
+    ref proof = make ArraySlotType {
+        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node()
     };
     if (!formal_binding_is_fixed(nodes, revision, used, at) &&
         inspect_binding(nodes, revision, used, formal.binding, binding) == TypedBinding &&
         binding.owner_name < at && names[binding.owner_name].kind == owner_binding() &&
-        (!slot || (!binding.readonly && source_slot_parameter(nodes, work, names[at].scope, at, used, revision)))) {
+        (!slot || !binding.readonly)) {
         val owner_site <- names[binding.owner_name].declaration;
-        if (owner_site < used && owner_constraint_syntax(nodes, owner_site) != NotOwnerConstraint &&
-            describe_byte_array(nodes, names, selected, contracts, published, binding.target_type, used, revision, proof)) {
-            views[at] <- make ByteArrayFormal {
-                owner_site <- owner_site; type_module <- proof.type_module; type_identity <- proof.type_identity;
-                slot <- slot
-            };
-            return true
+        if (owner_site < used && owner_constraint_syntax(nodes, owner_site) != NotOwnerConstraint) {
+            val kind <- describe_slot_array(nodes, names, selected, contracts, published, aggregate,
+                binding.target_type, used, revision, proof);
+            if (kind != 0u8 && (!slot || source_slot_parameter(nodes, work, names[at].scope, at,
+                used, revision, kind == sum_type()))) {
+                views[at] <- make ArraySlotFormal {
+                    owner_site <- owner_site; type_module <- proof.type_module; type_identity <- proof.type_identity;
+                    slot <- slot; element <- slot_element(kind);
+                    element_sum <- proof.element_sum
+                };
+                return true
+            }
         }
     };
     if (slot) {
@@ -1579,7 +1637,7 @@ func prepare_byte_array_formal(nodes:const ExprNodes in N, names:const NameBindi
     return true
 }
 
-export func prepared_byte_array_slot_signature(nodes:const ExprNodes in N, work:const NameWork in W,
+export func prepared_array_slot_signature(nodes:const ExprNodes in N, work:const NameWork in W,
     views:const SuppliedViews in V, signature:u64, used:u64, revision:u64) -> bool
     where {const owner N, const owner W, const owner V} {
     ref head = make u64 { no_node() };
@@ -1589,7 +1647,7 @@ export func prepared_byte_array_slot_signature(nodes:const ExprNodes in N, work:
     for (unused in 0u64 .. used) {
         if (at >= used || at >= intrinsic (len)(views)) return false;
         case views[at] of {
-            ByteArrayFormal { val passes_slot <- slot; } -> { if (passes_slot) return true };
+            ArraySlotFormal { val passes_slot <- slot; } -> { if (passes_slot) return true };
             _ -> {}
         };
         next <- work[at].next;
@@ -1618,11 +1676,40 @@ func callable_allocation_role(nodes:const ExprNodes in N, definition:u64, owner_
     return false
 }
 
-func prepare_byte_array_construction(nodes:const ExprNodes in N, names:const NameBindings in B,
+func prepare_empty_sum_array_fill(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, views:SuppliedViews in V, at:u64, fill:u64, sum:u64, used:u64,
+    revision:u64) -> bool where {const owner N, const owner B, const owner W, owner V} {
+    ref syntax = make ConstructionSites {
+        requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
+        initializer <- no_node(); contents <- no_node()
+    };
+    ref fields = make u64 { no_node() };
+    if (inspect_construction(nodes, revision, at, fill, syntax) != BracedConstruction ||
+        syntax.requested >= fill || syntax.queried_operand != no_node() || syntax.placement != no_node() ||
+        names[syntax.requested].kind != constructor_type() ||
+        !block_tail(nodes, revision, fill, syntax.contents, fields) || fields != no_node()) return false;
+    # In this source profile name registration has already rejected
+    # initializer overloads, regardless of the argument count at this use.
+    val arm <- names[syntax.requested].declaration;
+    if (arm >= used) return false;
+    ref count = make u64 { 0u64 };
+    ref ordinal = make u64 { no_node() };
+    ref sites = make SumArmSites { name <- no_node(); previous <- no_node(); fields <- no_node() };
+    if (local_sum_constructor(nodes, names, work, sum, syntax.requested, used, revision, count,
+            ordinal) != arm || !inspect_sum_arm(nodes, revision, used, arm, sites) ||
+        sites.fields != no_node()) return false;
+    if (case views[fill] of { NoSuppliedView -> false; _ -> true }) return false;
+    views[fill] <- make EmptySumArrayFill { construction <- at; sum <- sum; arm <- arm };
+    return true
+}
+
+func prepare_slot_array_construction(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:u64,
+    aggregate:const AggregateFacts in A, work:const NameWork in W,
     views:SuppliedViews in V, at:u64, used:u64, revision:u64,
     construction:const ConstructionSites in S, report:NativeDeclarationResult in R) -> bool
-    where {const owner N, const owner B, const owner E, const owner C, owner V, const owner S, owner R} {
+    where {const owner N, const owner B, const owner E, const owner C, const owner A, const owner W,
+           owner V, const owner S, owner R} {
     val requested <- construction.requested;
     if (requested >= at || construction.queried_operand != no_node()) {
         reject_declaration(report, at, unsupported_ordinary_construction());
@@ -1639,10 +1726,12 @@ func prepare_byte_array_construction(nodes:const ExprNodes in N, names:const Nam
         reject_declaration(report, placement, unsupported_ordinary_construction());
         return false
     };
-    ref proof = make ByteArrayBinding {
-        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node()
+    ref proof = make ArraySlotType {
+        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node()
     };
-    if (!describe_byte_array(nodes, names, selected, contracts, published, requested, used, revision, proof)) {
+    val kind <- describe_slot_array(nodes, names, selected, contracts, published, aggregate,
+        requested, used, revision, proof);
+    if (kind == 0u8) {
         reject_declaration(report, requested, unsupported_ordinary_construction());
         return false
     };
@@ -1656,9 +1745,16 @@ func prepare_byte_array_construction(nodes:const ExprNodes in N, names:const Nam
         reject_declaration(report, at, unsupported_ordinary_construction());
         return false
     };
-    views[at] <- make ByteArrayConstruction {
+    if (kind == sum_type() && !prepare_empty_sum_array_fill(nodes, names, work, views, at,
+        fill.item, proof.element_sum, used, revision)) {
+        reject_declaration(report, fill.item, unsupported_ordinary_construction());
+        return false
+    };
+    views[at] <- make PreparedArrayConstruction {
         requested <- requested; placement <- placement; length <- count.item; fill <- fill.item;
-        owner_site <- owner_site; type_module <- proof.type_module; type_identity <- proof.type_identity
+        owner_site <- owner_site; type_module <- proof.type_module; type_identity <- proof.type_identity;
+        element <- slot_element(kind);
+        element_sum <- proof.element_sum
     };
     return true
 }
@@ -1671,7 +1767,7 @@ func has_array_slot_body(views:const SuppliedViews in V, at:u64) -> bool where {
     }
 }
 
-export func finish_byte_array_slot_body(views:SuppliedViews in V, at:u64,
+export func finish_array_slot_body(views:SuppliedViews in V, at:u64,
     failures:const ByteArrayFailures in F) -> bool where {owner V, const owner F} {
     if (at >= intrinsic (len)(views)) return false;
     val empty <- case views[at] of {
@@ -1683,24 +1779,24 @@ export func finish_byte_array_slot_body(views:SuppliedViews in V, at:u64,
     return true
 }
 
-export func first_byte_array_work(views:const SuppliedViews in V, used:u64) -> u64
+export func first_array_slot_work(views:const SuppliedViews in V, used:u64) -> u64
     where {const owner V} {
     if (used > intrinsic (len)(views)) return no_node();
     for (at in 0u64 .. used) {
         case views[at] of {
-            ByteArrayConstruction -> { return at };
-            ByteArrayFormal { val aliases_slot <- slot; } -> { if (aliases_slot) return at };
+            PreparedArrayConstruction -> { return at };
+            ArraySlotFormal { val aliases_slot <- slot; } -> { if (aliases_slot) return at };
             _ -> {}
         }
     };
     return no_node()
 }
 
-export func prepared_byte_array_construction(views:const SuppliedViews in V, at:u64) -> bool
+export func prepared_array_construction(views:const SuppliedViews in V, at:u64) -> bool
     where {const owner V} {
     if (at >= intrinsic (len)(views)) return false;
     return case views[at] of {
-        ByteArrayConstruction -> true;
+        PreparedArrayConstruction -> true;
         _ -> false
     }
 }
@@ -1711,10 +1807,10 @@ func prepare_source_byte_read(nodes:const ExprNodes in N, names:const NameBindin
     where {const owner N, const owner B, const owner E, const owner C, owner V, const owner I} {
     val binding <- names[index.target].declaration;
     if (names[index.target].kind != formal_binding()) return;
-    ref proof = make ByteArrayBinding {
-        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node();
+    ref proof = make ArraySlotType {
+        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node()
     };
-    if (describe_byte_array_formal(nodes, names, selected, contracts, published, binding, used, revision, true, proof)) {
+    if (describe_byte_array_formal(nodes, names, selected, contracts, published, binding, used, revision, proof)) {
         views[at] <- make ReadonlyByteRead {
             array_site <- index.target; index <- index.index; formal <- binding;
             owner_site <- proof.owner_site; type_module <- proof.type_module; type_identity <- proof.type_identity
@@ -1752,11 +1848,11 @@ func prepare_byte_function(nodes:const ExprNodes in N, names:const NameBindings 
     if ((kind != enum_type() && kind != builtin_bool()) || result == no_node()) return;
     ref head = make u64 { no_node() };
     ref first = make u64 { no_node() };
-    ref proof = make ByteArrayBinding {
-        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node();
+    ref proof = make ArraySlotType {
+        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node()
     };
     if (!signature_formals(nodes, revision, used, callable.signature, head, first) ||
-        !describe_byte_array_formal(nodes, names, selected, contracts, published, first, used, revision, true, proof))
+        !describe_byte_array_formal(nodes, names, selected, contracts, published, first, used, revision, proof))
         return;
     val second <- work[first].next;
     if (!independent_u64_formal(nodes, names, second, used, revision)) return;
@@ -2900,20 +2996,25 @@ func check_native_operation_call(nodes:const ExprNodes in N, names:const NameBin
     return true;
 }
 
-func remember_indexed_byte_destination(views:SuppliedViews in V, destination:u64, assignment:u64,
+func remember_indexed_array_destination(views:SuppliedViews in V, destination:u64, assignment:u64,
     indexed:const IndexSites in I) -> void where {owner V, const owner I} {
-    views[destination] <- make IndexedByteDestination {
+    views[destination] <- make IndexedArrayDestination {
         assignment <- assignment; target <- indexed.target; index <- indexed.index
     };
     return
 }
 
+func remember_indexed_array_source(views:SuppliedViews in V, input:u64, assignment:u64,
+    indexed:const IndexSites in I) -> void where {owner V, const owner I} {
+    views[input] <- make IndexedArraySource { assignment <- assignment; target <- indexed.target; index <- indexed.index };
+    return
+}
+
 export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBindings in B,
                                    selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, interface_count:u64,
-                                   work:NameWork in W, views:SuppliedViews in V, used:u64,
-                                       revision:u64,
-                                   report:NativeDeclarationResult in R) -> bool
-    where {const owner N, const owner B, const owner E, const owner C, owner W, owner V, owner R} {
+                                   aggregate:const AggregateFacts in A, work:NameWork in W, views:SuppliedViews in V,
+                                   used:u64, revision:u64, report:NativeDeclarationResult in R) -> bool
+    where {const owner N, const owner B, const owner E, const owner C, const owner A, owner W, owner V, owner R} {
     if (used > intrinsic (len)(views)) {
         reject_declaration(report, no_node(), invalid_native_callback());
         return false;
@@ -2930,24 +3031,30 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
     };
     ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- 0u64 };
     for (at in 0u64 .. used) {
-        if (work[at].byte_array_construction) {
+        if (work[at].slot_array_construction) {
             if (inspect_construction(nodes, revision, used, at, construction) != PositionalConstruction) {
                 reject_declaration(report, at, unsupported_ordinary_construction());
                 return false
             };
-            if (!prepare_byte_array_construction(nodes, names, selected, contracts, interface_count,
-                views, at, used, revision, construction, report)) return false
+            if (!prepare_slot_array_construction(nodes, names, selected, contracts, interface_count,
+                aggregate, work, views, at, used, revision, construction, report)) return false
         };
         if (inspect_index_selection(nodes, revision, used, at, indexed)) {
             prepare_source_byte_read(nodes, names, selected, contracts, interface_count,
                 views, at, used, revision, indexed)
         };
-        if (!prepare_byte_array_formal(nodes, names, work, selected, contracts, interface_count,
-            views, at, used, revision, report)) return false;
+        if (!prepare_array_slot_formal(nodes, names, work, selected, contracts, interface_count,
+            aggregate, views, at, used, revision, report)) return false;
         if (names[at].kind == 0u8 &&
             inspect_assignment(nodes, revision, used, at, assignment) == PlaceTransfer &&
             inspect_index_selection(nodes, revision, at, assignment.destination, indexed)) {
-            remember_indexed_byte_destination(views, assignment.destination, at, indexed)
+            # The reader admits no named indexed operator. The checked name
+            # table must also have no selected ordinary transfer family here.
+            remember_indexed_array_destination(views, assignment.destination, at, indexed);
+            if (inspect_index_selection(nodes, revision, at, assignment.input, indexed) &&
+                (case views[assignment.input] of { NoSuppliedView -> true; _ -> false })) {
+                remember_indexed_array_source(views, assignment.input, at, indexed)
+            }
         };
         prepare_byte_function(nodes, names, selected, work, contracts, interface_count,
             views, at, used, revision);

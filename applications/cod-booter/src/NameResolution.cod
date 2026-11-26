@@ -147,7 +147,7 @@ export data NameWorkSlot {
     enclosing_case_arm:u64;
     arm_case:u64;
     sum_loan_formals:bool;
-    byte_array_construction:bool;
+    slot_array_construction:bool;
     product_type_diagnostic:u8;
     product_type_site:u64;
     # Reaching installation at expression entry. The syntax count denotes
@@ -196,6 +196,7 @@ data NameState {
     module_names:u64;
     module_candidates:bool;
     source_only:bool;
+    array_fill:u64;
     runtime_floor:u64;
     transfer_binding:u64;
     transfer_resolved:bool;
@@ -821,7 +822,7 @@ func link_entries(nodes:const ExprNodes in N, work:NameWork in W, revision:u64, 
         work[at].enclosing_case_arm <- no_node();
         work[at].arm_case <- no_node();
         work[at].sum_loan_formals <- false;
-        work[at].byte_array_construction <- false;
+        work[at].slot_array_construction <- false;
         work[at].product_type_diagnostic <- 0u8;
         work[at].product_type_site <- no_node();
         work[at].imported_interface <- no_node();
@@ -1411,10 +1412,20 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         return;
     };
     val requested <- construction.requested;
+    if (state.source_only && state.array_fill == at &&
+        shape == BracedConstruction && construction.placement == no_node() &&
+        construction.queried_operand == no_node()) {
+        val found <- lookup(source, nodes, work, requested, 0u64, state.used);
+        if (found != no_node() && bindings[found].kind == constructor_type()) {
+            remember(bindings, requested, bindings[found].declaration, constructor_type());
+            resolve_record_initializer(source, nodes, bindings, work, state, construction.contents);
+            return
+        }
+    };
     val record_initializer <- false;
     val text_initializer <- false;
     val builder_initializer <- false;
-    val byte_array_initializer <- false;
+    val array_initializer <- false;
     if (construction.queried_operand != no_node()) {
         resolve_expression(source, nodes, bindings, work, state, construction.queried_operand);
     } else {
@@ -1426,12 +1437,12 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         builder_initializer <- is_lexical_builder(nodes, bindings, requested, state.syntax_revision, state.syntax_used);
         record_initializer <- (kind == record_type() && !has_exception_parent(nodes, bindings, definition, state.syntax_revision, state.syntax_used)) ||
             (kind == ordinary_selection() && bindings[definition].imported_kind == record_export());
-        byte_array_initializer <- state.source_only && shape == PositionalConstruction &&
+        array_initializer <- state.source_only && shape == PositionalConstruction &&
             !text_initializer && !builder_initializer && !record_initializer &&
             construction.placement != no_node() && (kind == array_type() ||
             (kind == ordinary_selection() && (bindings[definition].imported_kind == array_export() ||
                 bindings[requested].module_use == (SelectedType:ModuleNameUse))));
-        if (!text_initializer && !builder_initializer && !record_initializer && !byte_array_initializer &&
+        if (!text_initializer && !builder_initializer && !record_initializer && !array_initializer &&
             !native_scalar(kind) && kind != builtin_void() && kind != enum_type()) {
             reject_name(state, at, unsupported_ordinary_construction());
             return;
@@ -1453,15 +1464,28 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         val valid_count <- if (builder_initializer) {
             first == no_node() || (first != tail && work[first].next == tail)
         } else {
-            if (byte_array_initializer) { first < tail && work[first].next == tail }
+            if (array_initializer) { first < tail && work[first].next == tail }
             else { text_initializer && first != no_node() && first == tail }
         };
         if (shape != PositionalConstruction || !valid_count) {
             reject_name(state, at, unsupported_ordinary_construction());
             return;
         } else {};
-        work[at].byte_array_construction <- byte_array_initializer;
+        work[at].slot_array_construction <- array_initializer;
+        val previous_input <- state.array_fill;
+        if (array_initializer && bindings[requested].kind == array_type()) {
+            ref fill = make SequenceEntry { previous <- no_node(); item <- no_node() };
+            if (inspect_sequence_entry(nodes, state.syntax_revision, at, tail, fill) != ArgumentSequence ||
+                fill.previous != first) {
+                reject_name(state, tail, invalid_module_tree());
+                return
+            };
+            # Bind the constructor name in its own argument. The array
+            # schema and the fill's actual parent are checked after binding.
+            (state.array_fill <- fill.item):void
+        };
         resolve_list(source, nodes, bindings, work, state, tail);
+        state.array_fill <- previous_input;
         return;
     } else {};
     val body <- construction.contents;
@@ -3038,7 +3062,7 @@ func resolve_lexical_callable(source:const SourceBytes in S, nodes:const ExprNod
         syntax_revision <- state.syntax_revision; syntax_used <- state.syntax_used;
         used <- state.used; first <- state.used; module_names <- state.module_names; scope_node <- definition;
         module_candidates <- state.module_candidates;
-        source_only <- state.source_only;
+        source_only <- state.source_only; array_fill <- no_node();
         runtime_floor <- if (is_function(nodes, definition)) { mark } else { (state.runtime_floor) };
         transfer_binding <- no_node(); transfer_resolved <- false; native_installation <- no_node();
         delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
@@ -3518,7 +3542,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
         syntax_revision <- tree.revision; syntax_used <- tree.used;
         used <- 0u64; first <- 0u64; module_names <- 0u64; runtime_floor <- 0u64; scope_node <- tree.root;
         module_candidates <- selected_used != 0u64;
-        source_only <- declarations_only;
+        source_only <- declarations_only; array_fill <- no_node();
         transfer_binding <- no_node(); transfer_resolved <- false; native_installation <- no_node();
         delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
         here_group <- false; handoff <- no_node(); case_target <- no_node(); case_arm <- no_node();

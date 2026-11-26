@@ -59,7 +59,7 @@ using "./NameResolution.cod" {
     NameBindings, NameWork, enclosing_callable, exception_binding,
 };
 using "./OperandChecking.cod" {
-    OperandFacts, nullable_ptr, borrowed_ref, never_result, void_result, has_value_tail,
+    OperandFacts, nullable_ptr, borrowed_ref, never_result, void_result, has_value_tail, has_slot_array,
     unreachable_case_item, misses_case_arm, has_terminal_defer_before, present_target, absent_target, selected_target_presence,
 };
 using "./ModuleExports.cod" {
@@ -818,7 +818,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
         return route_failure(nodes, names, links, facts, sites, at, used, revision,
             index_out_of_bounds_identity(), 0u8, possible_failure());
     if (facts[at].allocation_owner != no_node()) {
-        if (facts[at].byte_array && (sites[at].registration != no_node() ||
+        if (has_slot_array(facts, at) && (sites[at].registration != no_node() ||
             sites[at].in_delayed_body != 0u8 || sites[at].in_supplied_body)) return unproved_deferred_error();
         return route_failure(nodes, names, links, facts, sites, at, used, revision,
             out_of_memory_identity(), 0u8, possible_failure())
@@ -943,7 +943,7 @@ func record_byte_completion(nodes:const ExprNodes in N, names:const NameBindings
     if (event == skipped_operand() || names[at].scope == no_node()) return 0u8;
     val definition <- enclosing_callable(nodes, names, names[at].scope);
     if (!prepared_byte_function(views, definition, false)) return 0u8;
-    if (facts[at].byte_array && facts[at].allocation_owner != no_node()) return unproved_byte_completion();
+    if (has_slot_array(facts, at) && facts[at].allocation_owner != no_node()) return unproved_byte_completion();
     val failed <- event == possible_failure() || event == definite_failure();
     if (!failed && !can_continue(sites, at)) return 0u8;
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
@@ -1128,7 +1128,7 @@ func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings 
                         invocation_reached(nodes, sites, at, used, revision)
                 } else { can_continue(sites, at) });
             allocation <- array_summary && category != index_out_of_bounds_identity() &&
-                facts[at].byte_array && facts[at].allocation_owner != no_node() && can_continue(sites, at);
+                has_slot_array(facts, at) && facts[at].allocation_owner != no_node() && can_continue(sites, at);
             broad_rethrow <- routed && is_failure_statement(nodes, at) &&
                 sites[at].category_module == 0u64 && sites[at].category == exception_root_identity();
             replacement <- routed && sites[at].category_module == 0u64 && sites[at].category == category &&

@@ -189,11 +189,13 @@ An ordinary scalar reference local can rebind to an existing initialized target 
 
 The declaration and C provider commands also check fixed locals initialized from a named byte-array loan with a `u64` index. The loan can be an ordinary reference formal or a previously checked local. The checker requires the exact nominal array and owner. A writable target supports indexed byte stores and ordinary mutable loans. Rebinding an ordinary slot under that owner leaves earlier selections intact. Byte-array object emission, grouped fixed references and bare fixed declarations retain their profile limits. [Binding and target qualifiers](../../design/RegionalOwnership.md#independent-binding-and-target-qualifiers)
 
-### Byte-array growth and reference-slot calls
+### Array growth and reference-slot calls
 
 The declaration and C provider commands check `reserve_keys` with its original `SourceBytes` type and `growth_capacity` helper. Within the same module, a `ref var` formal can forward the caller's initialized writable slot. An ordinary reference formal lends its own local slot. Rebinding requires the same nominal array and actual owner, and construction separately requires a writable allocator role. Fixed slots, readonly targets and temporary arrays cannot supply a writable reference slot.
 
-The checker records the possible escaping bounds and allocation failures of a completed slot body. A failed argument prevents callee entry. The staged interface records the formal modes, owner roles and allocation requirements. Imported reference-slot calls still require a cross-module rebind contract before they can be checked. Visit-array growth and object emission have separate profiles. [Key-array checking contract](docs/ModuleGraph.md#checking-growth-of-the-module-key-array)
+The checker records the possible escaping bounds and allocation failures of a completed slot body. A failed argument prevents callee entry. The staged interface records the formal modes, owner roles and allocation requirements. Imported reference-slot calls still require a cross-module rebind contract before they can be checked. [Key-array checking contract](docs/ModuleGraph.md#checking-growth-of-the-module-key-array)
+
+Both source commands also check `reserve_visits`. The visit-array profile requires a locally declared `u64`-indexed array whose exact sum element has a completed finite bits schema. The fieldless fill must belong to that sum. The checker prepares the indexed destination before the source, including both bounds checks, and admits the whole-value transfer in discarded position. The final rebind follows the copy loop. Mixed-slot signatures and object emission remain separate profiles. [Visit-array checking contract](docs/ModuleGraph.md#checking-growth-of-the-module-visit-array)
 
 ### Predicate assertions
 

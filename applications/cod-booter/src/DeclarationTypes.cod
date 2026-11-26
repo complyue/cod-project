@@ -189,6 +189,36 @@ export func describe_record_field(source:const SourceBytes in S, nodes:const Exp
         interface_count, name, used, revision, false, result, ordinal)
 }
 
+export func local_sum_constructor(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, sum:u64, spelling:u64, used:u64, revision:u64,
+    count:u64 in C, ordinal:u64 in C) -> u64 where {const owner N, const owner B, const owner W, owner C} {
+    ref shape = make DeclarationSites {
+        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false
+    };
+    if (inspect_declaration(nodes, revision, used, sum, shape) != NominalSum ||
+        spelling >= used || names[spelling].kind != constructor_type()) return no_node();
+    val chosen <- names[spelling].declaration;
+    ref first = make u64 { no_node() };
+    if (!first_sequence_entry(nodes, revision, used, shape.entries, SumSequence, first)) return no_node();
+    ref sites = make SumArmSites { previous <- no_node(); name <- no_node(); fields <- no_node() };
+    val arm <- first;
+    val selected_arm <- no_node();
+    for (index in 0u64 .. used) {
+        if (!inspect_sum_arm(nodes, revision, used, arm, sites)) return no_node();
+        if (arm == chosen) {
+            selected_arm <- arm;
+            (ordinal <- index):void
+        };
+        if (arm == shape.entries) {
+            count <- index + 1u64;
+            return selected_arm
+        };
+        arm <- work[arm].next
+    };
+    return no_node()
+}
+
 export func describe_record_member(source:const SourceBytes in S, nodes:const ExprNodes in N,
     names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
     spellings:const SourceBytes in P, spelling_used:u64,

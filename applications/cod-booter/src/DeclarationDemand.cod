@@ -13,7 +13,7 @@ using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField }
 using "./ExceptionTypes.cod" ExceptionType;
 using "./NativeDeclarations.cod" {
     SuppliedViews, read_acquisition_failure, has_imported_native_loan, source_handle_callable,
-    prepared_byte_function, prepared_byte_array_construction, prepared_byte_array_slot_signature
+    prepared_byte_function, prepared_array_construction, prepared_array_slot_signature
 };
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" sum_type;
@@ -201,7 +201,7 @@ export func discover_declaration_demand(
                 return false
             };
             demand[site].declared_failure <- clause;
-            if (prepared_byte_array_slot_signature(nodes, links, views, callable.signature, used, revision)) {
+            if (prepared_array_slot_signature(nodes, links, views, callable.signature, used, revision)) {
                 demand[site].slot_body <- true;
                 if (!require_receipt_body(demand, site, count, receipt_count, used)) {
                     problem <- site;
@@ -270,7 +270,7 @@ export func discover_declaration_demand(
                 (checked_call <- true):void
             }
         };
-        if (prepared_byte_array_construction(views, site) &&
+        if (prepared_array_construction(views, site) &&
             (!local_body(nodes, revision, used, scope, callable) ||
              !require_receipt_body(demand, scope, count, receipt_count, used))) {
             problem <- site;
