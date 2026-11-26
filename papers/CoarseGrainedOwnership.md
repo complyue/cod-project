@@ -1,9 +1,8 @@
 <a id="coarse-grained-ownership-for-relocatable-object-graphs"></a>
 <a id="which-references-survive-replacement-of-a-region"></a>
+<a id="choosing-which-allocations-retire-together"></a>
 
-# Choosing Which Allocations Retire Together
-
-*Multi-owner tracking and address-space fragmentation in CoD*
+# Memory Management at the Right Granularity — Coarse-Grained Ownership Tracking
 
 A railway service runs through many timetable revisions. The engineer importing a revision knows when the decoded records can go away. The routing engineer knows when a search frontier can go away. The client decides how long to keep an itinerary. Those are three useful answers to “when can we reclaim this memory?” Each answer can cover thousands of allocations.
 
