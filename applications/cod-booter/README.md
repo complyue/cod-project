@@ -108,7 +108,9 @@ Direct lexical acquisition of an owning C handle registers cleanup on success. A
 
 The replacement installs a freshly acquired LLVM session under its selected owning symbol. A procedure can use the active session as a direct C handle loan. Successful installations restore the preceding binding and release their own session on exit. An explicit `CString` assertion on a readonly `String` loan preserves its owner and checks for an interior NUL before entering the C provider. The linked object-writing probe constructs and verifies LLVM units, writes an object to a UTF-8 filename and runs the resulting program.
 
-Ordinary protected blocks allocate lexical bits arrays in their enclosing invocation. The replacement also translates unguarded Boolean and nominal enum cases, including older member spellings resolved from the subject type. The linked primitive layout probe writes all five size and alignment rows through the real native layout provider.
+Ordinary protected blocks allocate lexical bits arrays in their enclosing invocation. The linked primitive layout probe writes all five size and alignment rows through the real native layout provider.
+
+The replacement translates unguarded Boolean and nominal enum cases and typed enum expressions. A typed name follows ordinary lexical lookup before consulting the enum member table. Integer literals are matched before narrowing, and a runtime backing value is evaluated once and raises `TypeAssertionFailedError` when it is outside the declared domain.
 
 A lexical text builder can receive text at construction, be borrowed by a synchronous helper, and grow through the selected text storage append operation. `make String(builder)` materializes an immutable snapshot in the enclosing invocation. A linked probe uses the snapshots with the real provider-file publisher, including allocation and publication failures that preserve earlier files.
 
