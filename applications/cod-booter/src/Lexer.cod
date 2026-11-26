@@ -1,3 +1,11 @@
+using "ASCII.cod";
+using "ASCII.cod" ASCII {
+    EXCLAMATION, DOUBLE_QUOTE, DOLLAR, AMPERSAND, LEFT_PAREN, RIGHT_PAREN, ASTERISK, PLUS, COMMA,
+    MINUS, PERIOD, SLASH, DIGIT_0, DIGIT_2, DIGIT_3, DIGIT_4, DIGIT_6, DIGIT_8, DIGIT_9, COLON,
+    SEMICOLON, LESS_THAN, GREATER_THAN, AT, UPPER_A, UPPER_C, UPPER_E, UPPER_Z, LEFT_BRACKET,
+    BACKSLASH, RIGHT_BRACKET, UNDERSCORE, LOWER_A, LOWER_E, LOWER_F, LOWER_U, LOWER_Z, LEFT_BRACE,
+    PIPE, RIGHT_BRACE
+};
 using "./SourceStorage.cod" { SourceBytes, Token };
 using "./SourceAccess.cod" len;
 using "std:text-storage" { utf8_size, utf8_byte }
@@ -252,7 +260,7 @@ export func here_word(source:const SourceBytes in S, token:const Token in T) -> 
 
 export func c_linkage(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
-    return token.kind == quoted_text() && token.past - token.first == 3u64 && source[token.first + 1u64] == 67u8; # "C"
+    return token.kind == quoted_text() && token.past - token.first == 3u64 && source[token.first + 1u64] == UPPER_C; # "C"
 }
 
 export func valid_module_path(source:const SourceBytes in S, token:const Token in T) -> bool
@@ -261,8 +269,8 @@ export func valid_module_path(source:const SourceBytes in S, token:const Token i
     val byte <- 0u8;
     for (at in token.first + 1u64 .. token.past - 1u64) {
         byte <- source[at];
-        if (escaped && byte != 34u8 && byte != 92u8) return false;
-        escaped <- !escaped && byte == 92u8;
+        if (escaped && byte != DOUBLE_QUOTE && byte != BACKSLASH) return false;
+        escaped <- !escaped && byte == BACKSLASH;
     };
     return !escaped;
 }
@@ -414,17 +422,17 @@ export func assert_word(source:const SourceBytes in S, token:const Token in T) -
 
 func digit(byte:u8) -> bool {
     # ASCII '0' to '9'.
-    return byte >= 48u8 && byte <= 57u8;
+    return byte >= DIGIT_0 && byte <= DIGIT_9;
 }
 
 func name_start(byte:u8) -> bool {
     # ASCII letters and underscore.
-    return (byte >= 65u8 && byte <= 90u8) ||
-        (byte >= 97u8 && byte <= 122u8) || byte == 95u8;
+    return (byte >= UPPER_A && byte <= UPPER_Z) ||
+        (byte >= LOWER_A && byte <= LOWER_Z) || byte == UNDERSCORE;
 }
 
 func whitespace(byte:u8) -> bool {
-    return byte == 32u8 || (byte >= 9u8 && byte <= 13u8);
+    return byte == SPACE || (byte >= HT && byte <= CR);
 }
 
 func skip_trivia(source:const SourceBytes in S, first:u64, past:u64) -> u64 where {const owner S} {
@@ -433,7 +441,7 @@ func skip_trivia(source:const SourceBytes in S, first:u64, past:u64) -> u64 wher
     for (at in first .. past) {
         byte <- source[at];
         # A newline ends a comment. '#' starts one anywhere outside a path.
-        comment <- byte != 10u8 && (comment || byte == 35u8);
+        comment <- byte != LF && (comment || byte == HASH);
         if (!comment && !whitespace(byte)) return at;
     };
     return past;
@@ -467,16 +475,16 @@ func numeral_end(source:const SourceBytes in S, first:u64, past:u64,
     val at <- digits_end(source, first + 1u64, past);
     val real <- false;
     val byte <- lookahead(source, at, past);
-    if (byte == 46u8 && digit(lookahead(source, at + 1u64, past))) { # '.'
+    if (byte == PERIOD && digit(lookahead(source, at + 1u64, past))) { # '.'
         at <- digits_end(source, at + 2u64, past);
         real <- true;
         (byte <- lookahead(source, at, past)):void;
     } else {};
-    if (byte == 101u8 || byte == 69u8) { # 'e' or 'E'
+    if (byte == LOWER_E || byte == UPPER_E) { # 'e' or 'E'
         real <- true;
         at <- at + 1u64;
         byte <- lookahead(source, at, past);
-        if (byte == 43u8 || byte == 45u8) { # '+' or '-'
+        if (byte == PLUS || byte == MINUS) { # '+' or '-'
             at <- at + 1u64;
             (byte <- lookahead(source, at, past)):void;
         } else {};
@@ -489,15 +497,15 @@ func numeral_end(source:const SourceBytes in S, first:u64, past:u64,
         (byte <- lookahead(source, at, past)):void;
     } else {};
 
-    if (byte == 102u8 || (!real && byte == 117u8)) { # 'f' or 'u'
+    if (byte == LOWER_F || (!real && byte == LOWER_U)) { # 'f' or 'u'
         val width <- lookahead(source, at + 1u64, past);
-        if (byte == 117u8 && width == 56u8) { # 'u8'
+        if (byte == LOWER_U && width == DIGIT_8) { # 'u8'
             (at <- at + 2u64):void;
         } else {};
-        if (width == 51u8 || width == 54u8) { # '3' or '6'
+        if (width == DIGIT_3 || width == DIGIT_6) { # '3' or '6'
             val tail <- lookahead(source, at + 2u64, past);
-            if ((width == 51u8 && tail == 50u8) || (width == 54u8 && tail == 52u8)) {
-                real <- real || byte == 102u8;
+            if ((width == DIGIT_3 && tail == DIGIT_2) || (width == DIGIT_6 && tail == DIGIT_4)) {
+                real <- real || byte == LOWER_F;
                 (at <- at + 3u64):void;
             } else {};
         } else {};
@@ -509,7 +517,7 @@ func numeral_end(source:const SourceBytes in S, first:u64, past:u64,
 
 func triple_quote(source:const SourceBytes in S, at:u64, past:u64) -> bool where {const owner S} {
     return at <= past && past - at >= 3u64 &&
-        source[at] == 34u8 && source[at + 1u64] == 34u8 && source[at + 2u64] == 34u8
+        source[at] == DOUBLE_QUOTE && source[at + 1u64] == DOUBLE_QUOTE && source[at + 2u64] == DOUBLE_QUOTE
 }
 
 func quoted_text_end(source:const SourceBytes in S, first:u64, past:u64,
@@ -520,17 +528,17 @@ func quoted_text_end(source:const SourceBytes in S, first:u64, past:u64,
     val byte <- 0u8;
     for (at in first + width .. past) {
         byte <- source[at];
-        if (!multiline && byte == 10u8) {
+        if (!multiline && byte == LF) {
             token.kind <- newline_in_module_path();
             token.past <- at;
             return
         };
-        if (!escaped && byte == 34u8 && (!multiline || triple_quote(source, at, past))) {
+        if (!escaped && byte == DOUBLE_QUOTE && (!multiline || triple_quote(source, at, past))) {
             token.kind <- if (multiline) { multiline_text() } else { quoted_text() };
             token.past <- at + width;
             return
         };
-        escaped <- !escaped && byte == 92u8
+        escaped <- !escaped && byte == BACKSLASH
     };
     token.kind <- unterminated_module_path();
     token.past <- past;
@@ -539,9 +547,9 @@ func quoted_text_end(source:const SourceBytes in S, first:u64, past:u64,
 
 func symbolic_source_byte(byte:u8) -> bool {
     # ! $ % & * + - . / : < = > |
-    return byte == 33u8 || (byte >= 36u8 && byte <= 38u8) || byte == 42u8 ||
-        byte == 43u8 || (byte >= 45u8 && byte <= 47u8) || byte == 58u8 ||
-        (byte >= 60u8 && byte <= 62u8) || byte == 124u8
+    return byte == EXCLAMATION || (byte >= DOLLAR && byte <= AMPERSAND) || byte == ASTERISK ||
+        byte == PLUS || (byte >= MINUS && byte <= SLASH) || byte == COLON ||
+        (byte >= LESS_THAN && byte <= GREATER_THAN) || byte == PIPE
 }
 
 export func operator_past(source:const SourceBytes in S, first:u64, past:u64) -> u64
@@ -572,7 +580,7 @@ export func scan_token(source:const SourceBytes in S, first:u64,
         token.past <- name_end(source, start + 1u64, past);
         return;
     } else {};
-    if (byte == 64u8) { # '@'
+    if (byte == AT) { # '@'
         if (name_start(lookahead(source, start + 1u64, past))) {
             token.kind <- symbol_name();
             token.past <- name_end(source, start + 2u64, past);
@@ -586,7 +594,7 @@ export func scan_token(source:const SourceBytes in S, first:u64,
         numeral_end(source, start, past, token);
         return;
     } else {};
-    if (byte == 34u8) { # '"'
+    if (byte == DOUBLE_QUOTE) { # '"'
         quoted_text_end(source, start, past, token);
         return;
     } else {};
@@ -595,13 +603,13 @@ export func scan_token(source:const SourceBytes in S, first:u64,
         token.past <- end;
         token.kind <- punctuation();
         if (end - start == 2u64 && source[start + 1u64] == byte) {
-            if (byte == 47u8) { (token.kind <- reserved_fraction_operator()):void };
-            if (byte == 58u8) { (token.kind <- legacy_type_separator()):void };
+            if (byte == SLASH) { (token.kind <- reserved_fraction_operator()):void };
+            if (byte == COLON) { (token.kind <- legacy_type_separator()):void };
         };
         return;
     };
-    token.kind <- if (byte == 40u8 || byte == 41u8 || byte == 91u8 || byte == 93u8 ||
-        byte == 123u8 || byte == 125u8 || byte == 44u8 || byte == 59u8) {
+    token.kind <- if (byte == LEFT_PAREN || byte == RIGHT_PAREN || byte == LEFT_BRACKET || byte == RIGHT_BRACKET ||
+        byte == LEFT_BRACE || byte == RIGHT_BRACE || byte == COMMA || byte == SEMICOLON) {
         punctuation()
     } else { unsupported_byte() };
     token.past <- start + 1u64;

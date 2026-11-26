@@ -32,11 +32,9 @@ ifneq ($(shell test -f "$(seed_prefix)/CMakeCache.txt" && test -d "$(development
 seed_library_dir := $(development_library)
 endif
 endif
-seed_library_path := $(seed_library_dir)/string.cod
-seed_library := $(shell test -f "$(seed_library_path)" && realpath -e -- "$(seed_library_path)")
-ifeq ($(seed_library),)
-$(error CoD library input not found for $(seed): $(seed_library_path))
-endif
+find_library = $(or $(shell test -f $(call quote,$(1)) && realpath -e -- $(call quote,$(1))),\
+                    $(error CoD library input not found for $(seed): $(1)))
+seed_libraries := $(foreach file,string.cod ASCII.cod,$(call find_library,$(seed_library_dir)/$(file)))
 llvm_config := $(abspath $(call find_tool,$(LLVM_CONFIG),LLVM_CONFIG))
 clang := $(abspath $(call find_tool,$(CLANG),CLANG))
 runtime_archive := $(abspath $(COD_RUNTIME_ARCHIVE))
@@ -91,7 +89,7 @@ $(out) $(out)/native:
 # Preserve stamp mtimes when the effective inputs are unchanged.
 $(out)/seed.inputs: FORCE | $(out)
 	@printf '%s\n' $(call quote,$(seed)) $(call quote,$(COD_SEED_FLAGS)) \
-		$(call quote,$(seed_library)) $(call quote,$(source_package_marker)) \
+		$(foreach library,$(seed_libraries),$(call quote,$(library))) $(call quote,$(source_package_marker)) \
 		$(foreach source,$(cod_sources),$(call quote,$(source))) > "$@.tmp"
 	@if cmp -s "$@.tmp" "$@"; then rm "$@.tmp"; else mv "$@.tmp" "$@"; fi
 
@@ -103,7 +101,7 @@ $(out)/native.inputs: FORCE | $(out)
 		$(foreach source,$(native_sources),$(call quote,$(source))) > "$@.tmp"
 	@if cmp -s "$@.tmp" "$@"; then rm "$@.tmp"; else mv "$@.tmp" "$@"; fi
 
-$(generated) &: $(entry) $(cod_sources) $(seed) $(seed_library) $(out)/seed.inputs Makefile $(package_recheck) | $(out)
+$(generated) &: $(entry) $(cod_sources) $(seed) $(seed_libraries) $(out)/seed.inputs Makefile $(package_recheck) | $(out)
 	@set -eu; stage=$$(mktemp -d "$(out)/.seed.XXXXXX"); \
 		trap 'rm -rf "$$stage"' EXIT; trap 'exit 1' HUP INT TERM; \
 		"$(seed)" $(COD_SEED_FLAGS) --no-cache --translate "$(entry)" \

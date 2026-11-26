@@ -1,3 +1,7 @@
+using "ASCII.cod" ASCII {
+    LEFT_PAREN, RIGHT_PAREN, PLUS, COMMA, MINUS, COLON, SEMICOLON, LESS_THAN, EQUAL, RIGHT_BRACKET,
+    RIGHT_BRACE
+};
 using "./Lexer.cod" {
     const_word, exception_word, identifier, in_word, lexical_error, not_word, own_word, punctuation,
     reserved_lexical_binder, reserved_module_name,
@@ -164,7 +168,7 @@ export func exception_binder_width(source:const SourceBytes in S, tokens:const T
     if (at + 1u64 >= past) return 0u64;
     if (own_word(source, tokens[at]) && exception_word(source, tokens[at + 1u64])) return 2u64;
     if (exception_word(source, tokens[at]) && tokens[at + 1u64].kind == identifier() &&
-        punct_at(source, tokens, at + 2u64, past) == 58u8) return 1u64;
+        punct_at(source, tokens, at + 2u64, past) == COLON) return 1u64;
     return 0u64;
 }
 
@@ -182,7 +186,7 @@ func parse_binding(source:const SourceBytes in S, tokens:const Tokens in T, node
             (!recover_local || !recover_syntax(source, tokens, nodes, result, name_start, past,
                 BindingNameRole))) return false
     };
-    if (punct_at(source, tokens, result.next, past) != 58u8) { # ':'
+    if (punct_at(source, tokens, result.next, past) != COLON) { # ':'
         if (require_type) { result.diagnostic <- expected_type(); return false; } else {};
         return true;
     } else {};
@@ -256,12 +260,12 @@ export func parse_resource_name(source:const SourceBytes in S, tokens:const Toke
                         nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
-    if (punct_at(source, tokens, at, past) != 40u8)
+    if (punct_at(source, tokens, at, past) != LEFT_PAREN)
         return parse_module_name(source, tokens, nodes, result, past);
     val operator <- at + 1u64;
-    val accepted <- punct_pair_at(source, tokens, operator, past, 43u8, 43u8) ||
-        punct_pair_at(source, tokens, operator, past, 60u8, 45u8);
-    if (!accepted || punct_at(source, tokens, at + 2u64, past) != 41u8) {
+    val accepted <- punct_pair_at(source, tokens, operator, past, PLUS, PLUS) ||
+        punct_pair_at(source, tokens, operator, past, LESS_THAN, MINUS);
+    if (!accepted || punct_at(source, tokens, at + 2u64, past) != RIGHT_PAREN) {
         result.diagnostic <- expected_name();
         return false;
     } else {};
@@ -310,13 +314,13 @@ func lexical_report_at(nodes:const ExprNodes in A, result:const ParseResult in R
 }
 
 func is_recovery_separator(mark:u8, role:SyntaxRole) -> bool {
-    if (role == ModuleSelectionItemRole) return mark == 44u8;
-    if (mark == 59u8 || mark == 125u8) return true;
-    if (role == BindingNameRole && mark == 58u8) return true;
-    if ((role == BindingNameRole || role == TypeAnnotationRole) && mark == 61u8) return true;
+    if (role == ModuleSelectionItemRole) return mark == COMMA;
+    if (mark == SEMICOLON || mark == RIGHT_BRACE) return true;
+    if (role == BindingNameRole && mark == COLON) return true;
+    if ((role == BindingNameRole || role == TypeAnnotationRole) && mark == EQUAL) return true;
     return (role == InitializerRole || role == ExpressionRole || role == BindingNameRole ||
             role == TypeAnnotationRole || role == ReferenceGroupEntryRole || role == ArgumentOperandRole) &&
-        (mark == 44u8 || mark == 41u8 || mark == 93u8)
+        (mark == COMMA || mark == RIGHT_PAREN || mark == RIGHT_BRACKET)
 }
 
 # Skip only groups the source delimiter map proved complete.
@@ -328,7 +332,7 @@ func recovery_boundary(source:const SourceBytes in S, tokens:const Tokens in T,
         if (at >= past) return past;
         if (is_recovery_separator(punct_at(source, tokens, at, past), role)) return at;
         if ((role == BindingNameRole || role == TypeAnnotationRole) &&
-            (punct_pair_at(source, tokens, at, past, 60u8, 45u8) || in_word(source,
+            (punct_pair_at(source, tokens, at, past, LESS_THAN, MINUS) || in_word(source,
                 tokens[at]))) return at;
         closing <- closing_token(tokens, at, past);
         at <- if (closing == no_node()) { at + 1u64 } else { closing + 1u64 }

@@ -1,3 +1,7 @@
+using "ASCII.cod" ASCII {
+    LEFT_PAREN, COMMA, MINUS, PERIOD, COLON, SEMICOLON, LESS_THAN, EQUAL, LEFT_BRACKET,
+    RIGHT_BRACKET, LEFT_BRACE, PIPE, RIGHT_BRACE
+};
 using "./Lexer.cod" {
     own_word, quoted_text, multiline_text, identifier, using_word, as_word, symbol_word, symbol_name,
     from_word, proc_word, func_word, ref_word, ptr_word, where_word, const_word, in_word,
@@ -77,9 +81,9 @@ func parse_member_selector(source:const SourceBytes in S, tokens:const Tokens in
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
-    if (punct_pair_at(source, tokens, result.next, past, 46u8, 46u8)) {
+    if (punct_pair_at(source, tokens, result.next, past, PERIOD, PERIOD)) {
         result.next <- result.next + 1u64;
-        if (punct_at(source, tokens, result.next, past) != 125u8) {
+        if (punct_at(source, tokens, result.next, past) != RIGHT_BRACE) {
             result.diagnostic <- expected_group_delimiter();
             return;
         } else {};
@@ -98,13 +102,13 @@ func parse_member_selector(source:const SourceBytes in S, tokens:const Tokens in
         if (result.diagnostic != 0u8) return;
         last <- result.root;
         delimiter <- punct_at(source, tokens, result.next, past);
-        if (delimiter == 44u8) { (result.next <- result.next + 1u64):void; } else {};
-        if (punct_at(source, tokens, result.next, past) == 125u8) {
+        if (delimiter == COMMA) { (result.next <- result.next + 1u64):void; } else {};
+        if (punct_at(source, tokens, result.next, past) == RIGHT_BRACE) {
             append_chosen_members(nodes, result, syntax_first(nodes, result.used, name), tokens[result.next].past, last, first);
             result.next <- result.next + 1u64;
             return;
         } else {};
-        if (delimiter != 44u8) { result.diagnostic <- expected_group_delimiter(); return; } else {};
+        if (delimiter != COMMA) { result.diagnostic <- expected_group_delimiter(); return; } else {};
     };
     (result.diagnostic <- expected_group_delimiter()):void;
 }
@@ -146,7 +150,7 @@ func parse_selection(source:const SourceBytes in S, tokens:const Tokens in T,
     val end <- syntax_past(nodes, result.used, result.root);
     ref members = make NoLink {};
     if (!selected_symbol && mode != ReexportResource && mode != IdentityResource && punct_at(source,
-        tokens, result.next, past) == 123u8) {
+        tokens, result.next, past) == LEFT_BRACE) {
         parse_member_selector(source, tokens, nodes, result, past, selection);
         if (result.diagnostic != 0u8) return;
         members = make LinkTo { node <- make NodeId { revision <- result.revision; index <- result.root; }; };
@@ -164,7 +168,7 @@ func finish_selection_item(source:const SourceBytes in S, tokens:const Tokens in
                            preceding:u64, form:u64, published:bool,
                                closed_group:bool) -> bool
     where {const owner S, const owner T, owner A, owner R} {
-    val separator <- punct_at(source, tokens, result.next, past) == 59u8;
+    val separator <- punct_at(source, tokens, result.next, past) == SEMICOLON;
     if (!separator && !closed_group) {
         result.diagnostic <- expected_module_separator();
         return false;
@@ -188,7 +192,7 @@ func emit_bulk_selection(source:const SourceBytes in S, tokens:const Tokens in T
     });
     if (result.diagnostic != 0u8) return false;
     val item_end <- end;
-    if (punct_at(source, tokens, result.next, past) == 59u8) {
+    if (punct_at(source, tokens, result.next, past) == SEMICOLON) {
         item_end <- tokens[result.next].past;
         (result.next <- result.next + 1u64):void
     };
@@ -199,9 +203,9 @@ func emit_bulk_selection(source:const SourceBytes in S, tokens:const Tokens in T
 func selection_boundary(source:const SourceBytes in S, tokens:const Tokens in T, at:u64,
     past:u64) -> bool
     where {const owner S, const owner T} {
-    if (at >= past || punct_at(source, tokens, at, past) == 59u8) return true;
+    if (at >= past || punct_at(source, tokens, at, past) == SEMICOLON) return true;
     if (selector_nature(source, tokens, at, past) == ProcedureResource &&
-        punct_at(source, tokens, at + 2u64, past) != 40u8) return false;
+        punct_at(source, tokens, at + 2u64, past) != LEFT_PAREN) return false;
     return export_word(source, tokens[at]) || using_word(source, tokens[at]) || import_word(source,
         tokens[at]) ||
         mixin_word(source, tokens[at]) || module_doclet_target(source, tokens, at, past) ||
@@ -236,10 +240,10 @@ func parse_selection_items(source:const SourceBytes in S, tokens:const Tokens in
         (symbolic <- mode == IdentityResource || (result.next < past &&
             tokens[result.next].kind == symbol_name())):void;
     } else {};
-    val grouped <- mode != ReexportResource && punct_at(source, tokens, result.next, past) == 123u8;
-    if (grouped && punct_pair_at(source, tokens, result.next + 1u64, past, 46u8, 46u8)) {
+    val grouped <- mode != ReexportResource && punct_at(source, tokens, result.next, past) == LEFT_BRACE;
+    if (grouped && punct_pair_at(source, tokens, result.next + 1u64, past, PERIOD, PERIOD)) {
         result.next <- result.next + 2u64;
-        if (explicit_prefix || symbolic || punct_at(source, tokens, result.next, past) != 125u8) {
+        if (explicit_prefix || symbolic || punct_at(source, tokens, result.next, past) != RIGHT_BRACE) {
             result.diagnostic <- expected_group_delimiter();
             return false
         };
@@ -278,13 +282,13 @@ func parse_selection_items(source:const SourceBytes in S, tokens:const Tokens in
             return finish_selection_item(
                 source, tokens, nodes, result, past, item_first, tail, form, exported, false);
         delimiter <- punct_at(source, tokens, result.next, past);
-        if (delimiter == 44u8) { (result.next <- result.next + 1u64):void; };
-        if (punct_at(source, tokens, result.next, past) == 125u8) {
+        if (delimiter == COMMA) { (result.next <- result.next + 1u64):void; };
+        if (punct_at(source, tokens, result.next, past) == RIGHT_BRACE) {
             result.next <- result.next + 1u64;
             return finish_selection_item(source, tokens, nodes, result, past, item_first,
                 tail, form, published, true);
         };
-        if (delimiter != 44u8) {
+        if (delimiter != COMMA) {
             result.diagnostic <- expected_group_delimiter();
             return false;
         };
@@ -309,7 +313,7 @@ func parse_record_fields(source:const SourceBytes in S, tokens:const Tokens in T
                          nodes:ExprNodes in A, result:ParseResult in R,
                          past:u64, native:bool) -> u64
     where {const owner S, const owner T, owner A, owner R} {
-    if (punct_at(source, tokens, result.next, past) != 123u8) {
+    if (punct_at(source, tokens, result.next, past) != LEFT_BRACE) {
         result.diagnostic <- expected_record_fields();
         return no_node();
     } else {};
@@ -321,7 +325,7 @@ func parse_record_fields(source:const SourceBytes in S, tokens:const Tokens in T
     };
     val delimiter <- 0u8;
     for (unused in result.next .. past) {
-        if (punct_at(source, tokens, result.next, past) == 125u8) {
+        if (punct_at(source, tokens, result.next, past) == RIGHT_BRACE) {
             if (native && last == no_node()) {
                 result.diagnostic <- expected_record_fields();
                 return no_node();
@@ -339,8 +343,8 @@ func parse_record_fields(source:const SourceBytes in S, tokens:const Tokens in T
             return no_node();
         } else {};
         delimiter <- punct_at(source, tokens, result.next, past);
-        if (delimiter == 125u8) { result.next <- result.next + 1u64; return last; } else {};
-        if (delimiter != 59u8) { result.diagnostic <- expected_record_fields(); return no_node(); } else {};
+        if (delimiter == RIGHT_BRACE) { result.next <- result.next + 1u64; return last; } else {};
+        if (delimiter != SEMICOLON) { result.diagnostic <- expected_record_fields(); return no_node(); } else {};
         result.next <- result.next + 1u64;
     };
     result.diagnostic <- expected_record_fields();
@@ -392,11 +396,11 @@ func parse_sum_declaration(source:const SourceBytes in S, tokens:const Tokens in
         if (!parse_sum_arm(source, tokens, nodes, result, past, last)) return;
         last <- result.root;
         delimiter <- punct_at(source, tokens, result.next, past);
-        if (delimiter == 59u8) {
+        if (delimiter == SEMICOLON) {
             append_sum_declaration(nodes, result, first, heading, last);
             return;
         };
-        if (delimiter != 124u8) {
+        if (delimiter != PIPE) {
             result.diagnostic <- expected_module_separator();
             return;
         };
@@ -471,7 +475,7 @@ func parse_nominal_type(source:const SourceBytes in S, tokens:const Tokens in T,
     if (!parse_module_name(source, tokens, nodes, result, past)) return;
     val name <- result.root;
     val descriptor <- name;
-    if (punct_pair_at(source, tokens, result.next, past, 60u8, 58u8)) { # '<:'
+    if (punct_pair_at(source, tokens, result.next, past, LESS_THAN, COLON)) { # '<:'
         val parent_at <- tokens[result.next].first;
         result.next <- result.next + 1u64;
         if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
@@ -491,7 +495,7 @@ func parse_nominal_type(source:const SourceBytes in S, tokens:const Tokens in T,
         });
         return;
     };
-    if (!native && punct_at(source, tokens, result.next, past) == 61u8) {
+    if (!native && punct_at(source, tokens, result.next, past) == EQUAL) {
         parse_sum_declaration(source, tokens, nodes, result, first, past, descriptor);
         return;
     };
@@ -523,13 +527,13 @@ func parse_symbol_declaration(source:const SourceBytes in S, tokens:const Tokens
     if (!parse_symbol(tokens, nodes, result, past)) return;
     val name <- result.root;
     val colon <- result.next;
-    if (punct_at(source, tokens, colon, past) != 58u8) {
+    if (punct_at(source, tokens, colon, past) != COLON) {
         result.diagnostic <- expected_type();
         return
     };
     val qualifier <- colon + 1u64;
     if (!explicit_value && qualifier < past && proc_word(source, tokens[qualifier]) &&
-        punct_at(source, tokens, qualifier + 1u64, past) == 40u8) {
+        punct_at(source, tokens, qualifier + 1u64, past) == LEFT_PAREN) {
         result.next <- qualifier;
         parse_procedure_symbol_type(source, tokens, nodes, result, past, first, name);
         return
@@ -571,7 +575,7 @@ func parse_reference_symbol(source:const SourceBytes in S, tokens:const Tokens i
     result.next <- at + 2u64;
     if (!parse_symbol(tokens, nodes, result, past)) return;
     val name <- result.root;
-    if (punct_at(source, tokens, result.next, past) != 58u8) { result.diagnostic <- expected_type(); return; };
+    if (punct_at(source, tokens, result.next, past) != COLON) { result.diagnostic <- expected_type(); return; };
     result.next <- result.next + 1u64;
     val readonly <- result.next < past && const_word(source, tokens[result.next]);
     if (readonly) { (result.next <- result.next + 1u64):void; };
@@ -633,7 +637,7 @@ func parse_array(source:const SourceBytes in S, tokens:const Tokens in T,
     result.next <- result.next + 1u64;
     if (!parse_module_name(source, tokens, nodes, result, past)) return;
     val name <- result.root;
-    if (punct_at(source, tokens, result.next, past) != 91u8) {
+    if (punct_at(source, tokens, result.next, past) != LEFT_BRACKET) {
         result.diagnostic <- expected_array_shape();
         return;
     } else {};
@@ -641,8 +645,8 @@ func parse_array(source:const SourceBytes in S, tokens:const Tokens in T,
     result.next <- result.next + 1u64;
     if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
     val index <- result.root;
-    if (punct_at(source, tokens, result.next, past) != 93u8 ||
-        punct_at(source, tokens, result.next + 1u64, past) != 58u8) {
+    if (punct_at(source, tokens, result.next, past) != RIGHT_BRACKET ||
+        punct_at(source, tokens, result.next + 1u64, past) != COLON) {
         result.diagnostic <- expected_array_shape();
         return;
     } else {};
@@ -661,7 +665,7 @@ func parse_enum_initializer(source:const SourceBytes in S, tokens:const Tokens i
                             nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val first <- result.next;
-    val negative <- punct_at(source, tokens, first, past) == 45u8;
+    val negative <- punct_at(source, tokens, first, past) == MINUS;
     val at <- first + if (negative) { 1u64 } else { 0u64 };
     if (at < past && tokens[at].kind == integer_literal()) {
         val width <- integer_width(source, tokens[at]);
@@ -685,12 +689,12 @@ func parse_enum_member(source:const SourceBytes in S, tokens:const Tokens in T, 
     if (!parse_module_name(source, tokens, nodes, result, past)) return false;
     val name <- result.root;
     val initializer <- no_node();
-    if (punct_at(source, tokens, result.next, past) == 61u8) {
+    if (punct_at(source, tokens, result.next, past) == EQUAL) {
         result.next <- result.next + 1u64;
         if (!parse_enum_initializer(source, tokens, nodes, result, past)) return false;
         (initializer <- result.root):void;
     } else {};
-    if (punct_at(source, tokens, result.next, past) != 59u8) {
+    if (punct_at(source, tokens, result.next, past) != SEMICOLON) {
         result.diagnostic <- expected_module_separator();
         return false;
     } else {};
@@ -730,21 +734,21 @@ func parse_enum(source:const SourceBytes in S, tokens:const Tokens in T,
     result.next <- result.next + 1u64;
     if (!parse_module_name(source, tokens, nodes, result, past)) return;
     val name <- result.root;
-    if (punct_at(source, tokens, result.next, past) != 58u8) {
+    if (punct_at(source, tokens, result.next, past) != COLON) {
         result.diagnostic <- expected_type();
         return;
     } else {};
     result.next <- result.next + 1u64;
     if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
     val backing <- result.root;
-    if (punct_at(source, tokens, result.next, past) != 123u8) {
+    if (punct_at(source, tokens, result.next, past) != LEFT_BRACE) {
         result.diagnostic <- expected_enum_member();
         return;
     } else {};
     result.next <- result.next + 1u64;
     val member <- no_node();
     for (unused in result.next .. past) {
-        if (punct_at(source, tokens, result.next, past) == 125u8) {
+        if (punct_at(source, tokens, result.next, past) == RIGHT_BRACE) {
             if (member == no_node()) { result.diagnostic <- expected_enum_member(); return; } else {};
             append_enum(nodes, result, first, tokens[result.next].past, name, backing, member);
             result.next <- result.next + 1u64;
@@ -779,7 +783,7 @@ func parse_module_form(source:const SourceBytes in S, tokens:const Tokens in T,
         parse_handle_type(source, tokens, nodes, result, past);
         return;
     } else {};
-    if (named_declaration && region_word(source, tokens[at]) && punct_at(source, tokens, at + 2u64, past) == 123u8) {
+    if (named_declaration && region_word(source, tokens[at]) && punct_at(source, tokens, at + 2u64, past) == LEFT_BRACE) {
         parse_region_definition(source, tokens, nodes, result, past);
         return;
     };
@@ -826,7 +830,7 @@ func module_doclet_target(source:const SourceBytes in S, tokens:const Tokens in 
     if (export_word(source, tokens[at])) return named_definition_head(source, tokens, at + 1u64, past);
     return named_definition_head(source, tokens, at, past) ||
         (at + 1u64 < past && region_word(source, tokens[at]) && tokens[at + 1u64].kind == identifier() &&
-         punct_at(source, tokens, at + 2u64, past) == 123u8)
+         punct_at(source, tokens, at + 2u64, past) == LEFT_BRACE)
 }
 
 func braced_callable_definition(nodes:const ExprNodes in N, used:u64, at:u64) -> bool where {const owner N} {
@@ -844,19 +848,35 @@ func braced_callable_definition(nodes:const ExprNodes in N, used:u64, at:u64) ->
 }
 
 func append_default_mark(nodes:ExprNodes in A, result:ParseResult in R, preceding:u64, name:u64,
-                         first:u64, nature:ResourceNature) -> void
-    where {owner A, owner R} {
+                         first:u64, end:u64, nature:ResourceNature, members:const NodeLink in M) -> void
+    where {owner A, owner R, const owner M} {
     ref previous = make NoLink {};
     if (preceding != no_node()) {
         previous = make LinkTo { node <- make NodeId { revision <- result.revision; index <-
             preceding; }; };
         {}
     };
-    append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, name),
+    append_syntax_node(nodes, result, first, end,
         make DefaultMark {
         previous <- previous; name <- make NodeId { revision <- result.revision; index <- name; };
-            nature <- nature;
+            nature <- nature; members <- members;
     })
+}
+
+func finish_default_mark(source:const SourceBytes in S, tokens:const Tokens in T,
+                         nodes:ExprNodes in A, result:ParseResult in R, past:u64,
+                         preceding:u64, first:u64, nature:ResourceNature) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val name <- result.root;
+    ref members = make NoLink {};
+    if (nature == OrdinaryResource && punct_at(source, tokens, result.next, past) == LEFT_BRACE) {
+        parse_member_selector(source, tokens, nodes, result, past, name);
+        if (result.diagnostic != 0u8) return;
+        members = make LinkTo { node <- make NodeId { revision <- result.revision; index <- result.root; } };
+        {};
+    };
+    append_default_mark(nodes, result, preceding, name, first, syntax_past(nodes, result.used, result.root),
+                        nature, members);
 }
 
 func finish_default_marks(source:const SourceBytes in S, tokens:const Tokens in T,
@@ -873,7 +893,7 @@ func finish_default_marks(source:const SourceBytes in S, tokens:const Tokens in 
     result.next <- result.next + 1u64;
     append_syntax_node(nodes, result, first, end, make DefaultPublicSet { marks <- marks; });
     if (result.diagnostic != 0u8) return false;
-    if (punct_at(source, tokens, result.next, past) == 59u8) {
+    if (punct_at(source, tokens, result.next, past) == SEMICOLON) {
         end <- tokens[result.next].past;
         (result.next <- result.next + 1u64):void
     };
@@ -891,7 +911,7 @@ func parse_default_marks(source:const SourceBytes in S, tokens:const Tokens in T
     val nature <- OrdinaryResource:ResourceNature;
     val selector_first <- 0u64;
     for (unused in result.next .. past + 1u64) {
-        if (punct_at(source, tokens, result.next, past) == 125u8)
+        if (punct_at(source, tokens, result.next, past) == RIGHT_BRACE)
             return finish_default_marks(source, tokens, nodes, result, past, first, previous, tail);
         if (result.next >= past) {
             result.diagnostic <- expected_group_delimiter();
@@ -905,12 +925,12 @@ func parse_default_marks(source:const SourceBytes in S, tokens:const Tokens in T
         } else {
             if (!parse_resource_name(source, tokens, nodes, result, past)) return false
         };
-        append_default_mark(nodes, result, tail, result.root, selector_first, nature);
+        finish_default_mark(source, tokens, nodes, result, past, tail, selector_first, nature);
         if (result.diagnostic != 0u8) return false;
         tail <- result.root;
-        if (punct_at(source, tokens, result.next, past) == 125u8)
+        if (punct_at(source, tokens, result.next, past) == RIGHT_BRACE)
             return finish_default_marks(source, tokens, nodes, result, past, first, previous, tail);
-        if (punct_at(source, tokens, result.next, past) != 44u8) {
+        if (punct_at(source, tokens, result.next, past) != COMMA) {
             result.diagnostic <- expected_group_delimiter();
             return false
         };
@@ -940,7 +960,7 @@ func parse_module_item(source:const SourceBytes in S, tokens:const Tokens in T,
         tokens[at + 2u64].kind == quoted_text())
         return parse_selection_items(source, tokens, nodes, result, past, previous,
             IdentityResource, false);
-    if (default_word(source, tokens[at]) && punct_at(source, tokens, at + 1u64, past) == 123u8)
+    if (default_word(source, tokens[at]) && punct_at(source, tokens, at + 1u64, past) == LEFT_BRACE)
         return parse_default_marks(source, tokens, nodes, result, past, previous);
     val defaulted <- at + 1u64 < past && default_word(source, tokens[at]) && export_word(source,
         tokens[at + 1u64]);
@@ -957,7 +977,7 @@ func parse_module_item(source:const SourceBytes in S, tokens:const Tokens in T,
         return parse_selection_items(source, tokens, nodes, result, past, previous, ImportResource, true);
     val qualified_selector <- export_prefix && selector_nature(source, tokens, at + 1u64,
         past) != OrdinaryResource &&
-        punct_at(source, tokens, at + 3u64, past) != 40u8;
+        punct_at(source, tokens, at + 3u64, past) != LEFT_PAREN;
     val public_definition <- defaulted || (export_prefix && !qualified_selector &&
         named_definition_head(source, tokens, at + 1u64, past));
     if (public_definition) { (result.next <- at + (if (defaulted) { 2u64 } else { 1u64 })):void; }
@@ -967,18 +987,18 @@ func parse_module_item(source:const SourceBytes in S, tokens:const Tokens in T,
     if (result.diagnostic != 0u8) return false;
     val form <- result.root;
     val end <- syntax_past(nodes, result.used, form);
-    if (punct_at(source, tokens, result.next, past) == 59u8) { # ';'
+    if (punct_at(source, tokens, result.next, past) == SEMICOLON) { # ';'
         end <- tokens[result.next].past;
         (result.next <- result.next + 1u64):void;
     } else {
         val braced_type <- definition_start + 1u64 < result.next &&
-            punct_at(source, tokens, result.next - 1u64, past) == 125u8 &&
+            punct_at(source, tokens, result.next - 1u64, past) == RIGHT_BRACE &&
             (((enum_word(source, tokens[definition_start]) || region_word(source, tokens[definition_start])) &&
               tokens[definition_start + 1u64].kind == identifier()) ||
              (data_word(source, tokens[definition_start]) &&
               (tokens[definition_start + 1u64].kind == identifier() || tokens[definition_start + 1u64].kind == quoted_text())));
         val starts_marks <- result.next < past && default_word(source, tokens[result.next]) &&
-            punct_at(source, tokens, result.next + 1u64, past) == 123u8;
+            punct_at(source, tokens, result.next + 1u64, past) == LEFT_BRACE;
         val delimited <- braced_type || braced_callable_definition(nodes, result.used, form) ||
             braced_reference_group(nodes, result.revision, result.used, form) ||
             (qualified_selector && (starts_marks || selection_boundary(source, tokens, result.next,
@@ -1009,7 +1029,7 @@ func module_recovery_boundary(source:const SourceBytes in S, tokens:const Tokens
              (tokens[at].kind == multiline_text() && module_doclet_target(source, tokens, at + 1u64, past))))
             return at;
         delimiter <- punct_at(source, tokens, at, past);
-        if (delimiter == 59u8 || delimiter == 125u8) return at;
+        if (delimiter == SEMICOLON || delimiter == RIGHT_BRACE) return at;
         close <- closing_token(tokens, at, past);
         at <- if (close == no_node()) { at + 1u64 } else { close + 1u64 }
     };
@@ -1041,7 +1061,7 @@ export func parse_module(source:const SourceBytes in S, tokens:const Tokens in T
                 result.root, false, false);
             if (result.diagnostic != 0u8) return;
             delimiter <- punct_at(source, tokens, boundary, past);
-            if (delimiter == 59u8 || delimiter == 125u8) { (result.next <- boundary + 1u64):void; }
+            if (delimiter == SEMICOLON || delimiter == RIGHT_BRACE) { (result.next <- boundary + 1u64):void; }
         };
         last <- result.root;
     };

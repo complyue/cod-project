@@ -179,7 +179,7 @@ Apply the [name rules](../../design/SymbolicDynamicScope.md#clause-words-and-lex
 
 ## Build and run on Linux
 
-The standalone build uses GNU Make 4.3 or newer, a prepared CoD seed and its language library, and a compatible LLVM SDK with shared libraries. The seed prefix provides `bin/cod-seed` and `lib/cod/string.cod`. Use the following commands from the repository root with your ready seed prefix and the existing LLVM SDK in `build`.
+The standalone build uses GNU Make 4.3 or newer, a prepared CoD seed and its language library, and a compatible LLVM SDK with shared libraries. A prepared prefix has `bin/cod-seed` and the sources `string.cod` and `ASCII.cod` from [the language library](../../cod/library) in `lib/cod`. Stage the same library beside a distributed `bin/cod-booter` so it can resolve logical imports from any working directory. Use the following commands from the repository root with your ready seed prefix and the existing LLVM SDK in `build`.
 
 ```sh
 make -C cod/runtime

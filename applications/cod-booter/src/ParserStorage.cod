@@ -174,7 +174,7 @@ export data ExprPayload =
         mode:ModuleSelectionMode; nature:ResourceNature; }
     | BulkModuleSelection { path:NodeId; mode:ModuleSelectionMode; view:PublicView; }
     | DefaultPublicSet { marks:NodeLink; }
-    | DefaultMark { previous:NodeLink; name:NodeId; nature:ResourceNature; }
+    | DefaultMark { previous:NodeLink; name:NodeId; nature:ResourceNature; members:NodeLink; }
     | AllMembers { opening:u64; }
     | ChosenMembers { items:NodeId; opening:u64; }
     | ChosenMember { previous:NodeLink; member:NodeId; }
@@ -750,6 +750,7 @@ export data DefaultMarkSites {
     previous:u64;
     name:u64;
     nature:ResourceNature;
+    members:u64;
 }
 
 export func name_syntax(nodes:const ExprNodes in N, used:u64, at:u64) -> NameSyntax where {const owner N} {
@@ -795,18 +796,18 @@ func selection_local_name(nodes:const ExprNodes in N, revision:u64, at:u64, rena
 }
 
 func selection_member_clause(nodes:const ExprNodes in N, revision:u64, at:u64, members:const NodeLink in L,
-                             sites:ModuleSelectionSites in R) -> bool
+                             symbolic:bool, selected:u64 in R) -> bool
     where {const owner N, const owner L, owner R} {
     return case members of {
-        (NoLink) -> { sites.members <- no_node(); true };
+        (NoLink) -> { selected <- no_node(); true };
         (LinkTo { val selection <- node; }) -> {
-            if (!published_syntax_id(nodes, revision, at, selection) || sites.symbolic) return false;
+            if (symbolic || !published_syntax_id(nodes, revision, at, selection)) return false;
             case nodes[selection.index] of {
                 (Vacant) -> { false };
                 (Occupied { val syntax <- node; }) -> {
                     case syntax.payload of {
-                        (AllMembers) -> { sites.members <- selection.index; true };
-                        (ChosenMembers) -> { sites.members <- selection.index; true };
+                        (AllMembers) -> { selected <- selection.index; true };
+                        (ChosenMembers) -> { selected <- selection.index; true };
                         (_) -> { false };
                     }
                 };
@@ -852,7 +853,7 @@ func prepare_selection_sites(nodes:const ExprNodes in N, revision:u64, at:u64,
     sites.symbolic <- name == (SymbolicName:NameSyntax);
     sites.mode <- mode;
     return selection_local_name(nodes, revision, at, renamed, name, sites) &&
-        selection_member_clause(nodes, revision, at, members, sites);
+        selection_member_clause(nodes, revision, at, members, sites.symbolic, sites.members);
 }
 
 export func inspect_module_selection(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
@@ -949,7 +950,7 @@ export func inspect_default_mark(
     return case nodes[at] of {
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of {
-                (DefaultMark { val previous <-; val name <-; val nature <-; }) -> {
+                (DefaultMark { val previous <-; val name <-; val nature <-; val members <-; }) -> {
                     if (!published_syntax_id(nodes, revision, at, name) ||
                         !default_mark_link(nodes, revision, at, previous, sites.previous))
                         return false;
@@ -957,6 +958,9 @@ export func inspect_default_mark(
                         nature == (OrdinaryResource:ResourceNature)) {
                         OrdinaryName:NameSyntax
                     } else { SymbolicName:NameSyntax })) return false;
+                    if (!selection_member_clause(nodes, revision, at, members, nature != (OrdinaryResource:ResourceNature),
+                                                 sites.members))
+                        return false;
                     sites.name <- name.index;
                     sites.nature <- nature;
                     true

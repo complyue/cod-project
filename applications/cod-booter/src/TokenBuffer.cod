@@ -1,3 +1,6 @@
+using "ASCII.cod" ASCII {
+    LEFT_PAREN, RIGHT_PAREN, LEFT_BRACKET, RIGHT_BRACKET, LEFT_BRACE, RIGHT_BRACE
+};
 using "./SourceStorage.cod" {
     SourceBytes, Token, DelimiterLink { OrdinaryToken, UnmatchedDelimiter, MatchedDelimiter }
 };
@@ -13,9 +16,9 @@ export data ScanResult {
 }
 
 func opener_for(mark:u8) -> u8 {
-    if (mark == 41u8) return 40u8;
-    if (mark == 93u8) return 91u8;
-    if (mark == 125u8) return 123u8;
+    if (mark == RIGHT_PAREN) return LEFT_PAREN;
+    if (mark == RIGHT_BRACKET) return LEFT_BRACKET;
+    if (mark == RIGHT_BRACE) return LEFT_BRACE;
     return 0u8
 }
 
@@ -59,7 +62,7 @@ func index_delimiters(source:const SourceBytes in S, tokens:Tokens in T, eof:u64
     val expected <- 0u8;
     for (at in 0u64 .. eof) {
         mark <- punct_at(source, tokens, at, eof);
-        if (mark == 40u8 || mark == 91u8 || mark == 123u8) {
+        if (mark == LEFT_PAREN || mark == LEFT_BRACKET || mark == LEFT_BRACE) {
             {{ mark_delimiter(tokens, at, make UnmatchedDelimiter { previous <- open }) }};
             (open <- at):void
         } else {

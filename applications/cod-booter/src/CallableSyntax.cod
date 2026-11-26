@@ -1,3 +1,7 @@
+using "ASCII.cod" ASCII {
+    LEFT_PAREN, RIGHT_PAREN, COMMA, MINUS, PERIOD, COLON, SEMICOLON, GREATER_THAN, LEFT_BRACE,
+    RIGHT_BRACE
+};
 using "./Lexer.cod" {
     const_word, exception_word, handle_word, here_word, identifier, init_word, in_word, not_word, own_word, owner_word,
     ptr_word, ref_word, region_word, reserved_lexical_binder, reserved_module_name, throws_word, val_word, var_word,
@@ -34,15 +38,15 @@ func expected_identity_reference() -> u8 { return 50u8; }
 func direct_place_head(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> bool
     where {const owner S, const owner T} {
     return at + 2u64 < past && val_word(source, tokens[at]) && var_word(source, tokens[at + 1u64]) &&
-        punct_at(source, tokens, at + 2u64, past) != 58u8;
+        punct_at(source, tokens, at + 2u64, past) != COLON;
 }
 
 func ellipsis_at(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64)
     -> bool where {const owner S, const owner T} {
     if (at >= past || tokens[at].kind != punctuation()) return false;
     val first <- tokens[at].first;
-    return tokens[at].past - first == 3u64 && source[first] == 46u8 &&
-        source[first + 1u64] == 46u8 && source[first + 2u64] == 46u8
+    return tokens[at].past - first == 3u64 && source[first] == PERIOD &&
+        source[first + 1u64] == PERIOD && source[first + 2u64] == PERIOD
 }
 
 # Formal parameters link to their preceding parameter and retain the typed name.
@@ -59,7 +63,7 @@ export func parse_parameter(source:const SourceBytes in S, tokens:const Tokens i
     val reference_slot <- !field && at + 1u64 < past && ref_word(source, tokens[at]) && var_word(source, tokens[at + 1u64]);
     val const_prefix <- !field && at + 1u64 < past && const_word(source, tokens[at]);
     val fixed_value <- const_prefix && val_word(source, tokens[at + 1u64]);
-    val fixed_reference <- const_prefix && !fixed_value && punct_at(source, tokens, at + 2u64, past) == 58u8;
+    val fixed_reference <- const_prefix && !fixed_value && punct_at(source, tokens, at + 2u64, past) == COLON;
     val binding_const <- fixed_value || fixed_reference;
     if (identity_only || reference_slot || binding_const) {
         if (identity_only) {
@@ -92,7 +96,7 @@ export func parse_parameter(source:const SourceBytes in S, tokens:const Tokens i
                     if (ref_word(source, tokens[at])) { (kind <- ReferenceFormal):void; } else {};
                     if (ptr_word(source, tokens[at])) { (kind <- PointerFormal):void; } else {};
                     if (val_word(source, tokens[at])) { (kind <- ExplicitValueFormal):void; } else {};
-                    if (handle_word(source, tokens[at]) && punct_at(source, tokens, at + 1u64, past) != 58u8) {
+                    if (handle_word(source, tokens[at]) && punct_at(source, tokens, at + 1u64, past) != COLON) {
                         (kind <- HandleFormal):void;
                     } else {};
                     if (kind != ValueFormal) { (result.next <- at + 1u64):void; } else {};
@@ -155,13 +159,13 @@ func parse_parameters(source:const SourceBytes in S, tokens:const Tokens in T,
                       past:u64, allow_here:bool, multiple_here:bool, allow_variadic:bool) -> u64
     where {const owner S, const owner T, owner A, owner R} {
     val last <- no_node();
-    if (punct_at(source, tokens, result.next, past) == 41u8) return last; # ')'
+    if (punct_at(source, tokens, result.next, past) == RIGHT_PAREN) return last; # ')'
     val at <- result.next;
     val delimiter <- 0u8;
     for (unused in result.next .. past) {
         at <- result.next;
         if (allow_here && (last == no_node() || (multiple_here && is_here_formal(nodes, result.used, last))) &&
-            at < past && here_word(source, tokens[at]) && punct_at(source, tokens, at + 1u64, past) != 58u8) {
+            at < past && here_word(source, tokens[at]) && punct_at(source, tokens, at + 1u64, past) != COLON) {
             parse_here_parameter(source, tokens, nodes, result, past, last);
             if (result.diagnostic != 0u8) return no_node();
         } else {
@@ -170,12 +174,12 @@ func parse_parameters(source:const SourceBytes in S, tokens:const Tokens in T,
         last <- result.root;
         delimiter <- punct_at(source, tokens, result.next, past);
         if (formal_variadic_at(nodes, result.revision, result.used, last) != no_node() &&
-            (!allow_variadic || delimiter != 41u8)) {
+            (!allow_variadic || delimiter != RIGHT_PAREN)) {
             result.diagnostic <- expected_parameter_list();
             return no_node()
         };
-        if (delimiter == 41u8) return last; # ')'
-        if (delimiter != 44u8) { result.diagnostic <- expected_parameter_list(); return no_node(); } else {}; # ','
+        if (delimiter == RIGHT_PAREN) return last; # ')'
+        if (delimiter != COMMA) { result.diagnostic <- expected_parameter_list(); return no_node(); } else {}; # ','
         result.next <- result.next + 1u64;
     };
     result.diagnostic <- expected_parameter_list();
@@ -196,7 +200,7 @@ func start_parameter_list(source:const SourceBytes in S, tokens:const Tokens in 
     };
     val name <- result.root;
     val open <- result.next;
-    if (punct_at(source, tokens, open, past) != 40u8) { # '('
+    if (punct_at(source, tokens, open, past) != LEFT_PAREN) { # '('
         result.diagnostic <- expected_parameter_list();
         return no_node();
     } else {};
@@ -229,7 +233,7 @@ func parse_owning_region_result(source:const SourceBytes in S, tokens:const Toke
     result.next <- result.next + 2u64;
     val readonly <- false;
     ref schema = make NoLink {};
-    if (punct_at(source, tokens, result.next, past) == 58u8) {
+    if (punct_at(source, tokens, result.next, past) == COLON) {
         result.next <- result.next + 1u64;
         if (result.next < past && const_word(source, tokens[result.next])) {
             readonly <- true;
@@ -263,7 +267,7 @@ func parse_type_clause(source:const SourceBytes in S, tokens:const Tokens in T, 
         if (at + 1u64 < past && own_word(source, tokens[at]) && region_word(source, tokens[at + 1u64]))
             return parse_owning_region_result(source, tokens, nodes, result, previous, first, past);
         val width <- 0u64;
-        if (exception_word(source, tokens[at]) && punct_at(source, tokens, at + 1u64, past) == 58u8) {
+        if (exception_word(source, tokens[at]) && punct_at(source, tokens, at + 1u64, past) == COLON) {
             (width <- 1u64):void;
         } else {
             if (own_word(source, tokens[at]) && at + 1u64 < past && exception_word(source, tokens[at + 1u64])) {
@@ -272,7 +276,7 @@ func parse_type_clause(source:const SourceBytes in S, tokens:const Tokens in T, 
         };
         if (width != 0u64) {
             result.next <- at + width;
-            if (punct_at(source, tokens, result.next, past) != 58u8) { result.diagnostic <- expected_type(); return false; } else {};
+            if (punct_at(source, tokens, result.next, past) != COLON) { result.diagnostic <- expected_type(); return false; } else {};
             result.next <- result.next + 1u64;
             (clause_kind <- exception_result_node()):void;
         } else {
@@ -341,7 +345,7 @@ func parse_here_parameter(source:const SourceBytes in S, tokens:const Tokens in 
     if (result.diagnostic != 0u8) return;
     finish_callable_head(tokens, nodes, result, name, parameters, open);
     if (result.diagnostic != 0u8) return;
-    if (!punct_pair_at(source, tokens, result.next, past, 45u8, 62u8)) {
+    if (!punct_pair_at(source, tokens, result.next, past, MINUS, GREATER_THAN)) {
         result.diagnostic <- expected_type();
         return;
     } else {};
@@ -421,7 +425,7 @@ export func parse_constraints(source:const SourceBytes in S, tokens:const Tokens
                        nodes:ExprNodes in A, result:ParseResult in R, past:u64, ordinary:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
     result.next <- result.next + 1u64;
-    if (punct_at(source, tokens, result.next, past) != 123u8) { # '{'
+    if (punct_at(source, tokens, result.next, past) != LEFT_BRACE) { # '{'
         if (ordinary) { parse_constraint(source, tokens, nodes, result, past, ordinary):void; return; };
         result.diagnostic <- expected_owner_clause();
         return;
@@ -431,8 +435,8 @@ export func parse_constraints(source:const SourceBytes in S, tokens:const Tokens
     for (unused in result.next .. past) {
         if (!parse_constraint(source, tokens, nodes, result, past, ordinary)) return;
         delimiter <- punct_at(source, tokens, result.next, past);
-        if (delimiter == 125u8) { result.next <- result.next + 1u64; return; } else {}; # '}'
-        if (delimiter != 44u8) { result.diagnostic <- expected_owner_clause(); return; } else {}; # ','
+        if (delimiter == RIGHT_BRACE) { result.next <- result.next + 1u64; return; } else {}; # '}'
+        if (delimiter != COMMA) { result.diagnostic <- expected_owner_clause(); return; } else {}; # ','
         result.next <- result.next + 1u64;
     };
     (result.diagnostic <- expected_owner_clause()):void;
@@ -441,7 +445,7 @@ export func parse_constraints(source:const SourceBytes in S, tokens:const Tokens
 func parse_signature_clauses(source:const SourceBytes in S, tokens:const Tokens in T,
                              nodes:ExprNodes in A, result:ParseResult in R, past:u64, native:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
-    if (punct_pair_at(source, tokens, result.next, past, 45u8, 62u8)) { # '->'
+    if (punct_pair_at(source, tokens, result.next, past, MINUS, GREATER_THAN)) { # '->'
         if (!parse_type_clause(source, tokens, nodes, result, past, result_clause_node())) return;
     } else {};
     val leading_throws <- result.next < past && throws_word(source, tokens[result.next]);
@@ -463,10 +467,10 @@ export func parse_callable_signature(source:const SourceBytes in S, tokens:const
     where {const owner S, const owner T, owner A, owner R} {
     parse_callable_head(source, tokens, nodes, result, past, native, operators);
     if (result.diagnostic != 0u8) return;
-    val has_result <- punct_pair_at(source, tokens, result.next, past, 45u8, 62u8);
+    val has_result <- punct_pair_at(source, tokens, result.next, past, MINUS, GREATER_THAN);
     parse_signature_clauses(source, tokens, nodes, result, past, native);
     if (result.diagnostic == 0u8 && !native && !has_result &&
-        punct_at(source, tokens, result.next, past) == 59u8) {
+        punct_at(source, tokens, result.next, past) == SEMICOLON) {
         (result.diagnostic <- expected_type()):void
     };
 }
@@ -541,7 +545,7 @@ func parse_procedure_inputs(source:const SourceBytes in S, tokens:const Tokens i
                             nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> u64
     where {const owner S, const owner T, owner A, owner R} {
     val tail <- no_node();
-    if (punct_at(source, tokens, result.next, past) == 41u8) return tail; # ')'
+    if (punct_at(source, tokens, result.next, past) == RIGHT_PAREN) return tail; # ')'
     val delimiter <- 0u8;
     for (unused in result.next .. past) {
         if (!parse_procedure_type(source, tokens, nodes, result, past)) return no_node();
@@ -549,8 +553,8 @@ func parse_procedure_inputs(source:const SourceBytes in S, tokens:const Tokens i
         if (result.diagnostic != 0u8) return no_node();
         tail <- result.root;
         delimiter <- punct_at(source, tokens, result.next, past);
-        if (delimiter == 41u8) return tail;
-        if (delimiter != 44u8) { result.diagnostic <- expected_parameter_list(); return no_node(); };
+        if (delimiter == RIGHT_PAREN) return tail;
+        if (delimiter != COMMA) { result.diagnostic <- expected_parameter_list(); return no_node(); };
         result.next <- result.next + 1u64;
     };
     result.diagnostic <- expected_parameter_list();
@@ -565,7 +569,7 @@ export func parse_procedure_symbol_type(source:const SourceBytes in S, tokens:co
     if (result.diagnostic != 0u8) return;
     val arrow <- result.next + 1u64;
     result.next <- arrow;
-    if (!punct_pair_at(source, tokens, arrow, past, 45u8, 62u8)) { result.diagnostic <- expected_type(); return; };
+    if (!punct_pair_at(source, tokens, arrow, past, MINUS, GREATER_THAN)) { result.diagnostic <- expected_type(); return; };
     val arrow_first <- tokens[arrow].first;
     result.next <- arrow + 1u64;
     if (!parse_procedure_type(source, tokens, nodes, result, past)) return;

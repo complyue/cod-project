@@ -63,7 +63,7 @@ func read_default_marks(
     nodes:const ExprNodes in N, used:u64, revision:u64, tail:u64, marks:DefaultMarkOrder in M,
     problem:u64 in P) -> u64 where {const owner N, owner M, owner P} {
     ref mark = make DefaultMarkSites {
-        previous <- no_node(); name <- no_node(); nature <- OrdinaryResource;
+        previous <- no_node(); name <- no_node(); nature <- OrdinaryResource; members <- no_node();
     };
     val cursor <- tail;
     for (at in 0u64 .. used) {
@@ -94,7 +94,7 @@ export func stage_module_defaults(
         return InvalidDefaultTree:DefaultPublicationStatus;
     ref marks = make DefaultMarkOrder(used, no_node());
     ref mark = make DefaultMarkSites {
-        previous <- no_node(); name <- no_node(); nature <- OrdinaryResource;
+        previous <- no_node(); name <- no_node(); nature <- OrdinaryResource; members <- no_node();
     };
     ref item = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     ref tail = make u64 { no_node() };
@@ -129,6 +129,10 @@ export func stage_module_defaults(
                 };
                 if (!matches_export_nature(exports, row, mark.nature)) {
                     problem <- site;
+                    return WrongDefaultKind:DefaultPublicationStatus
+                };
+                if (mark.members != no_node()) {
+                    problem <- mark.members;
                     return WrongDefaultKind:DefaultPublicationStatus
                 };
                 if (!stage_default(defaults, count, next, row, mark.nature)) {
