@@ -39,6 +39,20 @@ enum class BuiltinOperation {
   none, unary, binary, identity, array_length, array_transfer, reference_swap, bits_swap, print,
   builder_append, lexical_result, text_size, text_byte, text_slice
 };
+inline std::optional<BuiltinOperation> text_access(std::optional<cod_lang_export_kind> primitive) {
+  if (primitive == COD_LANG_TEXT_SIZE_EXPORT) return BuiltinOperation::text_size;
+  if (primitive == COD_LANG_TEXT_BYTE_EXPORT) return BuiltinOperation::text_byte;
+  if (primitive == COD_LANG_TEXT_SLICE_EXPORT) return BuiltinOperation::text_slice;
+  return {};
+}
+inline Type text_access_result(BuiltinOperation operation, const Expression &expr) {
+  const size_t arity = operation == BuiltinOperation::text_size ? 1 : operation == BuiltinOperation::text_byte ? 2 : 3;
+  if (expr.children.size() != arity || expr.has_here_body())
+    fail(expr.at, "text access requires a String and its byte offsets, if any");
+  if (operation == BuiltinOperation::text_size) return Type::uint64;
+  if (operation == BuiltinOperation::text_byte) return Type::uint8;
+  return Type::string;
+}
 // Nominal schema identities for a selected abstract target. An empty set carries no narrowing.
 using NominalTargets = std::set<size_t>;
 using AbstractSymbolTargets = std::map<size_t, NominalTargets>;

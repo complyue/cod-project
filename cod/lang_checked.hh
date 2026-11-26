@@ -11825,20 +11825,6 @@ class ScalarChecker {
     if (selected == module_names().text_primitives.end()) return {};
     return selected->second;
   }
-  static std::optional<BuiltinOperation> text_access(std::optional<cod_lang_export_kind> primitive) {
-    if (primitive == COD_LANG_TEXT_SIZE_EXPORT) return BuiltinOperation::text_size;
-    if (primitive == COD_LANG_TEXT_BYTE_EXPORT) return BuiltinOperation::text_byte;
-    if (primitive == COD_LANG_TEXT_SLICE_EXPORT) return BuiltinOperation::text_slice;
-    return {};
-  }
-  static Type text_access_result(BuiltinOperation operation, const Expression &expr) {
-    const size_t arity = operation == BuiltinOperation::text_size ? 1 : operation == BuiltinOperation::text_byte ? 2 : 3;
-    if (expr.children.size() != arity || expr.has_here_body())
-      fail(expr.at, "text access requires a String and its byte offsets, if any");
-    if (operation == BuiltinOperation::text_size) return Type::uint64;
-    if (operation == BuiltinOperation::text_byte) return Type::uint8;
-    return Type::string;
-  }
   CheckedOperation check_argument_expression(const Expression &operand, ArgumentMode mode, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, const Type *expected = nullptr,
       IndexedUse indexed_use = IndexedUse::value_only) {

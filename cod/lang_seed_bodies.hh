@@ -804,6 +804,26 @@ class BodyExtraction {
       return text_type(type) || declarations().builder_type(type);
     }
 
+    CheckedOperation read_text(const Expression &expr, BuiltinOperation access) {
+      CheckedOperation op;
+      op.type = text_access_result(access, expr);
+      op.builtin = access;
+      const auto &text = operand(expr, 0);
+      if (!text_type(text.type)) fail(expr.children.front()->at, "text access requires a readable String");
+      single_owner(text, expr.children.front()->at);
+      for (size_t i = 1; i < expr.children.size(); ++i)
+        if (operand(expr, i).type != Type::uint64)
+          fail(expr.children[i]->at, "text byte offset must have type u64");
+      if (access == BuiltinOperation::text_slice) {
+        expect(!in_iteration_ && !supplied_body(), expr.at,
+               "replacement seed needs a text slice owned by the enclosing full scope");
+        op.view = op.read_only = true;
+        op.owners.insert(0);
+        op.lexical_allocation = CheckedOperation::LexicalAllocation{0, CheckedOperation::LexicalAllocation::text_slice};
+      }
+      return op;
+    }
+
     CheckedOperation append_text(const Expression &expr) {
       expect(expr.children.size() == 2 && !expr.has_here_body(), expr.at,
              "text append requires a builder and one text piece");
@@ -994,8 +1014,10 @@ class BodyExtraction {
       if (!expr.intrinsic && !visible_local(expr.text)) {
         if (const auto *formal = find_here(expr)) return invoke_here(expr, *formal);
         const auto primitive = names().text_primitives.find(expr.text);
-        if (primitive != names().text_primitives.end() && primitive->second == COD_LANG_BUILDER_APPEND_EXPORT)
-          return append_text(expr);
+        if (primitive != names().text_primitives.end()) {
+          if (primitive->second == COD_LANG_BUILDER_APPEND_EXPORT) return append_text(expr);
+          if (const auto access = text_access(primitive->second)) return read_text(expr, *access);
+        }
         const auto native = names().native_operations.find(expr.text);
         if (native != names().native_operations.end()) return provider_call(expr, native->second);
       }
@@ -1507,18 +1529,19 @@ class BodyExtraction {
     CheckedOperation declaration(const Expression &expr, bool fixed) {
       const bool value = expr.declaration_kind == "val";
       expect((value || expr.declaration_kind == "ref") && expr.children.size() == 1 &&
-             (!value || !expr.annotation) && expr.owner_name.empty() && !expr.read_only,
-             expr.at, "replacement seed needs an initialized ref or an inferred initialized val");
+             expr.owner_name.empty() && !expr.read_only,
+             expr.at, "replacement seed needs an initialized ref or scalar val");
       const auto &initial = operand(expr, 0);
-      if (expr.annotation && resolve_annotation(*expr.annotation, expr.at) != initial.type)
+      const auto type = expr.annotation ? resolve_annotation(*expr.annotation, expr.at) : initial.type;
+      if (!value && type != initial.type)
         fail(expr.at, "reference initializer does not match the declared target type");
       expect(initial.type.kind != Type::native_handle, expr.at, "a native handle view needs a handle declaration");
       const auto owner = value ? size_t{0} : single_owner(initial, expr.at);
-      if (value) takes_value(initial, initial.type, expr.at);
-      const auto local = declare(expr.at, expr.text, initial.type, value, value ? fixed : initial.read_only, fixed, owner);
+      if (value) takes_value(initial, type, expr.at);
+      const auto local = declare(expr.at, expr.text, type, value, value ? fixed : initial.read_only, fixed, owner);
       CheckedOperation op;
       op.binding = local.binding;
-      op.type = op.operand_type = initial.type;
+      op.type = op.operand_type = type;
       op.place = local.place;
       op.view = !value;
       return op;
