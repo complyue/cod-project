@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Make pass restarts inexpressible and apply the rule to the booter
+
+<a id="h-compiler-restart-mechanism-20261126"></a>
+**H-COMPILER-RESTART-MECHANISM-20261126.** The project user clarified in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) “不允许存在程序机制能允许写出导致这种结果的程序。 正确解法是分阶段收集信息再使用信息。 真实技术困难找我讨论。” This clarifies [H-RESTART-FROM-ENTRY](#h-restart-from-entry-20261124), [H-WORKQUEUE-VALUE](#h-workqueue-value-20261125) and the [project-wide replacement decision](#h-compiler-pipeline-replacement-20261125). D-ARCH-REVIEW r224→225 and P-682/P-683 cover the absence of a restart operation in the reachable interfaces. Pipeline r9→10 and roadmap r48→49 apply the rule to the [CoD booter rewrite](applications/cod-booter/docs/CompilerPipeline.md#replacing-the-booter-pipeline), using the [standalone build](https://github.com/complyue/cod-project/commit/b801a6d98744260873745f55d2fa91164eade04a) as the behavior reference. D-20-STAGE-CONTROLS and P-744/P-745 retain the distinct stage-specific goals for client switches. Validation reference r487→488 identifies the legacy scheduler as historical. Registry r1337→1338. Design confirmed the first CoD initialization boundary: extract operations, complete correlated control states, then propagate readiness before checking uses. Mainline owns implementation and cutover evidence.
+
 ## 2026-11-26 — Describe the callback from native cleanup
 
 <a id="k-native-cleanup-callback-wording-20261126"></a>

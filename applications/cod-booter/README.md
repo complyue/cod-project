@@ -1,10 +1,12 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 48 · Recorded: 2026-11-26 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 49 · Recorded: 2026-11-26 · Phase: initial seed delivery through alternating booter and seed development.
 
 **Compiler design target.** On the command line, `cod` (Compile on Demand) compiles the entry for this run and executes it immediately, leaving no user-facing executable. The planned production command `cfe` (Compile for Ever) spends more time optimizing the program and saves the executable for later runs. Seed and booter development prioritize Go-like compile speed with moderate runtime performance. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
 
 ## Design authority
+
+At r49 the [booter pipeline rewrite](docs/CompilerPipeline.md#replacing-the-booter-pipeline) applies [D-ARCH-REVIEW](../../design/DesignAuthorityRegistry.md#d-arch-review) to the CoD compiler delivered by the replacement seed. The [clarification](../../CHANGELOG.md#h-compiler-restart-mechanism-20261126) preserves the booter’s checking, native interfaces and observable command behavior.
 
 At r48 the [production parser bundle](../../design/DesignAuthorityRegistry.md#d-20-parser-bundle) identifies `pcl.cod` as the HLVM and the production CoD parser as an application of it, following the [user’s clarification](../../CHANGELOG.md#h-pcl-hlvm-parser-application-20261126).
 
@@ -150,7 +152,7 @@ For supported live `here` captures, the seed prepares the selected storage addre
 
 Remove a static check and the computation used exclusively to support it when translation has no use for its result. This includes whole-program type or ownership proofs whose sole purpose is to reject invalid input. Seed translation makes no claim of source validity. The CoD booter owns type, ownership and other semantic validation, including checking the full source world of its own compiler entry. Record supported self-check coverage separately from generating or running the first booter and from a successful self-build.
 
-The annotated tag [archive/checked-cpp-seed](https://github.com/complyue/cod-project/tree/archive/checked-cpp-seed) preserves the checked seed at `a0922741`. Its 52 focused comparisons across both seed modes and its Lexer, TokenBuffer and ModuleIndex outputs establish the checked-stage reference. The [replacement C++ pipeline](../../design/ImplementationArchitecture.md#replacement-seed-pipeline) is the active development path. Reuse established translation logic where its dependencies are explicit. The booter should apply the seed’s experience with [selectable operations](docs/CompilerPipeline.md#independently-selectable-compiler-operations) when its development resumes. Add an individual opt-in seed check when a concrete engineering use warrants it. Document that use, how to enable the check and the behavior it diagnoses. The default path pays none of the analysis cost unique to that check. The [cutover and acceptance](../../design/ImplementationArchitecture.md#seed-checker-migration-and-performance-acceptance) cover the generated booter and its supported commands.
+The annotated tag [archive/checked-cpp-seed](https://github.com/complyue/cod-project/tree/archive/checked-cpp-seed) preserves the checked seed at `a0922741`. Its 52 focused comparisons across both seed modes and its Lexer, TokenBuffer and ModuleIndex outputs establish the checked-stage reference. The [replacement C++ pipeline](../../design/ImplementationArchitecture.md#replacement-seed-pipeline) is the active development path. Reuse established translation logic where its dependencies are explicit. The CoD booter needs its own [pipeline rewrite](docs/CompilerPipeline.md#replacing-the-booter-pipeline) to keep producer traversal out of reach of consumers. The [selectable operations](docs/CompilerPipeline.md#independently-selectable-compiler-operations) are a separate client-facing goal. Add an individual opt-in seed check when a concrete engineering use warrants it. Document that use, how to enable the check and the behavior it diagnoses. The default path pays none of the analysis cost unique to that check. The [cutover and acceptance](../../design/ImplementationArchitecture.md#seed-checker-migration-and-performance-acceptance) cover the generated booter and its supported commands.
 
 ### Compiler memory acceptance
 
