@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Separate omitted-result inference from statement-call use in the seed
+
+<a id="k-seed-omitted-statement-result-20261126"></a>
+**K-SEED-OMITTED-STATEMENT-RESULT-20261126.** [D-ARCH-REVIEW r218→219](design/ImplementationArchitecture.md#statement-calls-with-an-omitted-result) applies [D-24-TAIL](design/DesignAuthorityRegistry.md#d-24-tail) at the [intermediate booter call](https://github.com/complyue/cod-project/blob/da068d66/applications/cod-booter/src/ModuleGraph.cod#L988). The [selected function](https://github.com/complyue/cod-project/blob/da068d66/applications/cod-booter/src/DeclarationTypes.cod#L582) supplies the independent evidence for its result. The caller consumes the sealed contract for emission. Registry r1328→1329 continues P-682/P-683. Executable acceptance remains with mainline.
+
 ## 2026-11-26 — Name the composition papers and connect domain rules through open sinks
 
 <a id="k-three-composition-papers-20261126"></a>
