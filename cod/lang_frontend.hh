@@ -3,6 +3,7 @@
 
 #include "lang_llvm.hh"
 #include "lang_checked.hh"
+#include "lang_seed_bodies.hh"
 #include "lang_c_provider.hh"
 
 #include <optional>
@@ -54,6 +55,20 @@ class Compiler {
     }
   }
 
+  void emit(Compilation &result, const CheckedProgram &program, const SourceProgram &source,
+            bool emit_text, bool emit_bitcode, bool emit_providers) const {
+    LLVMEmission emission;
+    auto [text, bitcode] = emission.emit(program, emit_text, emit_bitcode, specialize_, bounds_checks_);
+    for (const auto module : program.execution_order)
+      result.execution_order.push_back(source.modules[module].path.string());
+    result.llvm_ir = std::move(text);
+    result.bitcode = std::move(bitcode);
+    if (emit_providers) result.providers = emit_native_providers(program, emission.provider_row_layouts(),
+                                                                 source.modules.front().path.generic_string());
+    result.native_library = !program.native_entries.empty();
+    result.accepted = true;
+  }
+
 public:
   explicit Compiler(WarningOptions warnings = {}, bool specialize = true, bool bounds_checks = true)
       : warnings_(std::move(warnings)), specialize_(specialize), bounds_checks_(bounds_checks) {}
@@ -98,28 +113,27 @@ public:
     return result;
   }
 
-  Compilation compile(ParsedCompilation parsed, bool emit_text, bool emit_bitcode, bool emit_providers = false) {
+  Compilation compile(ParsedCompilation parsed, bool emit_text, bool emit_bitcode, bool emit_providers = false,
+                      bool replacement = false) const {
     auto result = std::move(parsed.result_);
     result.accepted = false;
     auto &diagnostics = result.diagnostics;
     const auto &source = parsed.source_;
     try {
       if (!diagnostics.complete()) return result;
+      if (replacement) {
+        auto declarations = ScalarChecker::bind_module_declarations(std::move(parsed.source_), diagnostics);
+        if (!declarations || promotes_warning(diagnostics)) return result;
+        const auto executable = seed::BodyExtraction::bind(std::move(*declarations));
+        emit(result, executable.program(), executable.source(), emit_text, emit_bitcode, emit_providers);
+        return result;
+      }
       auto checked = ScalarChecker{}.check(source, diagnostics);
       if (!checked) return result;
       for (auto &warning : checked->warnings) if (!diagnostics.append(std::move(warning))) return result;
       if (promotes_warning(diagnostics)) return result;
 
-      LLVMEmission emission;
-      auto [text, bitcode] = emission.emit(*checked, emit_text, emit_bitcode, specialize_, bounds_checks_);
-      for (const auto module : checked->execution_order)
-        result.execution_order.push_back(source.modules[module].path.string());
-      result.llvm_ir = std::move(text);
-      result.bitcode = std::move(bitcode);
-      if (emit_providers) result.providers = emit_native_providers(*checked, emission.provider_row_layouts(),
-                                                                   source.modules.front().path.generic_string());
-      result.native_library = !checked->native_entries.empty();
-      result.accepted = true;
+      emit(result, *checked, source, emit_text, emit_bitcode, emit_providers);
     } catch (const LocatedFailure &failure) {
       retain_failure(diagnostics, failure);
     } catch (const std::bad_alloc &) {

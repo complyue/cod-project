@@ -2,6 +2,7 @@
 #pragma once
 
 #include "lang_checked_program.hh"
+#include "lang_scalar_operations.hh"
 #include "lang_modules.hh"
 #include "lang_callable_flow.hh"
 #include "native/provider_names.h"
@@ -18,6 +19,8 @@
 namespace cod::language {
 
 using CompletionInputs = std::set<size_t>;
+
+namespace seed { class BodyExtraction; }
 
 class DynamicSymbolBindings {
 public:
@@ -2945,12 +2948,12 @@ class ScalarChecker {
       code = std::uint64_t{1} << 63;
       in_range = domain.backing == Type::integer;
     } else if (negative) {
-      const auto magnitude = literal(*source->children.front());
+      const auto magnitude = numeric_literal(*source->children.front());
       if (magnitude.type != Type::integer) return {};
       code = std::uint64_t{0} - magnitude.integer;
       in_range = magnitude.integer == 0 || domain.backing == Type::integer;
     } else {
-      code = literal(*source).integer;
+      code = numeric_literal(*source).integer;
       in_range = domain.backing != Type::integer || code <= std::uint64_t{INT64_MAX};
     }
     if (in_range) {
@@ -7806,66 +7809,6 @@ class ScalarChecker {
     operation.arguments = std::move(preparation);
     operation.type = completes ? *result : Type{Type::never};
   }
-  struct EagerTypes {
-    Type result, operand;
-    bool unary = false, failing = false;
-    std::string error;
-  };
-  static std::optional<Type> common_value_type(const std::vector<Type> &values) {
-    if (values.empty()) return {};
-    auto candidates = values;
-    for (const auto kind : {Type::uint8, Type::uint32, Type::uint64, Type::integer, Type::float32, Type::float64})
-      candidates.push_back(Type{kind});
-    candidates.emplace_back(Type::exception, exception_categories.front().name);
-    std::vector<Type> common;
-    for (const auto &candidate : candidates)
-      if (std::find(common.begin(), common.end(), candidate) == common.end() &&
-          std::all_of(values.begin(), values.end(), [&](const auto &type) { return transfers_value(type, candidate); }))
-        common.push_back(candidate);
-    std::optional<Type> least;
-    for (const auto &candidate : common)
-      if (std::all_of(common.begin(), common.end(), [&](const auto &other) { return transfers_value(candidate, other); })) {
-        if (least && *least != candidate) return {};
-        least = candidate;
-      }
-    return least;
-  }
-  static EagerTypes eager_types(std::string_view name, const std::vector<Type> &arguments) {
-    EagerTypes types;
-    types.unary = arguments.size() == 1 && (name == "+" || name == "-" || name == "!");
-    const auto error = [&](const std::string &message) { types.error = message; return types; };
-    if (!types.unary && (arguments.size() != 2 || name == "!")) return error("builtin operator argument count does not match");
-    const bool completes = std::none_of(arguments.begin(), arguments.end(), [](const Type &type) { return type == Type::never; });
-    if (types.unary) {
-      const auto &argument = arguments.front();
-      if (!completes) { types.result = types.operand = Type::never; return types; }
-      if (name == "!") {
-        if (argument != Type::boolean) return error("logical negation requires bool");
-      } else if (argument != Type::integer && !(name == "-" && floating(argument)))
-        return error("numeric unary operation requires i64, or floating point for negation");
-      types.result = types.operand = argument;
-      types.failing = name == "-" && argument == Type::integer;
-    } else {
-      const bool equality = name == "==" || name == "!=";
-      const bool comparison = equality || name == "<" || name == ">" || name == "<=" || name == ">=";
-      std::vector<Type> values;
-      for (const auto &type : arguments) if (type != Type::never) values.push_back(type);
-      if (values.empty()) { types.result = types.operand = Type::never; return types; }
-      if (equality && (values.front() == Type::boolean || values.front().kind == Type::enumeration) &&
-          std::ranges::all_of(values, [&](const auto &type) { return type == values.front(); })) types.operand = values.front();
-      else if (comparison && values.size() == 2 && supplies_enum_code(values[0], values[1])) types.operand = values[1];
-      else if (comparison && values.size() == 2 && supplies_enum_code(values[1], values[0])) types.operand = values[0];
-      else {
-        if (!std::all_of(values.begin(), values.end(), numeric)) return error("no applicable numeric operation '" + std::string(name) + "'");
-        if (const auto common = common_value_type(values)) types.operand = *common;
-        else return error("numeric operands have no lossless common type");
-        if (name == "%" && floating(types.operand)) return error("remainder requires integer operands");
-      }
-      types.result = !completes ? Type{Type::never} : comparison ? Type{Type::boolean} : types.operand;
-      types.failing = completes && !comparison && integral(types.operand);
-    }
-    return types;
-  }
   std::set<size_t> builtin_declarations(const Expression &expr, const std::vector<Type> &arguments,
                                       bool destinations = false,
                                       const Access &access = {}, const Owners &owners = {}, const TypeEvidenceState *state = nullptr) const {
@@ -8394,40 +8337,6 @@ class ScalarChecker {
     const auto result = infer_result(id, arguments, *retained, state).contract;
     if (!result || nested_binder(method, *result->type)) return {};
     return complete_callable_type(method, arguments, *result);
-  }
-  static CheckedOperation literal(const Expression &expr) {
-    using K = Expression::Kind;
-    CheckedOperation operation;
-    switch (expr.kind) {
-    case K::integer: {
-      auto digits = std::string_view(expr.text);
-      operation.type = Type::integer;
-      if (digits.ends_with("u8")) { operation.type = Type::uint8; digits.remove_suffix(2); }
-      else if (digits.ends_with("u32")) { operation.type = Type::uint32; digits.remove_suffix(3); }
-      else if (digits.ends_with("u64")) { operation.type = Type::uint64; digits.remove_suffix(3); }
-      const auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), operation.integer);
-      const auto limit = operation.type == Type::uint8 ? std::uint64_t{255} :
-          operation.type == Type::uint32 ? std::uint64_t{0xffffffff} :
-          operation.type == Type::integer ? std::uint64_t{0x7fffffffffffffff} : std::numeric_limits<std::uint64_t>::max();
-      if (parsed.ec != std::errc{} || parsed.ptr != digits.data() + digits.size() || operation.integer > limit)
-        fail(expr.at, "integer literal is outside " + type_name(operation.type));
-      break;
-    }
-    case K::real: {
-      operation.type = expr.text.ends_with("f32") ? Type::float32 : Type::float64;
-      auto digits = std::string_view(expr.text);
-      if (digits.ends_with("f32") || digits.ends_with("f64")) digits.remove_suffix(3);
-      const auto in_range = [&](auto value) {
-        const auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), value);
-        return parsed.ec == std::errc{} && parsed.ptr == digits.data() + digits.size() && std::isfinite(value);
-      };
-      if (!(operation.type == Type::float32 ? in_range(float{}) : in_range(double{})))
-        fail(expr.at, "floating literal is outside " + type_name(operation.type) + " range");
-      break;
-    }
-    default: throw std::logic_error("expected scalar literal");
-    }
-    return operation;
   }
   bool signed_minimum(const Expression &expr, const TypeEvidenceState *state = nullptr) const {
     if (expr.kind != Expression::Kind::unary || expr.text != "-" || expr.children.front()->kind != Expression::Kind::integer) return false;
@@ -12612,13 +12521,13 @@ class ScalarChecker {
       target_facts.presence = TargetPresence::present;
       return string_literal_type(expr, expected);
     case K::integer:
-      if (state.required) return literal(expr).type;
+      if (state.required) return numeric_literal(expr).type;
       if (expr.text.ends_with("u8")) return Type::uint8;
       if (expr.text.ends_with("u32")) return Type::uint32;
       if (expr.text.ends_with("u64")) return Type::uint64;
       return Type::integer;
     case K::real:
-      if (state.required) return literal(expr).type;
+      if (state.required) return numeric_literal(expr).type;
       return expr.text.ends_with("f32") ? Type::float32 : Type::float64;
     case K::boolean:
       if (state.selections.tracking) target_facts.branches = PresenceBranches::constant(expr.text == "true");
@@ -13735,7 +13644,7 @@ class ScalarChecker {
           first == Type::never ? last : first;
       const bool completes = first != Type::never && last != Type::never;
       const auto bound = [&](const Expression &operand) -> std::optional<std::uint64_t> {
-        if (first && first == last && integral(*first) && operand.kind == K::integer) return literal(operand).integer;
+        if (first && first == last && integral(*first) && operand.kind == K::integer) return numeric_literal(operand).integer;
         return {};
       };
       const auto reach = range_reachability(completes, index,
@@ -20227,7 +20136,7 @@ class ScalarChecker {
       return operations.insert_or_assign(&expr, std::move(operation)).first->second.type;
     }
     switch (expr.kind) {
-    case K::integer: case K::real: operation = literal(expr); break;
+    case K::integer: case K::real: operation = numeric_literal(expr); break;
     case K::string_literal:
       operation.type = string_literal_type(expr, expected);
       operation.view = operation.read_only = true;
@@ -23175,7 +23084,7 @@ class ScalarChecker {
       ScalarPlan::ArrayGrowth::Field field{&item, ordinal, {}, {}};
       switch (value.kind) {
       case K::integer: case K::real:
-        transfer_type(literal(value).type, member.type, value.at);
+        transfer_type(numeric_literal(value).type, member.type, value.at);
         break;
       case K::boolean:
         if (member.type != Type::boolean) return false;
@@ -26528,6 +26437,7 @@ class ScalarChecker {
 public:
   class ModuleDeclarations {
     friend class ScalarChecker;
+    friend class seed::BodyExtraction;
 
     // Declaration and method source links point into this exact revision.
     SourceProgram source_;
