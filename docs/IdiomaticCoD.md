@@ -13,7 +13,8 @@ dependencies are identified where needed. For a compact reference to the source 
 
 ## Design authority
 
-Guide revision 13 applies the [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125)
+Guide revision 15 illustrates the [default ASCII vocabulary](../CHANGELOG.md#k-ascii-vocabulary-20261125) and uppercase named constants. Revision 14 applies [enum backing coercion](../design/TypedEnums.md#using-an-enum-as-its-backing-value)
+to [ASCII members in a byte scanner](#ascii-members-in-a-byte-scanner). Revision 13 applies the [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125)
 to [tariff dispatch](#put-type-and-value-specializations-in-one-method-group) and [method arm boundaries](#use-canonical-source-form).
 It retains revision 12's [fixed receiver binding](../CHANGELOG.md#h-fixed-self-binding-20261125) in the member examples. Revision 11 applies the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) to direct calls and borrowed results. It continues the revision 10 guidance on the [confirmed OO source rules](../design/DomainLanguageDesign.md#product-storage-inheritance)
 and [direct-parent construction](../design/ConstructionAndAcquisition.md#initializing-the-storage-parent-of-a-product). It applies the [normal-completion rule](../CHANGELOG.md#h-normal-completion-20261124), the [single-directive import](../CHANGELOG.md#h-proc-import-identity-20261124) and the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
@@ -120,9 +121,9 @@ func handling_order(priority:Priority) -> u8 {
 name `Urgent`. The case heads resolve members through the subject's enum, so a same-spelled lexical
 variable does not change their patterns.
 
-The `u8` backing gives the enum a representation; it does not grant arithmetic, ordering or implicit
-integer conversion. The function states the application's ordering explicitly. Use a sum instead
-when a priority needs distinct payloads, such as a deadline belonging only to one alternative.
+A `Priority` value can supply its code to a `u8` result or parameter. `handling_order` gives
+`Urgent` the first handling position independently of its declared code. Use a sum when a
+priority needs distinct payloads, such as a deadline belonging only to one alternative.
 
 Member aliases retain one value identity, and coverage counts distinct members of the complete
 enum. Selecting only some member names does not reduce its domain. An exhaustive case makes each
@@ -131,6 +132,47 @@ policy, accepting that it also covers members added later.
 
 [Enum identity](../design/TypedEnums.md#declaration-and-value-identity) ·
 [Member names and case coverage](../design/TypedEnums.md#names-and-case-matching)
+
+### ASCII members in a byte scanner
+
+Use `UPPER_SNAKE_CASE` for published named compile-time constants. Control-code abbreviations
+such as `LF` and `CR` already fit that convention. Give both letter cases distinct readable
+names, for example `UPPER_A` and `LOWER_A`. Name style has no effect on lookup or dispatch.
+
+The full ASCII vocabulary assigns a member to each code from 0 through 127. This excerpt
+from a package-root `ASCII.cod` includes the scanner's proposed defaults and two less
+frequently used members. The module chooses the defaults. Every member belongs to `ASCII`.
+
+```cod
+export enum ASCII:u8 {
+    HT = 9;
+    LF = 10;
+    CR = 13;
+    ESC = 27;
+    SPACE = 32;
+    HASH = 35;
+    DEL = 127;
+}
+default { ASCII { HT, LF, CR, SPACE, HASH } }
+```
+
+The [booter's trivia scanner](../applications/cod-booter/src/Lexer.cod) reads raw bytes.
+In a consumer, `using "ASCII.cod";` selects the type and the five named defaults. Where
+the scanner already has `byte:u8` and the current `comment:bool`, its update reads:
+
+```cod
+comment <- byte != LF && (comment || byte == HASH)
+```
+
+After `#`, CR or a byte of value 255 keeps the comment open. LF closes it. In a different
+rule, `byte == (ESC:ASCII)` can recognize escape. With no lexical `ESC` binding, the type
+supplies the member table. A local binding with that spelling takes precedence in this
+expression. Code that needs an enum value for an integer uses `10:ASCII`.
+
+The same vocabulary works in a [method group](../design/SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch).
+A `u8` slot can match `(=LF)` through its selected constant. An `ASCII` slot can match
+`(ESC)` through the enum's member table even when `ESC` is outside the defaults.
+See [default module selections](../design/ModuleWorlds.md#default-and-complete-public-selections).
 
 ## Make storage and access visible
 

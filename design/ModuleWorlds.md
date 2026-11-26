@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 83 · Recorded: 2026-11-25 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 84 · Recorded: 2026-11-25 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+At r84 the [ASCII vocabulary example](../CHANGELOG.md#k-ascii-vocabulary-20261125) applies the existing [default and complete public selections](#default-and-complete-public-selections) to a type with many members under [D-15](DesignAuthorityRegistry.md#d-15). Compare an omitted selector with an explicit member subset, then use another member through the selected enum type.
 
 At r83 the [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125) applies r82's family identity and extension permissions to value-refined methods under [D-10-METHOD-GROUPS](DesignAuthorityRegistry.md#d-10-method-groups). Check a receiving world with independent cold-shipment and express-service methods, then supply the intersection there. Selection uses the same permissions and actual argument evidence in either import order.
 
@@ -373,6 +375,13 @@ default export func version() -> u64 { 1u64 }
 | `import "string.cod" {..}` or `using "string.cod" {..}` | All explicitly published entries of the selected module, including named re-exports. |
 | `import "string.cod" { emitStr, emitRepr }` | The written entries, with ordinary binding, naming and extension rules. |
 | `using "./palette.cod" Color {..}` | The members of the selected type under its existing rules. |
+
+For a public enum `ASCII`, the module can write `default { ASCII { HT, LF, CR, SPACE, HASH } }`.
+A consumer's `using "ASCII.cod";` then selects the same type and member bindings as
+`using "ASCII.cod" ASCII { HT, LF, CR, SPACE, HASH };`. The complete member table remains
+available through the type. A consumer without a lexical `ESC` binding can write `ESC:ASCII`
+for that member. [Byte scanner example](../docs/IdiomaticCoD.md#ascii-members-in-a-byte-scanner) ·
+[Enum lookup](TypedEnums.md#names-and-case-matching)
 
 For example, a module can publish a symbolic variable and a symbolic procedure family under their respective kinds. The entries in its default list have the same spelling as the entries in a consumer’s list:
 

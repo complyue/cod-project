@@ -1,10 +1,12 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 269 · Recorded: 2026-11-25 · Phase: language/application co-design.
+Design revision: 270 · Recorded: 2026-11-25 · Phase: language/application co-design.
 
 ## Design authority
 
-At r269 [D-10-METHOD-GROUPS](DesignAuthorityRegistry.md#d-10-method-groups) records the [project user’s grouped-method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125) under P-740/P-741. [Named and installed groups](#grouped-method-definitions-and-value-dispatch) share typed constant and type refinements, unique-most-specific selection and [delimited method bodies](#method-arm-boundaries). The r268 public-call and installed-family requirements continue. Check an open intersection, actual-owner access, complete installed coverage and formatter round trips. General named-constant spelling is open.
+At r270 the [named-constant decision](../CHANGELOG.md#h-named-method-constants-20261125) specifies `=name` under [D-10-METHOD-GROUPS](DesignAuthorityRegistry.md#d-10-method-groups), P-740/P-741. Check a constant shadowed by a method formal, duplicate typed values and the [enum-to-backing value coercion](TypedEnums.md#using-an-enum-as-its-backing-value) in a byte slot. Public argument preparation and method ordering continue from r269.
+
+At r269 [D-10-METHOD-GROUPS](DesignAuthorityRegistry.md#d-10-method-groups) records the [project user’s grouped-method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125) under P-740/P-741. [Named and installed groups](#grouped-method-definitions-and-value-dispatch) share typed constant and type refinements, unique-most-specific selection and [delimited method bodies](#method-arm-boundaries). The r268 public-call and installed-family requirements continue. Check an open intersection, actual-owner access, complete installed coverage and formatter round trips.
 
 At r268 the [project user’s decision](../CHANGELOG.md#h-perform-family-capture-20261125) extends [D-10-FAMILY-EFFECT-REQUIREMENTS](DesignAuthorityRegistry.md#d-10-family-effect-requirements) to [handler activation and replay](#captured-values-and-call-behavior). The installed family’s outstanding symbols determine the full capture and restoration set. The stage boundary, local-supply rule and invocation ordering continue from r267.
 
@@ -698,8 +700,29 @@ member. Two otherwise identical methods differing only by such an alias are dupl
 definitions. Raw backing integers and equal codes in different nominal enums denote
 different values. A typed binder such as `name:T` retains its ordinary formal meaning.
 Matching uses the established typed value directly. It invokes no user equality, conversion
-or effect. A named compile-time constant can supply the same typed singleton restriction.
-Its general source spelling in a method head remains open. [Enum names and matching](TypedEnums.md#names-and-case-matching)
+or effect. [Enum names and matching](TypedEnums.md#names-and-case-matching)
+
+Write `=name` to match a named compile-time constant. Look up that one identifier in the
+lexical environment around the method definition, before introducing any formals of this
+method. Slot order has no effect on that lookup. An ordinary binding that shadows a constant
+must itself qualify as a compile-time constant to appear here. A call such as `=get_limit()`
+is outside this grammar. Check the constant against the slot at definition checking time.
+An enum constant supplies its declared code when the public slot has its exact backing type.
+The resulting typed value determines both applicability and duplicate method domains.
+
+For example, suppose a packet format publishes the `u8` constant `unspecified` with value
+`255u8`. The deliberate reuse of its name tests the two scopes:
+
+```cod
+func field_size(measured:u8, encoded:u8) -> u8 of {
+    (unspecified:u8, =unspecified) => unspecified;
+    (_, size:u8)                   => size
+}
+```
+
+`field_size(9u8, 255u8)` returns 9 and `field_size(9u8, 12u8)` returns 12. The first
+body reads its formal. Its second slot denotes the published constant. Replacing that slot
+with `255u8` gives the same domain, so defining both versions is a duplicate.
 
 Select the public signature and bind labels and defaults under the ordinary call rules.
 Prepare the selected arguments once in their established evaluation order and default
@@ -1325,7 +1348,7 @@ either element mode.
 
 ### Expression type conversion and assertion
 
-H-453 selects `expression : Type` for explicit conversion/type assertion. It is not a named-argument separator; declaration annotations retain their own grammar. A void target requests [explicit discard](#void-inference-and-explicit-discard). For other targets H-468/H-471 chooses the operation from its concrete types at semantic specialization. A pure numeric value-to-value pair uses [H-466 numeric conversion](ScalarUnitsAndIndexTypes.md#explicit-numeric-conversion-and-loss-warnings): warn unless losslessness is proven, permit opt-in errors, and insert no runtime conversion enforcement; actual loss/unrepresentability is undefined behavior. Other admitted type assertions follow H-467/H-470: resolve provable success/failure at compile time and check unresolved membership at runtime, throwing an unchecked mismatch. Numeric warnings and bounds-check opt-out do not disable those checks. A numeric payload inside a ref/ptr, unit-bearing type or other nominal contract does not erase that contract or turn the whole operation into a pure numeric value conversion.
+H-453 selects `expression : Type` for explicit conversion/type assertion. It is not a named-argument separator; declaration annotations retain their own grammar. A void target requests [explicit discard](#void-inference-and-explicit-discard). For other targets H-468/H-471 chooses the operation from its concrete types at semantic specialization. An integer literal or backing value with a concrete enum target uses [checked code membership](TypedEnums.md#decoding-an-integer-into-an-enum). A pure numeric value-to-value pair uses [H-466 numeric conversion](ScalarUnitsAndIndexTypes.md#explicit-numeric-conversion-and-loss-warnings): warn unless losslessness is proven, permit opt-in errors, and insert no runtime conversion enforcement; actual loss/unrepresentability is undefined behavior. Other admitted type assertions follow H-467/H-470: resolve provable success/failure at compile time and check unresolved membership at runtime, throwing an unchecked mismatch. Numeric warnings and bounds-check opt-out do not disable those checks. A numeric payload inside a ref/ptr, unit-bearing type or other nominal contract does not erase that contract or turn the whole operation into a pure numeric value conversion.
 
 Conversion produces a value through an admitted conversion; assertion checks whether an existing value/view satisfies the requested type. Once the assertion path is selected, it invokes no constructor, user conversion, payload copy, graph transfer or method-body probe to make the check pass. Its result retains the value or selected target, actual type identity, owner/locator and permitted lifetime/access. A narrowed reference view is not a new object. Ordinary initialization/passage rules still govern how the surrounding expression receives that result.
 
