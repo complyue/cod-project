@@ -217,14 +217,14 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 
 ## 8. Symbolic effects 的可组合性与带焦点的上下文计算
 
-[CoD 符号效应组合与 Comonad 重聚焦论文](../papers/ComposingEffectsAndFocusedContexts.md)把两项猜想放在同一业务中检验。普通动态绑定、`perform` 与 `behave` 的选择以及实际 owner 的存活条件沿用[已有契约](../design/SymbolicDynamicScope.md#captured-values-and-call-behavior)。下列问题留给语言与库的后续设计。
+[组合的边际成本论文](../papers/MarginalCostOfComposition.md)以质检候选模型的影子上线为例，研究独立扩展时应用作者需要改动哪些代码、掌握哪些上下文。下列路由成本与局部采样问题为这一研究提供可分别检验的条件。普通动态绑定、`perform` 与 `behave` 的选择以及实际 owner 的存活条件沿用[已有契约](../design/SymbolicDynamicScope.md#captured-values-and-call-behavior)。下列问题留给语言与库的后续设计。
 
 论文中的标量阈值和坐标遵循已确认的[值符号声明规则](../design/SymbolicDynamicScope.md#declaring-a-bits-value-symbol)。当 `T` 解析为 bits 类型时，`symbol @x:T` 是 `val symbol @x:T` 的简写。两种写法使用同一套安装、读取和作用域恢复语义。
 
 | 待讨论问题 | 用什么程序区分候选设计 |
 | --- | --- |
 | 新能力穿过无关作用域时，哪些配对可共用查找或转发，哪些需要单独的解释？ | 让两位库作者分别增加阈值标记和图块层。把兼容性检查、需要修改的声明与必须定制的行为分别列出。图块验证失败时，尝试审计与正式缺陷报告应有各自可检查的结果。 |
-| 能否把透明组合中作者需要提供的实现规模从逐对适配降为 M + N，并保住已承诺的行为？ | 用[三个 State、五个 Writer 的源码对照](../papers/examples/ComposedTileReport.md)检验同型实例的身份、两个暂存输出的联合提交及三份状态在拒绝后的更新。交换重试和发布作用域，再独立加入第九个日志。[调用模式对照](../papers/examples/ScopedTileAudit.md)单独检查回放与恢复。单列交互策略、中央分发器和生成器输入的成本；与已有模块化效果系统比较，并用 owner 替换检验拒绝条件。[命题与适用前提](../papers/ComposingEffectsAndFocusedContexts.md#additive-source-extension) |
+| 能否把透明组合中作者需要提供的实现规模从逐对适配降为 M + N，并保住已承诺的行为？ | 用[三个 State、五个 Writer 的源码对照](../papers/examples/ComposedTileReport.md)检验同型实例的身份、两个暂存输出的联合提交及三份状态在拒绝后的更新。交换重试和发布作用域，再独立加入第九个日志。[调用模式对照](../papers/examples/ScopedTileAudit.md)单独检查回放与恢复。单列交互策略、中央分发器和生成器输入的成本；与已有模块化效果系统比较，并用 owner 替换检验拒绝条件。[命题与适用前提](../papers/MarginalCostOfComposition.md#additive-source-extension) |
 | 在既有 callable 和 owner 规则下，能否给任意合格的只读局部计算提供可复用的重新聚焦接口？ | 固定输入图像和边界策略，比较按需北移、物化中间栅格、错误回放中心坐标。中心得分应分别为 15、15、0；换实际 owner 后旧视图的使用必须拒绝。 |
 | 读取能力、空间依赖范围和可见副作用应怎样分别表达？ | 改东北像素会改变中心结果，改西南像素不会。请求同一位置两次时，缓存与重算可以得到相同分数，但可能发出不同数量的标记。分别规定预取、诊断及提交所需的承诺。 |
 

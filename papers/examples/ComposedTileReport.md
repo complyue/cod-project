@@ -910,6 +910,6 @@ includes telemetry in the provisional evidence, the stage must also implement it
 publication contract.
 
 These are costs of routing repeated instances of two effect families. The paper's
-[interface/transformer matrix](../ComposingEffectsAndFocusedContexts.md#where-the-m--n-obligations-arise)
+[interface/transformer matrix](../MarginalCostOfComposition.md#where-the-m--n-obligations-arise)
 counts independently extensible *interfaces and layer constructors*. Three states and
 five writers by themselves establish neither fifteen adapters nor an asymptotic bound.

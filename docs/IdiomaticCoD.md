@@ -13,7 +13,7 @@ dependencies are identified where needed. For a compact reference to the source 
 
 ## Design authority
 
-Guide revision 16 links the [companion guide to reusable domain operations](BuildingReusableDomainOperations.md) from the pipeline example. Revision 15 illustrates the [default ASCII vocabulary](../CHANGELOG.md#k-ascii-vocabulary-20261125) and uppercase named constants. Revision 14 applies [enum backing coercion](../design/TypedEnums.md#using-an-enum-as-its-backing-value)
+Guide revision 17 links the [scoped effect composition guide](ScopedEffectComposition.md) at the integration-boundary example. Revision 16 links the [companion guide to reusable domain operations](BuildingReusableDomainOperations.md) from the pipeline example. Revision 15 illustrates the [default ASCII vocabulary](../CHANGELOG.md#k-ascii-vocabulary-20261125) and uppercase named constants. Revision 14 applies [enum backing coercion](../design/TypedEnums.md#using-an-enum-as-its-backing-value)
 to [ASCII members in a byte scanner](#ascii-members-in-a-byte-scanner). Revision 13 applies the [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125)
 to [tariff dispatch](#put-type-and-value-specializations-in-one-method-group) and [method arm boundaries](#use-canonical-source-form).
 It retains revision 12's [fixed receiver binding](../CHANGELOG.md#h-fixed-self-binding-20261125) in the member examples. Revision 11 applies the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) to direct calls and borrowed results. It continues the revision 10 guidance on the [confirmed OO source rules](../design/DomainLanguageDesign.md#product-storage-inheritance)
@@ -721,6 +721,8 @@ Prefer an ordinary named function or procedure when the program wants one implem
 that should obey the active policy can select the vocabulary identity with `symbol from` and call
 `behave` or `perform`. Ordinary callers rarely need `using proc` or `import proc`. A direct call to
 a lexically selected family would bypass an active replacement for that operation.
+
+The companion guide puts this decision into practice by routing two detectors' requests and tracing a missing or misplaced handler. [Facing Complexity with Scoped Effect Composition](ScopedEffectComposition.md)
 
 One reason to select the family is to install a complete policy for downstream code. Suppose a
 rating engine calls `behave @quote(shipment)`. The carrier package supplies methods for several

@@ -6,7 +6,7 @@ policies whose nesting changes the public report, see [Composing retry and publi
 A tile records one inspection attempt before it is validated. A caller can request an
 audit addressed to the installation-time destination, or to the destination active in the
 tile. Either attempt remains observable if validation fails. This is the small source
-comparison for the [additive-extension claim](../ComposingEffectsAndFocusedContexts.md#additive-source-extension).
+comparison for the [additive-extension claim](../MarginalCostOfComposition.md#additive-source-extension).
 
 ## Contract and observations
 

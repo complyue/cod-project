@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Study the marginal cost of composition and introduce the scoped-effects guide
+
+<a id="k-marginal-cost-and-scoped-effects-guide-20261126"></a>
+**K-MARGINAL-COST-AND-SCOPED-EFFECTS-GUIDE-20261126.** The project user requested initial paper and product-guide drafts on the engineering cost and local reasoning required for complex composition. The [paper](papers/MarginalCostOfComposition.md) retains the routing and Store arguments from the [prior revision](https://github.com/complyue/cod-project/blob/a229aca12306e93f83f99f2bc76de0add207151b/papers/ComposingEffectsAndFocusedContexts.md) and applies them to independently adding a detector and a shadow deployment. The [guide](docs/ScopedEffectComposition.md) exercises a shared vocabulary, lexical direct calls, current dynamic invocation and installation-time replay. The audit distinguishes rejection requests from issued commands. [D-DOC-IDIOMATICS](design/DesignAuthorityRegistry.md#d-doc-idiomatics) continues the guide scope. Comparative implementation and observed reader effort are future work.
+
 ## 2026-11-26 — Prepare a current symbol’s selected target and owner together
 
 <a id="k-seed-current-symbol-argument-20261126"></a>
@@ -771,7 +776,7 @@
 ## 2026-11-24 — Frame effect composition and focused computation as language questions
 
 <a id="k-composition-presentation-20261124"></a>
-**K-COMPOSITION-PRESENTATION-20261124.** The [paper](papers/ComposingEffectsAndFocusedContexts.md) states its conditional bound on authored wiring and its Store reference semantics. The [applications](papers/examples/ComposedTileReport.md#application-end-in-cod-and-haskell) name both staging policies and show ordinary void procedures completing naturally under the user's clarified rule. The [engineering checks](papers/examples/ComposedTileReport.md#engineering-checks) compare the same observations separately. Previous text: `da12f768a12bd6dec6794820273feda0d3d9fc21:papers/examples/ComposedTileReport.md`.
+**K-COMPOSITION-PRESENTATION-20261124.** The [paper](papers/MarginalCostOfComposition.md) states its conditional bound on authored wiring and its Store reference semantics. The [applications](papers/examples/ComposedTileReport.md#application-end-in-cod-and-haskell) name both staging policies and show ordinary void procedures completing naturally under the user's clarified rule. The [engineering checks](papers/examples/ComposedTileReport.md#engineering-checks) compare the same observations separately. Previous text: `da12f768a12bd6dec6794820273feda0d3d9fc21:papers/examples/ComposedTileReport.md`.
 
 ## 2026-11-24 — Recover independent seed schema payload checks
 
@@ -786,7 +791,7 @@
 ## 2026-11-24 — Compare ordinary tile operations over scoped state
 
 <a id="k-tile-scoped-state-and-traversal-20261124"></a>
-**K-TILE-SCOPED-STATE-AND-TRAVERSAL-20261124.** The [tile study](papers/examples/ComposedTileReport.md#cod) implements the eight business operations as ordinary CoD procedures over scoped reference bindings. Its [case traversal](papers/examples/ComposedTileReport.md#cod-installation-and-check) matches the two inner Haskell `forM_` loops. The [paper](papers/ComposingEffectsAndFocusedContexts.md#compare-the-operations-the-inspector-can-request) distinguishes state selection from replacing an operation. The prior comparison is at `154e2634ac0870f40756999c7b70e854d4e96adc:papers/examples/ComposedTileReport.md`.
+**K-TILE-SCOPED-STATE-AND-TRAVERSAL-20261124.** The [tile study](papers/examples/ComposedTileReport.md#cod) implements the eight business operations as ordinary CoD procedures over scoped reference bindings. Its [case traversal](papers/examples/ComposedTileReport.md#cod-installation-and-check) matches the two inner Haskell `forM_` loops. The [paper](papers/MarginalCostOfComposition.md#compare-the-operations-the-inspector-can-request) distinguishes state selection from replacing an operation. The prior comparison is at `154e2634ac0870f40756999c7b70e854d4e96adc:papers/examples/ComposedTileReport.md`.
 
 ## 2026-11-24 — Retain the defining symbol name on a binder collision
 
@@ -806,7 +811,7 @@
 ## 2026-11-24 — Show the tile inspector's application code in both languages
 
 <a id="k-tile-application-comparison-20261124"></a>
-**K-TILE-APPLICATION-COMPARISON-20261124.** The [paper](papers/ComposingEffectsAndFocusedContexts.md#compare-the-operations-the-inspector-can-request) shows the CoD, `mtl` and labeled `effectful` expressions that compose retry and staging. The [worked example](papers/examples/ComposedTileReport.md#application-end-in-cod-and-haskell) checks the same twelve inputs and nine observations with each assembly. The previous presentation is at `bc720b26c06d4389f16cad7eb4f1975f094b81f1:papers/examples/ComposedTileReport.md`.
+**K-TILE-APPLICATION-COMPARISON-20261124.** The [paper](papers/MarginalCostOfComposition.md#compare-the-operations-the-inspector-can-request) shows the CoD, `mtl` and labeled `effectful` expressions that compose retry and staging. The [worked example](papers/examples/ComposedTileReport.md#application-end-in-cod-and-haskell) checks the same twelve inputs and nine observations with each assembly. The previous presentation is at `bc720b26c06d4389f16cad7eb4f1975f094b81f1:papers/examples/ComposedTileReport.md`.
 
 ## 2026-11-24 — Check protected symbol names at declaration
 
@@ -821,7 +826,7 @@
 ## 2026-11-24 — Compare named business operations in Haskell and CoD
 
 <a id="k-ports-symbolic-procs-20261124"></a>
-**K-PORTS-SYMBOLIC-PROCS-20261124.** The [tile study](papers/examples/ComposedTileReport.md#which-report-is-correct) pairs Haskell `Ports m` over the actual transformer stack and labeled handlers with eight installed CoD symbolic procedures. Only the two provisional writer operations are reinterpreted under staging. A nested rejection tests that an accepted child forwards to its enclosing stage. The [paper](papers/ComposingEffectsAndFocusedContexts.md#compare-the-operations-the-inspector-can-request) distinguishes an operation interface from access to writable storage and includes the installation work on both sides.
+**K-PORTS-SYMBOLIC-PROCS-20261124.** The [tile study](papers/examples/ComposedTileReport.md#which-report-is-correct) pairs Haskell `Ports m` over the actual transformer stack and labeled handlers with eight installed CoD symbolic procedures. Only the two provisional writer operations are reinterpreted under staging. A nested rejection tests that an accepted child forwards to its enclosing stage. The [paper](papers/MarginalCostOfComposition.md#compare-the-operations-the-inspector-can-request) distinguishes an operation interface from access to writable storage and includes the installation work on both sides.
 
 ## 2026-11-24 — Publish mixed value and reference effects together
 
@@ -874,7 +879,7 @@
 ## 2026-11-24 — Make the regional HLVM and observable effect composition the paper subjects
 
 <a id="k-software-defined-hlvm-composition-20261124"></a>
-**K-SOFTWARE-DEFINED-HLVM-COMPOSITION-20261124.** The project user identified the central concept of [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) as a Software Defined HLVM whose instructions are relocatable functor objects. The revision develops the native executor, handler, reopen and cost hypotheses under the [regional platform charter](design/RegionalSemanticPlatformCharter.md), with graph editing as an authoring case. The user also distinguished invocation from composition in the [raster paper](papers/ComposingEffectsAndFocusedContexts.md#composing-retry-and-publication). [Three paper programs](papers/examples/ComposedTileReport.md) now compare the same retry and publication scopes in opposite orders. The traces are derived expectations. Both revisions concern research examples.
+**K-SOFTWARE-DEFINED-HLVM-COMPOSITION-20261124.** The project user identified the central concept of [*Algebraic Effects Is All You Need*](papers/AlgebraicEffectsIsAllYouNeed.md) as a Software Defined HLVM whose instructions are relocatable functor objects. The revision develops the native executor, handler, reopen and cost hypotheses under the [regional platform charter](design/RegionalSemanticPlatformCharter.md), with graph editing as an authoring case. The user also distinguished invocation from composition in the [raster paper](papers/MarginalCostOfComposition.md#composing-retry-and-publication). [Three paper programs](papers/examples/ComposedTileReport.md) now compare the same retry and publication scopes in opposite orders. The traces are derived expectations. Both revisions concern research examples.
 
 ## 2026-11-24 — Install a local single-method family when an effect supplies a body
 
@@ -892,7 +897,7 @@
 ## 2026-11-24 — Test the additive source-extension claim on matched effect programs
 
 <a id="k-additive-effect-sources-20261124"></a>
-**K-ADDITIVE-EFFECT-SOURCES-20261124.** At the user's request the [raster paper](papers/ComposingEffectsAndFocusedContexts.md#additive-source-extension) sharpens the M × N to M + N conjecture at `eaadae7073f1d0285ae7ce19a749da189b706413:papers/ComposingEffectsAndFocusedContexts.md`. It bounds authored source for a transparent fragment, identifies independent policy and wiring costs, and compares prior lifting and handler mechanisms. [Matched source](papers/examples/ScopedTileAudit.md) contrasts CoD, mtl and effectful on threshold selection and audited tile failure. These are worked language-design comparisons.
+**K-ADDITIVE-EFFECT-SOURCES-20261124.** At the user's request the [raster paper](papers/MarginalCostOfComposition.md#additive-source-extension) sharpens the M × N to M + N conjecture at `eaadae7073f1d0285ae7ce19a749da189b706413:papers/ComposingEffectsAndFocusedContexts.md`. It bounds authored source for a transparent fragment, identifies independent policy and wiring costs, and compares prior lifting and handler mechanisms. [Matched source](papers/examples/ScopedTileAudit.md) contrasts CoD, mtl and effectful on threshold selection and audited tile failure. These are worked language-design comparisons.
 
 ## 2026-11-24 — Record the seed’s delivered module diagnostic coverage
 
@@ -917,7 +922,7 @@
 ## 2026-11-24 — Study effect composition and focused raster computations
 
 <a id="k-effects-focused-contexts-20261124"></a>
-**K-EFFECTS-FOCUSED-CONTEXTS-20261124.** The user asked for a workload that exposes the M × N lifting problem and tests a possible CoD answer to comonadic programming. The [raster paper](papers/ComposingEffectsAndFocusedContexts.md) extends the portfolio at `6a397519f591b0a2d6bde7736545c0b81d667504:papers/README.md`. It derives the small mtl instance matrix, tests independently added flagging and tile handling, and compares scoped CoD reads with a focused Store on a stable image. [Open questions](docs/DesignTopics.md#effect-composition-and-focused-contexts) cover forwarding, reusable refocusing and spatial dependencies. The study adds no language decision or implementation authorization.
+**K-EFFECTS-FOCUSED-CONTEXTS-20261124.** The user asked for a workload that exposes the M × N lifting problem and tests a possible CoD answer to comonadic programming. The [raster paper](papers/MarginalCostOfComposition.md) extends the portfolio at `6a397519f591b0a2d6bde7736545c0b81d667504:papers/README.md`. It derives the small mtl instance matrix, tests independently added flagging and tile handling, and compares scoped CoD reads with a focused Store on a stable image. [Open questions](docs/DesignTopics.md#effect-composition-and-focused-contexts) cover forwarding, reusable refocusing and spatial dependencies. The study adds no language decision or implementation authorization.
 
 ## 2026-11-24 — Check a case on a sum received into an arm local
 

@@ -1,33 +1,45 @@
 <a id="extending-an-effect-vocabulary-and-refocusing-a-raster-computation"></a>
+<a id="symbolic-effect-composition-and-comonadic-refocusing-in-cod"></a>
 
-# Symbolic Effect Composition and Comonadic Refocusing in CoD
+# The Marginal Cost of Composition — Independent Extension and Local Reasoning in CoD
+
+*Working paper · companion developer guide: [Facing Complexity with Scoped Effect Composition](../docs/ScopedEffectComposition.md).*
 
 ## Abstract
 
-How much code must independent authors write when they can add both an effect and a scope
-through which existing effects must pass? When can a computation that reads its surroundings
-be reused at a different focus? We study these questions together for CoD's typed symbolic
-bindings. In both cases, composition must preserve what a caller can observe.
+A production inspection line already works. What must its application author change, and whose code must they understand, to run a candidate detector beside it? We study the *marginal cost* of adding an independently developed feature to a functioning composition. We count changes to domain rules, scopes and integration code, and identify the facts an author needs to predict an observation. CoD offers shared vocabulary modules, lexically identified operations, dynamically scoped interpretations and statically checked requirements. For bounded definitions of $M$ operations and $N$ transparent scopes, the routing argument gives an $O(M+N)$ bound on authored source. $K$ independent, bounded interaction rules add $O(K)$. A separate Store argument establishes when a detector can reuse or recompute a sampled field without changing its values. Neither calculation measures developer effort. A shadow rollout below gives both arguments a common job and specifies what an author study would have to measure.
 
-For $M$ independently named operations and $N$ transparent scopes, we give a conditional
-$O(M + N)$ bound on authored routing code. The construction uses nominal lookup and restoration,
-bounded definitions and statically checked, live binding targets. With $K$ independent,
-bounded interaction rules the bound is $O(M + N + K)$. Arbitrary policies can still require
-a separate decision for each of the $M × N$ pairs. Three independently authored Haskell
-transformers expose the integration cost. One fixed stack uses three native instances and
-three cross-layer instances. Supporting all six orders requires six distinct cross-layer
-instances in total. A separate retry and selective-publication experiment compares CoD,
-`mtl` and labeled `effectful`.
+## The change request
 
-A defect viewer and a batch job share a detector that can read either raw pixels or a
-horizontal filter's results. The detector must be able to read its input again at a neighbour.
-We compare how its author expresses the rule and how the application connects the stages
-in CoD, Haskell and C++20. A synchronous CoD `here` body can supply either input under a
-locally changed focus. Caching the filter preserves scores on a stable frame with total,
-observationally pure rules. It can change the report if evaluating a rule itself publishes
-an event. The appendix proves the value equivalence in the Store model. These are design
-results for the stated fragment. The interface for retaining a derived CoD view and the
-conditions for reordering effectful rules remain open.
+> Run the candidate on the same exposure as the production detector. Record disagreements. Only the production detector may cause equipment to reject a part.
+
+The detector team knows the image rule. The deployment team owns the equipment and the shadow log. Both select the same nominal request from an inspection vocabulary. Give the detectors one acquired sample of 80 for part 42. A production threshold of 90 passes it. A candidate threshold of 70 requests rejection. With a recording adapter at each exit, the expected observations are **one acquisition, zero production reject commands, one shadow “would reject” entry**. The [developer exercise](../docs/ScopedEffectComposition.md#wire-production-and-shadow-to-one-acquisition) derives that trace. Removing the shadow installation alone leaves a compatible production handler and changes the trace to **1 / 1 / 0**. This is a small test of a large promise: type-correct wiring can still implement the wrong deployment.
+
+Two teams now make independent changes. One adds a neighbourhood detector that explains a finding and can request manual inspection. The other adds shadow execution to an existing pipeline. Sharing an acquired frame and its calibration lets each model read the same evidence. An extra lookup across a tile boundary must not spend another exposure. A physical retry *does* spend one. Sending a manual-inspection request from the shadow run to a real work-order system requires a product decision. Charge that decision to the composition. A scheme that makes every unrelated tile or camera helper forward the new request charges the feature for considerably more.
+
+## What the application author has to know
+
+| Author | A sufficient interface for this change | Evidence that would undermine the claim |
+| --- | --- | --- |
+| Detector author | The sampling contract identifies the frame revision, focus and boundary policy. The vocabulary states what a request means. | To implement a new rule, the author must inspect the camera retry stack, the device driver or the list of shadow deployments. |
+| Application integrator | The production and shadow entries state who supplies each effect, what it may reach, and which observations survive failure. | To predict whether a work order opens, the integrator must read unadvertised dependencies inside an otherwise compatible handler. |
+| Library author | A transparent layer admits its body once, preserves required resources and restores relevant bindings. Exceptional policies identify their affected operations. | A new operation requires adapters in every old transparent layer or equivalent edits to a central registry. |
+
+The [routing argument](#counting-the-things-authors-must-supply) explains why some of that knowledge can remain local. Fix an operation's nominal identity and the bindings its interpretation actually depends on. Passing it through a once-only scope that preserves those bindings, target lifetimes and observable resources gives its author the same interpretation. The shared lookup rule covers another transparent scope by the same reasoning. A retry that invokes the body twice, a handler that writes to shared state, and a deployment that changes the meaning of rejection each require their own account. Counting their independent policies explicitly prevents a short client program from hiding the cost in its assembler.
+
+The [raster fixture](#run-the-same-detector-on-raw-pixels-and-on-a-filtered-image) asks what the detector author can assume at a neighbour. The middle cell scores 6 on the raw field and 15 on the horizontally filtered field. On a stable frame with pure sampling, a cached and a recomputed filtered field agree on those scores. An audit promised for each actual evaluation can distinguish the schedules. Thus an application may share the sample contract across models while keeping physical exposure, rule evaluation, proposed rejection and issued command as separate observations. The [Store proof](#appendix-a) justifies the value substitution for its stated fragment.
+
+## Lexical identity, dynamic interpretation, static checking
+
+A dedicated vocabulary module can publish a typed procedure symbol before any implementation is installed. The detector can select that identity with `symbol from`. The integration can select or supply a method family and install it for an execution scope. Independently declaring a symbol with the same spelling and signature gives a different identity. [Shared identities](../design/ModuleWorlds.md#vocabulary-modules-establish-shared-identities) · [Selecting a procedure family](../design/ModuleWorlds.md#selecting-a-symbolic-procedure-family)
+
+For a **procedure symbol**, a bare `@op(x)` calls the lexically, statically selected family, with ordinary method dispatch inside it. A dynamic replacement for that symbol cannot intercept the bare call. Both `behave @op(x)` and `perform @op(x)` call the currently installed handler. `behave` uses the dynamic bindings effective at the call. `perform` replays the required bindings captured **at that installation**. The same source definition installed twice can capture different destinations. Restoring a binding on exit preserves writes already made through it. A captured reference still depends on its actual owner. The pre-2.0 checking contract uses the union of outstanding requirements in the selected family after local supply is accounted for. A missing required installation is grounds for rejection. The choice between two available, compatible business interpretations remains visible in the trace. [Call forms](../design/SymbolicDynamicScope.md#lexical-selection-installation-and-invocation) · [Checking boundary](../design/SymbolicDynamicScope.md#family-wide-effect-requirements-before-20) · [Audit trace](examples/ScopedTileAudit.md#contract-and-observations)
+
+## Dependency injection, inversion of control and aspects
+
+A composition root in a dependency-injection design can supply a camera, a reporting capability and a device adapter. Inversion of control also covers the framework's decision about *when* to call the detector. The engineering comparison concerns how a deployment changes one interpretation down a call chain, how the program checks the supply, and how much wiring each author must inspect. Compile-time DI and statically typed dynamic binding both have precedents. Use an idiomatic explicit-capability or labeled-effect implementation with scoped override as a baseline. Include its setup, and count CoD's registrations and required installations on the same terms. [Fowler on dependency injection and IoC](https://martinfowler.com/articles/injection.html) · [Dagger compile-time validation](https://dagger.dev/dev-guide/basic-usage) · [Lewis et al., *Implicit Parameters: Dynamic Scoping with Static Types*](https://launchbury.blog/wp-content/uploads/2019/01/implicit-paramters.pdf)
+
+For aspect-oriented programming, the vocabulary offers an explicit **domain join point**. “Reject requested” belongs at the detector's policy boundary. “Reject command issued” belongs at the device adapter. An audit can interpret the first operation across independently written detectors and see one request in the shadow fixture. An audit of the second sees zero commands. A direct driver call bypasses the request boundary. Claiming coverage of every device command therefore requires control over the actual driver entry points. Wrapping audit and retry also requires a delegation and ordering contract. A bounded `here` body can supply the next step. Calling `behave @op` again from a replacement can re-enter it, and `perform` replays installation-time bindings. Neither verb implicitly advances an advice chain. Compare the cost of providing and maintaining this explicit boundary with AspectJ pointcuts and with typed join point interfaces that support explicit announcement. [AspectJ join points and advice](https://eclipse.dev/aspectj/doc/latest/progguide/semantics.html) · [Bodden, Tanter and Inostroza, *Join Point Interfaces*](https://www.bodden.de/pubs/bti13jpi.pdf)
 
 ## The inspection that both extensions must preserve
 
@@ -797,11 +809,9 @@ the two numerical implementations.
 | Which effectful kernels can share the pure composition law? | Specify observations first. Count both stage evaluations and committed flags. An equality that preserves the score and changes a promised diagnostic trace fails for that interface. |
 | What does the checker need to know about a neighbourhood? | Show that the footprint covers the northeast dependency, handles the tile seam and respects the boundary policy. Decide separately if conservative over-approximation is acceptable for prefetch, permission checking or invalidation. |
 
-A scope can pass an independently named operation through when it has no policy for that
-operation. The viewer shows another form of reuse. A local detector can read different fields through one
-synchronous sampling contract. To justify new library machinery, a
-proposal must say what further program it admits, which owner keeps its input valid and
-which observations a new evaluation schedule preserves.
+The first application study should freeze the detector interface, then give one author the neighbourhood rule and another the shadow deployment. Combine their changes in both orders. For each role, record initial setup, incremental edits, provider installations, policy decisions, generated inputs and the old modules opened to understand the change. Run the same release sequence with explicit capabilities and a labeled-effect implementation; for the audit boundary also compare typed join point interfaces. An ordinary detector may cost the same in each. Give a reader the public interfaces and wiring, ask for the three expected counts, and time a correct diagnosis of a deliberately misrouted request. Report prediction errors and rework separately from source counts.
+
+The shadow observations in this draft are derived for the stated fixture. Comparable implementations, participant measurements and a full evaluation of aspect coverage belong to the next revision. The conditional routing bound and the pure Store derivation below establish narrower properties that those experiments can use as controls.
 
 <a id="appendix-a"></a>
 
