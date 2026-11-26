@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Retire the rewritten seed’s inert shared-emission switch
+
+<a id="h-seed-shared-switch-retirement-20261126"></a>
+**H-SEED-SHARED-SWITCH-RETIREMENT-20261126.** Asked whether to retain shared emission as a seed requirement if the rewritten translator has no supported input on which the switch changes emission, the project user selected “Drop the inert seed switch. Keep the old implementation in Git.” The [post-rewrite cleanup](#h-post-rewrite-cleanup-20261126) covers the option, its forwarding and its callers. The [old generic relay comparison](#k-booter-one-build-20261124) remains evidence for the earlier implementation. The [build rule](AGENTS.md#build-and-command-execution) continues single-build acceptance for the booter. The decision applies to the rewritten seed.
+
 ## 2026-11-26 — Clean up both bootstrap compilers after their rewrites
 
 <a id="h-post-rewrite-cleanup-20261126"></a>

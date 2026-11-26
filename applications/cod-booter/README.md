@@ -195,7 +195,7 @@ make -C applications/cod-booter COD_SEED=/path/to/ready-seed/bin/cod-seed
 ./build-cod-booter/deferred-release
 ```
 
-The program prints `1` on three lines. Use `TOOLCHAIN` for a ready toolchain prefix. The runtime and LLVM service builds accept `CLANG` and `LLVM_AR`, and the LLVM service also accepts `LLVM_CONFIG`. The booter accepts `COD_SEED`, `CLANG`, `LLVM_CONFIG`, `COD_RUNTIME_ARCHIVE` and `COD_LLVM_ARCHIVE`. Use a separate `OUT` for each build you run concurrently or want to retain, such as `OUT=../../build-cod-booter-shared COD_SEED_FLAGS=--no-specialize`. Make interprets relative paths from the selected build directory. Use paths without whitespace.
+The program prints `1` on three lines. Use `TOOLCHAIN` for a ready toolchain prefix. The runtime and LLVM service builds accept `CLANG` and `LLVM_AR`, and the LLVM service also accepts `LLVM_CONFIG`. The booter accepts `COD_SEED`, `CLANG`, `LLVM_CONFIG`, `COD_RUNTIME_ARCHIVE` and `COD_LLVM_ARCHIVE`. Use a separate `OUT` for each build you run concurrently or want to retain. Make interprets relative paths from the selected build directory. Use paths without whitespace.
 
 The scanner and parser use [the bundled ASCII vocabulary](../../docs/IdiomaticCoD.md#ascii-members-in-a-byte-scanner) for character codes. The booter's declaration and C provider commands resolve nested enum default selections, including the five free ASCII members. The generated C provider header exposes the complete 128-member table. Imported enum formals and assertions still encounter the current booter object profile. Unsuffixed integer decoding in booter source remains open.
 
