@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Apply the completed lexer predicate to two loans and a string literal
+
+<a id="k-seed-lexer-literal-wrappers-20261125"></a>
+**K-SEED-LEXER-LITERAL-WRAPPERS-20261125.** The [architecture review](design/ImplementationArchitecture.md#forwarding-two-loans-and-a-string-literal) continues D-ARCH-REVIEW r198→199 under the [completed-callee decision](#h-completed-callee-behavior-20261125) and [UTF-8 text rule](#h-utf8-native-text-20261121). At `9f714ef8:applications/cod-booter/src/Lexer.cod`, direct wrappers can consume the finished `word_is` contract in the existing second batch. Ordinary preparation supplies the literal's owner, and an entered callee's failure retains its runtime origin.
+
 ## 2026-11-25 — Complete read-only lexer calls from settled exits
 
 <a id="k-seed-readonly-lexer-contracts-20261125"></a>
