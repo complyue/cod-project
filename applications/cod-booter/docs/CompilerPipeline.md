@@ -1,8 +1,10 @@
 # Compiler modes, selectable stages and persistent stage reuse
 
-Revision 8 · 2026-11-25 · Compiler modes and stage controls confirmed. Persistent artifact design remains a planning draft.
+Revision 9 · 2026-11-26 · Compiler modes and stage controls confirmed. Persistent artifact design remains a planning draft.
 
 ## Design authority
+
+At r9 the [production CLI decision](../../../CHANGELOG.md#h-cfe-output-directory-20261126) specifies the command and output destination for the optimizing build under [D-20-COMPILER-MODES](../../../design/DesignAuthorityRegistry.md#d-20-compiler-modes), C-80/P-746/P-747. The release milestones and execution behavior carry forward from r8.
 
 At r8 [D-20-COMPILER-MODES](../../../design/DesignAuthorityRegistry.md#d-20-compiler-modes) covers [default execution and optimized builds](#default-execution-and-optimized-builds). The [project user’s decision](../../../CHANGELOG.md#h-default-run-and-optimized-build-20261125) sets the compilation and runtime trade-off and release scope through C-80/P-746/P-747. It continues r7’s independent stage controls and leaves backend optimization choices open.
 
@@ -21,11 +23,11 @@ At r8 [D-20-COMPILER-MODES](../../../design/DesignAuthorityRegistry.md#d-20-comp
 | --- | --- | --- |
 | Default `cod` invocation on a program entry | Compile and run it immediately, as with `go run`. Leave no executable as a user output. | Aim for Go-like fast compilation and machine code with moderate runtime performance in the seed, booter and first release of `e-wrks/cod`. |
 | Default seed bootstrap build | Produce the `cod-booter` executable and keep it for subsequent invocations. | Use the fast compilation path. The seed build can request intermediate bitcode and provider files and link them into the tool. |
-| Explicit optimizing compilation | Write an executable for later use. Building it leaves the program unexecuted by default. | Spend more compile time on high-quality machine code. Experimental in the first release of `e-wrks/cod`, formally supported in 2.0. |
+| `cfe` (Compile For Ever) in `e-wrks/cod` | Build an optimized executable for later use. Save it in `~/.local/bin/` by default. The user can set the output directory in `~/.cod/config.yaml`. | Spend more compile time on high-quality machine code. Experimental in the first release of `e-wrks/cod`, formally supported in 2.0. |
 
 The ordinary edit–run cycle gives priority to the time from invoking the compiler to entering the program. Any executable needed internally for a run is a compiler implementation detail. Explicit requests for a binary, object, bitcode or provider files have their own output contract. The seed uses the fast path to build its persistent executable. A parse-only or check-only request ends at its selected operation.
 
-Fast and optimizing compilation preserve the program’s observable semantics and applicable runtime checks. For acceptance, use an entry that prints a recognizable value. An ordinary `cod` invocation prints it once and leaves no new or replaced user executable. Verify the seed default separately by invoking the resulting `cod-booter` in a subsequent process. An optimizing build delivers an executable with no entry effect during the build. Launching that executable then prints the same value. A compilation failure prevents launch. Go-like compilation speed and moderate runtime performance are qualitative design targets. Backend settings and numeric targets remain open.
+Fast and optimizing compilation preserve the program’s observable semantics and applicable runtime checks. For acceptance, use an entry that prints a recognizable value. An ordinary `cod` invocation prints it once and leaves no new or replaced user executable. Verify the seed default separately by invoking the resulting `cod-booter` in a subsequent process. Run `cfe` with the output directory unset and verify the executable appears in `~/.local/bin/`. Set the output directory to another location in `~/.cod/config.yaml` and build again. Verify the new executable appears in the configured directory. In both cases the build leaves the entry unexecuted. Launching either executable then prints the same value. A compilation failure prevents launch. Go-like compilation speed and moderate runtime performance are qualitative design targets. Backend settings and numeric targets remain open.
 
 ## Independently selectable compiler operations
 
