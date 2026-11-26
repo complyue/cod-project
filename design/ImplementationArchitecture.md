@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r219 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r218 for [statement calls with an omitted result](#statement-calls-with-an-omitted-result). The [review](../CHANGELOG.md#k-seed-omitted-statement-result-20261126) applies D-24-TAIL and D-10-DISCARD to the existing extraction and emission boundary.
+
 At r218 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r217 under the [replacement pipeline decision](../CHANGELOG.md#h-compiler-pipeline-replacement-20261125). The [recursive allocator review](../CHANGELOG.md#k-seed-recursive-allocator-20261126) applies P-682/P-683 to capability completion and the separate empty-replay prerequisite.
 
 At r217 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r216 for [borrowing CLI entry inputs in a catalog callback](#borrowing-cli-entry-inputs-in-a-catalog-callback). The [review](../CHANGELOG.md#k-seed-cli-input-loans-20261126) applies [D-07-UTF8](DesignAuthorityRegistry.md#d-07-utf8) and [D-20-C-HANDLES](DesignAuthorityRegistry.md#d-20-c-handles) at the C entry and its synchronous forwarding call.
@@ -783,6 +785,14 @@ A recursive procedure can forward a writable array under owner `G` to itself, th
 After body extraction, start at the selected bodies and input-owner ordinals used by actual allocations. Follow the recorded call and installation edges backwards through their prepared owner substitutions. Expand each reached `(body, input owner ordinal)` once. A prepared lexical or region allocator supplies that site locally. Keep its identity for emission. Retain the site of a missing substitution for validation against the completed demands. The traversal takes sealed graph records and has no operation to revisit source or schedule a body. A later pass reads the completed roles, checks each demanded actual and supplies the existing signatures, handler frames and call operands.
 
 The empty-replay check follows body dependencies independently, including installations and calls supplied by local allocators. A publishing installation can use the empty layout only when its entire admitted closure is represented and reaches neither an incoming symbol nor an open boundary. Preserve the existing native lifecycle and callback limits. Verify the linked growth result and the actual capability operands around a cycle that exchanges two roles. A missing demanded capability or an opaque dependency in a recursive handler must retain the located failure and prior outputs. The production recursive handler has its own eligibility check.
+
+#### Statement calls with an omitted result
+
+In [`bind_graph_module`](../applications/cod-booter/src/ModuleGraph.cod), `prepare_native_operand_types(...)` is an intermediate statement. The selected [ordinary `func`](../applications/cod-booter/src/DeclarationTypes.cod) has no result annotation. Its final `for` writes to `work` on matching iterations and can finish with no payload, including when `used` is zero. The following interface check uses the updated `work` only after the call completes normally.
+
+Extract a pending call when selection, operand preparation and extraction of the following statements are independent of its result. Record the selected body, site, ordered operands, owner substitutions and normal and abrupt continuations. During the callee’s one extraction, collect its own return and tail evidence under the [body-form rules](CallableResultInference.md#results-of-proc-func-and-here-bodies). A later pass seals one result per selected body and interpretation. This first profile accepts normal no-value evidence or a reached bare return, with all other result evidence compatible. An ordinary `func` value tail, a payload return, a throw-only definition without an established contract, or a dependency on another omitted result lies outside it. An ignored result at the caller supplies no evidence for `void`.
+
+Application reads the sealed result and constructs the final call operation and ABI. The pending record has no provisional type or fallthrough fact. Preserve operand failure before entry, writes before an entered failure, cleanup, and the normal successor. Check those observations on a linked range call and confirm the result is independent of declaration order. Keep a result-sensitive use and an unresolved result located before output publication. The unmodified booter call establishes whether translation passes the original site.
 
 #### Extracting the path-key callback
 
