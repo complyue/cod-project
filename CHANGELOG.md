@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Record delegated PR authorization and commission the ASCII scanner path
+
+<a id="h-pr-route-and-ascii-delivery-20261125"></a>
+**H-PR-ROUTE-AND-ASCII-DELIVERY-20261125.** In the [CoD design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user stated “PR#1 我授权另一智能体合入的” and “原则上 PR 是正规途径”, and requested the complete ASCII vocabulary, both compiler paths and the scanner migration. [PR #1](https://github.com/complyue/cod-project/pull/1) merged at [9a95bc01](https://github.com/complyue/cod-project/commit/9a95bc01c72380d67fdf10868d9556d32e1eb160). Its design propositions retain their original [named constant](#h-named-method-constants-20261125), [enum conversion](#h-enum-backing-coercion-20261125) and [ASCII vocabulary](#k-ascii-vocabulary-20261125) records. This confirmation covers the delegated merge and the stated delivery. [Architecture r209→210](design/ImplementationArchitecture.md#pull-request-authorization-and-design-evidence) clarifies the publication route. [ASCII acceptance](design/ImplementationArchitecture.md#delivering-ascii-to-the-booter-scanner) connects D-15-DEFAULT-EXPORTS r74→84 coverage to [P-692/P-693](design/DesignAuthorityRegistry.md#d-15-default-exports) and D-07-ENUM r8. Registry r1309→1310. Compiler delivery is tracked by mainline.
+
 ## 2026-11-25 — Show a full ASCII vocabulary with a small default selection
 
 <a id="k-ascii-vocabulary-20261125"></a>
