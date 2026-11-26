@@ -1,2 +1,0 @@
-symbol @step : proc() -> i64;
-mixin "./source.cod" proc @p as @step with { @missing as @x; };

@@ -1,2 +1,0 @@
-proc read() -> i64 { 1 }
-perform read();

@@ -1,7 +1,0 @@
-using symbol "std:io" @print;
-import "./vocabulary.cod" proc @p;
-symbol from "./vocabulary.cod" @x;
-
-proc @p() -> i64 { return 900 + @x }
-export proc @p;
-behave @print(1001);

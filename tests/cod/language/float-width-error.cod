@@ -1,2 +1,0 @@
-function read(x:f32) -> f32 { return x }
-read(1.0);

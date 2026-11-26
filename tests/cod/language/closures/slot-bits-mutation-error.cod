@@ -1,5 +1,0 @@
-region State { number:u64; }
-own region state:State <- make State(capacity = 128u64) { number <- 3u64 };
-val var number:const u64 -> state.number;
-func callback = func [number] () -> void { number <- 4u64; {} };
-callback();

@@ -236,7 +236,7 @@ Code sharing must preserve selected semantic views, concrete types, actual owner
 
 ## Implementation status and review boundaries
 
-Current supported and missing behavior, implementation entry points and validation commands are maintained in the [source capability reference](../tests/cod/language/README.md). Language requirements in this document remain subject to their recorded qualification; examples specify acceptance targets, not evidence that every target is implemented.
+Earlier compiler support, implementation entry points and validation commands are recorded in the [archived source capability reference](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/tests/cod/language/README.md). Language requirements in this document remain subject to their recorded qualification; examples specify acceptance targets, not evidence that every target is implemented.
 
 H-417 requires one statically provable owner per reference. A here site may use several distinct references, each with its own proven owner. Concrete result discrimination remains a separate representation question.
 
@@ -248,6 +248,6 @@ Concrete evidence must survive parameters/results, stored and nullable reference
 
 ## Examples and validation
 
-Acceptance covers static function selection, type-origin defaults, recursion with overlapping activations, invalidation of a borrowed owner, slot rebinding, nullable invocation and cleanup. [Source capability reference](../tests/cod/language/README.md)
+Acceptance covers static function selection, type-origin defaults, recursion with overlapping activations, invalidation of a borrowed owner, slot rebinding, nullable invocation and cleanup. [Source capability reference](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/tests/cod/language/README.md)
 
 Measure construction, copy and invocation costs, compilation scale, region release and failure recovery on the supported paths. Reject incompatible kind, owner, access and lifetime; do not infer whole-document qualification from passing examples.

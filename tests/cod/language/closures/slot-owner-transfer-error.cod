@@ -1,3 +1,0 @@
-region State { count:u64; }
-own region state:State <- make State(capacity = 128u64) { count <- 3u64 };
-func callback = func [state <- state] () -> void {};

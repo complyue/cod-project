@@ -1,9 +1,0 @@
-using symbol "std:io" @print;
-import "./import-mapping-provider.cod" proc @p as @step;
-symbol from "./vocabulary.cod" @x as @target;
-effect @target <- 7;
-effect proc @step;
-effect @target <- 8;
-behave @print(perform @step);
-behave @print(behave @step);
-behave @print(@target);

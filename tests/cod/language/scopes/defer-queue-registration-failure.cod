@@ -1,8 +1,0 @@
-using symbol "std:io" @print;
-proc run() -> void {
-  val value <- make u64;
-  defer {behave @print(value);};
-  for (i in 0u64 .. 1u64) {defer {(value <- 1u64):void;};};
-  return;
-}
-run();

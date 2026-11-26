@@ -1,6 +1,0 @@
-using "./method-view-library.cod" create;
-import "./method-view-first.cod" through as twice;
-using "./method-view-second.cod" score as other;
-region symbol arena;
-effect @arena <- region(4096u64);
-twice(create(@arena));

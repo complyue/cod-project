@@ -1,3 +1,0 @@
-symbol @local : proc(i64) -> void;
-using "std:io" proc @print as @local;
-using symbol "std:io" @print as @local;

@@ -1,8 +1,0 @@
-symbol from "./procedure-vocabulary.cod" @bias;
-function scale(x:i64) -> i64 { return x * 2 }
-effect @bias <- 10;
-proc read(x:i64) -> i64 { return scale(x) + @bias }
-
-export var @bias;
-export read;
-export scale;

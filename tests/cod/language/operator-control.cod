@@ -1,1 +1,0 @@
-function (&&)(a:bool, b:bool) -> bool { a }

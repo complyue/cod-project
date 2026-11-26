@@ -1,2 +1,0 @@
-symbol @print : i64;
-mixin "std:io" proc @print;

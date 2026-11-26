@@ -1,2 +1,0 @@
-proc action() -> void {}
-func selected = action;

@@ -1,2 +1,0 @@
-func mismatch() -> const u64 { return true; }
-mismatch();

@@ -1,6 +1,0 @@
-using symbol "std:io" @print;
-using "std:exceptions" InvalidCapacityError;
-func value()->const u64 {
-  return {{defer catch(e:const InvalidCapacityError) {}; 12u64}};
-}
-behave @print(value());

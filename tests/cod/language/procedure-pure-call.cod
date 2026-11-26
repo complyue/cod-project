@@ -1,5 +1,0 @@
-symbol bias : i64;
-effect @bias <- 2;
-proc read(x:i64) -> i64 { return @bias + x }
-function hidden() -> i64 { return read(1) }
-hidden();

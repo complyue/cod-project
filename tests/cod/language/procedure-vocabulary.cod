@@ -1,4 +1,0 @@
-symbol bias : i64, dispatch : proc(i64) -> i64;
-
-export var @bias;
-export proc @dispatch;

@@ -4,7 +4,7 @@ Document-set baseline: 220 · Document revision: 221 · Recorded: 2026-11-24.
 
 ## Design authority
 
-- **Callable/type dependency:** D-10/D-18 governs typed symbols, callable values, captured/current contexts and owner-preserving installation. [Current source coverage](../../../tests/cod/language/README.md) is separate from application qualification; no neuron model, layout or learning rule follows.
+- **Callable/type dependency:** D-10/D-18 governs typed symbols, callable values, captured/current contexts and owner-preserving installation. [Current source coverage](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/tests/cod/language/README.md) is separate from application qualification; no neuron model, layout or learning rule follows.
 
 - **Capture/resource clarification:** [H-180/K-300](../../../CHANGELOG.md#h-180) reaffirms definition-time dynamic-value capture for perform and current-binding behave. Temporary regional-resource shadows preserve both owners and do not copy or freeze the graph. Packet transport and effect-resource construction are distinct. Existing captured/current traces remain relevant; ordinary owners and the full allowed-type/root interfaces remain incomplete. No neural model, layout or training choice changes.
 
@@ -73,7 +73,7 @@ For an operation needing fixed model configuration **and** the current target, l
 
 Capture payloads contain only bits or regional pointers. Frame/target references must not escape their valid scope or survive frame reuse without a specified lifetime. The first implementation can establish non-escaping stack values and same-region captures. User closures cannot gain a native-heap lifetime automatically; cross-region references remain an explicit placeholder for later increments. The system's per-thread binding context does not replace the CC's regional state or create another user allocation carrier.
 
-The [current source reference](../../../tests/cod/language/README.md) identifies supported native paths. Exact-integer gather is an application data-flow acceptance target, not evidence of successful SNN behavior.
+The [archived source reference](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/tests/cod/language/README.md) identifies supported native paths. Exact-integer gather is an application data-flow acceptance target, not evidence of successful SNN behavior.
 
 ## Paired increments
 
@@ -105,9 +105,9 @@ Subsequent native validation must distinguish language errors from numerical cha
 
 ## Current native evidence
 
-The [source capability reference](../../../tests/cod/language/README.md) owns current implementation coverage and validation commands. The application catalog specifies acceptance targets; it does not establish execution of every case or SNN acceptance.
+The [archived source capability reference](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/tests/cod/language/README.md) records earlier implementation coverage and validation commands. The application catalog specifies acceptance targets; it does not establish execution of every case or SNN acceptance.
 
-The [regional gather example](../../../tests/cod/language/region-gather.cod) specifies separate type, layout/index, kernel and procedure modules with source IDs, weights and A/B states in regional SoA arrays. Acceptance compares each gather against an independent rounded FP32 calculation and checks owner/lifetime and relocation requirements. Slot-set arithmetic does not select the CC neuron count or a neural transition law.
+The [regional gather example](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/tests/cod/language/region-gather.cod) specifies separate type, layout/index, kernel and procedure modules with source IDs, weights and A/B states in regional SoA arrays. Acceptance compares each gather against an independent rounded FP32 calculation and checks owner/lifetime and relocation requirements. Slot-set arithmetic does not select the CC neuron count or a neural transition law.
 
 These are programming/storage capabilities and arithmetic diagnostics. The H-123 increment excludes SNN dynamics/training; it establishes no learned behavior, neuronal update law, package-version semantics, cross-region representation or concurrent snapshot protocol. The broader application case catalog remains a specification with selected evidence links.
 

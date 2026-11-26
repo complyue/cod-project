@@ -104,7 +104,7 @@ $(out)/native.inputs: FORCE | $(out)
 $(generated) &: $(entry) $(cod_sources) $(seed) $(seed_libraries) $(out)/seed.inputs Makefile $(package_recheck) | $(out)
 	@set -eu; stage=$$(mktemp -d "$(out)/.seed.XXXXXX"); \
 		trap 'rm -rf "$$stage"' EXIT; trap 'exit 1' HUP INT TERM; \
-		"$(seed)" $(COD_SEED_FLAGS) --no-cache --translate "$(entry)" \
+		"$(seed)" $(COD_SEED_FLAGS) --translate "$(entry)" \
 			--emit-c-provider "$$stage" --emit-llvm "$$stage/driver.ll"; \
 		for file in $(generated_names); do test -f "$$stage/$$file"; done; \
 		for file in $(generated_names); do mv "$$stage/$$file" "$(out)/$$file"; done

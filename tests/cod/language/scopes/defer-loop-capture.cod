@@ -1,2 +1,0 @@
-using symbol "std:io" @print;
-{{ for(i in 0u64 .. 2u64) { defer { behave @print(i); }; }; }};

@@ -1,8 +1,0 @@
-data Item {value:u64;}
-proc run()->void {
- own region original:Item <-make Item(capacity=256u64){value<-1u64};
- ptr p:Item=null in here;
- defer {p=root(original);};
- own region moved:Item <-original;
-}
-run();

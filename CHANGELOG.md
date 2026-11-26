@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-11-26 — Assign cross-builds to cfe and distribute the production LLVM toolchain with codup
+
+<a id="h-production-cross-build-20261126"></a>
+**H-PRODUCTION-CROSS-BUILD-20261126.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user directed “cross-build 能力只规划给 cfe 入口，cod还是直接宿主运行就行” and “通过 codup 管理CoD安装，不要依赖系统的llvm实例”. The user endorsed static musl for hosted Linux, permitted CRT linkage for packages with C components, and identified SoC development as the primary motivation for a CRT-free path. D-20-COMPILER-MODES and D-20-REPOSITORIES continue the [prior command contract](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds). [D-20-TARGET-TOOLCHAIN](design/DesignAuthorityRegistry.md#d-20-target-toolchain), P-754/P-755, records the new distribution and target runtime scope at pipeline r13 and roadmap r52. The user raised `brk` as an example for discussion. No allocator interface, system call or board was selected. Registry r1340→1341.
+
+## 2026-11-26 — Give the booter one practical code-generation mode
+
+<a id="h-booter-single-codegen-mode-20261126"></a>
+**H-BOOTER-SINGLE-CODEGEN-MODE-20261126.** The project user confirmed in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) “booter也只支持一种实用模式就够了，到 cfe 再折腾各种性能选项”. [D-20-COMPILER-MODES](design/DesignAuthorityRegistry.md#d-20-compiler-modes), pipeline r12 and roadmap r51 assign user-selectable performance tuning to `cfe` in `e-wrks/cod`. The [earlier mode contract](#h-cfe-output-directory-20261126) supplies the execution and output behavior and release milestones. The booter keeps its fast default and its independent checking and output operations. C-80/P-746/P-747 continue. Registry r1339→1340.
+
+## 2026-11-26 — Retire the rewritten seed’s inert shared-emission switch
+
+<a id="h-seed-shared-switch-retirement-20261126"></a>
+**H-SEED-SHARED-SWITCH-RETIREMENT-20261126.** Asked whether to retain shared emission as a seed requirement if the rewritten translator has no supported input on which the switch changes emission, the project user selected “Drop the inert seed switch. Keep the old implementation in Git.” The [post-rewrite cleanup](#h-post-rewrite-cleanup-20261126) covers the option, its forwarding and its callers. The [old generic relay comparison](#k-booter-one-build-20261124) remains evidence for the earlier implementation. The [build rule](AGENTS.md#build-and-command-execution) continues single-build acceptance for the booter. The decision applies to the rewritten seed.
+
+## 2026-11-26 — Clean up both bootstrap compilers after their rewrites
+
+<a id="h-post-rewrite-cleanup-20261126"></a>
+**H-POST-REWRITE-CLEANUP-20261126.** The project user directed the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) to sweep the seed now and the booter after its rewrite, saying “旧的死代码和误导参数、命名再迭代扫描清扫一波，直到自后一次扫描没有残留” and “多余的参数和变量也在清扫之列”. The [retirement contract](design/ImplementationArchitecture.md#retiring-a-replaced-compiler-pipeline) extends the [structural prohibition](#h-compiler-restart-mechanism-20261126) to the command surface and material consumers. D-ARCH-REVIEW r225→226, bootstrap roadmap r49→50 and booter pipeline r10→11 carry the same final-scan condition. The [seed dispatch at the audited baseline](https://github.com/complyue/cod-project/blob/e9cdcaf7e4f4756401d76875f19a7cf6c791843f/cod/main.cc#L213) still exposes the old checker. Registry r1338→1339.
+
+## 2026-11-26 — Scope verification to the compiler and workload that own the result
+
+<a id="k-bootstrap-audit-acceptance-20261126"></a>
+**K-BOOTSTRAP-AUDIT-ACCEPTANCE-20261126.** Continued from the [verification scope correction](#k-bootstrap-verification-scope-20261125) and the [terminal diagnostic retirement](https://github.com/complyue/cod-project/commit/42ca800c8f212340dd687e4b871678f78db385b5). Validation reference r488→489 locates historical terminal and deferred diagnostics at the checked seed. The surviving runtime cases retain ordered failure, payload and cleanup observations. D-20-MODULE-GRAPH r96→97 sizes routine acceptance to the affected commands and imports. Broad comparisons remain available for release decisions, including the documented package cutover. P-680/P-681 and P-682/P-683 retain their earlier scope. [Validation reference](tests/cod/language/README.md) · [Module graph](applications/cod-booter/docs/ModuleGraph.md)
+
 ## 2026-11-26 — Make pass restarts inexpressible and apply the rule to the booter
 
 <a id="h-compiler-restart-mechanism-20261126"></a>

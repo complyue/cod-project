@@ -1,2 +1,0 @@
-function number()->const u64 { return 3u64 }
-number()();

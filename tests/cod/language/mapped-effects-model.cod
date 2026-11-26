@@ -1,8 +1,0 @@
-symbol @target : i64;
-symbol @next : i64;
-symbol @update : proc() -> i64;
-procedure @update -> i64 { effect @target <- @target + 1; return behave @next }
-
-export var @next;
-export var @target;
-export proc @update;

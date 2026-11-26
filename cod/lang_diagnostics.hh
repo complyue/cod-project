@@ -12,7 +12,7 @@
 
 namespace cod::language {
 
-enum class Warning { unit_conversion, multi_alias_extension, shadow, unused_capture, missing_return, package_shadow };
+enum class Warning { multi_alias_extension, package_shadow };
 struct WarningOptions {
   bool as_errors = false;
   std::set<Warning> errors;
@@ -26,11 +26,7 @@ struct WarningDiagnostic {
   std::string text() const {
     const char *name = nullptr;
     switch (kind) {
-    case Warning::unit_conversion: name = "unit-conversion"; break;
     case Warning::multi_alias_extension: name = "multi-alias-extension"; break;
-    case Warning::shadow: name = "shadow"; break;
-    case Warning::unused_capture: name = "unused-capture"; break;
-    case Warning::missing_return: name = "missing-return"; break;
     case Warning::package_shadow: name = "package-shadow"; break;
     }
     return location_text(at) + ": warning: " + message + " [-W" + name + "]";

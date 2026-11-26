@@ -1,7 +1,0 @@
-using symbol "std:io" @print;
-using units "./units-procedure-source.cod" {raw as SourceRaw, normalized as SourceN};
-symbol from "./units-procedure-source.cod" @distance as @source_distance;
-using symbol "./units-procedure-source.cod" @read as @source_read;
-effect @source_distance <- SourceN(9.0);
-behave @print(perform @source_read(SourceRaw(200.0)));
-behave @print(behave @source_read(SourceRaw(200.0)));

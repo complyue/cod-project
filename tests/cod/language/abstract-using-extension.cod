@@ -1,3 +1,0 @@
-using "./abstract-data.cod" Sample;
-using "./abstract-library.cod" Entity;
-data Sample <: Entity;

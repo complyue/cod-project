@@ -1,9 +1,0 @@
-build/
-.cod/
-
-*.o
-*.so
-*.dylib
-*.exe
-compile_commands.json
-*.dbmr

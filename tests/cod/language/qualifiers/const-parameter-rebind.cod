@@ -1,2 +1,0 @@
-function bad(const ptr x:u64,y:u64)->void { x=y; }
-bad(1u64,2u64);

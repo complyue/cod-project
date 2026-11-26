@@ -1,3 +1,0 @@
-using symbol "./source.cod" @p;
-
-export proc @p;

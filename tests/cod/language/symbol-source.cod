@@ -1,9 +1,0 @@
-using symbol "std:io" @print;
-symbol from "./vocabulary.cod" @x;
-symbol @token : i64;
-effect @x <- 99;
-behave @print(777);
-
-export proc @print;
-export var @token;
-export var @x;

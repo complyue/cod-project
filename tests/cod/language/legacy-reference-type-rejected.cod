@@ -1,2 +1,0 @@
-data Node { value:i64; }
-symbol @node:ref<Node>;

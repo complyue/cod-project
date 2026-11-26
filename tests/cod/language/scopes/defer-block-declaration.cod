@@ -1,2 +1,0 @@
-proc run() -> void { defer { if (true) { val x:u64 <- 1u64; } else {}; }; }
-run();

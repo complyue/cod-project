@@ -4,7 +4,7 @@ Document-set baseline: 220 · Document revision: 221 · Recorded: 2026-11-24 · 
 
 ## Design authority
 
-- **Callable/type dependency:** D-10/D-18 governs typed symbols, callable values, captured/current contexts and owner-preserving installation. [Current source coverage](../../../tests/cod/language/README.md) is separate from application qualification; no neuron model, layout or learning rule follows.
+- **Callable/type dependency:** D-10/D-18 governs typed symbols, callable values, captured/current contexts and owner-preserving installation. [Current source coverage](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/tests/cod/language/README.md) is separate from application qualification; no neuron model, layout or learning rule follows.
 
 - **Capture/resource clarification:** [H-180/K-300](../../../CHANGELOG.md#h-180) reaffirms definition-time dynamic-value capture for perform and current-binding behave. Temporary regional-resource shadows preserve both owners and do not copy or freeze the graph. Packet transport and effect-resource construction are distinct. Existing captured/current traces remain relevant; ordinary owners and the full allowed-type/root interfaces remain incomplete. No neural model, layout or training choice changes.
 
@@ -27,7 +27,7 @@ This document set owns the application's model, resource planning and decisions.
 
 [LanguageCoDesign](LanguageCoDesign.md) links the confirmed two-frame pull architecture to useful CoD features. Pure lexical functions compute from input-reachable snapshots; symbol-named dynamic procedures supply context and perform regional writes. After the complete dependency scan, entry-driven compilation incorporates each module once in first-encounter order and checks required bindings along the resulting caller paths.
 
-The [semantic catalog](../research/cod-language-scope-cases.json) records the agreed rules, open questions and selected [native evidence](../../../tests/cod/language/README.md). Current programming facilities include products/UoMs, bounded iteration, static regional SoA arrays/records, captured/current procedure calls and pure reference traversal. Arithmetic gather, relocation and composition records identify their own source revisions and measured scope. The H-123 increment is language/runtime work; a complete neural simulator and learned SNN behavior still require the application’s selected model contracts.
+The [semantic catalog](../research/cod-language-scope-cases.json) records the agreed rules, open questions and selected [native evidence](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/tests/cod/language/README.md). Current programming facilities include products/UoMs, bounded iteration, static regional SoA arrays/records, captured/current procedure calls and pure reference traversal. Arithmetic gather, relocation and composition records identify their own source revisions and measured scope. The H-123 increment is language/runtime work; a complete neural simulator and learned SNN behavior still require the application’s selected model contracts.
 
 ## Model and operating goals
 

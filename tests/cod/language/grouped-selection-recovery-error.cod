@@ -1,5 +1,0 @@
-using "./Publisher.cod" { 2u64, answer, other as , 4u64 }
-proc later() -> u64 {
-    val missing <- ;
-    return 7u64
-}

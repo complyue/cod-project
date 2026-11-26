@@ -386,7 +386,6 @@ struct Expression {
   bool case_resumes = false;
   bool case_breaks = false;
   bool grouped_deferred_call = false;
-  bool repeated_defer_registration = true;
   std::string declaration_kind = {};
   std::string owner_name = {};
   std::shared_ptr<ReceivingHeader> receiving = {};
@@ -428,12 +427,6 @@ struct Expression {
   bool braced_ref_group() const {
     return kind == Kind::pointer_group && declaration_kind == "ref" && children.size() > 1 &&
         children.back()->kind == Kind::block;
-  }
-  bool deferred_catch() const {
-    return kind == Kind::deferred && binding == "fallback" && children.at(1)->kind == Kind::handler;
-  }
-  const Expression *deferred_finalizer() const {
-    return deferred_catch() && children.back()->kind == Kind::block ? children.back().get() : nullptr;
   }
   bool inspects_return(bool binds_payload = false) const;
 };
@@ -1136,7 +1129,7 @@ class Parser {
       std::string result_mode;
       type.target = std::make_shared<Type>(signature_type(result_const, result_mode));
       if (result_mode == "val" && !numeric(*type.target) && *type.target != Type::boolean)
-        fail(token.at, "micro-dispatch implementation gap: explicit val callable results require a concrete scalar type; this is not a language restriction");
+        fail(token.at, "seed translation limit: explicit val callable results require a concrete scalar type");
       type.value_result = result_mode != "ref" && result_mode != "ptr" &&
           (result_const || result_mode == "val" || numeric(*type.target) || *type.target == Type::boolean ||
            *type.target == Type::void_type || type.target->kind == Type::procedure);
@@ -2043,11 +2036,11 @@ class Parser {
         }
         return expr;
       }
-      const bool legacy_region = is("(", 1) && is("capacity", 2) && is("=", 3);
+      const bool region_capacity_clause = is("(", 1) && is("capacity", 2) && is("=", 3);
       const auto constructed = peek();
-      auto expr = make(legacy_region ? Expression::Kind::make_region : Expression::Kind::make_object,
+      auto expr = make(region_capacity_clause ? Expression::Kind::make_region : Expression::Kind::make_object,
                        name(TokenKind::identifier));
-      if (legacy_region) {
+      if (region_capacity_clause) {
         expect("(");
         expect("capacity");
         expect("=");
@@ -2714,9 +2707,6 @@ class Parser {
       if (draining)
         fail(expr.at, "defer cannot register work into its currently draining scope\n" +
             location_text(*draining) + ": note: enclosing deferred execution begins here");
-      // Ordinary iterations share the surrounding cleanup scope. Full scopes
-      // and callable invocations start a fresh registration sequence.
-      expr.repeated_defer_registration = iteration || handoff;
     }
     const bool declaration = expr.kind == K::pointer_group || expr.kind == K::region_binding ||
         expr.kind == K::native_handle_binding || expr.kind == K::here_binding ||
