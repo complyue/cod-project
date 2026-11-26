@@ -244,7 +244,6 @@ struct CheckedOperation {
   struct PreparedProducer {
     size_t instance;
     std::vector<size_t> owners; // Actual owners in the producer's declared owner order.
-    std::set<size_t> dependencies = {}; // Owners retained by the complete prepared traversal.
     auto operator<=>(const PreparedProducer &) const = default;
   };
   std::optional<PreparedProducer> prepared_producer;
@@ -279,7 +278,6 @@ struct CheckedOperation {
     std::vector<const Expression *> stages;
     const Expression *source = nullptr;
     std::optional<SuppliedHere> terminal;
-    size_t owner = 0;
   };
   std::optional<SavedPipeline> saved_pipeline;
   std::optional<std::vector<const Expression *>> open_pipeline_operands;
