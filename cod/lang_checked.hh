@@ -11991,9 +11991,12 @@ class ScalarChecker {
     require_live_view(actual, at);
     if (!actual.targets.contains(null_target)) return actual;
     using Presence = CheckedOperation::CheckedRefPresence;
-    actual.checked_ref_presence = actual.targets.size() == 1 ? Presence::definite_absence : Presence::possible_absence;
+    // Fresh array backing has no individual payload place in targets. Its
+    // absence cannot be inferred from a lone null alternative in that set.
+    const bool definitely_absent = actual.targets.size() == 1 && actual.type.kind != Type::array;
+    actual.checked_ref_presence = definitely_absent ? Presence::definite_absence : Presence::possible_absence;
     note_abrupt(at, {exception_id(ExceptionCategory::null_pointer)});
-    if (actual.checked_ref_presence == Presence::definite_absence) lexical_.live = false;
+    if (definitely_absent) lexical_.live = false;
     auto prepared = actual;
     prepared.targets.erase(null_target);
     prepared.nullable_view = false;
