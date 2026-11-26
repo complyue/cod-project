@@ -2,6 +2,7 @@
 #pragma once
 
 #include "lang_checked_program.hh"
+#include "lang_scalar_operations.hh"
 
 namespace cod::language {
 
@@ -64,6 +65,45 @@ inline bool readonly_field(const CheckedSchema::Field &field) {
   return field.source->read_only || field.source->fixed_binding;
 }
 
+inline std::optional<EnumValue> enum_member(const CheckedProgram &program, const Type &type, const std::string &name) {
+  const auto &domain = program.enums.at(type.identity);
+  const auto spelling = domain.spellings.find(name);
+  if (spelling == domain.spellings.end()) return {};
+  return EnumValue{type, domain.members.at(spelling->second).canonical};
+}
+
+inline CheckedOperation checked_enum_literal(const CheckedProgram &program, const EnumValue &value) {
+  CheckedOperation op;
+  op.type = value.type;
+  op.enum_literal = true;
+  op.integer = program.enums.at(value.type.identity).members.at(value.member).code;
+  return op;
+}
+
+inline std::optional<EnumValue> enum_literal_from_integer(const CheckedProgram &program, const Type &type,
+    const Expression &operand, const Expression &literal, bool negative, bool signed_minimum) {
+  const auto &domain = program.enums.at(type.identity);
+  std::uint64_t code;
+  bool in_range;
+  if (signed_minimum) {
+    code = std::uint64_t{1} << 63;
+    in_range = domain.backing == Type::integer;
+  } else if (negative) {
+    const auto magnitude = numeric_literal(*literal.children.front());
+    if (magnitude.type != Type::integer) return {};
+    code = std::uint64_t{0} - magnitude.integer;
+    in_range = magnitude.integer == 0 || domain.backing == Type::integer;
+  } else {
+    code = numeric_literal(literal).integer;
+    in_range = domain.backing != Type::integer || code <= std::uint64_t{INT64_MAX};
+  }
+  if (in_range) {
+    const auto member = std::ranges::find(domain.members, code, &CheckedEnum::Member::code);
+    if (member != domain.members.end()) return EnumValue{type, member->canonical};
+  }
+  fail(operand.at, "integer code is not a member of enum '" + type.name + "'");
+}
+
 inline CasePattern bind_case_pattern(const CheckedProgram &program, const Type &subject, const Expression &arm,
                                      const std::map<std::string, SumConstructor> &constructors) {
   using K = CasePattern::Kind;
@@ -82,12 +122,8 @@ inline CasePattern bind_case_pattern(const CheckedProgram &program, const Type &
     fail(arm.at, "a bool case pattern requires true, false, null or a catch-all");
   }
   if (subject == Type::null_ref) fail(arm.at, "a null case subject requires a null pattern or a catch-all");
-  const auto &domain = program.enums.at(subject.identity);
-  const auto spelling = domain.spellings.find(arm.text);
-  if (spelling != domain.spellings.end()) {
-    const auto canonical = domain.members.at(spelling->second).canonical;
-    return {K::code, domain.members.at(canonical).code};
-  }
+  if (const auto member = enum_member(program, subject, arm.text))
+    return {K::code, program.enums.at(subject.identity).members.at(member->member).code};
   fail(arm.at, "unknown member '" + arm.text + "' of enum '" + subject.name + "'");
 }
 

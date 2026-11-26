@@ -416,12 +416,7 @@ class BodyExtraction {
                expr.at, "replacement seed needs a direct here invocation");
         const auto selected = names().enum_members.find(expr.text);
         expect(selected != names().enum_members.end(), expr.at, "replacement seed needs a bound operand");
-        const auto &member = selected->second;
-        CheckedOperation op;
-        op.type = member.type;
-        op.enum_literal = true;
-        op.integer = declarations().enums.at(member.type.identity).members.at(member.member).code;
-        return op;
+        return checked_enum_literal(declarations(), selected->second);
       }
       const auto *local = std::get_if<Local>(binding);
       expect(local, expr.at, "replacement seed needs a direct lexical procedure call");
@@ -1251,13 +1246,54 @@ class BodyExtraction {
       return op;
     }
 
+    CheckedOperation assert_enum(const Expression &expr, const Type &type) {
+      const auto &written = *expr.children.front();
+      if (written.kind == Kind::name && !visible_local(written.text) && !here_.contains(written.text) &&
+          (!body_.outline || !body_.outline->visible_here.contains(written.text)) &&
+          !names().binds_other_than_enum_member(written.text) &&
+          !names().enum_members.contains(written.text)) {
+        if (const auto member = enum_member(declarations(), type, written.text))
+          return checked_enum_literal(declarations(), *member);
+        fail(written.at, "unknown member '" + written.text + "' of enum '" + type.name + "'");
+      }
+      const auto &literal = ungrouped_expression(written);
+      const bool negative = literal.kind == Kind::unary && literal.text == "-" &&
+                            literal.children.front()->kind == Kind::integer;
+      if (negative || literal.kind == Kind::integer) {
+        bool minimum = false;
+        if (negative) {
+          confirm_intrinsic(literal, "-");
+          auto magnitude = std::string_view(literal.children.front()->text);
+          while (magnitude.starts_with('0')) magnitude.remove_prefix(1);
+          minimum = magnitude == "9223372036854775808";
+        }
+        if (const auto member = enum_literal_from_integer(declarations(), type, written, literal, negative, minimum))
+          return checked_enum_literal(declarations(), *member);
+      }
+      const auto &source = operand(expr, 0);
+      if (supplies_enum_code(type, source.type)) {
+        CheckedOperation op;
+        op.type = type;
+        op.enum_decode = true;
+        return op;
+      }
+      if (source.type != type && source.type != Type::never)
+        fail(expr.at, "type assertion cannot match enum '" + type.name + "'");
+      auto op = source;
+      op.enum_assertion = true;
+      op.enum_literal = op.enum_decode = false;
+      return op;
+    }
+
     CheckedOperation typed_expression(const Expression &expr) {
-      if (expr.annotation == Type::void_type) {
+      const auto type = resolve_annotation(*expr.annotation, expr.at);
+      if (type.kind == Type::enumeration) return assert_enum(expr, type);
+      if (type == Type::void_type) {
         operand(expr, 0);
         return {};
       }
-      expect(expr.annotation == Type::c_string, expr.at,
-             "replacement seed supports void and CString result assertions");
+      expect(type == Type::c_string, expr.at,
+             "replacement seed supports enum, void and CString result assertions");
       auto op = operand(expr, 0);
       expect(text_type(op.type) && op.view && op.read_only && op.owners.size() == 1,
              expr.at, "replacement seed needs a readonly String loan for a CString assertion");

@@ -569,11 +569,6 @@ class ScalarChecker {
     }
     return effects;
   }
-  struct EnumValue {
-    Type type;
-    size_t member;
-    bool operator==(const EnumValue &) const = default;
-  };
   struct ModuleNames {
     std::map<std::string, size_t> callables;
     std::map<std::string, size_t> native_operations;
@@ -2809,10 +2804,7 @@ class ScalarChecker {
     return member->second;
   }
   std::optional<EnumValue> enum_member(const Type &type, const std::string &name) const {
-    const auto &domain = program_.enums.at(type.identity);
-    const auto member = domain.spellings.find(name);
-    if (member == domain.spellings.end()) return {};
-    return EnumValue{type, domain.members[member->second].canonical};
+    return cod::language::enum_member(program_, type, name);
   }
   struct CasePossibilities {
     std::set<std::uint64_t> codes;
@@ -2884,11 +2876,7 @@ class ScalarChecker {
                          : std::vector<CaseField>{};
   }
   CheckedOperation enum_literal(const EnumValue &value) const {
-    CheckedOperation result;
-    result.type = value.type;
-    result.enum_literal = true;
-    result.integer = program_.enums.at(value.type.identity).members.at(value.member).code;
-    return result;
+    return checked_enum_literal(program_, value);
   }
   std::optional<EnumValue> typed_enum_member(const Expression &operand, const Type &type,
                                              const TypeEvidenceState *state = nullptr) const {
@@ -2905,26 +2893,8 @@ class ScalarChecker {
         source->children.front()->kind == K::integer && operation_name(*source, state) == "-" &&
         !has_declarations(source->text) && !applicable_operation(source->text, {Type::integer});
     if (!negative && source->kind != K::integer) return {};
-    const auto &domain = program_.enums.at(type.identity);
-    std::uint64_t code;
-    bool in_range = true;
-    if (negative && signed_minimum(*source, state)) {
-      code = std::uint64_t{1} << 63;
-      in_range = domain.backing == Type::integer;
-    } else if (negative) {
-      const auto magnitude = numeric_literal(*source->children.front());
-      if (magnitude.type != Type::integer) return {};
-      code = std::uint64_t{0} - magnitude.integer;
-      in_range = magnitude.integer == 0 || domain.backing == Type::integer;
-    } else {
-      code = numeric_literal(*source).integer;
-      in_range = domain.backing != Type::integer || code <= std::uint64_t{INT64_MAX};
-    }
-    if (in_range) {
-      const auto member = std::ranges::find(domain.members, code, &CheckedEnum::Member::code);
-      if (member != domain.members.end()) return EnumValue{type, member->canonical};
-    }
-    fail(operand.at, "integer code is not a member of enum '" + type.name + "'");
+    return enum_literal_from_integer(program_, type, operand, *source, negative,
+                                     negative && signed_minimum(*source, state));
   }
   size_t resolve_symbol(const std::string &name, const Location &at, bool local,
                         std::optional<size_t> method = {}) const {

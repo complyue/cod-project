@@ -865,6 +865,12 @@ struct CheckedNativeOperation {
   const auto &arrays() const { return contract.here.front().inputs; }
 };
 
+struct EnumValue {
+  Type type;
+  size_t member;
+  bool operator==(const EnumValue &) const = default;
+};
+
 struct CheckedEnum {
   struct Member {
     std::uint64_t code;
