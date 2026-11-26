@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Apply the necessity rule to design review’s own gates
+
+<a id="k-design-review-delivery-gates-20261126"></a>
+**K-DESIGN-REVIEW-DELIVERY-GATES-20261126.** The project user identified a first-principles failure by design review in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). Review had made proof that handler replay could be omitted a delivery prerequisite. The [case correction](https://github.com/complyue/cod-project/commit/c5d979e9) restored the existing language contract. D-ARCH-REVIEW r222→223 applies the [confirmed necessity rule](#h-compiler-work-necessity-20261125) to the reviewer’s own decisions to hold delivery. Mainline retains its implementation authority. Registry r1335→1336 continues P-682/P-683. [Review responsibilities](design/ImplementationArchitecture.md#design-review-and-delivery-responsibilities)
+
 ## 2026-11-26 — Prioritize correct handler replay in the replacement seed
 
 <a id="k-seed-replay-delivery-20261126"></a>

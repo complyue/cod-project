@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r223, the existing material-consumer rule applies to prerequisites proposed by design review itself. The reviewer owns the justification for holding delivery. [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) · [Continuity record](../CHANGELOG.md#k-design-review-delivery-gates-20261126)
+
 At r222 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues the [family capture contract](SymbolicDynamicScope.md#family-wide-effect-requirements-before-20). The [delivery clarification](../CHANGELOG.md#k-seed-replay-delivery-20261126) sets the order for [live handler emission](#emission-boundary-for-live-handler-installations).
 
 At r221 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r220 for [preparing a current reference-symbol argument](#preparing-a-current-reference-symbol-argument). The [review](../CHANGELOG.md#k-seed-current-symbol-argument-20261126) applies [D-10-OWNER-SYMBOL](DesignAuthorityRegistry.md#d-10-owner-symbol) to an ordinary synchronous call on the existing ABI.
@@ -541,6 +543,8 @@ The earlier fixtures distinguished shared payloads, mutable pools, owner transfe
 The design discussion maintains the language contracts and confirms major choices about program structure and algorithms before mainline implements them. Examples include splitting a compiler into passes, changing how an inference solver computes its result, and choosing how modules can run concurrently. An unchanged source contract can still admit several substantially different algorithms. Bring the choice while the alternatives are open. The design discussion takes a language or value trade-off outside its delegated authority to the project user.
 
 Development mainline implements, verifies and publishes within the agreed design. It chooses data members, helpers, patch boundaries, test fixtures and release evidence. For example, applying an already approved ownership model to another private effect record is a mainline decision. Replacing the ownership model across compiler phases calls for design confirmation. A review covers the decision through delivery. Mainline returns if a major choice changes or a confirmed guarantee cannot be met, and reports material milestones or blockers when useful.
+
+Before holding delivery, the reviewer starts from the confirmed requirement and works through the simplest faithful behavior on the actual input. For live handlers, ordinary replay lets cleanup observe the captured 7 and the caller observe its restored 29. Proving that omission preserves every observable result matters if the compiler proposes to skip replay. Ordinary replay remains available as a design even when the current emitter still needs work to support it. If the ordinary path would violate an ownership guarantee or exceed an agreed resource limit, identify that concrete conflict. When a gate serves only the proposed shortcut, design withdraws it and corrects its handoff. [Justifying compiler work](#justifying-compiler-work-before-coding) · [Handler emission](#emission-boundary-for-live-handler-installations)
 
 For example, if the user asks whether a redesigned AST is in production, the design discussion can inspect the public commit and ask what the production driver still needs. If the supplied results cover object emission but omit provider generation, the reviewer identifies the missing comparison and asks mainline for its result. Mainline owns the comparison, repair and implementation push. The reviewer reports the outcome or the outstanding blocker to the user.
 
