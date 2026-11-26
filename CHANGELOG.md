@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Complete booter readiness at the initialization sites that use it
+
+<a id="k-booter-demand-readiness-20261126"></a>
+**K-BOOTER-DEMAND-READINESS-20261126.** The [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) confirmed mainline’s algorithm within the [existing booter phase contract](https://github.com/complyue/cod-project/blob/d3a2381f9ae1709447659633234a28530ae27e52/applications/cod-booter/docs/CompilerPipeline.md#replacing-the-booter-pipeline). The reference compiled 384 successive reserve/write/read triples. The held rewrite exhausted workspace retaining facts beyond the reads they could influence. [Pipeline r14](applications/cod-booter/docs/CompilerPipeline.md#replacing-the-booter-pipeline) limits readiness propagation to the predecessors that can affect a demanded site and retains a single result bit per obligation. The [deferred writer acceptance case](applications/cod-booter/workloads/deferred-initialization.cod), diagnostic order, client check scopes and structural restart prohibition carry forward. D-20-STAGE-CONTROLS continued, registry r1341→1342.
+
 ## 2026-11-26 — Assign cross-builds to cfe and distribute the production LLVM toolchain with codup
 
 <a id="h-production-cross-build-20261126"></a>
