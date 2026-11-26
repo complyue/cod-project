@@ -6323,50 +6323,55 @@ class ScalarChecker {
         state.exceptions = entry.exceptions;
         auto pending = input.exception() ? path.exceptions.restricted({input.category()}) : ExceptionFacts{};
         if (input.exception() && pending.empty()) pending = {input.category()};
-        auto applied = effects;
-        const auto observed_selection = CleanupEquations::project_observed_return(applied, state.returned, state.selections);
-        applied.resolve_conditions([&](size_t binding) -> std::optional<CleanupEquations::Targets> {
-          if (binding == CleanupEquations::pending_return_selection) return observed_selection;
-          if (deferred_action_) return state.selections.selection_on_exit(binding);
-          const auto found = state.targets.find(binding);
-          if (!found) return {};
-          auto selected = selection_targets(found->places, found->null_sources);
-          if (const auto recorded = state.selections.targets.find(binding);
-              recorded != state.selections.targets.end() && recorded->second.entries.empty())
-            selected.nullness = recorded->second.nullness;
-          if (selected.nullable() && !selected.places.empty()) {
-            // A cleanup condition observes the selection at the drain entry.
-            // Relate that observation to other snapshots before applying writes.
-            CleanupEquations::BooleanValue observed;
-            const CleanupEquations::BindingSnapshot snapshot{binding, found->versions};
-            for (const auto &[null, paths] : selected.null_observations()) for (auto facts : paths) {
-              (null ? facts.absent_bindings : facts.bindings).insert(snapshot);
-              CleanupEquations::add_condition(observed[null], std::move(facts));
+        // The empty queue resumes this completion without observing the
+        // pending payload, returned selection or caller Boolean places.
+        auto applied = queue ? effects : CleanupEquations::Effects{};
+        if (queue) {
+          const auto observed_selection = CleanupEquations::project_observed_return(applied, state.returned, state.selections);
+          applied.resolve_conditions([&](size_t binding) -> std::optional<CleanupEquations::Targets> {
+            if (binding == CleanupEquations::pending_return_selection) return observed_selection;
+            if (deferred_action_) return state.selections.selection_on_exit(binding);
+            const auto found = state.targets.find(binding);
+            if (!found) return {};
+            auto selected = selection_targets(found->places, found->null_sources);
+            if (const auto recorded = state.selections.targets.find(binding);
+                recorded != state.selections.targets.end() && recorded->second.entries.empty())
+              selected.nullness = recorded->second.nullness;
+            if (selected.nullable() && !selected.places.empty()) {
+              // A cleanup condition observes the selection at the drain entry.
+              // Relate that observation to other snapshots before applying writes.
+              CleanupEquations::BooleanValue observed;
+              const CleanupEquations::BindingSnapshot snapshot{binding, found->versions};
+              for (const auto &[null, paths] : selected.null_observations()) for (auto facts : paths) {
+                (null ? facts.absent_bindings : facts.bindings).insert(snapshot);
+                CleanupEquations::add_condition(observed[null], std::move(facts));
+              }
+              selected.nullness = std::move(observed);
             }
-            selected.nullness = std::move(observed);
+            return selected;
+          }, deferred_action_);
+          applied.transform_values([&](const auto &value) { return value.through_payloads(payload_at, pending, true, false); },
+              [&](const auto &value) { return value.through_payloads(payload_at, pending, true, true); });
+          CleanupEquations::BooleanValues booleans;
+          const auto resolve_boolean = [&](size_t place) -> const CleanupEquations::BooleanValue * {
+            if (!state.available.contains(place) || storage(place).type != Type::boolean) return nullptr;
+            const auto [found, inserted] = booleans.try_emplace(place);
+            if (inserted) found->second = snapshot_boolean(state.predicates.get(place), state, at);
+            return &found->second;
+          };
+          if (!effects.declared_root && !CleanupEquations::unconditional(effects.action_reaching)) {
+            const auto reaching = CleanupEquations::substitute_boolean_payloads(effects.action_reaching, resolve_boolean, false, true);
+            if (CleanupEquations::conjoin_conditions(reaching, CleanupEquations::boolean_conditions(path_conditions(state))).empty()) continue;
           }
-          return selected;
-        }, deferred_action_);
-        applied.transform_values([&](const auto &value) { return value.through_payloads(payload_at, pending, true, false); },
-            [&](const auto &value) { return value.through_payloads(payload_at, pending, true, true); });
-        CleanupEquations::BooleanValues booleans;
-        const auto resolve_boolean = [&](size_t place) -> const CleanupEquations::BooleanValue * {
-          if (!state.available.contains(place) || storage(place).type != Type::boolean) return nullptr;
-          const auto [found, inserted] = booleans.try_emplace(place);
-          if (inserted) found->second = snapshot_boolean(state.predicates.get(place), state, at);
-          return &found->second;
-        };
-        if (!effects.declared_root && !CleanupEquations::unconditional(effects.action_reaching)) {
-          const auto reaching = CleanupEquations::substitute_boolean_payloads(effects.action_reaching, resolve_boolean, false, true);
-          if (CleanupEquations::conjoin_conditions(reaching, CleanupEquations::boolean_conditions(path_conditions(state))).empty()) continue;
+          if (proving_ && validating_ && outcome.unproved)
+            implementation_gap(path.at, "cyclic deferred failure queue exceeds the translation model");
+          applied.transform_conditions([&](const auto &clauses) {
+            return CleanupEquations::substitute_boolean_payloads(clauses, resolve_boolean, true);
+          });
         }
-        if (proving_ && validating_ && outcome.unproved)
-          implementation_gap(path.at, "cyclic deferred failure queue exceeds the translation model");
-        applied.transform_conditions([&](const auto &clauses) {
-          return CleanupEquations::substitute_boolean_payloads(clauses, resolve_boolean, true);
-        });
         const bool aggregate = outcome.has_deferred_failure() && completion.exception() && completion.category() == deferred_aggregate_id;
-        auto failure = aggregate ? ExceptionFacts{deferred_aggregate_id} : outcome.resumes_body_failure() ? pending : ExceptionFacts{};
+        auto failure = aggregate ? ExceptionFacts{deferred_aggregate_id} :
+            outcome.resumes_body_failure() ? std::move(pending) : ExceptionFacts{};
         if (completion.exception() && failure.empty()) {
           if (!effects.unknown_thrown) continue;
           failure = {completion.category()};
