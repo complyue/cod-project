@@ -1,8 +1,10 @@
 # Typed enums
 
-Design revision: 7 · 2026-11-25
+Design revision: 8 · 2026-11-25
 
 ## Design authority
+
+At r8 the [guide’s ASCII vocabulary example](../docs/IdiomaticCoD.md#ascii-members-in-a-byte-scanner) uses the [preferred constant spelling and default selection](../CHANGELOG.md#k-ascii-vocabulary-20261125). Read a default member by name and a non-default member in an expression with its enum type. The r7 value and membership rules continue.
 
 At r7 the [project user’s decision](../CHANGELOG.md#h-enum-backing-coercion-20261125) qualifies [D-07-ENUM](DesignAuthorityRegistry.md#d-07-enum), P-658/P-659, for implicit use of a member's backing value and explicit decoding with `code:E`. Check a runtime member, an alias, an invalid code and the raw-byte lexer workload. Nominal coverage and checked inbound C exchange continue from r6.
 
@@ -44,7 +46,7 @@ An enum value has ordinary scalar `val` semantics and the size/alignment of its 
 Given `enum E:B`, a value of `E` implicitly supplies its declared integer code wherever
 a by-value `B` is required. This applies to runtime values and to constants. Assigning to a
 `B` value slot, returning from a function with result `B`, or passing an argument to a
-parameter of type `B` each supplies that code. In `byte == lf`, an existing `u8` operand
+parameter of type `B` each supplies that code. In `byte == LF`, an existing `u8` operand
 and an `ASCII:u8` member can therefore be compared as bytes. Aliases yield the same code.
 A call with an exact enum overload uses ordinary exact-match priority. Given only the
 backing-typed overload, its body receives the prepared integer.
@@ -62,7 +64,7 @@ Use `10:ASCII` to obtain the member declared with code 10. A parameter or result
 `ASCII` requires the caller or producer to write the conversion when supplying an integer.
 For an integer literal or a value of the backing type, compare its integer value to the
 declared codes. A sparse domain requires an exact member. Check before narrowing: with
-`lf = 10` in a `u8`-backed enum, `266:ASCII` is invalid. Aliases for 10 yield one member.
+`LF = 10` in a `u8`-backed enum, `266:ASCII` is invalid. Aliases for 10 yield one member.
 
 Use the [existing assertion failure rules](SymbolicDynamicScope.md#nonnumeric-assertion-contract).
 A provably invalid code rejects statically. For a runtime byte, `byte:ASCII` evaluates
@@ -99,9 +101,9 @@ Coverage counts distinct canonical members of the complete declaration, independ
 In a [grouped method definition](SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch) a parameter declared `ne:NativeError` gives the pattern `(Rejected)` its enum domain. It matches the prepared argument whether the caller used `Rejected`, used `OldRejected`, or obtained the value at runtime. A local variable of either name cannot change the pattern's meaning. Two otherwise identical methods for the two spellings are duplicate definitions of one domain. The integer `1u8` and a member with code 1 in a different enum do not denote that domain. When complete coverage is required, count distinct members of the full enum. `case` continues to try its arms in source order. Method selection uses the unique most-specific applicable method across the selected family.
 
 When the public slot is instead the backing integer type, a lexically selected member in
-`=name` supplies its code in that slot. With `lf` selected from `ASCII:u8`, `(=lf)` and
+`=name` supplies its code in that slot. With `LF` selected from `ASCII:u8`, `(=LF)` and
 `(10u8)` denote the same singleton in a `u8` slot. Defining both with otherwise identical
-heads is a duplicate. An `ASCII` slot uses `(lf)` for its nominal member pattern.
+heads is a duplicate. An `ASCII` slot uses `(LF)` for its nominal member pattern.
 
 ## Generated C exchange
 

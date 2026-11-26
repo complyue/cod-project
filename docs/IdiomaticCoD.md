@@ -13,7 +13,7 @@ dependencies are identified where needed. For a compact reference to the source 
 
 ## Design authority
 
-Guide revision 14 applies [enum backing coercion](../design/TypedEnums.md#using-an-enum-as-its-backing-value)
+Guide revision 15 illustrates the [default ASCII vocabulary](../CHANGELOG.md#k-ascii-vocabulary-20261125) and uppercase named constants. Revision 14 applies [enum backing coercion](../design/TypedEnums.md#using-an-enum-as-its-backing-value)
 to [ASCII members in a byte scanner](#ascii-members-in-a-byte-scanner). Revision 13 applies the [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125)
 to [tariff dispatch](#put-type-and-value-specializations-in-one-method-group) and [method arm boundaries](#use-canonical-source-form).
 It retains revision 12's [fixed receiver binding](../CHANGELOG.md#h-fixed-self-binding-20261125) in the member examples. Revision 11 applies the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) to direct calls and borrowed results. It continues the revision 10 guidance on the [confirmed OO source rules](../design/DomainLanguageDesign.md#product-storage-inheritance)
@@ -135,36 +135,44 @@ policy, accepting that it also covers members added later.
 
 ### ASCII members in a byte scanner
 
-A character vocabulary can publish the ASCII codes it uses. This excerpt shows two members
-of the vocabulary:
+Use `UPPER_SNAKE_CASE` for published named compile-time constants. Control-code abbreviations
+such as `LF` and `CR` already fit that convention. Give both letter cases distinct readable
+names, for example `UPPER_A` and `LOWER_A`. Name style has no effect on lookup or dispatch.
+
+The full ASCII vocabulary assigns a member to each code from 0 through 127. This excerpt
+from a package-root `ASCII.cod` includes the scanner's proposed defaults and two less
+frequently used members. The module chooses the defaults. Every member belongs to `ASCII`.
 
 ```cod
 export enum ASCII:u8 {
-    lf = 10;
-    hash = 35;
+    HT = 9;
+    LF = 10;
+    CR = 13;
+    ESC = 27;
+    SPACE = 32;
+    HASH = 35;
+    DEL = 127;
 }
+default { ASCII { HT, LF, CR, SPACE, HASH } }
 ```
 
 The [booter's trivia scanner](../applications/cod-booter/src/Lexer.cod) reads raw bytes.
-In the scanner module, select both member names. Their codes let the scanner recognize two bytes
-while accepting every possible input byte:
+In a consumer, `using "ASCII.cod";` selects the type and the five named defaults. Where
+the scanner already has `byte:u8` and the current `comment:bool`, its update reads:
 
 ```cod
-using "./ASCII.cod" ASCII { lf, hash };
-
-func comment_after(byte:u8, was_in_comment:bool) -> bool of {
-    (=lf,   _)         => false;
-    (=hash, _)         => true;
-    (_,     keep:bool) => keep
-}
+comment <- byte != LF && (comment || byte == HASH)
 ```
 
-After `#`, an ordinary byte such as `255u8` keeps the comment open. CR also keeps it open;
-LF closes it. The same names work directly in the scanner's Boolean expression,
-`byte != lf && (comment || byte == hash)`. A method whose public parameter already has
-type `ASCII` can match `(lf)` through that enum's member table. To call it with code 10,
-write `10:ASCII`. A raw byte from a file uses `byte:ASCII` only when the consumer requires
-an ASCII member. The comment scanner can pass through any byte, including `255u8`.
+After `#`, CR or a byte of value 255 keeps the comment open. LF closes it. In a different
+rule, `byte == (ESC:ASCII)` can recognize escape. With no lexical `ESC` binding, the type
+supplies the member table. A local binding with that spelling takes precedence in this
+expression. Code that needs an enum value for an integer uses `10:ASCII`.
+
+The same vocabulary works in a [method group](../design/SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch).
+A `u8` slot can match `(=LF)` through its selected constant. An `ASCII` slot can match
+`(ESC)` through the enum's member table even when `ESC` is outside the defaults.
+See [default module selections](../design/ModuleWorlds.md#default-and-complete-public-selections).
 
 ## Make storage and access visible
 

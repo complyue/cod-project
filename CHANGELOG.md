@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Show a full ASCII vocabulary with a small default selection
+
+<a id="k-ascii-vocabulary-20261125"></a>
+**K-ASCII-VOCABULARY-20261125.** The project user suggested uppercase constant names and “通过 `default { ... }` export 常用值” in the CoD design conversation. [Idiomatic CoD r14→15](docs/IdiomaticCoD.md#ascii-members-in-a-byte-scanner) applies this style to the [earlier scanner example](https://github.com/complyue/cod-project/blob/17779f20c16cc7ef016265e3f833d62113d7d65c/docs/IdiomaticCoD.md#ascii-members-in-a-byte-scanner). [Module worlds r83→84](design/ModuleWorlds.md#default-and-complete-public-selections) illustrates selector expansion with an enum member subset. [Enum r7→8](design/TypedEnums.md#names-and-case-matching) carries forward lexical lookup and code coercion. Registry r1308→1309. Compiler and library delivery follow the development mainline.
+
 ## 2026-11-25 — Name method constants and use enum backing codes
 
 <a id="h-named-method-constants-20261125"></a>
