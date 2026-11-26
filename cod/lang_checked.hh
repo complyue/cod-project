@@ -814,7 +814,9 @@ class ScalarChecker {
     std::set<size_t> bindings, required;
   };
   CatchCapture *captures_ = nullptr;
-  CleanupEquations cleanup_{program_.exception_types};
+  // Completed by module registration and shared by the body's cleanup frames.
+  CleanupEquations::ExceptionCatalog cleanup_exceptions_;
+  CleanupEquations cleanup_{cleanup_exceptions_};
   size_t cleanup_scope_ = 0;
   const Expression *prepared_call_ = nullptr;
   const Expression *region_result_initializer_ = nullptr;
@@ -22266,7 +22268,9 @@ class ScalarChecker {
     storage_ = &storage; bindings_ = &bindings;
     storage.clear(); bindings.clear(); operations.clear(); definitions_.clear();
     if (!proving) clear_target_discovery();
-    lexical_ = {}; cleanup_ = CleanupEquations{program_.exception_types}; scope_storage_.clear(); checked_scope_owners_.clear(); external_owners_.clear();
+    lexical_ = {};
+    cleanup_ = CleanupEquations{cleanup_exceptions_};
+    scope_storage_.clear(); checked_scope_owners_.clear(); external_owners_.clear();
     native_resource_owners_.clear(); native_owner_scopes_.clear(); scope_native_owner_places_.clear(); region_owners_.clear();
     incoming_native_symbol_owners_.clear();
     abstract_input_bindings_.clear();
@@ -25411,9 +25415,13 @@ class ScalarChecker {
     if (!registered || diagnostics.has_error() || !diagnostics.continue_work()) return {};
     check_native_type_names();
     // Module registration has completed the exception catalog before any call is checked.
-    for (size_t category = 1; category < program_.exception_types.size(); ++category)
-      if (concrete_failure(category) && !program_.exception_types[category].checked)
+    cleanup_exceptions_.type_count = program_.exception_types.size();
+    for (size_t category = 1; category < cleanup_exceptions_.type_count; ++category) {
+      if (!concrete_failure(category)) continue;
+      cleanup_exceptions_.concrete_categories.insert(category);
+      if (!program_.exception_types[category].checked)
         default_call_reasons_.insert(Completion::failure(category).reason);
+    }
     for (auto &method : program_.methods)
       method.throws_categories = declared_exception_categories(method.throws_types);
     for (auto &family : program_.families)

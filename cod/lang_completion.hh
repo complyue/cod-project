@@ -248,14 +248,14 @@ struct Completion {
 
 class CleanupEquations {
 public:
-  explicit CleanupEquations(std::span<const CheckedExceptionCategory> exception_types)
-      : exception_types_(exception_types) {
-    for (size_t category = 1; category < exception_types_.size(); ++category)
-      if (concrete_failure(category)) categories_.insert(category);
-  }
+  struct ExceptionCatalog {
+    size_t type_count = 0;
+    std::set<size_t> concrete_categories;
+  };
+  explicit CleanupEquations(const ExceptionCatalog &exceptions) : exceptions_(&exceptions) {}
   // This entry selector belongs to the pending completion, outside lexical binding IDs.
   static constexpr size_t pending_return_selection = null_target;
-  size_t deferred_return_offset() const { return exception_types_.size() + 1; }
+  size_t deferred_return_offset() const { return exceptions_->type_count + 1; }
   size_t deferred_input(Completion completion, bool receives, bool observes_return) const {
     const auto arrival = receives && completion.exception() ? completion.category() : 0;
     return arrival + (observes_return && completion.returned ? deferred_return_offset() : 0);
@@ -1179,7 +1179,7 @@ public:
   };
   struct Path { size_t input; Completion completion; size_t queue; Effects effects{}; };
   Effects preserve_pending(Effects effects) const {
-    effects.thrown = ExceptionFacts::arrival(categories_);
+    effects.thrown = ExceptionFacts::arrival(exceptions_->concrete_categories);
     return effects;
   }
   struct Action {
@@ -1230,8 +1230,7 @@ private:
   std::vector<Queue> queues_{{}};
   std::vector<Action> actions_;
   std::set<size_t> observed_inputs_, observed_references_;
-  std::span<const CheckedExceptionCategory> exception_types_;
-  std::set<size_t> categories_;
+  const ExceptionCatalog *exceptions_;
   using Outcomes = std::map<DrainState, Effects>;
   std::map<DrainState, Outcomes> identities_;
   Effects preserve_queue(Effects effects, const DrainState &state) const {
@@ -1420,10 +1419,10 @@ private:
     for (size_t i = 0; i < known.queued_failures.size(); ++i) known.queued_failures[i].merge(effects.queued_failures[i]);
     known.unknown_thrown = known.unknown_thrown || effects.unknown_thrown;
     for (auto &[target, value] : known.payloads)
-      if (!effects.payloads.contains(target)) value.merge(ExceptionFacts::payload(target, categories_));
+      if (!effects.payloads.contains(target)) value.merge(ExceptionFacts::payload(target, exceptions_->concrete_categories));
     for (const auto &[target, value] : effects.payloads) {
       const auto [found, inserted] = known.payloads.try_emplace(target, value);
-      if (inserted) found->second.merge(ExceptionFacts::payload(target, categories_));
+      if (inserted) found->second.merge(ExceptionFacts::payload(target, exceptions_->concrete_categories));
       else found->second.merge(value);
     }
     for (auto &[target, value] : known.booleans)
