@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Skip the seed source-form walk when the relevant syntax is absent
+
+<a id="k-seed-source-form-walk-20261125"></a>
+**K-SEED-SOURCE-FORM-WALK-20261125.** The [architecture review](design/ImplementationArchitecture.md#skipping-the-seed-source-form-walk) continues D-ARCH-REVIEW r201→202 under the [material-consumer rule](#h-compiler-work-necessity-20261125). At `b1af7314:cod/lang_syntax.hh` the ordinary parser constructs every syntax form that can affect the pre-registration visitor. A completed file can carry that fact to the checker. Marked modules and inputs of unknown provenance keep the existing visitor and diagnostic order.
+
 ## 2026-11-25 — Prove the lexer's read-only range once per phase
 
 <a id="k-seed-readonly-range-phase-20261125"></a>
