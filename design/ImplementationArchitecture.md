@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r213 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r212’s [replacement seed pipeline](#replacement-seed-pipeline) under the [compiler modes decision](../CHANGELOG.md#h-default-run-and-optimized-build-20261125). The bootstrap performance target governs default-path work. The high-quality optimizing mode belongs to [D-20-COMPILER-MODES](DesignAuthorityRegistry.md#d-20-compiler-modes).
+
 At r212 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r211 for the [first LLVM handoff](#replacement-seed-pipeline). The [adapter review](../CHANGELOG.md#k-replacement-seed-llvm-handoff-20261125) identifies the existing LLVM and provider consumers, the lifetime of their source references and the boundary between their emission walk and upstream collection.
 
 At r211 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) extends r210 under the [project user’s pipeline decision](../CHANGELOG.md#h-compiler-pipeline-replacement-20261125). P-682/P-683 now cover the project-wide prohibition on restarting a pass and the [replacement seed pipeline](#replacement-seed-pipeline). The trusted-source and native emission contracts continue. [D-20-STAGE-CONTROLS](DesignAuthorityRegistry.md#d-20-stage-controls) governs what IDE and build clients can request from each compiler.
@@ -754,7 +756,7 @@ Exercise a single arrival and multiple origins with distinct initialization and 
 
 ### Replacement seed pipeline
 
-Develop the new C++ pipeline from the facts needed to translate the real booter entry to LLVM bitcode and its C provider interface. The released translator remains usable until cutover. Its parser, binding rules, lowering routines and workload evidence can be reused where their inputs fit the new phase boundaries. New seed work belongs on this pipeline. Earlier exemptions for individual body shapes document useful behavior of the reference implementation.
+Develop the new C++ pipeline from the facts needed to translate the real booter entry to LLVM bitcode and its C provider interface. The [fast compile-and-run design target](../applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds) governs the cost of this path. The seed’s default bootstrap build keeps the linked `cod-booter` executable. Its internal generation and link steps may request their individual output files. The released translator remains usable until cutover. Its parser, binding rules, lowering routines and workload evidence can be reused where their inputs fit the new phase boundaries. New seed work belongs on this pipeline. Earlier exemptions for individual body shapes document useful behavior of the reference implementation.
 
 Take the two calls in [`ModuleIndex.insert_visit`](../applications/cod-booter/src/ModuleIndex.cod) as the first end-to-end case. Extraction records the two distinct caller slots, the ordered calls and the owner supplied to them. A separate pass derives the allocator arguments needed by the two reserve bodies from completed operations and call edges. Lowering uses those arguments and the actual slots. Verify both successful growth and failure of the second reserve after the first has rebound its slot. An emitter should be able to produce the ordered writes and failure edges without proving the caller's complete state on every exit.
 
