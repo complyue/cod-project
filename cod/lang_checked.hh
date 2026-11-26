@@ -15048,7 +15048,15 @@ class ScalarChecker {
     return result;
   }
   std::vector<ArgumentEvidence> argument_evidence(const Expression &expr) const {
+    if (expr.children.empty()) return {};
     if (expr.intrinsic || named_family(expr).methods.empty()) return std::vector<ArgumentEvidence>(expr.children.size());
+    // Reuse ordinary literal inference without surveying unrelated lexical
+    // bindings. Grouping, annotations, names and calls still use the frame.
+    if (std::ranges::all_of(expr.children, [](const auto &operand) {
+          using K = Expression::Kind;
+          return operand->kind == K::integer || operand->kind == K::real ||
+              operand->kind == K::boolean || operand->kind == K::string_literal;
+        })) return argument_evidence(expr, TypeEvidenceState{});
     return argument_evidence(expr, evidence_state());
   }
   bool builtin_indexed_transfer(const Expression &expr, std::string_view operation,
