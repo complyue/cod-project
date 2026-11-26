@@ -459,6 +459,8 @@ class ScalarChecker {
     const Expression *range = nullptr;
     bool independent_locals = true;
     std::vector<std::pair<const Expression *, BuiltinOperation>> reads;
+
+    bool requires_application() const { return readonly_loans || !calls.empty(); }
   };
   std::map<size_t, ScalarPlan> scalar_callers_;
   const ScalarPlan *applying_scalar_ = nullptr;
@@ -22656,6 +22658,10 @@ class ScalarChecker {
         !parameter.not_init_ref && !parameter.selects_caller_place() &&
         !parameter.automatic_conversion && !parameter.variadic;
   }
+  static bool direct_readonly_range(const ScalarPlan &plan, const Expression &body) {
+    return plan.readonly_loans && plan.range && plan.independent_locals &&
+        std::ranges::any_of(body.children, [&](const auto &item) { return item.get() == plan.range; });
+  }
 
   bool bind_scalar_call(const Expression &expr, const TypeEvidenceState &scope, ScalarPlan &plan,
                         Type::Kind result, size_t guard, bool forwards_literal = false) const {
@@ -22840,7 +22846,7 @@ class ScalarChecker {
                                 size_t guard = null_target) const {
     using K = Expression::Kind;
     if (expr.definition || expr.receiving || expr.annotation || expr.checked_ref_argument || expr.spread ||
-        expr.scoped || expr.lexical_symbol_call || expr.intrinsic) return false;
+        expr.scoped || expr.lexical_symbol_call || (expr.intrinsic && !array_length_query(expr))) return false;
     const auto bind_child = [&](const Expression &child, size_t condition) {
       return bind_readonly_operations(child, scope, plan, condition);
     };
@@ -22934,6 +22940,12 @@ class ScalarChecker {
       return bind_children();
     }
     case K::call:
+      if (array_length_query(expr)) {
+        // Array entries in this scope are the original readonly formals.
+        if (expr.children.size() != 1 || !readonly_base(Type::array)) return false;
+        plan.reads.emplace_back(&expr, BuiltinOperation::array_length);
+        return bind_children();
+      }
       if (const auto operation = text_access(text_primitive(expr, &scope))) {
         if ((*operation != BuiltinOperation::text_size && *operation != BuiltinOperation::text_byte) ||
             expr.children.size() != (*operation == BuiltinOperation::text_size ? 1 : 2) ||
@@ -22976,12 +22988,17 @@ class ScalarChecker {
           !std::ranges::all_of(method.input_owners(), &OwnerParameter::read_only)) return {};
       TypeEvidenceState scope;
       scope.method = instance.method;
+      bool has_value_inputs = false;
       for (size_t i = 0; i < parameters.size(); ++i) {
         const auto &type = instance.arguments[i];
-        if (!readonly_loan(parameters[i]) ||
-            (type.kind != Type::array && type != Type::string &&
-             (type.kind != Type::product || !program_.bits_payload(type))) ||
-            !scope.bindings.emplace(parameters[i].name, type).second) return {};
+        const auto &parameter = parameters[i];
+        const bool value = type == Type::uint64 && argument_mode(parameter) == ArgumentMode::value &&
+            parameter.owner.empty() && !parameter.not_init_ref && !parameter.selects_caller_place() &&
+            !parameter.automatic_conversion && !parameter.variadic;
+        const bool loan = readonly_loan(parameter) && (type.kind == Type::array || type == Type::string ||
+            (type.kind == Type::product && program_.bits_payload(type)));
+        if ((!value && !loan) || !scope.bindings.emplace(parameter.name, type).second) return {};
+        has_value_inputs |= value;
       }
       for (const auto &owner : method.input_owners()) scope.symbol_shadows.insert(owner.name);
       const ModuleLookup module(module_, method.module);
@@ -23009,14 +23026,19 @@ class ScalarChecker {
       }
       plan.kind = LeafBehaviorPlan::Kind::scalar_predicate;
       plan.scalar.readonly_loans = true;
-      if (form.body->children.size() == 1) {
+      if (!has_value_inputs && form.body->children.size() == 1) {
         const auto &returned = *form.body->children.front();
         if (returned.children.size() == 1 &&
             bind_scalar_call(*returned.children.front(), scope, plan.scalar, Type::boolean, null_target, true))
           return plan;
       }
-      if (!bind_readonly_operations(*form.body, scope, plan.scalar) || plan.scalar.calls.empty())
-        return {};
+      if (!bind_readonly_operations(*form.body, scope, plan.scalar)) return {};
+      const bool explicit_length = std::ranges::any_of(plan.scalar.reads, [](const auto &read) {
+        return read.second == BuiltinOperation::array_length;
+      });
+      if (plan.scalar.calls.empty()) {
+        if (!explicit_length || !direct_readonly_range(plan.scalar, *form.body)) return {};
+      } else if (has_value_inputs || explicit_length) return {};
       return plan;
     }
     if (scalar_function && (form.body->scoped || (!integer_result && form.body->children.size() != 1) ||
@@ -23101,6 +23123,7 @@ class ScalarChecker {
     for (const auto &[site, builtin] : plan.reads) {
       const auto &operation = instance.operations.at(site);
       if (operation.callee || operation.callable_call || operation.builtin != builtin ||
+          (builtin == BuiltinOperation::array_length && operation.type != Type::uint64) ||
           (site->kind == Expression::Kind::index && (!operation.indexed_target || !operation.read_only)) ||
           (site->kind == Expression::Kind::field && (!operation.product_field || !operation.read_only)))
         throw std::logic_error("read-only operation disagrees with its binding plan");
@@ -23200,9 +23223,7 @@ class ScalarChecker {
     const auto *readonly_range = [&]() -> const Expression * {
       if (!scalar_exits || distinct_bindings) return nullptr;
       const auto &plan = *applying_scalar_;
-      if (!plan.readonly_loans || !plan.range || !plan.independent_locals ||
-          std::ranges::none_of(method.body->children, [&](const auto &item) { return item.get() == plan.range; }))
-        return nullptr;
+      if (!direct_readonly_range(plan, *method.body)) return nullptr;
       const auto read_only = [&](const ScalarPlan::Call &call) {
         if ((call.kind != ScalarPlan::Call::Kind::literal && call.kind != ScalarPlan::Call::Kind::array_length) ||
             (validating_ && module_names().values.contains(call.site->text))) return false;
@@ -23871,7 +23892,7 @@ class ScalarChecker {
     std::set<size_t> completed_literals, completed_predicates, completed_lengths, completed_readonly_predicates;
     for (const auto &[id, plan] : std::as_const(bound)) {
       if ((plan.kind == LeafBehaviorPlan::Kind::borrowed_byte && !plan.primitive) ||
-          !plan.scalar.calls.empty()) continue;
+          plan.scalar.requires_application()) continue;
       ReplayWarnings warnings;
       struct ExtractionScope {
         ScalarChecker &checker;
@@ -23931,7 +23952,7 @@ class ScalarChecker {
       };
       std::vector<Application> applications;
       for (const auto &[id, plan] : std::as_const(bound)) {
-        if (plan.scalar.calls.empty() || attempted.contains(id) ||
+        if (!plan.scalar.requires_application() || attempted.contains(id) ||
             !std::ranges::all_of(plan.scalar.calls, completed_target)) continue;
         attempted.insert(id);
         auto &instance = program_.instances[id];
