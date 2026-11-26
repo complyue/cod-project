@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Omit target discovery in completed direct lexer wrappers
+
+<a id="k-seed-wrapper-target-preparation-20261125"></a>
+**K-SEED-WRAPPER-TARGET-PREPARATION-20261125.** The [architecture review](design/ImplementationArchitecture.md#target-preparation-in-direct-lexer-wrappers) continues D-ARCH-REVIEW r199→200 under the [material-consumer rule](#h-compiler-work-necessity-20261125). At `6827e2b2:cod/lang_checked.hh`, the proving frame already supplies all places in the admitted read-only wrapper. The reviewed change keeps separate proving visits for application and final comparison, with ordinary validation on a late written-name collision.
+
 ## 2026-11-25 — Apply the completed lexer predicate to two loans and a string literal
 
 <a id="k-seed-lexer-literal-wrappers-20261125"></a>

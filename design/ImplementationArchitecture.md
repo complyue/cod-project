@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r200 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r199 for [target preparation in direct lexer wrappers](#target-preparation-in-direct-lexer-wrappers). Under the [material-consumer rule](../CHANGELOG.md#h-compiler-work-necessity-20261125), the checked wrapper can omit a discovery traversal when the current proving frame supplies all target facts. Its final contract comparison and diagnostic turn remain required. [Review record](../CHANGELOG.md#k-seed-wrapper-target-preparation-20261125)
+
 At r199 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r198 for [forwarding two loans and a string literal](#forwarding-two-loans-and-a-string-literal). The scalar application batches and the read-only exit projection continue. The [UTF-8 contract](Utf8Strings.md) governs the literal's backing and owner. [Review record](../CHANGELOG.md#k-seed-lexer-literal-wrappers-20261125)
 
 At r198 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r197 for [completing read-only calls in the lexer](#completing-read-only-calls-in-the-lexer). The [completed-callee rule](../CHANGELOG.md#h-completed-callee-behavior-20261125) permits a caller to apply the finished length contract while the ordinary checker still owns loan preparation, loop settlement and validation. [Review record](../CHANGELOG.md#k-seed-readonly-lexer-contracts-20261125)
@@ -1149,6 +1151,14 @@ At `9f714ef8:applications/cod-booter/src/Lexer.cod`, `exception_word` returns `w
 Apply the sealed normal and abrupt facts to the three actuals. Then project the settled exits using the wrapper’s own inputs and their checked fields. In particular, callee formal 2 represents the literal here. The same ordinal in the wrapper can denote a projected field. Substitute the concrete literal before projecting a condition that mentions it. A preparation failure precedes entry. After entry, the exact call can relay a numeric or bounds completion from the sealed callee. The wrapper's call site accounts for that exit in the checker, while the emitted outcome carries the original failing operation's site and payload through cleanup.
 
 Use the existing batch publication and final read-only comparison. Compound wrappers, transformed actuals and unproved selections take the ordinary path. Verify the unchanged Lexer and a downstream import, the ordered loans for two actual wrappers, and the byte extent of an empty or multibyte literal. Distinguish a null actual rejected before entry from a reached failure in a less guarded predicate whose wrapper relays the original location. These cases exercise the scope independently of a full bootstrap.
+
+#### Target preparation in direct lexer wrappers
+
+At `6827e2b2:cod/lang_checked.hh`, both application and final validation run target discovery for the [direct wrapper](#forwarding-two-loans-and-a-string-literal). Its bound plan identifies the single returned call, both bare read-only formals and the literal. The current proving traversal already creates the two input places and their direct inline field places, and prepares the literal's view and owner. The exact completed callee has no input writes or rebindings on any exit. These facts suffice to select the existing proving traversal with clean discovery and loop state before entering the body. The wrapper still prepares actual owners and access, applies inherited completions and projects its own exits. This scheduling choice applies only to the bound wrapper shape and ordinary binding variant.
+
+Use one proving traversal during application and a separate one at the wrapper’s normal final validation turn. For the latter, first check the original written callee name, including a rename, against the completed names in the defining module and interpretation. Choose the ordinary discovery and validation schedule on a collision, before changing the frame. Otherwise keep validation active, rebuild the frame, deliver warnings through the existing finalization path and compare the freshly derived contract with the sealed one. The earlier frame remains insufficient by itself to mark the wrapper complete.
+
+Verify both phases on `exception_word` and `own_word`, with ordinary Lexer and TokenBuffer artifacts. The loop inside `word_is` still needs target discovery and settlement. Keep the located late-name diagnostic and prior artifacts, actual checked-null behavior and inherited bounds location. The timing gate continues.
 
 ### Boolean snapshots at immediate scalar calls
 
