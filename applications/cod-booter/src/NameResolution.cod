@@ -2894,7 +2894,7 @@ func resolve_enum_member(source:const SourceBytes in S, nodes:const ExprNodes in
 }
 
 func resolve_enum(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
-                  work:NameWork in W, state:NameState in R, backing:u64, tail:u64) -> void
+                  work:NameWork in W, state:NameState in R, declaration:u64, backing:u64, tail:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val kind <- builtin_type_name(source, nodes, backing);
     val limit <- 18446744073709551615u64;
@@ -2915,7 +2915,10 @@ func resolve_enum(source:const SourceBytes in S, nodes:const ExprNodes in N, bin
         return;
     };
     for (unused in 0u64 .. state.syntax_used) {
-        if (member == no_node()) return;
+        if (member == no_node()) {
+            work[declaration].enum_backing <- kind;
+            return
+        };
         resolve_enum_member(source, nodes, bindings, work, state, numbering, member);
         if (state.diagnostic != 0u8) return;
         member <- work[member].next;
@@ -3123,7 +3126,7 @@ func resolve_module_form(source:const SourceBytes in S, nodes:const ExprNodes in
         return;
     };
     if (shape == EnumTypeDeclaration) {
-        resolve_enum(source, nodes, bindings, work, state, declaration.value_type, declaration.entries);
+        resolve_enum(source, nodes, bindings, work, state, form, declaration.value_type, declaration.entries);
         return;
     };
     if (shape == HandleTypeDeclaration && declaration.parent_type != no_node()) {

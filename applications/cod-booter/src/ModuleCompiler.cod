@@ -45,13 +45,13 @@ export func compile_module_commands(source:const SourceBytes in S, tokens:Tokens
         aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
         scalar_object_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
     });
-    return compile_bound_commands(source, nodes, selected, bindings, work, interfaces, facts, owners, sites, commands,
+    return compile_bound_commands(source, nodes, selected, bindings, work, interfaces, 0u64, facts, owners, sites, commands,
                                   plan, report, 0u64, true);
 }
 
 export func compile_bound_commands(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                    selected:const SelectedExports in X, bindings:const NameBindings in Y,
-                                   work:const NameWork in W, interfaces:const ModuleInterfaces in I,
+                                   work:const NameWork in W, interfaces:const ModuleInterfaces in I, interface_count:u64,
                                    facts:OperandFacts in F, owners:CallOwners in O,
                                    sites:CompletionSites in K, commands:NativeCommands in C,
                                    plan:NativePlan in P, report:ModuleBindingResult in R, base:u64, entry:bool) -> bool
@@ -63,7 +63,7 @@ export func compile_bound_commands(source:const SourceBytes in S, nodes:const Ex
     plan.slots <- 0u64;
     plan.diagnostic <- 0u8;
     plan.node <- no_node();
-    if (!analyze_bound_operands(source, nodes, selected, bindings, work, facts, owners, report) ||
+    if (!analyze_bound_operands(source, nodes, selected, bindings, work, interfaces, interface_count, facts, owners, report) ||
         !analyze_bound_completion(nodes, bindings, work, facts, sites, report)) return false;
     if (!lower_native_module(nodes, report.frontend.tree, bindings, work, interfaces, facts, sites, commands, plan, base, entry)) return false;
     ref initialization = make InitializationResult { diagnostic <- 0u8; node <- no_node(); };

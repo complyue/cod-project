@@ -643,7 +643,7 @@ func library_declaration(nodes:const ExprNodes in N, tree:const ParseResult in T
 proc compile_graph_unit(source:const SourceBytes in S, lines:const SourceLines in S,
                         handle diagnostic:DiagnosticDestination in D, nodes:const ExprNodes in W,
                         selected:const SelectedExports in W, names:const NameBindings in W, work:NameWork in W,
-                        interfaces:const ModuleInterfaces in G,
+                        interfaces:const ModuleInterfaces in G, interface_count:u64,
                         progress:ModuleProgressRows in W, facts:OperandFacts in W,
                             owners:CallOwners in W,
                         sites:CompletionSites in W, commands:NativeCommands in W,
@@ -664,7 +664,7 @@ proc compile_graph_unit(source:const SourceBytes in S, lines:const SourceLines i
         used <- 0u64; functions <- 0u64; function_base <- 0u64; labels <- 0u64; slots <- 0u64; diagnostic <- 0u8; node <- no_node();
         initialization_notes <- false; initialization_obligations <- false;
     };
-    if (!compile_bound_commands(source, nodes, selected, names, work, interfaces, facts, owners, sites, commands,
+    if (!compile_bound_commands(source, nodes, selected, names, work, interfaces, interface_count, facts, owners, sites, commands,
                                  plan, result, progress[0u64].function_base, progress[0u64].entry != 0u8)) {
         if (result.stage != 0u8) {
             delivered <- report_graph_rejection(source, lines, diagnostic, result.stage, result.diagnostic, result.frontend.diagnostic_first,
@@ -736,7 +736,7 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
         return false
     };
     if (!check_module_operands(source, nodes, result.frontend.tree, names, work, selected, module,
-        facts, owners, fields, views, cases, demand, operands)) {
+        facts, interfaces, interface_count, owners, fields, views, cases, demand, operands)) {
         binding_diagnostic(nodes, result, module_operands_failed(), operands.diagnostic,
             operands.node);
         return false
@@ -1032,7 +1032,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     };
     if (native) {
         val checked_unit <- compile_graph_unit(source, lines, diagnostic, nodes, selected, names,
-            work, published_interfaces, progress, facts, owners, sites, commands, result, keys, key_first, key_past, run);
+            work, published_interfaces, interface_count, progress, facts, owners, sites, commands, result, keys, key_first, key_past, run);
         if (checked_unit != Complete) return checked_unit;
     };
     ref publication = make ModulePublication {
@@ -1385,7 +1385,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             case_item <- 0u8; case_match <- 0u8; case_body <- 0u8; case_guard <- 0u8; case_resume <- 0u8;
             case_end <- 0u8; case_presence <- 0u8; case_selection <- no_node(); case_context <- no_node();
             case_after_subject <- no_node(); case_discriminator <- 0u8; case_may_be_absent <- 0u8;
-            enum_constant <- 0u8; discriminator_code <- 0u64;
+            enum_constant <- 0u8; enum_backing <- 0u8; discriminator_code <- 0u64;
             case_excluded_at <- no_node(); case_exclusion_member <- no_node(); case_exclusion_previous <- no_node();
             case_exclusion_next <- no_node(); case_exit_link <- no_node(); case_exit_tail <- no_node();
             owner <- no_node(); identity <- 0u64; reservation <- no_node(); product_words <- 0u64; bits_product <- false;

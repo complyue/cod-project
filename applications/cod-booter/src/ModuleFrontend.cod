@@ -517,14 +517,27 @@ export func analyze_module_operands(source:const SourceBytes in S, tokens:Tokens
            owner F, owner O, owner R} {
     if (!bind_module(source, tokens, nodes, spellings, exports, selected, bindings, work, result))
         return false;
-    return analyze_bound_operands(source, nodes, selected, bindings, work, facts, owners, result);
+    ref interfaces = make ModuleInterfaces(0u64, make ModuleInterfaceRow {
+        defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
+        interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
+        type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
+        target_readonly <- 0u8; owner_readonly <- 0u8; has_here <- 0u8; failure_checked <- 0u8;
+        failure_module <- 0u64; failure_identity <- 0u64; name_first <- 0u64; name_past <- 0u64;
+        enum_code <- 0u64; native_function <- no_node(); callable_kind <- NoCallableKind;
+        native_reception <- 0u8;
+        membership <- UnprovedMembership;
+        native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
+        aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
+        scalar_object_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
+    });
+    return analyze_bound_operands(source, nodes, selected, bindings, work, interfaces, 0u64, facts, owners, result);
 }
 
 export func analyze_bound_operands(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                    selected:const SelectedExports in X, bindings:const NameBindings in Y,
-                                   work:const NameWork in W, facts:OperandFacts in F,
+                                   work:const NameWork in W, interfaces:const ModuleInterfaces in I, interface_count:u64, facts:OperandFacts in F,
                                    owners:CallOwners in O, result:ModuleBindingResult in R) -> bool
-    where {const owner S, const owner N, const owner X, const owner Y, const owner W, owner F, owner O, owner R} {
+    where {const owner S, const owner N, const owner X, const owner Y, const owner W, const owner I, owner F, owner O, owner R} {
     val declaration <- first_extended_declaration(nodes, work, result.frontend.tree, true);
     if (declaration != no_node()) {
         binding_diagnostic(nodes, result, module_binding_failed(), unsupported_module_declaration(), declaration);
@@ -546,7 +559,7 @@ export func analyze_bound_operands(source:const SourceBytes in S, nodes:const Ex
         receipt_body <- false; signature <- false; body <- false;
     });
     if (!check_module_operands(source, nodes, result.frontend.tree, bindings, work, selected, 1u64,
-        facts, owners,
+        facts, interfaces, interface_count, owners,
                                fields, no_native_loans, no_constructor_cases, executable, operands)) {
         binding_diagnostic(nodes, result, module_operands_failed(), operands.diagnostic, operands.node);
         return false;

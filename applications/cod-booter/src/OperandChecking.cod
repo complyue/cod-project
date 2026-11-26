@@ -160,6 +160,7 @@ export data OperandFact {
     case_discriminator:u8;
     case_may_be_absent:u8;
     enum_constant:u8;
+    enum_backing:u8;
     discriminator_code:u64;
     case_excluded_at:u64;
     case_exclusion_member:u64;
@@ -302,6 +303,7 @@ func set_fact(facts:OperandFacts in F, at:u64, kind:u8, reception:u8,
     facts[at].reservation <- no_node();
     facts[at].checked_exception <- checked_exception;
     facts[at].identity_module <- 0u64;
+    facts[at].enum_backing <- 0u8;
     facts[at].reaches_constructed_throw <- false;
     facts[at].loans_owning_handle <- false;
     facts[at].loans_case_receipt <- false;
@@ -375,11 +377,25 @@ func same_operand_type(facts:const OperandFacts in F, left:u64, right:u64) -> bo
             facts[right].identity_module);
 }
 
-func require_matching_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:u64, expected:u64) -> u8
+func supplies_enum_backing(facts:const OperandFacts in F, operand:u64, expected:u8) -> bool
+    where {const owner F} {
+    return expected != 0u8 && facts[operand].kind == scalar_enum() &&
+        source_scalar_kind(facts[operand].enum_backing) == expected
+}
+
+# Consume an independent copy of the code. The original nominal type and
+# the access contract of its storage remain attached to the source operand.
+func require_value_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:u64, expected:u8) -> u8
     where {const owner N, owner F} {
-    if (facts[expected].kind == scalar_enum() && facts[operand].kind == scalar_enum() &&
-        !same_operand_type(facts, operand, expected)) return wrong_operand_type();
-    return require_typed_bits(nodes, facts, operand, facts[expected].kind);
+    val read_kind <- if (supplies_enum_backing(facts, operand, expected)) { scalar_enum() } else { expected };
+    return require_typed_bits(nodes, facts, operand, read_kind)
+}
+
+func require_matching_value_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:u64, expected:u64) -> u8
+    where {const owner N, owner F} {
+    if (!compatible_operand_nominal(facts, operand, facts[expected].kind, facts[expected].identity,
+        facts[expected].identity_module)) return wrong_operand_type();
+    return require_value_bits(nodes, facts, operand, facts[expected].kind)
 }
 
 func require_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:u64) -> u8
@@ -589,7 +605,8 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
     if (form != ValueFormal && form != ExplicitValueFormal && form != ReferenceFormal &&
         form != PointerFormal) return unproved_operand();
     val declared <- names[annotation].kind;
-    if (source_only && declared == ordinary_selection()) {
+    if (declared == ordinary_selection() &&
+        (source_only || form == ValueFormal || form == ExplicitValueFormal)) {
         val choice <- names[annotation].declaration;
         if (choice < intrinsic (len)(selected) && selected[choice].kind == enum_export() &&
             selected[choice].origin_module != 0u64 && selected[choice].identity != no_node()) {
@@ -802,10 +819,10 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, fact
             facts[at].reservation <- initializer;
             return 0u8;
         } else {};
-        val diagnostic <- require_typed_bits(nodes, facts, initializer, value_kind);
+        val diagnostic <- require_value_bits(nodes, facts, initializer, value_kind);
         if (diagnostic != 0u8) return diagnostic;
         set_fact(facts, at, value_kind, local_place(), names[at].scope, identity, 0u8);
-        facts[at].identity_module <- facts[initializer].identity_module;
+        if (value_kind == scalar_enum()) { (facts[at].identity_module <- facts[initializer].identity_module):void };
         facts[at].target_readonly <- readonly;
         return 0u8;
     } else {};
@@ -837,6 +854,7 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, fact
     };
     if (owner_site == no_node()) return unproved_owner();
     set_fact(facts, at, kind, reception, owner_site, identity, 0u8);
+    facts[at].identity_module <- facts[initializer].identity_module;
     facts[at].target_readonly <- if (type_name == no_node()) { (facts[initializer].target_readonly) } else { readonly };
     facts[at].reservation <- facts[initializer].reservation;
     facts[at].text_nul <- facts[initializer].text_nul;
@@ -905,7 +923,7 @@ func check_construction(nodes:const ExprNodes in N, names:const NameBindings in 
     if (facts[body].kind == never_result()) { set_result(facts, at, never_result()); return 0u8; } else {};
     if (kind == scalar_enum() && facts[body].kind == scalar_enum() && facts[body].identity != identity)
         return incompatible_enum_type();
-    val diagnostic <- require_typed_bits(nodes, facts, body, kind);
+    val diagnostic <- require_value_bits(nodes, facts, body, kind);
     if (diagnostic != 0u8) return diagnostic;
     set_fact(facts, at, kind, borrowed_ref(), owner_site, identity, 0u8);
     return 0u8;
@@ -1137,7 +1155,7 @@ func check_product_initializer(source:const SourceBytes in S, nodes:const ExprNo
             (state.abrupt <- true):void;
         } else {
             val kind <- declared_scalar(names[annotation].kind);
-            val bits_problem <- require_typed_bits(nodes, facts, value, kind);
+            val bits_problem <- require_value_bits(nodes, facts, value, kind);
             if (bits_problem != 0u8) return bits_problem;
             if (kind == scalar_enum() && facts[value].identity != nominal_identity(names, annotation))
                 return incompatible_enum_type();
@@ -1267,6 +1285,7 @@ func check_transfer_destination(
 func remember_transfer(facts:OperandFacts in F, at:u64, destination:u64) -> void where {owner F} {
     set_fact(facts, at, facts[destination].kind, borrowed_ref(),
              facts[destination].owner, facts[destination].identity, 0u8);
+    facts[at].identity_module <- facts[destination].identity_module;
     facts[at].target_readonly <- 1u8;
     facts[at].reservation <- facts[destination].reservation;
     return
@@ -1276,7 +1295,7 @@ func check_transfer(nodes:const ExprNodes in N, facts:OperandFacts in F,
                     at:u64, destination:u64, supplied:u64) -> u8 where {const owner N, owner F} {
     val diagnostic <- check_transfer_destination(nodes, facts, destination);
     if (diagnostic != 0u8) return diagnostic;
-    diagnostic <- require_matching_bits(nodes, facts, supplied, destination);
+    diagnostic <- require_matching_value_bits(nodes, facts, supplied, destination);
     if (diagnostic != 0u8) return diagnostic;
     remember_transfer(facts, at, destination);
     return 0u8;
@@ -1332,9 +1351,9 @@ func check_argument_operand(nodes:const ExprNodes in N, facts:OperandFacts in F,
         return checked_selection_requires_ref();
     if (wanted == local_place()) {
         if (!compatible_operand_nominal(facts, actual, kind, identity, module)) return wrong_operand_type();
-        val bits_problem <- if (kind == source_u32()) { require_source_u32(nodes, facts, actual,
-            true) }
-            else { require_typed_bits(nodes, facts, actual, kind) };
+        val bits_problem <- if (kind == source_u32() && !supplies_enum_backing(facts, actual, kind)) {
+            require_source_u32(nodes, facts, actual, true)
+        } else { require_value_bits(nodes, facts, actual, kind) };
         if (bits_problem != 0u8) return bits_problem;
         set_fact(facts, argument, kind, independent_value(), no_node(), identity, 0u8);
         facts[argument].identity_module <- module;
@@ -2397,16 +2416,18 @@ func sequence_result(facts:const OperandFacts in F, tail:u64) -> u8 where {const
 }
 
 # Abrupt paths add no normal result to a full scope or try expression.
-func merge_result(facts:OperandFacts in F, at:u64, kind:u8, identity:u64) -> u8 where {owner F} {
+func merge_result(facts:OperandFacts in F, at:u64, kind:u8, identity:u64, module:u64) -> u8 where {owner F} {
     if (kind == 0u8) return unproved_result_contract();
     if (kind == never_result()) return 0u8;
     if (immutable_text_kind(kind)) return unsupported_text_operation();
     if (kind == product_kind()) return unsupported_product_layout();
     if (facts[at].kind != 0u8 &&
-        (facts[at].kind != kind || (kind == scalar_enum() && facts[at].identity != identity)))
+        (facts[at].kind != kind || !compatible_operand_nominal(facts, at, kind, identity, module)))
         return unproved_result_contract();
-    if (kind == scalar_enum()) { set_fact(facts, at, kind, independent_value(), no_node(), identity, 0u8); }
-    else { set_result(facts, at, kind); };
+    if (kind == scalar_enum()) {
+        set_fact(facts, at, kind, independent_value(), no_node(), identity, 0u8);
+        (facts[at].identity_module <- module):void
+    } else { set_result(facts, at, kind); };
     return 0u8;
 }
 
@@ -2416,7 +2437,7 @@ func merge_arm_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u6
     if (kind == 0u8) return unproved_result_contract();
     if (kind == never_result()) return 0u8;
     if (discard && facts[at].discarded_result == loop_discard())
-        return merge_result(facts, at, void_result(), 0u64);
+        return merge_result(facts, at, void_result(), 0u64, 0u64);
     if (immutable_text_kind(kind)) return unsupported_text_operation();
     if (kind == product_kind()) return unsupported_product_layout();
     if (facts[at].kind == 0u8) {
@@ -2443,6 +2464,7 @@ func merge_arm_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u6
     val present <- facts[at].target_presence;
     val selected <- facts[at].selection;
     set_fact(facts, at, kind, reception, owner_site, identity, 0u8);
+    facts[at].identity_module <- facts[arm].identity_module;
     facts[at].target_readonly <- readonly;
     facts[at].reservation <- reservation;
     if (present == facts[arm].target_presence) { (facts[at].target_presence <- present):void; } else {};
@@ -2845,7 +2867,7 @@ func merge_case_breaks(nodes:const ExprNodes in N, names:const NameBindings in B
         if (pending == no_node() || pending > through) return 0u8;
         if (reached && case_transfer_survives(nodes, names, facts, pending, used, revision)) {
             if (!completion_operand(nodes, revision, used, pending, value)) return invalid_operand_tree();
-            diagnostic <- if (value == no_node()) { merge_result(facts, at, void_result(), 0u64) }
+            diagnostic <- if (value == no_node()) { merge_result(facts, at, void_result(), 0u64, 0u64) }
                           else { merge_arm_result(nodes, facts, at, value, false) };
             if (diagnostic != 0u8) return diagnostic;
         } else {};
@@ -2863,12 +2885,12 @@ func operand_problem(report:OperandCheckResult in R, at:u64, diagnostic:u8) -> b
 
 func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
                 links:const NameWork in L, selected:const SelectedExports in E, facts:OperandFacts in F,
-                owners:CallOwners in O, fields:const CaughtFieldUses in X,
+                interfaces:const ModuleInterfaces in I, published:u64, owners:CallOwners in O, fields:const CaughtFieldUses in X,
                     views:const SuppliedViews in H,
                 cases:const ConstructorCaseFacts in C,
                 demand:const DeclarationDemands in D,
                 report:OperandCheckResult in R, at:u64, used:u64, revision:u64, outer:u64) -> bool
-    where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F,
+    where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F, const owner I,
            owner O, const owner X, const owner H, const owner C, const owner D, owner R} {
     ref selection = make CaseSites { subject <- no_node(); items <- no_node(); };
     if (!inspect_case(nodes, revision, used, at, selection)) return operand_problem(report, at, invalid_operand_tree());
@@ -2960,7 +2982,7 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
             if (diagnostic != 0u8) return operand_problem(report, at, diagnostic);
             if (reached) { match_case_arm(facts, coverage, subject, expression, member, mode); } else {};
             context <- enter_case_context(facts, outer, expression);
-            if (!check_operand_range(source, nodes, names, links, selected, facts, owners, fields,
+            if (!check_operand_range(source, nodes, names, links, selected, facts, interfaces, published, owners, fields,
                 views, cases, demand, report,
                                      cursor, item, used, revision, context)) return false;
             diagnostic <- finish_case_arm(nodes, links, facts, coverage, at, expression, member, borrowed, used, revision, arm, mode);
@@ -2976,7 +2998,7 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
                 (facts[item].case_selection <- facts[subject].selection):void;
             } else {};
             context <- enter_case_context(facts, outer, item);
-            if (!check_operand_range(source, nodes, names, links, selected, facts, owners, fields,
+            if (!check_operand_range(source, nodes, names, links, selected, facts, interfaces, published, owners, fields,
                 views, cases, demand, report,
                                      cursor, item, used, revision, context)) return false;
             diagnostic <- merge_case_breaks(nodes, names, facts, last_exit, at, expression, reached, used, revision);
@@ -3034,8 +3056,8 @@ func merge_guard_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:
     where {const owner N, owner F} {
     val kind <- facts[arm].kind;
     if (discard && (scalar_kind(kind) || immutable_text_kind(kind)))
-        return merge_result(facts, at, void_result(), 0u64);
-    if (facts[at].arm_result == 0u8 || !scalar_kind(kind)) return merge_result(facts, at, kind, facts[arm].identity);
+        return merge_result(facts, at, void_result(), 0u64, 0u64);
+    if (facts[at].arm_result == 0u8 || !scalar_kind(kind)) return merge_result(facts, at, kind, facts[arm].identity, facts[arm].identity_module);
     if (facts[arm].reception == nullable_ptr() && facts[at].discarded_result == 0u8)
         return unproved_nonnull_borrow();
     # A native result slot can hold either bits or a target. A guard with
@@ -3105,7 +3127,8 @@ func check_catch_clause(nodes:const ExprNodes in N, facts:const OperandFacts in 
 
 func check_scope_tail(facts:OperandFacts in F, scope:u64, tail:u64) -> u8 where {owner F} {
     val identity <- if (tail == no_node()) { 0u64 } else { (facts[tail].identity) };
-    val diagnostic <- merge_result(facts, scope, sequence_result(facts, tail), identity);
+    val module <- if (tail == no_node()) { 0u64 } else { (facts[tail].identity_module) };
+    val diagnostic <- merge_result(facts, scope, sequence_result(facts, tail), identity, module);
     if (diagnostic == 0u8 && facts[scope].kind == 0u8) {
         if (facts[scope].case_resume != 0u8) { set_result(facts, scope, never_result()); }
         else { only_void(facts, scope); };
@@ -3123,7 +3146,9 @@ func check_callable_tail(facts:const OperandFacts in F, definition:u64, callable
     val kind <- facts[callable.body].kind;
     if (kind == 0u8) return unproved_result_contract();
     if (scalar_kind(kind) && facts[definition].kind == void_result()) return value_tail_in_void_function();
-    if (scalar_kind(kind) && !same_operand_type(facts, callable.body, definition)) return wrong_return_type();
+    if (scalar_kind(kind) && !same_operand_type(facts, callable.body, definition) &&
+        (facts[definition].reception != independent_value() ||
+         !supplies_enum_backing(facts, callable.body, facts[definition].kind))) return wrong_return_type();
     return 0u8;
 }
 
@@ -3134,7 +3159,8 @@ func validate_return(nodes:const ExprNodes in N, names:const NameBindings in B, 
     if (module_tail(nodes, revision, used, scope, tail)) return wrong_return_type();
     if (is_scope_block(nodes, scope) && block_tail(nodes, revision, used, scope, tail)) {
         val identity <- if (value == no_node()) { 0u64 } else { (facts[value].identity) };
-        return merge_result(facts, scope, result_kind(nodes, facts, value, true), identity);
+        val module <- if (value == no_node()) { 0u64 } else { (facts[value].identity_module) };
+        return merge_result(facts, scope, result_kind(nodes, facts, value, true), identity, module);
     } else {};
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
     val form <- inspect_callable(nodes, revision, used, scope, callable);
@@ -3162,9 +3188,18 @@ func validate_return(nodes:const ExprNodes in N, names:const NameBindings in B, 
         if (facts[value].owner != facts[scope].owner) return wrong_text_result_owner();
         return 0u8;
     };
-    val diagnostic <- if (facts[scope].kind == source_u32()) { require_source_u32(nodes, facts,
-        value, true) }
-        else { require_matching_bits(nodes, facts, value, scope) };
+    val kind <- facts[scope].kind;
+    val diagnostic <- if (kind == source_u32() && !supplies_enum_backing(facts, value, kind)) {
+        require_source_u32(nodes, facts, value, true)
+    } else {
+        if (facts[scope].reception == independent_value()) {
+            require_matching_value_bits(nodes, facts, value, scope)
+        } else {
+            if (!compatible_operand_nominal(facts, value, kind, facts[scope].identity, facts[scope].identity_module))
+                { wrong_operand_type() }
+            else { require_typed_bits(nodes, facts, value, kind) }
+        }
+    };
     if (diagnostic == wrong_operand_type()) return wrong_return_type();
     return diagnostic;
 }
@@ -3214,10 +3249,20 @@ func check_numeric_expression(nodes:const ExprNodes in N, facts:OperandFacts in 
 func check_comparison(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64, binary:const BinarySites in B) -> u8
     where {const owner N, owner F, const owner B} {
     val left <- binary.left_operand;
-    val kind <- if (binary.relation == Equal || binary.relation == Unequal) { (facts[left].kind) } else { scalar_u64() };
-    val diagnostic <- require_typed_bits(nodes, facts, left, kind);
+    val right <- binary.right_operand;
+    val equality <- binary.relation == Equal || binary.relation == Unequal;
+    val left_kind <- facts[left].kind;
+    val right_kind <- facts[right].kind;
+    val kind <- if (equality) {
+        if (supplies_enum_backing(facts, left, right_kind)) { right_kind } else { left_kind }
+    } else { scalar_u64() };
+    if (!compatible_operand_nominal(facts, right, left_kind, facts[left].identity, facts[left].identity_module))
+        return wrong_operand_type();
+    val diagnostic <- if (equality) { require_value_bits(nodes, facts, left, kind) }
+        else { require_typed_bits(nodes, facts, left, kind) };
     if (diagnostic != 0u8) return diagnostic;
-    diagnostic <- require_matching_bits(nodes, facts, binary.right_operand, left);
+    diagnostic <- if (equality) { require_value_bits(nodes, facts, right, kind) }
+        else { require_typed_bits(nodes, facts, right, left_kind) };
     if (diagnostic != 0u8) return diagnostic;
     set_result(facts, at, scalar_bool());
     return 0u8;
@@ -3876,17 +3921,33 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     return 0u8;
 }
 
+func complete_enum_backing(links:const NameWork in L, interfaces:const ModuleInterfaces in I,
+                           published:u64, facts:OperandFacts in F, at:u64, used:u64) -> void
+    where {const owner L, const owner I, owner F} {
+    if (facts[at].kind != scalar_enum()) return;
+    val identity <- facts[at].identity;
+    val module <- facts[at].identity_module;
+    if (module == 0u64) {
+        if (identity < used) { (facts[at].enum_backing <- links[identity].enum_backing):void };
+        return
+    };
+    val head <- find_interface(interfaces, published, module, identity);
+    if (head != no_node() && interfaces[head].interface_kind == enum_type()) {
+        (facts[at].enum_backing <- interfaces[head].element_kind):void
+    };
+}
+
 # Ordinary nodes are checked in postorder. Once a case subject is ready,
 # its ordered scan checks each direct item in the context that reaches it.
 func check_operand_range(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
                          links:const NameWork in L, selected:const SelectedExports in E, facts:OperandFacts in F,
-                         owners:CallOwners in O, fields:const CaughtFieldUses in X,
+                         interfaces:const ModuleInterfaces in I, published:u64, owners:CallOwners in O, fields:const CaughtFieldUses in X,
                              views:const SuppliedViews in H,
                          cases:const ConstructorCaseFacts in C,
                 demand:const DeclarationDemands in D,
                          report:OperandCheckResult in R, first:u64, past:u64, used:u64,
                              revision:u64, context:u64) -> bool
-    where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F,
+    where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F, const owner I,
         owner O, const owner X, const owner H, const owner C, const owner D, owner R} {
     val at <- first;
     val diagnostic <- 0u8;
@@ -3896,14 +3957,15 @@ func check_operand_range(source:const SourceBytes in S, nodes:const ExprNodes in
         if (needs_body_check(demand, at)) {
             if (at != context) { (facts[at].case_context <- context):void; };
             if (at == enclosing_case) {
-                if (!check_case(source, nodes, names, links, selected, facts, owners, fields, views,
+                if (!check_case(source, nodes, names, links, selected, facts, interfaces, published, owners, fields, views,
                     cases, demand, report,
                                 at, used, revision, context)) return false;
             } else {
                 diagnostic <- check_operand(source, nodes, names, links, selected, facts, owners,
                     fields, views, cases, intrinsic (len)(demand) != 0u64, at, used, revision);
                 if (diagnostic != 0u8) return operand_problem(report, at, diagnostic)
-            }
+            };
+            complete_enum_backing(links, interfaces, published, facts, at, used);
         };
         enclosing_case <- facts[at].case_after_subject;
         at <- if (enclosing_case != no_node() && enclosing_case < past) { enclosing_case } else { at + 1u64 };
@@ -4059,21 +4121,23 @@ func close_allocation_owners(facts:OperandFacts in F, owners:CallOwners in O, us
 export func check_module_operands(source:const SourceBytes in S, nodes:const ExprNodes in N, tree:const ParseResult in T,
                                   names:const NameBindings in B, links:const NameWork in L,
                                   selected:const SelectedExports in E, module:u64,
-                                      facts:OperandFacts in F,
+                                      facts:OperandFacts in F, interfaces:const ModuleInterfaces in I,
+                                      published:u64,
                                   owners:CallOwners in O, fields:const CaughtFieldUses in X,
                                       views:const SuppliedViews in H,
                                   cases:const ConstructorCaseFacts in C,
                                   demand:const DeclarationDemands in D,
                                       report:OperandCheckResult in R) -> bool
     where {const owner S, const owner N, const owner T, const owner B, const owner L, const owner E,
-        owner F,
+        owner F, const owner I,
            owner O, const owner X, const owner H, const owner C, const owner D, owner R} {
     report.node <- no_node();
     report.diagnostic <- invalid_operand_tree();
     ref tail = make u64 { no_node() };
     if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) ||
         tree.root != tree.used - 1u64 || !module_tail(nodes, tree.revision, tree.used, tree.root, tail)) return false;
-    if (intrinsic (len)(names) < tree.used || intrinsic (len)(links) < tree.used ||
+    if (published > intrinsic (len)(interfaces) ||
+        intrinsic (len)(names) < tree.used || intrinsic (len)(links) < tree.used ||
         intrinsic (len)(selected) < tree.used || intrinsic (len)(facts) < tree.used ||
         intrinsic (len)(owners) < tree.used ||
         (intrinsic (len)(cases) != 0u64 && intrinsic (len)(cases) < tree.used)) {
@@ -4187,7 +4251,7 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
             (facts[selection.subject].case_after_subject <- at):void;
         } else {};
     };
-    if (!check_operand_range(source, nodes, names, links, selected, facts, owners, fields, views,
+    if (!check_operand_range(source, nodes, names, links, selected, facts, interfaces, published, owners, fields, views,
         cases, demand, report,
                              0u64, tree.used, tree.used, tree.revision, no_node())) return false;
     close_allocation_owners(facts, owners, tree.used);
