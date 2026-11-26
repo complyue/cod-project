@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Select an ordinary enum overload before preparing the call
+
+<a id="k-booter-enum-overloads-20261126"></a>
+**K-BOOTER-ENUM-OVERLOADS-20261126.** The [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) confirmed [read-only selection over completed same-revision family signatures](applications/cod-booter/docs/CompilerPipeline.md#ordinary-overloads-on-an-enum-and-its-backing-type). The [baseline object checker](https://github.com/complyue/cod-project/blob/116e98ea7900dbdf7ca16e2cae54519d2aef22a5/applications/cod-booter/src/OperandChecking.cod#L4161-L4188) uses transfer-family checks on a linked list of methods. The new ordinary-call boundary implements the existing [exact enum overload preference](design/TypedEnums.md#using-an-enum-as-its-backing-value) while preserving argument preparation, nominal identity and ambiguity. D-07-ENUM and D-20-STAGE-CONTROLS continue at pipeline r16, registry r1344→1345.
+
 ## 2026-11-26 — Schedule booter syntax delivery alongside the pipeline rewrite
 
 <a id="h-booter-syntax-delivery-order-20261126"></a>
