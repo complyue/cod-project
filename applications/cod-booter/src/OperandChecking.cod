@@ -1818,7 +1818,8 @@ func value_applicability(nodes:const ExprNodes in N, links:const NameWork in L, 
             # could matter to selection but is outside this executable slice.
             if ((facts[actual].kind != scalar_u8() || facts[formal].kind != scalar_u64()) &&
                 facts[actual].kind != never_result() &&
-                !(facts[actual].kind == scalar_enum() && facts[actual].enum_backing == 0u8))
+                !(facts[actual].kind == scalar_enum() && facts[actual].enum_backing == 0u8 &&
+                  (facts[formal].kind == scalar_u8() || facts[formal].kind == scalar_u64())))
                 return (InapplicableValue:ValueApplicability);
             (unrepresented <- true):void
         };
@@ -1892,15 +1893,26 @@ func select_value_method(nodes:const ExprNodes in N, links:const NameWork in L, 
     ref formals = make u64 { no_node() };
     val method <- family;
     val applicability <- (InapplicableValue:ValueApplicability);
+    val ambiguous <- false;
+    val unrepresented <- false;
     for (unused in 0u64 .. used) {
-        if (method == no_node()) { selected <- best.method; return 0u8 };
+        if (method == no_node()) {
+            # An unrepresented conversion is non-exact at a position where
+            # every represented applicant must match exactly. It cannot
+            # resolve ambiguity between represented methods.
+            if (ambiguous) return ambiguous_value_call();
+            if (unrepresented) return unsupported_value_family();
+            selected <- best.method;
+            return 0u8
+        };
         if (method != best.method) {
             if (!callable_formals(nodes, revision, used, method, false, formals)) return invalid_operand_tree();
             applicability <- value_applicability(nodes, links, facts, formals, arguments, used, revision);
             if (applicability != (InapplicableValue:ValueApplicability) &&
                 !better_value_method(nodes, links, facts, best.formals, formals, arguments, used, revision)) {
-                if (applicability == (UnrepresentedValue:ValueApplicability)) return unsupported_value_family();
-                return ambiguous_value_call()
+                if (applicability == (UnrepresentedValue:ValueApplicability)) {
+                    (unrepresented <- true):void
+                } else { (ambiguous <- true):void }
             };
         };
         (method <- links[method].next_method):void
