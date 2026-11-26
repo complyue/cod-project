@@ -1,8 +1,10 @@
 # Scalar units, strict brands and array index domains
 
-Discussion revision: 37 · Recorded: 2026-11-23 · Status: alternatives under discussion.
+Discussion revision: 38 · Recorded: 2026-11-26 · Status: alternatives under discussion.
 
 ## Design authority
+
+At r38 [D-07-TYPE-SYNONYMS](DesignAuthorityRegistry.md#d-07-type-synonyms) supplies canonical [scalar spellings and synonyms](JuliaPackagePortability.md#scalar-names-and-transparent-type-synonyms). Synonyms preserve representation, nominal units and signedness. [D-10-LIBRARY-FIXITY](DesignAuthorityRegistry.md#d-10-library-fixity) clarifies grouping in the operator naming example. Conversion, widening and index-domain contracts continue from r37.
 
 - **Conversion route spelling:** [D-10-OPERATOR-RUNS](DesignAuthorityRegistry.md#d-10-operator-runs) at D-11 r37 separates the automatic-conversion marker from the first route arrow. Check the explicit route against the same units and selected conversion before and after the spelling migration. [Decision](../CHANGELOG.md#h-maximal-operator-runs-20261123)
 
@@ -239,7 +241,7 @@ a - b     ≡ (-)(a, b)
 
 Unary and binary methods share the parenthesized name and differ by argument count/types. No extra unary-magic spelling is needed. The overload family can express heterogeneous input/result types, including UoM products, rather than requiring every operator to return its operand type. These examples do not independently approve the SlotDelta type or its arithmetic policy.
 
-For an eager operator, infix/prefix notation should resolve to the same method and preserve the same operand evaluation as its explicit call: each operand is evaluated once, and dispatch does not commute, duplicate or discard it. Parsing precedence and associativity belong to the expression grammar; a method overload does not silently change the parse of `a + b * c`. User-defined tokens/fixities and higher-order operator values remain separate scope, rather than implicit requirements of this naming form.
+For an eager operator, infix/prefix notation should resolve to the same method and preserve the same operand evaluation as its explicit call: each operand is evaluated once, and dispatch does not commute, duplicate or discard it. The expression grammar applies the [selected vocabulary’s precedence and associativity](JuliaPackagePortability.md#operator-grouping-belongs-to-the-selected-vocabulary) before selecting methods for `a + b * c`. Parenthesized operator names also work in the existing bootstrap vocabulary.
 
 A consistent indexing-read candidate is:
 

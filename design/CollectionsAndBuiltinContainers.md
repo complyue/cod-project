@@ -1,8 +1,10 @@
 # Collections and builtin containers
 
-Design revision 6 · 2026-11-23 · Source design draft
+Design revision 7 · 2026-11-26 · Source design draft
 
 ## Design authority
+
+At r7 [D-30-ARRAY-POLICY](DesignAuthorityRegistry.md#d-30-array-policy) assigns public array behavior and names to libraries. P-758/P-759 preserve the r6 owner, access and transfer rules at library and native boundaries. [Human direction and acceptance](JuliaPackagePortability.md#library-defined-arrays-and-the-native-c-boundary)
 
 [H-DRAIN-HANDOFF-20261123](../CHANGELOG.md#h-drain-handoff-20261123) confirms incremental removal and suffix custody in [consuming traversal](#removal-order-and-failure) under [D-30](DesignAuthorityRegistry.md#d-30), P-589/P-590. Each successful handoff identifies the member whose owner changes. D-29-HEADERS governs release on overwrite or loop exit. Acceptance observes the first member between handoffs and checks the remaining members on early exit. The operation names, general conformance and owning-yield signatures remain proposals.
 
@@ -18,6 +20,8 @@ Design revision 6 · 2026-11-23 · Source design draft
 - The visitor mutation rule applies to indirect calls. Acceptance checks owner identity after compaction. The wider visitor contract remains pending. [Engineering review](../CHANGELOG.md#k-collection-visitor-proof-20261118)
 
 ## Builtin containers and related forms
+
+The named regional array below describes the current bootstrap representation. The bundled native interop vocabulary is explicitly selected as `CArray`; `julia.cod` can export `Array`. Each library specifies its own axes, layout and slice/view behavior. [Array policy and migration](JuliaPackagePortability.md#library-defined-arrays-and-the-native-c-boundary) · [Stepped subscripts](JuliaPackagePortability.md#stepped-subscripts)
 
 | Form | Element and owner model | Design and source status |
 | --- | --- | --- |

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Give array conventions and expression grouping to libraries and prioritize type synonyms
+
+<a id="h-library-arrays-fixity-and-type-names-20261126"></a>
+**H-LIBRARY-ARRAYS-FIXITY-AND-TYPE-NAMES-20261126.** In the [CoD design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user directed “不自动using，不占 `Array` 名头，留给 julia.cod 去用”, delegated concrete choices and requested early type synonyms. The user confirmed “Keep signed i64 and unsigned u64. Both lower to LLVM i64. Julia names are transparent synonyms.” For the range conflict the user decided “把range写法转换作为porting jl to cod 的手工步骤要求吧，CoD坚持自己的原味语法”. The [r2 portability design](design/JuliaPackagePortability.md#library-defined-arrays-and-the-native-c-boundary) qualifies library array policy, selected operator fixity and first-order synonyms under P-758–P-763. It continues the [r1 port workloads](https://github.com/complyue/cod-project/blob/5b0c4c5fb88d8857c16d82b12fd79a83f51cf238/design/JuliaPackagePortability.md) and the [tokenization contract](#h-maximal-operator-runs-20261123). Breaking updates to the booter source are permitted where needed for the intended library design. Registry r1345→1346.
+
 ## 2026-11-26 — Select an ordinary enum overload before preparing the call
 
 <a id="k-booter-enum-overloads-20261126"></a>
