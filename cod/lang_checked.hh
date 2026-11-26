@@ -9250,24 +9250,42 @@ class ScalarChecker {
   void require_type_readable_target(const TypeEvidenceState &state, const TargetEvidence &target,
                                     const Location &at) const {
     if (!state.checks_initialization() || !state.selections.initialization_reachable) return;
+    const auto may_have_required_fields = [&](size_t type) {
+      const auto &schema = program_.schemas.at(type);
+      // A checked bits layout also excludes reference fields in inline children.
+      return !schema.layout_checked || !schema.bits;
+    };
     // An unresolved receiver can make a different candidate's field evidence insufficient.
     bool required_fields = false, unresolved = false;
     for (const auto &place : target.places) if (const auto *product = std::get_if<QueryProductPlace>(&place)) {
       unresolved |= !product->reservation && !product->enclosing;
-      if (const auto type = inline_query_product(*product)) {
-        const auto &schema = program_.schemas.at(*type);
-        // A checked bits layout also excludes reference fields in inline children.
-        required_fields |= !schema.layout_checked || !schema.bits;
-      }
+      if (const auto type = inline_query_product(*product)) required_fields |= may_have_required_fields(*type);
     }
     if (!required_fields && !unresolved) return;
     const auto &flow = state.selections;
-    const auto reaching = state.selections.outcome(state.selections.selection_outcomes(target), true);
+    std::optional<ObservationPaths> reaching;
+    const auto may_read_uninitialized = [&](const EvidenceSlot &place) {
+      if (flow.uninitialized.empty()) return false;
+      if (!reaching) reaching = flow.outcome(flow.selection_outcomes(target), true);
+      return flow.may_read_uninitialized(place, *reaching);
+    };
+    std::optional<ProductFieldPaths> ready_fields;
+    const auto field_ready = [&](const ProductFieldPath &path) {
+      if (!ready_fields) ready_fields = flow.ready_fields(target);
+      return ready_fields->contains(path);
+    };
     // Follow required edges, keeping inline field paths and ending the path on a reference edge.
     using Projection = std::pair<EvidenceSlot, std::optional<ProductFieldPath>>;
     std::set<Projection> pending, visited;
-    for (const auto &place : target.places) pending.emplace(place, ProductFieldPath{});
-    const auto ready_fields = flow.ready_fields(target);
+    const auto enqueue_target = [&](const EvidenceSlot &place, std::optional<ProductFieldPath> path) {
+      if (!unresolved) {
+        const auto *product = std::get_if<QueryProductPlace>(&place);
+        const auto type = product ? inline_query_product(*product) : std::nullopt;
+        if (!type || !may_have_required_fields(*type)) return;
+      }
+      pending.emplace(place, std::move(path));
+    };
+    for (const auto &place : target.places) enqueue_target(place, ProductFieldPath{});
     const bool selected_ready = unresolved && flow.selection_initialized(target);
     while (!pending.empty()) {
       auto item = pending.extract(pending.begin());
@@ -9277,25 +9295,30 @@ class ScalarChecker {
         if (const auto type = inline_query_product(*product); type && !program_.schemas.at(*type).fields.empty()) {
           const auto &fields = program_.schemas.at(*type).fields;
           for (size_t index = 0; index < fields.size(); ++index) {
+            const auto &description = fields[index];
+            const bool reference = description.storage == PlaceKind::reference;
+            const bool visit_member = unresolved || (description.storage == PlaceKind::value &&
+                description.type.kind == Type::product && may_have_required_fields(description.type.identity));
+            if (!reference && !visit_member) continue;
             const auto member = product->field(*type, index);
             std::optional<ProductFieldPath> field;
             if (path) {
               field = *path;
               field->emplace_back(*type, index);
             }
-            if (fields[index].storage == PlaceKind::reference) {
+            if (reference) {
               if (const auto selected = flow.targets.find(member); selected != flow.targets.end() && !selected->second.empty())
-                for (const auto &referent : selected->second) pending.emplace(referent, std::nullopt);
-              else if ((field && ready_fields.contains(*field)) || !flow.may_read_uninitialized(member, reaching))
+                for (const auto &referent : selected->second) enqueue_target(referent, std::nullopt);
+              else if ((field && field_ready(*field)) || !may_read_uninitialized(member))
                 implementation_gap(at, "required product field has no proved target in typeof");
             }
-            pending.emplace(member, std::move(field));
+            if (visit_member) pending.emplace(member, std::move(field));
           }
           continue;
         }
       }
-      if (unresolved && !(path && (path->empty() ? selected_ready : ready_fields.contains(*path))) &&
-          flow.may_read_uninitialized(place, reaching))
+      if (unresolved && !(path && (path->empty() ? selected_ready : field_ready(*path))) &&
+          may_read_uninitialized(place))
         implementation_gap(at, "product field initialization with an unresolved receiver in typeof");
     }
   }
