@@ -1,8 +1,10 @@
 # Compiler modes, selectable stages and persistent stage reuse
 
-Revision 14 · 2026-11-26 · Compiler modes and stage controls confirmed. Persistent artifact design remains a planning draft.
+Revision 15 · 2026-11-26 · Compiler modes and stage controls confirmed. Persistent artifact design remains a planning draft.
 
 ## Design authority
+
+At r15 the booter shares [enum assertion selection](#enum-assertions-in-source-and-object-commands) across its source and object commands. This continues the r10 phase boundary and the [existing enum conversion contract](../../../design/TypedEnums.md#decoding-an-integer-into-an-enum). [Design review and scope](../../../CHANGELOG.md#k-booter-enum-assertion-selection-20261126)
 
 At r14 the [initialization readiness decision](../../../CHANGELOG.md#k-booter-demand-readiness-20261126) continues the r10 phase boundary under [D-20-STAGE-CONTROLS](../../../design/DesignAuthorityRegistry.md#d-20-stage-controls). The object checker answers the same located initialization obligations from the completed control graph. The design covers workspace for readiness and preserves each command’s check scope.
 
@@ -78,6 +80,12 @@ In the [deferred-initialization workload](../workloads/deferred-initialization.c
 Escaping-failure checking first records the roots, reverse call edges and delayed-use sites for each checked category. A separate completion traverses only those edges and records reachable callables. The delayed-use check reads that completed order and preserves the reference diagnostic order for multiple uses. In the Linux comparison, a missing return and an unexpected case propagated through ordinary callers to their deferred-use sites. A recursive caller pair preserved the missing-return diagnostic, and an ordinary catch printed `42`. Rejections preserved the previous object. [Reference propagation](https://github.com/complyue/cod-project/blob/b801a6d98744260873745f55d2fa91164eade04a/applications/cod-booter/src/CompletionChecking.cod#L983)
 
 Carry the rewrite through the declaration, provider and object commands. For each fact kind, identify the producer, completed input and consuming decision. Check the reachable operations from each consumer and from any propagation item. A queue justified for a particular fact may carry that fact through its recorded edges. Keep the body visitor, pass reset and whole-pass scheduling outside those interfaces. Exercise the normal commands on supported sources, including diagnostic locations, preserved outputs on rejection, cleanup and linked object behavior. One migrated check establishes only its own boundary. Development mainline owns delivery. Take any concrete need for an exception to the user with the affected workload and alternatives. [Project rule](../../../AGENTS.md#passes-and-dependency-changes)
+
+### Enum assertions in source and object commands
+
+For each enum assertion a command needs, bind its site, source revision and nominal domain using the completed module declarations and lexical bindings. All three commands consume the same selection. A visible lexical name supplies the operand of `ESC:ASCII`. An otherwise unbound member spelling is resolved against the full defining enum, including members outside the import’s default list. A known code selects its canonical member by mathematical value before narrowing. For a dynamic decode, retain a read-only reference to the checked domain and the requirement that the operand supply its backing type by value. Preserve an already matching enum and an operand that exits abruptly. [Enum conversions](../../../design/TypedEnums.md#decoding-an-integer-into-an-enum)
+
+The declaration and provider checks can validate these facts using source inputs alone. Object checking consumes the selection and the checked operand. Emission evaluates a dynamic operand once and tests actual membership, including gaps in a sparse enum. Failure raises `TypeAssertionFailedError` through ordinary cleanup. Application reads completed facts and has no interface for traversing the body again. Verify `10:ASCII`, a dynamic byte of 255, lexical shadowing, nominal identity, an operand with an observable effect and preserved outputs on static rejection. [ASCII delivery](../../../design/ImplementationArchitecture.md#delivering-ascii-to-the-booter-scanner)
 
 ## Design from compiler work
 

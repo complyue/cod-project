@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Share enum assertion selection across the booter commands
+
+<a id="k-booter-enum-assertion-selection-20261126"></a>
+**K-BOOTER-ENUM-ASSERTION-SELECTION-20261126.** At [the linked baseline](https://github.com/complyue/cod-project/blob/403316ef220743db3961b867c38b3ff4b0af9db0/applications/cod-booter/src/ModuleGraph.cod#L573-L594), object binding returns before declaration-expression checking. The [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) confirmed [one revision-bound selection](applications/cod-booter/docs/CompilerPipeline.md#enum-assertions-in-source-and-object-commands) for the booter declaration, provider and object commands. The user’s [enum coercion and decoding contract](#h-enum-backing-coercion-20261125) governs membership, operand effects and failure. This architecture decision continues D-20-STAGE-CONTROLS and D-07-ENUM. Pipeline r14→15, registry r1343→1344.
+
 ## 2026-11-26 — Investigate agent-assisted Julia package ports
 
 <a id="h-julia-package-portability-20261126"></a>
