@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Separate supplier and callback extraction at the native path loan
+
+<a id="k-seed-pipeline-path-key-callback-20261125"></a>
+**K-SEED-PIPELINE-PATH-KEY-CALLBACK-20261125.** [D-ARCH-REVIEW r213→214](design/ImplementationArchitecture.md#extracting-the-path-key-callback) continues P-682/P-683 under the [replacement pipeline decision](#h-compiler-pipeline-replacement-20261125). At `a0d304e3` real [`fill_path`](https://github.com/complyue/cod-project/blob/a0d304e3/applications/cod-booter/src/ModuleIndex.cod#L138) supplies a literal to [`path_key`](https://github.com/complyue/cod-project/blob/a0d304e3/applications/cod-booter/src/NativeSource.cod#L26). The [existing bridge](https://github.com/complyue/cod-project/blob/a0d304e3/cod/lang_llvm.hh#L1316) consumes a descriptor and distinguishes protected completion, value feedback and provider failure. The review clears separate literal extraction and subsequent capture binding against that ABI. Executable acceptance remains a mainline milestone.
+
 ## 2026-11-25 — Make fast compile-and-run the default and schedule optimizing builds
 
 <a id="h-default-run-and-optimized-build-20261125"></a>
