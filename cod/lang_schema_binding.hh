@@ -52,4 +52,40 @@ inline std::vector<size_t> product_initializers(const CheckedSchema &schema, con
   return order;
 }
 
+inline void bits_payload_type(const CheckedProgram &program, const Type &source, const Type &destination,
+                              const Location &at) {
+  if (!inline_aggregate_type(destination)) {
+    if (!transfers_value(source, destination)) fail(at, "bits transfer source does not satisfy destination type");
+    return;
+  }
+  if (!program.bits_payload(destination))
+    implementation_gap(at, "whole-payload transfer requires recursively bits fields");
+  if (source != destination) fail(at, "aggregate bits transfer requires the exact destination type");
+}
+
+struct CaseField {
+  size_t field;
+  Type type;
+  bool read_only;
+};
+
+template <typename Resolve>
+std::vector<CaseField> bind_case_fields(const CheckedProgram &program, const Expression &arm,
+                                      const CheckedSum::Alternative &alternative, Resolve resolve) {
+  std::vector<CaseField> result;
+  for (const auto &item : arm.receiving->items) {
+    if (item.declaration_kind != "val" || item.operation != "<-" || !item.owner.empty())
+      implementation_gap(item.at, "sum case reception outside a fresh direct bits value");
+    const auto found = std::ranges::find_if(alternative.fields, [&](const auto &field) {
+      return field.source->name == item.selector;
+    });
+    if (found == alternative.fields.end())
+      fail(item.at, "unknown field '" + item.selector + "' of '" + alternative.source->name.text + "'");
+    const auto type = item.annotation ? resolve(*item.annotation) : found->type;
+    bits_payload_type(program, found->type, type, item.at);
+    result.push_back({static_cast<size_t>(found - alternative.fields.begin()), type, item.read_only || item.fixed_binding});
+  }
+  return result;
+}
+
 } // namespace cod::language

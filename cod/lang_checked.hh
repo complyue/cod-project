@@ -2896,29 +2896,10 @@ class ScalarChecker {
       return {K::code, program_.enums.at(subject.identity).members.at(member->member).code};
     fail(arm.at, "unknown member '" + arm.text + "' of enum '" + subject.name + "'");
   }
-  struct CaseField {
-    size_t field;
-    Type type;
-    bool read_only;
-  };
   template <typename Resolve>
   std::vector<CaseField> case_fields(const Expression &arm, const CasePattern &pattern, Resolve resolve) const {
-    std::vector<CaseField> result;
-    if (!arm.receiving) return result;
-    const auto &alternative = sum_alternative(*pattern.constructor);
-    for (const auto &item : arm.receiving->items) {
-      if (item.declaration_kind != "val" || item.operation != "<-" || !item.owner.empty())
-        implementation_gap(item.at, "sum case reception outside a fresh direct bits value");
-      const auto found = std::ranges::find_if(alternative.fields, [&](const auto &field) {
-        return field.source->name == item.selector;
-      });
-      if (found == alternative.fields.end())
-        fail(item.at, "unknown field '" + item.selector + "' of '" + alternative.source->name.text + "'");
-      const auto type = item.annotation ? resolve(*item.annotation) : found->type;
-      bits_payload_type(found->type, type, item.at);
-      result.push_back({static_cast<size_t>(found - alternative.fields.begin()), type, item.read_only || item.fixed_binding});
-    }
-    return result;
+    return arm.receiving ? bind_case_fields(program_, arm, sum_alternative(*pattern.constructor), resolve)
+                         : std::vector<CaseField>{};
   }
   CheckedOperation enum_literal(const EnumValue &value) const {
     CheckedOperation result;
@@ -3478,15 +3459,6 @@ class ScalarChecker {
     if (destination.kind == Type::product) implementation_gap(at, "whole-product bits transfer");
     if (destination.kind == Type::sum) implementation_gap(at, "whole-sum bits transfer");
     if (!transfers_value(source, destination)) fail(at, "bits transfer source does not satisfy destination type");
-  }
-  void bits_payload_type(const Type &source, const Type &destination, const Location &at) const {
-    if (!inline_aggregate_type(destination)) {
-      transfer_type(source, destination, at);
-      return;
-    }
-    if (!program_.bits_payload(destination))
-      implementation_gap(at, "whole-payload transfer requires recursively bits fields");
-    if (source != destination) fail(at, "aggregate bits transfer requires the exact destination type");
   }
   static bool ordinary_callable_type(const Type &type) {
     if (type.kind != Type::procedure) return true;
@@ -9771,7 +9743,7 @@ class ScalarChecker {
     const auto source = type_evidence(expr, state, false, nullptr, nullptr, ExpectedTypeUse::materialization, reached,
                                       aggregate ? EvidenceRead::projection : EvidenceRead::payload);
     if (source && *source != Type::never && state.required) {
-      bits_payload_type(*source, destination, expr.at);
+      bits_payload_type(program_, *source, destination, expr.at);
       if (aggregate) {
         if (state.value.view != true || state.value.mixed_view)
           implementation_gap(expr.at, "aggregate bits transfer requires one complete source target");
@@ -19285,7 +19257,7 @@ class ScalarChecker {
     const auto source = check(expr, instance, operations, !aggregate, false, nullptr,
         ExpectedTypeUse::materialization, false, aggregate ? IndexedUse::immediate_target : IndexedUse::value_only);
     if (source != Type::never) {
-      bits_payload_type(source, destination, expr.at);
+      bits_payload_type(program_, source, destination, expr.at);
       if (aggregate) {
         const auto &view = operations.at(&expr);
         if (!view.view || view.mixed_view)

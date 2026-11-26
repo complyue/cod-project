@@ -248,9 +248,15 @@ class BodyExtraction {
              at, "replacement seed needs an admitted value transfer");
     }
 
-    static bool ordinary_loan(ArgumentMode mode, const Type &type) {
+    bool ordinary_loan(ArgumentMode mode, const Type &type) const {
       return (mode == ArgumentMode::borrowed_read || mode == ArgumentMode::borrowed_ref) &&
-             (type.kind == Type::array || scalar_type(type));
+             (type.kind == Type::array || scalar_type(type) ||
+              (type.kind == Type::product && declarations().bits_payload(type)));
+    }
+
+    void takes_payload(const CheckedOperation &value, const Type &to, const Location &at) const {
+      bits_payload_type(declarations(), value.type, to, at);
+      expect(!inline_aggregate_type(to) || value.view, at, "aggregate bits transfer needs a source view");
     }
 
     static size_t single_owner(const CheckedOperation &view, const Location &at) {
@@ -270,7 +276,7 @@ class BodyExtraction {
       expect(!parameter.not_init_ref && !parameter.variadic && !parameter.automatic_conversion &&
              (!parameter.selects_caller_place() || slot) &&
              (mode == ArgumentMode::value ? scalar_type(type) : native_handle || ordinary_loan(mode, type)),
-             parameter.at, "replacement seed needs a fixed scalar, array or native handle formal");
+             parameter.at, "replacement seed needs a fixed scalar, array, bits product or native handle formal");
       auto &frame = body_.instance.frame;
       const auto owner = parameter.owner.empty() ? size_t{0} : input_owner(owner_role(parameter.owner, parameter.at));
       if (owner) frame.owners.try_emplace(owner, frame.inputs.size());
@@ -451,9 +457,7 @@ class BodyExtraction {
         op = index(expr);
         expect(!op.read_only, expr.at, "indexed transfer needs a writable array view");
         const auto &source = operand(expr, 2);
-        if (inline_aggregate_type(op.type))
-          expect(source.view && source.type == op.type, expr.at, "indexed transfer needs the exact nominal element");
-        else takes_value(source, op.type, expr.children[2]->at);
+        takes_payload(source, op.type, expr.children[2]->at);
         op.builtin = BuiltinOperation::array_transfer;
         op.read_only = true;
         return op;
@@ -526,6 +530,45 @@ class BodyExtraction {
       return op;
     }
 
+    Type resolve_annotation(const Type &annotation, const Location &at) const {
+      if (annotation.kind != Type::named) return annotation;
+      const auto found = names().types.find(annotation.name);
+      if (found == names().types.end()) fail(at, "unknown type '" + annotation.name + "'");
+      return found->second;
+    }
+
+    CheckedOperation make_product(const Expression &expr, const Type &type, bool local_storage) {
+      expect(expr.kind == Kind::make_object && expr.annotation &&
+             !expr.construction_type_query && !expr.constructor_arguments &&
+             expr.initializer_block && expr.owner_name.empty() &&
+             resolve_annotation(*expr.annotation, expr.at) == type &&
+             declarations().bits_payload(type),
+             expr.at, "replacement seed needs a complete inline bits product initializer");
+      const auto &schema = declarations().schemas.at(type.identity);
+      const auto order = product_initializers(schema, expr);
+      expect(std::set(order.begin(), order.end()).size() == schema.fields.size(), expr.at,
+             "replacement seed needs an initializer for each product field");
+      CheckedOperation op;
+      op.type = op.operand_type = type;
+      if (local_storage) op.place = storage("$product", type, 0, false, false);
+      op.view = true;
+      op.owners.insert(0);
+      for (size_t i = 0; i < order.size(); ++i) {
+        const auto &item = *expr.initializer_items()[i];
+        const auto &field = schema.fields[order[i]];
+        const auto &input = *item.children.back();
+        if (field.type.kind == Type::product) {
+          // The backend initializes this nested product in its destination.
+          remember(input, make_product(input, field.type, false));
+        } else takes_payload(extract(input), field.type, input.at);
+        CheckedOperation write;
+        write.type = write.operand_type = field.type;
+        write.product_field = order[i];
+        remember(item, std::move(write));
+      }
+      return op;
+    }
+
     CheckedOperation make(const Expression &expr) {
       expect(!expr.construction_type_query && expr.annotation && expr.annotation->kind == Type::named,
              expr.at, "replacement seed needs a declared construction type");
@@ -549,7 +592,7 @@ class BodyExtraction {
           expect(field != arm.fields.end() && !field->stores_target(), label->at, "sum initializer field is unavailable");
           const auto ordinal = static_cast<size_t>(field - arm.fields.begin());
           expect(supplied.insert(ordinal).second, label->at, "replacement seed needs a single initializer per field");
-          takes_value(extract(*item->children.back()), field->type, item->at);
+          takes_payload(extract(*item->children.back()), field->type, item->at);
           CheckedOperation initializer;
           initializer.operand_type = field->type;
           body_.instance.operations.emplace(item.get(), std::move(initializer));
@@ -561,6 +604,8 @@ class BodyExtraction {
         return op;
       }
       const auto type = names().types.find(spelling);
+      if (type != names().types.end() && type->second.kind == Type::product)
+        return make_product(expr, type->second, true);
       expect(type != names().types.end() && type->second.kind == Type::array && expr.constructor_arguments &&
              expr.children.size() == 2 && !family(spelling),
              expr.at, "replacement seed needs an ordinary array constructor");
@@ -572,9 +617,7 @@ class BodyExtraction {
       expect(declarations().bits_payload(array.element), expr.at, "array fill requires a finite bits element");
       takes_value(operand(expr, 0), Type::uint64, expr.children.front()->at);
       const auto &fill = operand(expr, 1);
-      if (inline_aggregate_type(array.element))
-        expect(fill.view && fill.type == array.element, expr.at, "array fill needs the exact nominal bits element");
-      else takes_value(fill, array.element, expr.children.back()->at);
+      takes_payload(fill, array.element, expr.children.back()->at);
       op.type = op.operand_type = type->second;
       op.view = true;
       op.owners.insert(owner);
@@ -698,8 +741,7 @@ class BodyExtraction {
       return op;
     }
 
-    CheckedOperation exception_field(const Expression &expr) {
-      const auto &base = operand(expr, 0);
+    CheckedOperation exception_field(const Expression &expr, const CheckedOperation &base) {
       expect(expr.children.front()->kind == Kind::name && base.place && caught_places_.contains(*base.place) &&
              nominal_exception(base.type), expr.at, "replacement seed needs a field read from the active nominal catch");
       const auto &schema = scalar_exception_schema(declarations(), base.type, expr.at);
@@ -710,6 +752,91 @@ class BodyExtraction {
       op.product_field = index;
       op.exception_owner = base.place;
       op.read_only = true;
+      return op;
+    }
+
+    CheckedOperation field(const Expression &expr) {
+      const auto &base = operand(expr, 0);
+      if (base.type.kind == Type::exception) return exception_field(expr, base);
+      expect(base.type.kind == Type::product && base.view && declarations().bits_payload(base.type), expr.at,
+             "replacement seed needs an inline field of a bits product view");
+      const auto &schema = declarations().schemas.at(base.type.identity);
+      const auto index = product_field(schema, expr);
+      const auto &member = schema.fields[index];
+      CheckedOperation op;
+      op.type = member.type;
+      op.operand_type = base.type;
+      op.product_field = index;
+      op.view = op.indexed_target = true;
+      op.read_only = base.read_only || readonly_field(member);
+      op.owners = base.owners;
+      return op;
+    }
+
+    CheckedOperation sum_case(const Expression &expr) {
+      const auto &subject = operand(expr, 0);
+      expect(subject.type.kind == Type::sum && subject.view && declarations().bits_payload(subject.type) &&
+             !expr.case_breaks && !expr.case_resumes,
+             expr.at, "replacement seed needs a finite bits sum case without case transfers");
+      const auto &sum = declarations().sums.at(subject.type.identity);
+      std::set<size_t> covered;
+      bool catch_all = false;
+      CheckedOperation op;
+      op.type = Type::never;
+      for (const auto &entry : std::span(expr.children).subspan(1)) {
+        const auto &arm = *entry;
+        expect(arm.kind == Kind::case_arm && !arm.case_resumes && arm.children.size() == 1, arm.at,
+               "replacement seed needs an unguarded case arm");
+        CheckedOperation matched;
+        scopes_.emplace_back();
+        if (arm.text == "_") {
+          expect(!arm.receiving, arm.at, "a catch-all cannot receive sum fields");
+          catch_all = true;
+        } else {
+          const auto constructor = names().constructors.find(arm.text);
+          if (constructor == names().constructors.end() || constructor->second.sum != subject.type.identity)
+            fail(arm.at, "'" + arm.text + "' is not a selected data constructor of '" + subject.type.name + "'");
+          const auto selected = constructor->second;
+          matched.case_pattern = {CasePattern::Kind::code, selected.alternative, selected};
+          covered.insert(selected.alternative);
+          if (arm.receiving) {
+            const auto &alternative = sum.alternatives.at(selected.alternative);
+            const auto receiving = bind_case_fields(declarations(), arm, alternative, [&](const Type &type) {
+              return resolve_annotation(type, arm.at);
+            });
+            for (size_t i = 0; i < receiving.size(); ++i) {
+              const auto &receiver = *arm.case_bindings.at(i);
+              const auto &saved = receiving[i];
+              const auto local = declare(receiver.at, receiver.text, saved.type, true, saved.read_only,
+                                         receiver.fixed_binding, 0);
+              CheckedOperation binding;
+              binding.place = local.place;
+              binding.type = saved.type;
+              binding.operand_type = alternative.fields.at(saved.field).type;
+              matched.case_payload_fields.push_back(saved.field);
+              remember(receiver, std::move(binding));
+            }
+          }
+        }
+        const auto &result = operand(arm, 0);
+        matched.type = result.type;
+        matched.case_arm_completes = result.type != Type::never;
+        if (matched.case_arm_completes) {
+          expect(result.type == Type::void_type || scalar_type(result.type),
+                 arm.at, "replacement seed needs case arms with void or independent scalar results");
+          expect(op.type == Type::never || op.type == result.type, arm.at, "case arms require one result type");
+          op.type = result.type;
+          op.scalar_value_join |= result.view;
+        }
+        scopes_.pop_back();
+        remember(arm, std::move(matched));
+      }
+      op.case_reaches_end = !catch_all && covered.size() != sum.alternatives.size();
+      if (op.case_reaches_end) {
+        if (op.type == Type::never) op.type = Type::void_type;
+        else if (op.type != Type::void_type)
+          fail(expr.at, "value case may finish without a result; provide a completing arm or a catch-all");
+      }
       return op;
     }
 
@@ -726,7 +853,11 @@ class BodyExtraction {
       case Kind::call: return call(expr);
       case Kind::make_object: return make(expr);
       case Kind::index: return index(expr);
-      case Kind::field: return exception_field(expr);
+      case Kind::field: return field(expr);
+      case Kind::case_expression: return sum_case(expr);
+      case Kind::case_failure:
+        op.type = Type::never;
+        return op;
       case Kind::raise: return braced_throw(expr);
       case Kind::try_scope: return try_statement(expr);
       case Kind::rebind: case Kind::transfer: return assign(expr);
@@ -788,16 +919,19 @@ class BodyExtraction {
       }
     }
 
-    const CheckedOperation &extract(const Expression &expr) {
-      expect(!expr.checked_ref_argument && !expr.spread && !expr.lexical_symbol_call &&
-             !expr.definition && !expr.receiving,
-             expr.at, "replacement seed has no extracted transport for this expression");
-      auto op = operation(expr);
+    const CheckedOperation &remember(const Expression &expr, CheckedOperation op) {
       if (op.view && !scalar_type(op.type) && op.type != Type::exception)
         op.discarded_view = true;
       const auto [row, first] = body_.instance.operations.emplace(&expr, std::move(op));
       if (!first) throw std::logic_error("replacement seed visited an operation twice");
       return row->second;
+    }
+
+    const CheckedOperation &extract(const Expression &expr) {
+      expect(!expr.checked_ref_argument && !expr.spread && !expr.lexical_symbol_call &&
+             !expr.definition && !expr.receiving,
+             expr.at, "replacement seed has no extracted transport for this expression");
+      return remember(expr, operation(expr));
     }
 
   public:
