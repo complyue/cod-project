@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Complete recursive allocator requirements over recorded owner substitutions
+
+<a id="k-seed-recursive-allocator-20261126"></a>
+**K-SEED-RECURSIVE-ALLOCATOR-20261126.** [D-ARCH-REVIEW r217→218](design/ImplementationArchitecture.md#completing-allocator-roles-across-recursive-calls) applies the [replacement pipeline decision](#h-compiler-pipeline-replacement-20261125). At `139acf2b` the [completion pass](https://github.com/complyue/cod-project/blob/139acf2b/cod/lang_seed_bodies.hh#L1542) rejects the recursive `descend` call at 6:9. The reference links the real `reserve_visits` and returns 22. The approved algorithm propagates each required owner role once over recorded substitutions and checks replay closure separately before emission. Registry r1326→1327 continues P-682/P-683. Implementation acceptance is pending.
+
 ## 2026-11-26 — Reframe the ownership paper around domain lifetimes
 
 <a id="k-ownership-paper-domain-lifetimes-20261126"></a>
