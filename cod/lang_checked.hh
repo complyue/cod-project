@@ -22347,7 +22347,7 @@ class ScalarChecker {
   }
 
   enum class FlowExports { none, every_pass, final_pass };
-  enum class TargetPreparation { discover, independent_scalar };
+  enum class TargetPreparation { discover, single_proving };
   template <typename Check> void check_flow(FlowExports exports, TargetPreparation targets, const Check &check) {
     const bool validating = validating_;
     struct RestoreExport {
@@ -22361,13 +22361,13 @@ class ScalarChecker {
     outgoing_payload_writes_.reset();
     if (restore.previous && exports != FlowExports::none && !closing_symbol_effects_ && !applying_scalar_)
       outgoing_payload_writes_.emplace();
-    if (targets == TargetPreparation::independent_scalar) {
+    if (targets == TargetPreparation::single_proving) {
       clear_target_discovery();
       loop_evidence_changed_ = false;
       exporting_effects_ = restore.previous && exports != FlowExports::none;
       check(true);
       if (!loop_states_.empty() || loop_evidence_changed_)
-        throw std::logic_error("independent scalar proving discovered a loop");
+        throw std::logic_error("single proving traversal discovered a loop");
       return;
     }
     exporting_effects_ = restore.previous && exports == FlowExports::every_pass;
@@ -23178,8 +23178,21 @@ class ScalarChecker {
     // A late call-name collision returns to the ordinary validation schedule.
     const bool bound_scalar = leaf ? leaf->kind != LeafBehaviorPlan::Kind::borrowed_byte
                                    : scalar_exits && !validating_;
-    const auto targets = bound_scalar && !distinct_bindings && independent_scalar_frame(instance, *checking_method_)
-        ? TargetPreparation::independent_scalar : TargetPreparation::discover;
+    const auto bound_readonly_wrapper = [&] {
+      if (!scalar_exits || applying_scalar_->calls.size() != 1) return false;
+      const auto &call = applying_scalar_->calls.front();
+      if (call.kind != ScalarPlan::Call::Kind::readonly_predicate ||
+          (validating_ && module_names().values.contains(call.site->text))) return false;
+      // The ordered wrapper operands are two current-frame loans and a literal.
+      // No completed callee exit can replace those selections or their fields.
+      const auto &callee = program_.instances.at(call.instance);
+      const auto &effects = callee.effects;
+      return callee.effects_frozen && effects.written_inputs.empty() &&
+          effects.binding_sources.empty() && effects.bindings.empty();
+    };
+    const bool single_proving = !distinct_bindings &&
+        ((bound_scalar && independent_scalar_frame(instance, *checking_method_)) || bound_readonly_wrapper());
+    const auto targets = single_proving ? TargetPreparation::single_proving : TargetPreparation::discover;
     check_flow(exports, targets, [&](bool proving) {
       begin_check(instance.storage, instance.bindings, instance.operations, proving);
       for (const auto &[symbol, targets] : instance.incoming_abstract_targets)
