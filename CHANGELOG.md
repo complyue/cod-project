@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Give the booter one practical code-generation mode
+
+<a id="h-booter-single-codegen-mode-20261126"></a>
+**H-BOOTER-SINGLE-CODEGEN-MODE-20261126.** The project user confirmed in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) “booter也只支持一种实用模式就够了，到 cfe 再折腾各种性能选项”. [D-20-COMPILER-MODES](design/DesignAuthorityRegistry.md#d-20-compiler-modes), pipeline r12 and roadmap r51 assign user-selectable performance tuning to `cfe` in `e-wrks/cod`. The [earlier mode contract](#h-cfe-output-directory-20261126) supplies the execution and output behavior and release milestones. The booter keeps its fast default and its independent checking and output operations. C-80/P-746/P-747 continue. Registry r1339→1340.
+
 ## 2026-11-26 — Retire the rewritten seed’s inert shared-emission switch
 
 <a id="h-seed-shared-switch-retirement-20261126"></a>

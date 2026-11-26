@@ -1,8 +1,10 @@
 # Compiler modes, selectable stages and persistent stage reuse
 
-Revision 11 · 2026-11-26 · Compiler modes and stage controls confirmed. Persistent artifact design remains a planning draft.
+Revision 12 · 2026-11-26 · Compiler modes and stage controls confirmed. Persistent artifact design remains a planning draft.
 
 ## Design authority
+
+At r12 the project user confirmed [one booter code-generation mode](../../../CHANGELOG.md#h-booter-single-codegen-mode-20261126). [D-20-COMPILER-MODES](../../../design/DesignAuthorityRegistry.md#d-20-compiler-modes) retains the fast bootstrap goal and assigns performance tuning to the production optimizing entry.
 
 At r11 the [post-rewrite cleanup decision](../../../CHANGELOG.md#h-post-rewrite-cleanup-20261126) adds the final scan to the booter migration under [D-ARCH-REVIEW](../../../design/DesignAuthorityRegistry.md#d-arch-review). The r10 checks and client controls carry forward.
 
@@ -30,6 +32,8 @@ At r8 [D-20-COMPILER-MODES](../../../design/DesignAuthorityRegistry.md#d-20-comp
 | `cod` (Compile on Demand), invoked on a program entry | Compile and run it immediately, as with `go run`. Leave no executable as a user output. | Aim for Go-like fast compilation and machine code with moderate runtime performance in the seed, booter and first release of `e-wrks/cod`. |
 | `cfe` (Compile for Ever) in `e-wrks/cod` | Build an optimized executable for later use. Save it in `~/.local/bin/` by default. The user can set the output directory in `~/.cod/config.yaml`. | Spend more compile time on high-quality machine code. Experimental in the first release of `e-wrks/cod`, formally supported in 2.0. |
 | Default seed bootstrap build | Produce the `cod-booter` executable and keep it for subsequent invocations. | Use the fast compilation path. The seed build can request intermediate bitcode and provider files and link them into the tool. |
+
+The booter ships one practical code-generation mode for fast compilation and moderate runtime performance. It can improve that default internally. User-selectable optimization levels and performance trade-offs belong to `cfe` in `e-wrks/cod`. A client can still request declaration checking, provider generation or object emission, and select the available checking stages. These choices determine what work to perform and which result to deliver.
 
 The ordinary edit–run cycle gives priority to the time from invoking the compiler to entering the program. Any executable needed internally for a run is a compiler implementation detail. Explicit requests for a binary, object, bitcode or provider files have their own output contract. The seed uses the fast path to build its persistent executable. A parse-only or check-only request ends at its selected operation.
 

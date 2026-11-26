@@ -1,10 +1,12 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 50 · Recorded: 2026-11-26 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 51 · Recorded: 2026-11-26 · Phase: initial seed delivery through alternating booter and seed development.
 
-**Compiler design target.** On the command line, `cod` (Compile on Demand) compiles the entry for this run and executes it immediately, leaving no user-facing executable. The planned production command `cfe` (Compile for Ever) spends more time optimizing the program and saves the executable for later runs. Seed and booter development prioritize Go-like compile speed with moderate runtime performance. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
+**Compiler design target.** On the command line, `cod` (Compile on Demand) compiles the entry for this run and executes it immediately, leaving no user-facing executable. The planned production command `cfe` (Compile for Ever) spends more time optimizing the program and saves the executable for later runs. The booter provides one practical code-generation mode. Both bootstrap compilers prioritize Go-like compile speed with moderate runtime performance. User-selectable performance options belong to `cfe`. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
 
 ## Design authority
+
+At r51 [D-20-COMPILER-MODES](../../design/DesignAuthorityRegistry.md#d-20-compiler-modes) records the [user’s decision](../../CHANGELOG.md#h-booter-single-codegen-mode-20261126) on booter performance options. The command outputs and checking responsibilities carry forward.
 
 At r50 the [post-rewrite cleanup decision](../../CHANGELOG.md#h-post-rewrite-cleanup-20261126) applies the existing bootstrap scope to command retirement in the seed and to the booter after its rewrite. [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap) continues from r49.
 
