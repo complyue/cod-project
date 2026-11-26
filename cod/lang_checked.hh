@@ -3380,6 +3380,11 @@ class ScalarChecker {
     }
     return result;
   }
+  bool selects_any_slot(size_t id, const std::set<size_t> &slots) const {
+    const auto &selection = binding(id).selection;
+    if (selection.empty()) return slots.contains(id);
+    return std::ranges::any_of(selection, [&](size_t slot) { return slots.contains(slot); });
+  }
   std::set<size_t> overlapping_slots(const std::set<size_t> &slots) const {
     auto result = physical_slots(slots);
     const auto physical = result;
@@ -3560,10 +3565,11 @@ class ScalarChecker {
     for (const auto id : overlapping_slots(target.slots)) {
       const auto &binding = bindings_->at(id);
       rebind_access(binding.read_only, source.read_only, at);
-      auto owners = lexical_.owners.at(id);
-      owners.insert(source.owners.begin(), source.owners.end());
-      if (physical.contains(id) && owners.size() > 1) fail(at, "reference rebinding cannot change the initializer-fixed owner");
-      if (binding.embedded_slot && storage(*binding.embedded_slot).borrowed && owners.size() > 1)
+      const auto &owners = lexical_.owners.at(id);
+      const bool different_owners = owners.size() > 1 || source.owners.size() > 1 ||
+          (!owners.empty() && !source.owners.empty() && *owners.begin() != *source.owners.begin());
+      if (physical.contains(id) && different_owners) fail(at, "reference rebinding cannot change the initializer-fixed owner");
+      if (binding.embedded_slot && storage(*binding.embedded_slot).borrowed && different_owners)
         implementation_gap(at, "embedded slot overlap with an unproved owner equality");
       // Any possible earlier target makes this a rebind of a potentially
       // readable object. A fresh embedded slot can establish the edge first.
@@ -3587,7 +3593,7 @@ class ScalarChecker {
     const auto written = overlapping_slots(target.slots);
     std::vector<size_t> affected;
     lexical_.targets.each([&](size_t id, const auto &) {
-      if (!intersect(written, physical_slots({id})).empty()) affected.push_back(id);
+      if (selects_any_slot(id, written)) affected.push_back(id);
     });
     // A definite local rebind inside a delayed body can retain the selected
     // entry target in another slot. Prepared rebinds already carry a snapshot.
@@ -3623,7 +3629,7 @@ class ScalarChecker {
       const auto written = overlapping_slots(target.slots);
       const auto incoming = physical_slots(source.slots);
       lexical_.targets.each([&](size_t id, const auto &) {
-        if (intersect(written, physical_slots({id})).empty()) return;
+        if (!selects_any_slot(id, written)) return;
         CleanupEquations::Targets update{{}, {}, incoming};
         if (target.slots.size() != 1 || !target.slots.contains(id)) update.entries.insert(id);
         effects.selections.targets[id].merge(update);
@@ -4753,7 +4759,7 @@ class ScalarChecker {
     if (!proving_) for (const auto &[parameter, sources] : summary.binding_sources) {
       const auto written = overlapping_slots(views.at(parameter).slots);
       lexical_.targets.each([&](size_t binding, const auto &) {
-        if (intersect(written, physical_slots({binding})).empty()) return;
+        if (!selects_any_slot(binding, written)) return;
         for (const auto input : sources) {
           if (input == null_target) {
             possible_targets_.at(binding).insert(null_target);
@@ -4816,7 +4822,7 @@ class ScalarChecker {
         }
         std::set<size_t> affected;
         lexical_.targets.each([&](size_t id, const auto &) {
-          if (!intersect(written, physical_slots({id})).empty()) affected.insert(id);
+          if (selects_any_slot(id, written)) affected.insert(id);
         });
         if (deferred) for (const auto id : written)
           if (const auto slot = binding(id).embedded_slot; slot && !storage(*slot).borrowed) affected.insert(id);
@@ -21176,7 +21182,7 @@ class ScalarChecker {
           if (mixed) owners.insert(declaration_scope(declaration->text, declaration->at).id);
           if (owners.size() > 1) fail(initializer.at, "reference initializer joins different owners");
           if (owners.empty() && !owner) fail(initializer.at, "reference initializer requires one statically provable owner; qualify null with 'in here' or 'in O'");
-          if (lexical_.live) for (const auto owner : owners)
+          if (delayed_ && lexical_.live) for (const auto owner : owners)
             if (!owner_alive(owner))
               fail(initializer.at, "reference initializer's lexical owner has ended");
           if (expr.declaration_kind == "ref") require_payload_access(source, initializer.at);
@@ -21309,7 +21315,7 @@ class ScalarChecker {
       }
       const auto target = operations.at(expr.children[0].get());
       assignment_destination(target.view, target.mixed_view, expr.at);
-      for (const auto owner : target.owners) if (lexical_.live)
+      if ((prepared || delayed_) && lexical_.live) for (const auto owner : target.owners)
         if (!owner_alive(owner))
           fail(expr.at, "assignment destination's lexical owner has ended");
       if (expr.kind == K::rebind) {
