@@ -947,10 +947,11 @@ class BodyExtraction {
         if (method.here.empty() && method.parameters.size() == expr.children.size()) candidates.push_back(id);
       }
       if (candidates.empty()) fail(expr.at, "no method with the written arity for " + call_name());
-      const auto &first = definition(candidates.front());
-      for (const auto id : candidates)
-        expect(fixed_overload_inputs(definition(id), first), expr.at,
-               "replacement seed needs fixed ordinary overloads with common input modes, access and owner roles");
+      for (const auto id : candidates) {
+        const auto &method = definition(id);
+        expect(fixed_overload_inputs(method, method), expr.at,
+               "replacement seed needs fixed ordinary overload inputs");
+      }
 
       // Common preparation makes the same view/access checks apply to every
       // candidate. Select from the types of the ordered, already extracted operands.
@@ -962,6 +963,16 @@ class BodyExtraction {
         operands.push_back(&arg);
         types.push_back(arg.type);
       }
+      // A type-incompatible signature cannot change operand preparation.
+      // Keep possible lossless conversions until the ordinary ranking phase.
+      std::erase_if(candidates, [&](size_t id) {
+        return !matches_fixed_inputs(definition(id), types, true);
+      });
+      if (candidates.empty()) fail(expr.at, "no applicable method for " + call_name());
+      const auto &first = definition(candidates.front());
+      for (const auto id : std::span(candidates).subspan(1))
+        expect(fixed_overload_inputs(definition(id), first), expr.at,
+               "replacement seed needs possibly applicable overloads with common input modes, access and owner roles");
       for (const bool widening : {false, true}) {
         std::vector<size_t> applicable;
         for (const auto id : candidates)
