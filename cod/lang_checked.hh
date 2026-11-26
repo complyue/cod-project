@@ -693,7 +693,8 @@ class ScalarChecker {
     if (!exports_call_behavior()) throw std::logic_error("traversal cannot export call behavior");
     return observed_;
   }
-  std::vector<std::set<size_t>> possible_targets_, possible_null_sources_, target_dependencies_;
+  std::vector<std::set<size_t>> possible_targets_, possible_null_sources_;
+  std::map<size_t, std::set<size_t>> target_dependencies_;
   std::vector<CheckedStorage> catalog_storage_;
   std::vector<CheckedBinding> catalog_bindings_;
   size_t next_target_version_ = 0;
@@ -3260,7 +3261,6 @@ class ScalarChecker {
     if (!proving_) {
       possible_targets_.push_back(targets);
       possible_null_sources_.push_back({});
-      target_dependencies_.push_back({});
     }
     scope.bindings.append(name, id);
     lexical_.bindings_available.insert(id);
@@ -3348,8 +3348,13 @@ class ScalarChecker {
     if (!proving_) {
       possible_targets_.at(binding).insert(source.targets.begin(), source.targets.end());
       possible_null_sources_.at(binding).insert(source.null_sources.begin(), source.null_sources.end());
-      target_dependencies_.at(binding).insert(source.origins.begin(), source.origins.end());
+      record_target_dependencies(binding, source.origins);
     }
+  }
+  void record_target_dependencies(size_t destination, const std::set<size_t> &sources) {
+    if (sources.empty()) return;
+    auto &dependencies = target_dependencies_[destination];
+    dependencies.insert(sources.begin(), sources.end());
   }
   void require_live_view(const CheckedOperation &view, const Location &at) const {
     if (lexical_.live) for (const auto owner : view.owners)
@@ -3615,7 +3620,7 @@ class ScalarChecker {
         if (!proving_) {
           possible_targets_.at(id).insert(source.targets.begin(), source.targets.end());
           possible_null_sources_.at(id).insert(source.null_sources.begin(), source.null_sources.end());
-          target_dependencies_.at(id).insert(incoming.begin(), incoming.end());
+          record_target_dependencies(id, incoming);
           record_rebinding(id, true);
         }
       });
@@ -4258,13 +4263,16 @@ class ScalarChecker {
     bool changed;
     do {
       changed = false;
-      for (size_t i = 0; i < possible_targets_.size(); ++i) for (const auto source : target_dependencies_[i]) {
-        const auto before = possible_targets_[i].size();
-        possible_targets_[i].insert(possible_targets_[source].begin(), possible_targets_[source].end());
-        changed = changed || before != possible_targets_[i].size();
-        const auto nulls = possible_null_sources_[i].size();
-        possible_null_sources_[i].insert(possible_null_sources_[source].begin(), possible_null_sources_[source].end());
-        changed = changed || nulls != possible_null_sources_[i].size();
+      for (const auto &[destination, sources] : target_dependencies_) {
+        auto &targets = possible_targets_[destination];
+        auto &null_sources = possible_null_sources_[destination];
+        for (const auto source : sources) {
+          const auto before = targets.size();
+          const auto nulls = null_sources.size();
+          targets.insert(possible_targets_[source].begin(), possible_targets_[source].end());
+          null_sources.insert(possible_null_sources_[source].begin(), possible_null_sources_[source].end());
+          changed |= before != targets.size() || nulls != null_sources.size();
+        }
       }
       for (const auto &call : deferred_product_writes_) changed |= discover_product_writes(call);
     } while (changed);
@@ -4745,7 +4753,7 @@ class ScalarChecker {
           const auto &source = views.at(input);
           for (const auto place : source.targets) if (place != null_target) possible_targets_.at(binding).insert(place);
           possible_null_sources_.at(binding).insert(source.null_sources.begin(), source.null_sources.end());
-          target_dependencies_.at(binding).insert(source.origins.begin(), source.origins.end());
+          record_target_dependencies(binding, source.origins);
         }
       });
     }
@@ -4843,8 +4851,7 @@ class ScalarChecker {
               }
             }
             for (const auto input : targets.targets) {
-              const auto &origins = views.at(input).origins;
-              target_dependencies_.at(id).insert(origins.begin(), origins.end());
+              record_target_dependencies(id, views.at(input).origins);
             }
             record_rebinding(id, deferred);
           }
