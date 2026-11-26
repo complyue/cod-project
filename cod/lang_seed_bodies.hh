@@ -352,7 +352,7 @@ class BodyExtraction {
                !parameter.selects_caller_place();
       return (mode == ArgumentMode::borrowed_read || mode == ArgumentMode::borrowed_ref) &&
              (type.kind == Type::array || scalar_type(type) ||
-              (type.kind == Type::product && declarations().bits_payload(type)));
+              (inline_aggregate_type(type) && declarations().bits_payload(type)));
     }
 
     void takes_payload(const CheckedOperation &value, const Type &to, const Location &at) const {
@@ -377,7 +377,7 @@ class BodyExtraction {
       expect(!parameter.not_init_ref && !parameter.variadic && !parameter.automatic_conversion &&
              (!parameter.selects_caller_place() || slot) &&
              (mode == ArgumentMode::value ? scalar_type(type) : native_handle || ordinary_loan(parameter, mode, type)),
-             parameter.at, "replacement seed needs a fixed scalar, array, bits product, text or native handle formal");
+             parameter.at, "replacement seed needs a fixed scalar, array, bits aggregate, text or native handle formal");
       auto &frame = body_.instance.frame;
       const auto owner = parameter.owner.empty() ? size_t{0} : input_owner(owner_role(parameter.owner, parameter.at));
       if (owner) frame.owners.try_emplace(owner, frame.inputs.size());
@@ -1298,9 +1298,11 @@ class BodyExtraction {
     CheckedOperation declaration(const Expression &expr, bool fixed) {
       const bool value = expr.declaration_kind == "val";
       expect((value || expr.declaration_kind == "ref") && expr.children.size() == 1 &&
-             !expr.annotation && expr.owner_name.empty() && !expr.read_only,
-             expr.at, "replacement seed needs an inferred initialized val or ref");
+             (!value || !expr.annotation) && expr.owner_name.empty() && !expr.read_only,
+             expr.at, "replacement seed needs an initialized ref or an inferred initialized val");
       const auto &initial = operand(expr, 0);
+      if (expr.annotation && resolve_annotation(*expr.annotation, expr.at) != initial.type)
+        fail(expr.at, "reference initializer does not match the declared target type");
       expect(initial.type.kind != Type::native_handle, expr.at, "a native handle view needs a handle declaration");
       const auto owner = value ? size_t{0} : single_owner(initial, expr.at);
       if (value) takes_value(initial, initial.type, expr.at);
