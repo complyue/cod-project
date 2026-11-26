@@ -64,6 +64,33 @@ inline bool readonly_field(const CheckedSchema::Field &field) {
   return field.source->read_only || field.source->fixed_binding;
 }
 
+inline CasePattern bind_case_pattern(const CheckedProgram &program, const Type &subject, const Expression &arm,
+                                     const std::map<std::string, SumConstructor> &constructors) {
+  using K = CasePattern::Kind;
+  if (arm.receiving && (subject.kind != Type::sum || arm.text == "_" || arm.text == "null"))
+    implementation_gap(arm.at, "receiving fields in this case pattern");
+  if (arm.text == "_") return {};
+  if (arm.text == "null") return {K::null};
+  if (subject.kind == Type::sum) {
+    const auto constructor = constructors.find(arm.text);
+    if (constructor == constructors.end() || constructor->second.sum != subject.identity)
+      fail(arm.at, "'" + arm.text + "' is not a selected data constructor of '" + subject.name + "'");
+    return {K::code, constructor->second.alternative, constructor->second};
+  }
+  if (subject == Type::boolean) {
+    if (arm.text == "true" || arm.text == "false") return {K::code, arm.text == "true"};
+    fail(arm.at, "a bool case pattern requires true, false, null or a catch-all");
+  }
+  if (subject == Type::null_ref) fail(arm.at, "a null case subject requires a null pattern or a catch-all");
+  const auto &domain = program.enums.at(subject.identity);
+  const auto spelling = domain.spellings.find(arm.text);
+  if (spelling != domain.spellings.end()) {
+    const auto canonical = domain.members.at(spelling->second).canonical;
+    return {K::code, domain.members.at(canonical).code};
+  }
+  fail(arm.at, "unknown member '" + arm.text + "' of enum '" + subject.name + "'");
+}
+
 inline std::vector<size_t> product_initializers(const CheckedSchema &schema, const Expression &expr) {
   std::set<size_t> single_initialization;
   std::vector<size_t> order;

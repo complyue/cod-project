@@ -2876,25 +2876,7 @@ class ScalarChecker {
     return {std::move(codes), {std::move(remaining), borrowed && presence != TargetPresence::present}, borrowed};
   }
   CasePattern case_pattern(const Type &subject, const Expression &arm) const {
-    using K = CasePattern::Kind;
-    if (arm.receiving && (subject.kind != Type::sum || arm.text == "_" || arm.text == "null"))
-      implementation_gap(arm.at, "receiving fields in this case pattern");
-    if (arm.text == "_") return {};
-    if (arm.text == "null") return {K::null};
-    if (subject.kind == Type::sum) {
-      const auto constructor = module_names().constructors.find(arm.text);
-      if (constructor == module_names().constructors.end() || constructor->second.sum != subject.identity)
-        fail(arm.at, "'" + arm.text + "' is not a selected data constructor of '" + subject.name + "'");
-      return {K::code, constructor->second.alternative, constructor->second};
-    }
-    if (subject == Type::boolean) {
-      if (arm.text == "true" || arm.text == "false") return {K::code, arm.text == "true"};
-      fail(arm.at, "a bool case pattern requires true, false, null or a catch-all");
-    }
-    if (subject == Type::null_ref) fail(arm.at, "a null case subject requires a null pattern or a catch-all");
-    if (const auto member = enum_member(subject, arm.text))
-      return {K::code, program_.enums.at(subject.identity).members.at(member->member).code};
-    fail(arm.at, "unknown member '" + arm.text + "' of enum '" + subject.name + "'");
+    return bind_case_pattern(program_, subject, arm, module_names().constructors);
   }
   template <typename Resolve>
   std::vector<CaseField> case_fields(const Expression &arm, const CasePattern &pattern, Resolve resolve) const {

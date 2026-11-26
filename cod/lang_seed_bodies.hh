@@ -967,7 +967,9 @@ class BodyExtraction {
       expect(!supplied_body(), expr.at, "replacement seed does not allocate arrays inside a here literal");
       const auto owner = array_owner(expr);
       const auto allocator = allocator_for(owner);
-      expect(allocator && (owner || scopes_.size() == 2), expr.at,
+      // Ordinary blocks only introduce bindings. Allocation belongs to the
+      // enclosing full invocation, which owns its cleanup.
+      expect(allocator && (allocator->kind != Allocator::lexical || !in_iteration_), expr.at,
              "replacement seed needs an admitted array allocation owner");
       const auto &array = declarations().arrays.at(type.identity);
       expect(declarations().bits_payload(array.element), expr.at, "array fill requires a finite bits element");
@@ -1148,13 +1150,14 @@ class BodyExtraction {
       return op;
     }
 
-    CheckedOperation sum_case(const Expression &expr) {
+    CheckedOperation check_case(const Expression &expr) {
       const auto &subject = operand(expr, 0);
-      expect(subject.type.kind == Type::sum && subject.view && declarations().bits_payload(subject.type) &&
+      const bool sum = subject.type.kind == Type::sum && subject.view && declarations().bits_payload(subject.type);
+      const bool enumeration = subject.type.kind == Type::enumeration;
+      expect((sum || enumeration || subject.type == Type::boolean) &&
              !expr.case_breaks && !expr.case_resumes,
-             expr.at, "replacement seed needs a finite bits sum case without case transfers");
-      const auto &sum = declarations().sums.at(subject.type.identity);
-      std::set<size_t> covered;
+             expr.at, "replacement seed needs a closed Boolean, enum or bits sum case without case transfers");
+      std::set<std::uint64_t> covered;
       bool catch_all = false;
       CheckedOperation op;
       op.type = Type::never;
@@ -1163,34 +1166,29 @@ class BodyExtraction {
         expect(arm.kind == Kind::case_arm && !arm.case_resumes && arm.children.size() == 1, arm.at,
                "replacement seed needs an unguarded case arm");
         CheckedOperation matched;
+        matched.case_pattern = bind_case_pattern(declarations(), subject.type, arm, names().constructors);
+        const auto &pattern = matched.case_pattern;
+        expect(pattern.kind != CasePattern::Kind::null, arm.at, "replacement seed needs a non-null case pattern");
+        if (pattern.kind == CasePattern::Kind::any) catch_all = true;
+        else covered.insert(pattern.code);
         scopes_.emplace_back();
-        if (arm.text == "_") {
-          expect(!arm.receiving, arm.at, "a catch-all cannot receive sum fields");
-          catch_all = true;
-        } else {
-          const auto constructor = names().constructors.find(arm.text);
-          if (constructor == names().constructors.end() || constructor->second.sum != subject.type.identity)
-            fail(arm.at, "'" + arm.text + "' is not a selected data constructor of '" + subject.type.name + "'");
-          const auto selected = constructor->second;
-          matched.case_pattern = {CasePattern::Kind::code, selected.alternative, selected};
-          covered.insert(selected.alternative);
-          if (arm.receiving) {
-            const auto &alternative = sum.alternatives.at(selected.alternative);
-            const auto receiving = bind_case_fields(declarations(), arm, alternative, [&](const Type &type) {
-              return resolve_annotation(type, arm.at);
-            });
-            for (size_t i = 0; i < receiving.size(); ++i) {
-              const auto &receiver = *arm.case_bindings.at(i);
-              const auto &saved = receiving[i];
-              const auto local = declare(receiver.at, receiver.text, saved.type, true, saved.read_only,
-                                         receiver.fixed_binding, 0);
-              CheckedOperation binding;
-              binding.place = local.place;
-              binding.type = saved.type;
-              binding.operand_type = alternative.fields.at(saved.field).type;
-              matched.case_payload_fields.push_back(saved.field);
-              remember(receiver, std::move(binding));
-            }
+        if (arm.receiving) {
+          const auto constructor = *pattern.constructor;
+          const auto &alternative = declarations().sums.at(constructor.sum).alternatives.at(constructor.alternative);
+          const auto receiving = bind_case_fields(declarations(), arm, alternative, [&](const Type &type) {
+            return resolve_annotation(type, arm.at);
+          });
+          for (size_t i = 0; i < receiving.size(); ++i) {
+            const auto &receiver = *arm.case_bindings.at(i);
+            const auto &saved = receiving[i];
+            const auto local = declare(receiver.at, receiver.text, saved.type, true, saved.read_only,
+                                       receiver.fixed_binding, 0);
+            CheckedOperation binding;
+            binding.place = local.place;
+            binding.type = saved.type;
+            binding.operand_type = alternative.fields.at(saved.field).type;
+            matched.case_payload_fields.push_back(saved.field);
+            remember(receiver, std::move(binding));
           }
         }
         const auto &result = operand(arm, 0);
@@ -1206,7 +1204,15 @@ class BodyExtraction {
         scopes_.pop_back();
         remember(arm, std::move(matched));
       }
-      op.case_reaches_end = !catch_all && covered.size() != sum.alternatives.size();
+      if (!catch_all) {
+        if (sum) op.case_reaches_end = covered.size() != declarations().sums.at(subject.type.identity).alternatives.size();
+        else if (enumeration) {
+          const auto &domain = declarations().enums.at(subject.type.identity);
+          op.case_reaches_end = std::ranges::any_of(domain.members, [&](const auto &member) {
+            return !covered.contains(member.code);
+          });
+        } else op.case_reaches_end = covered.size() != 2;
+      }
       if (op.case_reaches_end) {
         if (op.type == Type::never) op.type = Type::void_type;
         else if (op.type != Type::void_type)
@@ -1234,7 +1240,7 @@ class BodyExtraction {
       case Kind::effect: return install_native_effect(expr);
       case Kind::index: return index(expr);
       case Kind::field: return field(expr);
-      case Kind::case_expression: return sum_case(expr);
+      case Kind::case_expression: return check_case(expr);
       case Kind::case_failure:
         op.type = Type::never;
         return op;
