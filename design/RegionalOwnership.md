@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 136 · Recorded: 2026-11-24 · Status: design draft with scoped confirmed requirements.
+Design revision: 137 · Recorded: 2026-11-26 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+At r137 [D-30-TYPED-SUBSCRIPTS](DesignAuthorityRegistry.md#d-30-typed-subscripts) extends the indexed call to multiple positional axis values. The selected method retains the r136 owner, access, transfer and result rules. [Observable call and failure order](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads)
 
 At r136 the [symbol identity decision](../CHANGELOG.md#h-runtime-symbol-identity-20261124) applies [D-10’s protected lexical name](SymbolicDynamicScope.md#the-bare-symbol-name-at-runtime) to owner binders. Distinct spellings may denote the same identity. A binding that would hide a visible symbol fails at its declaration.
 
@@ -1377,6 +1379,8 @@ A nonvoid ordinary `(<-)` method must return the original evaluated destination 
 The expected everyday use of `a <- b <- c` is bits transfer. Under H-308, a third-party library intending or recommending such chains should keep their meaning aligned with bits transfer. A library that does not promise or recommend chaining has no additional copy-like semantic obligation. Its normal type, access, lifetime, effects and declared-result contracts still apply. Whole-region moves use explicit steps; user-defined object writes need not promise a chain.
 
 ### Logical indexed transfer
+
+For multiple axes, `container[row, col] <- source` selects `([]<-)(container, row, col, source)`. Each selector retains its source type, including units and explicit or omitted range bounds. The matching reference-binding family is `([]=)`. [Typed subscript overloads](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads)
 
 `container[index] <- source` selects `([]<-)(container, index, source)` before assuming any addressable element. The container and index retain their types for dispatch. A packed representation can implement the write and return void without exposing an element reference or getter. The native array fallback writes the actual element and returns its readonly view; `intrinsic ([]<-)(...)` explicitly selects that checked fallback.
 

@@ -1,8 +1,10 @@
 # Collections and builtin containers
 
-Design revision 7 · 2026-11-26 · Source design draft
+Design revision 8 · 2026-11-26 · Source design draft
 
 ## Design authority
+
+At r8 [D-30-TYPED-SUBSCRIPTS](DesignAuthorityRegistry.md#d-30-typed-subscripts) supplies each axis to the library overload in source order, including ordinary unitless indices and nominal coordinates. P-766/P-767 preserve library array policy, receiver access, actual owners and UoM identity. [Decision and acceptance](../CHANGELOG.md#h-ranges-and-typed-subscripts-20261126)
 
 At r7 [D-30-ARRAY-POLICY](DesignAuthorityRegistry.md#d-30-array-policy) assigns public array behavior and names to libraries. P-758/P-759 preserve the r6 owner, access and transfer rules at library and native boundaries. [Human direction and acceptance](JuliaPackagePortability.md#library-defined-arrays-and-the-native-c-boundary)
 
@@ -50,6 +52,30 @@ val empty <- fold(4u64, 4u64, 10u64) (acc, i) => { acc + i };
 The results are 16 and 10. The written bounds and seed are evaluated once in that order. An empty input performs no step and still type-checks the supplied body. The step result must satisfy the accumulator contract, including applicable lossless conversions and owner/access evidence for a borrowed accumulator. An overload accepting a compatible producer visits in that producer’s order and honors its feedback contract. A single-brace step can `continue value` to deliver the next accumulator, `break value` to complete the fold call or `return value` from its lexical supplier. A double-brace callback has its own return target. All exits retain the applicable cleanup obligations.
 
 For a writable `array Counts[u32]:u64` in a live owner, the builtin selection in `ref cell = counts[i]` borrows that element. After `counts[i] <- 9u64`, `cell` reads 9. In contrast, `val saved <- counts[i]` retains the bits read at reception. A readonly array supplies at most a readonly view. Preserve bounds checks, nominal index domains and once-only evaluation. A custom getter returning a val or a packed collection with only an indexed writer supplies no borrow of its internal storage. A library needing a specifically named borrow can publish an ordinary function returning `ref T in O`. The standard array element count comes from the visible `len` family.
+
+## Multidimensional subscript overloads
+
+Commas inside brackets separate positional arguments to **one** indexing operation. Scalar indices keep their ordinary argument types. A bounded range is one range value, irrespective of its length. An axis-relative selector preserves its supplied fields and indicates which bound was omitted. The two range forms preserve the endpoint policy, the typed bounds and the step. A library can inspect those values at the call without receiving an enumerated list, byte offsets or fabricated first/last coordinates. No public tuple, allocation or physical selector layout is required.
+
+| Written use | Selected call |
+| --- | --- |
+| `m[r, c]` | `([])(m, r, c)` |
+| `m[rows, c] <- value` | `([]<-)(m, rows, c, value)` |
+| `m[r, c] = target` | `([]=)(m, r, c, target)` when the receiver supports reference binding |
+
+For `m[1 ..= 6 by 2, 3]` the getter receives a range with start 1, written inclusive bound 6 and step 2, followed by the scalar 3. Its last visited row is 5. For `m[.. by -1, 3]` the first selector has two absent bounds and an explicit step of −1. The overload can distinguish a scalar, a bounded progression and an axis-relative selector, and use the coordinate and step types in method selection. The actual numbers and endpoint policy are available to the selected body. This contract leaves the public names and representation of selector types open.
+
+`m[r][c]` performs two lookups and may have a different meaning. Each family uses ordinary visible overloads, arity, parameter modes and specificity. For example, a two-scalar getter and a range-plus-scalar getter can return an element and a column selection respectively. A rank mismatch with no applicable method is a normal call error. One composite index explicitly passed in brackets remains one argument. Scalar indices, a full-axis selector (`..`), and omitted ends (`lo ..`, `.. hi`, `.. by -1`) stay distinguishable. The library supplies an omitted bound from the corresponding axis and direction. Copies, borrowed views, bounds policy, result rank and memory strides follow the selected operation.
+
+Prepare the receiver first, then each selector left to right, then any written RHS. Complete each argument's evaluation and required conversions before the next. A failure during preparation skips subsequent operands and method entry. An indexed writer receives the original receiver and selectors directly. Any check performed inside a user-defined setter runs at its ordinary point after argument preparation. Preserve the established destination-before-RHS checks of the builtin indexed transfer. The result, mutation and allowed access follow the chosen operation, including its owner and cleanup obligations.
+
+### Unitless and unit-bearing axes
+
+Ordinary integer axes accept unitless indices and ranges. A numerical matrix can expose `m[1, 2]` and `m[1 ..= 5 by 2, 2]` directly. A library declaring row and column units can instead provide a method taking `u32(Row)` and `u32(Column)`. For that method `grid[Row(1u32), Column(2u32)]` is valid and reversing the arguments fails. Comparing primitive widths or stripping a unit during overload selection would erase this distinction. Existing same-unit whole-type widening and conversions enabled by the formal parameter keep their established rules. A domain-specific library may separately publish a unitless ordinal overload and specify how an ordinal maps to its axis. The ordinary numerical profile needs no unit annotations at the call site. Bounds and index origin remain properties of the receiving array.
+
+Range endpoints belong to compatible coordinate domains. The step is an advance, which can have a different representation or type from a coordinate. A discrete row domain can define `by 2` as two row advances. A physical coordinate domain can require a typed displacement. For data sampled every five milliseconds, an overload taking `.. by 2` as every second position visits samples ten milliseconds apart. A step of `ms(2u32)` asks for a two-millisecond advance and needs its own applicable coordinate operation. A dimensionless step does not automatically acquire a physical unit. A range with both bounds supplied keeps the same progression when it is used with another array. For an open selector such as `grid[.. by 2, c]`, a library may interpret the unitless step as every second position on that row axis. A user-defined shift or conversion must respect the original coordinate identity and operand effects. [Scalar units and index domains](ScalarUnitsAndIndexTypes.md#the-requirement)
+
+Acceptance compares the ordered values observed by a custom getter and writer for a unitless matrix and a nominal grid. Cover a scalar versus a range, swapped units, open and negative steps, and a selector producer that fails before a later selector or the RHS. A numeric `1 ..= 6 by 2` visits 1, 3 and 5. An inclusive singleton at the largest coordinate visits it exactly once. Check a write observed through a borrowed strided view and an empty selection with no backing dereference.
 
 ## Proposed common operations
 
