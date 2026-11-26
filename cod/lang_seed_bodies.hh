@@ -153,13 +153,38 @@ class BodyExtraction {
   };
 
   const Declarations &declarations_;
+  const std::map<size_t, Type> reference_targets_;
   std::map<size_t, size_t> selected_;
   std::deque<BoundBody> bodies_;
   std::vector<LocalDefinition> local_definitions_;
   std::set<size_t> handler_layouts_;
   size_t outlined_methods_ = 0;
 
-  explicit BodyExtraction(const Declarations &declarations) : declarations_(declarations) {}
+  explicit BodyExtraction(const Declarations &declarations)
+      : declarations_(declarations), reference_targets_(singleton_reference_targets(declarations.declarations_)) {}
+
+  static std::map<size_t, Type> singleton_reference_targets(const CheckedProgram &program) {
+    std::map<size_t, Type> targets;
+    for (size_t id = 0; id < program.symbols.size(); ++id) {
+      const auto &symbol = program.symbols[id];
+      if (!symbol.reference || symbol.reference->nullable || symbol.reference->read_only ||
+          !symbol.type || symbol.type->kind != Type::abstract_type) continue;
+      std::optional<Type> candidate;
+      for (size_t i = 0; i < program.schemas.size(); ++i) {
+        const auto &schema = program.schemas[i];
+        if (!schema.abstract_parent) continue;
+        Type type{Type::product, schema.source->name, i};
+        if (!program.conforms_to(type, *symbol.type)) continue;
+        if (candidate) {
+          candidate.reset();
+          break;
+        }
+        candidate = std::move(type);
+      }
+      if (candidate && program.builder_type(*candidate)) targets.emplace(id, std::move(*candidate));
+    }
+    return targets;
+  }
 
   static void expect(bool condition, const Location &at, const char *detail) {
     if (!condition) implementation_gap(at, detail);
@@ -413,6 +438,7 @@ class BodyExtraction {
       if (!owner) return Allocator{Allocator::lexical};
       if (const auto region = writable_regions_.find(owner); region != writable_regions_.end())
         return Allocator{Allocator::region, region->second};
+      if (is_symbol_owner(owner, declarations().symbols.size())) return std::nullopt;
       if (owner > first_symbol_owner && !const_input_owner(owner))
         return Allocator{Allocator::input, null_target - 1 - owner};
       return {};
@@ -502,9 +528,12 @@ class BodyExtraction {
       const auto &supplier = extraction_.bodies_.at(outlined.supplier).instance;
       const auto &source = supplier.bindings.at(original.binding);
       const bool live_view = source.type.kind == Type::array ||
-          (supplied_body() && source.type.kind == Type::product && declarations().bits_payload(source.type));
+          ((supplied_body() || form_.implicit_scope) && source.type.kind == Type::product &&
+           declarations().bits_payload(source.type));
       const bool handle = source.type.kind == Type::native_handle && !source.type.owned;
       const bool text = source.type == Type::string && source.read_only;
+      const bool builder = form_.implicit_scope && declarations().builder_type(source.type);
+      const bool lexical_text = form_.implicit_scope && text && !original.owner;
       const bool scalar_input = body_.case_scope && scalar_type(source.type);
       const bool incoming_loan = (handle || text || scalar_input) && original.place && original.owner > first_symbol_owner &&
           std::ranges::any_of(supplier.frame.inputs, [&](const auto &input) {
@@ -512,8 +541,9 @@ class BodyExtraction {
                    input.mode == (handle ? ArgumentMode::borrowed_handle : ArgumentMode::borrowed_ref);
           });
       expect(!source.nullable &&
-             (live_view || incoming_loan || (scalar_type(source.type) && (source.value_binding || source.fixed))),
-             expr.at, "replacement seed needs an admitted scalar place, bits view or incoming text or handle loan in a lexical capture");
+             (live_view || builder || lexical_text || incoming_loan ||
+              (scalar_type(source.type) && (source.value_binding || source.fixed))),
+             expr.at, "replacement seed needs an admitted scalar place, bits view, builder or incoming text or handle loan in a lexical capture");
       if (outlined.handler && scalar_type(source.type))
         expect(source.read_only || (source.fixed && source.requires_initialized), expr.at,
                "replacement seed needs a readonly scalar or fixed scalar reference capture in a live handler");
@@ -686,19 +716,18 @@ class BodyExtraction {
       return selected->second;
     }
 
-    size_t owning_symbol(const Expression &expr) const {
-      const auto id = selected_symbol(expr);
+    void require_owning_symbol(const Expression &expr, size_t id) const {
       const auto &symbol = declarations().symbols.at(id);
       expect(!supplied_body(), expr.at, "replacement seed has no owning dynamic effects in a supplied body");
       if (symbol.reference || !symbol.type || symbol.type->kind != Type::native_handle || !symbol.type->owned)
         implementation_gap(expr.at, "replacement seed needs an owning native handle " + symbol_name(expr, symbol));
-      return id;
     }
 
     const CheckedOperation &native_operand(const Expression &expr, size_t index, const Type &formal) {
       const auto &source = *expr.children.at(index);
       if (formal.kind != Type::c_type_marker || source.kind != Kind::symbol) return extract(source);
-      const auto id = owning_symbol(source);
+      const auto id = selected_symbol(source);
+      require_owning_symbol(source, id);
       const auto &symbol = declarations().symbols.at(id);
       if (!matches_native_handle(*symbol.type, formal))
         fail(source.at, symbol_name(source, symbol) + " cannot supply a native handle borrow of type '" + formal.name + "'");
@@ -708,6 +737,26 @@ class BodyExtraction {
       op.view = true;
       op.owners.insert(symbol_owner_key(id));
       return remember(source, std::move(op));
+    }
+
+    const Type &reference_target(const Expression &expr, size_t id) const {
+      const auto target = extraction_.reference_targets_.find(id);
+      if (target == extraction_.reference_targets_.end())
+        implementation_gap(expr.at, "replacement seed needs a unique concrete builder target for borrowed " +
+            symbol_name(expr, declarations().symbols.at(id)));
+      return target->second;
+    }
+
+    const CheckedOperation &ordinary_operand(const Expression &source) {
+      if (source.kind != Kind::symbol) return extract(source);
+      require_executable_expression(source);
+      const auto id = selected_symbol(source);
+      CheckedOperation operation;
+      operation.type = reference_target(source, id);
+      operation.symbol = id;
+      operation.owners.insert(symbol_owner_key(id));
+      operation.view = true;
+      return remember(source, std::move(operation));
     }
 
     CheckedOperation provider_call(const Expression &expr, size_t id) {
@@ -889,7 +938,7 @@ class BodyExtraction {
       types.reserve(expr.children.size());
       operands.reserve(expr.children.size());
       for (const auto &source : expr.children) {
-        const auto &arg = extract(*source);
+        const auto &arg = ordinary_operand(*source);
         operands.push_back(&arg);
         types.push_back(arg.type);
       }
@@ -973,8 +1022,14 @@ class BodyExtraction {
       for (size_t i = 0; i < parameters.size(); ++i) {
         const auto &parameter = parameters[i];
         const auto mode = argument_mode(parameter);
-        const auto &arg = operands.empty() ? operand(expr, i) : *operands[i];
+        const auto &source = *expr.children[i];
+        const auto &arg = operands.empty() ? ordinary_operand(source) : *operands[i];
         const auto &formal = target.parameters[i];
+        const auto current_symbol = source.kind == Kind::symbol ? arg.symbol : std::nullopt;
+        if (current_symbol)
+          expect(target.result.type && !region_receiver && target.here.empty() &&
+                 !parameter.selects_caller_place() && (mode == ArgumentMode::borrowed_read || mode == ArgumentMode::borrowed_ref),
+                 source.at, "replacement seed needs a direct ordinary borrow of the current reference symbol");
         if (mode == ArgumentMode::value) takes_value(arg, formal, expr.children[i]->at);
         else {
           const auto &at = expr.children[i]->at;
@@ -993,9 +1048,11 @@ class BodyExtraction {
           if (declarations().builder_type(formal) && !role->read_only && const_input_owner(owner))
             fail(at, "const owner cannot supply a writable builder owner");
           const auto [first, inserted] = actual_owners.emplace(static_cast<size_t>(role - roles.begin()), owner);
+          expect(inserted || (!current_symbol && !is_symbol_owner(first->second, declarations().symbols.size())),
+                 at, "replacement seed needs a separate ordinary owner role for a current reference symbol");
           expect(inserted || first->second == owner, at, "one formal owner needs the same actual owner");
         }
-        op.arguments.push_back({mode, formal, parameter.selects_caller_ref_slot()});
+        op.arguments.push_back({mode, formal, parameter.selects_caller_ref_slot(), {}, current_symbol});
       }
       BoundCall edge{&expr, callee, {}};
       for (const auto &[role, owner] : actual_owners) if (!target.input_owners()[role].read_only)
@@ -1198,9 +1255,23 @@ class BodyExtraction {
       return {id, &initializer};
     }
 
-    CheckedOperation install_native_effect(const Expression &expr) {
-      const auto id = owning_symbol(expr);
+    CheckedOperation install_effect(const Expression &expr) {
+      const auto id = selected_symbol(expr);
       const auto &symbol = declarations().symbols.at(id);
+      if (symbol.reference) {
+        const auto &target = reference_target(expr, id);
+        expect(!supplied_body() && (!body_.outline || form_.implicit_scope) &&
+               expr.binding == "=" && expr.children.size() == 1,
+               expr.at, "replacement seed needs a synchronous borrowed reference effect");
+        const auto &view = operand(expr, 0);
+        const auto owner = single_owner(view, expr.children.front()->at);
+        expect(view.type == target && !view.read_only && !const_input_owner(owner),
+               expr.children.front()->at, "replacement seed needs the declared writable target of a borrowed effect");
+        CheckedOperation op;
+        op.symbol = id;
+        return op;
+      }
+      require_owning_symbol(expr, id);
       if (expr.binding != "<-" || expr.children.size() != 1)
         fail(expr.at, "an owning effect for " + symbol_name(expr, symbol) + " requires '<-' and fresh 'make own handle' construction");
       const auto &initializer = ungrouped_expression(*expr.children.front());
@@ -1728,7 +1799,7 @@ class BodyExtraction {
       case Kind::region_binding: return bind_region(expr);
       case Kind::native_handle_binding: return bind_native_handle(expr);
       case Kind::make_borrowed_handle: return attach_native_handle(expr);
-      case Kind::effect: return expr.definition ? install_handler(expr) : install_native_effect(expr);
+      case Kind::effect: return expr.definition ? install_handler(expr) : install_effect(expr);
       case Kind::procedure_effect:
         expect(expr.definition != nullptr, expr.at, "replacement seed needs a private live handler body");
         return install_handler(expr);
@@ -1851,7 +1922,7 @@ class BodyExtraction {
       // dependency is represented. Native disposal has its own contract.
       if (!body_.open_replay &&
           (op.native_acquisition || op.native_call || op.invokes_here || expr.has_here_body() ||
-           (expr.kind == Kind::symbol && op.symbol)))
+           ((expr.kind == Kind::symbol || (expr.kind == Kind::effect && !expr.definition)) && op.symbol)))
         body_.open_replay = true;
       if (op.view && !scalar_type(op.type) && op.type != Type::exception)
         op.discarded_view = true;

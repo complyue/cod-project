@@ -55,6 +55,7 @@ struct CheckedArgument {
     auto operator<=>(const ReferenceStorage &) const = default;
   };
   std::optional<ReferenceStorage> reference_storage = {};
+  std::optional<size_t> current_reference_symbol = {};
   bool operator==(const CheckedArgument &) const = default;
 };
 inline ArgumentMode argument_mode(const Parameter &parameter) {

@@ -1366,7 +1366,8 @@ class LLVMEmission {
   llvm::Value *native_call(const Expression &expr, llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared,
                            const std::vector<llvm::Value *> &captured = {}, std::optional<size_t> instance = {},
                            const Type *callable_view = nullptr, llvm::AllocaInst *here_site = nullptr,
-                           const std::vector<llvm::Value *> &here_values = {}, bool nominal = false) {
+                           const std::vector<llvm::Value *> &here_values = {}, bool nominal = false,
+                           std::span<llvm::Value *const> current_owners = {}) {
     const auto &layout = call_layouts_.at(method);
     const auto &inputs = input_frame(method).inputs;
     if (prepared.size() != layout.operands) throw std::logic_error("unchecked native call arity");
@@ -1401,7 +1402,8 @@ class LLVMEmission {
       } else {
         const auto index = input + offset;
         const auto &operand = invocation.argument(expr, index);
-        prepared.push_back(nominal ? selected_owner(operand) : selected_owner(operand, &expr, method, callable_view, index));
+        if (!current_owners.empty() && current_owners[index]) prepared.push_back(current_owners[index]);
+        else prepared.push_back(nominal ? selected_owner(operand) : selected_owner(operand, &expr, method, callable_view, index));
       }
     }
     for (const auto role : layout.array_owners) {
@@ -1617,7 +1619,8 @@ class LLVMEmission {
     return outcome(empty_scalar(), integer(0), integer(0), null_pointer());
   }
   llvm::Value *invoke(const Expression &expr, const std::vector<llvm::Value *> &arguments, llvm::AllocaInst *here_site = nullptr,
-                      const std::vector<llvm::Value *> &here_values = {}) {
+                      const std::vector<llvm::Value *> &here_values = {},
+                      std::span<llvm::Value *const> current_owners = {}) {
     const auto &fact = contexts_.front().at(&expr);
     if (fact.invokes_here) {
       auto *argument = here_arguments_.at(*fact.invokes_here);
@@ -1697,7 +1700,8 @@ class LLVMEmission {
             const auto &other = program_->instances[*choice.operation->callee];
             return other.method == target.method && other.retained_types == target.retained_types &&
                 other.query_environment == target.query_environment;
-          })) return native_call(expr, general_[target.method], target.method, inputs, captured, id, nullptr, here_site, here_values);
+          })) return native_call(expr, general_[target.method], target.method, inputs, captured, id, nullptr, here_site,
+                                  here_values, false, current_owners);
     }
     return choose(expr, inputs, cases, outcome_, [&](const Choice &choice) -> llvm::Value * {
       if (choice.nominal_callee) {
@@ -1709,7 +1713,8 @@ class LLVMEmission {
       if (choice.operation->callee) {
         const auto id = *choice.operation->callee;
         auto *target = specialize_ && cases.size() == 1 ? specialized_[id] : general_[program_->instances[id].method];
-        return native_call(expr, target, program_->instances[id].method, inputs, captured, id, nullptr, here_site, here_values);
+        return native_call(expr, target, program_->instances[id].method, inputs, captured, id, nullptr, here_site,
+                           here_values, false, current_owners);
       }
       if (choice.operation->builtin == BuiltinOperation::unary || choice.operation->builtin == BuiltinOperation::binary)
         return outcome(eager_builtin(expr, arguments, choice), integer(0), integer(0), null_pointer());
@@ -3026,8 +3031,21 @@ class LLVMEmission {
     for (const auto &[prepared, from] : incoming) value->addIncoming(prepared, from);
     return value;
   }
-  llvm::Value *prepare_argument(const Expression &expr, size_t index, bool copy) {
-    const auto &child = contexts_.front().at(&expr).argument(expr, index);
+  llvm::Value *prepare_argument(const Expression &expr, size_t index, bool copy,
+                                std::vector<llvm::Value *> *current_owners = nullptr) {
+    const auto &call = contexts_.front().at(&expr);
+    const auto &child = call.argument(expr, index);
+    if (const auto symbol = call.arguments.at(index).current_reference_symbol) {
+      if (!current_owners || std::ranges::any_of(contexts_, [&](const auto &context) {
+            return context.at(&expr).arguments.at(index).current_reference_symbol != symbol;
+          })) throw std::logic_error("current reference argument lacks a uniform owner preparation");
+      // Both projections must survive preparation of all later operands.
+      auto *binding = symbols_.at(*symbol);
+      auto *selected = b_.CreateLoad(binding->getValueType(), binding, "effect.current.argument");
+      if (current_owners->empty()) current_owners->resize(call.argument_count(expr));
+      (*current_owners)[index] = b_.CreateExtractValue(selected, 1, "effect.argument.owner");
+      return b_.CreateExtractValue(selected, 0, "effect.argument.selection");
+    }
     const auto consumes_exception = [&](const auto &context) {
       return context.at(&expr).arguments.at(index).mode == ArgumentMode::owning_exception;
     };
@@ -3100,7 +3118,8 @@ class LLVMEmission {
     return contextual_value(child, alternatives, "argument", prepare);
   }
   std::vector<llvm::Value *> prepare_arguments(const Expression &expr, bool deferred = false,
-                                               std::span<llvm::Value *> here_values = {}, llvm::Value *first_place = nullptr) {
+                                               std::span<llvm::Value *> here_values = {}, llvm::Value *first_place = nullptr,
+                                               std::vector<llvm::Value *> *current_owners = nullptr) {
     using Preparation = CheckedOperation::OperandPreparation;
     std::vector<llvm::Value *> arguments;
     const auto &fact = contexts_.front().at(&expr);
@@ -3134,7 +3153,7 @@ class LLVMEmission {
         if (slot >= here_values.size()) throw std::logic_error("missing checked here operand slot");
         here_values[slot] = prepare_here_argument(expr, slot);
       } else if (first_place && slot == 0) arguments[first] = pack_view(first_place, fact.argument(expr, 0));
-      else arguments[first + slot] = prepare_argument(expr, slot, !offset || slot || protect);
+      else arguments[first + slot] = prepare_argument(expr, slot, !offset || slot || protect, current_owners);
       if (!reachable()) return {};
     }
     check_destination_arguments(expr, arguments);
@@ -4388,15 +4407,16 @@ class LLVMEmission {
       return temporary_scope(expr.at, !fact.borrowed_result || read ? scalar_ : static_cast<llvm::Type *>(b_.getPtrTy()), [&]() -> llvm::Value * {
         // An entry-time supplied body leaves its slot empty during preparation.
         std::vector<llvm::Value *> here_values(fact.here_arguments.size());
+        std::vector<llvm::Value *> current_owners;
         const auto arguments = fact.pipeline_preparation ? prepare_pipeline(expr, *fact.pipeline_preparation, here_values)
-                                                        : prepare_arguments(expr, false, here_values);
+                                                        : prepare_arguments(expr, false, here_values, nullptr, &current_owners);
         if (!reachable()) return nullptr;
         llvm::AllocaInst *here_site = nullptr;
         if (fact.supplied_here && program_->methods[program_->instances[fact.supplied_here->instance].method].here_group) {
           here_site = slot(b_.getPtrTy(), "here.call.destination");
           b_.CreateStore(null_pointer(), here_site);
         }
-        auto *result = invoke(expr, arguments, here_site, here_values);
+        auto *result = invoke(expr, arguments, here_site, here_values, current_owners);
         if (here_site) result = consume_here_transfer(result, load(here_site), expr.at);
         auto *value = propagate(result);
         if (!fact.borrowed_result) return own_value(value);
