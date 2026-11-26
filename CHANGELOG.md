@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Use Julia’s fixed-width numeric type names in CoD source
+
+<a id="h-builtin-numeric-names-20261126"></a>
+**H-BUILTIN-NUMERIC-NAMES-20261126.** In the [side discussion](codex://threads/01a218df-119e-78f0-8cd7-c920e9c7778e), the project user cited variables such as `i31` and `i32` and approved the proposed fixed-width names, package-selected word aliases and separate literal suffixes (“同意，落repo然后知会你的主对话”). [D-07-SCALAR-NAMES](design/DesignAuthorityRegistry.md#d-07-scalar-names) supersedes the source naming portion of the [previous contract](https://github.com/complyue/cod-project/blob/486327493e0e4e1e8a0aa1e399d985490a0cf50b/design/JuliaPackagePortability.md#scalar-names-and-transparent-type-synonyms). Transparent synonyms, signed and unsigned identities, conversion and native layout continue. The [acceptance and booter migration](design/JuliaPackagePortability.md#scalar-names-and-transparent-type-synonyms) distinguish this design decision from compiler delivery. Registry r1351→1352.
+
 ## 2026-11-26 — Give explicit scalar conversions Julia-compatible results and failures
 
 <a id="h-julia-numeric-conversions-20261126"></a>

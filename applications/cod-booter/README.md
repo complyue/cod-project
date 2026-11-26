@@ -211,9 +211,9 @@ Quoted assertion messages and reference-identity predicates such as `p is not nu
 
 ### Transparent type synonyms
 
-The booter accepts first-order declarations such as `export type Float64 = double`. The binder resolves the target in the defining module before checking signatures or layouts. Chains can refer forward to local declarations and through selected exports, including renamed and default selections. Cycles containing only synonyms fail at the target that closes the cycle.
+The current booter accepts first-order declarations such as `export type Sample = double`. The [builtin naming decision](../../design/JuliaPackagePortability.md#scalar-names-and-transparent-type-synonyms) calls for migrating this example to `export type Sample = Float64` and migrating the booter’s own type references. The binder resolves the target in the defining module before checking signatures or layouts. Chains can refer forward to local declarations and through selected exports, including renamed and default selections. Cycles containing only synonyms fail at the target that closes the cycle.
 
-A synonym retains the target’s identity through overload selection, enum backing declarations and C provider signatures. For example, `UInt64` for `u64` has the same signature as `u64`, whereas `Int64` for `i64` retains signed identity. The spellings `float` and `double` use the existing `f32` and `f64` kinds. Object emission checks duplicate signatures for the supported ordinary fixed value families. Each command retains its existing profile for the underlying type and module graph. [Type synonym contract](../../design/JuliaPackagePortability.md#scalar-names-and-transparent-type-synonyms)
+A synonym retains the target’s identity through overload selection, enum backing declarations and C provider signatures. For example, two synonyms of the same unsigned type give identical signatures, and a synonym of the corresponding signed type retains its distinct identity. The spellings `float` and `double` use the existing `f32` and `f64` kinds. Object emission checks duplicate signatures for the supported ordinary fixed value families. Each command retains its existing profile for the underlying type and module graph. [Type synonym contract](../../design/JuliaPackagePortability.md#scalar-names-and-transparent-type-synonyms)
 
 ### Contextual names in both frontends
 

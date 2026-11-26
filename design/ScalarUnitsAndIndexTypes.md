@@ -1,8 +1,10 @@
 # Scalar units, strict brands and array index domains
 
-Discussion revision: 41 · Recorded: 2026-11-26 · Status: alternatives under discussion.
+Discussion revision: 42 · Recorded: 2026-11-26 · Status: alternatives under discussion.
 
 ## Design authority
+
+At r42 [D-07-SCALAR-NAMES](DesignAuthorityRegistry.md#d-07-scalar-names) supplies the fixed-width source names used in quantity and conversion examples. P-776/P-777 preserve r41 numeric identities, units, lossless widening and explicit conversion outcomes. [Spelling, suffixes and delivery acceptance](JuliaPackagePortability.md#scalar-names-and-transparent-type-synonyms)
 
 At r41 [D-11-NUMERIC-CONVERSION](DesignAuthorityRegistry.md#d-11-numeric-conversion), P-774/P-775, gives explicit builtin scalar conversions a defined rounded result or an exact integer result with a recoverable failure. The [delegated decision](../CHANGELOG.md#h-julia-numeric-conversions-20261126) supersedes H-463–H-466 for these pairs. H-261 implicit widening, nominal units, access and the deferred fraction contract continue from r40. [Examples and acceptance](#explicit-scalar-numeric-conversions)
 
@@ -56,26 +58,26 @@ H-260 selects independent `unit m;` declarations and quantity annotations such a
 ```text
 unit m;
 unit cm;
-conversion function cm_to_m(x::f64(cm))::f64(m) {
+conversion function cm_to_m(x::Float64(cm))::Float64(m) {
   m(scalar(x) / 100.0)
 }
-function distance(x::f64(m*))::f64 { scalar(x) }
+function distance(x::Float64(m*))::Float64 { scalar(x) }
 ```
 
 Units are compile-time identities; quantities combine one identity with a numeric representation. Aliases do not change either component. The existing concrete representations have these additional implicit destinations:
 
 | Source | Lossless destinations |
 | --- | --- |
-| u8 | u32, u64, i64, f32, f64 |
-| u32 | u64, i64, f64 |
-| f32 | f64 |
-| i64, u64, f64 | none |
+| UInt8 | UInt32, UInt64, Int64, Float32, Float64 |
+| UInt32 | UInt64, Int64, Float64 |
+| Float32 | Float64 |
+| Int64, UInt64, Float64 | none |
 
-Identity conversions remain valid. Bool is not numeric. The rule concerns every value of a source type, rather than the magnitude of one literal. In particular, i64/u64→f64 and u32→f32 require explicit conversion. Fraction-specific promotion remains deferred. Floating widening preserves numerical values, signed zeros and infinities, not a promise about NaN payload encodings.
+Identity conversions remain valid. Bool is not numeric. The rule concerns every value of a source type, rather than the magnitude of one literal. In particular, Int64/UInt64→Float64 and UInt32→Float32 require explicit conversion. Fraction-specific promotion remains deferred. Floating widening preserves numerical values, signed zeros and infinities, not a promise about NaN payload encodings.
 
-Exact applicable methods take precedence. Otherwise there must be a unique most-specific applicable signature under lossless widening; incomparable candidates reject. Builtin mixed scalar arithmetic chooses the unique least common safe representation: u32 with f32 uses f64, whereas i64 with f64 has none. Quantity operations retain their declared overloads; widening can adapt their arguments while preserving the unit identity. Mutable reference targets are not widened.
+Exact applicable methods take precedence. Otherwise there must be a unique most-specific applicable signature under lossless widening; incomparable candidates reject. Builtin mixed scalar arithmetic chooses the unique least common safe representation: UInt32 with Float32 uses Float64, whereas Int64 with Float64 has none. Quantity operations retain their declared overloads; widening can adapt their arguments while preserving the unit identity. Mutable reference targets are not widened.
 
-Quantity parameter `f64(m)` permits safe representation widening within m; `f64(m*)` additionally permits selected unit conversions. Each declared conversion has typed input/output quantities. A route may widen to an input or from an output only under the table above; its intermediate representation must remain compatible. Numeric widening is compatibility, not another semantic conversion edge or an extra source of path ambiguity. Direct unit conversion remains preferred, then an explicit unit itinerary, then the existing searched-route/warning policy. Conversions complete before the next argument's effects. No implicit narrowing, ordinary return-type-only overload selection, runtime unit tag or source-world editing is introduced.
+Quantity parameter `Float64(m)` permits safe representation widening within m; `Float64(m*)` additionally permits selected unit conversions. Each declared conversion has typed input/output quantities. A route may widen to an input or from an output only under the table above; its intermediate representation must remain compatible. Numeric widening is compatibility, not another semantic conversion edge or an extra source of path ambiguity. Direct unit conversion remains preferred, then an explicit unit itinerary, then the existing searched-route/warning policy. Conversions complete before the next argument's effects. No implicit narrowing, ordinary return-type-only overload selection, runtime unit tag or source-world editing is introduced.
 
 <a id="explicit-numeric-conversion-and-loss-warnings"></a>
 ### Explicit scalar numeric conversions
@@ -84,17 +86,17 @@ For `x : T` between dimensionless builtin fixed-width integer and binary floatin
 
 | Destination | Result |
 | --- | --- |
-| Binary floating (`float` or `double`) | Round directly from the source value to the destination format with IEEE round-to-nearest, ties-to-even. This includes floating narrowing, subnormals, and signed infinity on rounded overflow. Preserve signed floating zeros and infinities. A floating NaN converts to a NaN with no payload guarantee. |
+| Binary floating (`Float32` or `Float64`) | Round directly from the source value to the destination format with IEEE round-to-nearest, ties-to-even. This includes floating narrowing, subnormals, and signed infinity on rounded overflow. Preserve signed floating zeros and infinities. A floating NaN converts to a NaN with no payload guarantee. |
 | Signed or unsigned integer | Return the source value exactly if it is finite, integral and within the destination range. Floating negative zero converts to integer zero. Otherwise raise the unchecked `InexactError` at the conversion expression. |
 
 The default compiler accepts possible precision loss in an explicit floating conversion. A tool may offer opt-in precision advice. A plain integer conversion that may fail also compiles under the ordinary exception rules. The compiler may elide a check when it proves the result, or fold an executable constant conversion to the same value or the same located throw. In a context requiring a successful compile-time constant, report the failing conversion at its site. In executable code, a handler can catch even a failure known at compile time. Operand failures take precedence. If argument preparation reaches an inexact integer conversion, subsequent operands and the callee are skipped, and recorded cleanup runs normally. [Numeric conversion failures](ExceptionControl.md#numeric-conversion-failures)
 
 | Observation | Expected result |
 | --- | --- |
-| Convert the integer values `2^53 + 1` and `2^53 + 3` to `double` | Respectively `2^53` and `2^53 + 4`. These are mathematical powers. |
-| Convert `2^62 + 2^38 + 1` from `i64` directly to `float` | `2^62 + 2^39`. A detour through binary64 would give the lower neighbor. |
-| `255.0f64 : u8` or `-0.0f64 : u8` | 255 or 0. |
-| `300u64 : u8`, `3.5f64 : u64`, negative one to unsigned, NaN or infinity to integer | Catchable `InexactError` on reaching the expression. |
+| Convert the integer values `2^53 + 1` and `2^53 + 3` to `Float64` | Respectively `2^53` and `2^53 + 4`. These are mathematical powers. |
+| Convert `2^62 + 2^38 + 1` from `Int64` directly to `Float32` | `2^62 + 2^39`. A detour through binary64 would give the lower neighbor. |
+| `255.0f64 : UInt8` or `-0.0f64 : UInt8` | 255 or 0. |
+| `300u64 : UInt8`, `3.5f64 : UInt64`, negative one to unsigned, NaN or infinity to integer | Catchable `InexactError` on reaching the expression. |
 
 Compare constant and runtime operands, including rounded overflow and underflow for floating narrowing. Use a reached handler and a later observable argument to check failure order and cleanup. Preserve whole-type losslessness for implicit compatibility and overload selection. Boolean values, enum decoding, changing units, planned fractions, references and user-defined conversions have separate contracts. This decision specifies the builtin by-value conversions. [Julia numerical conversions](https://docs.julialang.org/en/v1/manual/mathematical-operations/#Numerical-Conversions) · [Julia default rounding](https://docs.julialang.org/en/v1/manual/integers-and-floating-point-numbers/#Rounding-modes)
 
