@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Forward borrowed CLI inputs through the catalog callback
+
+<a id="k-seed-cli-input-loans-20261126"></a>
+**K-SEED-CLI-INPUT-LOANS-20261126.** [D-ARCH-REVIEW r216→217](design/ImplementationArchitecture.md#borrowing-cli-entry-inputs-in-a-catalog-callback) continues P-682/P-683. At `7dc810e0`, [`compile_cli`](https://github.com/complyue/cod-project/blob/7dc810e0/applications/cod-booter/src/__main__.cod#L7) forwards borrowed input, output text and a writable diagnostic destination through its synchronous catalog callback. The [existing entry adapter](https://github.com/complyue/cod-project/blob/7dc810e0/cod/native/provider_call.h#L36) establishes the bounded UTF-8 snapshot. This review clears use of the existing place and owner records through the callback and ordinary forward. Full CLI translation remains an implementation milestone.
+
 ## 2026-11-26 — Identify the CoD parser as an application of the pcl.cod HLVM
 
 <a id="h-pcl-hlvm-parser-application-20261126"></a>

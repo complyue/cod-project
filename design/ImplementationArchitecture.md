@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r217 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r216 for [borrowing CLI entry inputs in a catalog callback](#borrowing-cli-entry-inputs-in-a-catalog-callback). The [review](../CHANGELOG.md#k-seed-cli-input-loans-20261126) applies [D-07-UTF8](DesignAuthorityRegistry.md#d-07-utf8) and [D-20-C-HANDLES](DesignAuthorityRegistry.md#d-20-c-handles) at the C entry and its synchronous forwarding call.
+
 At r216 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r215 and extends the r214 callback extraction to [ordered readonly arrays with one actual owner](#ordered-array-loans-from-one-native-owner). The [review](../CHANGELOG.md#k-seed-pipeline-ordered-catalog-loans-20261126) preserves the existing native provider ABI, synchronous lifetime and completion rules.
 
 At r215 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r214 under the [replacement pipeline decision](../CHANGELOG.md#h-compiler-pipeline-replacement-20261125). The [direct lexical handle review](#direct-native-handle-acquisition-in-the-replacement-seed) applies [D-20-C-HANDLES](DesignAuthorityRegistry.md#d-20-c-handles) to root opening, owner identity and cleanup on the existing LLVM interface. [Review record](../CHANGELOG.md#k-seed-pipeline-lexical-native-handles-20261126)
@@ -787,6 +789,14 @@ The [CLI](../applications/cod-booter/src/__main__.cod) borrows two arrays from [
 Use the completed positional `here` signature to extract each offered parameter in declaration order. Each offer keeps its array type, readonly access and position, including unused offers. The bridge passes all the array views, then one actual owner and the descriptor context. Later frame assembly maps the full ordered reception before the supplier’s captures. When a CoD relay calls its lexical `here` formal, prepare each actual in source order and establish its type, access and common owner before invoking the descriptor. The two-argument [`with_source` relay](../applications/cod-booter/src/NativeSourceUse.cod) gives a direct forwarding workload. The r214 single-visit extraction, lifetime and completion boundaries continue for every admitted arity.
 
 Verify that each catalog extent and element can independently change the ordinary feedback and that a thrown record-derived payload reaches the catch without producing an ordinary callback value. Catalog sizes belong to the input revision. Keep wrong-owner or incompatible reception failures located before output publication. The scope covers full positional reception of nonempty, readonly, single-owner offers. Catalog translation alone leaves full CLI entry translation open.
+
+#### Borrowing CLI entry inputs in a catalog callback
+
+In [`compile_cli`](../applications/cod-booter/src/__main__.cod), the catalog callback passes the entry’s input `Path` and readonly output `String` under A, and its writable diagnostic destination under D, alongside the catalog’s offered arrays. The generated C entry checks the input text extent, copies its declared bytes and validates UTF-8 before calling CoD. An embedded NUL is part of that length-delimited content. The entry adapter owns the snapshot through the call and releases it on return. [Bounded native text](Utf8Strings.md#borrowing-text-for-a-c-call)
+
+Bind the callback’s use to the selected formal and its place in the supplier’s activation. Forward the validated text view and the original borrowed handle pairs with their target access and actual owner mappings. The catalog supplies its own owner for both arrays. In `providers_cli` the directory path uses its own P mapping. Different formal owner roles alone cannot establish disjoint runtime targets. CoD forwarding and the bounded outgoing text provider can reuse the entry snapshot. Neither a second snapshot nor a native release belongs to the callback.
+
+Exercise the real catalog handoff with an observer in place of `compile_object`. It must receive the four bytes containing NUL and a multibyte character, or just the two bytes specified by the shorter input. A malformed extent or incomplete UTF-8 sequence must fail at entry with the destination and feedback intact. Verify wrong-owner and writable-access failures before publication. This slice covers existing borrowed handle formals and fixed readonly text views. Text construction, C-string conversion, escaping results and retained callbacks have separate requirements.
 
 #### Direct native handle acquisition in the replacement seed
 
