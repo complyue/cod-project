@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Require live handler evidence at installation
+
+<a id="k-seed-scoped-activation-emission-20261125"></a>
+**K-SEED-SCOPED-ACTIVATION-EMISSION-20261125.** The [architecture review](design/ImplementationArchitecture.md#emission-boundary-for-live-handler-installations) continues D-ARCH-REVIEW r207→208 and applies the [r188 omission rule](design/ImplementationArchitecture.md#live-handlers-without-scalar-snapshot-fields). At held revision `3884f7fa:cod/lang_checked.hh`, the perform-only finalization misses an emitted installation in the owning loader's current-context twin. The held seed must establish its representation at the installation before emitting output. Native disposal permissions remain a separate design question.
+
 ## 2026-11-25 — Complete an ordered byte transfer before its callers
 
 <a id="k-seed-overlapping-byte-transfer-20261125"></a>
