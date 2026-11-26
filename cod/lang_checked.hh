@@ -705,9 +705,10 @@ class ScalarChecker {
   std::vector<CheckedStorage> *storage_ = nullptr;
   std::vector<CheckedBinding> *bindings_ = nullptr;
   std::map<size_t, std::vector<size_t>> scope_storage_;
-  std::map<size_t, size_t> native_resource_owners_, native_owner_scopes_;
+  std::map<size_t, size_t> native_resource_owners_;
+  std::set<size_t> nonallocating_owners_;
   struct RegionOwner {
-    size_t holder, lifetime;
+    size_t holder;
     bool read_only;
   };
   std::map<size_t, RegionOwner> region_owners_;
@@ -890,7 +891,7 @@ class ScalarChecker {
   }
   bool const_owner(size_t owner) const {
     const auto region = region_owners_.find(owner);
-    return native_owner_scopes_.contains(owner) || const_native_owner(owner) ||
+    return nonallocating_owners_.contains(owner) || const_native_owner(owner) ||
         (region != region_owners_.end() && region->second.read_only);
   }
   void require_lexical_allocator(std::optional<size_t> actual, const Location &at) {
@@ -909,8 +910,7 @@ class ScalarChecker {
   CheckedOperation::ArrayAllocator array_allocator(std::optional<size_t> actual, const Location &at) const {
     using Allocator = CheckedOperation::ArrayAllocator;
     if (actual == cleanup_scope_) return {Allocator::lexical};
-    if (!actual || (lexical_.live && !owner_alive(*actual)))
-      implementation_gap(at, "array allocation without a proved live destination owner");
+    if (!actual) implementation_gap(at, "array allocation without an established destination owner");
     if (const_owner(*actual)) fail(at, "const owner cannot allocate storage");
     if (const auto region = region_owners_.find(*actual); region != region_owners_.end())
       return {Allocator::region, region->second.holder};
@@ -940,24 +940,12 @@ class ScalarChecker {
     if (exports_call_behavior() && lexical_.live && allocator.kind == CheckedOperation::ArrayAllocator::input)
       observe_call_behavior().array_allocations.insert(allocator.place);
   }
-  size_t owner_lifetime_scope(size_t owner) const {
-    if (const auto region = region_owners_.find(owner); region != region_owners_.end())
-      return region->second.lifetime;
-    const auto found = native_owner_scopes_.find(owner);
-    return found == native_owner_scopes_.end() ? owner : found->second;
-  }
-  bool owner_alive(size_t owner) const {
-    owner = owner_lifetime_scope(owner);
-    return external_owner(owner) || is_symbol_owner(owner, program_.symbols.size()) ||
-        std::any_of(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &scope) { return scope.id == owner; });
-  }
   size_t named_owner(const std::string &name, const Location &at) const {
     const auto binding = lexical_.lookup(name);
     if (!binding) fail(at, "unknown owner '" + name + "'");
     if (!lexical_.bindings_available.contains(*binding)) fail(at, "owner binding '" + name + "' is not available on every reaching path");
     const auto owner = bindings_->at(*binding).owner_binding;
     if (!owner) fail(at, "nearest binding '" + name + "' is not an owner");
-    if (lexical_.live && !owner_alive(*owner)) fail(at, "owner '" + name + "' has ended");
     return *owner;
   }
   void read_view(const CheckedOperation &view, const Location &at) {
@@ -3367,10 +3355,6 @@ class ScalarChecker {
     auto &dependencies = target_dependencies_[destination];
     dependencies.insert(sources.begin(), sources.end());
   }
-  void require_live_view(const CheckedOperation &view, const Location &at) const {
-    if (lexical_.live) for (const auto owner : view.owners)
-      if (!owner_alive(owner)) fail(at, "storage view's lexical owner has ended");
-  }
   std::set<size_t> physical_slots(const std::set<size_t> &slots) const {
     std::set<size_t> result;
     for (const auto id : slots) {
@@ -5565,10 +5549,7 @@ class ScalarChecker {
       operation.borrowed_result = operation.view = true;
       operation.read_only = !contract.const_views.empty() && contract.const_views.back();
       operation.owners = {owners.at(result_owner)};
-      if (operation.type.kind == Type::native_handle) {
-        require_live_view(operation, expr.at);
-        return;
-      }
+      if (operation.type.kind == Type::native_handle) return;
       operation.initialization = CleanupEquations::Initialization{};
       for (const auto parameter : summary.returned.targets) {
         if (parameter == null_target) continue;
@@ -5761,9 +5742,8 @@ class ScalarChecker {
     auto result = left;
     const auto join_owner = [&](size_t owner, size_t alternative) {
       if (owner == alternative) return owner;
-      const auto lifetime = std::max(owner_lifetime_scope(owner), owner_lifetime_scope(alternative));
       const auto joined_owner = next_scope_++;
-      native_owner_scopes_.emplace(joined_owner, lifetime);
+      nonallocating_owners_.insert(joined_owner);
       return joined_owner;
     };
     // Visit native installations from the left first, then right-only ones,
@@ -6563,7 +6543,6 @@ class ScalarChecker {
     if (value.type.kind != Type::native_handle || value.type.owned || !value.view || value.mixed_view || value.nullable_view)
       fail(operand.at, "a borrowed handle parameter requires a native handle borrow");
     if (!one_owner(value)) fail(operand.at, "a native handle argument requires one proven actual owner");
-    require_live_view(value, operand.at);
     return value;
   }
   CheckedOperation read_native_loan(const Expression &name, size_t binding) {
@@ -9884,8 +9863,6 @@ class ScalarChecker {
     if (owner && readonly_evidence_owner(*owner, state)) fail(expr.at, "const owner cannot allocate storage");
     if (owner && regional_evidence(*owner)) {
       require_regional_scalar_product(schema, expr.at);
-      if (owner->kind == EvidenceOwner::Kind::checked && lexical_.live && !owner_alive(owner->id))
-        fail(expr.at, "regional construction requires a live owner");
       return owner;
     }
     if (compare_owners(owner, state.full_scope_owner, &state) != OwnerMatch::satisfied)
@@ -16100,7 +16077,6 @@ class ScalarChecker {
   }
   size_t scope_owner_role(CheckedMethod::ScopeInputs &inputs, std::vector<size_t> &owners, size_t actual,
                           const Location &at, bool native = false) const {
-    if (lexical_.live && !owner_alive(actual)) fail(at, "full-scope input owner has ended");
     const auto found = std::ranges::find(owners, actual);
     const auto role = std::distance(owners.begin(), found);
     if (found == owners.end()) {
@@ -16342,15 +16318,12 @@ class ScalarChecker {
       if (declared_place) parameter.name = "$scope.place." + std::to_string(ordinal);
       if (view.owners.size() != 1)
         implementation_gap(capture.at, "full-scope reference input requires one statically provable owner");
-      require_live_view(view, capture.at);
       parameter.owner = inputs.owners[owner_role(*view.owners.begin(), capture.at)].name;
       const auto slots = physical_slots(view.slots);
       parameter.read_only = std::ranges::all_of(slots, [&](size_t slot) { return bindings_->at(slot).read_only; });
       parameter.fixed_binding = std::ranges::any_of(slots, [&](size_t slot) { return bindings_->at(slot).fixed; });
-      for (const auto slot : slots) for (const auto owner : bindings_->at(slot).place_owners) {
-        if (lexical_.live && !owner_alive(owner)) fail(capture.at, "selected storage place's lexical owner has ended");
+      for (const auto slot : slots) for (const auto owner : bindings_->at(slot).place_owners)
         inputs.place_owners[ordinal].insert(owner_role(owner, capture.at));
-      }
       // The outlined body applies each lexical name's access restrictions.
       view.read_only = parameter.read_only;
     } else if (type.kind == Type::procedure) {
@@ -16707,7 +16680,6 @@ class ScalarChecker {
           const auto &captured = operations.at(&source);
           const auto &argument = installation->arguments[i];
           auto view = argument.binding_slot ? read_binding(source, false, captured.binding) : captured;
-          require_live_view(view, source.at);
           if (argument.type.kind != Type::native_handle)
             require_payload_access(view, source.at);
           arguments.push_back(view.type);
@@ -16997,7 +16969,6 @@ class ScalarChecker {
     }
     CheckedOperation::SuppliedHere supplied{};
     const auto capture_owner = [&](size_t actual, const Location &at, bool native = false) {
-      if (lexical_.live && !owner_alive(actual)) fail(at, "here access requires a live supplier owner");
       const auto found = std::ranges::find(owners, std::optional{actual});
       const auto role = std::distance(owners.begin(), found);
       if (found == owners.end()) {
@@ -17052,7 +17023,6 @@ class ScalarChecker {
           implementation_gap(capture.at, writable_product ?
               "here product writes require one live initialized writable ref binding" :
               "here writes require one live initialized writable array binding");
-        require_live_view(view, capture.at);
         require_payload_access(view, capture.at);
       }
       if (product) {
@@ -17066,10 +17036,7 @@ class ScalarChecker {
           implementation_gap(capture.at, writable_product ?
               "here product access requires a stable lexical ref to a local product" :
               "here readonly product access requires a stable lexical ref under a live owner");
-        if (readonly_product) {
-          require_live_view(view, capture.at);
-          require_payload_access(view, capture.at);
-        }
+        if (readonly_product) require_payload_access(view, capture.at);
       }
       // A live scalar value slot is supplied by address. The body may
       // initialize it before reading it on each actual invocation.
@@ -17375,7 +17342,6 @@ class ScalarChecker {
           implementation_gap(at, "prepared producer requires a readonly, initialized borrowed operand");
         const auto actual = one_owner(prepared.views[i]);
         if (!actual) implementation_gap(at, "prepared producer requires an established actual owner");
-        require_live_view(prepared.views[i], at);
         actual_owners.try_emplace(parameter.owner, *actual);
       }
     }
@@ -18960,7 +18926,6 @@ class ScalarChecker {
           lexical_.live = false;
           continue;
         }
-        require_live_view(value, operand.at);
         bind(*input.owner, one_owner(value), operand.at);
       } else if (text_type(input.type)) {
         if (prepared || delayed_) implementation_gap(operand.at, "deferred C text loans");
@@ -18971,7 +18936,6 @@ class ScalarChecker {
           fail(operand.at, "C provider requires '" + type_name(input.type) + "'");
         const auto &view = operations.at(&operand);
         prepare_borrow(view, ArgumentMode::borrowed_ref, operand.at);
-        require_live_view(view, operand.at);
         bind(*input.owner, one_owner(view), operand.at);
       } else {
         const bool array = input.type.kind == Type::array;
@@ -18985,7 +18949,6 @@ class ScalarChecker {
           const auto &view = operations.at(&operand);
           if (type != input.type || !view.view || view.mixed_view)
             fail(operand.at, "C provider requires a storage view of array '" + input.type.name + "'");
-          require_live_view(view, operand.at);
           read_view(view, operand.at);
           bind(*input.owner, one_owner(view), operand.at);
         } else transfer_type(type, input.type, operand.at);
@@ -19080,7 +19043,7 @@ class ScalarChecker {
   size_t native_symbol_owner(const LexicalState &state, size_t symbol) {
     if (const auto installed = state.symbols.get(symbol).native_owner) return *installed;
     const auto [incoming, first] = incoming_native_symbol_owners_.try_emplace(symbol, next_scope_);
-    if (first) native_owner_scopes_.emplace(next_scope_++, 0);
+    if (first) nonallocating_owners_.insert(next_scope_++);
     return incoming->second;
   }
   size_t borrowed_symbol_owner(size_t symbol) const {
@@ -19128,11 +19091,10 @@ class ScalarChecker {
       if (type.kind == Type::abstract_type && !stable_nominal_target(source, mode.read_only))
         implementation_gap(operand.at, "abstract symbol target outside the stable lexical product profile");
       prepare_borrow(view, ArgumentMode::borrowed_ref, operand.at);
-      require_live_view(view, operand.at);
       if (view.read_only && !mode.read_only)
         fail(operand.at, "readonly target cannot supply a writable reference symbol");
       const auto owner = one_owner(view);
-      if (!owner || native_owner_scopes_.contains(*owner) || view.indexed_target)
+      if (!owner || nonallocating_owners_.contains(*owner) || view.indexed_target)
         implementation_gap(operand.at, "reference symbol requires one stable actual lexical owner");
       if (!lexical_.live) return;
       const auto boundary = std::find_if(lexical_.scopes.rbegin(), lexical_.scopes.rend(),
@@ -19172,11 +19134,8 @@ class ScalarChecker {
     operation.operand_type = type;
     operation.type = completes ? Type{Type::void_type} : Type{Type::never};
     if (!completes || !lexical_.live) return;
-    const auto lifetime = std::find_if(lexical_.scopes.rbegin(), lexical_.scopes.rend(),
-        [](const auto &scope) { return scope.symbol_entry.has_value(); });
-    const auto scope = lifetime == lexical_.scopes.rend() ? cleanup_scope_ : lifetime->id;
     const auto owner = next_scope_++;
-    native_owner_scopes_.emplace(owner, scope);
+    nonallocating_owners_.insert(owner);
     lexical_.symbols.update(*operation.symbol, [&](auto &facts) {
       facts.native_owner = owner;
       facts.bound = true;
@@ -19221,7 +19180,7 @@ class ScalarChecker {
     const auto place = declare(expr.text, native_handle_type(declared, true), false, true, expr.at);
     const auto owner = next_scope_++;
     native_resource_owners_.emplace(place, owner);
-    native_owner_scopes_.emplace(owner, storage(place).scope);
+    nonallocating_owners_.insert(owner);
     bindings_->back().fixed = true;
     if (completes) initialize(place);
     CheckedOperation operation;
@@ -19278,7 +19237,7 @@ class ScalarChecker {
     const auto target = read_native_loan(destination, binding);
     const auto owner = one_owner(target);
     if (!target.place || !owner)
-      implementation_gap(destination.at, "native handle rebind without one live local slot and owner");
+      implementation_gap(destination.at, "native handle rebind without one local slot and actual owner");
     const auto &operand = *expr.children[1];
     const auto source = check_handle_loan(operand, instance, operations);
     CheckedOperation operation;
@@ -19289,16 +19248,6 @@ class ScalarChecker {
     check_native_rebind_operands(target.type, source.type, target.read_only, source.read_only, operand.at);
     if (compare_owners(owner, one_owner(source)) != OwnerMatch::satisfied)
       fail(operand.at, "native handle rebinding requires its original actual owner");
-    require_live_view(target, destination.at);
-    if (lexical_.live && !external_owner(*owner)) {
-      const auto lifetime = owner_lifetime_scope(*owner);
-      const auto local_scope = storage(*target.place).scope;
-      const auto lifetime_position = std::ranges::find(lexical_.scopes, lifetime, &LexicalState::Scope::id);
-      const auto local_position = std::ranges::find(lexical_.scopes, local_scope, &LexicalState::Scope::id);
-      if (lifetime_position == lexical_.scopes.end() || local_position == lexical_.scopes.end() ||
-          lifetime_position > local_position)
-        fail(operand.at, "native handle borrow does not outlive the destination binding");
-    }
     return operation;
   }
   size_t construction_destination(const Expression &expr, std::optional<size_t> required) const {
@@ -19324,7 +19273,6 @@ class ScalarChecker {
                                                       const Location &at) const {
     const auto region = region_owners_.find(owner);
     if (region == region_owners_.end()) return {};
-    if (lexical_.live && !owner_alive(owner)) fail(at, "regional construction requires a live owner");
     require_regional_scalar_product(schema, at);
     return region->second.holder;
   }
@@ -19342,7 +19290,7 @@ class ScalarChecker {
     // A live lexical scope is the backing owner of its named arrays. A
     // region, a native handle and an incoming loan have separate owner IDs.
     const bool lexical_backing = source_owner && !region_owners_.contains(*source_owner) &&
-        !native_owner_scopes_.contains(*source_owner) &&
+        !nonallocating_owners_.contains(*source_owner) &&
         std::ranges::any_of(lexical_.scopes, [&](const auto &scope) { return scope.id == *source_owner; });
     if (!source.indexed_target || !scalar_type(source.type) || !lexical_backing ||
         !source.initialized_target())
@@ -19402,7 +19350,6 @@ class ScalarChecker {
     const auto region = region_owners_.find(owner);
     if (region == region_owners_.end())
       implementation_gap(expr.at, "a sum reservation without a writable named region");
-    if (lexical_.live && !owner_alive(owner)) fail(expr.at, "sum reservation requires a live region");
     const auto type = sum_type(constructor.sum);
     const auto root = reserve_lexical_construction(type, expr.at);
     assign_regional_storage(root, owner);
@@ -19464,7 +19411,6 @@ class ScalarChecker {
         return;
       }
       if (mode == ArgumentMode::borrowed_ref) {
-        require_live_view(value, input.at);
         if (one_owner(value) != owner || !value.place || value.mixed_view ||
             value.targets != std::set<size_t>{*value.place} || !storage(*value.place).reserved_alternative)
           fail(input.at, "not init ref requires one selected target in the initializer's actual region");
@@ -19476,8 +19422,6 @@ class ScalarChecker {
     if (checking_method_ && checking_method_->source->kind == Form::Kind::function &&
         program_.methods.at(selected).source->kind == Form::Kind::procedure)
       fail(expr.at, "a function cannot invoke a procedure initializer");
-    require_live_view(target, expr.at);
-
     const auto callee = demand_regional_initializer(selected, expr.at);
     const auto &called = program_.instances.at(callee);
     const auto &method = program_.methods.at(called.method);
@@ -19633,7 +19577,7 @@ class ScalarChecker {
     const auto place = declare(expr.text, owned_region_type(schema), expr.read_only, true, expr.at);
     const auto owner = next_scope_++;
     checked_scope_owners_[&expr] = owner;
-    region_owners_.emplace(owner, RegionOwner{place, storage(place).scope, expr.read_only});
+    region_owners_.emplace(owner, RegionOwner{place, expr.read_only});
     const auto binding = storage(place).binding;
     bindings_->at(binding).owner_binding = owner;
     bindings_->at(binding).fixed = true;
@@ -20207,7 +20151,7 @@ class ScalarChecker {
       operation.initialization.emplace();
       if (!literal_text_owner_) {
         literal_text_owner_ = next_scope_++;
-        native_owner_scopes_.emplace(*literal_text_owner_, 0);
+        nonallocating_owners_.insert(*literal_text_owner_);
       }
       operation.owners = {*literal_text_owner_};
       break;
@@ -21120,7 +21064,6 @@ class ScalarChecker {
       if (!owner || !target.place || !storage(*target.place).reserved_alternative ||
           target.targets != std::set<size_t>{*target.place})
         fail(name.at, "init requires one selected reserved target and its actual owner");
-      require_live_view(target, name.at);
       if (target.read_only || const_owner(*owner))
         fail(name.at, "init requires a writable target and owner");
       operations.insert_or_assign(&name, target);
@@ -21182,9 +21125,6 @@ class ScalarChecker {
           if (mixed) owners.insert(declaration_scope(declaration->text, declaration->at).id);
           if (owners.size() > 1) fail(initializer.at, "reference initializer joins different owners");
           if (owners.empty() && !owner) fail(initializer.at, "reference initializer requires one statically provable owner; qualify null with 'in here' or 'in O'");
-          if (delayed_ && lexical_.live) for (const auto owner : owners)
-            if (!owner_alive(owner))
-              fail(initializer.at, "reference initializer's lexical owner has ended");
           if (expr.declaration_kind == "ref") require_payload_access(source, initializer.at);
         }
         if (completes && borrowed) check_initializer_access(*declaration, source.read_only);
@@ -21315,9 +21255,6 @@ class ScalarChecker {
       }
       const auto target = operations.at(expr.children[0].get());
       assignment_destination(target.view, target.mixed_view, expr.at);
-      if ((prepared || delayed_) && lexical_.live) for (const auto owner : target.owners)
-        if (!owner_alive(owner))
-          fail(expr.at, "assignment destination's lexical owner has ended");
       if (expr.kind == K::rebind) {
         reference_destination(target, expr.at, true);
         if (child(1, false) == Type::never) { operation.type = Type::never; break; }
@@ -21325,7 +21262,6 @@ class ScalarChecker {
         check_rebind(target, selected, expr.at, !prepared && !delayed_);
         operation.arguments[1].type = selected.type;
         if (prepared) {
-          require_live_view(selected, expr.children[1]->at);
           const auto targets = snapshot_selection(selected, expr.at);
           const auto before = lexical_;
           lexical_.selections = {};
@@ -21386,7 +21322,6 @@ class ScalarChecker {
       auto written = target.targets; written.erase(null_target);
       auto written_target = target; select_targets(written_target, written);
       if (prepared) {
-        require_live_view(target, expr.children[0]->at);
         record_payload_write(written_target, true);
         CallEffects effects;
         effects.initialized[0] = {0};
@@ -21778,7 +21713,6 @@ class ScalarChecker {
         const auto owner = one_owner(parent);
         if (!owner || !region_owners_.contains(*owner))
           implementation_gap(expr.at, "regional sum field selection without one proved owner");
-        require_live_view(parent, expr.at);
         require_payload_access(parent, expr.at);
         const auto constructor = *storage(*parent.place).reserved_alternative;
         const auto index = selected_sum_field(constructor, expr);
@@ -22047,9 +21981,6 @@ class ScalarChecker {
           const auto &type = program_.symbols[symbol].type;
           if (!type || type->kind != Type::native_handle) return false;
           observe_symbol_use(lexical_, symbol, expr.at);
-          CheckedOperation loan;
-          loan.owners = {native_symbol_owner(lexical_, symbol)};
-          require_live_view(loan, expr.at);
           return true;
         });
       };
@@ -22336,7 +22267,7 @@ class ScalarChecker {
     lexical_ = {};
     cleanup_ = CleanupEquations{cleanup_exceptions_};
     scope_storage_.clear(); checked_scope_owners_.clear(); external_owners_.clear();
-    native_resource_owners_.clear(); native_owner_scopes_.clear(); scope_native_owner_places_.clear(); region_owners_.clear();
+    native_resource_owners_.clear(); nonallocating_owners_.clear(); scope_native_owner_places_.clear(); region_owners_.clear();
     incoming_native_symbol_owners_.clear();
     abstract_input_bindings_.clear();
     initializing_reference_fields_.clear();
