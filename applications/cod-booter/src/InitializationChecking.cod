@@ -14,7 +14,7 @@ using "./InitializationControl.cod" {
     InitializationControlResult, complete_initialization_control,
 };
 using "./InitializationReadiness.cod" {
-    UnreadyFact, UnreadyFacts, InitializationResult, complete_initialization_readiness, check_initialization,
+    InitializationResult, complete_initialization_readiness, check_initialization,
 };
 
 func initialization_storage_exhausted() -> u8 { return 14u8; }
@@ -57,16 +57,9 @@ func prove_initialization(code:const NativeCommands in C, plan:const NativePlan 
         return false
     };
 
-    ref facts = make UnreadyFacts(capacity, make UnreadyFact {
-        state <- no_node(); tag <- 0u64; previous <- no_node()
-    });
-    ref heads = make InitializationIndices(control.states, no_node());
-    ref count = make u64 { 0u64 };
-    if (!complete_initialization_readiness(operations, demanded, states, roots, control.states, facts, heads, count)) {
-        result.diagnostic <- initialization_storage_exhausted();
-        return false
-    };
-    return check_initialization(operations, states, operation_heads, control.states, facts, heads, count, result)
+    ref rejected = make InitializationTags(used, false);
+    complete_initialization_readiness(operations, states, roots, control.states, extent + 1u64, rejected);
+    return check_initialization(operations, rejected, result)
 }
 
 func publish_commands(code:NativeCommands in C, plan:NativePlan in P) -> void
