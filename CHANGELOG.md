@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Apply a completed predicate in the next group of scalar callers
+
+<a id="k-seed-second-scalar-application-20261125"></a>
+**K-SEED-SECOND-SCALAR-APPLICATION-20261125.** The [architecture review](design/ImplementationArchitecture.md#applying-a-completed-scalar-predicate) continues D-ARCH-REVIEW r196→197 under the [completed-callee decision](#h-completed-callee-behavior-20261125). In `b38eb47f:applications/cod-booter/src/NativeCommands.cod`, the seed can complete `local_binding_fact` against literal leaves before applying it at the guarded call in `initialization_access`. The two batches consume only earlier completed inputs and retain ordinary validation and output publication.
+
 ## 2026-11-25 — Omit target discovery for already bound independent scalar frames
 
 <a id="k-seed-independent-scalar-proving-20261125"></a>
