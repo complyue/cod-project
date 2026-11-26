@@ -1,5 +1,0 @@
-func pick(first:u64, middle:u64, last:u64) -> u64 { middle }
-proc examine() -> u64 {
-    val ignored <- pick(, 4u64, );
-    return 7u64;
-}

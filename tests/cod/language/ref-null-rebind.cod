@@ -1,6 +1,0 @@
-{
-  val x <- 1;
-  ref p = x;
-  p = null;
-  {}
-};

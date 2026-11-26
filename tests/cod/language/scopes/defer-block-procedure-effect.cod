@@ -1,4 +1,0 @@
-symbol @work:proc()->void;
-proc unused() -> void {
-  defer { effect proc @work() -> void {} };
-}

@@ -1,5 +1,0 @@
-using symbol "std:io" @print;
-function increment(value:i64) -> i64 {
-  return value + 1
-}
-behave @print(increment(9223372036854775807));

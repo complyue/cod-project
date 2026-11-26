@@ -1,9 +1,0 @@
-using "./structural-api.cod" Node;
-using "./structural-api.cod" Cursor;
-own region first:Cursor <- make Cursor(capacity = 256u64) { ticks <- 0u64; current = null };
-own region second:Cursor <- make Cursor(capacity = 256u64) { ticks <- 0u64; current = null };
-second.current = alloc second Node(3);
-ptr var left -> first.current;
-ptr var right -> second.current;
-func wrong = func [left, right] () -> void { left = right; {} };
-wrong();

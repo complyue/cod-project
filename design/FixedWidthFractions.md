@@ -87,7 +87,7 @@ Conversion methods specify accepted input types and output representation. Their
 
 Two conversions with identical input types but different outputs require a defined destination-selection mechanism; this draft does not introduce general return-type overload dispatch. A conversion may deliberately change representation or round according to its contract. It does not implicitly canonicalize merely because a fraction participates.
 
-H-260/H-261 selects independent `unit m;` declarations, representation-explicit quantities and lossless primitive widening. [Current source coverage](../tests/cod/language/README.md) and the [pending numeric contract](NamedQuantitiesAndNumericCompatibility.md) bound implementation work. These prerequisites do not implement fractions or select fraction-specific promotion rules. [K-632](../CHANGELOG.md#k-632) records editorial continuity.
+H-260/H-261 selects independent `unit m;` declarations, representation-explicit quantities and lossless primitive widening. [Current source coverage](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/tests/cod/language/README.md) and the [pending numeric contract](NamedQuantitiesAndNumericCompatibility.md) bound implementation work. These prerequisites do not implement fractions or select fraction-specific promotion rules. [K-632](../CHANGELOG.md#k-632) records editorial continuity.
 
 ## Required review for later language work
 

@@ -1,5 +1,0 @@
-unit Position;
-function (+)(i:i64(Position), step:i64) -> i64(Position) { return Position(scalar(i) + step) }
-
-export (+);
-export Position;

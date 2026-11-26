@@ -24,7 +24,7 @@
   ],
   "purpose": "Reviewable language semantics and SNN execution expectations for joint development.",
   "execution_evidence": {
-    "reference": "../../../tests/cod/language/README.md",
+    "reference": "https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/tests/cod/language/README.md",
     "scope": "The source capability reference owns current runnable coverage. This catalog specifies acceptance targets and does not establish execution of all 25 cases.",
     "candidate_fixture_links": {
       "CS-01": [
@@ -401,7 +401,7 @@
         "H-189"
       ],
       "note": "Entry and dependency top-level scopes stay alive until process exit. Initialization executes once after scanning, in encounter order; using/import select effective resources. Cyclic initialization remains open.",
-      "execution_evidence": "../../../tests/cod/language/typed-procedure-validation.json"
+      "execution_evidence": "https://github.com/complyue/cod-project/blob/98c8f86e275fb09c349a249ae477adeb2223e1b6/tests/cod/language/typed-procedure-validation.json"
     },
     {
       "id": "CS-15",

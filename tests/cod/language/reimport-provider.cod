@@ -1,9 +1,0 @@
-symbol @middle : proc() -> i64;
-symbol @value : i64;
-function helper() -> i64 { return 9 }
-effect @value <- 7;
-mixin "./source.cod" proc @p as @middle with { @value as @x; };
-
-export proc @middle;
-export var @value;
-export helper;

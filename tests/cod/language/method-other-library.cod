@@ -1,3 +1,0 @@
-function score(x:bool) -> i64 { return if (x) { 7 } else { 9 } }
-
-export score;

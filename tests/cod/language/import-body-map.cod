@@ -1,3 +1,0 @@
-symbol from "./vocabulary.cod" @x;
-symbol saved : proc() -> i64;
-import "./source.cod" proc @p as @saved with { @x as @x; };

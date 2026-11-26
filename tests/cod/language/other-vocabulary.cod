@@ -1,3 +1,0 @@
-symbol @x : i64;
-
-export var @x;

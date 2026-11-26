@@ -1,3 +1,0 @@
-function choose(x:i64) -> i64 { return 1 }
-function choose(x:u64) -> i64 { return 2 }
-choose(3u32);

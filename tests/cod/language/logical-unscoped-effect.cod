@@ -1,3 +1,0 @@
-symbol @flag : bool;
-effect @flag <- true;
-false && effect @flag <- true;

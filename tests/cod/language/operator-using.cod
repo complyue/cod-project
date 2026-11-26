@@ -1,5 +1,0 @@
-using symbol "std:io" @print;
-using units "./operator-library.cod" {Position as P};
-using "./operator-library.cod" (+);
-behave @print(scalar(P(8) + 4));
-behave @print(scalar((+)(P(8), 4)));

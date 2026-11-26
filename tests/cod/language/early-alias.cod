@@ -1,3 +1,0 @@
-symbol @read : proc() -> i64;
-procedure @read() -> i64 { return @x }
-symbol from "./vocabulary.cod" @x;

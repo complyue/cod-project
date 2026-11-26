@@ -1,5 +1,0 @@
-using symbol "std:io" @print;
-using "std:exceptions" NullPointerException;
-using "std:exceptions" OutOfMemoryError;
-proc run()->void {val value:u64<-1u64;const ptr p:u64=null in here;defer {p=value;};}
-run();

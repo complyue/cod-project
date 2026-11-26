@@ -1,2 +1,0 @@
-function number(x:f64) -> f64 { return x }
-number(9007199254740993);

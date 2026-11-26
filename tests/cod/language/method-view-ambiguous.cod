@@ -1,5 +1,0 @@
-using "./method-view-first.cod" Sample;
-using "./method-view-second.cod" Sample as SameSample;
-region symbol @arena;
-effect @arena <- region(4096u64);
-through(create(@arena));

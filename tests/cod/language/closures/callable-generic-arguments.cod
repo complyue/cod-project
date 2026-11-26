@@ -1,3 +1,0 @@
-function same(x:T,y:T)->const T where T { return x }
-func selected = same;
-selected(1,true);

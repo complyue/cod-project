@@ -1,5 +1,0 @@
-region State { value:u64; }
-for (i in 0u64 .. 2u64) {
-  if (i == 0u64) { own region state <- make State(capacity=128u64) { value <- i }; }
-  else { {} };
-};

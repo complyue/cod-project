@@ -1,3 +1,0 @@
-symbol @step : proc() -> i64;
-
-export proc @step;

@@ -1,6 +1,0 @@
-{
-  ptr a = 1, b = 2;
-  ptr retained = a <- b;
-  ptr alias = retained;
-  alias <- 3;
-};

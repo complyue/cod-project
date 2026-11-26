@@ -1,5 +1,0 @@
-data Packet { value:i64; }
-own region a:Packet <- make Packet(capacity=256u64) {value <- 1};
-own region b:Packet <- make Packet(capacity=256u64) {value <- 2};
-ptr p:i64 = null in here;
-if (true) { p = root(a).value; {} } else { p = root(b).value; {} };

@@ -1,9 +1,0 @@
-region State { flag:bool; }
-function reader(region state:State) -> func()->const bool with {region state} {
-  return func [state] () -> const bool { return state.flag }
-}
-region escaped:State = {{
-  own region local:State <- make State(capacity = 128u64) { flag <- true };
-  func cb = reader(local);
-  cb -> state
-}};

@@ -1,2 +1,0 @@
-data Arena {seed:u64;} data Links {const ref fixed:u64; ref observed:const u64;} own region arena <- make Arena(capacity=4096u64){seed<-0u64}; ref links=alloc arena Links(arena.seed,arena.seed);
-setfield(links,fixed,arena.seed);

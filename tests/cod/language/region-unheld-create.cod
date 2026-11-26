@@ -1,2 +1,0 @@
-function bad() { return region(4096u64) }
-bad();

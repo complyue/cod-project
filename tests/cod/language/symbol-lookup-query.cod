@@ -1,3 +1,0 @@
-symbol @gain:u64;
-effect @gain <- 7u64;
-{{val gain:u64 <- 1u64; ptr queried=make typeof(@gain) {0u64};}};
