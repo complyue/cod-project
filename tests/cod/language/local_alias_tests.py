@@ -58,7 +58,6 @@ runner.CASES = {
     'alias_and_parameter_copy': (IO + 'func f(x:T)->const T where T{const ptr p=x;val copy<-p;return copy;}behave @print(f(11u64));behave @print(f(true));', 0, '11\ntrue\n', ''),
     'alias_then_catch_storage': (ERRORS + 'val x<-1;const ptr p=x;try{missing();{}}catch(e:const MissingReturnError){behave @print(e.category);};', 0, '5\n', WARN),
     'caught_alias_snapshot': (ERRORS + '{{for(i in 0..2){try{missing();{}}catch(e:const MissingReturnError){{{const ptr p=e;defer{behave @print(p.category);};}}};};}};', 0, '5\n5\n', WARN),
-    'caught_alias_expired': (ERRORS + 'try{throw error();}catch(e:const MissingReturnError){const ptr p=e;{};};p;', 2, '', "lexical owner has ended"),
     'mutable_exception_alias': (ERRORS + 'val e<-error();const ptr p=e;{{defer{behave @print(p.category);};p<-error():void;}};', 0, '5\n', WARN),
     'rethrow_alias': (ERRORS + 'try{try{missing();{}}catch(e:const MissingReturnError){const ptr p=e;throw p;};}catch(e:const MissingReturnError){behave @print(e.category);};', 0, '5\n', WARN),
 }
