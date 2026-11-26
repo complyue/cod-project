@@ -18,95 +18,33 @@ using "./ModuleExportStorage.cod" {
 
 export array AggregateFacts[UInt64]:AggregateStorage;
 
-data SchemaVisit =
-    UnvisitedSchema {} |
-    ActiveSchema {
-        parent:UInt64; arm:UInt64; last_arm:UInt64; field:UInt64; last_field:UInt64; storage:AggregateStorage; native_record:bool;
-    } |
-    CompleteSchema {};
-array SchemaVisits[UInt64]:SchemaVisit;
+enum SchemaKind:UInt8 { NoSchema; ProductSchema; NativeSchema; SumSchema; }
+data SchemaDeclaration { kind:SchemaKind; referent:bool; entries:UInt64; }
+array SchemaDeclarations[UInt64]:SchemaDeclaration;
 
-data SchemaCursor {
-    parent:UInt64; arm:UInt64; last_arm:UInt64; field:UInt64; last_field:UInt64; storage:AggregateStorage; native_record:bool;
-}
+# Steps are indexed by their original declaration, arm or field site.
+data SchemaStep =
+    NoSchemaStep {} |
+    InvalidSchemaStart {} |
+    SchemaStart { arm:UInt64; field:UInt64; storage:AggregateStorage; native:bool; } |
+    ArmSuccessor { arm:UInt64; field:UInt64; } |
+    FieldInput {
+        site:UInt64; next:UInt64; next_valid:bool; storage:AggregateStorage; dependency:UInt64;
+    };
+array SchemaSteps[UInt64]:SchemaStep;
 
 enum SchemaProgress:UInt8 { Unvisited; Active; Complete; }
+data SchemaCursor {
+    progress:SchemaProgress; parent:UInt64; arm:UInt64; field:UInt64; storage:AggregateStorage; native:bool;
+}
+array SchemaCursors[UInt64]:SchemaCursor;
+
 export data SchemaCheck { diagnostic:UInt8; node:UInt64; }
 
 func reject_schema(check:SchemaCheck in R, at:UInt64, cycle:bool) -> bool where {owner R} {
     check.diagnostic <- if (cycle) { 18u8 } else { 17u8 };
     check.node <- at;
     return false;
-}
-
-func read_cursor(visits:const SchemaVisits in V, schema:UInt64, result:SchemaCursor in R) -> SchemaProgress
-    where {const owner V, owner R} {
-    return case visits[schema] of {
-        (UnvisitedSchema) -> { (Unvisited:SchemaProgress) };
-        (CompleteSchema) -> { (Complete:SchemaProgress) };
-        (ActiveSchema { val parent <- parent; val arm <- arm; val last_arm <- last_arm; val field <- field;
-                        val last_field <- last_field; val storage <- storage; val native_record <- native_record; }) -> {
-            result.parent <- parent;
-            result.arm <- arm;
-            result.last_arm <- last_arm;
-            result.field <- field;
-            result.last_field <- last_field;
-            result.storage <- storage;
-            result.native_record <- native_record;
-            (Active:SchemaProgress)
-        };
-    };
-}
-
-func save_cursor(visits:SchemaVisits in V, schema:UInt64, cursor:const SchemaCursor in R)
-    -> void where {owner V, const owner R} {
-    visits[schema] <- make ActiveSchema {
-        parent <- cursor.parent; arm <- cursor.arm; last_arm <- cursor.last_arm;
-        field <- cursor.field; last_field <- cursor.last_field; storage <- cursor.storage; native_record <- cursor.native_record;
-    };
-    return;
-}
-
-func complete_schema(visits:SchemaVisits in V, facts:AggregateFacts in F, schema:UInt64, storage:AggregateStorage)
-    -> void where {owner V, owner F} {
-    facts[schema] <- storage;
-    visits[schema] <- make CompleteSchema {};
-    return;
-}
-
-func first_arm_field(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, arm:UInt64, cursor:SchemaCursor in R)
-    -> bool where {const owner N, owner R} {
-    ref sites = make SumArmSites { name <- no_node(); previous <- no_node(); fields <- no_node(); };
-    if (!inspect_sum_arm(nodes, revision, used, arm, sites) ||
-        !first_sequence_entry(nodes, revision, arm, sites.fields, FormalSequence, cursor.field)) return false;
-    cursor.last_field <- sites.fields;
-    return true;
-}
-
-func begin_schema(nodes:const ExprNodes in N, visits:SchemaVisits in V, schema:UInt64, parent:UInt64, used:UInt64, revision:UInt64)
-    -> bool where {const owner N, owner V} {
-    ref declaration = make DeclarationSites {
-        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
-        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
-    };
-    val shape <- inspect_declaration(nodes, revision, used, schema, declaration);
-    ref cursor = make SchemaCursor {
-        parent <- parent; arm <- no_node(); last_arm <- no_node(); field <- no_node(); last_field <- no_node();
-        storage <- CLayoutBitsRecord; native_record <- shape == NativeRecord;
-    };
-    if (shape == NominalSum) {
-        cursor.storage <- CoDBitsAggregate;
-        cursor.last_arm <- declaration.entries;
-        if (!first_sequence_entry(nodes, revision, schema, declaration.entries, SumSequence, cursor.arm) ||
-            cursor.arm == no_node() || !first_arm_field(nodes, revision, schema, cursor.arm, cursor)) return false;
-    } else {
-        if (shape != NominalRecord && shape != NativeRecord) return false;
-        if (!first_sequence_entry(nodes, revision, schema, declaration.entries, FormalSequence, cursor.field))
-            return false;
-        (cursor.last_field <- declaration.entries):void;
-    };
-    save_cursor(visits, schema, cursor);
-    return true;
 }
 
 func imported_storage(interfaces:const ModuleInterfaces in I, interface_used:UInt64,
@@ -156,137 +94,258 @@ func next_field(nodes:const ExprNodes in N, work:const NameWork in W, revision:U
     return true;
 }
 
-func next_arm(nodes:const ExprNodes in N, work:const NameWork in W, revision:UInt64, schema:UInt64,
-              cursor:SchemaCursor in R) -> bool where {const owner N, const owner W, owner R} {
-    if (cursor.arm == no_node()) return true;
-    val following <- work[cursor.arm].next;
-    if (cursor.arm > cursor.last_arm || (following == no_node()) != (cursor.arm == cursor.last_arm)) return false;
-    if (following != no_node()) {
-        ref arm = make SumArmSites { name <- no_node(); previous <- no_node(); fields <- no_node(); };
-        if (following <= cursor.arm || following > cursor.last_arm || !inspect_sum_arm(nodes, revision, schema, following, arm) ||
-            arm.previous != cursor.arm || !first_arm_field(nodes, revision, schema, following, cursor)) return false;
-    };
-    cursor.arm <- following;
-    return true;
-}
-
-func supported_schema_target(nodes:const ExprNodes in N, names:const NameBindings in B,
-                             target:UInt64, kind:UInt8, used:UInt64, revision:UInt64) -> bool
-    where {const owner N, const owner B} {
-    ref sites = make DeclarationSites {
-        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
-        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
-    };
-    val shape <- inspect_declaration(nodes, revision, used, target, sites);
-    if (kind == sum_type()) return shape == NominalSum;
-    return (shape == NominalRecord || shape == NativeRecord) &&
-        !has_exception_parent(nodes, names, target, revision, used) &&
-        !lexical_builder_record(nodes, names, target, revision, used);
-}
-
-func advance_schema_field(nodes:const ExprNodes in N, names:const NameBindings in B, work:const NameWork in W,
-                           selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, interface_used:UInt64,
-                           facts:const AggregateFacts in F, visits:SchemaVisits in V, schema:UInt64 in A, used:UInt64, revision:UInt64,
-                           cursor:SchemaCursor in C, check:SchemaCheck in R) -> bool
-    where {const owner N, const owner B, const owner W, const owner E, const owner I, const owner F,
-           owner V, owner A, owner C, owner R} {
-    val field <- cursor.field;
-    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
-    ref binding = make BindingSites {
-        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
-    };
-    if (inspect_formal(nodes, revision, used, field, formal) != OrdinaryFormal ||
-        inspect_binding(nodes, revision, field, formal.binding, binding) != TypedBinding)
-        return reject_schema(check, field, false);
-    val at <- binding.target_type;
-    val kind <- names[at].kind;
-    val target <- names[at].declaration;
-    val reference <- formal.mode == ReferenceFormal || formal.mode == PointerFormal;
-    if ((!reference && formal.mode != ValueFormal && formal.mode != ExplicitValueFormal) || binding.owner_name != no_node())
-        return reject_schema(check, at, false);
-    val storage <- UnprovedAggregate;
-    if (native_scalar(kind)) { (storage <- CLayoutBitsRecord):void; };
-    if (kind == builtin_string() && !reference && !has_exception_parent(nodes, names, schema, revision, used))
-        { (storage <- NonBitsAggregate):void; };
-    if (kind == enum_type()) { (storage <- CoDBitsAggregate):void; };
-    if (kind == ordinary_selection()) { (storage <- imported_storage(interfaces, interface_used, selected, target)):void; };
-    if (kind == record_type() || kind == sum_type()) {
-        if (target >= used || !supported_schema_target(nodes, names, target, kind, used, revision))
-            return reject_schema(check, at, false);
-        if (reference) {
-            (storage <- NonBitsAggregate):void;
-        } else {
-            case visits[target] of {
-                (ActiveSchema) -> { return reject_schema(check, at, true); };
-                (CompleteSchema) -> { (storage <- facts[target]):void; };
-                (UnvisitedSchema) -> {
-                    if (!begin_schema(nodes, visits, target, schema, used, revision))
-                        return reject_schema(check, at, false);
-                    schema <- target;
-                    return true;
-                };
-            };
-        };
-    };
-    if (storage == UnprovedAggregate) return reject_schema(check, at, false);
-    if (reference) { (storage <- NonBitsAggregate):void; };
-    if (storage != CLayoutBitsRecord && cursor.native_record) return reject_schema(check, at, false);
-    cursor.storage <- combined_storage(cursor.storage, storage);
-    if (!next_field(nodes, work, revision, field, cursor.last_field, cursor.field)) return reject_schema(check, field, false);
-    save_cursor(visits, schema, cursor);
-    return true;
-}
-
-func walk_schema(nodes:const ExprNodes in N, names:const NameBindings in B, work:const NameWork in W,
-                  selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, interface_used:UInt64,
-                  facts:AggregateFacts in F, visits:SchemaVisits in V, root:UInt64, used:UInt64, revision:UInt64,
-                  check:SchemaCheck in R) -> bool
-    where {const owner N, const owner B, const owner W, const owner E, const owner I, owner F, owner V, owner R} {
-    ref cursor = make SchemaCursor {
-        parent <- no_node(); arm <- no_node(); last_arm <- no_node(); field <- no_node(); last_field <- no_node();
-        storage <- UnprovedAggregate; native_record <- false;
-    };
-    if (read_cursor(visits, root, cursor) == (Complete:SchemaProgress)) return true;
-    if (!begin_schema(nodes, visits, root, no_node(), used, revision)) return reject_schema(check, root, false);
-    val schema <- root;
-    for (step in 0u64 .. 3u64 * used + 1u64) {
-        if (schema == no_node()) return true;
-        if (read_cursor(visits, schema, cursor) != (Active:SchemaProgress)) return reject_schema(check, schema, false);
-        if (cursor.field == no_node()) {
-            if (!next_arm(nodes, work, revision, schema, cursor)) return reject_schema(check, schema, false);
-            if (cursor.arm != no_node()) {
-                save_cursor(visits, schema, cursor);
-            } else {
-                complete_schema(visits, facts, schema, cursor.storage);
-                (schema <- cursor.parent):void;
-            };
-        } else {
-            if (!advance_schema_field(nodes, names, work, selected, interfaces, interface_used, facts, visits,
-                                       schema, used, revision, cursor, check)) return false;
-        };
-    };
-    return reject_schema(check, root, false);
-}
-
-export func check_aggregate_schemas(nodes:const ExprNodes in N, names:const NameBindings in B, work:const NameWork in W,
-                                    selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, interface_used:UInt64,
-                                    facts:AggregateFacts in F, used:UInt64, revision:UInt64, check:SchemaCheck in R)
-    -> bool where {const owner N, const owner B, const owner W, const owner E, const owner I, owner F, owner R} {
-    if (used > intrinsic (len)(facts) || used > intrinsic (len)(nodes) || used > 6148914691236517204u64)
-        return reject_schema(check, no_node(), false);
-    ref visits = make SchemaVisits(used, make UnvisitedSchema {});
+func collect_schema_declarations(nodes:const ExprNodes in N, names:const NameBindings in B,
+    declarations:SchemaDeclarations in D, used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, owner D} {
     ref sites = make DeclarationSites {
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
         index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
     };
     val shape <- NominalRecord;
-    for (schema in 0u64 .. used) {
-        shape <- inspect_declaration(nodes, revision, used, schema, sites);
-        if (shape == NominalSum ||
-            ((shape == NominalRecord || shape == NativeRecord) && !lexical_builder_record(nodes, names, schema, revision, used))) {
-            if (!walk_schema(nodes, names, work, selected, interfaces, interface_used, facts, visits, schema, used, revision, check))
-                return false;
+    for (at in 0u64 .. used) {
+        shape <- inspect_declaration(nodes, revision, used, at, sites);
+        if (shape == NominalSum) {
+            declarations[at] <- make SchemaDeclaration { kind <- (SumSchema:SchemaKind); referent <- true; entries <- sites.entries }
+        } else {
+            if ((shape == NominalRecord || shape == NativeRecord) &&
+                !lexical_builder_record(nodes, names, at, revision, used)) {
+                declarations[at] <- make SchemaDeclaration {
+                    kind <- if (shape == NativeRecord) { (NativeSchema:SchemaKind) } else { (ProductSchema:SchemaKind) };
+                    referent <- !has_exception_parent(nodes, names, at, revision, used);
+                    entries <- sites.entries;
+                }
+            }
+        }
+    };
+    return
+}
+
+data SchemaFieldReceipt {
+    site:UInt64; next:UInt64; next_valid:bool; storage:AggregateStorage; dependency:UInt64;
+}
+
+func collect_field_input(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, interface_used:UInt64,
+    declarations:const SchemaDeclarations in D, field:UInt64, schema:UInt64, used:UInt64, revision:UInt64,
+    receipt:SchemaFieldReceipt in R) -> void
+    where {const owner N, const owner B, const owner E, const owner I, const owner D, owner R} {
+    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
+    };
+    receipt.site <- field;
+    receipt.storage <- UnprovedAggregate;
+    receipt.dependency <- no_node();
+    if (inspect_formal(nodes, revision, used, field, formal) != OrdinaryFormal ||
+        inspect_binding(nodes, revision, field, formal.binding, binding) != TypedBinding) return;
+    val at <- binding.target_type;
+    receipt.site <- at;
+    val kind <- names[at].kind;
+    val target <- names[at].declaration;
+    val reference <- formal.mode == ReferenceFormal || formal.mode == PointerFormal;
+    if ((!reference && formal.mode != ValueFormal && formal.mode != ExplicitValueFormal) || binding.owner_name != no_node())
+        return;
+    val storage <- UnprovedAggregate;
+    if (native_scalar(kind)) { (storage <- CLayoutBitsRecord):void; };
+    if (kind == builtin_string() && !reference && declarations[schema].referent)
+        { (storage <- NonBitsAggregate):void; };
+    if (kind == enum_type()) { (storage <- CoDBitsAggregate):void; };
+    if (kind == ordinary_selection())
+        { (storage <- imported_storage(interfaces, interface_used, selected, target)):void; };
+    if ((kind == record_type() || kind == sum_type()) && target < used && declarations[target].referent) {
+        val target_kind <- declarations[target].kind;
+        if ((kind == sum_type() && target_kind == (SumSchema:SchemaKind)) ||
+            (kind == record_type() && (target_kind == (ProductSchema:SchemaKind) || target_kind == (NativeSchema:SchemaKind)))) {
+            if (!reference) { receipt.dependency <- target; return; };
+            (storage <- NonBitsAggregate):void;
+        }
+    };
+    if (storage != UnprovedAggregate && reference) { (storage <- NonBitsAggregate):void; };
+    receipt.storage <- storage;
+    return
+}
+
+func collect_fields(nodes:const ExprNodes in N, names:const NameBindings in B, work:const NameWork in W,
+    selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, interface_used:UInt64,
+    declarations:const SchemaDeclarations in D, steps:SchemaSteps in T, schema:UInt64,
+    first_field:UInt64, tail:UInt64, used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, const owner W, const owner E, const owner I, const owner D, owner T} {
+    ref receipt = make SchemaFieldReceipt {
+        site <- no_node(); next <- no_node(); next_valid <- false; storage <- UnprovedAggregate; dependency <- no_node();
+    };
+    val field <- first_field;
+    for (unused in 0u64 .. used) {
+        if (field == no_node()) return;
+        collect_field_input(nodes, names, selected, interfaces, interface_used,
+            declarations, field, schema, used, revision, receipt);
+        receipt.next <- no_node();
+        receipt.next_valid <- next_field(nodes, work, revision, field, tail, receipt.next);
+        steps[field] <- make FieldInput {
+            site <- receipt.site; next <- receipt.next; next_valid <- receipt.next_valid;
+            storage <- receipt.storage; dependency <- receipt.dependency;
+        };
+        if (!receipt.next_valid) return;
+        field <- receipt.next;
+    };
+    return
+}
+
+func collect_schema_steps(nodes:const ExprNodes in N, names:const NameBindings in B, work:const NameWork in W,
+    selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, interface_used:UInt64,
+    declarations:const SchemaDeclarations in D, steps:SchemaSteps in T, schema:UInt64, used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, const owner W, const owner E, const owner I, const owner D, owner T} {
+    val kind <- declarations[schema].kind;
+    val entries <- declarations[schema].entries;
+    ref first = make UInt64 { no_node() };
+    ref arm = make UInt64 { no_node() };
+    ref sites = make SumArmSites { name <- no_node(); previous <- no_node(); fields <- no_node() };
+    if (kind == (SumSchema:SchemaKind)) {
+        if (!first_sequence_entry(nodes, revision, schema, entries, SumSequence, arm) || arm == no_node() ||
+            !inspect_sum_arm(nodes, revision, schema, arm, sites) ||
+            !first_sequence_entry(nodes, revision, arm, sites.fields, FormalSequence, first)) {
+            steps[schema] <- make InvalidSchemaStart {};
+            return;
+        }
+    } else {
+        if (!first_sequence_entry(nodes, revision, schema, entries, FormalSequence, first)) {
+            steps[schema] <- make InvalidSchemaStart {};
+            return;
+        };
+        (sites.fields <- entries):void;
+    };
+    steps[schema] <- make SchemaStart {
+        arm <- arm; field <- first; native <- kind == (NativeSchema:SchemaKind);
+        storage <- if (kind == (SumSchema:SchemaKind)) { CoDBitsAggregate } else { CLayoutBitsRecord };
+    };
+    val next <- no_node();
+    for (unused in 0u64 .. used) {
+        collect_fields(nodes, names, work, selected, interfaces, interface_used,
+            declarations, steps, schema, first, sites.fields, used, revision);
+        if (arm == no_node()) return;
+        next <- work[arm].next;
+        if (arm > entries || (next == no_node()) != (arm == entries)) return;
+        if (next == no_node()) {
+            steps[arm] <- make ArmSuccessor { arm <- no_node(); field <- no_node() };
+            return;
+        };
+        if (next <= arm || next > entries || !inspect_sum_arm(nodes, revision, schema, next, sites) ||
+            sites.previous != arm ||
+            !first_sequence_entry(nodes, revision, next, sites.fields, FormalSequence, first)) return;
+        steps[arm] <- make ArmSuccessor { arm <- next; field <- first };
+        arm <- next;
+    };
+    return
+}
+
+func begin_schema(steps:const SchemaSteps in T, cursors:SchemaCursors in C, schema:UInt64, parent:UInt64)
+    -> bool where {const owner T, owner C} {
+    return case steps[schema] of {
+        SchemaStart { val arm <-; val field <-; val storage <-; val native <-; } -> {
+            cursors[schema] <- make SchemaCursor {
+                progress <- (Active:SchemaProgress); parent <- parent; arm <- arm; field <- field; storage <- storage; native <- native;
+            };
+            true
+        };
+        _ -> false
+    }
+}
+
+func advance_schema_field(steps:const SchemaSteps in T, cursors:SchemaCursors in C, facts:const AggregateFacts in F,
+    schema:UInt64 in A, check:SchemaCheck in R) -> bool
+    where {const owner T, owner C, const owner F, owner A, owner R} {
+    val field <- cursors[schema].field;
+    val resolved <- UnprovedAggregate;
+    return case steps[field] of {
+        FieldInput { val site <-; val next <-; val next_valid <-; val storage <-; val dependency <-; } -> {
+            resolved <- storage;
+            if (dependency != no_node()) {
+                case cursors[dependency].progress of {
+                    Active -> { return reject_schema(check, site, true); };
+                    Complete -> { (resolved <- facts[dependency]):void; };
+                    Unvisited -> {
+                        if (!begin_schema(steps, cursors, dependency, schema)) return reject_schema(check, site, false);
+                        schema <- dependency;
+                        return true;
+                    };
+                }
+            };
+            if (resolved == UnprovedAggregate || (resolved != CLayoutBitsRecord && cursors[schema].native))
+                return reject_schema(check, site, false);
+            if (!next_valid) return reject_schema(check, field, false);
+            cursors[schema].storage <- combined_storage(cursors[schema].storage, resolved);
+            cursors[schema].field <- next;
+            true
+        };
+        _ -> reject_schema(check, field, false)
+    }
+}
+
+func advance_schema_arm(steps:const SchemaSteps in T, cursors:SchemaCursors in C, schema:UInt64) -> bool
+    where {const owner T, owner C} {
+    return case steps[cursors[schema].arm] of {
+        ArmSuccessor { val arm <-; val field <-; } -> {
+            cursors[schema].arm <- arm;
+            cursors[schema].field <- field;
+            true
+        };
+        _ -> false
+    }
+}
+
+func complete_schema(steps:const SchemaSteps in T, cursors:SchemaCursors in C, facts:AggregateFacts in F,
+    root:UInt64, used:UInt64, check:SchemaCheck in R) -> bool
+    where {const owner T, owner C, owner F, owner R} {
+    if (!begin_schema(steps, cursors, root, no_node())) return reject_schema(check, root, false);
+    val schema <- root;
+    for (step in 0u64 .. 3u64 * used + 1u64) {
+        if (schema == no_node()) return true;
+        if (cursors[schema].field == no_node()) {
+            if (cursors[schema].arm != no_node() && !advance_schema_arm(steps, cursors, schema))
+                return reject_schema(check, schema, false);
+            if (cursors[schema].arm == no_node()) {
+                facts[schema] <- cursors[schema].storage;
+                cursors[schema].progress <- (Complete:SchemaProgress);
+                (schema <- cursors[schema].parent):void;
+            }
+        } else {
+            if (!advance_schema_field(steps, cursors, facts, schema, check)) return false;
         };
     };
-    return true;
+    return reject_schema(check, root, false)
+}
+
+func complete_aggregate_schemas(steps:const SchemaSteps in T, facts:AggregateFacts in F, used:UInt64,
+    check:SchemaCheck in R) -> bool where {const owner T, owner F, owner R} {
+    ref cursors = make SchemaCursors(used, make SchemaCursor {
+        progress <- (Unvisited:SchemaProgress); parent <- no_node(); arm <- no_node(); field <- no_node();
+        storage <- UnprovedAggregate; native <- false;
+    });
+    for (root in 0u64 .. used) {
+        if ((case steps[root] of { SchemaStart -> true; InvalidSchemaStart -> true; _ -> false }) &&
+            cursors[root].progress != (Complete:SchemaProgress) &&
+            !complete_schema(steps, cursors, facts, root, used, check)) return false;
+    };
+    return true
+}
+
+export func check_aggregate_schemas(nodes:const ExprNodes in N, names:const NameBindings in B, work:const NameWork in W,
+    selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, interface_used:UInt64,
+    facts:AggregateFacts in F, used:UInt64, revision:UInt64, check:SchemaCheck in R)
+    -> bool where {const owner N, const owner B, const owner W, const owner E, const owner I, owner F, owner R} {
+    if (used > intrinsic (len)(facts) || used > intrinsic (len)(nodes) || used > 6148914691236517204u64)
+        return reject_schema(check, no_node(), false);
+    ref steps = make SchemaSteps(used, make NoSchemaStep {});
+    {
+        ref declarations = make SchemaDeclarations(used, make SchemaDeclaration {
+            kind <- (NoSchema:SchemaKind); referent <- false; entries <- no_node();
+        });
+        collect_schema_declarations(nodes, names, declarations, used, revision);
+        for (schema in 0u64 .. used) {
+            if (declarations[schema].kind != (NoSchema:SchemaKind)) {
+                collect_schema_steps(nodes, names, work, selected, interfaces, interface_used, declarations,
+                    steps, schema, used, revision)
+            }
+        }
+    };
+    return complete_aggregate_schemas(steps, facts, used, check)
 }
