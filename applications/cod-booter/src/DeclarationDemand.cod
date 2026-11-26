@@ -18,7 +18,7 @@ using "./NativeDeclarations.cod" {
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" sum_type;
 using "./ModuleExportStorage.cod" ByteFunctionCompletion { NoByteFunction };
-using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, LocalSumConstruction, IndexedProductDestination } };
+using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, LocalSumConstruction, IndexedProductDestination, IndexedProductRead } };
 
 export data DeclarationDemand {
     scope:UInt64;
@@ -101,7 +101,7 @@ func family_needs_checked_operands(links:const NameWork in W, demand:const Decla
     return true
 }
 
-func passes_case_receipt(nodes:const ExprNodes in N, names:const NameBindings in B,
+func passes_scoped_aggregate_loan(nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in W, cases:const ConstructorCaseFacts in C, tail:UInt64, used:UInt64,
     revision:UInt64) -> bool where {const owner N, const owner B, const owner W, const owner C} {
     if (intrinsic (len)(cases) == 0u64) return false;
@@ -112,6 +112,10 @@ func passes_case_receipt(nodes:const ExprNodes in N, names:const NameBindings in
     for (unused in 0u64 .. used) {
         if (argument >= used || inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence)
             return false;
+        if (entry.item < intrinsic (len)(cases) && (case cases[entry.item] of {
+            IndexedProductRead { val consumer <-; } -> consumer == argument;
+            _ -> false
+        })) return true;
         if (names[entry.item].kind == local_binding()) {
             receipt <- names[entry.item].declaration;
             if (receipt < entry.item && receipt < intrinsic (len)(cases) &&
@@ -263,7 +267,7 @@ export func discover_declaration_demand(
             checked_call <- family_needs_checked_operands(links, demand, definition, used) ||
                 prepared_byte_function(views, definition, true);
             if (shape == DirectInvocationReady &&
-                passes_case_receipt(nodes, names, links, cases, invocation.arguments, used, revision)) {
+                passes_scoped_aggregate_loan(nodes, names, links, cases, invocation.arguments, used, revision)) {
                 if (!require_receipt_body(demand, definition, count, receipt_count, used)) {
                     problem <- site;
                     return false

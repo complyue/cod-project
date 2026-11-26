@@ -7,20 +7,21 @@ using "./ParserStorage.cod" {
     SequenceSyntax { SumSequence }, FormalMode { ValueFormal, ExplicitValueFormal, ReferenceFormal },
     FormalSyntax { OrdinaryFormal }, BindingSyntax { TypedBinding },
     IndexSites, inspect_index_selection, owner_constraint_syntax,
+    DirectCallSites, direct_invocation, DirectInvocationSyntax { DirectInvocationReady },
     AssignmentSites, inspect_assignment, AssignmentSyntax { PlaceTransfer, FieldTransfer },
     ConstructionSites, inspect_construction, ConstructionSyntax { BracedConstruction },
     OwnerConstraintSyntax { ReadonlyOwnerConstraint, NotOwnerConstraint },
     CaseSites, inspect_case, CaseArmSites, inspect_case_arm, case_pattern,
     CasePatternSyntax { NamedCaseMember, ConstructorCaseTarget, AnyCaseTarget },
     ConstructorCaseSites, inspect_constructor_case, CaseReceiverSites, inspect_case_value_receiver,
-    SequenceEntry, inspect_sequence_entry, SequenceSyntax { BlockSequence, CaseReceiverSequence, FormalSequence },
+    SequenceEntry, inspect_sequence_entry, SequenceSyntax { ArgumentSequence, BlockSequence, CaseReceiverSequence, FormalSequence },
     FieldSelectionSites, inspect_field_selection, name_syntax, NameSyntax { OrdinaryName },
     CallableSites, inspect_callable, CallableSyntax { ModuleCallable, LexicalCallable },
     SignatureSites, inspect_signature, find_signature_clause, SignatureSyntax { SignatureHead }
 };
 using "./NameResolution.cod" {
     NameBindings, NameWork, builtin_u64, record_type, find_named_field, array_type, formal_binding,
-    owner_binding, local_binding, native_scalar, record_initializer_label
+    owner_binding, local_binding, callable_binding, native_scalar, record_initializer_label
 };
 using "./ModuleExports.cod" SelectedExports;
 using "./DeclarationTypes.cod" { DeclaredType, DeclaredExpressionResult, describe_type, describe_record_field, describe_record_member, local_sum_constructor };
@@ -37,6 +38,7 @@ export data ConstructorCaseFact =
         expression:UInt64; array_site:UInt64; index:UInt64; owner_site:UInt64; array_type:UInt64; value_type:DeclaredType; count:UInt64;
     } |
     DirectCaseSubject { expression:UInt64; formal:UInt64; count:UInt64; } |
+    FieldLoanCaseSubject { expression:UInt64; receiver:UInt64; count:UInt64; } |
     ReceiptCaseSubject { expression:UInt64; receipt:UInt64; arm:UInt64; count:UInt64; } |
     CaseSumFormal { definition:UInt64; owner_site:UInt64; readonly:bool; value_type:DeclaredType; } |
     InlineProductFormal { definition:UInt64; owner_site:UInt64; value_type:DeclaredType; } |
@@ -47,6 +49,10 @@ export data ConstructorCaseFact =
     CaseSumReceipt { receipt:UInt64; arm:UInt64; value_type:DeclaredType; } |
     CaseSumProjection { receiver:UInt64; field:UInt64; receipt:UInt64; arm:UInt64; record:DeclaredType; value_type:DeclaredType; } |
     LocalSumConstruction { transfer:UInt64; sum:UInt64; arm:UInt64; fields:UInt64; } |
+    IndexedProductRead {
+        consumer:UInt64; array:UInt64; index:UInt64; owner_site:UInt64; array_type:UInt64;
+        record_module:UInt64; record:UInt64; index_binds_storage:bool;
+    } |
     IndexedProductDestination {
         transfer:UInt64; array:UInt64; index:UInt64; owner_site:UInt64; array_type:UInt64; record:UInt64; index_binds_storage:bool;
     } |
@@ -108,6 +114,18 @@ func describe_indexed_case_loan(nodes:const ExprNodes in N, names:const NameBind
     loan.owner_site <- owner_site;
     loan.array_type <- names[marker].declaration;
     return true
+}
+
+func remember_indexed_product_read(nodes:const ExprNodes in N, facts:ConstructorCaseFacts in F,
+    consumer:UInt64, loan:const IndexedCaseLoan in L, record:const DeclaredType in R) -> void
+    where {const owner N, owner F, const owner L, const owner R} {
+    if (loan.expression == no_node()) return;
+    facts[loan.expression] <- make IndexedProductRead {
+        consumer <- consumer; array <- loan.array; index <- loan.index; owner_site <- loan.owner_site;
+        array_type <- loan.array_type; record_module <- record.defining_module; record <- record.identity;
+        index_binds_storage <- binds_local_storage(nodes, loan.index);
+    };
+    return
 }
 
 func case_bits_type(type:const DeclaredType in T, aggregate:const AggregateFacts in F,
@@ -686,6 +704,48 @@ func prepare_projected_sum_case(source:const SourceBytes in S, nodes:const ExprN
     return true
 }
 
+func prepare_borrowed_field_sum_case(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, selected:const SelectedExports in E, work:NameWork in W,
+    spellings:const SourceBytes in G, spelling_used:UInt64, interfaces:const ModuleInterfaces in G,
+    published:UInt64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
+    at:UInt64, choice:const CaseSites in C, used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R)
+    -> bool where {const owner S, const owner N, const owner B, const owner E, owner W,
+        const owner G, const owner A, owner F, const owner C, owner R} {
+    val subject <- choice.subject;
+    ref projection = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
+    if (!inspect_field_selection(nodes, revision, used, subject, projection)) return true;
+    val receiver <- projection.receiver;
+    ref index = make IndexedCaseLoan {
+        expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node(); array_type <- no_node();
+    };
+    ref record = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    val origin <- if (names[receiver].kind == formal_binding()) { names[receiver].declaration } else { receiver };
+    if (origin >= subject ||
+        (!describe_inline_product(facts, origin, record) &&
+         !describe_indexed_case_loan(nodes, names, selected, receiver, used, revision, record_type(), index, record)))
+        return true;
+    if (!case_bits_type(record, aggregate, interfaces, published))
+        return case_problem(report, subject, unproved_sum_subject());
+    ref sum = make DeclaredType { kind <- record.kind; defining_module <- record.defining_module; identity <- record.identity };
+    ref ordinal = make UInt64 { no_node() };
+    if (!describe_record_member(source, nodes, names, selected, work, spellings, spelling_used, interfaces,
+        published, projection.field, used, revision, true, sum, ordinal) || ordinal == no_node())
+        return case_problem(report, projection.field, unproved_case_field());
+    if (sum.kind != sum_type()) return true;
+    if (!case_bits_type(sum, aggregate, interfaces, published))
+        return case_problem(report, projection.field, unproved_case_field());
+    ref count = make UInt64 { sum_case_extent(nodes, work, interfaces, published, sum, used, revision) };
+    if (count == 0u64) return case_problem(report, subject, unproved_sum_subject());
+    if (!prepare_case_arms(source, nodes, names, selected, work, spellings, spelling_used,
+        interfaces, published, aggregate, facts, at, subject, choice.items, sum, used, revision, count, report))
+        return false;
+    remember_indexed_product_read(nodes, facts, subject, index, record);
+    remember_inline_product_field(facts, subject, receiver, projection.field, ordinal, record, sum);
+    facts[at] <- make FieldLoanCaseSubject { expression <- subject; receiver <- receiver; count <- count };
+    work[at].case_schema_prepared <- true;
+    return true
+}
+
 func prepare_sum_case(source:const SourceBytes in S, nodes:const ExprNodes in N,
     names:const NameBindings in B, selected:const SelectedExports in E, work:NameWork in W,
     spellings:const SourceBytes in G, spelling_used:UInt64, interfaces:const ModuleInterfaces in G,
@@ -696,6 +756,9 @@ func prepare_sum_case(source:const SourceBytes in S, nodes:const ExprNodes in N,
     if (work[at].case_schema_prepared) return true;
     ref choice = make CaseSites { subject <- no_node(); items <- no_node() };
     if (!inspect_case(nodes, revision, used, at, choice)) return true;
+    if (!prepare_borrowed_field_sum_case(source, nodes, names, selected, work, spellings, spelling_used,
+        interfaces, published, aggregate, facts, at, choice, used, revision, report)) return false;
+    if (work[at].case_schema_prepared) return true;
     if (!prepare_direct_sum_case(source, nodes, names, selected, work, spellings, spelling_used,
         interfaces, published, aggregate, facts, at, choice, used, revision, report)) return false;
     if (work[at].case_schema_prepared) return true;
@@ -791,15 +854,21 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
     ref record = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
     ref ordinal = make UInt64 { no_node() };
+    ref loan = make IndexedCaseLoan {
+        expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node(); array_type <- no_node();
+    };
     val origin <- no_node();
     for (site in 0u64 .. used) {
         if (inspect_field_selection(nodes, revision, used, site, selection) &&
-            (case facts[site] of { CaseSumProjection -> false; _ -> true })) {
+            (case facts[site] of { CaseSumProjection -> false; InlineProductField -> false; _ -> true })) {
             origin <- if (names[selection.receiver].kind == local_binding() ||
                           names[selection.receiver].kind == formal_binding()) {
                 (names[selection.receiver].declaration)
             } else { (selection.receiver) };
-            if (origin < site && describe_inline_product(facts, origin, type)) {
+            loan.expression <- no_node();
+            if (origin < site && (describe_inline_product(facts, origin, type) ||
+                (describe_indexed_case_loan(nodes, names, selected, selection.receiver, used, revision,
+                    record_type(), loan, type) && case_bits_type(type, aggregate, interfaces, published)))) {
                 record.kind <- type.kind;
                 record.defining_module <- type.defining_module;
                 record.identity <- type.identity;
@@ -808,6 +877,7 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
                     interfaces, published, selection.field, used, revision, true, type, ordinal) &&
                     ordinal != no_node() && (native_scalar(type.kind) || type.kind == enum_type() ||
                         (type.kind == record_type() && case_bits_type(type, aggregate, interfaces, published)))) {
+                    remember_indexed_product_read(nodes, facts, site, loan, record);
                     remember_inline_product_field(facts, site, selection.receiver,
                         selection.field, ordinal, record, type)
                 }
@@ -830,6 +900,70 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
         }
     };
     return true
+}
+
+func prepare_indexed_loan_call(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W,
+    interfaces:const ModuleInterfaces in G, published:UInt64, aggregate:const AggregateFacts in A,
+    facts:ConstructorCaseFacts in F, call:UInt64, first_argument:UInt64, first_formal:UInt64,
+    first:UInt64 in P, used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, const owner E, const owner W, const owner G, const owner A,
+        owner F, owner P} {
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    ref loan = make IndexedCaseLoan {
+        expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node(); array_type <- no_node();
+    };
+    ref record = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    val argument <- first_argument;
+    val formal <- first_formal;
+    for (unused in 0u64 .. used) {
+        if (argument >= used || formal >= used) return;
+        if (inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence) return;
+        # Only a complete loan candidate adds demand. Other arguments use
+        # their ordinary check when the caller is required for another reason.
+        if ((case facts[formal] of { InlineProductFormal -> true; _ -> false }) &&
+            describe_indexed_case_loan(nodes, names, selected, entry.item, used, revision,
+                record_type(), loan, record) && case_bits_type(record, aggregate, interfaces, published)) {
+            remember_indexed_product_read(nodes, facts, argument, loan, record);
+            if (first == no_node()) { (first <- call):void }
+        };
+        argument <- work[argument].next;
+        formal <- work[formal].next
+    };
+    return
+}
+
+func prepare_indexed_loan_arguments(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W,
+    interfaces:const ModuleInterfaces in G, published:UInt64, aggregate:const AggregateFacts in A,
+    facts:ConstructorCaseFacts in F, first:UInt64 in P, used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, const owner E, const owner W, const owner G, const owner A, owner F, owner P} {
+    ref invocation = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    ref signature = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false;
+    };
+    ref header = make UInt64 { no_node() };
+    ref argument = make UInt64 { no_node() };
+    ref formal = make UInt64 { no_node() };
+    val definition <- no_node();
+    for (call in 0u64 .. used) {
+        if (direct_invocation(nodes, revision, used, call, invocation) == DirectInvocationReady &&
+            invocation.arguments != no_node() && names[invocation.callee].kind == callable_binding()) {
+            definition <- names[invocation.callee].declaration;
+            if (definition < used && work[definition].next_method == no_node() &&
+                inspect_callable(nodes, revision, used, definition, callable) == ModuleCallable &&
+                callable.function_form && callable.body != no_node() &&
+                find_signature_clause(nodes, revision, used, callable.signature, SignatureHead, header) &&
+                inspect_signature(nodes, revision, used, header, signature) == SignatureHead &&
+                first_sequence_entry(nodes, revision, used, signature.parameter_tail, FormalSequence, formal) &&
+                first_sequence_entry(nodes, revision, used, invocation.arguments, ArgumentSequence, argument)) {
+                prepare_indexed_loan_call(nodes, names, selected, work, interfaces, published, aggregate,
+                    facts, call, argument, formal, first, used, revision)
+            }
+        }
+    };
+    return
 }
 
 func indexed_braced_transfer(nodes:const ExprNodes in N, at:UInt64, used:UInt64, revision:UInt64,
@@ -1039,6 +1173,8 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, used:UInt64,
     -> bool where {const owner N} {
     ref indexed = make IndexSites { target <- no_node(); index <- no_node() };
     ref choice = make CaseSites { subject <- no_node(); items <- no_node() };
+    ref projection = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
+    ref argument = make SequenceEntry { previous <- no_node(); item <- no_node() };
     ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- no_node() };
     ref construction = make ConstructionSites {
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
@@ -1049,7 +1185,10 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, used:UInt64,
             case_pattern(nodes, used, at) == ConstructorCaseTarget ||
             (inspect_case(nodes, revision, used, at, choice) &&
              (name_syntax(nodes, used, choice.subject) == OrdinaryName ||
-              inspect_index_selection(nodes, revision, used, choice.subject, indexed)))) return true
+              inspect_index_selection(nodes, revision, used, choice.subject, indexed) ||
+              inspect_field_selection(nodes, revision, used, choice.subject, projection)))) return true;
+        if (inspect_sequence_entry(nodes, revision, used, at, argument) == ArgumentSequence &&
+            inspect_index_selection(nodes, revision, used, argument.item, indexed)) return true
     };
     return false
 }
@@ -1112,6 +1251,8 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
             }
         }
     };
+    prepare_indexed_loan_arguments(nodes, names, selected, work, interfaces, published,
+        aggregate, facts, first, used, revision);
     return first == no_node() || prepare_received_fields(source, nodes, names, selected, work,
         spellings, spelling_used, interfaces, published, aggregate, facts, used, revision, report)
 }

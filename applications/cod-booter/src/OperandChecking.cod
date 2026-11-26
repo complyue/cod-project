@@ -114,10 +114,10 @@ using "./NameResolution.cod" EnumAssertion { FoldedEnumOperand, ConstantEnumAsse
 using "./DeclarationTypes.cod" { type_module, type_identity, DeclaredType, describe_type };
 using "./CaseSchemas.cod" {
     ConstructorCaseFacts,
-    ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, ReceiptCaseSubject, CaseSumFormal,
+    ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, FieldLoanCaseSubject, ReceiptCaseSubject, CaseSumFormal,
         CaseConstructor, CaseFieldReceipt, CaseProductField, CaseSumReceipt, CaseSumProjection,
         InlineProductFormal, InlineProductField, LocalSumConstruction,
-        IndexedProductDestination, BitsConstruction, BitsFieldInitializer }
+        IndexedProductRead, IndexedProductDestination, BitsConstruction, BitsFieldInitializer }
 }
 using "./ExceptionPayload.cod" {
     CaughtFieldUses, CaughtFieldUse { CaughtField }, unknown_exception_field
@@ -3770,6 +3770,15 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
                 coverage.total <- count;
                 (coverage.remaining <- count):void
             };
+            FieldLoanCaseSubject { val expression <-; val receiver <-; val count <-; } -> {
+                if (expression != subject || receiver >= subject || count == 0u64 ||
+                    facts[subject].selection != subject || facts[subject].reception != borrowed_ref() ||
+                    facts[subject].target_readonly == 0u8 || facts[subject].target_presence != present_target() ||
+                    facts[subject].owner == no_node() || facts[subject].owner != facts[receiver].owner)
+                    return operand_problem(report, at, invalid_operand_tree());
+                coverage.total <- count;
+                (coverage.remaining <- count):void
+            };
             ReceiptCaseSubject {
                 val expression <- expression; val receipt <- receipt; val arm <- arm; val count <- count;
             } -> {
@@ -4463,13 +4472,19 @@ func check_inline_product_field(nodes:const ExprNodes in N, facts:OperandFacts i
         projection.receiver != receiver || projection.field != field || receiver >= at ||
         ordinal == no_node() || record.kind != record_type()) return invalid_operand_tree();
     val kind <- facts[receiver].kind;
+    if (kind == never_result()) {
+        set_result(facts, at, never_result());
+        return 0u8
+    };
     if ((kind != source_product_loan() && kind != product_kind()) ||
         facts[receiver].reception != borrowed_ref() || facts[receiver].owner == no_node() ||
-        facts[receiver].target_readonly == 0u8 ||
+        facts[receiver].target_readonly == 0u8 || facts[receiver].target_presence != present_target() ||
         facts[receiver].identity != record.identity ||
         facts[receiver].identity_module != record.defining_module) return unsupported_product_layout();
-    if (result.kind == record_type()) {
-        set_fact(facts, at, source_product_loan(), borrowed_ref(), facts[receiver].owner, result.identity, 0u8);
+    if (result.kind == record_type() || result.kind == sum_type()) {
+        val loan_kind <- if (result.kind == record_type()) { source_product_loan() } else { source_sum_target() };
+        set_fact(facts, at, loan_kind, borrowed_ref(), facts[receiver].owner, result.identity, 0u8);
+        facts[at].selection <- at;
         facts[at].identity_module <- result.defining_module;
         facts[at].target_readonly <- 1u8;
         return 0u8
@@ -4656,8 +4671,9 @@ func check_local_sum_construction(source:const SourceBytes in S, nodes:const Exp
     return invalid_operand_tree()
 }
 
-func check_indexed_product_destination(facts:OperandFacts in F, at:UInt64, array:UInt64, index:UInt64,
-    owner_site:UInt64, array_type:UInt64, record:UInt64, index_binds_storage:bool) -> UInt8 where {owner F} {
+func check_indexed_product_element(facts:OperandFacts in F, at:UInt64, array:UInt64, index:UInt64,
+    owner_site:UInt64, array_type:UInt64, record_module:UInt64, record:UInt64, index_binds_storage:bool, writable:bool)
+    -> UInt8 where {owner F} {
     if (array >= at || index >= at) return invalid_operand_tree();
     if (facts[array].kind == never_result() || facts[index].kind == never_result()) {
         set_result(facts, at, never_result());
@@ -4668,12 +4684,14 @@ func check_indexed_product_destination(facts:OperandFacts in F, at:UInt64, array
         facts[array].identity_module != 0u64 || facts[array].identity != array_type ||
         facts[array].owner != owner_site || facts[array].target_presence != present_target())
         return unproved_nonnull_borrow();
-    if (facts[array].target_readonly != 0u8) return expected_writable_place();
+    if (writable && facts[array].target_readonly != 0u8) return expected_writable_place();
     if (index_binds_storage) return unproved_operand();
     val diagnostic <- require_prepared_array_u64(facts, index);
     if (diagnostic != 0u8) return diagnostic;
     set_fact(facts, at, source_product_loan(), borrowed_ref(), owner_site, record, 0u8);
+    facts[at].identity_module <- record_module;
     facts[at].selection <- at;
+    facts[at].target_readonly <- if (writable) { 0u8 } else { 1u8 };
     facts[at].checks_array_bounds <- true;
     return 0u8
 }
@@ -4801,11 +4819,20 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     };
     if (at < intrinsic (len)(cases)) {
         case cases[at] of {
+            IndexedProductRead {
+                val array <-; val index <-; val owner_site <-; val declared_array <- array_type; val record <-;
+                val index_binds_storage <-; val record_module <-;
+            } -> {
+                if (!source_only) return unsupported_product_layout();
+                return check_indexed_product_element(facts, at, array, index, owner_site, declared_array, record_module,
+                    record, index_binds_storage, false)
+            };
             IndexedProductDestination {
                 val array <-; val index <-; val owner_site <-; val declared_array <- array_type; val record <-; val index_binds_storage <-;
             } -> {
                 if (!source_only) return unsupported_product_layout();
-                return check_indexed_product_destination(facts, at, array, index, owner_site, declared_array, record, index_binds_storage)
+                return check_indexed_product_element(facts, at, array, index, owner_site, declared_array, 0u64,
+                    record, index_binds_storage, true)
             };
             BitsConstruction {
                 val type <- identity; val arm <-; val first_field <-; val last_field <-;
@@ -4843,7 +4870,8 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
             } -> {
                 if (!source_only) return unsupported_product_layout();
                 if (receiver >= at) return invalid_operand_tree();
-                if (facts[receiver].kind == source_product_loan())
+                if (facts[receiver].kind == source_product_loan() ||
+                    facts[receiver].kind == never_result())
                     return check_inline_product_field(nodes, facts, at, used, revision, receiver, field,
                         ordinal, record, schema)
             };

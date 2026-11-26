@@ -199,6 +199,12 @@ Both source commands also check `reserve_visits`. The visit-array profile requir
 
 The source commands also check a local braced constructor written directly into a writable element of a finite-bits sum array. They verify each initializer and the exact nominal element type, including nested inline bits fields. The isolated `mark_failed_visit` body passes both commands with its original schema. Object lowering and uses that consume the transfer's result remain outside this profile. [Indexed sum transfers](docs/ModuleGraph.md#checking-a-local-sum-constructor-in-an-indexed-transfer)
 
+### Inline sum cases on borrowed records
+
+The declaration and C provider commands check `case row.payload of { … }` on a readonly, nonnull loan of a finite-bits record. A direct selection from a locally defined `UInt64`-indexed record array can serve as the receiver or supply a record loan to an ordinary same-revision function. Each use keeps the defining module and nominal identity of the record and sum. The projected field retains the receiver’s owner. An indexed selection evaluates its index once and must succeed before the case reads its tag or the call enters. Constructor selection, field reception and case coverage follow the ordinary sum rules.
+
+The indexed element loan is scoped to the field use or immediate call. The source checks require compatible readonly formals and owner substitutions and reject deferred use of the loan. These checks cover `ModuleExportStorage` on both source routes. Object emission for these sum cases still reaches its existing profile boundary.
+
 ### Package probe and literal call contracts
 
 The declaration and C provider commands check the imported native package probe with two readonly byte-array loans and four independent 64-bit unsigned bounds. Each loan preserves the array's nominal identity and actual owner. The probe returns the full-width value, including the maximum code for an absent module. The unchanged resolver reaches its first indexed product field after the probe signature is checked. [Native package probe](docs/ModuleGraph.md#checking-the-native-package-probe)
