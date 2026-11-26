@@ -91,6 +91,12 @@ func const Base.score() -> u64 { self.id }
 func const Item.score() -> u64 { super.score() + self.detail }
 func const Tagged.score() -> u64 { super(Base).score() + self.id }
 
+func mark(entry:const Base in O, priority:Priority) -> u64 where {const owner O} of {
+    (item:const Item in O, Urgent) => item.detail;
+    (_, Urgent) => 1u64;
+    (_, _) => 0u64
+}
+
 ref item = make Tagged(7u64, 3u64, 9u64)
 ref base:Base = item
 base.update(11u64)
@@ -119,6 +125,18 @@ val direct <- threshold(12u64)
 val supplied <- test(threshold, 12u64)
 val deferred_read <- test(12u64) (x) => {{ return threshold(x) }}
 
+proc enabled(n:u64) -> bool of {
+    (0u64) => false;
+    (value:u64) => {
+        test(value) (x) => { x > 1u64 }
+    }
+}
+
+func as_flag -> bool {
+    (n:u64) => n != 0u64;
+    (b:bool) => b
+}
+
 func increment = func(x:u64) -> u64 { x + 1u64 }
 func apply(f:func(u64) -> u64, n:u64) -> u64 { f(n) }
 val applied <- apply(increment, 3u64)
@@ -128,10 +146,24 @@ val applied <- apply(increment, 3u64)
 val symbol @level:u64
 symbol @read:proc() -> u64
 proc @read() -> u64 { return @level }
+
+symbol @credit:proc(Priority) -> u64
+proc @credit(priority:Priority) -> u64 of {
+    (Standard) => 1u64;
+    (Urgent) => 2u64
+}
+effect @credit -> u64 {
+    (Urgent) => 1u64;
+    (_) => 0u64
+}
+
 effect @level <- 1u64
 effect proc @read;
 {{
     effect @level <- 2u64
+    effect proc @credit(priority:Priority) -> u64 of {
+        (_) => 3u64
+    }
     val current <- behave @read()
     val saved <- perform @read()
 }}

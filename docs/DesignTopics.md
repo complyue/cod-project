@@ -232,6 +232,7 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 
 | 议题 | 何时值得讨论、需要确定什么 |
 | --- | --- |
+| method 头里的一般具名常量 | 当业务库需要按已发布的非枚举编译期常量分派时，确定该槽如何引用这个值，同时保留 `name:T` 作为形参绑定。用一个与局部形参同名的常量检验解析和名称查找。布尔、定宽整数字面量以及已知 enum 参数域中的成员已有规则。[方法分组与值分派](../design/SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch) |
 | overload 中的 `default` | 有更具体的方法需要调用本族更通用的实现时，比较显式调用与委托的选取规则，涵盖多个候选及递归。模块的 `default { ... }` 与默认导出已经有独立决定。[模块选择](../design/ModuleWorlds.md#default-and-complete-public-selections) |
 | 初始化与分支结果 | 用真实调用检验非 bits 或产生所有权的分支如何合流。另有无 owner 的纯 bits 构造表达式候选；目前新建实例写 `make`。[构造与分配](../design/ConstructionAndAcquisition.md) · [owner 和初始化](../design/RegionalOwnership.md) |
 | 结构化结果与 generator 的扩展 | 当现有 receiving spec、`yields`、反馈和同步 `here` 无法表达某个调用时，以该调用界定需增加的行为。[generator 与循环](../design/RangedForAndGenerators.md) |

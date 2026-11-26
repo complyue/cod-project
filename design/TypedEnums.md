@@ -1,8 +1,10 @@
 # Typed enums
 
-Design revision: 5 · 2026-11-23
+Design revision: 6 · 2026-11-25
 
 ## Design authority
+
+The [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125) carries the r5 enum identity and member-lookup contract into method dispatch at r6 under [D-10-METHOD-GROUPS](DesignAuthorityRegistry.md#d-10-method-groups). Check a runtime member, an alternate spelling and a same-code value of a different enum against the public parameter domain. The generated C exchange keeps its existing contract.
 
 [H-TYPED-ENUM-20261121](../CHANGELOG.md#h-typed-enum-20261121) covers the project user's proposal, explicit requirement for old and new member names, and delegation of the detailed review. [D-07-ENUM](DesignAuthorityRegistry.md#d-07-enum), P-658/P-659, qualifies the closed nominal type, member identities, selection and coverage. [D-20-C-ENUM](DesignAuthorityRegistry.md#d-20-c-enum), P-660/P-661, qualifies generated current-target by-value exchange for the first booter workload. Charter §§3.2, 6.3, 8.1 and 12 connect named domain outcomes to readable programs and checked native execution. [K-TYPED-ENUM-REVIEW-20261121](../CHANGELOG.md#k-typed-enum-review-20261121) records the delegated resolutions below. Acceptance exercises the same identities from declaration through case analysis and the C boundary. Shared foreign storage and permanent binary interfaces remain outside this scope.
 
@@ -58,6 +60,10 @@ In an expression `name:E`, first resolve the visible type E and use ordinary loo
 In either member-pattern spelling, `OldRejected -> expr` or `(OldRejected) -> { expr }`, the static enum type of the subject supplies the member table. The token names a constant pattern; it introduces no variable and reads no shadowing local. A misspelling rejects. In `OldRejected | retryable() -> retry()`, the member test precedes the guard. If the guard declines, scanning continues. Names inside the guard and body use ordinary expression lookup. A member has no variant payload to receive. `isa` remains a type test. [Case semantics](DomainLanguageDesign.md#case-expressions-and-branch-local-variables) govern subject evaluation, source-order effects, guards, fallthrough and result completion. The explicit wildcard `_ -> throw;` raises `UnexpectedCaseError` when reached.
 
 Coverage counts distinct canonical members of the complete declaration, independently of the selected names. For `enum Decision:u8 { Yes; OldYes = Yes; No; }`, unguarded completing arms for OldYes and No cover the entire domain. Arms for Yes and OldYes leave No uncovered. A guard that can decline or a matching arm that always falls through supplies no independent proof of completion. Repeated spellings may still have different guards or lead to later observable work. A void case may be partial. Value cases follow the existing static completion/fallback rule. A nullable subject also needs the usual null handling. Coverage must respect possible changes to a borrowed subject during matching.
+
+## Enum members in method heads
+
+In a [grouped method definition](SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch) a parameter declared `ne:NativeError` gives the pattern `(Rejected)` its enum domain. It matches the prepared argument whether the caller used `Rejected`, used `OldRejected`, or obtained the value at runtime. A local variable of either name cannot change the pattern's meaning. Two otherwise identical methods for the two spellings are duplicate definitions of one domain. The integer `1u8` and a member with code 1 in a different enum do not denote that domain. When complete coverage is required, count distinct members of the full enum. `case` continues to try its arms in source order. Method selection uses the unique most-specific applicable method across the selected family.
 
 ## Generated C exchange
 

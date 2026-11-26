@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 82 · Recorded: 2026-11-25 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 83 · Recorded: 2026-11-25 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+At r83 the [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125) applies r82's family identity and extension permissions to value-refined methods under [D-10-METHOD-GROUPS](DesignAuthorityRegistry.md#d-10-method-groups). Check a receiving world with independent cold-shipment and express-service methods, then supply the intersection there. Selection uses the same permissions and actual argument evidence in either import order.
 
 At r82 the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) applies to methods defined outside the type. [D-07-FUNCTOR-LOOKUP](DesignAuthorityRegistry.md#d-07-functor-lookup) continues P-636/P-637 from r81. The two-module example checks extension grants, method identity and conflicts in the receiving world.
 
@@ -672,6 +674,8 @@ This module-world independence belongs to the [Global Variables Done Right visio
 
 ## Callable families and explicit installation
 
+The arms of a [named method group](SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch) contribute individual methods to the selected callable identity. The shared header describes their public call contract. Suppose one extension handles refrigerated shipments at any service level and another handles express service for any shipment. A client selecting both needs a unique winner for a refrigerated express request. An integrating module with extension permission can supply the method for that intersection. Reversing the order of selector directives leaves the result unchanged. A `using` of the callable family alone grants no extension permission. A locally installed `effect` group has only its written methods and must cover its procedure symbol when installed.
+
 A declared symbol carries its identity and signature in the module world. Its bare name supplies that identity at runtime. Reject a declaration that would occupy or shadow its lexical name with a different meaning. For a procedure symbol, `perform` and `behave` select the installed handler, whose extraction as an ordinary procedure value rejects.
 
 | Operation | Compilation/integration | Runtime |
@@ -686,7 +690,7 @@ A declared symbol carries its identity and signature in the module world. Its ba
 
 A family installation retains its selected interpretation and uses ordinary method dispatch. Export, using/import/mixin and extension remain module construction; none implicitly installs a receiver TLS value. Dependency initialization still follows its once-only incorporation contract and can execute its own explicit effects.
 
-A skipped effect installs nothing. Reentering a body site creates a new activation of its local family. Whole-program compilation prepares admissible actual-type combinations and dispatch. Independent module interpretations remain fixed for that composition and can coexist; a new explicit integration stage is separate from invocation.
+A skipped effect installs nothing. Reentering a body site creates a new activation of its local family. Whole-program compilation prepares dispatch for admitted actual types and value refinements. Independent module interpretations remain fixed for that composition and can coexist; a new explicit integration stage is separate from invocation.
 
 Entry-module composition additionally follows H-379: extending a dependency callable requires an explicit entry installation, and that installation cancels dependency installations of the callable. Module definitions and explicitly retained source interpretations remain available. CoD must expose unused installation roots to LLVM elimination; the [cancellation contract](AheadOfTimeExecutionPreparation.md#entry-installation-and-unused-dependency-code) preserves initialization operand effects and all procedure-local installations. Once-only dependency initialization does not override this rule.
 
