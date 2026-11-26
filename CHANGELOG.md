@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Reuse lexical native cleanup in the replacement seed
+
+<a id="k-seed-pipeline-lexical-native-handles-20261126"></a>
+**K-SEED-PIPELINE-LEXICAL-NATIVE-HANDLES-20261126.** [D-ARCH-REVIEW r214→215](design/ImplementationArchitecture.md#direct-native-handle-acquisition-in-the-replacement-seed) continues P-682/P-683 under the [replacement pipeline decision](#h-compiler-pipeline-replacement-20261125). At `3fa5ab0c` the [real root-opening prefix](https://github.com/complyue/cod-project/blob/3fa5ab0c/applications/cod-booter/src/ModuleGraph.cod#L1617) uses both owning construction and an attached path. The [existing LLVM release registration](https://github.com/complyue/cod-project/blob/3fa5ab0c/cod/lang_llvm.hh#L2567) consumes success at the owning place. The review authorizes new producers for those direct lexical operations and preserves the existing native failure ABI. Replacement execution remains to be verified.
+
 ## 2026-11-25 — Separate supplier and callback extraction at the native path loan
 
 <a id="k-seed-pipeline-path-key-callback-20261125"></a>
