@@ -11,7 +11,7 @@ exposes the difference between a route that expects void feedback and a seat sou
 Boolean. Even a correctly typed filter can answer the seat source incorrectly or open a cursor it
 never needs. We derive the missing behavioral obligations from explicit CoD loops and trace which
 ones a future type language could check at an adapter boundary. An open fare policy then lets
-the application change both the route source and the terminal without rewriting either stage.
+the application change both the route source and the terminal without rewriting either stage. Building on the [retention paper](WhatShouldAComposedOperationRetain.md#what-agreement-during-a-drive-means), we use a delayed audit to locate the boundary of a closed event pipeline. This is the closed-pipeline contribution to [Event Processing Systems](../design/EventProcessingSystems.md).
 
 ## Two ways to type a transformer
 
@@ -316,6 +316,22 @@ Two small counterexamples show why the observation matters. With A offering 120 
 false for the rejected 120 makes the service miss A's affordable seat. A different faulty filter
 can cache the first 80, enumerate B and eventually return the cached fare. A caller comparing
 only the final number will accept that implementation even though it made an extra inventory call.
+
+## Where a closed event pipeline ends
+
+Here *closed* describes a drive in which source, stages and terminal participate in one live chain of calls. The definition applies once the application supplies the endpoints. Earlier, an author could prepare `fares_for() |> affordable(100u64)` with both ends open. A region-owned version could survive its builder and serve several drives. Each drive still gets its own cursors, callbacks and control destinations. The choice to quote a ceiling, retain a particular tariff, or read the current caller's tariff is an independent part of the policy. This application uses a quoted ceiling of 100. [Three binding contracts](WhatShouldAComposedOperationRetain.md#one-mutation-three-answers)
+
+Suppose an auditor wants accepted seats for later processing. Add a terminal that appends a seat record to a destination-owned, in-process queue. Pause its reader until the booking procedure has returned. Assume appends and closes succeed. To make equal prices distinguishable, let the inventory adapter offer a record with route, seat ordinal and price, and let the price filter pass the record through. This is an explicit change to the scalar example's payload. A2 and A3 both cost 80, B1 costs 90. The queue gets a copy of each admitted record.
+
+| Terminal after a successful append | Which records are in the queue at drive completion? | What the inventory source observes |
+| --- | --- | --- |
+| Always reply true | A2, A3, B1 | A1 at 120 is rejected with true. A's two affordable seats and B's seat are all visited. |
+| Reply false on the first append, then true | A2, B1 | A2 gets false, so A closes. The route source proceeds to B. |
+| Return outward on the first append | A2 | A2 receives no Boolean reply. A closes, then the route cursor closes. B never opens. |
+
+The first append of A2 has completed on all three paths. The reader may now stop after inspecting A2 or encounter a failure. Either outcome belongs to the reader's invocation. It cannot change the reply that A2 received, reopen a cursor, or undo a completed append. Conversely, a queue whose admission can fail needs an explicit local failure or feedback policy at the append site. This is the first point at which two executions with the same first payload can impose different obligations on inventory.
+
+For `e-wrks/eps.cod` this case supplies two separate checks. Within the closed drive, compare the direct loop and the composed plan on every offer, reply, unwind and close. At the queue boundary, compare the identified records accepted *before* drive completion. The [open-network paper](OpenEventPipelines.md#connecting-two-closed-drives) takes those records as a possible input to a later drive and defines the additional evidence that a receiver needs. The ability to compose before attaching endpoints is useful on both sides. A protocol that returned the later reader's Boolean to the original seat source would change the contract of this example. [Joint library plan](../design/EventProcessingSystems.md#first-library-workload)
 
 ## Distinguishing the two candidates
 

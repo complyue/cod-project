@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Plan Event Processing Systems as one CoD library
+
+<a id="h-eps-library-direction-20261126"></a>
+**H-EPS-LIBRARY-DIRECTION-20261126.** In the CoD project conversation on 2026-11-26, the project user directed the two event-processing papers to build on the conclusions of the retention working paper, investigate closed event pipelines and open event networks, and plan a joint CoD library repository named `e-wrks/eps.cod`, “Event Processing Systems” (English rendering of the request). The [retention paper at the baseline](https://github.com/complyue/cod-project/blob/b3e97f50b15a39f107db3c25b4a689a326ac6ac9/papers/WhatShouldAComposedOperationRetain.md) and [previous pairing](https://github.com/complyue/cod-project/blob/b3e97f50b15a39f107db3c25b4a689a326ac6ac9/papers/README.md#read-the-two-pipeline-papers-together) identify the inputs. The [closed-drive](papers/ComposingEnumerativeChoice.md#where-a-closed-event-pipeline-ends) and [open-network](papers/OpenEventPipelines.md#connecting-two-closed-drives) studies now share a delayed-audit case and a [WIP library plan](design/EventProcessingSystems.md). [D-EPS-RESEARCH](design/DesignAuthorityRegistry.md#d-eps-research) records the direction separately from approval of public interfaces or executable support.
+
 ## 2026-11-26 — Name the `cfe` entry point throughout the compiler design
 
 <a id="k-cfe-entry-point-20261126"></a>

@@ -18,6 +18,8 @@ still open.
 
 ### Read the two pipeline papers together
 
+Start with [What should a composed operation retain?](WhatShouldAComposedOperationRetain.md). It separates a policy's binding time, the owner of a reusable plan, and the live control supplied by each invocation. The two pipeline papers use those results to develop [Event Processing Systems](../design/EventProcessingSystems.md), a planned CoD library in `e-wrks/eps.cod`. The [closed-pipeline study](ComposingEnumerativeChoice.md#where-a-closed-event-pipeline-ends) follows one live drive through feedback, outward exit and cleanup. The [open-network study](OpenEventPipelines.md#connecting-two-closed-drives) starts two independently driven computations and asks which observations survive admission, delivery or a change of reactive frame.
+
 Both papers show how to name a composition before choosing either endpoint. The library user can
 [expand routes and filter fares](ComposingEnumerativeChoice.md#an-itinerary-plan-with-both-ends-open), or
 [decode and normalize device frames](OpenEventPipelines.md#one-ingress-plan-for-live-and-replay).
