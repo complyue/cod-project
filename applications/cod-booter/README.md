@@ -1,10 +1,12 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 46 · Recorded: 2026-11-26 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 47 · Recorded: 2026-11-26 · Phase: initial seed delivery through alternating booter and seed development.
 
-**Compiler design target.** The default `cod` invocation compiles and runs an entry without leaving a user-facing executable. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** Seed and booter development prioritize Go-like compile speed with moderate runtime performance. High-quality optimizing builds belong to the production compiler roadmap. [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
+**Compiler design target.** The default `cod` invocation compiles and runs an entry without leaving a user-facing executable. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** Seed and booter development prioritize Go-like compile speed with moderate runtime performance. The production compiler roadmap names its optimizing CLI `cfe` (Compile For Ever). [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
 
 ## Design authority
+
+At r47 the [production CLI decision](../../CHANGELOG.md#h-cfe-output-directory-20261126) names the optimizing entry point and specifies its executable output directory under [D-20-COMPILER-MODES](../../design/DesignAuthorityRegistry.md#d-20-compiler-modes). The [compiler modes contract](docs/CompilerPipeline.md#default-execution-and-optimized-builds) gives both output-location checks.
 
 At r46 the [production parser bundle](../../design/DesignAuthorityRegistry.md#d-20-parser-bundle) adds an installed-toolchain acceptance case to the production roadmap. The [user’s delivery decision](../../CHANGELOG.md#h-production-parser-bundle-20261126) continues the existing division between the production parser and the bootstrap frontends.
 
@@ -161,7 +163,7 @@ The compiler and toolchain repositories are planned in the [e-wrks GitHub organi
 | --- | --- |
 | `cod-lang` | CoD language design and the authoritative language specification shared by both compilers. |
 | `cod-seed` | The C++ translator for trusted booter source, the CoD-written checking compiler and their C-native components, including the region core and LLVM bindings. The booter stays in this repository after the split. |
-| `cod` | The future production compiler written in CoD. The first release targets fast compile-and-run and experiments with optimizing builds. Version 2.0 formally supports the optimizing mode. The compiler also provides full diagnostics, [independent check and emission controls for editors and builds](docs/CompilerPipeline.md#independently-selectable-compiler-operations), and a future CoD REPL. [REPL decision](../../CHANGELOG.md#h-retire-cpp-repl-20261125) |
+| `cod` | The future production compiler written in CoD. The first release targets fast compile-and-run and introduces the experimental `cfe` optimizing CLI. Version 2.0 formally supports `cfe`. Its [output-directory contract](docs/CompilerPipeline.md#default-execution-and-optimized-builds) governs the generated executable. The compiler also provides full diagnostics, [independent check and emission controls for editors and builds](docs/CompilerPipeline.md#independently-selectable-compiler-operations), and a future CoD REPL. [REPL decision](../../CHANGELOG.md#h-retire-cpp-repl-20261125) |
 | `codup` | Toolchain version management in the role of rustup. |
 | `codmate` | The Language Server Protocol server and IDE plugins, including [reference-site doclet tooltips and navigation](../../design/DomainLanguageDesign.md#definition-doclets). |
 
