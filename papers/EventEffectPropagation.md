@@ -1,25 +1,42 @@
 <a id="open-event-pipelines-with-dynamically-scoped-event-sinks"></a>
 
-# Typing Open Event Pipelines across Actors and Reactive Timelines
+<a id="typing-open-event-pipelines-across-actors-and-reactive-timelines"></a>
+
+# A Vocabulary for Propagating Event Effects — Composing Domain Rules with Open Event Sinks
 
 ## Abstract
 
-Can a sensor adapter and a worker describe their halves of an event pipeline independently,
-then compose them without promising that every send reaches the worker? We explore higher-kinded
-producer, transformer and consumer signatures with separate type constructors for the sending
-and receiving ends of a chan. The same business types admit a local queue interpretation and an
-inter-Actor interpretation. CoD programs for live and trial pump monitors show what the signatures
-leave to the application. A synchronous submission must leave sufficient routing information for
-its eventual owner, and a progress record must follow every accepted reading it covers. A single
-open processing plan can serve both live ingestion and replay auditing. Paired
-histories show how either condition can fail even when the signatures agree. The
-[fuel-sale case](#a-reflex-style-network-for-a-fuel-sale) extends the question to transactions,
-timeline identity and a point-of-sale Actor. We apply the [retention paper](WhatShouldAComposedOperationRetain.md#two-tests-beyond-fare-search) to identify what must survive between local drives. These cases supply the open-network contribution to [Event Processing Systems](../design/EventProcessingSystems.md).
+A monitoring team can specify when a pump alarm takes effect. A maintenance team can specify what an alarm means for its work. How can the teams compose those rules when the monitor was written before the maintenance application existed? We study a vocabulary in which a domain rule can offer a named event to a typed, open sink. The application connecting the rules supplies the interpretation of that offer. A pump monitor and a fuel-sale controller expose the obligations behind this vocabulary. Routing determines which site can raise an alarm. Progress determines when the rule can decide. The grouping of events into a local frame determines which price goes on a receipt. We use the [composition paper](ComposingAcrossLifetimes.md#two-tests-beyond-fare-search) to distinguish a reusable rule from the live callback, state and delivery evidence required for a particular interpretation. This is the open-network study for [Event Processing Systems](../design/EventProcessingSystems.md).
+
+## From a pump alarm to an inspection request
+
+Two sensors monitor a pump. At each site, the monitoring rule observes a window until both sensors have reported progress through its end. If both reported a high reading for that pump within the window, the rule offers a `PumpAlarm`. A maintenance team uses that domain event to request an inspection. Each author can describe the effect they intend in the terms of their own application. In paper notation:
+
+```text
+Monitoring rule
+    When the site's window closes with high readings from both A and B,
+    offer PumpAlarm(site, pump, window).
+
+Maintenance rule
+    On PumpAlarm(site, pump, window),
+    offer InspectionRequested(site, pump, window).
+```
+
+The monitoring module publishes the alarm protocol. The maintenance module accepts that protocol and introduces the inspection-request protocol. An integration can supply the maintenance rule at the monitor's alarm sink and a work-order adapter at the maintenance rule's request sink. A replay author can instead supply an alarm recorder at the first sink. Neither rule needs a list of downstream applications. Here *open* means that another author can supply a compatible interpretation at the point of composition. The domain names above illustrate the proposed vocabulary. In the [CoD ingress example](#a-dynamically-scoped-event-sink), a declared procedure symbol and its installed implementation give a concrete way to select a sink.
+
+The [worker](#a-worker-that-can-distinguish-the-histories) produces the local decision `Alert` when its window qualifies. The monitor interprets that decision by offering one `PumpAlarm` for the site, pump and window. Compare the same readings with one synchronous handler at each connected sink, successful calls, and an initially empty observation log.
+
+| Window history and sink selected | Alarms offered | Inspection requests offered |
+| --- | --- | --- |
+| Split the high readings across live and trial. Connect maintenance. | None | None |
+| Pair both high readings at live. Connect an alarm recorder. | One live alarm, recorded | None |
+| Pair both high readings at live. Connect maintenance and a request recorder. | One live alarm | One request for the same site, pump and window |
+
+The last two rows give the same monitor an observably different business interpretation. They also locate the domain boundary precisely. A recorded request establishes that maintenance asked for an inspection. A work-order service that must confirm acceptance or completion has to describe that further event. The following endpoint and timeline cases ask what must be typed, retained and observed to honor such rules when the next handler runs elsewhere or later.
 
 ## Which constructor belongs to each endpoint?
 
-The higher-kinded question is whether two components can type their halves of this application
-independently. An instrument adapter needs authority to *send* a measurement. A monitor needs
+An alarm interpreter may run locally or be reached through a chan. To give independent authors only the authority their rules require, the higher-kinded question is whether each component can type its half of the connection. An instrument adapter needs authority to *send* a measurement. A monitor needs
 authority to *receive* its admitted input. Neither needs the other component's endpoint. We
 would like to reuse the typing of local producer, transformer and consumer composition on each
 side while allowing the two sides to use different traversal and endpoint families. CoD identifies
@@ -29,7 +46,7 @@ an operation. Its storage, calling convention, owner and dynamic requirements ne
 contracts. [Independent chan endpoints](../design/ActorChannels.md#independent-chan-endpoints)
 · [Producer and transformer contracts](../design/ProducersAndTransformers.md#a-transformer-takes-a-producer-as-an-input)
 
-Use the notation of the [closed traversal paper](ComposingEnumerativeChoice.md). A family `F` of
+Use the notation of the [closed traversal paper](ClosedEventPipelines.md). A family `F` of
 kind `Type → Type` takes an element type `A` and produces a completed local producer signature
 `F[A]`. A transformer changes the element type and, if its contract calls for it, the family.
 A terminal consumer drives a whole producer and yields a local result `Z`.
@@ -101,7 +118,7 @@ the local plan can finish while the receiving Actor has an empty turn. What cros
 is an admissible message. A later `ready(rx, budget)` drives a new local computation with
 that site's window state and its own terminal. Retaining the sender's `here` until an alarm
 arrives would violate its lifetime and give send a remote acknowledgement it does not promise.
-[Lexical connections](../design/ProducersAndTransformers.md#lexical-variables-for-open-pipelines) · [PCL rule interface](../design/ParserCombinatorLibSupport.md#the-rule-interface) · [Companion fare plan](ComposingEnumerativeChoice.md#an-itinerary-plan-with-both-ends-open)
+[Lexical connections](../design/ProducersAndTransformers.md#lexical-variables-for-open-pipelines) · [PCL rule interface](../design/ParserCombinatorLibSupport.md#the-rule-interface) · [Companion fare plan](ClosedEventPipelines.md#an-itinerary-plan-with-both-ends-open)
 
 ### Two compositions and a missing arrow
 
@@ -180,7 +197,7 @@ from an independent invocation. A worker can emit an alarm after *both* adapters
 We call this an *open* pipeline. In a closed traversal, the producer that offered the current
 item can still receive feedback or a control exit from its active consumer. Here the pump monitor
 owns the unfinished correlation across calls. The distinction already arises on one event loop
-when ingestion and processing run on separate turns. [Closed traversal and feedback](ComposingEnumerativeChoice.md)
+when ingestion and processing run on separate turns. [Closed traversal and feedback](ClosedEventPipelines.md)
 
 The application has two queues, one per deployment, and an ordinary named procedure
 `admit(site:Site, s:Sensor, k:Kind, stamp:u64) -> void`. For the worked histories there is room
@@ -400,7 +417,7 @@ In **Split**, live A sets `a_high`. When live B advances, both marks are at 10 b
 false, so live returns `Quiet`. Trial has only `b_high` and also returns `Quiet`. In **Pair**, both
 flags are set at live before B advances. Live returns `Alert` once. Trial returns `Quiet`. These
 steps remain valid if all consumption takes place after all six submissions. Each step still uses
-the state owned by the destination chosen for that record.
+the state owned by the destination chosen for that record. With the [maintenance rule connected](#from-a-pump-alarm-to-an-inspection-request), that one live alert in **Pair** yields a request for the same pump and window. Changing only the alarm sink to a recorder preserves the window decision and changes the downstream effect.
 
 Erase the destinations and put the records into a common queue. The worker now receives exactly
 the same six inputs in both histories, in the same order. Starting with the same state, it has
@@ -580,7 +597,7 @@ library, an input adapter and the CoD Actor transport each have a distinct obser
 
 An open network connects components whose work and observations can extend beyond the submitting call. A source-normalization-terminal chain on the sender can finish as one closed drive. A worker's bounded drain, window step and publication can form another. A local reactive graph can also remain open to future host frames while processing each admitted frame synchronously. At each boundary the network author must say who gets the next turn and which observations that turn can make.
 
-Start with the [booking paper's delayed audit](ComposingEnumerativeChoice.md#where-a-closed-event-pipeline-ends). In its outward-return case the queue owns A2, and the caller has received 80 after both cursors closed. With an independently driven Actor receiver, use this controlled schedule. Assume a valid transfer that eventually succeeds for A2. Record the local send-side observation appropriate to the chosen adapter, retire the sender's activation, run the receiver once before delivery, then once after delivery.
+Start with the [booking paper's delayed audit](ClosedEventPipelines.md#where-a-closed-event-pipeline-ends). In its outward-return case the queue owns A2, and the caller has received 80 after both cursors closed. With an independently driven Actor receiver, use this controlled schedule. Assume a valid transfer that eventually succeeds for A2. Record the local send-side observation appropriate to the chosen adapter, retire the sender's activation, run the receiver once before delivery, then once after delivery.
 
 | Observation point | Evidence available at that point |
 | --- | --- |

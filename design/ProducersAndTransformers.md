@@ -424,7 +424,7 @@ On the same implementation path, also compare a direct scalar generator and name
 
 ## Research question and prior work
 
-Working title: *Composing Enumerative Choice with Producers and Transformers*. Can a transformer accept any source that satisfies its producer interface and compose dependent choices while preserving the feedback, exits and cleanup of explicit nested loops? A fare search illustrates the question. For each itinerary, a second source offers seats available on that itinerary. A filter may skip a seat, several seats may yield the same fare, and a caller asking for the first acceptable fare can finish while both sources are open.
+The working paper [Closed Event Pipelines — Typed Feedback and Nonlocal Return](../papers/ClosedEventPipelines.md) asks whether a transformer can accept any source that satisfies its producer interface and compose dependent choices while preserving the feedback, exits and cleanup of explicit nested loops. A fare search illustrates the question. For each itinerary, a second source offers seats available on that itinerary. A filter may skip a seat, several seats may yield the same fare, and a caller asking for the first acceptable fare can finish while both sources are open.
 
 | Comparison | What the paper should establish |
 | --- | --- |
