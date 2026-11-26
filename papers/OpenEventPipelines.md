@@ -14,7 +14,7 @@ its eventual owner, and a progress record must follow every accepted reading it 
 open processing plan can serve both live ingestion and replay auditing. Paired
 histories show how either condition can fail even when the signatures agree. The
 [fuel-sale case](#a-reflex-style-network-for-a-fuel-sale) extends the question to transactions,
-timeline identity and a point-of-sale Actor.
+timeline identity and a point-of-sale Actor. We apply the [retention paper](WhatShouldAComposedOperationRetain.md#two-tests-beyond-fare-search) to identify what must survive between local drives. These cases supply the open-network contribution to [Event Processing Systems](../design/EventProcessingSystems.md).
 
 ## Which constructor belongs to each endpoint?
 
@@ -575,6 +575,24 @@ deduplication and reconciliation at the application level. Two histories with th
 receipt can therefore differ in what the remote till has recorded. This is where a Reflex-style
 library, an input adapter and the CoD Actor transport each have a distinct observable contract.
 [CoD actor channels](../design/ActorChannels.md)
+
+## Connecting two closed drives
+
+An open network connects components whose work and observations can extend beyond the submitting call. A source-normalization-terminal chain on the sender can finish as one closed drive. A worker's bounded drain, window step and publication can form another. A local reactive graph can also remain open to future host frames while processing each admitted frame synchronously. At each boundary the network author must say who gets the next turn and which observations that turn can make.
+
+Start with the [booking paper's delayed audit](ComposingEnumerativeChoice.md#where-a-closed-event-pipeline-ends). In its outward-return case the queue owns A2, and the caller has received 80 after both cursors closed. With an independently driven Actor receiver, use this controlled schedule. Assume a valid transfer that eventually succeeds for A2. Record the local send-side observation appropriate to the chosen adapter, retire the sender's activation, run the receiver once before delivery, then once after delivery.
+
+| Observation point | Evidence available at that point |
+| --- | --- |
+| Sender completes its bounded drive | The local result and cleanup trace are known. The fixture can record submission of A2. |
+| First receiver turn has no ready item | The worker completes an empty turn. The prior local result is the same. |
+| A2 is delivered before a second turn | The worker may consume the validated record, update its own state, stop its drain or report its own failure. |
+
+A run in which transport never delivers A2 can have the same local completion as the successful-transfer run. Remote processing or settlement that a sender needs to learn about requires a separate application message and an identity to correlate it. An in-process queue can promise a successful local append. The Actor adapter has the [chan send contract](../design/ActorChannels.md). EPS needs to name the observation each adapter exposes. An implementation that suspends the original seat offer until a worker decides would give a different result even in the empty-turn experiment.
+
+The retention question now applies separately to configuration, admitted work and worker state. A shared normalization plan may retain calibration data or a typed policy receiver. A live ingress drive supplies fresh callbacks and its chosen admission service. An admitted record must preserve the selected site, either by its queue or by explicit routing evidence. The worker owns its per-site match and progress independently of that plan. At a timeline boundary the host also supplies the frame membership and the sampling or switching rule. Storing a timestamp alone cannot recover them.
+
+This gives replay a precise contract. To compare decoders, replay the recorded frames and compare normalized records. To reproduce the [pump alarm](#a-worker-that-can-distinguish-the-histories), reproduce the selected destinations and the admitted per-source order, including progress. To reproduce the [receipt](#a-receipt-that-distinguishes-the-sampling-rules), reproduce the local frame grouping and sampling rule. Replaying identical normalized payloads can pass the first comparison and fail either of the other two. These are distinct acceptance cases for the [joint library plan](../design/EventProcessingSystems.md#evidence-for-an-open-network).
 
 <a id="prior-work-and-evaluation"></a>
 

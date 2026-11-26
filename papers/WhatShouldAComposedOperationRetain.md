@@ -64,6 +64,8 @@ For both domains, an operator can compose a reusable middle before a client supp
 
 ## Evidence and next experiments
 
+The [closed-pipeline study](ComposingEnumerativeChoice.md#where-a-closed-event-pipeline-ends) and [open-network study](OpenEventPipelines.md#connecting-two-closed-drives) extend the drive comparison to a seat admitted for later audit. Their joint [Event Processing Systems plan](../design/EventProcessingSystems.md) uses that boundary to investigate what a local stage and its deployment adapters can share.
+
 The fare traces are hand derivations against the linked project designs. The following experiments specify what could refute the argument or limit its usefulness.
 
 1. Run all six cells of the fare matrix, then repeat with a slot rebind in isolation. A policy lookup at the wrong time should produce a distinguishable offer list.
