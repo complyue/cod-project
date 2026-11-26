@@ -1,8 +1,10 @@
 # Compiler modes, selectable stages and persistent stage reuse
 
-Revision 15 · 2026-11-26 · Compiler modes and stage controls confirmed. Persistent artifact design remains a planning draft.
+Revision 16 · 2026-11-26 · Compiler modes and stage controls confirmed. Persistent artifact design remains a planning draft.
 
 ## Design authority
+
+At r16 the [ordinary call selector](#ordinary-overloads-on-an-enum-and-its-backing-type) applies the existing [enum by-value contract](../../../design/TypedEnums.md#using-an-enum-as-its-backing-value) to completed family signatures. [Design review and scope](../../../CHANGELOG.md#k-booter-enum-overloads-20261126)
 
 At r15 the booter shares [enum assertion selection](#enum-assertions-in-source-and-object-commands) across its source and object commands. This continues the r10 phase boundary and the [existing enum conversion contract](../../../design/TypedEnums.md#decoding-an-integer-into-an-enum). [Design review and scope](../../../CHANGELOG.md#k-booter-enum-assertion-selection-20261126)
 
@@ -88,6 +90,12 @@ For each enum assertion a command needs, bind its site, source revision and nomi
 The declaration and provider checks can validate these facts using source inputs alone. Object checking consumes the selection and the checked operand. Emission evaluates a dynamic operand once and tests actual membership, including gaps in a sparse enum. Failure raises `TypeAssertionFailedError` through ordinary cleanup. Application reads completed facts and has no interface for traversing the body again. Verify `10:ASCII`, a dynamic byte of 255, lexical shadowing, nominal identity, an operand with an observable effect and preserved outputs on static rejection. [ASCII delivery](../../../design/ImplementationArchitecture.md#delivering-ascii-to-the-booter-scanner)
 
 The linked Linux acceptance covers bundled ASCII and a sparse local enum with an alias. A lexical byte named `ESC` supplies the operand, a same-code value from another enum rejects, and a failed operand retains its original failure. The byte producer runs once in both the normal and invalid-code cases, and cleanup runs before the caller's catch. Positive signed-integer overflow aliases are rejected before narrowing. Negative expression spelling has its own reader boundary.
+
+### Ordinary overloads on an enum and its backing type
+
+For an ordinary fixed family defined in the same revision, bind the complete visible family and finish its formal and result signatures. The object selector reads those signatures and the completed facts for the actual arguments. In the initial by-value profile, an exact match takes priority at its argument position over conversion of an enum to its own backing type. A method wins when it matches at least as well at every position and better at one or more positions than each other applicable method. Multiple incomparable best candidates give a located ambiguity. If an unsupported member or conversion could change selection, report the support limit at the source. [Ordinary call compatibility](../../../design/NamedQuantitiesAndNumericCompatibility.md#whole-type-lossless-compatibility)
+
+Record the selected method and its argument conversions. Prepare its arguments once in source order. A failing operand preserves its original failure and prevents entry. The selected method supplies the result, completion and emitted call target. The calls `select(LF)` and `select(10u8)` must reach the `ASCII` and `u8` methods respectively in either declaration order. With two `ASCII` actuals, overloads taking `(ASCII, u8)` and `(u8, ASCII)` remain ambiguous. This scope covers ordinary positional value arguments and leaves transfer-operator selection under its existing contract.
 
 ## Design from compiler work
 
