@@ -446,11 +446,21 @@ class ScalarChecker {
   };
   struct ScalarPlan {
     struct Call {
-      enum class Kind { literal, scalar_predicate, array_length, readonly_predicate };
+      enum class Kind { literal, scalar_predicate, array_length, readonly_predicate, key_comparison };
       const Expression *site;
       size_t instance, guard;
       Kind kind;
-      std::vector<size_t> formals;
+      std::vector<std::variant<size_t, const Expression *>> inputs;
+    };
+    struct CaseArm {
+      const Expression *site;
+      SumConstructor constructor;
+      std::vector<size_t> fields;
+    };
+    struct IndexedCase {
+      const Expression *site;
+      size_t array;
+      std::vector<CaseArm> arms;
     };
     std::vector<const Expression *> operations;
     std::vector<LeafGuard> guards;
@@ -459,6 +469,7 @@ class ScalarChecker {
     const Expression *range = nullptr;
     bool independent_locals = true;
     std::vector<std::pair<const Expression *, BuiltinOperation>> reads;
+    std::optional<IndexedCase> indexed_case;
 
     bool requires_application() const { return readonly_loans || !calls.empty(); }
   };
@@ -7498,22 +7509,36 @@ class ScalarChecker {
     if (applying_scalar_) {
       const auto &call = planned_scalar_call(&expr);
       const bool literal_loan = call.kind == ScalarPlan::Call::Kind::readonly_predicate;
-      if (views.size() != call.formals.size() + literal_loan)
+      if (views.size() != call.inputs.size() + literal_loan)
         throw std::logic_error("scalar application changed its prepared operand count");
-      const auto mode = applying_scalar_->readonly_loans ? ArgumentMode::borrowed_ref : ArgumentMode::value;
-      for (size_t i = 0; i < call.formals.size(); ++i) {
-        const auto &formal = checking_instance_->frame.inputs.at(call.formals[i]);
+      for (size_t i = 0; i < call.inputs.size(); ++i) {
+        auto mode = ArgumentMode::value;
+        size_t place;
+        if (const auto *ordinal = std::get_if<size_t>(&call.inputs[i])) {
+          const auto &formal = checking_instance_->frame.inputs.at(*ordinal);
+          mode = applying_scalar_->readonly_loans ? ArgumentMode::borrowed_ref : ArgumentMode::value;
+          if (formal.mode != mode) throw std::logic_error("scalar application changed its formal mode");
+          place = formal.place;
+        } else {
+          const auto *source = std::get<const Expression *>(call.inputs[i]);
+          const auto &received = checking_instance_->operations.at(source);
+          if (!received.place || received.type != Type::uint64 || received.operand_type != Type::uint64 ||
+              lexical_.lookup(source->text) != storage(*received.place).binding || storage(*received.place).borrowed)
+            throw std::logic_error("scalar application changed its case reception");
+          place = *received.place;
+        }
         const auto &prepared = operation.arguments.at(i);
         const auto &view = views[i];
         if (&operation.argument(expr, i) != expr.children.at(i).get() ||
-            formal.mode != mode || prepared.mode != mode ||
+            prepared.mode != mode ||
             prepared.binding_slot || prepared.reference_storage || prepared.type != target.arguments.at(i) ||
-            view.place != formal.place || view.binding != storage(formal.place).binding ||
-            (literal_loan && (!view.read_only || view.targets.contains(null_target))))
-          throw std::logic_error("scalar application changed its prepared formal operand");
+            view.place != place || view.binding != storage(place).binding ||
+            ((literal_loan || call.kind == ScalarPlan::Call::Kind::key_comparison) &&
+             mode == ArgumentMode::borrowed_ref && (!view.read_only || view.targets.contains(null_target))))
+          throw std::logic_error("scalar application changed its prepared operand");
       }
       if (literal_loan) {
-        const auto i = call.formals.size();
+        const auto i = call.inputs.size();
         const auto &literal = operation.argument(expr, i);
         const auto &prepared = operation.arguments.at(i);
         const auto &view = views[i];
@@ -22664,12 +22689,14 @@ class ScalarChecker {
   }
 
   bool bind_scalar_call(const Expression &expr, const TypeEvidenceState &scope, ScalarPlan &plan,
-                        Type::Kind result, size_t guard, bool forwards_literal = false) const {
+                        Type::Kind result, size_t guard, bool forwards_literal = false,
+                        std::span<const std::unique_ptr<Expression>> receptions = {}) const {
     using K = Expression::Kind;
     using CallKind = ScalarPlan::Call::Kind;
-    if (expr.kind != K::call || expr.intrinsic || expr.annotation || expr.lexical_symbol_call ||
+    const bool compares_key = !receptions.empty();
+    if (expr.kind != K::call || expr.intrinsic || expr.annotation || expr.lexical_symbol_call || expr.has_here_body() ||
         expr.checked_ref_argument || expr.spread ||
-        (forwards_literal ? expr.children.size() != 3 : expr.children.size() > 1) ||
+        (compares_key ? expr.children.size() != 4 : forwards_literal ? expr.children.size() != 3 : expr.children.size() > 1) ||
         scope.bindings.contains(expr.text) ||
         text_primitive(expr, &scope) || native_operation(expr.text, &scope)) return false;
     const auto family = named_family(expr, &scope);
@@ -22687,9 +22714,10 @@ class ScalarChecker {
           literal.checked_ref_argument || method.parameters[2] != Type::string ||
           !readonly_loan(parameters[2])) return false;
       kind = CallKind::readonly_predicate;
-    } else if (!parameters.empty())
+    } else if (compares_key) kind = CallKind::key_comparison;
+    else if (!parameters.empty())
       kind = plan.readonly_loans ? CallKind::array_length : CallKind::scalar_predicate;
-    std::vector<size_t> formals;
+    std::vector<std::variant<size_t, const Expression *>> operands;
     const auto inputs = program_.methods.at(*scope.method).input_parameters();
     for (size_t i = 0; i < parameters.size() - forwards_literal; ++i) {
       const auto &operand = *expr.children[i];
@@ -22699,14 +22727,23 @@ class ScalarChecker {
       const auto &parameter = parameters[i];
       if (binding == scope.bindings.end() || !binding->second || method.parameters[i] != *binding->second ||
           parameter.automatic_conversion || parameter.variadic || parameter.not_init_ref) return false;
+      if (compares_key && (i == 1 || i == 2)) {
+        const auto reception = std::ranges::find_if(receptions, [&](const auto &source) { return source->text == operand.text; });
+        if (reception == receptions.end() || *binding->second != Type::uint64 || !parameter.owner.empty() ||
+            argument_mode(parameter) != ArgumentMode::value || parameter.selects_caller_place()) return false;
+        operands.emplace_back(reception->get());
+        continue;
+      }
       const auto input = std::ranges::find(inputs, operand.text, &Parameter::name);
       if (input == inputs.end()) return false;
+      const auto ordinal = static_cast<size_t>(input - inputs.begin());
       if (plan.readonly_loans) {
-        if (binding->second->kind != (i == 0 ? Type::array : Type::product) ||
+        if (binding->second->kind != (i == 0 || compares_key ? Type::array : Type::product) ||
+            (compares_key && ordinal != (i == 0 ? 1u : 3u)) ||
             !readonly_loan(*input) || !readonly_loan(parameter)) return false;
       } else if (result != Type::boolean || (binding->second != Type::uint8 && binding->second != Type::boolean) ||
                  argument_mode(*input) != ArgumentMode::value || argument_mode(parameter) != ArgumentMode::value) return false;
-      formals.push_back(std::distance(inputs.begin(), input));
+      operands.emplace_back(ordinal);
     }
     const auto matching = [&](size_t id) {
       const auto &instance = program_.instances[id];
@@ -22718,7 +22755,7 @@ class ScalarChecker {
     };
     const auto target = std::ranges::find_if(method.instances, matching);
     if (target == method.instances.end()) return false;
-    plan.calls.push_back({&expr, *target, guard, kind, std::move(formals)});
+    plan.calls.push_back({&expr, *target, guard, kind, std::move(operands)});
     return true;
   }
 
@@ -22958,6 +22995,83 @@ class ScalarChecker {
     }
   }
 
+  bool bind_readonly_visit_lookup(const CheckedInstance &instance, const Form &form,
+                                 TypeEvidenceState &scope, ScalarPlan &plan) const try {
+    using K = Expression::Kind;
+    const auto &types = instance.arguments;
+    const auto &parameters = program_.methods[instance.method].input_parameters();
+    const auto plain_block = [](const Expression &expr, size_t count) {
+      return expr.kind == K::block && !expr.scoped && expr.children.size() == count;
+    };
+    const auto bare_name = [](const Expression &expr, std::string_view name) {
+      return expr.kind == K::name && !expr.annotation && !expr.intrinsic && !expr.checked_ref_argument &&
+          !expr.spread && expr.text == name;
+    };
+    const auto returns = [&](const Expression &expr, std::string_view name) {
+      return expr.kind == K::return_value && expr.children.size() == 1 && bare_name(*expr.children.front(), name);
+    };
+    if (types.size() != 4 || types[2] != Type::uint64 || !plain_block(*form.body, 2) ||
+        !returns(*form.body->children.back(), parameters[2].name)) return false;
+    for (const auto input : {0u, 1u, 3u})
+      if (types[input].kind != Type::array || program_.arrays.at(types[input].identity).index != Type::uint64)
+        return false;
+    const auto &element = program_.arrays.at(types[0].identity).element;
+    if (element.kind != Type::sum || !program_.bits_payload(element) ||
+        program_.arrays.at(types[1].identity).element != Type::uint8 ||
+        program_.arrays.at(types[3].identity).element != Type::uint8) return false;
+
+    const auto &range = *form.body->children.front();
+    if (range.kind != K::range_for || range.children.size() != 3 || !plain_block(*range.children[2], 1)) return false;
+    const auto &first = *range.children[0];
+    if (first.kind != K::integer || first.annotation || first.text != "0u64" ||
+        !bare_name(*range.children[1], parameters[2].name) ||
+        !scope.bindings.emplace(range.text, Type::uint64).second) return false;
+
+    const auto &selection = *range.children[2]->children.front();
+    const auto alternatives = program_.sums.at(element.identity).alternatives.size();
+    if (selection.kind != K::case_expression || selection.annotation || selection.case_breaks ||
+        selection.case_resumes || selection.children.size() != alternatives + 1) return false;
+    const auto &subject = *selection.children.front();
+    if (subject.kind != K::index || subject.children.size() != 2 || subject.annotation ||
+        !bare_name(*subject.children[0], parameters[0].name) || !bare_name(*subject.children[1], range.text)) return false;
+    plan.range = &range;
+    plan.readonly_loans = true;
+    plan.reads.emplace_back(&subject, BuiltinOperation::none);
+    auto &bound_case = plan.indexed_case.emplace(ScalarPlan::IndexedCase{&selection, types[0].identity, {}});
+    std::set<size_t> matched;
+    for (const auto &entry : std::span{selection.children}.subspan(1)) {
+      const auto &arm = *entry;
+      if (arm.kind != K::case_arm || arm.children.size() != 1 || case_scan_scope(arm)) return false;
+      const auto pattern = case_pattern(element, arm);
+      if (!pattern.constructor || !matched.insert(pattern.constructor->alternative).second) return false;
+      if (arm.receiving && std::ranges::any_of(arm.receiving->items, [](const auto &item) { return item.annotation.has_value(); }))
+        return false;
+      const auto fields = case_fields(arm, pattern, [](const Type &type) { return type; });
+      if (fields.size() != arm.case_bindings.size()) return false;
+      auto &bound_arm = bound_case.arms.emplace_back(ScalarPlan::CaseArm{&arm, *pattern.constructor, {}});
+      const auto &body = *arm.children.front();
+      if (fields.empty() && plain_block(body, 0)) continue;
+      if (fields.size() != 2 || !plain_block(body, 1)) return false;
+      auto branch = scope;
+      const auto &schema = sum_alternative(*pattern.constructor);
+      for (size_t i = 0; i < fields.size(); ++i) {
+        const auto &field = fields[i];
+        if (field.type != Type::uint64 || schema.fields[field.field].storage != PlaceKind::value ||
+            !branch.bindings.emplace(arm.case_bindings[i]->text, field.type).second) return false;
+        bound_arm.fields.push_back(field.field);
+      }
+      const auto &test = *body.children.front();
+      if (test.kind != K::conditional || test.children.size() != 3 || !returns(*test.children[1], range.text) ||
+          !plain_block(*test.children[2], 0) ||
+          !bind_scalar_call(*test.children[0], branch, plan, Type::boolean, null_target, false, arm.case_bindings))
+        return false;
+    }
+    return !plan.calls.empty();
+  } catch (const LocatedFailure &) {
+    // Speculation cannot move a case diagnostic ahead of ordinary checking.
+    return false;
+  }
+
   std::optional<LeafBehaviorPlan> bind_leaf_behavior(size_t id) {
     const auto &instance = program_.instances[id];
     const auto &method = program_.methods[instance.method];
@@ -23014,6 +23128,11 @@ class ScalarChecker {
         plan.kind = LeafBehaviorPlan::Kind::array_length;
         plan.primitive = &read;
         return plan;
+      }
+      if (integer_result) {
+        plan.kind = LeafBehaviorPlan::Kind::integer_result;
+        if (bind_readonly_visit_lookup(instance, form, scope, plan.scalar)) return plan;
+        return {};
       }
       if (expected_result != Type::boolean) return {};
       // Inline value fields share the ordinary formal-relative projection.
@@ -23128,6 +23247,21 @@ class ScalarChecker {
           (site->kind == Expression::Kind::field && (!operation.product_field || !operation.read_only)))
         throw std::logic_error("read-only operation disagrees with its binding plan");
     }
+    if (plan.indexed_case) {
+      const auto &bound = *plan.indexed_case;
+      const auto &array = program_.arrays.at(bound.array);
+      const auto &selection = instance.operations.at(bound.site);
+      const auto &subject = instance.operations.at(bound.site->children.front().get());
+      if (selection.case_subject_may_be_null || selection.case_reaches_end || subject.type != array.element ||
+          subject.operand_type.kind != Type::array || subject.operand_type.identity != bound.array)
+        throw std::logic_error("read-only case changed its indexed subject");
+      for (const auto &arm : bound.arms) {
+        const auto &header = instance.operations.at(arm.site);
+        if (header.case_pattern.constructor != arm.constructor || header.case_payload_fields != arm.fields ||
+            header.case_scope_resumes)
+          throw std::logic_error("read-only case changed its field reception");
+      }
+    }
     for (const auto &call : plan.calls) {
       const auto &operation = instance.operations.at(call.site);
       const auto &target = program_.instances.at(call.instance);
@@ -23225,7 +23359,8 @@ class ScalarChecker {
       const auto &plan = *applying_scalar_;
       if (!direct_readonly_range(plan, *method.body)) return nullptr;
       const auto read_only = [&](const ScalarPlan::Call &call) {
-        if ((call.kind != ScalarPlan::Call::Kind::literal && call.kind != ScalarPlan::Call::Kind::array_length) ||
+        if ((call.kind != ScalarPlan::Call::Kind::literal && call.kind != ScalarPlan::Call::Kind::array_length &&
+             call.kind != ScalarPlan::Call::Kind::key_comparison) ||
             (validating_ && module_names().values.contains(call.site->text))) return false;
         const auto &callee = program_.instances.at(call.instance);
         const auto &effects = callee.effects;
@@ -23516,7 +23651,8 @@ class ScalarChecker {
         const auto reason = path.completion.reason == 1 ? 0 : path.completion.reason;
         const bool inherited_failure = (reason == 2 || reason == bounds) &&
             std::ranges::any_of(plan.calls, [&](const auto &call) {
-              if (call.kind != ScalarPlan::Call::Kind::readonly_predicate || path.at != call.site->at)
+              if ((call.kind != ScalarPlan::Call::Kind::readonly_predicate &&
+                   call.kind != ScalarPlan::Call::Kind::key_comparison) || path.at != call.site->at)
                 return false;
               const auto &checked = instance.operations.at(call.site);
               return checked.reads_direct_body && checked.callee == call.instance && checked.type == Type::boolean &&
@@ -23890,6 +24026,7 @@ class ScalarChecker {
     for (size_t id = 0; id < program_.instances.size(); ++id)
       if (auto plan = bind_leaf_behavior(id)) bound.emplace(id, std::move(*plan));
     std::set<size_t> completed_literals, completed_predicates, completed_lengths, completed_readonly_predicates;
+    std::set<size_t> completed_readonly_ranges;
     for (const auto &[id, plan] : std::as_const(bound)) {
       if ((plan.kind == LeafBehaviorPlan::Kind::borrowed_byte && !plan.primitive) ||
           plan.scalar.requires_application()) continue;
@@ -23947,6 +24084,7 @@ class ScalarChecker {
         case ScalarPlan::Call::Kind::scalar_predicate: return completed_predicates.contains(call.instance);
         case ScalarPlan::Call::Kind::array_length: return completed_lengths.contains(call.instance);
         case ScalarPlan::Call::Kind::readonly_predicate: return completed_readonly_predicates.contains(call.instance);
+        case ScalarPlan::Call::Kind::key_comparison: return completed_readonly_ranges.contains(call.instance);
         }
         throw std::logic_error("unknown completed call shape");
       };
@@ -23972,6 +24110,8 @@ class ScalarChecker {
         const bool frame_ready = independent_scalar_frame(instance, program_.methods[instance.method]);
         const bool readonly_loans = plan.scalar.readonly_loans;
         auto completed = seal_scalar_caller(std::move(application.exits), *instance.result.type, readonly_loans);
+        if (readonly_loans && plan.scalar.range && plan.scalar.calls.empty() && plan.kind == LeafBehaviorPlan::Kind::scalar_predicate)
+          completed_readonly_ranges.insert(id);
         scalar_callers_.emplace(id, std::move(plan.scalar));
         std::move(application.frame).install(instance);
         instance.effects = std::move(completed);
