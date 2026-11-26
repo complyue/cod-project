@@ -262,7 +262,10 @@ class BodyExtraction {
              at, "replacement seed needs an admitted value transfer");
     }
 
-    bool ordinary_loan(ArgumentMode mode, const Type &type) const {
+    bool ordinary_loan(const Parameter &parameter, ArgumentMode mode, const Type &type) const {
+      if (type == Type::string)
+        return mode == ArgumentMode::borrowed_ref && parameter.read_only &&
+               !parameter.owner.empty() && !parameter.selects_caller_place();
       return (mode == ArgumentMode::borrowed_read || mode == ArgumentMode::borrowed_ref) &&
              (type.kind == Type::array || scalar_type(type) ||
               (type.kind == Type::product && declarations().bits_payload(type)));
@@ -289,15 +292,15 @@ class BodyExtraction {
       const bool native_handle = mode == ArgumentMode::borrowed_handle && type.kind == Type::native_handle;
       expect(!parameter.not_init_ref && !parameter.variadic && !parameter.automatic_conversion &&
              (!parameter.selects_caller_place() || slot) &&
-             (mode == ArgumentMode::value ? scalar_type(type) : native_handle || ordinary_loan(mode, type)),
-             parameter.at, "replacement seed needs a fixed scalar, array, bits product or native handle formal");
+             (mode == ArgumentMode::value ? scalar_type(type) : native_handle || ordinary_loan(parameter, mode, type)),
+             parameter.at, "replacement seed needs a fixed scalar, array, bits product, readonly String or native handle formal");
       auto &frame = body_.instance.frame;
       const auto owner = parameter.owner.empty() ? size_t{0} : input_owner(owner_role(parameter.owner, parameter.at));
       if (owner) frame.owners.try_emplace(owner, frame.inputs.size());
       const bool value = mode != ArgumentMode::borrowed_ref && !native_handle;
       const auto local = declare(parameter.at, parameter.name, type, value,
                                  parameter.read_only || (mode == ArgumentMode::value && parameter.fixed_binding),
-                                 parameter.fixed_binding || native_handle, owner, true, capture);
+                                 parameter.fixed_binding || native_handle || type == Type::string, owner, true, capture);
       frame.inputs.push_back({*local.place, mode, parameter.selects_caller_place()});
     }
 
@@ -306,8 +309,16 @@ class BodyExtraction {
       const auto &supplier = extraction_.bodies_.at(literal.supplier).instance;
       const auto &source = supplier.bindings.at(original.binding);
       const bool array = source.type.kind == Type::array;
-      expect(!source.nullable && (array || (scalar_type(source.type) && (source.value_binding || source.fixed))),
-             expr.at, "replacement seed needs a stable scalar place or array view in a here capture");
+      const bool handle = source.type.kind == Type::native_handle && !source.type.owned;
+      const bool text = source.type == Type::string && source.read_only;
+      const bool incoming_loan = (handle || text) && original.place && original.owner > first_symbol_owner &&
+          std::ranges::any_of(supplier.frame.inputs, [&](const auto &input) {
+            return input.place == *original.place && !input.binding_slot &&
+                   input.mode == (handle ? ArgumentMode::borrowed_handle : ArgumentMode::borrowed_ref);
+          });
+      expect(!source.nullable &&
+             (array || incoming_loan || (scalar_type(source.type) && (source.value_binding || source.fixed))),
+             expr.at, "replacement seed needs a stable scalar place, array view or incoming text or handle loan in a here capture");
       const auto known = std::ranges::find(literal.owners, original.owner);
       const auto role = static_cast<size_t>(known - literal.owners.begin());
       if (known == literal.owners.end()) {
@@ -317,7 +328,7 @@ class BodyExtraction {
         literal.owner_parameters.push_back({"$here.owner." + std::to_string(role), {}, expr.at, false, read_only});
       }
       Parameter parameter{expr.text, source.type, expr.at, false, {}};
-      parameter.declaration_kind = "ref";
+      parameter.declaration_kind = handle ? "handle" : "ref";
       parameter.owner = literal.owner_parameters.at(role).name;
       parameter.read_only = source.read_only;
       parameter.fixed_binding = true;
@@ -463,8 +474,9 @@ class BodyExtraction {
         }
         const bool handle = input.type.kind == Type::c_type_marker;
         if (!handle)
-          expect(input.type.kind == Type::array && actual.type == input.type,
-                 at, "C provider needs a loan of the declared nominal type");
+          expect(actual.type == input.type &&
+                 (input.type.kind == Type::array || (input.type == Type::string && actual.read_only)),
+                 at, "C provider needs a loan of the declared type and access");
         const auto owner = handle ? native_loan(actual, input.type, at) : single_owner(actual, at);
         const auto &role = form.owner_parameters.at(*input.owner);
         if (!role.read_only && (actual.read_only || (handle ? const_input_owner(owner) : !can_allocate(owner))))
@@ -533,7 +545,7 @@ class BodyExtraction {
           const bool native_handle = mode == ArgumentMode::borrowed_handle && formal.kind == Type::native_handle;
           expect(role != roles.end() && !role->root && !role->explicit_parameter &&
                  !parameter.not_init_ref && (!parameter.selects_caller_place() || parameter.selects_caller_ref_slot()) &&
-                 (native_handle || ordinary_loan(mode, formal)) && arg.type == formal &&
+                 (native_handle || ordinary_loan(parameter, mode, formal)) && arg.type == formal &&
                  (parameter.read_only || !arg.read_only),
                  at, "replacement seed needs the declared ordinary borrow and access");
           if (parameter.selects_caller_ref_slot()) check_slot(arg, at);
@@ -778,6 +790,7 @@ class BodyExtraction {
              expr.at, "replacement seed needs an inferred initialized val or ref");
       const auto &initial = operand(expr, 0);
       expect(initial.type.kind != Type::native_handle, expr.at, "a native handle view needs a handle declaration");
+      expect(initial.type != Type::string, expr.at, "replacement seed supports existing readonly String formal loans");
       const auto owner = value ? size_t{0} : single_owner(initial, expr.at);
       if (value) takes_value(initial, initial.type, expr.at);
       const auto local = declare(expr.at, expr.text, initial.type, value, value ? fixed : initial.read_only, fixed, owner);
