@@ -13,7 +13,7 @@ using "./ParserStorage.cod" ExprPayload {
 using "./ParserStorage.cod" ConstructionSyntax {
     OtherConstruction, InvalidConstruction, ExceptionConstructionSyntax, PositionalConstruction,
 };
-using "./ParserStorage.cod" DeclarationSyntax { NominalRecord, LocalPublication, EnumTypeDeclaration, OtherDeclaration };
+using "./ParserStorage.cod" DeclarationSyntax { NominalRecord, LocalPublication, EnumTypeDeclaration, TypeSynonymDeclaration, OtherDeclaration };
 using "./ParserStorage.cod" CallableSyntax { ModuleCallable, CProvider, CEntry };
 using "./ModuleExportStorage.cod" FamilyMembership { UnprovedMembership };
 using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
@@ -174,7 +174,7 @@ func extended_declaration(nodes:const ExprNodes in N, revision:u64, used:u64, it
         nature <- OrdinaryResource;
     };
     val shape <- inspect_declaration(nodes, revision, used, form, declaration);
-    if (shape == EnumTypeDeclaration) return false;
+    if (shape == EnumTypeDeclaration || shape == TypeSynonymDeclaration) return false;
     val mode <- inspect_callable(nodes, revision, used, form, callable);
     val reexport <- inspect_module_selection(nodes, revision, used, form, selected) == SelectionReady &&
         selected.mode == ReexportResource;

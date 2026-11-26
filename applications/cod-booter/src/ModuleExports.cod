@@ -283,6 +283,7 @@ export func enum_export() -> u8 { return 134u8; }
 export func enum_member_export() -> u8 { return 135u8; }
 export func abstract_type_export() -> u8 { return 136u8; }
 export func lexical_builder_export() -> u8 { return 137u8; }
+export func scalar_type_export() -> u8 { return 138u8; }
 export func ordinary_callable_shape() -> u8 { return 1u8; }
 export func numeric_record_shape() -> u8 { return 2u8; }
 
@@ -343,7 +344,7 @@ func selection_profile(mode:ModuleSelectionMode, kind:u8, shape:u8, members:u64,
                        declarations_only:bool) -> u8 {
     if (mode == MixinResource) return unproved_import_interpretation();
     if (mode == IdentityResource && kind != symbol_export()) return wrong_export_kind();
-    if (mode == ImportResource && kind != enum_export() && kind != sum_export() &&
+    if (mode == ImportResource && kind != scalar_type_export() && kind != enum_export() && kind != sum_export() &&
         kind != nominal_exception_export() &&
         !(declarations_only && kind == callable_export() && shape == ordinary_callable_shape()))
         return unproved_import_interpretation();

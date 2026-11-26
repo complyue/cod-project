@@ -28,7 +28,7 @@ using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" SyntaxRole { ModuleItemRole, ModuleSelectionItemRole };
 using "./ParserStorage.cod" ExprPayload {
     CallableDefinition, CEntryDefinition, ModulePathSyntax, ModuleSelection, AllMembers, ChosenMembers, ChosenMember,
-    HandleType, NominalParent, RecordDefinition, AbstractType, HandleSymbol, ValueSymbol, ReferenceSymbol, Publication,
+    HandleType, NominalParent, RecordDefinition, AbstractType, TypeSynonym, HandleSymbol, ValueSymbol, ReferenceSymbol, Publication,
     ArrayDefinition, EnumInteger, EnumMember, EnumDefinition, SumDefinition, SumArm, RegionDefinition,
     BulkModuleSelection, DefaultPublicSet, DefaultMark,
 };
@@ -474,6 +474,23 @@ func parse_nominal_type(source:const SourceBytes in S, tokens:const Tokens in T,
     } else {};
     if (!parse_module_name(source, tokens, nodes, result, past)) return;
     val name <- result.root;
+    if (abstract && punct_at(source, tokens, result.next, past) == EQUAL) {
+        result.next <- result.next + 1u64;
+        val at <- result.next;
+        if (at < past &&
+            ((export_word(source, tokens[at]) && module_doclet_target(source, tokens, at, past)) ||
+             (type_word(source, tokens[at]) && punct_at(source, tokens, at + 2u64, past) == EQUAL))) {
+            result.diagnostic <- expected_type();
+            return
+        };
+        if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
+        val target <- result.root;
+        append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, target), make TypeSynonym {
+            name <- make NodeId { revision <- result.revision; index <- name; };
+            target <- make NodeId { revision <- result.revision; index <- target; };
+        });
+        return
+    };
     val descriptor <- name;
     if (punct_pair_at(source, tokens, result.next, past, LESS_THAN, COLON)) { # '<:'
         val parent_at <- tokens[result.next].first;
@@ -999,7 +1016,10 @@ func parse_module_item(source:const SourceBytes in S, tokens:const Tokens in T,
               (tokens[definition_start + 1u64].kind == identifier() || tokens[definition_start + 1u64].kind == quoted_text())));
         val starts_marks <- result.next < past && default_word(source, tokens[result.next]) &&
             punct_at(source, tokens, result.next + 1u64, past) == LEFT_BRACE;
-        val delimited <- braced_type || braced_callable_definition(nodes, result.used, form) ||
+        val synonym <- type_word(source, tokens[definition_start]) &&
+            punct_at(source, tokens, definition_start + 2u64, past) == EQUAL &&
+            (starts_marks || selection_boundary(source, tokens, result.next, past));
+        val delimited <- synonym || braced_type || braced_callable_definition(nodes, result.used, form) ||
             braced_reference_group(nodes, result.revision, result.used, form) ||
             (qualified_selector && (starts_marks || selection_boundary(source, tokens, result.next,
                 past)));

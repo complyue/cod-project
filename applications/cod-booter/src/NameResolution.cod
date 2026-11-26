@@ -23,7 +23,7 @@ using "./ParserStorage.cod" SequenceSyntax {
 using "./ParserStorage.cod" CasePatternSyntax { NamedCaseMember, ConstructorCaseTarget };
 using "./ParserStorage.cod" DeclarationSyntax {
     OtherDeclaration, InvalidDeclaration, NominalRecord, NativeRecord, HandleTypeDeclaration, ArrayTypeDeclaration,
-    EnumTypeDeclaration, AbstractTypeDeclaration, NativeSymbolDeclaration, ReferenceSymbolDeclaration, LocalPublication, NominalSum,
+    EnumTypeDeclaration, AbstractTypeDeclaration, TypeSynonymDeclaration, NativeSymbolDeclaration, ReferenceSymbolDeclaration, LocalPublication, NominalSum,
 };
 using "./ParserStorage.cod" CallableSyntax {
     InvalidCallable, OtherCallableSyntax, ModuleCallable, ModuleCallablePromise, LexicalCallable,
@@ -86,7 +86,7 @@ using "./ModuleExports.cod" {
     CheckedSelections, CheckedSelection { SelectedResource },
     find_selected_name, checked_lexical_selection_kind, project_checked_resource, symbol_export,
     array_export, enum_export, sum_export, abstract_type_export, nominal_exception_export,
-    native_handle_export, permits_module_family_extension,
+    native_handle_export, scalar_type_export, permits_module_family_extension,
 };
 using "./ModuleExportStorage.cod" {
     enum_type, sum_type, constructor_type, ModuleInterfaces, find_interface,
@@ -140,7 +140,8 @@ export data NameWorkSlot {
     receiver_import:ReceiverImportCheck;
     active:u64;
     module_selection:u64;
-    selected_symbol:bool;
+    module_kind:u8;
+    module_scalar:u8;
     local_symbol_conflict:u64;
     case_schema_prepared:bool;
     enclosing_case_arm:u64;
@@ -247,6 +248,16 @@ export func abstract_type_binding() -> u8 { return 32u8; }
 export func lexical_builder_type() -> u8 { return 33u8; }
 export func record_initializer_label() -> u8 { return 36u8; }
 func type_parameter_binding() -> u8 { return 34u8; }
+func type_synonym_binding() -> u8 { return 37u8; }
+
+export func builtin_type_kind(kind:u8) -> bool {
+    return native_scalar(kind) || text_type(kind) || kind == builtin_void()
+}
+
+func nominal_type_kind(kind:u8) -> bool {
+    return kind == c_handle_type() || kind == record_type() || kind == array_type() ||
+        kind == enum_type() || kind == sum_type() || kind == abstract_type_binding()
+}
 
 export func text_type(kind:u8) -> bool {
     return kind == builtin_string() || kind == builtin_c_string();
@@ -302,6 +313,7 @@ export func unprovided_callable_promise() -> u8 { return 132u8 }
 func unsupported_handle_rebind() -> u8 { return 133u8 }
 export func expected_value_binding() -> u8 { return 14u8; }
 export func protected_symbol_name() -> u8 { return 142u8 }
+func cyclic_type_synonym() -> u8 { return 143u8 }
 
 func reject_name(state:NameState in R, node:u64, diagnostic:u8) -> void where {owner R} {
     state.diagnostic <- diagnostic;
@@ -325,7 +337,7 @@ func select_on_lexical_miss(bindings:NameBindings in B, work:const NameWork in W
 }
 
 func admits_selected_type(kind:u8) -> bool {
-    return kind == record_export() || kind == array_export() || kind == enum_export() ||
+    return kind == scalar_type_export() || kind == record_export() || kind == array_export() || kind == enum_export() ||
         kind == sum_export() || kind == abstract_type_export() || kind == nominal_exception_export() ||
         kind == exception_type_export() || kind == native_handle_export() || kind == lexical_builder_export() ||
         kind == builder_storage_export() || kind == lexical_result_export()
@@ -413,9 +425,11 @@ export func project_module_selection_candidates(
     val past <- 0u64;
     val candidate <- no_node();
     val kind <- 0u8;
+    val scalar_identity <- 0u64;
     for (at in 0u64 .. tree.used) {
         work[at].module_selection <- no_node();
-        work[at].selected_symbol <- false;
+        work[at].module_kind <- 0u8;
+        work[at].module_scalar <- 0u8;
         if (name_syntax(nodes, tree.used, at) != NotAName || named_operator_at(nodes, at) != no_node()) {
             first <- spelling_start(nodes, at);
             past <- spelling_end(source, nodes, at);
@@ -426,7 +440,17 @@ export func project_module_selection_candidates(
                 kind <- checked_lexical_selection_kind(selections, selected_used, candidate, tree.revision, tree.used);
                 if (kind == 0u8) return false;
                 work[at].module_selection <- candidate;
-                (work[at].selected_symbol <- kind == symbol_export()):void
+                work[at].module_kind <- kind;
+                if (kind == scalar_type_export()) {
+                    case selections[candidate] of {
+                        SelectedResource { val shape <-; val origin <- defining_module; val identity <-; } -> {
+                            scalar_identity <- shape;
+                            if (origin != 0u64 || identity != scalar_identity || !builtin_type_kind(shape)) return false;
+                            (work[at].module_scalar <- shape):void
+                        };
+                        (_) -> { return false; };
+                    }
+                }
             }
         }
     };
@@ -482,7 +506,7 @@ func declare_name(source:const SourceBytes in S, nodes:const ExprNodes in N, bin
         reject_protected_name(work, state, name, same_scope_symbol);
         return
     };
-    if (!introducing_symbol && work[name].selected_symbol) {
+    if (!introducing_symbol && work[name].module_kind == symbol_export()) {
         reject_protected_name(work, state, name, no_node());
         return
     };
@@ -504,7 +528,7 @@ func declare_module_name(source:const SourceBytes in S, nodes:const ExprNodes in
     name:u64, declaration:u64, kind:u8) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     if (state.module_candidates && work[name].module_selection != no_node()) {
-        if (work[name].selected_symbol) {
+        if (work[name].module_kind == symbol_export()) {
             reject_protected_name(work, state, name, no_node())
         } else { reject_name(state, name, unproved_module_binding()) };
         return
@@ -551,8 +575,8 @@ func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
     };
     val kind <- bindings[found].kind;
     val declaration <- bindings[found].declaration;
-    if (kind == c_handle_type() || kind == record_type() || kind == array_type() ||
-        kind == enum_type() || kind == sum_type() || kind == abstract_type_binding()) {
+    if (nominal_type_kind(kind) || builtin_type_kind(kind) ||
+        (kind == ordinary_selection() && work[declaration].module_kind == scalar_type_export())) {
         reject_name(state, name, expected_value_binding());
         return;
     } else {};
@@ -661,6 +685,13 @@ func builtin_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N
             source[first + 2u64] == 111u8 && source[first + 3u64] == 108u8) return builtin_bool();
     } else {};
     if (length == 2u64 && source[first] == 117u8 && source[first + 1u64] == 56u8) return builtin_u8();
+    if (length == 5u64 &&
+        source[first] == 102u8 && source[first + 1u64] == 108u8 && source[first + 2u64] == 111u8 &&
+        source[first + 3u64] == 97u8 && source[first + 4u64] == 116u8) return builtin_f32(); # float
+    if (length == 6u64 &&
+        source[first] == 100u8 && source[first + 1u64] == 111u8 && source[first + 2u64] == 117u8 &&
+        source[first + 3u64] == 98u8 && source[first + 4u64] == 108u8 && source[first + 5u64] == 101u8)
+        return builtin_f64(); # double
     if (length != 3u64) return 0u8;
     val initial <- source[first];
     val tens <- source[first + 1u64];
@@ -713,13 +744,18 @@ func resolve_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N
     } else {};
     val found <- lookup(source, nodes, work, name, 0u64, state.module_names);
     if (found == no_node()) {
-        if (!select_on_lexical_miss(bindings, work, state, name, (SelectedType:ModuleNameUse), false))
-            { reject_name(state, name, unresolved_name()) };
+        if (select_on_lexical_miss(bindings, work, state, name, (SelectedType:ModuleNameUse), false)) {
+            if (work[name].module_scalar != 0u8) { (bindings[name].kind <- work[name].module_scalar):void }
+        } else { reject_name(state, name, unresolved_name()) };
         return
     };
+    val declaration <- bindings[found].declaration;
     val kind <- bindings[found].kind;
-    if (kind != ordinary_selection() && kind != c_handle_type() && kind != record_type() && kind != array_type() &&
-        kind != enum_type() && kind != sum_type() && kind != abstract_type_binding()) {
+    if (kind == ordinary_selection() && work[declaration].module_scalar != 0u8) {
+        remember(bindings, name, declaration, work[declaration].module_scalar);
+        return
+    };
+    if (kind != ordinary_selection() && !nominal_type_kind(kind) && !builtin_type_kind(kind)) {
         reject_name(state, name, expected_type_binding());
         return;
     } else {};
@@ -2136,6 +2172,10 @@ func register_selection(source:const SourceBytes in S, nodes:const ExprNodes in 
                          form:u64, selection:const ModuleSelectionSites in Q) -> void
     where {const owner S, const owner N, owner B, const owner E, owner W, owner R, const owner Q} {
     if (selection.mode == ReexportResource) return;
+    work[form].module_kind <- selected[form].kind;
+    work[form].module_scalar <- if (selected[form].kind == scalar_type_export()) {
+        (selected[form].shape)
+    } else { 0u8 };
     val name <- selection.local;
     val kind <- if (selection.symbolic) { symbolic_selection() } else { ordinary_selection() };
     val found <- lookup(source, nodes, work, name, 0u64, state.used);
@@ -2226,10 +2266,182 @@ func declaration_binding_kind(shape:DeclarationSyntax) -> u8 {
         (EnumTypeDeclaration) -> { enum_type() };
         (NominalSum) -> { sum_type() };
         (AbstractTypeDeclaration) -> { abstract_type_binding() };
+        (TypeSynonymDeclaration) -> { type_synonym_binding() };
         (NativeSymbolDeclaration) -> { native_symbol_binding() };
         (ReferenceSymbolDeclaration) -> { reference_symbol_binding() };
         (_) -> { 0u8 };
     };
+}
+
+data TypeSynonymEdge {
+    target:u64;
+    declaration:u64;
+    kind:u8;
+    selects_import:bool;
+}
+array TypeSynonymEdges[u64]:TypeSynonymEdge;
+
+data CompletedSynonym {
+    declaration:u64;
+    kind:u8;
+    visiting:bool;
+}
+array CompletedSynonyms[u64]:CompletedSynonym;
+array SynonymPath[u64]:u64;
+
+func bind_synonym_target(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    bindings:const NameBindings in B, work:const NameWork in W, state:NameState in R,
+    target:u64, edge:TypeSynonymEdge in E) -> void
+    where {const owner S, const owner N, const owner B, const owner W, owner R, owner E} {
+    edge.target <- target;
+    edge.kind <- builtin_type_name(source, nodes, target);
+    if (edge.kind != 0u8) return;
+    val found <- lookup(source, nodes, work, target, 0u64, state.module_names);
+    if (found == no_node()) {
+        if (!state.module_candidates || work[target].module_selection == no_node()) {
+            reject_name(state, target, unresolved_name());
+            return
+        };
+        if (!admits_selected_type(work[target].module_kind)) {
+            reject_name(state, target, expected_type_binding());
+            return
+        };
+        edge.selects_import <- true;
+        edge.declaration <- target;
+        (edge.kind <- if (work[target].module_kind == scalar_type_export()) {
+            (work[target].module_scalar)
+        } else { ordinary_selection() }):void;
+        return
+    };
+    val kind <- bindings[found].kind;
+    val declaration <- bindings[found].declaration;
+    if (kind == ordinary_selection()) {
+        if (!admits_selected_type(work[declaration].module_kind)) {
+            reject_name(state, target, expected_type_binding());
+            return
+        };
+        (edge.kind <- if (work[declaration].module_kind == scalar_type_export()) {
+            (work[declaration].module_scalar)
+        } else { kind }):void
+    } else {
+        if (kind != type_synonym_binding() && !nominal_type_kind(kind)) {
+            reject_name(state, target, expected_type_binding());
+            return
+        };
+        (edge.kind <- kind):void
+    };
+    (edge.declaration <- declaration):void
+}
+
+func complete_synonym_path(path:const SynonymPath in P, count:u64, kind:u8, declaration:u64,
+    completed:CompletedSynonyms in C) -> void where {const owner P, owner C} {
+    val at <- no_node();
+    for (index in 0u64 .. count) {
+        at <- path[index];
+        completed[at].declaration <- declaration;
+        completed[at].kind <- kind;
+        (completed[at].visiting <- false):void
+    }
+}
+
+# Complete the bound graph using only edges and private synonym results.
+# A shared suffix is ready after the first path that reaches it.
+func complete_synonym(start:u64, edges:const TypeSynonymEdges in E, completed:CompletedSynonyms in C,
+    path:SynonymPath in P, failed:u64 in F) -> u8
+    where {const owner E, owner C, owner P, owner F} {
+    if (completed[start].kind != 0u8) return 0u8;
+    val at <- start;
+    val kind <- 0u8;
+    val declaration <- no_node();
+    for (index in 0u64 .. intrinsic (len)(path)) {
+        completed[at].visiting <- true;
+        path[index] <- at;
+        kind <- edges[at].kind;
+        declaration <- edges[at].declaration;
+        if (kind != type_synonym_binding()) {
+            complete_synonym_path(path, index + 1u64, kind, declaration, completed);
+            return 0u8
+        };
+        if (completed[declaration].visiting) {
+            failed <- edges[at].target;
+            return cyclic_type_synonym()
+        };
+        if (completed[declaration].kind != 0u8) {
+            complete_synonym_path(path, index + 1u64, completed[declaration].kind,
+                completed[declaration].declaration, completed);
+            return 0u8
+        };
+        (at <- declaration):void
+    };
+    failed <- edges[start].target;
+    return invalid_module_tree()
+}
+
+func resolve_type_synonyms(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+    work:const NameWork in W, state:NameState in R) -> void
+    where {const owner S, const owner N, owner B, const owner W, owner R} {
+    val count <- 0u64;
+    for (slot in 0u64 .. state.module_names) {
+        if (bindings[work[slot].active].kind == type_synonym_binding()) { (count <- count + 1u64):void }
+    };
+    if (count == 0u64) return;
+    ref edges = make TypeSynonymEdges(state.syntax_used, make TypeSynonymEdge {
+        target <- no_node(); declaration <- no_node(); kind <- 0u8; selects_import <- false;
+    });
+    ref completed = make CompletedSynonyms(state.syntax_used, make CompletedSynonym {
+        declaration <- no_node(); kind <- 0u8; visiting <- false;
+    });
+    ref path = make SynonymPath(count, no_node());
+    ref sites = make DeclarationSites {
+        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
+    };
+    val name <- no_node();
+    val declaration <- no_node();
+    for (slot in 0u64 .. state.module_names) {
+        name <- work[slot].active;
+        if (bindings[name].kind == type_synonym_binding()) {
+            declaration <- bindings[name].declaration;
+            if (inspect_declaration(nodes, state.syntax_revision, state.syntax_used, declaration, sites) !=
+                TypeSynonymDeclaration || sites.name != name) {
+                reject_name(state, name, invalid_module_tree());
+                return
+            };
+            bind_synonym_target(source, nodes, bindings, work, state, sites.value_type, edges[declaration]);
+            if (state.diagnostic != 0u8) return
+        }
+    };
+    # Registration appended aliases in written module order.
+    ref failed = make u64 { no_node() };
+    val problem <- 0u8;
+    for (slot in 0u64 .. state.module_names) {
+        name <- work[slot].active;
+        if (bindings[name].kind == type_synonym_binding()) {
+            problem <- complete_synonym(bindings[name].declaration, edges, completed, path, failed);
+            if (problem != 0u8) {
+                reject_name(state, failed, problem);
+                return
+            }
+        }
+    };
+    val target <- no_node();
+    val kind <- 0u8;
+    val canonical <- no_node();
+    for (slot in 0u64 .. state.module_names) {
+        name <- work[slot].active;
+        if (bindings[name].kind == type_synonym_binding()) {
+            declaration <- bindings[name].declaration;
+            target <- edges[declaration].target;
+            kind <- completed[declaration].kind;
+            canonical <- completed[declaration].declaration;
+            remember(bindings, name, canonical, kind);
+            remember(bindings, target, canonical, kind);
+            if (edges[declaration].selects_import) {
+                bindings[target].module_use <- (SelectedType:ModuleNameUse);
+                (bindings[target].imported_kind <- work[target].module_kind):void
+            }
+        }
+    }
 }
 
 func extensible_selection(nodes:const ExprNodes in N, selected:const SelectedExports in E,
@@ -2896,6 +3108,14 @@ func resolve_enum(source:const SourceBytes in S, nodes:const ExprNodes in N, bin
                   work:NameWork in W, state:NameState in R, declaration:u64, backing:u64, tail:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val kind <- builtin_type_name(source, nodes, backing);
+    if (kind == 0u8) {
+        resolve_type_name(source, nodes, bindings, work, state, backing);
+        if (state.diagnostic != 0u8) {
+            reject_name(state, backing, invalid_enum_backing());
+            return
+        };
+        (kind <- bindings[backing].kind):void
+    } else { remember(bindings, backing, no_node(), kind) };
     val limit <- 18446744073709551615u64;
     if (kind == builtin_i64()) { (limit <- 9223372036854775807u64):void; } else {
         if (kind == builtin_u8()) { (limit <- 255u64):void; } else {
@@ -2904,7 +3124,6 @@ func resolve_enum(source:const SourceBytes in S, nodes:const ExprNodes in N, bin
             };
         };
     };
-    remember(bindings, backing, no_node(), kind);
     ref numbering = make EnumNumbering {
         limit <- limit; signed <- kind == builtin_i64(); previous <- 0u64; has_previous <- false;
     };
@@ -3292,6 +3511,9 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
     if (state.diagnostic == 0u8) {
         state.module_names <- state.used;
         state.first <- state.used;
+        resolve_type_synonyms(source, nodes, bindings, work, state)
+    };
+    if (state.diagnostic == 0u8) {
         resolve_module_types(source, nodes, bindings, work, state, first, selections, selected_used,
             interfaces, published, recovery);
         if (state.diagnostic == 0u8 && recovery.count != 0u64)

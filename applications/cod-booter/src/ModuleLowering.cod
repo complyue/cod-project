@@ -1,7 +1,7 @@
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid, RangeLoop, Parenthesized, BooleanLiteral,
-    ModuleSelection, BulkModuleSelection, DefaultPublicSet, CallableDefinition, EnumDefinition, RecordDefinition, Publication, TextLiteral, NullLiteral,
+    ModuleSelection, BulkModuleSelection, DefaultPublicSet, CallableDefinition, EnumDefinition, TypeSynonym, RecordDefinition, Publication, TextLiteral, NullLiteral,
     BlockSyntax, ScopeSyntax, DiscardedExpression, CheckedTypeAssertion, ProtectedBlock, CaseExpression,
     BreakValue, BreakVoid, CaseFallthrough, CaseFailure, RaiseValue, RaisePending,
 };
@@ -1517,6 +1517,7 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
                 BulkModuleSelection -> { return; };
                 (CallableDefinition) -> { return; };
                 (EnumDefinition) -> { return; };
+                (TypeSynonym) -> { return; };
                 (RecordDefinition) -> { return; };
                 (Publication) -> { return; };
                 (TextLiteral) -> {

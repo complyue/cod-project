@@ -67,14 +67,14 @@ using "./NameResolution.cod" {
     c_handle_type, handle_binding, formal_binding, local_binding, loop_index, enclosing_callable,
     record_type, array_type, c_constructor, c_operation, c_entry, callable_binding, owner_binding,
     ordinary_selection, symbolic_selection, native_symbol_binding, reference_symbol_binding, abstract_type_binding,
-    has_exception_parent, lexical_builder_record, is_lexical_builder, definition_name, native_scalar, builtin_bool,
+    has_exception_parent, lexical_builder_record, is_lexical_builder, definition_name, native_scalar, builtin_type_kind, builtin_bool,
     builtin_u8, builtin_u32, builtin_u64, builtin_i64, builtin_void, builtin_string, builtin_c_string, text_type,
     variadic_method_formal, unprovided_callable_promise,
 };
 using "./ModuleExports.cod" {
     SelectedExports, ModuleExports, exception_type_export, exception_root_identity, error_root_identity,
     native_handle_export, record_export, array_export, nominal_exception_export, callable_export, enum_export, sum_export, ordinary_callable_shape,
-    symbol_export, abstract_type_export, lexical_builder_export, aggregate_export_shape, numeric_record_shape,
+    symbol_export, abstract_type_export, lexical_builder_export, scalar_type_export, aggregate_export_shape, numeric_record_shape,
     CheckedSelections, StagedExportNames, StagedExportUses, SelectionSpelling { SourceSpelling, GraphSpelling },
     checked_selection_site, project_public_import, same_selection_spelling,
 };
@@ -3348,6 +3348,13 @@ func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in
     (exports[at].shape <- 0u8):void;
     if (kind == ordinary_selection() || kind == symbolic_selection())
         return publish_selection(selected, target, exports, at);
+    if (builtin_type_kind(kind)) {
+        exports[at].kind <- scalar_type_export();
+        exports[at].origin_module <- 0u64;
+        exports[at].identity <- kind;
+        (exports[at].shape <- kind):void;
+        return true
+    };
     ref declaration = make DeclarationSites {
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
         index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;

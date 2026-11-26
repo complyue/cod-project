@@ -181,6 +181,12 @@ The C++ seed and CoD booter must parse the [owning catch header and ordinary ref
 
 Acceptance checks each frontend at its own parse boundary. A valid form carries its binding mode, owner name when present, and construction operands into checking. Malformed syntax fails at parsing. When an execution path is unsupported, the compiler can reject the parsed form during checking or lowering. Supported paths must execute their required propagation, handling and cleanup. For example, parsing `catch (e:const E)` as a borrowed local loses the handler’s release obligation even when the handler only reads e.
 
+### Transparent type synonyms
+
+The booter accepts first-order declarations such as `export type Float64 = double`. The binder resolves the target in the defining module before checking signatures or layouts. Chains can refer forward to local declarations and through selected exports, including renamed and default selections. Cycles containing only synonyms fail at the target that closes the cycle.
+
+A synonym retains the target’s identity through overload selection, enum backing declarations and C provider signatures. For example, `UInt64` for `u64` has the same signature as `u64`, whereas `Int64` for `i64` retains signed identity. The spellings `float` and `double` use the existing `f32` and `f64` kinds. Object emission checks duplicate signatures for the supported ordinary fixed value families. Each command retains its existing profile for the underlying type and module graph. [Type synonym contract](../../design/JuliaPackagePortability.md#scalar-names-and-transparent-type-synonyms)
+
 ### Contextual names in both frontends
 
 Apply the [name rules](../../design/SymbolicDynamicScope.md#clause-words-and-lexical-variable-names) during dependency scanning, parsing and lookup. Cover lexical binders and their uses, `from` and `throws` in clauses, module declarations and ordinary user calls with names such as `fold` and `store`. A lexer accepting the spelling is insufficient if a later phase still diverts it to an intrinsic or rejects the binding. References to unsupported features retain their stage-specific diagnostics.

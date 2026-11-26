@@ -65,6 +65,7 @@ export data ExprPayload =
     | OwningRegionBinding { name:NodeId; schema:NodeId; input:NodeId; readonly:bool; transfer_at:u64; }
     | RegionConstruction { schema:NodeId; capacity:NodeId; initializers:NodeId; capacity_at:u64; }
     | AbstractType { heading:NodeId; }
+    | TypeSynonym { name:NodeId; target:NodeId; }
     | HandleSymbol { name:NodeId; marker:NodeId; }
     | ValueSymbol { name:NodeId; annotation:NodeId; explicit_value:bool; }
     | ReferenceSymbol { name:NodeId; target:NodeId; owner_name:NodeId; readonly:bool; nullable:bool; }
@@ -1677,6 +1678,7 @@ export enum DeclarationSyntax:u8 {
     ArrayTypeDeclaration;
     EnumTypeDeclaration;
     AbstractTypeDeclaration;
+    TypeSynonymDeclaration;
     NativeSymbolDeclaration;
     ReferenceSymbolDeclaration;
     LocalPublication;
@@ -1823,6 +1825,13 @@ export func inspect_declaration(nodes:const ExprNodes in N, revision:u64, used:u
                         !optional_syntax_link(nodes, revision, at, fields, sites.entries))
                         return InvalidDeclaration:DeclarationSyntax;
                     NamedRegion:DeclarationSyntax
+                };
+                (TypeSynonym { val name <- name; val target <- target; }) -> {
+                    if (!declaration_name(nodes, revision, at, name, false, sites) ||
+                        !published_syntax_id(nodes, revision, at, target))
+                        return InvalidDeclaration:DeclarationSyntax;
+                    sites.value_type <- target.index;
+                    TypeSynonymDeclaration:DeclarationSyntax
                 };
                 (AbstractType { val heading <- heading; }) -> {
                     if (!nominal_heading(nodes, revision, at, heading, sites)) return InvalidDeclaration:DeclarationSyntax;
