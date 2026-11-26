@@ -33,6 +33,7 @@ class BodyExtraction {
     const Expression *site;
     size_t callee;
     std::map<size_t, Allocator> owners;
+    bool installs_handler = false;
   };
   struct Local {
     size_t binding;
@@ -67,6 +68,7 @@ class BodyExtraction {
     std::vector<Capture> captures;
     std::vector<Parameter> parameters;
     std::optional<HereSupply> here;
+    std::optional<size_t> handler;
   };
   struct LocalDefinition {
     Outline outline;
@@ -78,12 +80,18 @@ class BodyExtraction {
     std::set<size_t> allocations;
     std::vector<BoundCall> calls;
     std::optional<Outline> outline;
+    const Expression *open_replay_boundary = nullptr;
+  };
+  struct CompletedBody {
+    std::set<size_t> allocations;
+    const Expression *open_replay_boundary;
   };
 
   const Declarations &declarations_;
   std::map<size_t, size_t> selected_;
   std::deque<BoundBody> bodies_;
   std::vector<LocalDefinition> local_definitions_;
+  std::set<size_t> handler_layouts_;
   size_t outlined_methods_ = 0;
 
   explicit BodyExtraction(const Declarations &declarations) : declarations_(declarations) {}
@@ -201,7 +209,11 @@ class BodyExtraction {
     const CheckedMethod *method_;
     const Form &form_;
     size_t module_;
-    std::vector<std::map<std::string, Binding>> scopes_{1};
+    struct LexicalScope {
+      std::map<std::string, Binding> names;
+      std::set<size_t> handlers;
+    };
+    std::vector<LexicalScope> scopes_{1};
     std::map<std::string, HereFormal> here_;
     std::set<size_t> caught_places_;
     std::map<size_t, size_t> writable_regions_;
@@ -210,16 +222,16 @@ class BodyExtraction {
 
     const Binding *find(const std::string &name) const {
       for (auto scope = scopes_.rbegin(); scope != scopes_.rend(); ++scope)
-        if (const auto found = scope->find(name); found != scope->end()) return &found->second;
+        if (const auto found = scope->names.find(name); found != scope->names.end()) return &found->second;
       return nullptr;
     }
 
     bool supplied_body() const { return body_.outline && body_.outline->here; }
 
     Outline outline(const Form &source) const {
-      Outline result{&source, id_, module_, {}, here_, {}, {}, {}, {}, {}};
+      Outline result{&source, id_, module_, {}, here_, {}, {}, {}, {}, {}, {}};
       for (const auto &scope : scopes_)
-        for (const auto &[name, binding] : scope) result.visible.insert_or_assign(name, binding);
+        for (const auto &[name, binding] : scope.names) result.visible.insert_or_assign(name, binding);
       return result;
     }
 
@@ -247,7 +259,7 @@ class BodyExtraction {
                                         : std::nullopt;
       auto &scope = capture ? scopes_.front() : scopes_.back();
       const Local local{id, place, owner};
-      const auto inserted = scope.emplace(name, local).second;
+      const auto inserted = scope.names.emplace(name, local).second;
       expect(inserted, at, "duplicate name in the replacement seed frame");
       return local;
     }
@@ -359,6 +371,9 @@ class BodyExtraction {
       expect(!source.nullable &&
              (array || incoming_loan || (scalar_type(source.type) && (source.value_binding || source.fixed))),
              expr.at, "replacement seed needs a stable scalar place, array view or incoming text or handle loan in a lexical capture");
+      if (outlined.handler && scalar_type(source.type))
+        expect(source.read_only || (source.fixed && source.requires_initialized), expr.at,
+               "replacement seed needs a readonly scalar or fixed scalar reference capture in a live handler");
       expect(!original.owner || original.owner > first_symbol_owner, expr.at,
              "replacement seed has no capture of a locally owned region view");
       const auto known = std::ranges::find(outlined.owners, original.owner);
@@ -376,7 +391,10 @@ class BodyExtraction {
       parameter.fixed_binding = true;
       // A borrowed array can live in a mutable supplier slot. Read that slot
       // at execution, while keeping the outlined body's own access target-only.
-      if (array && !source.value_binding) parameter.caller_place = Parameter::CallerPlace::reference_slot;
+      if (array && !source.value_binding) {
+        parameter.caller_place = Parameter::CallerPlace::reference_slot;
+        if (outlined.handler) parameter.fixed_binding = source.fixed;
+      }
       bind_input(parameter, parameter.type, true);
       body_.instance.arguments.push_back(parameter.type);
       outlined.captures.push_back({&expr, original, std::move(parameter)});
@@ -517,7 +535,7 @@ class BodyExtraction {
       return result;
     }
 
-    size_t owning_symbol(const Expression &expr) const {
+    size_t selected_symbol(const Expression &expr) const {
       if (visible_local(expr.text) || here_.contains(expr.text) ||
           (body_.outline && body_.outline->visible_here.contains(expr.text)) ||
           names().enum_members.contains(expr.text))
@@ -527,10 +545,16 @@ class BodyExtraction {
       const auto &symbol = declarations().symbols.at(selected->second);
       if (form_.kind == Form::Kind::function)
         fail(expr.at, "a function cannot access dynamic bindings through " + symbol_name(expr, symbol));
+      return selected->second;
+    }
+
+    size_t owning_symbol(const Expression &expr) const {
+      const auto id = selected_symbol(expr);
+      const auto &symbol = declarations().symbols.at(id);
       expect(!supplied_body(), expr.at, "replacement seed has no owning dynamic effects in a supplied body");
       if (symbol.reference || !symbol.type || symbol.type->kind != Type::native_handle || !symbol.type->owned)
         implementation_gap(expr.at, "replacement seed needs an owning native handle " + symbol_name(expr, symbol));
-      return selected->second;
+      return id;
     }
 
     const CheckedOperation &native_operand(const Expression &expr, size_t index, const Type &formal) {
@@ -729,6 +753,18 @@ class BodyExtraction {
       return found->second;
     }
 
+    void bind_independent_parameters(Outline &outlined) {
+      outlined.parameters = outlined.source->parameters;
+      for (auto &parameter : outlined.parameters) {
+        expect(!parameter.here && !parameter.variadic && !parameter.automatic_conversion &&
+               !parameter.selects_caller_place() && parameter.owner.empty() && !parameter.not_init_ref &&
+               (parameter.declaration_kind.empty() || parameter.declaration_kind == "val"),
+               parameter.at, "replacement seed needs independent lexical procedure inputs");
+        parameter.type = resolve_annotation(parameter.type, parameter.at);
+        expect(scalar_type(parameter.type), parameter.at, "replacement seed needs a scalar lexical procedure input");
+      }
+    }
+
     CheckedOperation define_local(const Expression &expr) {
       const auto &source = *expr.definition;
       expect(!body_.outline && source.ordinary_procedure() && !source.name.empty() && source.body &&
@@ -742,20 +778,69 @@ class BodyExtraction {
       expect(std::ranges::find(owners(), source.name, &OwnerParameter::name) == owners().end(), expr.at,
              "replacement seed has no lexical shadow of an owner name");
       const auto definition = extraction_.local_definitions_.size();
-      const auto inserted = scopes_.back().emplace(source.name, LocalProcedure{definition}).second;
+      const auto inserted = scopes_.back().names.emplace(source.name, LocalProcedure{definition}).second;
       expect(inserted, expr.at, "duplicate name in the replacement seed frame");
       auto outlined = outline(source);
-      outlined.parameters = source.parameters;
-      for (auto &parameter : outlined.parameters) {
-        expect(!parameter.here && !parameter.variadic && !parameter.automatic_conversion &&
-               !parameter.selects_caller_place() && parameter.owner.empty() && !parameter.not_init_ref &&
-               (parameter.declaration_kind.empty() || parameter.declaration_kind == "val"),
-               parameter.at, "replacement seed needs independent lexical procedure inputs");
-        parameter.type = resolve_annotation(parameter.type, parameter.at);
-        expect(scalar_type(parameter.type), parameter.at, "replacement seed needs a scalar lexical procedure input");
-      }
+      bind_independent_parameters(outlined);
       extraction_.local_definitions_.push_back({std::move(outlined), result, {}});
       return {};
+    }
+
+    const Type &handler_contract(size_t id, const Expression &expr) const {
+      const auto &symbol = declarations().symbols.at(id);
+      expect(!symbol.reference && symbol.type && symbol.type->kind == Type::procedure &&
+             !symbol.type->pure_callable && symbol.type->target && !symbol.type->variadic &&
+             symbol.type->owners.empty() && symbol.type->argument_modes.empty() &&
+             (scalar_type(*symbol.type->target) || *symbol.type->target == Type::void_type),
+             expr.at, "replacement seed needs a fixed procedure symbol with independent inputs and result");
+      return *symbol.type;
+    }
+
+    CheckedOperation install_handler(const Expression &expr) {
+      const auto id = selected_symbol(expr);
+      const auto &contract = handler_contract(id, expr);
+      const auto &source = *expr.definition;
+      expect(!body_.outline && !in_iteration_ && source.kind == Form::Kind::procedure && source.body &&
+             source.owner_parameters.empty() && source.type_parameters.empty() && !source.explicit_captures &&
+             source.result_type && source.result_owner.empty() && source.result_kind.empty(),
+             expr.at, "replacement seed needs a live handler in an ordinary procedure frame");
+      auto outlined = outline(source);
+      outlined.handler = id;
+      bind_independent_parameters(outlined);
+      const auto result = resolve_annotation(*source.result_type, source.at);
+      expect(result == *contract.target && std::ranges::equal(outlined.parameters, contract.parameters, {},
+                 &Parameter::type) && std::ranges::equal(source.throws_types, contract.throws_types, {},
+                 [&](const Type &type) { return resolve_annotation(type, source.at); }), expr.at,
+             "live handler must implement the selected symbol's exact contract");
+      const auto added = extraction_.handler_layouts_.insert(id).second;
+      expect(added, expr.at, "replacement seed needs one live handler layout per symbol");
+
+      const auto callee = extraction_.bodies_.size();
+      extraction_.add_outline(std::move(outlined), result);
+      body_.calls.push_back({&expr, callee, {}, true});
+      scopes_.back().handlers.insert(id);
+      CheckedOperation op;
+      op.symbol = id;
+      op.scoped_effect = callee;
+      return op;
+    }
+
+    CheckedOperation invoke_handler(const Expression &expr) {
+      const auto id = selected_symbol(expr);
+      const auto &contract = handler_contract(id, expr);
+      expect(std::ranges::any_of(scopes_, [&](const auto &scope) { return scope.handlers.contains(id); }),
+             expr.at, "replacement seed needs a selected live handler in the current invocation");
+      expect(expr.children.size() == contract.parameters.size() && !expr.has_here_body(), expr.at,
+             "live handler invocation needs its declared positional arguments");
+      CheckedOperation op;
+      op.symbol = id;
+      op.type = *contract.target;
+      for (size_t i = 0; i < contract.parameters.size(); ++i) {
+        const auto &type = contract.parameters[i];
+        takes_value(operand(expr, i), type, expr.children[i]->at);
+        op.arguments.push_back({ArgumentMode::value, type});
+      }
+      return op;
     }
 
     CheckedOperation fresh_region(const Expression &expr) {
@@ -1294,7 +1379,11 @@ class BodyExtraction {
       case Kind::region_binding: return bind_region(expr);
       case Kind::native_handle_binding: return bind_native_handle(expr);
       case Kind::make_borrowed_handle: return attach_native_handle(expr);
-      case Kind::effect: return install_native_effect(expr);
+      case Kind::effect: return expr.definition ? install_handler(expr) : install_native_effect(expr);
+      case Kind::procedure_effect:
+        expect(expr.definition != nullptr, expr.at, "replacement seed needs a private live handler body");
+        return install_handler(expr);
+      case Kind::behave: case Kind::perform: return invoke_handler(expr);
       case Kind::index: return index(expr);
       case Kind::field: return field(expr);
       case Kind::case_expression: return check_case(expr);
@@ -1381,6 +1470,12 @@ class BodyExtraction {
     }
 
     const CheckedOperation &remember(const Expression &expr, CheckedOperation op) {
+      // Calls with a here operand are open until the receiver-to-body
+      // dependency is represented. Native disposal has its own contract.
+      if (!body_.open_replay_boundary &&
+          (op.native_acquisition || op.native_call || op.invokes_here || expr.has_here_body() ||
+           (expr.kind == Kind::symbol && op.symbol)))
+        body_.open_replay_boundary = &expr;
       if (op.view && !scalar_type(op.type) && op.type != Type::exception)
         op.discarded_view = true;
       const auto [row, first] = body_.instance.operations.emplace(&expr, std::move(op));
@@ -1390,7 +1485,8 @@ class BodyExtraction {
 
     const CheckedOperation &extract(const Expression &expr) {
       expect(!expr.checked_ref_argument && !expr.spread && !expr.lexical_symbol_call &&
-             (expr.definition ? expr.kind == Kind::callable : expr.kind != Kind::callable) && !expr.receiving,
+             (expr.definition ? expr.kind == Kind::callable || expr.kind == Kind::effect ||
+                                 expr.kind == Kind::procedure_effect : expr.kind != Kind::callable) && !expr.receiving,
              expr.at, "replacement seed has no extracted transport for this expression");
       return remember(expr, operation(expr));
     }
@@ -1430,11 +1526,22 @@ class BodyExtraction {
     }
   };
 
-  // Dependency completion uses only collected allocations and call edges.
-  // It cannot call the body visitor or mutate that visitor's output.
-  std::vector<std::set<size_t>> complete_allocators() const {
-    std::vector<std::set<size_t>> roles;
-    for (const auto &body : bodies_) roles.push_back(body.allocations);
+  std::optional<Allocator> call_allocator(const BoundCall &call, size_t role) const {
+    if (!call.installs_handler) {
+      const auto found = call.owners.find(role);
+      return found == call.owners.end() ? std::nullopt : std::optional{found->second};
+    }
+    // The outlined handler's operands are established at its installation.
+    // A required input role has already passed the capture's access check.
+    const auto &target = *bodies_[call.callee].outline;
+    const auto owner = target.owners.at(role);
+    return owner ? Allocator{Allocator::input, null_target - 1 - owner} : Allocator{Allocator::lexical};
+  }
+
+  // Complete collected dependencies without entering any source body.
+  std::vector<CompletedBody> complete_dependencies() const {
+    std::vector<CompletedBody> completed;
+    for (const auto &body : bodies_) completed.push_back({body.allocations, body.open_replay_boundary});
     std::vector<bool> complete(bodies_.size()), active(bodies_.size());
     struct Pending { size_t body; size_t call = 0; };
     std::vector<Pending> stack;
@@ -1458,15 +1565,18 @@ class BodyExtraction {
           stack.push_back({call.callee});
           continue;
         }
-        for (const auto role : roles[call.callee]) {
-          const auto actual = call.owners.find(role);
-          expect(actual != call.owners.end(), call.site->at, "required allocation has no prepared owner capability");
-          if (actual->second.kind == Allocator::input) roles[current.body].insert(actual->second.place);
+        auto &caller = completed[current.body];
+        const auto &callee = completed[call.callee];
+        if (!caller.open_replay_boundary) caller.open_replay_boundary = callee.open_replay_boundary;
+        for (const auto role : callee.allocations) {
+          const auto actual = call_allocator(call, role);
+          expect(actual.has_value(), call.site->at, "required allocation has no prepared owner capability");
+          if (actual->kind == Allocator::input) caller.allocations.insert(actual->place);
         }
         ++current.call;
       }
     }
-    return roles;
+    return completed;
   }
 
   void extract() {
@@ -1495,6 +1605,12 @@ class BodyExtraction {
     method.definition = body.instance.method;
     method.parameters = body.instance.arguments;
     method.result = body.instance.result;
+    if (outline.handler) {
+      auto &symbol = program.symbols.at(*outline.handler);
+      symbol.live_scope = true;
+      symbol.scoped_instance = id;
+      method.throws_types = symbol.type->throws_types;
+    }
     CheckedMethod::ScopeInputs scope{};
     scope.lexical_method = body.instance.method;
     scope.parameters = std::move(outline.parameters);
@@ -1532,35 +1648,42 @@ class BodyExtraction {
     const auto parameters = program.methods.at(body.instance.method).input_parameters();
     operation.scope_owners = outline.owners;
     auto &arguments = operation.argument_sources.emplace();
-    for (const auto &argument : call.site->children) arguments.push_back(argument.get());
-    for (const auto &capture : outline.captures) {
-      const auto &parameter = parameters[operation.arguments.size()];
+    if (!call.installs_handler)
+      for (const auto &argument : call.site->children) arguments.push_back(argument.get());
+    const auto first_capture = parameters.size() - outline.captures.size();
+    for (size_t i = 0; i < outline.captures.size(); ++i) {
+      const auto &capture = outline.captures[i];
+      const auto &parameter = parameters[first_capture + i];
       operation.arguments.push_back({argument_mode(parameter), parameter.type, parameter.selects_caller_ref_slot()});
       arguments.push_back(capture.use);
     }
   }
 
   void seal(CheckedProgram &program) {
-    const auto roles = complete_allocators();
+    const auto completed = complete_dependencies();
     for (const auto &entry : program.native_entries)
-      expect(roles[selected_.at(entry.method)].empty(), program.methods[entry.method].source->at,
+      expect(completed[selected_.at(entry.method)].allocations.empty(), program.methods[entry.method].source->at,
              "a C entry cannot import an array allocator capability");
     for (size_t i = 0; i < bodies_.size(); ++i) if (const auto &outline = bodies_[i].outline) {
-      expect(roles[i].empty(), outline->source->at, "replacement seed needs an outlined body without imported allocators");
+      expect(outline->handler || completed[i].allocations.empty(), outline->source->at,
+             "replacement seed needs an ordinary outlined body without imported allocators");
       seal_outline(program, i);
     }
     for (size_t i = 0; i < bodies_.size(); ++i) {
       auto &body = bodies_[i];
       for (const auto &call : body.calls) {
         auto &operation = body.instance.operations.at(call.site);
+        const auto &callee = completed[call.callee];
+        if (call.installs_handler && callee.open_replay_boundary)
+          implementation_gap(call.site->at, "replacement seed cannot complete a live handler's empty replay inventory");
         if (const auto &outline = bodies_[call.callee].outline; outline && !outline->here)
           prepare_local_captures(program, call, operation);
-        if (roles[call.callee].empty()) continue;
+        if (callee.allocations.empty()) continue;
         auto arguments = std::make_shared<std::map<size_t, Allocator>>();
-        for (const auto role : roles[call.callee]) arguments->emplace(role, call.owners.at(role));
+        for (const auto role : callee.allocations) arguments->emplace(role, *call_allocator(call, role));
         operation.array_allocator_arguments = std::move(arguments);
       }
-      body.instance.array_allocator_roles = roles[i];
+      body.instance.array_allocator_roles = completed[i].allocations;
       body.instance.complete = true;
       program.methods[body.instance.method].instances.push_back(i);
       program.instances.push_back(std::move(body.instance));
