@@ -1,8 +1,10 @@
 # Collections and builtin containers
 
-Design revision 9 · 2026-11-26 · Source design draft
+Design revision 10 · 2026-11-26 · Source design draft
 
 ## Design authority
+
+At r10 [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families), P-778/P-779, gives each nominal receiver its own family for each indexing operation in the selected world. [Dispatch through an abstract receiver](#receiver-families-for-indexing) preserves r9 argument order, access, fixed and variadic selection, and library control of the axes. The [user decision](../CHANGELOG.md#h-receiver-index-families-20261126) covers indexing. Ordinary free functions keep their established families.
 
 At r9 [D-30-TYPED-SUBSCRIPTS](DesignAuthorityRegistry.md#d-30-typed-subscripts) puts the assigned value or target before the positional indices in the method signature. P-766/P-767 continue for bracket evaluation order, units and owner. [Literal ADTs](RangedForAndGenerators.md#concrete-types-of-range-and-slice-literals) and [explicit expansion](SymbolicDynamicScope.md#runtime-array-expansion-and-one-variadic-parameter) determine which typed operands the library receives.
 
@@ -70,6 +72,25 @@ For `m[1 ..= 6 by 2, 3]` the getter receives a range with start 1, written inclu
 `m[r][c]` performs two lookups and may have a different meaning. Each family uses ordinary visible overloads, arity, parameter modes and specificity. For example, a two-scalar getter and a range-plus-scalar getter can return an element and a column selection respectively. A rank mismatch with no applicable method is a normal call error. One composite index explicitly passed in brackets remains one argument. Scalar indices, a full-axis selector (`..`), and omitted ends (`lo ..`, `.. hi`, `.. by -1`) stay distinguishable. The library supplies an omitted bound from the corresponding axis and direction. Copies, borrowed views, bounds policy, result rank and memory strides follow the selected operation.
 
 Prepare the receiver first, then each selector left to right, then any written RHS. Complete each argument's evaluation and required conversions before the next. A failure during preparation skips subsequent operands and method entry. The writer binds the prepared RHS immediately after the receiver, leaving a final index pack available. Thus `m[next_row(), next_col()] <- produce()` evaluates both selectors before `produce()`. The explicitly written call `([]<-)(m, produce(), next_row(), next_col())` prepares its actuals in its own written order. An explicit expansion in `m[axes...] <- value` supplies the index pack, including at a length for which a fixed writer exists. Unitless integers still bind integer formals directly. A pack mixing integers and selectors needs an element contract that admits both. Any check performed inside a user-defined setter runs at its ordinary point after argument preparation. Preserve the established destination-before-RHS checks of the builtin indexed transfer. The result, mutation and allowed access follow the chosen operation, including its owner and cleanup obligations.
+
+### Receiver families for indexing
+
+A nominal collection type carries separate families for `([])` (read), `([]<-)` (value transfer) and `([]=)` (reference binding) wherever it provides those operations. The family’s identity is the receiver type and operation. Its visible methods belong to the module interpretation selected at the call site. A type synonym retains the original family. The builtin array operations keep their existing representation, bounds and ownership contracts.
+
+An OO head such as `func Dense.([]<-)(value:Int64, idxs:Int64...) -> void` contributes a method of the writable `Dense` setter. The receiver binds the usual fixed `self` with its actual owner. A library that explicitly imports the receiver type can publish an adapter adding a two-axis method to that same family. Consumers that select the extended type view see both methods. Another module can keep the original view. Family membership requires a binding to the receiver and permission to contribute. A coincidentally visible free operator spelling by itself supplies neither. The OO head makes the receiver explicit, including in an adapter. Bracket expressions keep the argument preparation order above. [OO receivers](DomainLanguageDesign.md#receivers-in-field-accessors-and-member-methods) · [Module publication](ModuleWorlds.md#publication-of-type-carried-call-operators)
+
+Suppose `Dense` and `Sparse` both declare conformance to `Matrix`. Each defines its own integer-index variadic setter. A selected adapter also supplies a fixed `(value, row, col)` setter for `Dense`. In a generic writer whose receiver is declared as writable `Matrix`, the same two source calls have these outcomes:
+
+| Expression in the generic body | Actual `Dense` | Actual `Sparse` |
+| --- | --- | --- |
+| `m[row, col] <- value` | Dense fixed setter from the adapter | Sparse variadic setter |
+| `m[axes...] <- value`, with the same two indices | Dense variadic setter | Sparse variadic setter |
+
+One receiver's variadic method never competes with another receiver's variadic method. Within the chosen family, ordinary tuple specificity and the explicit pack rule apply. Its methods may specialize an index type, a selector pattern or the value. An ambiguous concrete choice needs resolution in that family. An applicable concrete implementation takes priority over behavior offered for the abstract receiver. Automatic use of an implemented abstract default for a shape absent on the concrete receiver remains a separate design question. An invocation failure propagates through ordinary cleanup. A read-only receiver keeps its access when its concrete type becomes known.
+
+A caller can pass or forward a `Matrix` view without a cast or a user-written type switch. Its declared conformance and the selected world determine which concrete types the call can admit. Ahead-of-time compilation checks coverage of each demanded call, including its result, access, ownership and effects. When the actual type is already known the compiler can emit a direct call. Otherwise it preserves the receiver evidence and prepares local dispatch that selects the actual ADT's indexing behavior. A shared generic body can execute both rows of the table. A known Dense call needs only the Dense family’s incoming effects. A call that still admits both receiver types must cover the requirements that either route could impose, including each selected family’s pre-2.0 incoming-symbol rule. Concrete type evidence can discharge an unreachable alternative. [Family-wide incoming effects](SymbolicDynamicScope.md#family-wide-effect-requirements-before-20) [AOT coverage](AheadOfTimeExecutionPreparation.md#actual-type-dispatch-and-wpo-coverage)
+
+Verify the same actual through concrete and abstract formals, both receiver types through one call site, and two module views with and without the adapter. In the original view the direct two-axis `Dense` call reaches its variadic body. A reachable type with no permitted implementation for the demanded write must fail coverage, and an unused conformer outside the admitted call need not supply it.
 
 ### Unitless and unit-bearing axes
 

@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 228
+Discussion revision: 229
 
 Recorded: 2026-11-26
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r229 [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families) applies the existing OO receiver and actual-type dispatch rules to [the indexing operators](CollectionsAndBuiltinContainers.md#receiver-families-for-indexing). Method access, available conformance and fixed receiver bindings continue from r228.
 
 At r228 [D-10-SLICE-METHODS](DesignAuthorityRegistry.md#d-10-slice-methods) extends the r227 mirrored pattern to direct and grouped callable declarations. The existing public signature, case and nominal binding contracts continue. [Accepted heads and examples](SymbolicDynamicScope.md#slice-patterns-in-method-parameters)
 
@@ -585,6 +587,8 @@ For n equal to zero, `consume(10u64)` runs in the current outer iteration. For n
 In a single-brace arm, `break v;` can finish the case from any ordinary nested statement group. Evaluate v once and join this result with the other value-producing case paths under the ordinary conditional result rules, including mode, owner and lifetime. A bare `break;` is a void completion. A value/void mismatch rejects at the chosen case, even if an outer target could accept the exit. Throwing during operand evaluation follows ordinary exception control. Run cleanup for scopes actually exited before delivering the result. The enclosing callable’s return and deferred actions keep their ordinary destinations. A break in an ordinary statement between arms likewise completes the case. Case completion itself registers no return in the enclosing callable. Fallthrough requires an active arm and resumes the scan. Double-brace arms retain their local return and the specific fallthrough permission above. There is no general transfer across an independently invoked full scope.
 
 #### Receivers in field accessors and member methods
+
+An indexing head such as `func Dense.([]<-)(value:Int64, idxs:Int64...) -> void` attaches that setter to the nominal receiver. Calling through an admitted abstract receiver preserves selection by the actual ADT. [Indexing family identity and examples](CollectionsAndBuiltinContainers.md#receiver-families-for-indexing)
 
 A field accessor is declared with `func T.@name()` and read as `x.name`. A member method is declared with `func T.name(...)` and called as `x.name(...)`. Both receive the initialized target selected by `x` as their implicit first argument, `self`. Write `const` immediately before the receiver type for readonly access. Omitting it requires writable access in either form. The declaration marker `@` identifies an accessor in this position. Reading the member uses its receiver without looking up a dynamic symbol.
 

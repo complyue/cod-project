@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 84 · Recorded: 2026-11-25 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 85 · Recorded: 2026-11-26 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+At r85 [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families) extends r84 type-view publication to [receiver-carried indexing methods](CollectionsAndBuiltinContainers.md#receiver-families-for-indexing). Contributing a method requires authority over the receiver. Selecting an adapter can add its published method in the receiving world.
 
 At r84 the [ASCII vocabulary example](../CHANGELOG.md#k-ascii-vocabulary-20261125) applies the existing [default and complete public selections](#default-and-complete-public-selections) to a type with many members under [D-15](DesignAuthorityRegistry.md#d-15) and [D-15-DEFAULT-EXPORTS](DesignAuthorityRegistry.md#d-15-default-exports), continuing P-692/P-693. Compare an omitted selector with an explicit member subset, then use another member through the selected enum type.
 
@@ -188,6 +190,8 @@ When several `using` or `import` declarations select views of the same nominal d
 The constructor overload family belongs to the nominal type. Its dctors are methods of that family. For a sum, `export Receipt;` publishes every dctor and its visible initializer overloads. A constructor selector makes the named dctors explicit, and importing a dctor permits extending it. In the merged family, the overloads for the dctor named at the `make` site determine whether braced initialization is available. See the [constructor selectors and combined-world example](DomainLanguageDesign.md#publishing-and-selecting-data-constructors).
 
 ### Publication of type-carried call operators
+
+For the three indexing operations, selecting a type view likewise brings its published receiver families; an explicit import of the receiver permits an OO extension. Distinct ADTs can each supply their own variadic setter in the same world. Selecting multiple views of one receiver applies the existing contribution identity, conflict and visibility rules. [Receiver families for indexing](CollectionsAndBuiltinContainers.md#receiver-families-for-indexing)
 
 Exporting a nominal data type also publishes the `(())` family visible on that type in the exporting world. Re-export of a selected type view carries its family. Plain `using` selects the family with the type. An `import` of the type also permits local extension. A standalone `export`, `using` or `import` of `(())` is invalid. Calls use [type-level lookup](DomainLanguageDesign.md#type-level-call-operator-lookup).
 
