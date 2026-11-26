@@ -758,12 +758,27 @@ class BodyExtraction {
       return op;
     }
 
+    CheckedOperation make_scalar(const Expression &expr, const Type &type) {
+      const auto *initializer = expr.construction_initializer();
+      expect(initializer && !initializer->children.empty() && !expr.constructor_arguments &&
+             expr.owner_name.empty() && !body_.literal && !in_iteration_, expr.at,
+             "replacement seed needs an initialized lexical scalar construction");
+      takes_value(extract(*initializer), type, initializer->at);
+      CheckedOperation op;
+      op.type = op.operand_type = type;
+      op.place = storage("$scalar", type, 0, false, false);
+      op.view = true;
+      op.owners.insert(0);
+      return op;
+    }
+
     CheckedOperation make(const Expression &expr) {
-      expect(!expr.construction_type_query && expr.annotation && expr.annotation->kind == Type::named,
+      expect(!expr.construction_type_query && expr.annotation,
              expr.at, "replacement seed needs a declared construction type");
       CheckedOperation op;
       const auto &spelling = expr.annotation->name;
-      if (const auto found = names().constructors.find(spelling); found != names().constructors.end()) {
+      const auto found = expr.annotation->kind == Type::named ? names().constructors.find(spelling) : names().constructors.end();
+      if (found != names().constructors.end()) {
         const auto selected = found->second;
         const auto &sum = declarations().sums.at(selected.sum);
         const auto &arm = sum.alternatives.at(selected.alternative);
@@ -792,10 +807,10 @@ class BodyExtraction {
         op.owners.insert(0);
         return op;
       }
-      const auto type = names().types.find(spelling);
-      if (type != names().types.end() && type->second.kind == Type::product)
-        return make_product(expr, type->second, true);
-      expect(type != names().types.end() && type->second.kind == Type::array && expr.constructor_arguments &&
+      const auto type = resolve_annotation(*expr.annotation, expr.at);
+      if (scalar_type(type)) return make_scalar(expr, type);
+      if (type.kind == Type::product) return make_product(expr, type, true);
+      expect(type.kind == Type::array && expr.constructor_arguments &&
              expr.children.size() == 2 && !family(spelling),
              expr.at, "replacement seed needs an ordinary array constructor");
       expect(!body_.literal, expr.at, "replacement seed does not allocate arrays inside a here literal");
@@ -803,12 +818,12 @@ class BodyExtraction {
       const auto allocator = allocator_for(owner);
       expect(allocator && (owner || scopes_.size() == 2), expr.at,
              "replacement seed needs an admitted array allocation owner");
-      const auto &array = declarations().arrays.at(type->second.identity);
+      const auto &array = declarations().arrays.at(type.identity);
       expect(declarations().bits_payload(array.element), expr.at, "array fill requires a finite bits element");
       takes_value(operand(expr, 0), Type::uint64, expr.children.front()->at);
       const auto &fill = operand(expr, 1);
       takes_payload(fill, array.element, expr.children.back()->at);
-      op.type = op.operand_type = type->second;
+      op.type = op.operand_type = type;
       op.view = true;
       op.owners.insert(owner);
       op.array_allocator = allocator;
