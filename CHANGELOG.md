@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Describe the callback from native cleanup
+
+<a id="k-native-cleanup-callback-wording-20261126"></a>
+**K-NATIVE-CLEANUP-CALLBACK-WORDING-20261126.** The project user pointed out in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) that “reentry” could misdescribe a further callback. D-ARCH-REVIEW r223→224 names the same-thread call from the test cleanup hook to a separate CoD procedure. Registry r1336→1337 continues P-682/P-683 and the [existing replay behavior](https://github.com/complyue/cod-project/blob/c5d979e9/design/ImplementationArchitecture.md#emission-boundary-for-live-handler-installations). [Callback example](design/ImplementationArchitecture.md#callbacks-from-c-and-protected-path-acquisition)
+
 ## 2026-11-26 — Apply the necessity rule to design review’s own gates
 
 <a id="k-design-review-delivery-gates-20261126"></a>
