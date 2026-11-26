@@ -3250,7 +3250,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
         bindings[at].guarded_local_link <- no_node();
         bindings[at].handle_guard <- no_node();
         work[at].local_symbol_conflict <- no_node();
-        work[at].enum_assertion <- NoEnumAssertion;
+        work[at].enum_assertion <- (NoEnumAssertion:EnumAssertion);
         work[at].enum_members <- no_node();
         work[at].enum_backing <- 0u8;
         work[at].imported_byte_completion <- NoByteFunction;
