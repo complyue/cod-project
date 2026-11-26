@@ -106,9 +106,6 @@ behave @print(run());
 '''
 runner.CASES = {
     "inspection_keeps_result_through_covered_failure": (OBSERVE_RETURN, 0, '7\n42\n7\n', ''),
-    "inspection_does_not_cover_checked_failure": (OBSERVE_RETURN.replace(
-        '    defer catch (failure:const NullPointerException) { behave @print(42u64); };\n', ''),
-        2, '', 'coverage within the owning pass'),
     "each_visit_observes_the_latest_return": (CHECKED_READ + '''
 proc run() -> u64 {
     ptr missing:u64 = null in here;
@@ -153,9 +150,6 @@ behave @print(alternative);
         'proc run() -> void {', 'proc relay(here action() -> void) -> void { action(); return; }\n\n'
         'proc run() -> void {').replace('              drain();', '              relay() { drain(); };'),
         0, '1\n9\n2\n1\n9\n2\n3\n', ''),
-    "independent_drain_preserves_declared_checked_failure": (INDEPENDENT_DRAIN.replace(
-        'proc drain() -> void {', 'proc drain() -> void throws NullPointerException {'),
-        2, '', 'checked deferred failure requires coverage within the owning pass'),
     "independent_drain_preserves_escaping_unchecked_failure": ((
         'using "std:exceptions" MissingReturnError;\nfunc missing_result() -> u64 {}\n' + INDEPENDENT_DRAIN
     ).replace('    defer read(missing);\n    return;\n}', '    defer read(missing);\n    missing_result():void;\n    return;\n}', 1).replace(
@@ -364,18 +358,11 @@ try {
     "generic_recovery": (PRELUDE + 'func f(x:T)->const T where T{defer catch(e:const MissingReturnError){};defer missing();return x;}behave @print(f(2u64));behave @print(f(true));', 0, '2\ntrue\n', WARN),
     "terminal_failure_not_caught": (PRELUDE + '{{defer catch(e){observe(99);}finally{observe(1);};3/0;{}}};', 70, '1\n', 'division by zero'),
     "write_before_ordinary_failure": (PRELUDE + 'val n<-0;try{{defer catch(e:const MissingReturnError){};n<-2;missing();{}}}catch(e:const MissingReturnError){observe(n);};', 0, '2\n', WARN),
-    "uninitialized_after_recovery": (PRELUDE + 'val n<-make i64;{{defer catch(e:const MissingReturnError){};defer{missing();n<-2;};}};observe(n);', 2, '', 'before definite initialization'),
     "initialized_before_deferred_failure": (PRELUDE + 'val n<-make i64;{{defer catch(e:const MissingReturnError){};defer{n<-2;missing();};}};observe(n);', 0, '2\n', WARN),
-    "checked_body_requires_ordinary_coverage": (PRELUDE + 'func f(e:NullPointerException)->void{defer catch(x:const NullPointerException){};throw e;}', 2, '', 'requires a covering catch or throws declaration'),
     "checked_call_covered": (PRELUDE + 'func bad(e:NullPointerException)->void throws NullPointerException{throw e;}func f(e:NullPointerException)->void{defer catch(x:const NullPointerException){};defer bad(e);}', 0, '', WARN),
     "checked_block_covered": (PRELUDE + 'func f(e:NullPointerException)->void{defer catch(x:const NullPointerException){};defer{throw e;};}', 0, '', WARN),
-    "checked_wrong_order": (PRELUDE + 'func f(e:NullPointerException)->void{defer{throw e;};defer catch(x:const NullPointerException){};}', 2, '', 'coverage within the owning pass'),
-    "checked_conditional_gap": (PRELUDE + 'func f(e:NullPointerException,flag:bool)->void{if(flag){defer catch(x:const NullPointerException){};}else{};throw e;}', 2, '', 'requires a covering catch or throws declaration'),
     "checked_after_return_unreachable": (PRELUDE + 'func f(e:NullPointerException)->void{return;throw e;}', 0, '', WARN),
-    "checked_registration_catch_wrong_scope": (PRELUDE + 'func f(e:NullPointerException)->void{try{defer{throw e;};}catch(x:const NullPointerException){};}', 2, '', 'coverage within the owning pass'),
-    "checked_full_scope_catch": (PRELUDE + 'func f(e:NullPointerException)->void{try{{defer{throw e;};}}catch(x:const NullPointerException){};}', 2, '', 'coverage within the owning pass'),
     "checked_one_iteration": (PRELUDE + 'func f(e:NullPointerException)->void{for(i in 0..1){defer catch(x:const NullPointerException){};};defer{throw e;};}', 0, '', WARN),
-    "checked_zero_iterations": (PRELUDE + 'func f(e:NullPointerException)->void{for(i in 0..0){defer catch(x:const NullPointerException){};};throw e;}', 2, '', 'requires a covering catch or throws declaration'),
     "checked_per_iteration": (PRELUDE + 'func f(e:NullPointerException)->void{for(i in 0..3){ {{defer catch(x:const NullPointerException){};defer{throw e;};}}; };}', 0, '', WARN),
     "selective_forwarding_keeps_unmatched_failure_ahead": (
         FIFO_FORWARDING, 0, '204\n206\n209\n105\n104\n106\n109\n', WARN),
@@ -410,8 +397,6 @@ proc run() -> void {
 
 run();
 ''', 0, '20\n10\n30\n', ''),
-    "checked_loop_failure_count_is_unproved": (PRELUDE + 'func f(e:NullPointerException)->void{defer catch(x:const NullPointerException){};for(i in 0..3){defer{throw e;};};}', 2, '', 'coverage within the owning pass'),
-    "checked_finally_does_not_recover": (PRELUDE + 'func f(e:NullPointerException)->void{defer{}finally{};throw e;}', 2, '', 'requires a covering catch or throws declaration'),
 }
 runner.CASE_ARGUMENTS = {}
 runner.EXTRA_SOURCES = [Path(__file__)]

@@ -1,8 +1,10 @@
 # Compiler modes, selectable stages and persistent stage reuse
 
-Revision 10 · 2026-11-26 · Compiler modes and stage controls confirmed. Persistent artifact design remains a planning draft.
+Revision 11 · 2026-11-26 · Compiler modes and stage controls confirmed. Persistent artifact design remains a planning draft.
 
 ## Design authority
+
+At r11 the [post-rewrite cleanup decision](../../../CHANGELOG.md#h-post-rewrite-cleanup-20261126) adds the final scan to the booter migration under [D-ARCH-REVIEW](../../../design/DesignAuthorityRegistry.md#d-arch-review). The r10 checks and client controls carry forward.
 
 At r10 [D-ARCH-REVIEW](../../../design/DesignAuthorityRegistry.md#d-arch-review) applies the structural restart prohibition to the [replacement booter pipeline](#replacing-the-booter-pipeline). [D-20-STAGE-CONTROLS](../../../design/DesignAuthorityRegistry.md#d-20-stage-controls) retains its stage-specific client controls and independent evidence requirements. [Decision and scope](../../../CHANGELOG.md#h-compiler-restart-mechanism-20261126)
 
@@ -44,6 +46,8 @@ For production acceptance, exercise parse-only feedback with damaged source, ind
 ## Replacing the booter pipeline
 
 The replacement seed builds the booter executable. The compiler **inside** that executable has its own CoD pipeline. Rewrite its orchestration around completed phase results, using the working [standalone booter at b801a6d9](https://github.com/complyue/cod-project/commit/b801a6d98744260873745f55d2fa91164eade04a) as a behavior reference. The booter retains its static checking responsibility. Reuse the parser, module graph, diagnostic and emission code wherever their interfaces respect the boundary.
+
+Once the rewritten booter serves its declaration, provider and object commands, [remove superseded code, options and names and rescan](../../../design/ImplementationArchitecture.md#retiring-a-replaced-compiler-pipeline). A clean scan of the seed closes only the seed cleanup.
 
 The first concrete migration is initialization checking on the object path. After lowering, `check_native_initialization` can find a potentially uninitialized read, clear its path records and start a flag-sensitive search at the enclosing function’s entry for that reset. Several resets can repeat the same prefix. The capability exists even in compilations that never take the fallback. [Dispatch at the baseline](https://github.com/complyue/cod-project/blob/b801a6d98744260873745f55d2fa91164eade04a/applications/cod-booter/src/InitializationChecking.cod#L370) · [Fresh traversal](https://github.com/complyue/cod-project/blob/b801a6d98744260873745f55d2fa91164eade04a/applications/cod-booter/src/InitializationChecking.cod#L241)
 

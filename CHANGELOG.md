@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-26 — Clean up both bootstrap compilers after their rewrites
+
+<a id="h-post-rewrite-cleanup-20261126"></a>
+**H-POST-REWRITE-CLEANUP-20261126.** The project user directed the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) to sweep the seed now and the booter after its rewrite, saying “旧的死代码和误导参数、命名再迭代扫描清扫一波，直到自后一次扫描没有残留” and “多余的参数和变量也在清扫之列”. The [retirement contract](design/ImplementationArchitecture.md#retiring-a-replaced-compiler-pipeline) extends the [structural prohibition](#h-compiler-restart-mechanism-20261126) to the command surface and material consumers. D-ARCH-REVIEW r225→226, bootstrap roadmap r49→50 and booter pipeline r10→11 carry the same final-scan condition. The [seed dispatch at the audited baseline](https://github.com/complyue/cod-project/blob/e9cdcaf7e4f4756401d76875f19a7cf6c791843f/cod/main.cc#L213) still exposes the old checker. Registry r1338→1339.
+
+## 2026-11-26 — Scope verification to the compiler and workload that own the result
+
+<a id="k-bootstrap-audit-acceptance-20261126"></a>
+**K-BOOTSTRAP-AUDIT-ACCEPTANCE-20261126.** Continued from the [verification scope correction](#k-bootstrap-verification-scope-20261125) and the [terminal diagnostic retirement](https://github.com/complyue/cod-project/commit/42ca800c8f212340dd687e4b871678f78db385b5). Validation reference r488→489 locates historical terminal and deferred diagnostics at the checked seed. The surviving runtime cases retain ordered failure, payload and cleanup observations. D-20-MODULE-GRAPH r96→97 sizes routine acceptance to the affected commands and imports. Broad comparisons remain available for release decisions, including the documented package cutover. P-680/P-681 and P-682/P-683 retain their earlier scope. [Validation reference](tests/cod/language/README.md) · [Module graph](applications/cod-booter/docs/ModuleGraph.md)
+
 ## 2026-11-26 — Make pass restarts inexpressible and apply the rule to the booter
 
 <a id="h-compiler-restart-mechanism-20261126"></a>

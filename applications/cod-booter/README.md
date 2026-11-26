@@ -1,10 +1,12 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 49 · Recorded: 2026-11-26 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 50 · Recorded: 2026-11-26 · Phase: initial seed delivery through alternating booter and seed development.
 
 **Compiler design target.** On the command line, `cod` (Compile on Demand) compiles the entry for this run and executes it immediately, leaving no user-facing executable. The planned production command `cfe` (Compile for Ever) spends more time optimizing the program and saves the executable for later runs. Seed and booter development prioritize Go-like compile speed with moderate runtime performance. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
 
 ## Design authority
+
+At r50 the [post-rewrite cleanup decision](../../CHANGELOG.md#h-post-rewrite-cleanup-20261126) applies the existing bootstrap scope to command retirement in the seed and to the booter after its rewrite. [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap) continues from r49.
 
 At r49 the [booter pipeline rewrite](docs/CompilerPipeline.md#replacing-the-booter-pipeline) applies [D-ARCH-REVIEW](../../design/DesignAuthorityRegistry.md#d-arch-review) to the CoD compiler delivered by the replacement seed. The [clarification](../../CHANGELOG.md#h-compiler-restart-mechanism-20261126) preserves the booter’s checking, native interfaces and observable command behavior.
 
@@ -96,7 +98,7 @@ The selected name for the C++ build output is `bin/cod-seed` (`bin/cod-seed.exe`
 
 ### Trusted source and the seed
 
-Run `cod-seed --parse FILE` for syntax feedback across the selected entry and its reachable source modules. The command stops after source discovery and parsing. Use `cod-seed --check-declarations FILE` to also resolve module selections, nominal layouts and callable signatures. Declarations inside bodies and type checking of executable expressions belong to later work. Both commands report diagnostics without emitting artifacts. The standalone booter build uses `--translate`. The earlier seed route is available through `--check` with artifact options and `--run` for its source execution workloads.
+Run `cod-seed --parse FILE` for syntax feedback across the selected entry and its reachable source modules. The command stops after source discovery and parsing. Use `cod-seed --check-declarations FILE` to also resolve module selections, nominal layouts and callable signatures. Declarations inside bodies and type checking of executable expressions belong to later work. Both commands report diagnostics without emitting artifacts. The standalone booter build uses `--translate`. The [seed cleanup](../../design/ImplementationArchitecture.md#retiring-a-replaced-compiler-pipeline) tracks the remaining consumers of the earlier reference commands.
 
 `cod-seed --translate FILE` selects the replacement pipeline for supported C-entry closures. It extracts executable operations and frames, completes allocator and replay requirements from the recorded calls, then emits the requested LLVM and C provider artifacts. The current scope includes fixed scalar signatures, ordinary array growth, direct C provider calls with scalar operands and supported loans, and construction and catch-field reads of nominal exceptions with scalar payloads.
 
@@ -199,7 +201,7 @@ The scanner and parser use [the bundled ASCII vocabulary](../../docs/IdiomaticCo
 
 The seed processes the booter sources and emits the provider header, C stubs and LLVM IR into `OUT`. The grouped build tracks the library selected by the resolved seed executable. A seed in its CoD CMake development tree can use that checkout's `cod/library` when the installed library directory is absent. When an active project can supply a package override, the standalone build rechecks the source graph before reuse. Clang compiles the generated files and handwritten C adapters, then links the CoD archives and the shared libraries reported by `llvm-config`. The SDK library directory is recorded for the loader. The prepared inputs are read-only. The bootstrap input contract uses the [hand-prepared project directory](../../design/CodProjectStructureAndPkgMgmt.md#directory-layout).
 
-The current bootstrap CLIs use explicit operations. Run a program with `./build/bin/cod-seed --run FILE` after building the runtime. The current booter takes `cod-booter SOURCE OUTPUT` to emit an object, or an explicit declarations or provider request. An installed toolchain can provide `lib/libcod-runtime.a` under its prefix. Set the `COD_RUNTIME_ARCHIVE` environment variable to select a different compatible archive. Link seed-emitted objects or bitcode with the same archive when building an executable outside the seed.
+The current bootstrap CLIs use explicit operations. The current booter takes `cod-booter SOURCE OUTPUT` to emit an object, or an explicit declarations or provider request. An installed toolchain can provide `lib/libcod-runtime.a` under its prefix. Set the `COD_RUNTIME_ARCHIVE` environment variable to select a different compatible archive. Link seed-emitted objects or bitcode with the same archive when building an executable outside the seed.
 
 ## Next-stage repositories and native runtime
 

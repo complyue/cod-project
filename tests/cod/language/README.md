@@ -1,8 +1,10 @@
 # CoD source compiler validation
 
-Reference revision: 488 · Recorded: 2026-11-26 America/Los_Angeles.
+Reference revision: 489 · Recorded: 2026-11-26 America/Los_Angeles.
 
 ## Design authority
+
+At r489 the [seed cleanup decision](../../../CHANGELOG.md#h-post-rewrite-cleanup-20261126) continues the r484 distinction between archived verifier expectations and current runtime controls.
 
 At r488 the [structural phase decision](../../../CHANGELOG.md#h-compiler-restart-mechanism-20261126) distinguishes the checked-seed scheduling history from the source and runtime behavior exercised here. [D-ARCH-REVIEW](../../../design/DesignAuthorityRegistry.md#d-arch-review) covers the pass interfaces.
 
@@ -241,7 +243,7 @@ The seed's indexed source provider exposes a C-compatible view of a regular file
 
 The seed recovers missing call operands at the argument separator. In [the argument recovery fixture](argument-recovery-error.cod), the first and last operands each produce a located report. The middle argument and subsequent return remain in the recovered tree, and the errors prevent artifact publication. [Whole-file parser recovery](../../../applications/cod-booter/README.md#whole-file-parser-recovery)
 
-The [terminal body diagnostics test](terminal_body_diagnostics_tests.py) exercises two independent checked throws in both seed modes. It puts a forwarding procedure before its failing callee, checks the original two locations, and verifies the diagnostic cap and preservation of existing provider files. This recovery applies after ordinary direct-call effects and prerequisites have closed. [Final body validation](../../../design/ImplementationArchitecture.md#reporting-uncovered-checked-exceptions-from-independent-bodies)
+The archived checked seed reported two independent checked exceptions that lacked coverage at their original throw sites, capped the report on request and preserved existing provider files. The trusted seed retired that diagnostic replay. Its failure controls exercise the actual throw, cleanup, handler and output publication. [Archived two-body fixture](https://github.com/complyue/cod-project/blob/a0922741befb276e8b5225c2eaaae84a8923d3e3/tests/cod/language/terminal_body_diagnostics_tests.py) · [Retirement decision](../../../design/ImplementationArchitecture.md#removing-terminal-checked-exception-diagnostics)
 
 The [field initializer recovery fixture](field-initializer-recovery-error.cod) exercises separate missing operands in braced exception and product construction. The seed keeps the field and assignment, inserts an initializer-role error at the missing operand and resumes at the field separator to parse the next initializer and the subsequent return.
 
@@ -815,7 +817,7 @@ The private native value carrier includes bounded exception bits in programs tha
 
 <a id="deferred-execution-and-initialization"></a>
 
-The [checked-seed fixtures](deferred_recovery_tests.py) retain the [D-17 coverage requirement](../../../design/ExceptionControl.md#exceptions-between-deferred-actions) for deferred calls and blocks. Coverage can come from an ordinary local catch or a bodyless deferred catch reached after the failure. An attached catch covers its own action. An enclosing `throws` declaration, a handler visited too early, and a catch around registration leave a residual failure uncovered. Eager preparation retains ordinary checked propagation.
+The [archived checked-seed fixtures](https://github.com/complyue/cod-project/blob/a0922741befb276e8b5225c2eaaae84a8923d3e3/tests/cod/language/deferred_recovery_tests.py) illustrate the [D-17 coverage requirement](../../../design/ExceptionControl.md#exceptions-between-deferred-actions) for deferred calls and blocks. Coverage can come from an ordinary local catch or a bodyless deferred catch reached after the failure. An attached catch covers its own action. An enclosing `throws` declaration, a handler visited too early, and a catch around registration leave a residual failure uncovered. Eager preparation retains ordinary checked propagation. The [deferred runtime cases](deferred_recovery_tests.py) retain observable failure order, payloads, and finalizer effects.
 
 The trusted seed emits paths for successful registrations and the failures that actually reach the drain. During one bodyless visit, unmatched entries retain their order ahead of failures emitted by the catches. The finalizer can append a failure after those outputs. An ordinary body failure resumes with completed cleanup effects when the deferred queue clears. An explicit callable return can replace the ordinary failure. After the pass, a nonempty unchecked residual queue becomes `UnhandledDeferError`, including a single residual member. The aggregate retains members in FIFO order and keeps a pending ordinary body exception separately. Ordinary catches match the aggregate, and an inner aggregate stays one member of an outer drain. Failed aggregate acquisition releases retained owners and raises the resource failure. The seed supports catch and forwarding of the aggregate. Its `exceptions` and `body_exception` projections and member operations remain outside current source coverage. Queue growth beyond the cycle proof receives a located implementation-gap diagnostic.
 
@@ -1231,7 +1233,6 @@ COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-exception-values-validatio
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-exception-runtime-validation.json python3 tests/cod/language/exception_value_runtime_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-deferred-capture-validation.json python3 tests/cod/language/deferred_capture_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-deferred-capture-runtime-validation.json python3 tests/cod/language/deferred_capture_runtime_tests.py
-COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-deferred-recovery-validation.json python3 tests/cod/language/deferred_recovery_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-deferred-recovery-runtime-validation.json python3 tests/cod/language/deferred_recovery_runtime_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-deferred-initialization-validation.json python3 tests/cod/language/deferred_initialization_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-cleanup-selection-validation.json python3 tests/cod/language/cleanup_selection_tests.py
