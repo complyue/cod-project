@@ -198,7 +198,8 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
         mode == FieldRebind || mode == AugmentedPlaceTransfer) {
         inherit_context(sites, at, assignment.destination, guard, incoming, replacing);
         inherit_context(sites, at, assignment.input, guard, incoming, replacing);
-        if (mode == AugmentedPlaceTransfer &&
+        if ((mode == AugmentedPlaceTransfer ||
+                (mode == PlaceTransfer && facts[assignment.destination].checks_array_bounds)) &&
             facts[assignment.destination].kind == never_result()) {
             (sites[assignment.input].event <- skipped_operand()):void
         };

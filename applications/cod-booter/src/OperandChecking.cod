@@ -119,11 +119,12 @@ using "./ExceptionPayload.cod" {
 };
 using "./NativeDeclarations.cod" {
     SuppliedViews, HereContract, inspect_here_contract, HandleContract, inspect_handle_contract,
-    inspect_acquired_handle_loan,
+    inspect_acquired_handle_loan, ByteArrayBinding, byte_array_local,
     prepared_here_formal, prepared_native_operation, source_call_scalar,
 };
 using "./NativeDeclarations.cod" SuppliedView {
-    SuppliedArrayView, PreparedImportedNativeOperation, ImportedNativeOperand, ReadonlyByteRead
+    SuppliedArrayView, PreparedImportedNativeOperation, ImportedNativeOperand, ReadonlyByteRead,
+    ByteArrayLocal, ByteArrayIndex
 };
 using "./ParserStorage.cod" FormalMode { HandleFormal };
 using "./ParserStorage.cod" FormalSyntax { HereFormalSyntax };
@@ -776,6 +777,41 @@ func check_signature(nodes:const ExprNodes in N, names:const NameBindings in B, 
     (report.diagnostic <- unproved_result_contract()):void
 }
 
+func check_byte_array_local(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, facts:OperandFacts in F, at:u64, used:u64, revision:u64,
+    selection:const ByteArrayBinding in A) -> u8
+    where {const owner N, const owner B, const owner E, owner F, const owner A} {
+    ref local = make LocalBindingSites {
+        binding <- no_node(); initializer <- no_node(); mode <- ReferenceLocal; declaration_const <- false;
+    };
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
+    };
+    if (!inspect_local_binding(nodes, revision, used, at, local) || local.mode != ReferenceLocal ||
+        inspect_binding(nodes, revision, used, local.binding, binding) == InvalidBindingSyntax)
+        return invalid_operand_tree();
+    val input <- local.initializer;
+    if (facts[input].kind != source_array_loan() || facts[input].reception != borrowed_ref() ||
+        facts[input].identity_module != selection.type_module || facts[input].identity != selection.type_identity)
+        return unproved_operand();
+    if (facts[input].owner != selection.owner_site) return unproved_owner();
+    if (binding.owner_name != no_node() && names[binding.owner_name].declaration != selection.owner_site)
+        return owner_conflict(nodes, selection.owner_site, names[binding.owner_name].declaration);
+    val marker <- binding.target_type;
+    if (marker != no_node()) {
+        val kind <- names[marker].kind;
+        if (kind != array_type() && (kind != ordinary_selection() ||
+            selected[names[marker].declaration].kind != array_export())) return wrong_operand_type();
+        if (type_module(names, selected, marker, 0u64) != selection.type_module ||
+            type_identity(names, selected, marker) != selection.type_identity) return wrong_operand_type();
+        if (!binding.readonly && facts[input].target_readonly != 0u8) return expected_writable_place();
+    };
+    set_fact(facts, at, source_array_loan(), borrowed_ref(), selection.owner_site, selection.type_identity, 0u8);
+    facts[at].identity_module <- selection.type_module;
+    facts[at].target_readonly <- if (binding.readonly) { 1u8 } else { (facts[input].target_readonly) };
+    return 0u8
+}
+
 func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
                   facts:OperandFacts in F, at:u64, used:u64, revision:u64, local:const LocalBindingSites in L) -> u8
     where {const owner N, const owner B, const owner E, owner F, const owner L} {
@@ -1287,7 +1323,7 @@ func check_text_installation(nodes:const ExprNodes in N, facts:OperandFacts in F
     return 0u8;
 }
 
-func check_scalar_rebind(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
+func check_local_rebind(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
     at:u64, destination:u64, input:u64, used:u64, revision:u64) -> u8
     where {const owner N, const owner B, owner F} {
     if (name_syntax(nodes, used, destination) != OrdinaryName || names[destination].kind != local_binding())
@@ -1306,6 +1342,9 @@ func check_scalar_rebind(nodes:const ExprNodes in N, names:const NameBindings in
     if (binds_local_storage(nodes, input) || facts[input].reservation != no_node() ||
         (facts[input].reception != borrowed_ref() && facts[input].reception != local_place()) ||
         !same_operand_type(facts, destination, input)) return wrong_operand_type();
+    if (facts[destination].kind == source_array_loan() &&
+        (facts[input].reception != borrowed_ref() || facts[input].identity != facts[destination].identity ||
+            facts[input].identity_module != facts[destination].identity_module)) return wrong_operand_type();
     val owner_site <- facts[destination].owner;
     if (owner_site == no_node() || owner_site != facts[input].owner)
         return owner_conflict(nodes, owner_site, facts[input].owner);
@@ -3837,6 +3876,43 @@ func check_byte_read(nodes:const ExprNodes in N, names:const NameBindings in B,
     return 0u8
 }
 
+func check_local_byte_index(nodes:const ExprNodes in N, names:const NameBindings in B,
+    facts:OperandFacts in F, at:u64, used:u64, revision:u64, array_site:u64, index:u64, binding:u64) -> u8
+    where {const owner N, const owner B, owner F} {
+    ref syntax = make IndexSites { target <- no_node(); index <- no_node() };
+    if (!inspect_index_selection(nodes, revision, used, at, syntax) ||
+        syntax.target != array_site || syntax.index != index || binding >= array_site ||
+        names[array_site].kind != local_binding() || names[array_site].declaration != binding)
+        return invalid_operand_tree();
+    if (facts[array_site].kind != source_array_loan() || facts[array_site].reception != borrowed_ref() ||
+        facts[array_site].owner >= used) return unproved_operand();
+    if (facts[index].kind == never_result()) {
+        set_result(facts, at, never_result())
+    } else {
+        val diagnostic <- require_typed_bits(nodes, facts, index, scalar_u64());
+        if (diagnostic != 0u8) return diagnostic;
+        set_result(facts, at, scalar_u8())
+    };
+    (facts[at].checks_array_bounds <- true):void;
+    return 0u8
+}
+
+func check_local_byte_store(nodes:const ExprNodes in N, names:const NameBindings in B,
+    facts:OperandFacts in F, at:u64, destination:u64, input:u64, array_site:u64) -> u8
+    where {const owner N, const owner B, owner F} {
+    if (names[at].kind != 0u8 || !facts[destination].checks_array_bounds) return unsupported_transfer_signature();
+    if (facts[array_site].target_readonly != 0u8) return expected_writable_place();
+    if (facts[destination].kind == never_result() || facts[input].kind == never_result()) {
+        set_result(facts, at, never_result());
+        return 0u8
+    };
+    val diagnostic <- require_value_bits(nodes, facts, input, scalar_u8());
+    if (diagnostic != 0u8) return diagnostic;
+    set_fact(facts, at, scalar_u8(), borrowed_ref(), facts[array_site].owner, 0u64, 0u8);
+    facts[at].target_readonly <- 1u8;
+    return 0u8
+}
+
 func check_case_receipt(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
     at:u64, used:u64, revision:u64, header:u64, pattern:u64, schema:const DeclaredType in T) -> u8
     where {const owner N, const owner B, owner F, const owner T} {
@@ -3965,6 +4041,12 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     if (links[at].enum_assertion == FoldedEnumOperand) return 0u8;
     if (source_only && at < intrinsic (len)(views)) {
         case views[at] of {
+            ByteArrayLocal { val selection <-; } -> {
+                return check_byte_array_local(nodes, names, selected, facts, at, used, revision, selection)
+            };
+            ByteArrayIndex { val array_site <-; val index <-; val binding <-; } -> {
+                return check_local_byte_index(nodes, names, facts, at, used, revision, array_site, index, binding)
+            };
             ReadonlyByteRead {
                 val array_site <-; val index <-; val formal <-; val owner_site <-;
                 val module <- type_module; val identity <- type_identity;
@@ -4149,13 +4231,24 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                                        used, revision);
     if ((mode == PlaceRebind || mode == PlaceTransfer || mode == FieldTransfer) && names[at].scope == no_node()) return 0u8;
     if (mode == PlaceRebind) {
-        if (scalar_kind(facts[assignment.destination].kind))
-            return check_scalar_rebind(nodes, names, facts, at, assignment.destination, assignment.input, used, revision);
+        val destination <- assignment.destination;
+        if (scalar_kind(facts[destination].kind) ||
+            (source_only && facts[destination].kind == source_array_loan() &&
+                byte_array_local(views, names[destination].declaration)))
+            return check_local_rebind(nodes, names, facts, at, destination, assignment.input, used, revision);
         return check_text_installation(nodes, facts, at, assignment.destination, assignment.input)
     };
     if (mode == PlaceTransfer || mode == FieldTransfer) {
         val destination <- assignment.destination;
         val input <- assignment.input;
+        if (source_only && mode == PlaceTransfer) {
+            case views[destination] of {
+                ByteArrayIndex { val array_site <-; } -> {
+                    return check_local_byte_store(nodes, names, facts, at, destination, input, array_site)
+                };
+                _ -> {}
+            }
+        };
         if (facts[destination].kind == product_kind())
             return check_transfer_call(nodes, names, links, facts, owners, at, destination, input, false, used, revision);
         if (!immutable_text_kind(facts[destination].kind)) return check_transfer(nodes, facts, at, destination, input);

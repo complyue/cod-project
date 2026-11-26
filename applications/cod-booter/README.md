@@ -181,13 +181,13 @@ The C++ seed and CoD booter must parse the [owning catch header and ordinary ref
 
 Acceptance checks each frontend at its own parse boundary. A valid form carries its binding mode, owner name when present, and construction operands into checking. Malformed syntax fails at parsing. When an execution path is unsupported, the compiler can reject the parsed form during checking or lowering. Supported paths must execute their required propagation, handling and cleanup. For example, parsing `catch (e:const E)` as a borrowed local loses the handler’s release obligation even when the handler only reads e.
 
-### Fixed references to scalar storage
+### Fixed references
 
 An initialized `const ref` local selects a supported scalar target once. The fixed slot cannot be rebound. A writable target can still receive a bits transfer or an ordinary mutable loan through that reference. An omitted target annotation inherits access from the initializer. In `const ref saved:const u64 = source`, both the slot and the access through it are restricted.
 
 An ordinary scalar reference local can rebind to an existing initialized target with the same type and owner and compatible access. A failed right operand leaves the old target selected. The assignment result exposes the destination target with its declared access. A fixed reference taken before the rebind keeps the earlier target. The source commands check the body containing a fixed reference, including an unused binding.
 
-Fixed byte-array selections, fixed groups and bare declarations, and forwarded `ref var` slots retain their profile limits. [Binding and target qualifiers](../../design/RegionalOwnership.md#independent-binding-and-target-qualifiers)
+The declaration and C provider commands also check fixed locals initialized from a named byte-array loan with a `u64` index. The loan can be an ordinary reference formal or a previously checked local. The checker requires the exact nominal array and owner. A writable target supports indexed byte stores and ordinary mutable loans. Rebinding an ordinary slot under that owner leaves earlier selections intact. The byte-array object route, fixed groups and bare declarations, and forwarded `ref var` slots retain their profile limits. [Binding and target qualifiers](../../design/RegionalOwnership.md#independent-binding-and-target-qualifiers)
 
 ### Predicate assertions
 
