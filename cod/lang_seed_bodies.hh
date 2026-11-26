@@ -1537,6 +1537,24 @@ class BodyExtraction {
       return op;
     }
 
+    CheckedOperation alias_scalar_place(const Expression &expr) {
+      expect(!expr.annotation && expr.owner_name.empty() && !expr.fixed_binding && !expr.read_only &&
+             (expr.declaration_kind.empty() || expr.declaration_kind == "val") &&
+             expr.children.front()->kind == Kind::name,
+             expr.at, "replacement seed needs an unqualified alias of a lexical scalar val");
+      const auto &source = operand(expr, 0);
+      expect(source.view && source.binding && source.place && scalar_type(source.type) &&
+             body_.instance.bindings.at(*source.binding).value_binding && source.owners.size() == 1 && source.owners.contains(0),
+             expr.at, "replacement seed needs an alias of a lexical scalar val");
+      expect(std::ranges::find(owners(), expr.text, &OwnerParameter::name) == owners().end(),
+             expr.at, "replacement seed has no lexical shadow of an owner name");
+      // Both names resolve to the same storage and carry its original access.
+      const Local local{*source.binding, source.place, 0};
+      expect(scopes_.back().names.emplace(expr.text, local).second, expr.at,
+             "duplicate name in the replacement seed frame");
+      return {};
+    }
+
     CheckedOperation declaration(const Expression &expr, bool fixed) {
       const bool value = expr.declaration_kind == "val";
       expect((value || expr.declaration_kind == "ref") && expr.children.size() == 1 &&
@@ -1859,6 +1877,7 @@ class BodyExtraction {
       case Kind::raise: return throw_exception(expr);
       case Kind::try_scope: return try_statement(expr);
       case Kind::rebind: case Kind::transfer: return assign(expr);
+      case Kind::alias: return alias_scalar_place(expr);
       case Kind::grouped: return operand_result(extract(*expr.children.front(), discard_iteration_result));
       case Kind::typed_expression: return typed_expression(expr);
       case Kind::block:
