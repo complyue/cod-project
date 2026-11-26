@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Reframe the ownership paper around domain lifetimes
+
+<a id="k-ownership-paper-domain-lifetimes-20261126"></a>
+**K-OWNERSHIP-PAPER-DOMAIN-LIFETIMES-20261126.** The project user asked the [ownership paper](papers/CoarseGrainedOwnership.md) to foreground multi-owner tracking, domain choices about which allocations retire together, and the long-running process that can have 1 GB free yet fail a 10 MB request. The [previous paper](https://github.com/complyue/cod-project/blob/ce57f249170c181d3e666da706af5127d2260efe/papers/CoarseGrainedOwnership.md) supplies the revision-replacement example. The revision adds a [three-owner fare helper](papers/CoarseGrainedOwnership.md#one-call-can-use-three-owners-and-return-a-view-into-one), a [fixed-window allocation comparison](papers/CoarseGrainedOwnership.md#how-1-gb-free-can-fail-a-10-mb-request), the [audit result's owner](papers/CoarseGrainedOwnership.md#which-owner-should-carry-an-audit-result) and a workload evaluation plan under the [existing regional contract](design/RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy). The project user clarified that a `ref` can never outlive its actual owner and that the compiler must reject such an escape. Both placements in the bounded-allocator example release only whole regions. Production memory and latency remain empirical questions.
+
 ## 2026-11-26 — Explain Compile on Demand alongside Compile for Ever
 
 <a id="k-cod-cli-name-20261126"></a>
