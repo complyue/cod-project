@@ -15032,14 +15032,26 @@ class ScalarChecker {
   std::vector<ArgumentEvidence> argument_evidence(const Expression &expr) const {
     if (expr.children.empty()) return {};
     if (expr.intrinsic || named_family(expr).methods.empty()) return std::vector<ArgumentEvidence>(expr.children.size());
-    // Reuse ordinary literal inference without surveying unrelated lexical
-    // bindings. Grouping, annotations, names and calls still use the frame.
-    if (std::ranges::all_of(expr.children, [](const auto &operand) {
-          using K = Expression::Kind;
-          return operand->kind == K::integer || operand->kind == K::real ||
-              operand->kind == K::boolean || operand->kind == K::string_literal;
-        })) return argument_evidence(expr, TypeEvidenceState{});
-    return argument_evidence(expr, evidence_state());
+    // These operands only read their own declaration or its product schema.
+    // Compound operands can change or inspect other bindings during inference.
+    using K = Expression::Kind;
+    std::set<std::string> names;
+    for (const auto &operand : expr.children) {
+      if (operand->kind == K::integer || operand->kind == K::real ||
+          operand->kind == K::boolean || operand->kind == K::string_literal) continue;
+      const bool field = operand->kind == K::field && operand->children.size() == 1 &&
+          !operand->annotation && !operand->intrinsic && !operand->checked_ref_argument && !operand->spread;
+      const auto &name = field ? *operand->children.front() : *operand;
+      if (!bare_name(name) || name.construction_label)
+        return argument_evidence(expr, evidence_state());
+      const auto found = lexical_.lookup(name.text);
+      if (!found) return argument_evidence(expr, evidence_state());
+      const auto &binding = bindings_->at(*found);
+      if (binding.definition || binding.owner_binding || binding.pipeline || (field && binding.type.kind != Type::product))
+        return argument_evidence(expr, evidence_state());
+      names.insert(name.text);
+    }
+    return argument_evidence(expr, names.empty() ? TypeEvidenceState{} : evidence_state(false, &names));
   }
   bool builtin_indexed_transfer(const Expression &expr, std::string_view operation,
                                const TypeEvidenceState *state = nullptr) const {
@@ -23000,9 +23012,13 @@ class ScalarChecker {
     return expr.kind == Expression::Kind::block && !expr.scoped && expr.children.size() == count;
   }
 
-  static bool bare_name(const Expression &expr, std::string_view name) {
+  static bool bare_name(const Expression &expr) {
     return expr.kind == Expression::Kind::name && !expr.annotation && !expr.intrinsic && !expr.checked_ref_argument &&
-        !expr.spread && expr.text == name;
+        !expr.spread;
+  }
+
+  static bool bare_name(const Expression &expr, std::string_view name) {
+    return bare_name(expr) && expr.text == name;
   }
 
   bool bind_byte_transfer(const CheckedInstance &instance, const Form &form, ScalarPlan &plan) const {
