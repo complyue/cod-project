@@ -32,7 +32,7 @@ struct BodyDependencies {
   struct Requirements {
     std::set<size_t> allocations;
     Bindings replay;
-    bool open_replay = false;
+    const Location *unbound_replay = nullptr;
   };
   struct ReplayEdge {
     size_t caller;
@@ -59,12 +59,15 @@ struct BodyDependencies {
     std::vector<size_t> open;
     std::vector<std::pair<size_t, size_t>> used;
     for (size_t body = 0; body < replay_callers.size(); ++body) {
-      if (direct[body].open_replay) open.push_back(body);
+      if (direct[body].unbound_replay) open.push_back(body);
       for (const auto symbol : direct[body].replay) used.emplace_back(body, symbol);
     }
     for (size_t next = 0; next < open.size(); ++next)
       for (const auto &edge : replay_callers[open[next]])
-        if (!std::exchange(result[edge.caller].open_replay, true)) open.push_back(edge.caller);
+        if (!result[edge.caller].unbound_replay) {
+          result[edge.caller].unbound_replay = result[open[next]].unbound_replay;
+          open.push_back(edge.caller);
+        }
     for (size_t next = 0; next < used.size(); ++next) {
       const auto [body, symbol] = used[next];
       for (const auto &edge : replay_callers[body])
@@ -172,7 +175,7 @@ class BodyExtraction {
     SymbolBindings incoming;
     std::optional<Outline> outline;
     bool foreign_release = false;
-    bool open_replay = false;
+    const Location *unbound_replay = nullptr;
     const Expression *void_exit = nullptr;
     bool case_scope = false;
     std::vector<ValueReturn> value_returns;
@@ -664,7 +667,7 @@ class BodyExtraction {
       // Ordinary here inputs have explicit attached suppliers. A forwarded
       // descriptor in a literal comes from that literal's supplier frame.
       // An externally entered frame has no such bound source.
-      if (form_.c_linkage) body_.open_replay = true;
+      if (form_.c_linkage && !body_.unbound_replay) body_.unbound_replay = &expr.at;
       for (size_t i = 0; i < offers.size(); ++i) {
         const auto &input = operand(expr, i);
         const auto &offer = offers[i];
@@ -2193,7 +2196,7 @@ class BodyExtraction {
     if (!handler_layouts_.empty()) graph.replay_callers.resize(foreign + 1);
     for (size_t id = 0; id < bodies_.size(); ++id) {
       const auto &body = bodies_[id];
-      graph.direct.push_back({body.allocations, body.incoming, body.open_replay});
+      graph.direct.push_back({body.allocations, body.incoming, body.unbound_replay});
       if (!graph.replay_callers.empty()) {
         for (const auto &call : body.replay_calls)
           graph.replay_callers[call.callee].push_back({id, call.supplied});
@@ -2212,9 +2215,10 @@ class BodyExtraction {
             for (const auto method : call.family->methods) {
               if (method == bodies_[call.callee].instance.method) continue;
               const auto target = selected_.find(method);
-              if (target == selected_.end() || !declarations_.method(method).here.empty())
-                graph.direct.back().open_replay = true;
-              else graph.replay_callers[target->second].push_back({id, call.supplied});
+              if (target != selected_.end() && declarations_.method(method).here.empty())
+                graph.replay_callers[target->second].push_back({id, call.supplied});
+              else if (!graph.direct.back().unbound_replay)
+                graph.direct.back().unbound_replay = &declarations_.method(method).source->at;
             }
           }
         }
@@ -2391,11 +2395,16 @@ class BodyExtraction {
         auto &operation = body.instance.operations.at(call.site);
         const auto &callee = completed[call.callee];
         if (call.installs_handler) {
-          expect(!callee.open_replay, call.site->at, "replacement seed cannot complete a live handler's replay inventory");
+          if (callee.unbound_replay)
+            implementation_gap(call.site->at, "replacement seed cannot complete a live handler's replay inventory; "
+                               "unrepresented dependency at " + location_text(*callee.unbound_replay));
           for (const auto id : callee.replay) {
             const auto &symbol = program.symbols.at(id);
-            expect(!symbol.reference && symbol.type && scalar_type(*symbol.type), call.site->at,
-                   "replacement seed needs a supported scalar binding in live handler replay");
+            if (symbol.reference || !symbol.type || !scalar_type(*symbol.type)) {
+              const auto canonical = symbol.declaration ? symbol.declaration->filename() + "::" : "";
+              implementation_gap(call.site->at, "replacement seed needs a supported scalar binding in live handler "
+                                 "replay for " + canonical + "@" + symbol.name);
+            }
           }
         }
         if (const auto &outline = bodies_[call.callee].outline; outline && !outline->here)
