@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Schedule booter syntax delivery alongside the pipeline rewrite
+
+<a id="h-booter-syntax-delivery-order-20261126"></a>
+**H-BOOTER-SYNTAX-DELIVERY-ORDER-20261126.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) confirmed the proposed delivery order, “同意，按你的建议安排下去。” Mainline inventories confirmed booter syntax now and identifies the first missing phase for each form. Features that use stable interfaces can ship during the rewrite. Where both changes need the same phase interface, complete that boundary first and implement the feature against it. The [enum assertion decision](https://github.com/complyue/cod-project/blob/0d132ecbf394daa768824dab76fa59a2d89085fe/applications/cod-booter/docs/CompilerPipeline.md#enum-assertions-in-source-and-object-commands) illustrates this order. Start the [final cleanup](#h-post-rewrite-cleanup-20261126) when the rewritten declaration, provider and object commands are delivered, even if independent syntax work remains. Extend the seed for a concrete bootstrap need, including a capability that makes the intended booter source materially clearer. [Bootstrap delivery contract](applications/cod-booter/README.md#initial-seed-delivery)
+
 ## 2026-11-26 — Share enum assertion selection across the booter commands
 
 <a id="k-booter-enum-assertion-selection-20261126"></a>
