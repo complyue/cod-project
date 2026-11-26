@@ -198,6 +198,9 @@ class BodyExtraction {
 
   static CaseResult complete_case(const BoundCase &input, const CompletedResults &results) {
     CaseResult output;
+    // The parser marks the owning case. Extraction admits only bare breaks,
+    // each of which finishes that case with a void result.
+    if (input.site->case_breaks) output.type = Type::void_type;
     for (const auto &arm : input.arms) {
       const auto *known = std::get_if<ArmValue>(&arm.result);
       const auto &type = known ? known->type : *results.at(std::get<size_t>(arm.result)).type;
@@ -1752,9 +1755,8 @@ class BodyExtraction {
       const auto &subject = operand(expr, 0);
       const bool sum = subject.type.kind == Type::sum && subject.view && declarations().bits_payload(subject.type);
       const bool enumeration = subject.type.kind == Type::enumeration;
-      expect((sum || enumeration || subject.type == Type::boolean) &&
-             !expr.case_breaks && !expr.case_resumes,
-             expr.at, "replacement seed needs a closed Boolean, enum or bits sum case without case transfers");
+      expect((sum || enumeration || subject.type == Type::boolean) && !expr.case_resumes,
+             expr.at, "replacement seed needs a closed Boolean, enum or bits sum case without resumption");
       std::set<std::uint64_t> covered;
       bool catch_all = false;
       BoundCase input{&expr, {}};
@@ -1877,6 +1879,9 @@ class BodyExtraction {
       case Kind::index: return index(expr);
       case Kind::field: return field(expr);
       case Kind::case_expression: return check_case(expr);
+      case Kind::case_break:
+        expect(expr.children.empty(), expr.at, "replacement seed needs a payload-free case break");
+        [[fallthrough]];
       case Kind::case_failure:
         op.type = Type::never;
         return op;
