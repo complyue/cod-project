@@ -1409,12 +1409,16 @@ class LLVMEmission {
       std::map<std::optional<Allocator>, std::vector<size_t>> alternatives;
       for (size_t i = 0; i < contexts_.size(); ++i) {
         const auto &call = contexts_[i].at(&expr);
-        if (!call.callee || program_->instances[*call.callee].method != method) continue;
+        if (!call.callee) continue;
+        const auto &callee = program_->instances[*call.callee];
+        if (callee.method != method) continue;
         std::optional<Allocator> selected;
         if (call.array_allocator_arguments) {
           const auto found = call.array_allocator_arguments->find(role);
           if (found != call.array_allocator_arguments->end()) selected = found->second;
         }
+        if (!selected && callee.array_allocator_roles->contains(role))
+          implementation_gap(expr.at, "call without a prepared array allocator capability");
         alternatives[selected].push_back(i);
       }
       prepared.push_back(contextual_value(expr, alternatives, "array.owner",
@@ -5642,8 +5646,11 @@ public:
       auto &call = call_layouts_[i];
       std::set<size_t> array_owners;
       for (const auto id : method.instances) {
-        const auto &result = program.instances[id].result;
-        const auto &required = program.instances[id].effects.array_allocations;
+        const auto &instance = program.instances[id];
+        const auto &result = instance.result;
+        if (!instance.array_allocator_roles)
+          implementation_gap(method.source->at, "emission without completed array allocator requirements");
+        const auto &required = *instance.array_allocator_roles;
         array_owners.insert(required.begin(), required.end());
         call.callable_destination |= !result.borrowed() && result.type->kind == Type::procedure;
         call.native_borrow_destination |= result.native_borrow();

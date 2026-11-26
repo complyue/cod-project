@@ -628,6 +628,9 @@ struct CheckedInstance {
   bool effects_frozen = false;
   bool scalar_frame_ready = false;
   bool symbol_requirements_known_empty = false;
+  // Completed capability arguments for this executable frame. An empty
+  // layout is valid. A missing layout cannot supply the LLVM call ABI.
+  std::optional<std::set<size_t>> array_allocator_roles = {};
 };
 struct CheckedHereContract {
   struct Component {

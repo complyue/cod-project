@@ -26494,6 +26494,8 @@ class ScalarChecker {
           implementation_gap(method.source->at, "a C entry owner supplying a lexical allocator");
     }
     program_.warnings.erase(program_.warnings.begin(), program_.warnings.begin() + reported_warnings);
+    for (auto &instance : program_.instances)
+      instance.array_allocator_roles.emplace(std::move(instance.effects.array_allocations));
     return std::move(program_);
   }
 
