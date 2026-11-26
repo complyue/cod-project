@@ -71,6 +71,9 @@ data Base <: Identified { id:u64 }
 data Item extends Base { detail:u64 }
 data Tagged extends Item { id:u64 }
 
+# Outside the product header, `extends` is an ordinary identifier.
+func copy_value(extends:u64) -> u64 { extends }
+
 func Base(raw:u64) { id <- raw }
 func Item(raw:u64, extra:u64) {
     super(raw)

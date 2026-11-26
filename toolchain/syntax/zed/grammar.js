@@ -38,7 +38,7 @@ module.exports = grammar({
       'export', 'fallback', 'finally', 'for', 'from', 'func', 'function',
       'global', 'here', 'if', 'import', 'in', 'intrinsic', 'is', 'isa', 'make',
       'mixin', 'not', 'of', 'own', 'owner', 'perform', 'proc', 'procedure',
-      'ptr', 'ref', 'region', 'return', 'returning', 'symbol', 'throw',
+      'ptr', 'ref', 'region', 'return', 'returning', 'self', 'super', 'symbol', 'throw',
       'throws', 'touch', 'try', 'type', 'typeof', 'unit', 'units', 'using',
       'val', 'var', 'where', 'with', 'yield', 'yields',
     ),

@@ -13,8 +13,66 @@
 
 (source_file
   (keyword) @_type_declaration
+  . (comment)*
   . (identifier) @type.cod
   (#any-of? @_type_declaration "array" "data" "type" "unit"))
+
+; In a declaration head, `<:` names an abstract parent or conformance type.
+(source_file
+  (keyword) @_abstract_relation
+  . (comment)*
+  . (identifier)
+  . (comment)*
+  . (operator) @_abstract_relation_operator
+  . (comment)*
+  . (identifier) @type.cod
+  (#any-of? @_abstract_relation "data" "type")
+  (#eq? @_abstract_relation_operator "<:"))
+
+; `extends` is an identifier except in a product declaration head.
+(source_file
+  (keyword) @_product
+  . (comment)*
+  . (identifier) @type.cod
+  . (comment)*
+  . (identifier) @keyword.declaration.cod
+  . (comment)*
+  . (identifier) @type.cod
+  . (comment)*
+  . (block)
+  (#eq? @_product "data")
+  (#eq? @keyword.declaration.cod "extends"))
+
+; The dot distinguishes ancestor selection from a parent constructor call.
+((keyword) @_super
+  . (comment)*
+  . (parenthesized "(" . (comment)* . (identifier) @type.cod . (comment)* . ")")
+  . (comment)*
+  . (delimiter) @_super_dot
+  . (comment)*
+  . (identifier)
+  . (comment)*
+  . (parenthesized)
+  (#eq? @_super "super")
+  (#eq? @_super_dot "."))
+
+((keyword) @_member_declaration
+  . [
+    (identifier) @type.cod
+    ((keyword) @_receiver_const . (identifier) @type.cod)
+    (parenthesized
+      "(" . (keyword)? @_receiver_const
+      . (identifier) @type.cod
+      . (keyword) @_receiver_in
+      . (identifier) . ")")
+  ]
+  . (delimiter) @_member_dot
+  . [(identifier) @function (symbol) @function (parenthesized)]
+  . (parenthesized)
+  (#any-of? @_member_declaration "func" "function" "proc" "procedure")
+  (#eq? @_receiver_const "const")
+  (#eq? @_receiver_in "in")
+  (#eq? @_member_dot "."))
 
 ((delimiter) @_type_separator
   . (identifier) @type.cod

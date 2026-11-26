@@ -6,6 +6,7 @@
   "patterns": [
     { "include": "#comments" },
     { "include": "#module-paths" },
+    { "include": "#oo" },
     { "include": "#symbols" },
     { "include": "#numbers" },
     { "include": "#keywords" },
@@ -33,6 +34,55 @@
       "patterns": [
         { "match": "\\\\[\\\\\"]", "name": "constant.character.escape.cod" },
         { "match": "\\\\(?:[^\\\\\"\\n]|$)", "name": "invalid.illegal.escape.cod" }
+      ]
+    },
+    "oo": {
+      "comment": "Line-local patterns for OO declaration heads and named ancestor calls. Outside a product head, extends is an ordinary name.",
+      "patterns": [
+        {
+          "match": "\\b(data)[ \\t]+([A-Za-z_][A-Za-z_0-9]*)[ \\t]+(extends)[ \\t]+([A-Za-z_][A-Za-z_0-9]*)(?=[ \\t]*(?:\\{|#|$))",
+          "captures": {
+            "1": { "name": "storage.type.declaration.cod" },
+            "2": { "name": "entity.name.type.cod" },
+            "3": { "name": "storage.modifier.cod" },
+            "4": { "name": "entity.name.type.cod" }
+          }
+        },
+        {
+          "match": "\\b(super)[ \\t]*(\\()[ \\t]*([A-Za-z_][A-Za-z_0-9]*)[ \\t]*(\\))(?=[ \\t]*\\.[ \\t]*[A-Za-z_][A-Za-z_0-9]*[ \\t]*\\()",
+          "captures": {
+            "1": { "name": "keyword.other.receiver.cod" },
+            "2": { "name": "punctuation.section.parens.begin.cod" },
+            "3": { "name": "entity.name.type.cod" },
+            "4": { "name": "punctuation.section.parens.end.cod" }
+          }
+        },
+        {
+          "match": "\\b(func|function|proc|procedure)[ \\t]+(?:(const)[ \\t]+)?([A-Za-z_][A-Za-z_0-9]*)(?=[ \\t]*\\.)",
+          "captures": {
+            "1": { "name": "storage.type.function.cod" },
+            "2": { "name": "storage.modifier.cod" },
+            "3": { "name": "entity.name.type.cod" }
+          }
+        },
+        {
+          "match": "\\b(func|function|proc|procedure)[ \\t]+(\\()[ \\t]*(?:(const)[ \\t]+)?([A-Za-z_][A-Za-z_0-9]*)[ \\t]+(in)[ \\t]+[A-Za-z_][A-Za-z_0-9]*[ \\t]*(\\))(?=[ \\t]*\\.)",
+          "captures": {
+            "1": { "name": "storage.type.function.cod" },
+            "2": { "name": "punctuation.section.parens.begin.cod" },
+            "3": { "name": "storage.modifier.cod" },
+            "4": { "name": "entity.name.type.cod" },
+            "5": { "name": "storage.modifier.cod" },
+            "6": { "name": "punctuation.section.parens.end.cod" }
+          }
+        },
+        {
+          "match": "(\\.)[ \\t]*(@[A-Za-z_][A-Za-z_0-9]*)(?=[ \\t]*\\()",
+          "captures": {
+            "1": { "name": "punctuation.accessor.cod" },
+            "2": { "name": "entity.name.function.accessor.cod" }
+          }
+        }
       ]
     },
     "symbols": {
@@ -68,6 +118,7 @@
         { "match": "\\b(?:effect|perform|behave|touch)\\b", "name": "keyword.other.effect.cod" },
         { "match": "\\b(?:make|capacity|typeof)\\b", "name": "keyword.other.allocation.cod" },
         { "match": "\\b(?:is|not)\\b", "name": "keyword.operator.word.cod" },
+        { "match": "\\b(?:self|super)\\b", "name": "keyword.other.receiver.cod" },
         { "match": "\\b(?:i64|u8|u32|u64|f32|f64|bool|void)\\b", "name": "storage.type.primitive.cod" },
         { "match": "\\b(?:true|false)\\b", "name": "constant.language.boolean.cod" },
         { "match": "\\bnull\\b", "name": "constant.language.null.cod" },

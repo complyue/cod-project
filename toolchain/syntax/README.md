@@ -17,7 +17,9 @@ The editor grammars follow [D-10-ORDINARY-NAMES](../../design/DesignAuthorityReg
 
 For [contextual ownership](../../design/DesignAuthorityRegistry.md#d-10-own-qualifier) and [lexical names](../../design/DesignAuthorityRegistry.md#d-10-contextual-names), both previews highlight `own`, `from`, `throws`, `data`, `type`, `unit`, and `array` by spelling, even where CoD allows them as names. `owned` is an ordinary identifier and has no keyword highlight. For example, in [`contextual-own-calls.cod`](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/tests/cod/language/contextual-own-calls.cod), `own` still gets keyword styling when used as a callable or parameter name. Highlighting does not imply that a word is reserved.
 
-Zed distinguishes type names in recognizable syntax positions, including declarations, annotations, `throws` clauses, and explicit unit selections. It does not resolve names: a bare call such as `Position(...)` or an unqualified module selection keeps ordinary identifier highlighting.
+Both previews highlight `self` and `super` and treat `extends` as a keyword only in a [product storage-parent header](../../design/DesignAuthorityRegistry.md#d-07-product-extends). They distinguish the type in `super(Ancestor).method()` from the ordinary argument in `super(raw)`, and recognize the receiver type in dotted member, accessor and call-operator declarations, including the explicit-owner form. TextMate's OO patterns are line-local.
+
+Zed also distinguishes type names in positions such as annotations, `throws` clauses, and explicit unit selections. Neither preview resolves names: a bare call such as `Position(...)` or an unqualified module selection keeps ordinary identifier highlighting.
 
 ## Activate in local Zed
 
