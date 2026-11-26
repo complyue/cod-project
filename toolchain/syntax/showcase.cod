@@ -5,48 +5,48 @@
 # 01 — Literals, operators and units
 
 unit Position
-val channels:u8 <- 4u8
-val frame_size:u32 <- 256u32
-val samples:u64 <- 96000u64
-val offset:i64 <- -9
-val gain:f32 <- 1.5f32
-val tolerance:f64 <- 2.5e-3f64
+val channels:UInt8 <- 4u8
+val frame_size:UInt32 <- 256u32
+val samples:UInt64 <- 96000u64
+val offset:Int64 <- -9
+val gain:Float32 <- 1.5f32
+val tolerance:Float64 <- 2.5e-3f64
 val frames <- samples / frame_size
 val remainder <- samples % frame_size
 val paused <- false
 val ready <- not paused and frames > 0u64
-val pixel_offset <- i64(-2.75)
-func (+)(i:i64(Position), step:i64) -> i64(Position) { Position(scalar(i) + step) }
+val pixel_offset <- Int64(-2.75)
+func (+)(i:Int64(Position), step:Int64) -> Int64(Position) { Position(scalar(i) + step) }
 val shifted <- (+)(Position(10), 5)
 
 # 02 — Declarations, owners and storage
 
 val count <- 3u64
-const val limit:u64 <- 10u64
+const val limit:UInt64 <- 10u64
 ref view = count
 const ref fixed = count
-ref readonly:const u64 = count
-ptr selected:u64 = null in here
+ref readonly:const UInt64 = count
+ptr selected:UInt64 = null in here
 var slot -> selected
 slot = view
 if (selected is not null and selected is count) { selected <-:+ 1u64 }
 ptr scratch = make typeof(count) in here
 
-array Counts[u32]:u64
+array Counts[UInt32]:UInt64
 ref counts = make Counts(4u64, 0u64) in arena
 ref cell = counts[0u32]
 cell <- 9u64
 val size <- len(counts)
 
-region Stock { remaining:u64 }
+region Stock { remaining:UInt64 }
 own region inventory:Stock <- make region Stock(4096u64 -> capacity) { remaining <- 12u64 }
 func handoff(own region stock:Stock) -> own region :Stock { return stock }
 
 # 03 — Data alternatives, enums and cases
 
-export enum Priority:u8 { Standard; Urgent; }
-data Receipt = Accepted { id:u64; ptr prior:Receipt; } | Skipped {}
-func Accepted(raw:u64) {
+export enum Priority:UInt8 { Standard; Urgent; }
+data Receipt = Accepted { id:UInt64; ptr prior:Receipt; } | Skipped {}
+func Accepted(raw:UInt64) {
     id <- raw
     prior = null
 }
@@ -55,7 +55,7 @@ ref receipt = make Accepted(42u64)
 val accepted <- receipt isa Accepted
 
 """Returns the matching receipt ID for [Receipt](Receipt)."""
-func checked_id(ptr r:const Receipt in O, limit:u64) -> u64 where {const owner O} {
+func checked_id(ptr r:const Receipt in O, limit:UInt64) -> UInt64 where {const owner O} {
     case r of {
         null -> 0u64;
         Accepted { val n <- id; } | n >= limit -> n;
@@ -67,34 +67,34 @@ func checked_id(ptr r:const Receipt in O, limit:u64) -> u64 where {const owner O
 # 04 — Storage parents, member receivers and super
 
 type Identified;
-data Base <: Identified { id:u64 }
-data Item extends Base { detail:u64 }
-data Tagged extends Item { id:u64 }
+data Base <: Identified { id:UInt64 }
+data Item extends Base { detail:UInt64 }
+data Tagged extends Item { id:UInt64 }
 
 # Outside the product header, `extends` is an ordinary identifier.
-func copy_value(extends:u64) -> u64 { extends }
+func copy_value(extends:UInt64) -> UInt64 { extends }
 
-func Base(raw:u64) { id <- raw }
-func Item(raw:u64, extra:u64) {
+func Base(raw:UInt64) { id <- raw }
+func Item(raw:UInt64, extra:UInt64) {
     super(raw)
     detail <- extra
 }
-func Tagged(raw:u64, extra:u64, tag:u64) {
+func Tagged(raw:UInt64, extra:UInt64, tag:UInt64) {
     super(raw, extra)
     id <- tag
 }
 
-func const Base.@number() -> u64 { self.id }
-proc Base.update(n:u64) { self.id <- n }
-func (const Base in O).id_view() -> ref const u64 in O where {const owner O} {
+func const Base.@number() -> UInt64 { self.id }
+proc Base.update(n:UInt64) { self.id <- n }
+func (const Base in O).id_view() -> ref const UInt64 in O where {const owner O} {
     self.id
 }
 
-func const Base.score() -> u64 { self.id }
-func const Item.score() -> u64 { super.score() + self.detail }
-func const Tagged.score() -> u64 { super(Base).score() + self.id }
+func const Base.score() -> UInt64 { self.id }
+func const Item.score() -> UInt64 { super.score() + self.detail }
+func const Tagged.score() -> UInt64 { super(Base).score() + self.id }
 
-func mark(entry:const Base in O, priority:Priority) -> u64 where {const owner O} of {
+func mark(entry:const Base in O, priority:Priority) -> UInt64 where {const owner O} of {
     (item:const Item in O, Urgent) => item.detail;
     (_, Urgent) => 1u64;
     (_, _) => 0u64
@@ -107,55 +107,55 @@ val number <- base.number
 ref id_ref = base.id_view()
 val score <- item.score()
 
-data StorageException <: Exception { code:u64 }
-data ShortWriteException extends StorageException { written:u64 }
+data StorageException <: Exception { code:UInt64 }
+data ShortWriteException extends StorageException { written:UInt64 }
 
 # 05 — Call operators, callable values and here parameters
 
-data Threshold { minimum:u64 }
-func const Threshold.(())(value:u64) -> bool { value >= self.minimum }
-func (const Threshold in O).(())() -> ref const u64 in O where {const owner O} {
+data Threshold { minimum:UInt64 }
+func const Threshold.(())(value:UInt64) -> bool { value >= self.minimum }
+func (const Threshold in O).(())() -> ref const UInt64 in O where {const owner O} {
     self.minimum
 }
 
-func const Threshold.(())(x:u64, y:u64) -> bool {
+func const Threshold.(())(x:UInt64, y:UInt64) -> bool {
     x + y >= self.minimum
 }
 
-func test(here pred(x:u64) -> bool, n:u64) -> bool { pred(n) }
+func test(here pred(x:UInt64) -> bool, n:UInt64) -> bool { pred(n) }
 ref threshold = make Threshold { minimum <- 10u64 }
 val direct <- threshold(12u64)
 val supplied <- test(threshold, 12u64)
 val deferred_read <- test(12u64) (x) => {{ return threshold(x) }}
 
-proc enabled(n:u64) -> bool of {
+proc enabled(n:UInt64) -> bool of {
     (0u64) => false;
-    (value:u64) => {
+    (value:UInt64) => {
         test(value) (x) => { x > 1u64 }
     }
 }
 
 func as_flag -> bool {
-    (n:u64) => n != 0u64;
+    (n:UInt64) => n != 0u64;
     (b:bool) => b
 }
 
-func increment = func(x:u64) -> u64 { x + 1u64 }
-func apply(f:func(u64) -> u64, n:u64) -> u64 { f(n) }
+func increment = func(x:UInt64) -> UInt64 { x + 1u64 }
+func apply(f:func(UInt64) -> UInt64, n:UInt64) -> UInt64 { f(n) }
 val applied <- apply(increment, 3u64)
 
 # 06 — Symbols and scoped installations
 
-val symbol @level:u64
-symbol @read:proc() -> u64
-proc @read() -> u64 { return @level }
+val symbol @level:UInt64
+symbol @read:proc() -> UInt64
+proc @read() -> UInt64 { return @level }
 
-symbol @credit:proc(Priority) -> u64
-proc @credit(priority:Priority) -> u64 of {
+symbol @credit:proc(Priority) -> UInt64
+proc @credit(priority:Priority) -> UInt64 of {
     (Standard) => 1u64;
     (Urgent) => 2u64
 }
-effect @credit -> u64 {
+effect @credit -> UInt64 {
     (Urgent) => 1u64;
     (_) => 0u64
 }
@@ -164,50 +164,50 @@ effect @level <- 1u64
 effect proc @read;
 {{
     effect @level <- 2u64
-    effect proc @credit(priority:Priority) -> u64 of {
+    effect proc @credit(priority:Priority) -> UInt64 of {
         (_) => 3u64
     }
     val current <- behave @read()
     val saved <- perform @read()
 }}
 
-func symbol @rating() -> u64
-func baseline() -> u64 { 17u64 }
+func symbol @rating() -> UInt64
+func baseline() -> UInt64 { 17u64 }
 effect @rating <- baseline
 val rating_value <- @rating()
 
-symbol @gate:func(u64) -> bool in O where {owner O}
+symbol @gate:func(UInt64) -> bool in O where {owner O}
 effect @gate <- threshold
 val open <- @gate(12u64)
 
-ref symbol @balance:u64 in S where {owner S}
+ref symbol @balance:UInt64 in S where {owner S}
 effect @balance = count, @level <- 3u64
 @balance <-:- 2u64
 
 # 07 — Control, callbacks and cleanup
 
-func fold(here step(acc:u64, item:u64) -> u64, first:u64, past:u64, seed:u64) -> u64 {
+func fold(here step(acc:UInt64, item:UInt64) -> UInt64, first:UInt64, past:UInt64, seed:UInt64) -> UInt64 {
     val acc <- seed
     for (i in first .. past) { acc <- step(acc, i) }
     acc
 }
 val total <- fold(0u64, 4u64, 10u64) (acc, i) => { acc + i }
 
-func last_or(first:i64, past:i64) -> i64 {
-    val last <- -1i64
-    for (i in first .. past) { last <- i } else { last <- -1i64 }
+func last_or(first:Int64, past:Int64) -> Int64 {
+    val last <- -1
+    for (i in first .. past) { last <- i } else { last <- -1 }
     last
 }
 
-func relay(here body() -> void) -> u64 { body(); 99u64 }
+func relay(here body() -> void) -> UInt64 { body(); 99u64 }
 val early <- relay() { break 7u64 };
 {{ work() }}
 
 using "std:exceptions" NullPointerException
-func required(ptr p:u64 in O) -> u64 throws NullPointerException where {const owner O} {
+func required(ptr p:UInt64 in O) -> UInt64 throws NullPointerException where {const owner O} {
     not null p
 }
-proc observe(ptr p:u64 in O, wrap:bool) throws NullPointerException where {const owner O} {
+proc observe(ptr p:UInt64 in O, wrap:bool) throws NullPointerException where {const owner O} {
     val reading <- 0u64
     defer record(reading)
     defer { if returning () { record(reading) } }
@@ -222,21 +222,21 @@ proc observe(ptr p:u64 in O, wrap:bool) throws NullPointerException where {const
     }
 }
 
-proc deferred_read(ptr p:u64 in O) where {const owner O} {
+proc deferred_read(ptr p:UInt64 in O) where {const owner O} {
     defer catch (e:const NullPointerException) { report(e) }
     defer { required(p) : void }
 }
 
 # 08 — Generators and pipeline connectors
 
-func samples() yields u64 -> bool {
+func samples() yields UInt64 -> bool {
     if (not yield(1u64)) return
     yield(2u64) : void
 }
 for val item <- samples() { continue item < 2u64 }
 samples() (item) => { item < 2u64 }
 
-proc pipeline(here src() yields u64) {
+proc pipeline(here src() yields UInt64) {
     here stages = floor |> units |> limit
     here selected = src !> stages
     here reporting = stages $> report
@@ -250,4 +250,34 @@ ref builder = "Total: " ++ price
 ref retained = make String(builder) in arena
 
 # Deferred fraction syntax, included for token highlighting.
-val fraction:i64/i32 <- 1 // 3
+val fraction:Int64/Int32 <- 1 // 3
+
+# 10 — Range values, slice selectors and mirrored patterns
+
+val odd:Range <- 1 ..= 5 by 2
+for (i in odd) { use(i) }
+val reverse <- values[.. by -1]
+val tail <- values[lo .., column]
+val prefix <- values[..= hi]
+
+# `by` is still an ordinary name outside a step clause.
+func is_slice(by:AxisSelector) -> bool { by isa Slice }
+
+func select(s:const Slice in O) -> Int64 where {const owner O} {
+    case s of {
+        (..)                         -> whole_axis();
+        (.. by val d:Int64) | d == -1 -> reverse_axis();
+        (val lo .. by _)             -> from_index(lo);
+        (..= val hi)                 -> through_index(hi);
+        _                            -> other_slice(s)
+    }
+}
+
+func stride((.. by val d:Int64)) -> Int64 { d }
+
+func stride_code(s:const Slice in O) -> Int64 where {const owner O} of {
+    ((..))                => 0;
+    ((.. by val d:Int64)) => d;
+    ((.. by _))           => 2;
+    (_)                   => 3
+}

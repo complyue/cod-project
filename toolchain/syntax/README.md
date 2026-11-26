@@ -9,6 +9,7 @@ boundaries, see [Idiomatic CoD](../../docs/IdiomaticCoD.md).
 | 01–03 | Literals, units, operators, storage and owner annotations, data alternatives, enums, cases |
 | 04–06 | Storage parents, constructors, accessors, methods, call operators, `super`, symbols |
 | 07–09 | Control expressions, callbacks, exception and cleanup forms, generators, pipelines, text |
+| 10 | Ranges, slice selectors, case patterns, and method-parameter patterns |
 
 The editor grammars follow [D-10-ORDINARY-NAMES](../../design/DesignAuthorityRegistry.md#d-10-ordinary-names) and [D-22-MAKE-OWNER](../../design/DesignAuthorityRegistry.md#d-22-make-owner) ahead of the seed migration. The released names, including `fold` and `len`, and the former `local` modifier are highlighted as ordinary identifiers. `touch` remains special, and ordinary construction is written `make`.
 
@@ -18,6 +19,8 @@ The editor grammars follow [D-10-ORDINARY-NAMES](../../design/DesignAuthorityReg
 For [contextual ownership](../../design/DesignAuthorityRegistry.md#d-10-own-qualifier) and [lexical names](../../design/DesignAuthorityRegistry.md#d-10-contextual-names), both previews highlight `own`, `from`, `throws`, `data`, `type`, `unit`, and `array` by spelling, even where CoD allows them as names. `owned` is an ordinary identifier and has no keyword highlight. For example, in [`contextual-own-calls.cod`](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/tests/cod/language/contextual-own-calls.cod), `own` still gets keyword styling when used as a callable or parameter name. Highlighting does not imply that a word is reserved.
 
 Both previews highlight `self` and `super` and treat `extends` as a keyword only in a [product storage-parent header](../../design/DesignAuthorityRegistry.md#d-07-product-extends). They distinguish the type in `super(Ancestor).method()` from the ordinary argument in `super(raw)`, and recognize the receiver type in dotted member, accessor and call-operator declarations, including the explicit-owner form. TextMate's OO patterns are line-local.
+
+The range and slice examples follow the [selector design](../../design/RangedForAndGenerators.md#concrete-types-of-range-and-slice-literals). Both previews highlight `..` and `..=` as operators and recognize `by` in common step clauses, including mirrored slice patterns. These are token patterns, not full expression parsing; in a complex range, `by` may keep identifier styling. The previews use [canonical scalar names](../../design/DesignAuthorityRegistry.md#d-07-scalar-names) such as `Int64` while retaining literal suffixes such as `u64` in `5u64`.
 
 Zed also distinguishes type names in positions such as annotations, `throws` clauses, and explicit unit selections. Neither preview resolves names: a bare call such as `Position(...)` or an unqualified module selection keeps ordinary identifier highlighting.
 

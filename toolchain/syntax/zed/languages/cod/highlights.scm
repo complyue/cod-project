@@ -110,7 +110,7 @@
   . (builtin_type) @_unit_head
   . (parenthesized (identifier) @type.cod)
   (#eq? @_unit_colon ":")
-  (#any-of? @_unit_head "const" "i64" "u8" "u32" "u64" "f32" "f64"))
+  (#any-of? @_unit_head "const" "Int64" "UInt8" "UInt32" "UInt64" "Float32" "Float64"))
 
 ((keyword) @_unit_callable
   . [(identifier) (parenthesized)]?
@@ -121,7 +121,8 @@
   . (parenthesized (identifier) @type.cod)
   (#any-of? @_unit_callable "func" "function" "proc" "procedure" "here")
   (#eq? @_unit_arrow "->")
-  (#any-of? @_unit_head "const" "val" "ref" "ptr" "i64" "u8" "u32" "u64" "f32" "f64"))
+  (#any-of? @_unit_head "const" "val" "ref" "ptr"
+    "Int64" "UInt8" "UInt32" "UInt64" "Float32" "Float64"))
 
 (source_file
   (keyword) @_using
@@ -130,6 +131,40 @@
   . (block (identifier) @type.cod)
   (#eq? @_using "using")
   (#eq? @_units "units"))
+
+; Contextual `by` after a simple written stop, or after an omitted stop in a
+; bracketed selector or parenthesized pattern. Leave ordinary `by` names alone.
+((operator) @_range
+  . (comment)*
+  . (operator)? @_stop_sign
+  . [(identifier) (number) (parenthesized)]
+  . (comment)*
+  . (identifier) @keyword
+  . (comment)*
+  . [(identifier) (number) (parenthesized) (operator) @_step_sign]
+  (#any-of? @_range ".." "..=")
+  (#any-of? @_stop_sign "+" "-")
+  (#eq? @keyword "by")
+  (#any-of? @_step_sign "+" "-"))
+
+([
+  (bracketed
+    (operator) @_open_range
+    . (comment)*
+    . (identifier) @keyword
+    . (comment)*
+    . [(identifier) (number) (parenthesized) (operator) @_open_step_sign])
+  (parenthesized
+    (operator) @_open_range
+    . (comment)*
+    . (identifier) @keyword
+    . (comment)*
+    . [(identifier) (keyword) @_step_binder])
+ ]
+  (#any-of? @_open_range ".." "..=")
+  (#eq? @keyword "by")
+  (#eq? @_step_binder "val")
+  (#any-of? @_open_step_sign "+" "-"))
 
 ; More specific keyword patterns follow the generic fallback.
 (keyword) @keyword

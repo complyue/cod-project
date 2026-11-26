@@ -9,6 +9,7 @@
     { "include": "#oo" },
     { "include": "#symbols" },
     { "include": "#numbers" },
+    { "include": "#selector-types" },
     { "include": "#keywords" },
     { "include": "#operators" },
     { "include": "#delimiters" }
@@ -105,6 +106,25 @@
         }
       ]
     },
+    "selector-types": {
+      "patterns": [
+        {
+          "match": "(?<![:<])(:)[ \\t]*(?:(const)[ \\t]+)?(AxisSelector|Range|Slice)\\b",
+          "captures": {
+            "1": { "name": "punctuation.separator.colon.cod" },
+            "2": { "name": "storage.modifier.cod" },
+            "3": { "name": "entity.name.type.cod" }
+          }
+        },
+        {
+          "match": "\\b(isa)[ \\t]+(AxisSelector|Range|Slice)\\b",
+          "captures": {
+            "1": { "name": "keyword.operator.preview.cod" },
+            "2": { "name": "entity.name.type.cod" }
+          }
+        }
+      ]
+    },
     "keywords": {
       "patterns": [
         { "match": "\\b(?:using|import|mixin|export|from|as|units)\\b", "name": "keyword.control.import.cod" },
@@ -119,7 +139,7 @@
         { "match": "\\b(?:make|capacity|typeof)\\b", "name": "keyword.other.allocation.cod" },
         { "match": "\\b(?:is|not)\\b", "name": "keyword.operator.word.cod" },
         { "match": "\\b(?:self|super)\\b", "name": "keyword.other.receiver.cod" },
-        { "match": "\\b(?:i64|u8|u32|u64|f32|f64|bool|void)\\b", "name": "storage.type.primitive.cod" },
+        { "match": "\\b(?:Int64|UInt8|UInt32|UInt64|Float32|Float64|bool|void)\\b", "name": "storage.type.primitive.cod" },
         { "match": "\\b(?:true|false)\\b", "name": "constant.language.boolean.cod" },
         { "match": "\\bnull\\b", "name": "constant.language.null.cod" },
         { "match": "\\b(?:cause_at|deref|scalar)\\b", "name": "support.function.builtin.cod" },
@@ -147,7 +167,16 @@
         { "match": "->|=>", "name": "keyword.operator.arrow.cod" },
         { "match": "<-", "name": "keyword.operator.assignment.cod" },
         { "match": "<:", "name": "keyword.operator.constraint.cod" },
-        { "match": "\\.\\.", "name": "keyword.operator.range.cod" },
+        {
+          "comment": "Simple single-line steps, including open slice bounds and pattern binders. Retokenize the written stop, if any.",
+          "match": "(\\.\\.=?)[ \\t]*(?:([+-]?[ \\t]*(?:[A-Za-z_][A-Za-z_0-9]*|[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?(?:u8|u32|u64|f32|f64)?))[ \\t]+)?(by)\\b(?=[ \\t]*(?:[+-][ \\t]*)?[A-Za-z_0-9(])",
+          "captures": {
+            "1": { "name": "keyword.operator.range.cod" },
+            "2": { "patterns": [{ "include": "#numbers" }, { "include": "#operators" }] },
+            "3": { "name": "keyword.control.range.cod" }
+          }
+        },
+        { "match": "\\.\\.=?", "name": "keyword.operator.range.cod" },
         { "match": "==|!=|<=|>=|[<>]", "name": "keyword.operator.comparison.cod" },
         { "match": "&&|\\|\\||!", "name": "keyword.operator.logical.cod" },
         { "match": "=", "name": "keyword.operator.assignment.cod" },

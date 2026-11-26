@@ -31,7 +31,9 @@ module.exports = grammar({
     )),
     boolean: _ => choice('true', 'false'),
     null_literal: _ => 'null',
-    builtin_type: _ => choice('bool', 'void', 'i64', 'u8', 'u32', 'u64', 'f32', 'f64'),
+    builtin_type: _ => choice(
+      'bool', 'void', 'Int64', 'UInt8', 'UInt32', 'UInt64', 'Float32', 'Float64',
+    ),
     keyword: _ => choice(
       'array', 'as', 'assert', 'behave', 'break', 'capacity', 'case', 'catch',
       'const', 'continue', 'conversion', 'data', 'defer', 'effect', 'else',
@@ -46,7 +48,7 @@ module.exports = grammar({
     pipeline_operator: _ => choice('|>', '<|', '!>', '<!', '$>', '<$'),
     reserved_operator: _ => '//',
     operator: _ => choice(
-      '<=>', '<->', '...', '->', '<-', '<:', '=>', '..', '==', '!=', '<=',
+      '<=>', '<->', '...', '..=', '->', '<-', '<:', '=>', '..', '==', '!=', '<=',
       '>=', '&&', '||', '+', '-', '*', '/', '%', '<', '>', '=', '!', '|',
     ),
     delimiter: _ => choice(';', ',', ':', '.'),
