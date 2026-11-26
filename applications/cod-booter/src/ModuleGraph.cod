@@ -1392,12 +1392,11 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             event <- 0u8; presence <- 0u8; can_continue <- 0u8; local_return <- 0u8; retains_caught <- 0u8;
             byte_completion <- NoByteFunction;
             forwarded_operand <- 0u8; in_delayed_body <- 0u8; in_supplied_body <- false;
-            escaping_failure <- 0u8; case_break <- 0u8; case_scan <- 0u8;
+            case_break <- 0u8; case_scan <- 0u8;
             guarded_by <- no_node(); incoming_handler <- no_node(); throws_clause <- no_node(); category <- 0u64;
             category_module <- 0u64;
             destination <- no_node(); cleanup_first <- no_node(); cleanup_stop <- no_node(); registration <- no_node();
             previous_defer <- no_node(); last_defer <- no_node(); replacing_try <- no_node();
-            failure_user <- no_node(); failure_work <- no_node();
         });
         ref staged_commands = make NativeCommands(workspaces[0u64].plan.commands, make NativeCommand {
             opcode <- 0u8; a <- 0u64; b <- 0u64; c <- 0u64; d <- 0u64;

@@ -81,7 +81,6 @@ export data CompletionSite {
     forwarded_operand:u8;
     in_delayed_body:u8;
     in_supplied_body:bool;
-    escaping_failure:u8;
     byte_completion:ByteFunctionCompletion;
     case_break:u8;
     case_scan:u8;
@@ -97,8 +96,6 @@ export data CompletionSite {
     previous_defer:u64;
     last_defer:u64;
     replacing_try:u64;
-    failure_user:u64;
-    failure_work:u64;
 }
 export array CompletionSites[u64]:CompletionSite;
 
@@ -969,69 +966,49 @@ func is_failure_statement(nodes:const ExprNodes in N, at:u64) -> bool where {con
     };
 }
 
-func enqueue_failure(sites:CompletionSites in X, definition:u64, count:u64) -> u64 where {owner X} {
-    if (sites[definition].escaping_failure != 0u8) return count;
-    sites[definition].escaping_failure <- 1u8;
-    sites[count].failure_work <- definition;
-    return count + 1u64;
+data EscapingFailureEdge {
+    first_use:u64;
+    next_use:u64;
+    caller:u64;
+    delayed_use:u64;
+}
+array EscapingFailureEdges[u64]:EscapingFailureEdge;
+
+data ReachedFailure {
+    seen:bool;
+    order:u64;
+}
+array ReachedFailures[u64]:ReachedFailure;
+
+func enqueue_failure(reached:ReachedFailures in W, definition:u64, count:u64) -> u64 where {owner W} {
+    if (reached[definition].seen) return count;
+    reached[definition].seen <- true;
+    reached[count].order <- definition;
+    return count + 1u64
 }
 
-func propagate_failure(nodes:const ExprNodes in N, names:const NameBindings in B, sites:CompletionSites in X,
-                               report:CompletionCheckResult in R, definition:u64, queued:u64, used:u64, revision:u64) -> u64
-    where {const owner N, const owner B, owner X, owner R} {
-    val count <- queued;
-    val use <- sites[definition].failure_user;
-    val caller <- no_node();
-    val form <- InvalidCallable;
-    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
-    for (unused in 0u64 .. used) {
-        if (use == no_node()) return count;
-        if (sites[use].registration != no_node() || sites[use].in_delayed_body != 0u8) {
-            report.node <- use;
-            report.diagnostic <- unproved_deferred_error();
-            return no_node();
-        } else {};
-        caller <- enclosing_callable(nodes, names, names[use].scope);
-        form <- inspect_callable(nodes, revision, used, caller, callable);
-        if (form == ModuleCallable || form == LexicalCallable) {
-            (count <- enqueue_failure(sites, caller, count)):void
-        };
-        use <- sites[use].failure_user;
-    };
-    return count;
-}
-
-# Follow reverse call edges for each concrete unchecked failure that can
-# escape. A deferred invocation cannot use an enclosing catch as evidence.
-func check_escaping_failure_paths(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-                                facts:const OperandFacts in F, sites:CompletionSites in X,
-                                demand:const DeclarationDemands in D,
-                                    report:CompletionCheckResult in R,
-                                used:u64, revision:u64, category:u64) -> bool
-    where {const owner N, const owner B, const owner L, const owner F, owner X, const owner D,
-        owner R} {
+func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                           facts:const OperandFacts in F, sites:const CompletionSites in X,
+                           demand:const DeclarationDemands in D, reached:ReachedFailures in W,
+                           used:u64, revision:u64, category:u64) -> u64
+    where {const owner N, const owner B, const owner L, const owner F, const owner X, const owner D, owner W} {
     val count <- 0u64;
     val definition <- no_node();
     val form <- InvalidCallable;
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
     for (at in 0u64 .. used) {
-        sites[at].escaping_failure <- 0u8;
-        sites[at].failure_user <- no_node();
-        (sites[at].failure_work <- no_node()):void;
-    };
-    for (at in 0u64 .. used) {
         form <- inspect_callable(nodes, revision, used, at, callable);
         if (needs_body_check(demand, at) && category == missing_return_identity() &&
             (form == ModuleCallable || form == LexicalCallable) && can_miss_return(nodes, facts, sites, at, revision, used) &&
             !has_terminal_defer(nodes, links, facts, callable.body, revision, used)) {
-            (count <- enqueue_failure(sites, at, count)):void;
+            (count <- enqueue_failure(reached, at, count)):void;
         } else {};
         if (is_failure_statement(nodes, at) && sites[at].category_module == 0u64 &&
             sites[at].category == category) {
             definition <- enclosing_callable(nodes, names, names[at].scope);
             form <- inspect_callable(nodes, revision, used, definition, callable);
             if (sites[at].destination == definition && (form == ModuleCallable || form == LexicalCallable)) {
-                (count <- enqueue_failure(sites, definition, count)):void;
+                (count <- enqueue_failure(reached, definition, count)):void;
             } else {};
         } else {};
         if (needs_body_check(demand, at) && links[at].imported_interface != no_node() &&
@@ -1042,28 +1019,96 @@ func check_escaping_failure_paths(nodes:const ExprNodes in N, names:const NameBi
             definition <- enclosing_callable(nodes, names, names[at].scope);
             form <- inspect_callable(nodes, revision, used, definition, callable);
             if (form == ModuleCallable || form == LexicalCallable) {
-                (count <- enqueue_failure(sites, definition, count)):void;
+                (count <- enqueue_failure(reached, definition, count)):void;
             };
         };
     };
-    if (count == 0u64) return true;
+    return count
+}
+
+func collect_failure_edges(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                           facts:const OperandFacts in F, sites:const CompletionSites in X,
+                           edges:EscapingFailureEdges in E, used:u64, revision:u64, category:u64) -> void
+    where {const owner N, const owner B, const owner L, const owner F, const owner X, owner E} {
+    val definition <- no_node();
+    val caller <- no_node();
+    val form <- InvalidCallable;
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
     for (at in 0u64 .. used) {
         if (facts[at].call_definition != no_node() && can_continue(sites, at) &&
             (sites[at].registration != no_node() || (sites[at].replacing_try == no_node() &&
              matching_handler(nodes, links, facts, sites, at, 0u64, category, 0u8, used,
                  revision) == no_node()))) {
             definition <- facts[at].call_definition;
-            sites[at].failure_user <- sites[definition].failure_user;
-            sites[definition].failure_user <- at;
-            {};
-        } else {};
+            if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8) {
+                # The old reverse-use traversal considered the last recorded use first.
+                (edges[definition].delayed_use <- at):void
+            } else {
+                caller <- enclosing_callable(nodes, names, names[at].scope);
+                form <- inspect_callable(nodes, revision, used, caller, callable);
+                if (form == ModuleCallable || form == LexicalCallable) {
+                    edges[at].caller <- caller;
+                    edges[at].next_use <- edges[definition].first_use;
+                    (edges[definition].first_use <- at):void
+                };
+            };
+        };
     };
-    for (item in 0u64 .. used) {
-        if (item == count) return true;
-        count <- propagate_failure(nodes, names, sites, report, sites[item].failure_work, count, used, revision);
-        if (count == no_node()) return false;
+}
+
+func add_failure_callers(edges:const EscapingFailureEdges in E, reached:ReachedFailures in W,
+                         definition:u64, pending:u64) -> u64 where {const owner E, owner W} {
+    val count <- pending;
+    val use <- edges[definition].first_use;
+    for (unused in 0u64 .. intrinsic (len)(edges)) {
+        if (use == no_node()) return count;
+        count <- enqueue_failure(reached, edges[use].caller, count);
+        use <- edges[use].next_use;
     };
-    return true;
+    return count
+}
+
+# This completion only schedules a newly reached recorded callable.
+func complete_escaping_failures(edges:const EscapingFailureEdges in E, reached:ReachedFailures in W,
+                                initial:u64) -> u64 where {const owner E, owner W} {
+    val count <- initial;
+    for (item in 0u64 .. intrinsic (len)(reached)) {
+        if (item == count) return count;
+        (count <- add_failure_callers(edges, reached, reached[item].order, count)):void;
+    };
+    return count
+}
+
+# Report in definition discovery order, using each definition’s first delayed use.
+func check_delayed_failures(edges:const EscapingFailureEdges in E, reached:const ReachedFailures in W,
+                            count:u64, report:CompletionCheckResult in R) -> bool
+    where {const owner E, const owner W, owner R} {
+    val use <- no_node();
+    for (item in 0u64 .. count) {
+        use <- edges[reached[item].order].delayed_use;
+        if (use != no_node()) {
+            report.node <- use;
+            report.diagnostic <- unproved_deferred_error();
+            return false
+        };
+    };
+    return true
+}
+
+func check_escaping_failure_paths(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+                                 facts:const OperandFacts in F, sites:const CompletionSites in X,
+                                 demand:const DeclarationDemands in D, report:CompletionCheckResult in R,
+                                 used:u64, revision:u64, category:u64) -> bool
+    where {const owner N, const owner B, const owner L, const owner F, const owner X, const owner D, owner R} {
+    ref reached = make ReachedFailures(used, make ReachedFailure { seen <- false; order <- no_node() });
+    val roots <- collect_failure_roots(nodes, names, links, facts, sites, demand, reached, used, revision, category);
+    if (roots == 0u64) return true;
+    ref edges = make EscapingFailureEdges(used, make EscapingFailureEdge {
+        first_use <- no_node(); next_use <- no_node(); caller <- no_node(); delayed_use <- no_node()
+    });
+    collect_failure_edges(nodes, names, links, facts, sites, edges, used, revision, category);
+    val count <- complete_escaping_failures(edges, reached, roots);
+    return check_delayed_failures(edges, reached, count, report)
 }
 
 # The inputs are the same bound module revision. Cleanup links describe
