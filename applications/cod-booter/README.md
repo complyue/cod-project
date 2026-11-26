@@ -1,10 +1,12 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 47 · Recorded: 2026-11-26 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 48 · Recorded: 2026-11-26 · Phase: initial seed delivery through alternating booter and seed development.
 
 **Compiler design target.** The default `cod` invocation compiles and runs an entry without leaving a user-facing executable. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** Seed and booter development prioritize Go-like compile speed with moderate runtime performance. The production compiler roadmap names its optimizing CLI `cfe` (Compile For Ever). [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
 
 ## Design authority
+
+At r48 the [production parser bundle](../../design/DesignAuthorityRegistry.md#d-20-parser-bundle) identifies `pcl.cod` as the HLVM and the production CoD parser as an application of it, following the [user’s clarification](../../CHANGELOG.md#h-pcl-hlvm-parser-application-20261126).
 
 At r47 the [production CLI decision](../../CHANGELOG.md#h-cfe-output-directory-20261126) names the optimizing entry point and specifies its executable output directory under [D-20-COMPILER-MODES](../../design/DesignAuthorityRegistry.md#d-20-compiler-modes). The [compiler modes contract](docs/CompilerPipeline.md#default-execution-and-optimized-builds) gives both output-location checks.
 
@@ -167,7 +169,7 @@ The compiler and toolchain repositories are planned in the [e-wrks GitHub organi
 | `codup` | Toolchain version management in the role of rustup. |
 | `codmate` | The Language Server Protocol server and IDE plugins, including [reference-site doclet tooltips and navigation](../../design/DomainLanguageDesign.md#definition-doclets). |
 
-The `e-wrks/cod` toolchain will bundle the parser combinator library `pcl.cod` and the DBMR grammar program `cod.grammar`. Its production parser will open that image to parse CoD source on the normal compiler path. [Installed-toolchain workload](../../design/ParserCombinatorLibSupport.md#packaged-production-parser) · [Parser HLVM case study](../../papers/AlgebraicEffectsIsAllYouNeed.md#the-production-cod-parser-as-an-hlvm)
+The `e-wrks/cod` toolchain will bundle `pcl.cod`, the parser combinator library that implements the parsing HLVM. The production CoD parser is one of its applications. Its DBMR grammar program ships as `cod.grammar` and runs on `pcl.cod` on the compiler’s normal source path. [Installed-toolchain workload](../../design/ParserCombinatorLibSupport.md#packaged-production-parser) · [CoD parser application case study](../../papers/AlgebraicEffectsIsAllYouNeed.md#the-cod-parser-as-an-application-of-the-parsing-hlvm)
 
 Future package management belongs in `e-wrks/cod`. The bootstrap consumes [manually staged source roots](../../design/CodProjectStructureAndPkgMgmt.md#directory-layout).
 

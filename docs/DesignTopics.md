@@ -198,7 +198,7 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 
 **已确认的分工。** 规划中的 `e-wrks/cod` 负责设计和开发类 Megaparsec 的 CoD 解析库，在生产编译器的 lexer 和 parser 中使用，并参照 Edh 组织产生式。booter 继续用递归下降处理 bootstrap 子集和固定优先级。生产实现完成后，另行决定是否将其中一部分回移到 booter。[项目用户的决定](../CHANGELOG.md#h-production-parser-direction-20261124) · [编译器分工](../design/DesignAuthorityRegistry.md#d-20-repositories) · [Edh 解析器](https://github.com/e-wrks/edh/blob/a2e9b95ef1f84cc5677499512c69d4b03a12cbdc/elr/src/Language/Edh/Parser.hs)
 
-**发布内容。** `e-wrks/cod` 工具链将随附解析组合子库 `pcl.cod`，并以 DBMR 文件 `cod.grammar` 分发 CoD 文法。生产编译器从这份文法进入规则图，解析用户的 CoD 源文件。[安装版验收用例](../design/ParserCombinatorLibSupport.md#packaged-production-parser) · [解析器作为 HLVM 的用例](../papers/AlgebraicEffectsIsAllYouNeed.md#the-production-cod-parser-as-an-hlvm)
+**发布内容。** `pcl.cod` 是以解析组合子库形式提供的 HLVM，**生产 CoD parser 是这台 HLVM 的一个应用**。`e-wrks/cod` 工具链随附 `pcl.cod` 和这个应用的 DBMR 文法程序 `cod.grammar`。解析 CoD 源文件时，应用在 `pcl.cod` 上运行这份文法。[安装版验收用例](../design/ParserCombinatorLibSupport.md#packaged-production-parser) · [论文中的 CoD parser 应用](../papers/AlgebraicEffectsIsAllYouNeed.md#the-cod-parser-as-an-application-of-the-parsing-hlvm)
 
 [Parser combinator lib support 预研 WIP](../design/ParserCombinatorLibSupport.md) 要求可复用 grammar 与解析结果属于不同的实际 owner。首选研究接口用四个同步 `here` 回调区分消费与否、成功与失败，以 Megaparsec 9.8.3 对照分支路由、状态恢复、诊断和整文件恢复。可绑定的 `proc` 接收者视图及区域内异构子规则仍待验证。
 

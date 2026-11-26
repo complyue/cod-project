@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Identify the CoD parser as an application of the pcl.cod HLVM
+
+<a id="h-pcl-hlvm-parser-application-20261126"></a>
+**H-PCL-HLVM-PARSER-APPLICATION-20261126.** The project user clarified “pcl.cod是HLVM，**CoD parser是这个hlvm的一个app**”. This corrects the [earlier paper heading](https://github.com/complyue/cod-project/blob/2b2dc9d5d5c9ee61cbb398d3dbe562d978ea44c4/papers/AlgebraicEffectsIsAllYouNeed.md#the-production-cod-parser-as-an-hlvm) and its attribution in P-748. The [production bundle](design/DesignAuthorityRegistry.md#d-20-parser-bundle) supplies the parsing HLVM as `pcl.cod` and the CoD parser application’s DBMR grammar program as `cod.grammar`. The [revised paper example](papers/AlgebraicEffectsIsAllYouNeed.md#the-cod-parser-as-an-application-of-the-parsing-hlvm), WIP r3 and roadmap r48 carry that distinction through to the installed-toolchain workload.
+
 ## 2026-11-26 — Name the optimizing compiler CLI and its output directory
 
 <a id="h-cfe-output-directory-20261126"></a>

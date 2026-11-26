@@ -13,8 +13,8 @@ domain-specific High Level Virtual Machine (HLVM) in CoD, choose its instruction
 effects, and offer business users a **Domain Specific Graphical Programming Language**
 for that machine. A planner can draw a warehouse fallback, ask an AI assistant to change
 one route, and inspect the resulting reservations. An editor can put an approval step
-before publication and preview which edition would be released. CoD’s planned production
-parser provides a compiler example. Its grammar is an HLVM program shipped with the toolchain.
+before publication and preview which edition would be released. The parser combinator library `pcl.cod` is a parsing HLVM.
+The planned production CoD parser is one application of that machine.
 
 The programs are typed directed graphs admitting cycles (DCGs), stored in relocatable
 regions. An instruction is a functor in the C++ sense: a data object with a call
@@ -348,19 +348,23 @@ Saving a running instance across a crash would additionally require an explicit 
 the remaining computation, its state and the status of external effects.
 [Deferred BASIC application](../applications/README.md#deferred-application-hlvm-basic) · [Execution instances and persistent continuations](../design/RegionalSemanticPlatformCharter.md)
 
-## The production CoD parser as an HLVM
+<a id="the-production-cod-parser-as-an-hlvm"></a>
 
-The planned `e-wrks/cod` toolchain will ship the parser combinator library `pcl.cod` and a
-disk-backed memory region named `cod.grammar`. Grammar authors use the library to express
-rules and their composition. The grammar for CoD itself is the program for this HLVM.
-The production parser opens the distributed image read-only and starts parsing at its
-grammar entry. The image holds rule data, operands and regional edges. The compatible
-executor supplies the methods that give those rules their meaning.
+## The CoD parser as an application of the parsing HLVM
+
+The parser combinator library `pcl.cod` is a software-defined HLVM for parsing. It
+defines the rule operations and how they execute. **The production CoD parser is one
+application of this HLVM.** Its grammar program, `cod.grammar`, is a disk-backed memory
+region distributed with `pcl.cod` in the planned `e-wrks/cod` toolchain. To parse a CoD
+source file, the application opens the grammar read-only and invokes its entry on
+`pcl.cod`. The image supplies CoD-specific rules, operands and regional edges. Another
+parser application could use the same `pcl.cod` with its own grammar.
 
 Consider an expression rule that tries an integer literal and then an identifier as an
 expression. On the source `total`, the literal rule can fail before consuming input.
-The choice then enters the identifier rule at the same cursor and delivers an expression
-node to the current run’s AST. The choice and its child edges belong to the grammar.
+The ordered-choice operation in `pcl.cod` then tries the second rule at the same cursor.
+This CoD grammar rule builds an identifier expression in the current run’s AST. The
+choice node and its two child edges belong to `cod.grammar`.
 The cursor, success and failure callbacks, diagnostic state and writable AST arena come
 from this invocation. Another source file can enter the same grammar node with its own
 cursor and produce a tree under a different owner.
