@@ -1,8 +1,10 @@
 # Scalar units, strict brands and array index domains
 
-Discussion revision: 40 · Recorded: 2026-11-26 · Status: alternatives under discussion.
+Discussion revision: 41 · Recorded: 2026-11-26 · Status: alternatives under discussion.
 
 ## Design authority
+
+At r41 [D-11-NUMERIC-CONVERSION](DesignAuthorityRegistry.md#d-11-numeric-conversion), P-774/P-775, gives explicit builtin scalar conversions a defined rounded result or an exact integer result with a recoverable failure. The [delegated decision](../CHANGELOG.md#h-julia-numeric-conversions-20261126) supersedes H-463–H-466 for these pairs. H-261 implicit widening, nominal units, access and the deferred fraction contract continue from r40. [Examples and acceptance](#explicit-scalar-numeric-conversions)
 
 At r40 the [literal ADT identity](RangedForAndGenerators.md#concrete-types-of-range-and-slice-literals) and [writer argument order](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads) retain r39’s nominal coordinate and displacement types under D-30-TYPED-SUBSCRIPTS, P-766/P-767.
 
@@ -16,7 +18,7 @@ At r38 [D-07-TYPE-SYNONYMS](DesignAuthorityRegistry.md#d-07-type-synonyms) suppl
 
 - **Named region roots:** [H-595](../CHANGELOG.md#h-595)/[K-NAMED-ROOTS-20261117](../CHANGELOG.md#k-named-roots-20261117), [D-13-ROOT-ACCESS](DesignAuthorityRegistry.md#d-13-root-access)/P-546–P-548, aligns this revision's regional examples with named roots, ordinary `r.name` assignment destinations and receiving specifications; the source root intrinsic is removed. Reuse C-74/C-65/C-72 and charter §§2/3.1–3.3/4.3/6.3/8/12 for explicit storage, access and lifetime responsibility. D-13 owns acceptance; preserve existing qualifications, actual-owner checks, nominal component identity, D-16 and D-18's existing qualification boundaries. Full structural/receiving proof and compiler migration remain separate; no C++ storage API changes follow.
 
-- **Explicit numeric conversion:** [D-10-TYPED-EXPR](DesignAuthorityRegistry.md#d-10-typed-expr), [H-463/H-464](../CHANGELOG.md#h-463), [H-466](../CHANGELOG.md#h-466) and P-407/P-408/P-410 cover the explicit conversion section below; [K-NUMERIC-CONVERSION-UB-20261115](../CHANGELOG.md#k-numeric-conversion-ub-20261115) records the numeric contract; [K-717](../CHANGELOG.md#k-717) continues r34→35 with consistent acceptance wording. The candidate C-10 value path serves charter §§3.1/6.3/8 by exposing the exactness precondition and programmer responsibility without mandatory runtime enforcement. Warn unless losslessness is proven, permit opt-in errors, and assign undefined behavior to an executed conversion outside the exact representable domain. H-261 implicit compatibility, UoM identity and D-16 requirements remain unchanged. Acceptance distinguishes possible-loss diagnostics from actual undefined execution and requires no inserted conversion check/exception. Complete value-path qualification and broader expression typing remain pending; no implementation is claimed.
+- **Explicit numeric conversion:** D-10 selects the operation from its concrete types. [D-11-NUMERIC-CONVERSION](#explicit-scalar-numeric-conversions) defines its result, diagnostic policy and failure point. The [r40 baseline](https://github.com/complyue/cod-project/blob/ae53eee87569c91964d8d8eea5e9d1ee7d64bb6e/design/ScalarUnitsAndIndexTypes.md#explicit-numeric-conversion-and-loss-warnings) records the former exactness precondition.
 
 - **Registry / current scope:** [D-11](DesignAuthorityRegistry.md#d-11); the semantic revision stated above and the independently qualified scopes in the current registry. **Whole file pending-human.** C-47/C-49–C-51/P-112–P-130; H-260/H-261/K-402 covers representation-independent quantities and lossless widening.
 - **Value path:** C-47/P-112 and D-11/P-113 derive strict scalar/index meanings from C-10/P-14/C-01's inspectable typed business intent. C-49/P-119/P-120 preserves independent unit identity/reuse; C-50/P-121–P-123 and C-51/P-124–P-128 govern typed methods, conversions and explicit route control. C-39/P-94 and C-56/P-186 retain region-only data and nominal abstractions. Candidate value paths keep their registry status; P-118's application formula dependency grants no authority to choose an SNN configuration.
@@ -75,29 +77,26 @@ Exact applicable methods take precedence. Otherwise there must be a unique most-
 
 Quantity parameter `f64(m)` permits safe representation widening within m; `f64(m*)` additionally permits selected unit conversions. Each declared conversion has typed input/output quantities. A route may widen to an input or from an output only under the table above; its intermediate representation must remain compatible. Numeric widening is compatibility, not another semantic conversion edge or an extra source of path ambiguity. Direct unit conversion remains preferred, then an explicit unit itinerary, then the existing searched-route/warning policy. Conversions complete before the next argument's effects. No implicit narrowing, ordinary return-type-only overload selection, runtime unit tag or source-world editing is introduced.
 
-### Explicit numeric conversion and loss warnings
+<a id="explicit-numeric-conversion-and-loss-warnings"></a>
+### Explicit scalar numeric conversions
 
-H-453 selects `expression : Type` for explicit conversion/type assertion; [D-10](SymbolicDynamicScope.md#expression-type-conversion-and-assertion) owns that expression surface. H-463/H-464 selects **a compile-time warning unless the numeric conversion is proven lossless**, with an opt-in compiler policy to treat that warning as an error. H-466 requires the warning to state explicitly that violating the conversion's exactness/representability precondition is **undefined behavior, at the programmer's risk**. Merely writing the conversion explicitly does not suppress the warning. Its category/flag spelling and the compiler's proof coverage remain engineering work.
+For `x : T` between dimensionless builtin fixed-width integer and binary floating types, evaluate `x` once and convert its numerical value to the canonical destination type. Transparent synonyms select the same operation. The written destination determines the result.
 
-The diagnostic concerns the expression's admitted values. Whole-type lossless conversion is sufficient proof; a known value or sound range/exactness proof can also suffice. Integer-to-floating range alone is insufficient when precision can be lost. Failure to prove losslessness emits the warning; it does not prove that every execution has undefined behavior. H-261 remains unchanged: implicit compatibility requires losslessness for the entire source type, regardless of whether a particular literal fits.
+| Destination | Result |
+| --- | --- |
+| Binary floating (`float` or `double`) | Round directly from the source value to the destination format with IEEE round-to-nearest, ties-to-even. This includes floating narrowing, subnormals, and signed infinity on rounded overflow. Preserve signed floating zeros and infinities. A floating NaN converts to a NaN with no payload guarantee. |
+| Signed or unsigned integer | Return the source value exactly if it is finite, integral and within the destination range. Floating negative zero converts to integer zero. Otherwise raise the unchecked `InexactError` at the conversion expression. |
 
-**Execution contract:** an admitted explicit numeric conversion is defined when the source numerical value is exactly representable in the destination. It then produces that value in the destination type. If an executed conversion loses information or cannot represent the input, behavior is undefined. This includes discarded integer bits, discarded nonzero fractional parts, floating precision/range loss, and NaN/infinity converted to an integer. Existing lossless floating widening retains its signed-zero/infinity semantics and lack of a NaN-payload promise; the integer restriction does not ban non-finite values in floating types.
+The default compiler accepts possible precision loss in an explicit floating conversion. A tool may offer opt-in precision advice. A plain integer conversion that may fail also compiles under the ordinary exception rules. The compiler may elide a check when it proves the result, or fold an executable constant conversion to the same value or the same located throw. In a context requiring a successful compile-time constant, report the failing conversion at its site. In executable code, a handler can catch even a failure known at compile time. Operand failures take precedence. If argument preparation reaches an inexact integer conversion, subsequent operands and the callee are skipped, and recorded cleanup runs normally. [Numeric conversion failures](ExceptionControl.md#numeric-conversion-failures)
 
-| Explicit expression | Compile-time diagnostic | Execution contract |
-| --- | --- | --- |
-| `7u64 : u8` | None: exact value is representable | Defined: `7` |
-| `300u64 : u8` | Warning explicitly identifying undefined behavior; opt-in error | Undefined behavior |
-| `3.5f64 : u64` | Warning explicitly identifying undefined behavior; opt-in error | Undefined behavior |
-| `300.0f64 : u8` | Warning explicitly identifying undefined behavior; opt-in error | Undefined behavior |
-| `x : u8`, with `x:u64` and no sufficient range proof | Warning of possible undefined behavior; opt-in error | Defined for actual `x` in 0–255; otherwise undefined behavior |
+| Observation | Expected result |
+| --- | --- |
+| Convert the integer values `2^53 + 1` and `2^53 + 3` to `double` | Respectively `2^53` and `2^53 + 4`. These are mathematical powers. |
+| Convert `2^62 + 2^38 + 1` from `i64` directly to `float` | `2^62 + 2^39`. A detour through binary64 would give the lower neighbor. |
+| `255.0f64 : u8` or `-0.0f64 : u8` | 255 or 0. |
+| `300u64 : u8`, `3.5f64 : u64`, negative one to unsigned, NaN or infinity to integer | Catchable `InexactError` on reaching the expression. |
 
-**No runtime conversion enforcement is inserted.** The compiler does not add a loss/range/non-finite validation branch, exception or diagnostic trap for this operation. Undefined behavior supplies no result, continued-execution, exception or cleanup guarantee; it is not a promise of a nonthrowing result. In particular, neither wrapping/truncation/saturation nor confinement of the consequences to the converted value is guaranteed. Backend behavior on such inputs is not a portable CoD contract.
-
-For defined execution, constant and runtime evaluation agree, the operand executes once, and ordinary effect/conversion order and operand failures remain intact. A potential-loss warning or its severity does not change that execution. A statically known invalid conversion receives the same warning/opt-in-error policy; constant folding must not turn an incidental backend value into a specified CoD result. Undefined cases do not require constant/runtime agreement or successful evaluation where a defined compile-time value is required. A numeric conversion produces a value, not a reference reinterpreting the source storage.
-
-**Remaining scope:** exact syntax/type parsing, conversion-versus-assertion selection and diagnostic proof coverage remain under review. No output mapping needs selection for inputs assigned undefined behavior. This numeric rule does not admit bool conversions, UoM-changing routes, unsafe reference casts or fraction conversions, and does not change ordinary arithmetic overflow or runtime type assertions. D-16's nonzero denominator, exact arithmetic/failure requirements and implementation deferral remain intact.
-
-Acceptance must distinguish proven-safe literals, proven-invalid inputs and unknown values; ordinary warnings versus opt-in errors; and an unproven conversion that is defined for its actual input. Validate constant/runtime agreement and once-only operand effects only for defined execution. Inspect lowering for absence of inserted numeric-conversion enforcement; do not test for a particular result or absence of a crash after undefined behavior. Preserve implicit-overload selection and unrelated checks. This is design, not current `:` parser or execution support.
+Compare constant and runtime operands, including rounded overflow and underflow for floating narrowing. Use a reached handler and a later observable argument to check failure order and cleanup. Preserve whole-type losslessness for implicit compatibility and overload selection. Boolean values, enum decoding, changing units, planned fractions, references and user-defined conversions have separate contracts. This decision specifies the builtin by-value conversions. [Julia numerical conversions](https://docs.julialang.org/en/v1/manual/mathematical-operations/#Numerical-Conversions) · [Julia default rounding](https://docs.julialang.org/en/v1/manual/integers-and-floating-point-numbers/#Rounding-modes)
 
 ## The requirement
 
@@ -364,7 +363,7 @@ The full comparison/acceptance catalog below covers both the initial increment a
 4. Local-to-global conversion, including a local index from the wrong class or pool.
 5. A unit-polymorphic sum, scalar scaling, and a dimension-changing product.
 6. Zero, nonzero literals and runtime scalar offsets without implicit loss of domain identity.
-7. Correctly typed out-of-range values, explicit numeric-conversion warnings and defined results, overflow and positive-integer inverse arguments. Invalid explicit numeric conversions have undefined behavior and no specified result; unrelated numeric failure domains retain their own contracts.
+7. Correctly typed out-of-range values, direct floating rounding, caught inexact integer conversions, ordinary overflow and positive-integer inverse arguments. Check the first failure and its cleanup under the applicable operation.
 8. Representation inspection showing no per-element tag or wrapper allocation; actual conversion instructions remain visible.
 
 The bounded implementation increment uses the confirmed call, using and conversion rules. Compound-UoM algebra remains planned for later and is not a prerequisite.
