@@ -6217,7 +6217,7 @@ class ScalarChecker {
   void predicate_paths(const std::shared_ptr<const Predicate> &proof, bool value, const Location &at,
       const std::function<void()> &next) {
     if (!lexical_.live) return;
-    const auto before = lexical_;
+    auto before = lexical_;
     const auto visit = [&] {
       if (!lexical_.live) return;
       if (!proof || proof->kind == Predicate::Kind::presence) { next(); return; }
@@ -6243,21 +6243,25 @@ class ScalarChecker {
     const auto found = proof ? proof->results.find(value) : CleanupEquations::BooleanValue::const_iterator{};
     if (!proof) visit();
     else if (found == proof->results.end() || found->second.empty()) { if (!proof->complete_results) visit(); }
-    else for (const auto &facts : found->second) {
-      lexical_ = before;
-      record_present(facts.present);
-      lexical_.boolean_inputs.insert(facts.inputs.begin(), facts.inputs.end());
-      lexical_.boolean_payloads.insert(facts.payloads.begin(), facts.payloads.end());
-      lexical_.selection_conditions.append(facts.conditions);
-      lexical_.exception_conditions.insert(facts.exceptions.begin(), facts.exceptions.end());
-      lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions, {facts});
-      lexical_.live = lexical_.live && lexical_.selection_conditions.possible;
-      for (const auto &[binding, versions] : facts.bindings) refine_test({binding, versions}, false);
-      for (const auto &[binding, versions] : facts.absent_bindings) refine_test({binding, versions}, true);
-      lexical_.live = lexical_.live && has_reaching_path(lexical_);
-      visit();
+    else {
+      const auto &clauses = found->second;
+      for (auto clause = clauses.begin(); clause != clauses.end(); ++clause) {
+        if (clause != clauses.begin()) lexical_ = before;
+        const auto &facts = *clause;
+        record_present(facts.present);
+        lexical_.boolean_inputs.insert(facts.inputs.begin(), facts.inputs.end());
+        lexical_.boolean_payloads.insert(facts.payloads.begin(), facts.payloads.end());
+        lexical_.selection_conditions.append(facts.conditions);
+        lexical_.exception_conditions.insert(facts.exceptions.begin(), facts.exceptions.end());
+        lexical_.predicate_conditions = CleanupEquations::conjoin_conditions(lexical_.predicate_conditions, {facts});
+        lexical_.live = lexical_.live && lexical_.selection_conditions.possible;
+        for (const auto &[binding, versions] : facts.bindings) refine_test({binding, versions}, false);
+        for (const auto &[binding, versions] : facts.absent_bindings) refine_test({binding, versions}, true);
+        lexical_.live = lexical_.live && has_reaching_path(lexical_);
+        visit();
+      }
     }
-    lexical_ = before;
+    lexical_ = std::move(before);
   }
   void refine_predicate(const std::shared_ptr<const Predicate> &proof, bool value, const Location &at) {
     std::optional<LexicalState> joined;
@@ -6301,7 +6305,7 @@ class ScalarChecker {
   }
   void dereference(const CheckedOperation &view, const Location &at) {
     if (view.targets.contains(null_target)) {
-      const auto before = lexical_;
+      auto before = lexical_;
       const auto projected = !view.binding && view.embedded_slot_selection && view.selection_identity
           ? null_predicate(view) : nullptr;
       const auto refine = [&](bool absent) {
@@ -6311,7 +6315,7 @@ class ScalarChecker {
       };
       refine(true);
       note_abrupt(at, {exception_id(ExceptionCategory::null_pointer)});
-      lexical_ = before;
+      lexical_ = std::move(before);
       refine(false);
     }
     record_presence(view.targets);
@@ -20310,13 +20314,13 @@ class ScalarChecker {
     case K::binary: {
       if (expr.text == "&&" || expr.text == "||") {
         const auto left = child(0);
-        const auto before_right = lexical_;
+        auto before_right = lexical_;
         refine(*expr.children[0], expr.text == "&&", operations);
         const auto right = child(1);
-        const auto after_right = lexical_;
-        lexical_ = before_right;
+        const auto after_right = std::move(lexical_);
+        lexical_ = std::move(before_right);
         refine(*expr.children[0], expr.text != "&&", operations);
-        const auto skipped = lexical_;
+        const auto skipped = std::move(lexical_);
         join(skipped, false, after_right, right == Type::never, expr.at);
         if ((left != Type::boolean && left != Type::never) || (right != Type::boolean && right != Type::never))
           fail(expr.at, "logical operation requires bool operands");
@@ -20866,7 +20870,7 @@ class ScalarChecker {
       }();
       const auto condition = child(0);
       if (condition != Type::boolean && condition != Type::never) fail(expr.at, "if condition requires bool");
-      const auto before = lexical_;
+      auto before = lexical_;
       refine(test, true, operations);
       const bool binds_return = return_test && !test.binding.empty();
       if (binds_return) {
@@ -20911,12 +20915,12 @@ class ScalarChecker {
       const auto checked_yes = check(*expr.children[1], instance, operations, read && !value_join, discard, expected, expected_use,
           false, IndexedUse::value_only, native_loan, {}, nullptr, arm_use);
       const auto yes = return_test && !operations.at(&test).return_filter.can_match ? Type{Type::never} : checked_yes;
-      auto yes_state = lexical_;
-      lexical_ = before;
+      auto yes_state = std::move(lexical_);
+      lexical_ = std::move(before);
       refine(test, false, operations);
       const auto no = check(*expr.children[2], instance, operations, read && !value_join, discard, expected, expected_use,
           false, IndexedUse::value_only, native_loan, {}, nullptr, arm_use);
-      auto no_state = lexical_;
+      auto no_state = std::move(lexical_);
       auto &yes_fact = operations.at(expr.children[1].get()), &no_fact = operations.at(expr.children[2].get());
       const bool independent = !discarded_arms && condition != Type::never && yes == no && independent_scalar_conditional(yes, yes_fact.view, no_fact.view,
           yes_fact.mixed_view || no_fact.mixed_view);
