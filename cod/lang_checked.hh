@@ -3287,6 +3287,11 @@ class ScalarChecker {
     for (const auto id : a) if (b.contains(id)) result.insert(id);
     return result;
   }
+  static bool has_common_element(const std::set<size_t> &a, const std::set<size_t> &b) {
+    const auto &shorter = a.size() <= b.size() ? a : b;
+    const auto &longer = a.size() <= b.size() ? b : a;
+    return std::ranges::any_of(shorter, [&](size_t id) { return longer.contains(id); });
+  }
   const CheckedStorage &storage(size_t place) const {
     return place < storage_->size() ? storage_->at(place) : catalog_storage_.at(place);
   }
@@ -3367,7 +3372,10 @@ class ScalarChecker {
   bool selects_any_slot(size_t id, const std::set<size_t> &slots) const {
     const auto &selection = binding(id).selection;
     if (selection.empty()) return slots.contains(id);
-    return std::ranges::any_of(selection, [&](size_t slot) { return slots.contains(slot); });
+    return has_common_element(selection, slots);
+  }
+  bool selects_any_slot(const std::set<size_t> &ids, const std::set<size_t> &slots) const {
+    return std::ranges::any_of(ids, [&](size_t id) { return selects_any_slot(id, slots); });
   }
   std::set<size_t> overlapping_slots(const std::set<size_t> &slots) const {
     auto result = physical_slots(slots);
@@ -5430,7 +5438,8 @@ class ScalarChecker {
           auto value = CleanupEquations::unknown_boolean();
           const auto outcome = summary.booleans.find(reason);
           const bool reported = outcome != summary.booleans.end() && outcome->second.contains(i);
-          if (readonly && (!reported || !intersect(payload_targets(views[i]), written_targets).empty())) continue;
+          if (readonly && (!reported ||
+              (!written_targets.empty() && has_common_element(payload_targets(views[i]), written_targets)))) continue;
           if (reported)
             value = instantiate_boolean(outcome->second.at(i), boolean_inputs, views, observed_slots, exception_inputs);
           if (readonly) {
@@ -7501,8 +7510,8 @@ class ScalarChecker {
     bool distinct_bindings = false;
     if (uses_caller_bindings && views.size() == 2) {
       const auto left = overlapping_slots(views[0].slots);
-      const auto right = physical_slots(views[1].slots);
-      distinct_bindings = !left.empty() && !right.empty() && intersect(left, right).empty();
+      const auto &right = views[1].slots;
+      distinct_bindings = !left.empty() && !right.empty() && !selects_any_slot(right, left);
     }
     const bool direct_named_body = expr.kind == Expression::Kind::call &&
         !operation.callable_call && !method.scope_inputs && !method.here_group && method.here.empty();
@@ -16114,7 +16123,7 @@ class ScalarChecker {
     for (const auto left : inputs.live_bindings) {
       const auto possible = overlapping_slots(views[left].slots);
       for (const auto right : inputs.live_bindings)
-        if (right > left && !intersect(possible, physical_slots(views[right].slots)).empty())
+        if (right > left && selects_any_slot(views[right].slots, possible))
           inputs.overlapping_input_bindings.emplace(left, right);
       if (std::ranges::any_of(possible, [&](size_t id) { return binding(id).embedded_slot.has_value(); }))
         embedded_places.emplace(left, physical_slots(views[left].slots));
@@ -16130,7 +16139,7 @@ class ScalarChecker {
         const auto field = arguments.size() + i;
         const auto possible = overlapping_slots(projected[field].slots);
         for (const auto &[input, places] : embedded_places)
-          if (!intersect(possible, places).empty())
+          if (has_common_element(possible, places))
             inputs.overlapping_input_bindings.emplace(input, field);
       }
     }
@@ -16158,6 +16167,7 @@ class ScalarChecker {
       if (!inputs.parameters[p].owner.empty() && views[p].selection_identity)
         identities.emplace(p, *views[p].selection_identity);
     }
+    if (selections.empty() && identities.size() < 2) return;
     const auto conditions = path_conditions(lexical_);
     CleanupEquations::ConditionFacts captured;
     captured.same_inputs = selection_groups(identities, conditions);
@@ -17038,14 +17048,6 @@ class ScalarChecker {
               "here readonly product access requires a stable lexical ref under a live owner");
         if (readonly_product) require_payload_access(view, capture.at);
       }
-      // A live scalar value slot is supplied by address. The body may
-      // initialize it before reading it on each actual invocation.
-      if (!(source.value_binding && scalar) && validating_ && proving_ &&
-          lexical_.live && !view.initialized_target() &&
-          std::ranges::any_of(view.targets, [&](size_t place) {
-            return !missing_initialization(lexical_, place, selected_target(view, place, true)).empty();
-          }))
-        implementation_gap(capture.at, "here access to a slot without definite initialization at supply");
       const auto role = capture_owner(*view.owners.begin(), capture.at, handle);
       Parameter input{name, type, capture.at, false, {}};
       input.declaration_kind = handle ? "handle" : source.value_binding ? "ptr" : "ref";
