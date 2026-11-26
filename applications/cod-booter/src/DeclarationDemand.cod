@@ -2,7 +2,7 @@ using "./ParserStorage.cod" {
     ExprNodes, no_node, CallableSites, inspect_callable, find_signature_clause,
     DirectCallSites, direct_invocation, NamedThrowSites, inspect_named_throw,
     first_sequence_entry, inspect_sequence_entry, SequenceEntry, SequenceSyntax { ArgumentSequence },
-    module_tail, AssignmentSites, inspect_assignment, predicate_operand, fixed_reference_local,
+    module_tail, AssignmentSites, inspect_assignment, predicate_operand, fixed_reference_local, formal_binding_is_fixed,
     AssignmentSyntax { PlaceTransfer, FieldTransfer, InvalidAssignment },
 };
 using "./ParserStorage.cod" CallableSyntax { ModuleCallable, LexicalCallable, CEntry };
@@ -280,7 +280,7 @@ export func discover_declaration_demand(
             has_imported_native_loan(views, site) || read_acquisition_failure(views, site, failure) ||
             inspect_named_throw(nodes, revision, used, site, construction) ||
             predicate_operand(nodes, revision, used, site) != no_node() ||
-            fixed_reference_local(nodes, revision, used, site)) {
+            fixed_reference_local(nodes, revision, used, site) || formal_binding_is_fixed(nodes, revision, used, site)) {
             if (scope >= used || (scope != root && !local_body(nodes, revision, used, scope, callable)) ||
                 !require_body(demand, scope, count, used, scope != root)) {
                 problem <- site;

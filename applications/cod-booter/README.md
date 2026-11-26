@@ -197,6 +197,10 @@ The checker records the possible escaping bounds and allocation failures of a co
 
 Both source commands also check `reserve_visits`. The visit-array profile requires a locally declared `u64`-indexed array whose exact sum element has a completed finite bits schema. The fieldless fill must belong to that sum. The checker prepares the indexed destination before the source, including both bounds checks, and admits the whole-value transfer in discarded position. The final rebind follows the copy loop. Mixed-slot signatures and object emission remain separate profiles. [Visit-array checking contract](docs/ModuleGraph.md#checking-growth-of-the-module-visit-array)
 
+### Fixed scalar value formals
+
+Ordinary definitions can use `const val n:T` for a supported scalar `T`. The parameter receives its own copy at the written argument position. Its storage allows reads and readonly loans. The source commands check that restriction even in a private unused definition, and the object command emits supported module calls. Fixed reference formals and fixed formals in C and `here` signatures remain outside this profile. [Parameter checking](docs/ModuleGraph.md#parsing-parameters-for-graph-table-growth)
+
 ### Predicate assertions
 
 The booter’s three commands check `assert predicate;` in an ordinary body. The predicate must supply a `bool`. A literal false predicate is rejected, including under parentheses. A literal true predicate needs no assertion branch. Otherwise the compiled program evaluates the predicate once and raises unchecked `AssertionFailedError` on false. Failures during evaluation retain their category and follow ordinary cleanup. The source commands check the body containing the assertion.

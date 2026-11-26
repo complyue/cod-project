@@ -61,7 +61,7 @@ using "./ParserStorage.cod" {
     SignatureSites, inspect_signature, find_signature_clause, ModuleSelectionSites,
         inspect_module_selection,
     DeclarationSyntax, formal_variadic_at,
-    BindingSites, inspect_binding, inspect_type_annotation, FormalSites, inspect_formal, is_scope_block,
+    BindingSites, inspect_binding, inspect_type_annotation, FormalSites, inspect_formal, formal_binding_is_fixed, is_scope_block,
     LocalBindingSites, inspect_local_binding, fixed_reference_local,
     DirectCallSites, direct_invocation, CaseSites, CaseArmSites, inspect_case, inspect_case_arm,
     ConstructorCaseSites, inspect_constructor_case, case_pattern,
@@ -289,6 +289,7 @@ func dynamic_symbol_in_function() -> u8 { return 12u8; }
 export func unsupported_module_declaration() -> u8 { return 13u8; }
 export func unsupported_ordinary_construction() -> u8 { return 37u8; }
 export func unsupported_reference_slot_formal() -> u8 { return 121u8; }
+export func unsupported_fixed_formal() -> u8 { return 122u8; }
 func unsupported_initializer_rebind() -> u8 { return 46u8; }
 func unsupported_repeated_defer() -> u8 { return 47u8; }
 func unsupported_repeated_construction() -> u8 { return 48u8; }
@@ -2808,12 +2809,17 @@ func resolve_header_types(source:const SourceBytes in S, nodes:const ExprNodes i
     };
 }
 
-enum FormalNameRole:u8 { CallableParameters; AggregateFields; }
+enum FormalNameRole:u8 { OrdinaryParameters; OtherCallableParameters; AggregateFields; }
 
 func resolve_ordinary_formal(source:const SourceBytes in S, nodes:const ExprNodes in N,
     bindings:NameBindings in B, work:NameWork in W, state:NameState in R, parameter:u64,
     formal:const FormalSites in F, binding:const BindingSites in F, names:FormalNameRole) -> void
     where {const owner S, const owner N, owner B, owner W, owner R, const owner F} {
+    val fixed <- formal_binding_is_fixed(nodes, state.syntax_revision, state.syntax_used, parameter);
+    if (fixed && names != (OrdinaryParameters:FormalNameRole)) {
+        reject_name(state, parameter, unsupported_fixed_formal());
+        return
+    };
     # Field labels share a duplicate-check extent. An annotation borrows the
     # enclosing namespace, ending before the first label.
     val owner_past <- if (names == (AggregateFields:FormalNameRole)) { (state.first) } else { (state.used) };
@@ -2833,7 +2839,7 @@ func resolve_ordinary_formal(source:const SourceBytes in S, nodes:const ExprNode
         return
     };
     declare_name(source, nodes, bindings, work, state, binding.name, parameter, formal_binding(), duplicate_binding());
-    if (state.diagnostic == 0u8 && formal.mode == ReferenceSlotFormal) {
+    if (state.diagnostic == 0u8 && (fixed || formal.mode == ReferenceSlotFormal)) {
         (bindings[parameter].scope <- state.scope_node):void
     }
 }
@@ -2854,7 +2860,7 @@ func resolve_formals(source:const SourceBytes in S, nodes:const ExprNodes in N, 
     for (unused in 0u64 .. state.syntax_used) {
         if (parameter == no_node()) return;
         shape <- inspect_formal(nodes, state.syntax_revision, state.syntax_used, parameter, formal);
-        if (shape == HereFormalSyntax && names == (CallableParameters:FormalNameRole)) {
+        if (shape == HereFormalSyntax && names != (AggregateFields:FormalNameRole)) {
             resolve_here_formal(source, nodes, bindings, work, state, parameter, formal.signature);
         } else {
             if (shape != OrdinaryFormal ||
@@ -2886,7 +2892,7 @@ func resolve_here_formal(source:const SourceBytes in S, nodes:const ExprNodes in
     state.first <- enclosing_used;
     resolve_header_types(source, nodes, bindings, work, state, callback);
     if (state.diagnostic != 0u8) return;
-    resolve_formals(source, nodes, bindings, work, state, header.parameter_tail, CallableParameters:FormalNameRole);
+    resolve_formals(source, nodes, bindings, work, state, header.parameter_tail, OtherCallableParameters:FormalNameRole);
     if (state.diagnostic != 0u8) return;
     state.first <- enclosing_first;
     state.used <- enclosing_used;
@@ -3014,7 +3020,10 @@ func resolve_callable_body(source:const SourceBytes in S, nodes:const ExprNodes 
     if (state.diagnostic != 0u8) return;
     resolve_header_types(source, nodes, bindings, work, state, head);
     if (state.diagnostic != 0u8) return;
-    resolve_formals(source, nodes, bindings, work, state, header.parameter_tail, CallableParameters:FormalNameRole);
+    val role <- if (mode == ModuleCallable || mode == LexicalCallable) {
+        OrdinaryParameters:FormalNameRole
+    } else { OtherCallableParameters:FormalNameRole };
+    resolve_formals(source, nodes, bindings, work, state, header.parameter_tail, role);
     if (state.diagnostic != 0u8) return;
     if (callable.body != no_node()) {
         resolve_expression(source, nodes, bindings, work, state, callable.body);

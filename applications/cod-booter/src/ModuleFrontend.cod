@@ -1,5 +1,5 @@
 using "./ParserStorage.cod" NodeLink { NoLink };
-using "./NameResolution.cod" unsupported_reference_slot_formal;
+using "./NameResolution.cod" { unsupported_reference_slot_formal, unsupported_fixed_formal };
 using "./ModuleExportStorage.cod" ByteArrayFailures;
 using "./ModuleExportStorage.cod" ByteFunctionCompletion { NoByteFunction };
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
@@ -29,7 +29,7 @@ using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 using "./ParserStorage.cod" SelectionSyntax { SelectionReady };
 using "./ParserStorage.cod" LocalMode { ExceptionLocal, ReferenceLocal };
 using "./ParserStorage.cod" FormalMode {
-    ValueFormal, ExceptionFormal, HandleFormal, RetainedHandleFormal, ReferenceSlotFormal, IdentityOnlyRefFormal,
+    ValueFormal, ExplicitValueFormal, ExceptionFormal, HandleFormal, RetainedHandleFormal, ReferenceSlotFormal, IdentityOnlyRefFormal,
 };
 using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { NoConstructorCase } }
 using "./ParserStorage.cod" {
@@ -98,7 +98,6 @@ func unsupported_nominal_sum() -> u8 { return 114u8; }
 func unsupported_named_region() -> u8 { return 116u8; }
 func unsupported_const_local() -> u8 { return 117u8; }
 func unsupported_constructor_case() -> u8 { return 120u8; }
-func unsupported_fixed_formal() -> u8 { return 122u8; }
 func unsupported_procedure_symbol() -> u8 { return 123u8; }
 func unsupported_scoped_procedure() -> u8 { return 124u8; }
 func unsupported_reference_group() -> u8 { return 134u8; }
@@ -300,7 +299,10 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64,
                     if (mode == ReferenceSlotFormal && (emit_object || !publish_defaults))
                         return unsupported_reference_slot_formal();
                     if (mode == IdentityOnlyRefFormal) return unsupported_identity_reference();
-                    if (fixed) return unsupported_fixed_formal();
+                    if (fixed) {
+                        if (mode != ExplicitValueFormal) return unsupported_fixed_formal();
+                        (requires_operand_checks <- true):void
+                    };
                     if (mode == ExceptionFormal) { 29u8 } else { 0u8 }
                 };
                 (ExceptionResult) -> { 30u8 };
