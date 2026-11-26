@@ -102,7 +102,7 @@ The replacement translates the synchronous path-loan chain used by `ModuleIndex.
 
 A named lexical procedure with an independent scalar signature can be called directly from its defining activation. The replacement resolves captured names at the declaration and passes their live places on each call. The linked reporting probe forwards a borrowed native diagnostic handle through ordinary returns and a catch.
 
-The same path-loan code translates `ModuleIndex.lookup_path` and its visit search. The replacement supports direct readonly and writable borrows of finite bits products, complete inline product initialization, initialized lexical scalar cells and unguarded nominal sum cases with fresh bits field reception. The lookup writes its result fields only after the callback completes.
+The same path-loan code translates `ModuleIndex.lookup_path` and its visit search. The replacement supports direct readonly and writable borrows of finite bits products, complete inline product initialization, initialized lexical scalar cells and unguarded nominal sum cases with fresh bits field reception. The lookup writes its result fields only after the callback completes. A local `ref` can name its initializer's exact target type. A finite bits sum can be borrowed through an ordinary call, as in the `VisitObject` loan to `ModuleIndex.mark_checked`.
 
 Direct lexical acquisition of an owning C handle registers cleanup on success. An attached borrow shares the selected live parent’s lifetime and adds no release. The linked root-opening probe covers source revision acquisition, path preparation, attachment and lookup with the existing native providers.
 
