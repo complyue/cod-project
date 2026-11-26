@@ -30,6 +30,8 @@
 
 namespace fs = std::filesystem;
 
+enum class LanguageAction { parse, check, run };
+
 struct LanguageEmission {
   std::optional<fs::path> ir, bitcode, providers;
   bool specialize = true;
@@ -115,17 +117,18 @@ public:
 #endif
   }
 
-  int compileLanguage(const fs::path &entry, const fs::path &project, bool check_only, bool verbose,
+  int compileLanguage(const fs::path &entry, const fs::path &project, LanguageAction action, bool verbose,
                       const LanguageEmission &emission, const cod::language::WarningOptions &warnings,
                       std::optional<size_t> diagnostic_limit) const;
 };
 
 static void printUsage(const char *prog_name) {
-  std::cout << "Usage: " << prog_name << " (--check FILE | --run FILE) [OPTIONS]\n"
+  std::cout << "Usage: " << prog_name << " (--parse FILE | --check FILE | --run FILE) [OPTIONS]\n"
             << "\n"
             << "Options:\n"
             << "  --run FILE          Compile and run a CoD source-language entry\n"
             << "  --check FILE        Check a CoD entry and its demanded call paths\n"
+            << "  --parse FILE        Parse a CoD entry and its reachable source modules\n"
             << "  --project PATH      Select the source project's package root\n"
             << "  --emit-llvm FILE    Save directly emitted textual LLVM IR\n"
             << "  --emit-bc FILE      Save directly emitted LLVM bitcode\n"
@@ -199,14 +202,15 @@ static std::optional<int> runExecutableAndWait(const fs::path &binary_path) {
 #endif
 }
 
-int CodTool::compileLanguage(const fs::path &entry, const fs::path &project, bool check_only, bool verbose,
+int CodTool::compileLanguage(const fs::path &entry, const fs::path &project, LanguageAction action, bool verbose,
                             const LanguageEmission &emission, const cod::language::WarningOptions &warnings,
                             std::optional<size_t> diagnostic_limit) const {
   try {
-    auto compilation = cod::language::Compiler{warnings, emission.specialize, emission.bounds_checks}.compile(
-        fs::absolute(entry), {getLanguageLibrary(), project},
-        emission.ir.has_value(), !check_only || emission.bitcode.has_value(), emission.providers.has_value(),
-        diagnostic_limit);
+    cod::language::Compiler compiler{warnings, emission.specialize, emission.bounds_checks};
+    auto parsed = compiler.parse(fs::absolute(entry), {getLanguageLibrary(), project}, diagnostic_limit);
+    auto compilation = action == LanguageAction::parse ? compiler.report_parse(std::move(parsed))
+        : compiler.compile(std::move(parsed), emission.ir.has_value(),
+            action == LanguageAction::run || emission.bitcode.has_value(), emission.providers.has_value());
     for (const auto &finding : compilation.diagnostics.findings()) {
       if (const auto *warning = std::get_if<cod::language::WarningDiagnostic>(&finding.primary)) {
         std::cerr << warning->text();
@@ -245,7 +249,7 @@ int CodTool::compileLanguage(const fs::path &entry, const fs::path &project, boo
       write(*emission.providers / Files::header_name, compilation.providers->header);
       write(*emission.providers / Files::stubs_name, compilation.providers->stubs);
     }
-    if (check_only) return 0;
+    if (action != LanguageAction::run) return 0;
     if (compilation.native_library)
       throw std::runtime_error("a C entry library requires a linked native launcher; emit it with --check");
     const auto archive = getLanguageRuntime();
@@ -291,7 +295,7 @@ int main(int argc, const char **argv) {
   fs::path project;
   std::optional<fs::path> language_entry;
   LanguageEmission emission;
-  bool check_only = false;
+  LanguageAction action = LanguageAction::check;
   bool verbose = false;
   cod::language::WarningOptions warnings;
   std::optional<size_t> diagnostic_limit;
@@ -307,13 +311,13 @@ int main(int argc, const char **argv) {
         return 1;
       }
       project = fs::absolute(argv[++i]);
-    } else if (arg == "--run" || arg == "--check") {
+    } else if (arg == "--parse" || arg == "--run" || arg == "--check") {
       if (i + 1 >= argc || language_entry) {
-        std::cerr << "Error: provide exactly one --run or --check entry file\n";
+        std::cerr << "Error: provide exactly one --parse, --check or --run entry file\n";
         return 1;
       }
       language_entry = fs::absolute(argv[++i]);
-      check_only = arg == "--check";
+      action = arg == "--parse" ? LanguageAction::parse : arg == "--run" ? LanguageAction::run : LanguageAction::check;
     } else if (arg == "--no-specialize") {
       emission.specialize = false;
     } else if (arg == "--no-bounds-checks") {
@@ -363,9 +367,13 @@ int main(int argc, const char **argv) {
   }
 
   if (!language_entry) {
-    std::cerr << "Error: provide a CoD entry with --run or --check\n";
+    std::cerr << "Error: provide a CoD entry with --parse, --check or --run\n";
     printUsage(argv[0]);
     return 1;
   }
-  return CodTool{}.compileLanguage(*language_entry, project, check_only, verbose, emission, warnings, diagnostic_limit);
+  if (action == LanguageAction::parse && (emission.ir || emission.bitcode || emission.providers)) {
+    std::cerr << "Error: artifact emission requires --check or --run\n";
+    return 1;
+  }
+  return CodTool{}.compileLanguage(*language_entry, project, action, verbose, emission, warnings, diagnostic_limit);
 }
