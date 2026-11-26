@@ -69,6 +69,7 @@ class BodyExtraction {
     std::map<size_t, Allocator> owners;
     bool installs_handler = false;
     std::optional<std::vector<CheckedArgument>> pending_result_arguments = {};
+    const CheckedFamily *family = nullptr;
   };
   struct Local {
     size_t binding;
@@ -144,6 +145,7 @@ class BodyExtraction {
     CheckedInstance instance;
     std::set<size_t> allocations;
     std::vector<BoundCall> calls;
+    std::vector<size_t> handler_targets;
     std::optional<Outline> outline;
     bool open_replay = false;
     const Expression *void_exit = nullptr;
@@ -365,7 +367,7 @@ class BodyExtraction {
     size_t module_;
     struct LexicalScope {
       std::map<std::string, Binding> names;
-      std::set<size_t> handlers;
+      std::map<size_t, size_t> handlers;
     };
     std::vector<LexicalScope> scopes_{1};
     std::map<std::string, HereFormal> here_;
@@ -633,6 +635,10 @@ class BodyExtraction {
       operation.type = formal.contract->result.type;
       operation.operand_type = invocation_type(*formal.contract);
       operation.invokes_here = formal.slot;
+      // Ordinary here inputs have explicit attached suppliers. A forwarded
+      // descriptor in a literal comes from that literal's supplier frame.
+      // An externally entered frame has no such bound source.
+      if (form_.c_linkage) body_.open_replay = true;
       for (size_t i = 0; i < offers.size(); ++i) {
         const auto &input = operand(expr, i);
         const auto &offer = offers[i];
@@ -772,6 +778,9 @@ class BodyExtraction {
       CheckedOperation op;
       op.type = *native.contract.result.type;
       op.native_call = id;
+      // A native func cannot independently reenter CoD procedure code.
+      // Its supplied body, if any, is a separate recorded dependency.
+      if (form.kind != Form::Kind::function) body_.open_replay = true;
       std::map<size_t, size_t> owners;
       for (size_t i = 0; i < native.inputs.size(); ++i) {
         const auto &input = native.inputs[i];
@@ -1097,6 +1106,7 @@ class BodyExtraction {
         op.arguments.push_back({mode, formal, parameter.selects_caller_ref_slot(), {}, current_symbol});
       }
       BoundCall edge{&expr, callee, {}};
+      if (selected->methods.size() != 1) edge.family = selected;
       for (const auto &[role, owner] : actual_owners) if (!target.input_owners()[role].read_only)
         if (const auto allocator = allocator_for(owner)) edge.owners.emplace(role, *allocator);
       if (!target.result.type) {
@@ -1189,7 +1199,7 @@ class BodyExtraction {
       const auto callee = extraction_.bodies_.size();
       extraction_.add_outline(std::move(outlined), result);
       body_.calls.push_back({&expr, callee, {}, true});
-      scopes_.back().handlers.insert(id);
+      scopes_.back().handlers.emplace(id, callee);
       CheckedOperation op;
       op.symbol = id;
       op.scoped_effect = callee;
@@ -1199,8 +1209,10 @@ class BodyExtraction {
     CheckedOperation invoke_handler(const Expression &expr) {
       const auto id = selected_symbol(expr);
       const auto &contract = handler_contract(id, expr);
-      expect(std::ranges::any_of(scopes_, [&](const auto &scope) { return scope.handlers.contains(id); }),
-             expr.at, "replacement seed needs a selected live handler in the current invocation");
+      const auto active = std::ranges::find_if(scopes_.rbegin(), scopes_.rend(),
+          [&](const auto &scope) { return scope.handlers.contains(id); });
+      expect(active != scopes_.rend(), expr.at, "replacement seed needs a selected live handler in the current invocation");
+      const auto callee = active->handlers.at(id);
       expect(expr.children.size() == contract.parameters.size() && !expr.has_here_body(), expr.at,
              "live handler invocation needs its declared positional arguments");
       CheckedOperation op;
@@ -1211,6 +1223,7 @@ class BodyExtraction {
         takes_value(operand(expr, i), type, expr.children[i]->at);
         op.arguments.push_back({ArgumentMode::value, type});
       }
+      body_.handler_targets.push_back(callee);
       return op;
     }
 
@@ -2015,11 +2028,10 @@ class BodyExtraction {
     }
 
     const CheckedOperation &remember(const Expression &expr, CheckedOperation op) {
-      // Calls with a here operand are open until the receiver-to-body
-      // dependency is represented. Native disposal has its own contract.
-      if (!body_.open_replay &&
-          (op.native_acquisition || op.native_call || op.invokes_here || expr.has_here_body() ||
-           ((expr.kind == Kind::symbol || (expr.kind == Kind::effect && !expr.definition)) && op.symbol)))
+      // Native disposal has its own contract. A runtime symbolic read or
+      // installation also lies outside this empty-inventory profile.
+      if (op.native_acquisition ||
+          ((expr.kind == Kind::symbol || (expr.kind == Kind::effect && !expr.definition)) && op.symbol))
         body_.open_replay = true;
       if (op.view && !scalar_type(op.type) && op.type != Type::exception)
         op.discarded_view = true;
@@ -2100,8 +2112,27 @@ class BodyExtraction {
     for (size_t id = 0; id < bodies_.size(); ++id) {
       const auto &body = bodies_[id];
       graph.direct.push_back({body.allocations, body.open_replay});
+      if (!graph.replay_callers.empty()) {
+        // Every attached body is a potential invocation. A literal that
+        // forwards a lexical here input uses the supplier's existing
+        // descriptor, whose own attached body is already a dependency.
+        if (body.outline && body.outline->here)
+          graph.replay_callers[id].push_back(body.outline->supplier);
+        for (const auto target : body.handler_targets) graph.replay_callers[target].push_back(id);
+      }
       for (const auto &call : body.calls) {
-        if (!graph.replay_callers.empty()) graph.replay_callers[call.callee].push_back(id);
+        if (!graph.replay_callers.empty()) {
+          graph.replay_callers[call.callee].push_back(id);
+          if (call.family) {
+            for (const auto method : call.family->methods) {
+              if (method == bodies_[call.callee].instance.method) continue;
+              const auto target = selected_.find(method);
+              if (target == selected_.end() || !declarations_.method(method).here.empty())
+                graph.direct.back().open_replay = true;
+              else graph.replay_callers[target->second].push_back(id);
+            }
+          }
+        }
         for (const auto &[owner, input] : bodies_[call.callee].instance.frame.owners) {
           const auto role = null_target - 1 - owner;
           const auto actual = call_allocator(call, role);
@@ -2234,8 +2265,8 @@ class BodyExtraction {
     return cases;
   }
 
-  void seal(CheckedProgram &program, const CompletedResults &results, const CompletedCases &cases) {
-    const auto completed = freeze_dependencies().complete();
+  void seal(CheckedProgram &program, const CompletedResults &results, const CompletedCases &cases,
+            const std::vector<BodyDependencies::Requirements> &completed) {
     for (const auto &[method, result] : results)
       if (method < program.methods.size()) program.methods[method].result = result;
     for (const auto &entry : program.native_entries)
@@ -2291,8 +2322,9 @@ public:
     extraction.extract();
     const auto results = extraction.complete_results();
     const auto cases = extraction.complete_case_returns(results);
+    const auto dependencies = extraction.freeze_dependencies().complete();
     auto program = std::move(declarations.declarations_);
-    extraction.seal(program, results, cases);
+    extraction.seal(program, results, cases, dependencies);
     return {std::move(declarations.source_), std::move(program)};
   }
 };
