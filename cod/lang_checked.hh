@@ -448,6 +448,7 @@ class ScalarChecker {
     struct Call {
       const Expression *site;
       size_t instance, guard;
+      size_t formal = null_target;
     };
     std::vector<const Expression *> operations;
     std::vector<LeafGuard> guards;
@@ -455,11 +456,11 @@ class ScalarChecker {
   };
   std::map<size_t, ScalarPlan> scalar_callers_;
   const ScalarPlan *applying_scalar_ = nullptr;
-  size_t planned_scalar_target(const Expression *site) const {
+  const ScalarPlan::Call &planned_scalar_call(const Expression *site) const {
     const auto &calls = applying_scalar_->calls;
     const auto call = std::ranges::find(calls, site, &ScalarPlan::Call::site);
     if (call == calls.end()) throw std::logic_error("scalar application reached an unplanned call");
-    return call->instance;
+    return *call;
   }
   std::map<size_t, SyntaxDiagnostic> unavailable_leaf_behaviors_;
   struct EntryBehaviorCheck {
@@ -477,7 +478,7 @@ class ScalarChecker {
                                  EffectUse use = EffectUse::all, const Expression *call_site = nullptr) const {
     if (extracting_leaf_)
       throw std::logic_error("closed leaf extraction reached an ordinary behavior dependency");
-    if (applying_scalar_ && (!call_site || distinct_bindings || planned_scalar_target(call_site) != instance ||
+    if (applying_scalar_ && (!call_site || distinct_bindings || planned_scalar_call(call_site).instance != instance ||
                              !program_.instances[instance].effects_frozen))
       throw std::logic_error("scalar application reached an unproved behavior dependency");
     require_leaf_behavior(instance);
@@ -7412,8 +7413,9 @@ class ScalarChecker {
     if (family.methods.empty()) missing_callable(expr);
     const auto method = select_method(family.methods, arguments, expr.at, expr.text, family.retained_types(), access, owners);
     if (applying_scalar_) {
-      const auto instance = planned_scalar_target(&expr);
-      if (program_.instances[instance].method != method || !arguments.empty() || family.context || family.definition ||
+      const auto instance = planned_scalar_call(&expr).instance;
+      const auto &planned = program_.instances[instance];
+      if (planned.method != method || planned.arguments != arguments || family.context || family.definition ||
           family.declaration || !family.retained_types().empty())
         throw std::logic_error("scalar application changed its selected call");
       return instance;
@@ -7463,6 +7465,18 @@ class ScalarChecker {
     const bool direct_named_body = expr.kind == Expression::Kind::call &&
         !operation.callable_call && !method.scope_inputs && !method.here_group && method.here.empty();
     operation.reads_direct_body = direct_named_body && !expr.lexical_symbol_call;
+    if (applying_scalar_) {
+      const auto &call = planned_scalar_call(&expr);
+      if (call.formal != null_target) {
+        const auto &formal = checking_instance_->frame.inputs.at(call.formal);
+        const auto &prepared = operation.arguments.at(0);
+        if (views.size() != 1 || &operation.argument(expr, 0) != expr.children.front().get() ||
+            formal.mode != ArgumentMode::value || prepared.mode != ArgumentMode::value ||
+            prepared.binding_slot || prepared.reference_storage || prepared.type != target.arguments.front() ||
+            views.front().place != formal.place || views.front().binding != storage(formal.place).binding)
+          throw std::logic_error("scalar application changed its prepared formal operand");
+      }
+    }
     // For this direct statement, the only use of Returned is to describe the
     // ignored independent Boolean value. Invocation effects are still read.
     const bool result_ignored = closing_write_effects_ && checking_instance_ &&
@@ -22583,27 +22597,44 @@ class ScalarChecker {
     return expr.kind == Expression::Kind::binary && (expr.text == "+" || expr.text == "*");
   }
 
-  bool bind_scalar_literal_call(const Expression &expr, const TypeEvidenceState &scope, ScalarPlan &plan,
-                                Type::Kind result, size_t guard) const {
-    if (expr.intrinsic || !expr.children.empty() || scope.bindings.contains(expr.text) ||
+  bool bind_scalar_call(const Expression &expr, const TypeEvidenceState &scope, ScalarPlan &plan,
+                        Type::Kind result, size_t guard) const {
+    if (expr.intrinsic || expr.children.size() > 1 || scope.bindings.contains(expr.text) ||
         text_primitive(expr, &scope) || native_operation(expr.text, &scope)) return false;
     const auto family = named_family(expr, &scope);
     if (family.methods.size() != 1 || family.context || family.definition || family.declaration ||
         !family.retained_types().empty() || has_declarations(expr.text)) return false;
     const auto &method = program_.methods[family.methods.front()];
-    if (!method.input_parameters().empty() || method.source->kind != Form::Kind::function ||
+    const auto parameters = method.input_parameters();
+    if (parameters.size() != expr.children.size() || parameters.size() != method.parameters.size() ||
+        method.source->kind != Form::Kind::function ||
         abstract_effect_inputs_.contains(method.source)) return false;
+    size_t formal = null_target;
+    if (!parameters.empty()) {
+      const auto &operand = *expr.children.front();
+      if (operand.kind != Expression::Kind::name || operand.annotation || operand.spread ||
+          operand.intrinsic || operand.checked_ref_argument || result != Type::boolean) return false;
+      const auto binding = scope.bindings.find(operand.text);
+      const auto &parameter = parameters.front();
+      if (binding == scope.bindings.end() || (binding->second != Type::uint8 && binding->second != Type::boolean) ||
+          method.parameters.front() != *binding->second || argument_mode(parameter) != ArgumentMode::value ||
+          parameter.automatic_conversion || parameter.variadic || parameter.not_init_ref) return false;
+      const auto inputs = program_.methods.at(*scope.method).input_parameters();
+      const auto input = std::ranges::find(inputs, operand.text, &Parameter::name);
+      if (input == inputs.end() || argument_mode(*input) != ArgumentMode::value) return false;
+      formal = std::distance(inputs.begin(), input);
+    }
     const auto matching = [&](size_t id) {
       const auto &instance = program_.instances[id];
       // An explicitly declared result can set result_supplied. The query
       // environment identifies a result supplied by the calling context.
-      return instance.arguments.empty() && instance.environment.empty() && instance.retained_types.empty() &&
+      return instance.arguments == method.parameters && instance.environment.empty() && instance.retained_types.empty() &&
           !instance.query_environment && instance.incoming_abstract_targets.empty() &&
           instance.result.mode == ResultMode::value && instance.result.type == result;
     };
     const auto target = std::ranges::find_if(method.instances, matching);
     if (target == method.instances.end()) return false;
-    plan.calls.push_back({&expr, *target, guard});
+    plan.calls.push_back({&expr, *target, guard, formal});
     return true;
   }
 
@@ -22617,7 +22648,7 @@ class ScalarChecker {
     case K::boolean: case K::integer:
       return true;
     case K::call:
-      return bind_scalar_literal_call(expr, scope, plan, Type::uint8, guard);
+      return bind_scalar_call(expr, scope, plan, expr.children.empty() ? Type::uint8 : Type::boolean, guard);
     case K::grouped:
       break;
     case K::unary: case K::binary:
@@ -22712,7 +22743,7 @@ class ScalarChecker {
           expr.children.front()->kind != K::name) return false;
       break;
     case K::call:
-      if (integer_result) return bind_scalar_literal_call(expr, scope, plan.scalar, Type::uint64, guard);
+      if (integer_result) return bind_scalar_call(expr, scope, plan.scalar, Type::uint64, guard);
       if (expr.has_here_body() || expr.intrinsic ||
           text_access(text_primitive(expr, &scope)) != BuiltinOperation::text_byte ||
           plan.primitive || expr.children.size() != 2 || expr.children.front()->kind != K::string_literal)
@@ -22830,9 +22861,10 @@ class ScalarChecker {
     }
     for (const auto &call : plan.calls) {
       const auto &operation = instance.operations.at(call.site);
+      const auto &target = program_.instances.at(call.instance);
       if (!operation.reads_direct_body || operation.callable_call || operation.builtin != BuiltinOperation::none ||
-          operation.callee != call.instance || !operation.arguments.empty() ||
-          operation.type != *program_.instances.at(call.instance).result.type)
+          operation.callee != call.instance || operation.arguments.size() != target.arguments.size() ||
+          operation.type != *target.result.type)
         throw std::logic_error("scalar operation disagrees with its planned call");
     }
   }
@@ -23532,7 +23564,7 @@ class ScalarChecker {
     std::map<size_t, LeafBehaviorPlan> bound;
     for (size_t id = 0; id < program_.instances.size(); ++id)
       if (auto plan = bind_leaf_behavior(id)) bound.emplace(id, std::move(*plan));
-    std::set<size_t> completed_literals;
+    std::set<size_t> completed_literals, completed_predicates;
     for (const auto &[id, plan] : std::as_const(bound)) {
       if ((plan.kind == LeafBehaviorPlan::Kind::borrowed_byte && !plan.primitive) ||
           !plan.scalar.calls.empty()) continue;
@@ -23568,6 +23600,7 @@ class ScalarChecker {
         instance.scalar_frame_ready = prepare_frame && warnings.warnings.empty();
         frame.keep_frame = true;
         if (plan.kind == LeafBehaviorPlan::Kind::scalar_literal) completed_literals.insert(id);
+        if (plan.kind == LeafBehaviorPlan::Kind::scalar_predicate) completed_predicates.insert(id);
       } catch (const LocatedFailure &failure) {
         // An independent entry error retains its ordinary precedence. A
         // consumer of this leaf cannot apply the initial placeholder.
@@ -23580,33 +23613,42 @@ class ScalarChecker {
       BodyFrame frame;
       std::vector<ScalarExit> exits;
     };
-    std::vector<Application> applications;
-    for (const auto &[id, plan] : std::as_const(bound)) {
-      if (plan.scalar.calls.empty() || !std::ranges::all_of(plan.scalar.calls, [&](const auto &call) {
-            return completed_literals.contains(call.instance);
-          })) continue;
-      auto &instance = program_.instances[id];
-      BodyReplay frame{program_, instance};
-      try {
-        auto exits = apply_scalar_caller(id, plan.scalar);
-        applications.push_back({id, BodyFrame{instance}, std::move(exits)});
-      } catch (const LocatedFailure &) {
-        // The ordinary checker retains this body's diagnostic and its order.
+    std::set<size_t> attempted;
+    const auto apply_batch = [&] {
+      std::vector<Application> applications;
+      for (const auto &[id, plan] : std::as_const(bound)) {
+        if (plan.scalar.calls.empty() || attempted.contains(id) ||
+            !std::ranges::all_of(plan.scalar.calls, [&](const auto &call) {
+              return call.formal == null_target ? completed_literals.contains(call.instance)
+                                                : completed_predicates.contains(call.instance);
+            })) continue;
+        attempted.insert(id);
+        auto &instance = program_.instances[id];
+        BodyReplay frame{program_, instance};
+        try {
+          auto exits = apply_scalar_caller(id, plan.scalar);
+          applications.push_back({id, BodyFrame{instance}, std::move(exits)});
+        } catch (const LocatedFailure &) {
+          // The ordinary checker retains this body's diagnostic and its order.
+        }
       }
-    }
-    // No caller contract is available to any of the applications above.
-    for (auto &application : applications) {
-      const auto id = application.instance;
-      auto &instance = program_.instances[id];
-      auto &plan = bound.at(id);
-      const bool frame_ready = independent_scalar_frame(instance, program_.methods[instance.method]);
-      auto completed = seal_scalar_caller(application.exits, *instance.result.type);
-      scalar_callers_.emplace(id, std::move(plan.scalar));
-      std::move(application.frame).install(instance);
-      instance.effects = std::move(completed);
-      instance.effects_frozen = true;
-      instance.scalar_frame_ready = frame_ready;
-    }
+      // Publish only after every application in this batch has finished.
+      for (auto &application : applications) {
+        const auto id = application.instance;
+        auto &instance = program_.instances[id];
+        auto &plan = bound.at(id);
+        const bool frame_ready = independent_scalar_frame(instance, program_.methods[instance.method]);
+        auto completed = seal_scalar_caller(application.exits, *instance.result.type);
+        scalar_callers_.emplace(id, std::move(plan.scalar));
+        std::move(application.frame).install(instance);
+        instance.effects = std::move(completed);
+        instance.effects_frozen = true;
+        instance.scalar_frame_ready = frame_ready;
+        if (plan.kind == LeafBehaviorPlan::Kind::scalar_predicate) completed_predicates.insert(id);
+      }
+    };
+    apply_batch();
+    apply_batch();
   }
 
   bool close_effects(bool symbols) {
