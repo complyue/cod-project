@@ -1,8 +1,10 @@
 # Ranged for-loops and synchronous generators
 
-Design revision: 24 · Recorded: 2026-11-24 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
+Design revision: 25 · Recorded: 2026-11-26 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
 
 ## Design authority
+
+At r25 [D-29-STEPPED-RANGES](DesignAuthorityRegistry.md#d-29-stepped-ranges) confirms bounded integer ranges as values in loops and subscripts. P-764/P-765 preserve the old half-open loop, written evaluation order and empty-loop behavior. [User decision](../CHANGELOG.md#h-ranges-and-typed-subscripts-20261126)
 
 At r24 the [normal-completion decision](../CHANGELOG.md#h-normal-completion-20261124) covers [natural exhaustion](#void-final-completion) under [D-29-SIGNATURE](DesignAuthorityRegistry.md#d-29-signature), P-528–P-530 and [D-24-TAIL](DesignAuthorityRegistry.md#d-24-tail). Count body invocations and observe generator cleanup independently of per-yield feedback.
 
@@ -41,6 +43,20 @@ At r24 the [normal-completion decision](../CHANGELOG.md#h-normal-completion-2026
 - **Dependencies / invariants:** D-10 calls/effects, D-14/D-28 owners, D-17 scopes/completion, D-18 callable values, D-22 result/receiving specifications, D-23 operations, D-24 inference and D-16 numerical compatibility. Preserve unique actual owners, access/readiness, exact cleanup and the no-closure-cell/no-lifetime-extension boundary. Callable views remain lexical, never regional. There is no C++ object copying/moving model.
 - **Non-goals:** no retained iterator object, async callback, persistent continuation, independently resumable generator frame, first-class result group, custom final generator result or physical ABI is selected. A synchronous native call stack is not a persistent execution-state contract. D-18 governs access to the actual supplying activation.
 - **Acceptance / record:** the final section identifies observations and rejection cases for a future qualified implementation. [K-GENERATOR-DRAFT-20261117](../CHANGELOG.md#k-generator-draft-20261117) records this new draft and its open boundaries; it is not continuity qualification of a previously accepted generator mechanism. [K-GENERATOR-FEEDBACK-20261117](../CHANGELOG.md#k-generator-feedback-20261117) updates r1→2 with H-580 and a concrete pending signature proposal. [K-GENERATOR-FAILURES-20261117](../CHANGELOG.md#k-generator-failures-20261117) records r2→3 under H-584/H-585, with source-level failure composition, H-588 catch bypass, H-587 cleanup and outstanding proof scope. [K-GENERATOR-CLEANUP-20261117](../CHANGELOG.md#k-generator-cleanup-20261117) records r3→4: reuse ordinary outward failure rules while preserving the separate lexical return destinations. No compiler support is claimed.
+
+## Stepped range values
+
+`lo .. hi` excludes the end, and `lo ..= hi` includes it if the progression reaches it. The optional contextual `by step` applies to the entire range. Arithmetic in each field binds first: `lo + 1 .. hi - 1 by k * 2` has lower bound `lo + 1`, upper bound `hi - 1` and step `k * 2`. A plain identifier spelled `by` keeps its ordinary uses. The colon in `value:Type` keeps its existing grammar. Traversing a range in `for (i in r)` retains the numeric loop’s body, early-exit and zero-iteration `else` behavior. Synchronous generator calls keep their existing control contracts.
+
+Evaluate the lower bound, upper bound and explicit step once in written order when constructing the range. An ordinary integer range defaults to +1. A positive step advances while below the end (at or below for `..=`), and a negative step while above it (at or above for `..=`). A step directed away from the end gives an empty sequence. A zero step is invalid even for an otherwise empty range. Termination must work at the minimum and maximum representable coordinates without wrapping to an extra iteration or evaluating an overflowing final increment. Unsigned coordinates can descend with a signed negative step. A range does not promise that its cardinality fits its coordinate type.
+
+```cod
+val odd <- 1 ..= 5 by 2
+for (i in odd) { use(i) }
+samples[odd]
+```
+
+Both uses request 1, 3 and 5. Endpoints and step remain available even for an empty progression. The same bounded range keeps its coordinates across uses and needs no materialized list. Omitting a bound inside brackets leaves it for the selected axis to supply. An absent bound has no standalone numeric value. [Axis-relative selectors and units](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads)
 
 ## Data and control directions
 

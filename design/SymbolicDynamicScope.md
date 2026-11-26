@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 271 · Recorded: 2026-11-26 · Phase: language/application co-design.
+Design revision: 272 · Recorded: 2026-11-26 · Phase: language/application co-design.
 
 ## Design authority
+
+At r272 [D-29-STEPPED-RANGES](DesignAuthorityRegistry.md#d-29-stepped-ranges) gives `..`, `..=` and contextual `by` their range grammar. [D-30-TYPED-SUBSCRIPTS](DesignAuthorityRegistry.md#d-30-typed-subscripts) extends the single-index operation boundary to an ordered axis list. Maximal operator tokens, colon assertions and source-order preparation continue from r271.
 
 At r271 [D-10-LIBRARY-FIXITY](DesignAuthorityRegistry.md#d-10-library-fixity), P-760/P-761, assigns expression-operator grouping to selected library vocabularies. Maximal token spans, fixed structural grammar, definition-site meaning and operand preparation remain governed by their existing contracts. [Scope and acceptance](JuliaPackagePortability.md#operator-grouping-belongs-to-the-selected-vocabulary)
 
@@ -2188,7 +2190,7 @@ The parser and source tools must preserve the parenthesized expression boundary 
 
 The [selected library vocabulary](JuliaPackagePortability.md#operator-grouping-belongs-to-the-selected-vocabulary) supplies precedence and associativity for its expression operators. Grouping precedes method selection and is stable across changes in operand types. The production compiler applies the selected rules to recorded tokens. The existing bootstrap reader covers its working vocabulary.
 
-At the start of a symbolic token, the lexer consumes the longest contiguous run of operator characters. Its spelling and source span are fixed before grammar, module lookup or type checking. The current alphabet is `!`, `$`, `%`, `&`, `*`, `+`, `-`, `.`, `/`, `:`, `<`, `=`, `>` and `|`. Whitespace (including a newline), identifiers and structural delimiters `()[]{};,` end a run. Symbol names beginning with `@`, comments beginning with `#`, quoted text and numeric literals follow their own lexical rules. In particular, `1e-3` has an exponent sign, `1.5` has a decimal point, and `1..3` has a range token between two integers.
+At the start of a symbolic token, the lexer consumes the longest contiguous run of operator characters. Its spelling and source span are fixed before grammar, module lookup or type checking. The current alphabet is `!`, `$`, `%`, `&`, `*`, `+`, `-`, `.`, `/`, `:`, `<`, `=`, `>` and `|`. Whitespace (including a newline), identifiers and structural delimiters `()[]{};,` end a run. Symbol names beginning with `@`, comments beginning with `#`, quoted text and numeric literals follow their own lexical rules. In particular, `1e-3` has an exponent sign, `1.5` has a decimal point, and `1..3` has a range token between two integers. In `1..=3`, the inclusive range token is the whole `..=` run. [Bounds and contextual step](RangedForAndGenerators.md#stepped-range-values)
 
 Classify the exact spelling. For example, `->`, `=>`, `<:`, `:=`, `..` and the five augmented transfers are each one token. Grammar still determines where each can occur. Exact `//` is reserved for fraction construction and exact `::` retains its existing rejection. A longer run beginning with either spelling is still a single token. An unsupported spelling such as `<+>` retains its whole span for an error at its use. [Fraction construction and comments](FixedWidthFractions.md#construction-comments-and-output)
 

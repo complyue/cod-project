@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Give stepped ranges and typed axis arguments to library subscripts
+
+<a id="h-ranges-and-typed-subscripts-20261126"></a>
+**H-RANGES-AND-TYPED-SUBSCRIPTS-20261126.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user confirmed the recommended half-open `..`, inclusive `..=` and contextual `by` design, requested “要给lib的overload拿到下标值，包括多维下标” and specified “普通的unitless下标类型我们肯定要支持”. [D-29-STEPPED-RANGES](design/DesignAuthorityRegistry.md#d-29-stepped-ranges) covers range values in loops and subscripts. [D-30-TYPED-SUBSCRIPTS](design/DesignAuthorityRegistry.md#d-30-typed-subscripts) carries each scalar or selector to a library call with its actual type, together with the existing UoM, evaluation order and ownership contracts. This continues the [r2 array-library and colon decisions](https://github.com/complyue/cod-project/blob/6f64f8a19b90d4e3d37a4f8dcd7b8d5b9786fa9b/design/JuliaPackagePortability.md#stepped-subscripts) and the existing one-index call forms. Implementation coverage is separate. Registry r1346→1347.
+
 ## 2026-11-26 — Give array conventions and expression grouping to libraries and prioritize type synonyms
 
 <a id="h-library-arrays-fixity-and-type-names-20261126"></a>

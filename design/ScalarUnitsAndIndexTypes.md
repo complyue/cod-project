@@ -1,8 +1,10 @@
 # Scalar units, strict brands and array index domains
 
-Discussion revision: 38 · Recorded: 2026-11-26 · Status: alternatives under discussion.
+Discussion revision: 39 · Recorded: 2026-11-26 · Status: alternatives under discussion.
 
 ## Design authority
+
+At r39 [D-30-TYPED-SUBSCRIPTS](DesignAuthorityRegistry.md#d-30-typed-subscripts) applies the r38 identity and conversion rules independently to [each axis and its step](CollectionsAndBuiltinContainers.md#unitless-and-unit-bearing-axes). Unitless numeric arrays and domain-specific arrays can publish distinct overloads.
 
 At r38 [D-07-TYPE-SYNONYMS](DesignAuthorityRegistry.md#d-07-type-synonyms) supplies canonical [scalar spellings and synonyms](JuliaPackagePortability.md#scalar-names-and-transparent-type-synonyms). Synonyms preserve representation, nominal units and signedness. [D-10-LIBRARY-FIXITY](DesignAuthorityRegistry.md#d-10-library-fixity) clarifies grouping in the operator naming example. Conversion, widening and index-domain contracts continue from r37.
 
@@ -243,19 +245,17 @@ Unary and binary methods share the parenthesized name and differ by argument cou
 
 For an eager operator, infix/prefix notation should resolve to the same method and preserve the same operand evaluation as its explicit call: each operand is evaluated once, and dispatch does not commute, duplicate or discard it. The expression grammar applies the [selected vocabulary’s precedence and associativity](JuliaPackagePortability.md#operator-grouping-belongs-to-the-selected-vocabulary) before selecting methods for `a + b * c`. Parenthesized operator names also work in the existing bootstrap vocabulary.
 
-A consistent indexing-read candidate is:
+The one-axis case of [ordinary subscript dispatch](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads) is:
 
-```text
-function ([])(a::SlotWeights, i::SlotIndex)::Weight {
-    slot_read(a, i)
+```cod
+func ([])(a:const SlotWeights in R, i:SlotIndex) -> Weight where {const owner R} {
+    return slot_read(a, i)
 }
-
-a[i] ≡ ([])(a, i)
 ```
 
-This would make the array/index association a function method over explicit inputs. `([])` is a proposal to discuss, not an additional user-confirmed spelling. Under H-197/H-198, functions may modify explicit writable regional inputs; dynamic-context access and procedure calls remain excluded. Operator naming does not change that boundary. Short-circuit control and dynamic binding forms require their own evaluation semantics and cannot simply be rewritten as eager operator calls. Operator naming alone does not override these rules.
+Both `a[i]` and `([])(a, i)` supply the same array and typed index to this getter. Under H-197/H-198, functions may modify explicit writable regional inputs; dynamic-context access and procedure calls remain excluded. Operator naming does not change that boundary. Short-circuit control and dynamic binding forms require their own evaluation semantics and cannot simply be rewritten as eager operator calls. Operator naming alone does not override these rules.
 
-Acceptance should cover a declared binary method reached by both spellings, unary/binary arity resolution, heterogeneous UoM results, rejected index-domain combinations and preserved operand evaluation/grouping. Parenthesized eager operator names, equivalent prefix/infix calls and typed intrinsic overloads retain their qualified language scope; [current source support](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/tests/cod/language/README.md) is tracked separately. Explicit numeric-operation methods can accept a nominal index value without enabling implicit brand erasure or adding an automatic unit-conversion edge. H-163/H-164 select the write form `a[i] = value` as `([]=)(a, i, value)`. Keeping the original array/container and index types permits the same nominal-type dispatch and conversion checks as explicit method calls. A selected procedural write remains forbidden in a pure function. The proposed indexing-read spelling `([])` and broader operator grammar remain separately scoped.
+Acceptance should cover a declared binary method reached by both spellings, unary/binary arity resolution, heterogeneous UoM results, rejected index-domain combinations and preserved operand evaluation/grouping. Parenthesized eager operator names, equivalent prefix/infix calls and typed intrinsic overloads retain their qualified language scope; [current source support](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/tests/cod/language/README.md) is tracked separately. Explicit numeric-operation methods can accept a nominal index value without enabling implicit brand erasure or adding an automatic unit-conversion edge. H-163/H-164 select the write form `a[i] = value` as `([]=)(a, i, value)`. Keeping the original array/container and index types permits the same nominal-type dispatch and conversion checks as explicit method calls. A selected procedural write remains forbidden in a pure function. Each additional written axis supplies a further positional argument to the indexing family.
 
 ## What the language precedents establish
 
