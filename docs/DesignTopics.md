@@ -228,6 +228,12 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 | 在既有 callable 和 owner 规则下，能否给任意合格的只读局部计算提供可复用的重新聚焦接口？ | 固定输入图像和边界策略，比较按需北移、物化中间栅格、错误回放中心坐标。中心得分应分别为 15、15、0；换实际 owner 后旧视图的使用必须拒绝。 |
 | 读取能力、空间依赖范围和可见副作用应怎样分别表达？ | 改东北像素会改变中心结果，改西南像素不会。请求同一位置两次时，缓存与重算可以得到相同分数，但可能发出不同数量的标记。分别规定预取、诊断及提交所需的承诺。 |
 
+<a id="julia-package-portability"></a>
+
+## 9. 用 julia.cod 降低 Julia 包的移植成本
+
+用一个单样本 t 检验打通 CoD 调用 Rmath 的浮点结果，再让另一个智能体移植按列计算的距离矩阵，观察数组 API 还需要多少适配和人工纠正。对于 Julia 和 CoD 都用得上的操作，优先研究在 CoD 本身采用一致语义。首例是显式 `x : f64`：用不能精确表示的整数区分舍入结果，并单独决定精度警告。矩阵按列遍历、视图写回和底层存储的实际 owner 则决定数组包能复用到什么程度。[预研 WIP 与对照用例](../design/JuliaPackagePortability.md) · [现有数值转换契约](../design/ScalarUnitsAndIndexTypes.md#explicit-numeric-conversion-and-loss-warnings)
+
 ## 生产阶段的包管理
 
 包管理留给未来的 `e-wrks/cod`。重启讨论时，从一个需要获取、选择版本和复现依赖的实际项目出发。旧 `codp` 的命令和 YAML 格式仅作历史参考。当前 seed 与 booter 使用[手工准备的项目目录](../design/CodProjectStructureAndPkgMgmt.md#directory-layout)。

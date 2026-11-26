@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Investigate agent-assisted Julia package ports
+
+<a id="h-julia-package-portability-20261126"></a>
+**H-JULIA-PACKAGE-PORTABILITY-20261126.** In the CoD project conversation on 2026-11-26, the project user requested native C access to Julia's Rmath library and a Julia-like array interface so agents could port important packages. The user stated “CoD 的 `x : f64`可以往julia靠，类似的语义特性，其它没冲突的也完全值得向Julia靠。” and requested a repository WIP. [Research r1](design/JuliaPackagePortability.md) compares explicit integer-to-binary64 rounding with the [exact-conversion baseline](https://github.com/complyue/cod-project/blob/d3a2381f9ae1709447659633234a28530ae27e52/design/ScalarUnitsAndIndexTypes.md#explicit-numeric-conversion-and-loss-warnings). The commission covers package porting and evaluating Julia semantics in CoD. Detailed rounding and diagnostics, the package API and implementation are research candidates. [Registry scope](design/DesignAuthorityRegistry.md#d-julia-pkg-research), P-756/P-757, r1342→1343.
+
 ## 2026-11-26 — Complete booter readiness at the initialization sites that use it
 
 <a id="k-booter-demand-readiness-20261126"></a>
