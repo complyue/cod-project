@@ -1,10 +1,12 @@
 # Porting Julia packages to CoD with `julia.cod`
 
-Research WIP · revision 4 · 2026-11-26
+Research WIP · revision 5 · 2026-11-26
 
 An agent porting a one-sample t-test should be able to recognize the sample, compute the same statistic and ask for the same tail probability in CoD. A second agent porting a distance function should be able to reuse those array operations without learning which C library supplies a probability. These two ports test whether a small CoD package can make important Julia algorithms economical to bring over and maintain.
 
 ## Design authority
+
+At r5 [D-07-SCALAR-NAMES](DesignAuthorityRegistry.md#d-07-scalar-names) makes Julia’s fixed-width names directly available in CoD and frees numbered identifiers for local use. P-776/P-777 supersede the r2 default spelling. Transparent synonyms, signedness, conversion and native layout continue through this change. [Decision](../CHANGELOG.md#h-builtin-numeric-names-20261126) · [Names and migration acceptance](#scalar-names-and-transparent-type-synonyms)
 
 At r4 [D-11-NUMERIC-CONVERSION](DesignAuthorityRegistry.md#d-11-numeric-conversion) applies the project user’s Julia-alignment direction to explicit scalar conversions, P-774/P-775. The r3 array and operator selections and both port workloads continue. Provider and package implementation remain research. [Decision and scope](ScalarUnitsAndIndexTypes.md#explicit-scalar-numeric-conversions)
 
@@ -12,7 +14,7 @@ At r3 [D-29-STEPPED-RANGES](DesignAuthorityRegistry.md#d-29-stepped-ranges) and 
 
 At r2 the project user delegated the concrete library boundaries and confirmed distinct signed and unsigned integer identities and manual porting of Julia ranges. [D-30-ARRAY-POLICY](DesignAuthorityRegistry.md#d-30-array-policy), [D-10-LIBRARY-FIXITY](DesignAuthorityRegistry.md#d-10-library-fixity) and [D-07-TYPE-SYNONYMS](DesignAuthorityRegistry.md#d-07-type-synonyms) cover the decisions below. P-758–P-763 connect them to reviewable domain operations and their prerequisites. The two port workloads carry forward from r1. [Decision and scope](../CHANGELOG.md#h-library-arrays-fixity-and-type-names-20261126)
 
-The project user commissioned research on native C access to Julia's Rmath library and a Julia-like array interface for agent-assisted ports. Direct compilation of Julia source is outside the goal. The user also invited alignment in CoD itself wherever Julia's semantics fit and specifically reopened `x : f64` for that purpose. This preference applies when choosing ordinary CoD operations as well as package APIs. The numerical conversion rule is specified. The provider extension and numerical package APIs below remain proposals. The confirmed r2 boundaries govern the array and source-vocabulary examples. No port has been executed for this revision. [User decision](../CHANGELOG.md#h-julia-package-portability-20261126) · [Registry and scope](DesignAuthorityRegistry.md#d-julia-pkg-research)
+The project user commissioned research on native C access to Julia's Rmath library and a Julia-like array interface for agent-assisted ports. Direct compilation of Julia source is outside the goal. The user also invited alignment in CoD itself wherever Julia's semantics fit and specifically reopened `x : f64` for that purpose. This preference applies when choosing ordinary CoD operations as well as package APIs. The numerical conversion rule is specified. The provider extension and numerical package APIs below remain proposals. The r2 library boundaries and r5 builtin names govern the port examples. No port has been executed for this revision. [User decision](../CHANGELOG.md#h-julia-package-portability-20261126) · [Registry and scope](DesignAuthorityRegistry.md#d-julia-pkg-research)
 
 The charter calls for local, reviewable edits by people and agents. Reusing a checked operation across packages lets a reviewer inspect the domain algorithm and check its assumptions about values, storage and lifetimes. The candidate value path is P-756. P-757 identifies the conversion, owner, collection and native-call contracts that constrain the two workloads. [Charter §§1, 4.3 and 8](RegionalSemanticPlatformCharter.md) · [Regional arrays](CollectionsAndBuiltinContainers.md#fold-and-array-access) · [Native C providers](../applications/cod-booter/docs/LLVMInterop.md#generated-c-providers-for-the-first-booter)
 
@@ -22,15 +24,15 @@ For each recurring Julia operation, write down an input that distinguishes its b
 
 ### Explicit conversion to binary64
 
-For an `i64` sample count of 9,007,199,254,740,993, Julia's `Float64(x)` and CoD's explicit `x : double` specify 9,007,199,254,740,992. Both round directly to binary64 with ties to even. The converse conversion to a builtin integer requires an exact result and can raise `InexactError`. These are ordinary CoD operations available to every library. [Julia numerical conversions](https://docs.julialang.org/en/v1/manual/mathematical-operations/#Numerical-Conversions) · [Julia rounding modes](https://docs.julialang.org/en/v1/manual/integers-and-floating-point-numbers/#Rounding-modes) · [CoD destination rules](ScalarUnitsAndIndexTypes.md#explicit-scalar-numeric-conversions)
+For an `Int64` sample count of 9,007,199,254,740,993, Julia's `Float64(x)` and CoD's explicit `x : Float64` specify 9,007,199,254,740,992. Both round directly to binary64 with ties to even. The converse conversion to a builtin integer requires an exact result and can raise `InexactError`. These are ordinary CoD operations available to every library. [Julia numerical conversions](https://docs.julialang.org/en/v1/manual/mathematical-operations/#Numerical-Conversions) · [Julia rounding modes](https://docs.julialang.org/en/v1/manual/integers-and-floating-point-numbers/#Rounding-modes) · [CoD destination rules](ScalarUnitsAndIndexTypes.md#explicit-scalar-numeric-conversions)
 
-| Integer input | Specified `f64` result, written as its exact mathematical value |
+| Integer input | Specified `Float64` result, written as its exact mathematical value |
 | --- | --- |
 | `2^53 − 1` | `2^53 − 1` |
 | `2^53 + 1` | `2^53` |
 | `2^53 + 3` | `2^53 + 4` |
 | `−(2^53 + 1)` | `−2^53` |
-| `2^64 − 1` as `u64` | `2^64` |
+| `2^64 − 1` as `UInt64` | `2^64` |
 
 For delivery, compare folded and runtime operands against the bits from Julia’s `reinterpret(UInt64, Float64(x))`. Check exact and inexact integer destinations, including failure before a later operand. Precision advice for explicit floating rounding is opt-in. [Scalar acceptance](ScalarUnitsAndIndexTypes.md#explicit-scalar-numeric-conversions) · [Implicit compatibility](NamedQuantitiesAndNumericCompatibility.md#whole-type-lossless-compatibility)
 
@@ -60,14 +62,21 @@ Keep CoD’s colon grammar, including `value:Type`. When porting Julia, rewrite 
 
 ## Scalar names and transparent type synonyms
 
-Prefer LLVM IR names where the source meaning matches. Use `float` and `double` for supported binary32 and binary64. Preserve the values and type identities of existing `f32` and `f64` spellings during migration. CoD `i64` selects signed arithmetic and `u64` unsigned arithmetic. Both lower to LLVM `i64`; comparison, division and conversion select the appropriate instructions. CoD Boolean conditions and ownership-carrying references keep their source rules. LLVM's `i1` and `ptr` representations alone cannot confer those semantics. This decision does not expose every LLVM internal type or change literal suffixes. [LLVM integer types](https://llvm.org/docs/LangRef.html#integer-type) · [LLVM floating-point types](https://llvm.org/docs/LangRef.html#floating-point-types)
+CoD’s default vocabulary names each supported fixed-width numeric type with Julia’s spelling. The existing signed 64-bit, unsigned 8/32/64-bit and binary32/64 types are `Int64`, `UInt8`, `UInt32`, `UInt64`, `Float32` and `Float64`. Apply the same convention when another width is supported, for example `Int32`. A name in Julia’s catalog alone does not add a width to CoD. The target-word aliases `Int` and `UInt` belong to the explicitly selected `julia.cod` vocabulary. [Julia’s numeric types](https://docs.julialang.org/en/v1/manual/integers-and-floating-point-numbers/)
 
-Prioritize transparent synonyms of already established types. A package can publish:
+An identifier consisting of `i` followed by decimal digits is an ordinary identifier at every width. Adding a width cannot invalidate an existing parameter name. This signature takes two signed 64-bit arguments:
 
 ```cod
-export type Float64 = double
-export type Int64 = i64
-export type UInt64 = u64
+func distance(i31:Int64, i32:Int64) -> Int64 { i32 - i31 }
+```
+
+The default lookup has no short numeric type names or `float`/`double` aliases. A literal suffix belongs to the numeric token: `255u8` supplies a `UInt8` value even in a scope with a local named `u8`. Signed and unsigned source types retain distinct dispatch and operations. `Int64` and `UInt64` both lower to LLVM `i64`, and `Float64` lowers to LLVM `double`. The C provider uses its existing ABI. [Numeric conversions](ScalarUnitsAndIndexTypes.md#explicit-scalar-numeric-conversions) · [LLVM integer types](https://llvm.org/docs/LangRef.html#integer-type)
+
+Migrate the booter’s type references to the canonical names as the seed and booter acquire them. Check a no-import module that binds `i1`, `i31`, `i32`, `i34` and `i64` as values, a `UInt8` return of `255u8`, distinct signed and unsigned overloads, and the generated C signatures before and after the migration. Existing bootstrap source and examples using the earlier names identify the same representations. A package can explicitly offer short spellings through ordinary type synonyms:
+
+```cod
+export type i64 = Int64
+export type u64 = UInt64
 ```
 
 Resolve the right-hand type in the defining module. A synonym carries its canonical identity, including any nominal or unit distinctions, through imports, re-exports, signatures and generated C layout. A synonym introduces no conversion, storage or overload. Two overload heads differing only by synonymous type names are duplicates, while overloads for `Int64` and `UInt64` remain distinct. Diagnose unresolved targets and synonym cycles at their declarations. Preserve the spelling at a use and the canonical identity in diagnostics. Acceptance includes one imported synonym chain, overload selection, duplicate rejection and identical native representation. A module can define both `Array` and its element type names without a global Julia prelude. Simple synonyms are an early frontend deliverable. Parameterized aliases and higher-kinded synonyms for channel pipelines have separate workloads. [Module identities](ModuleWorlds.md) · [Higher-kinded type synonyms](../docs/DesignTopics.md#higher-kinded-type-synonyms)
