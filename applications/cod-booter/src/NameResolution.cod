@@ -129,6 +129,13 @@ export data ProductTypeRecovery {
     first_site:u64;
 }
 
+export enum EnumAssertion:u8 {
+    NoEnumAssertion;
+    FoldedEnumOperand;
+    ConstantEnumAssertion;
+    ValueEnumAssertion;
+}
+
 export data NameWorkSlot {
     receiver_import:ReceiverImportCheck;
     active:u64;
@@ -162,6 +169,10 @@ export data NameWorkSlot {
     imported_passes_owner:u8;
     imported_failure_checked:u8;
     enum_code:u64;
+    # Interface header for an imported assertion, or local first member.
+    enum_members:u64;
+    enum_assertion:EnumAssertion;
+    enum_backing:u8;
     value_module:u64;
     value_identity:u64;
     value_kind:u8;
@@ -3239,6 +3250,9 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
         bindings[at].guarded_local_link <- no_node();
         bindings[at].handle_guard <- no_node();
         work[at].local_symbol_conflict <- no_node();
+        work[at].enum_assertion <- NoEnumAssertion;
+        work[at].enum_members <- no_node();
+        work[at].enum_backing <- 0u8;
         work[at].imported_byte_completion <- NoByteFunction;
     };
     if (!link_entries(nodes, work, tree.revision, tree.used)) return false;

@@ -793,7 +793,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
     if (inspect_local_binding(nodes, revision, used, at, binding) && binding.mode == ReferenceLocal &&
         facts[binding.initializer].reception == nullable_ptr() &&
         sites[binding.initializer].presence != present_target()) return unproved_nonnull_binding();
-    if (facts[at].text_assertion != 0u8)
+    if (facts[at].text_assertion != 0u8 || facts[at].enum_assertion_check)
         return route_failure(nodes, names, links, facts, sites, at, used, revision, type_assertion_failed_identity(), 0u8, possible_failure());
     if (facts[at].checks_array_bounds)
         return route_failure(nodes, names, links, facts, sites, at, used, revision,

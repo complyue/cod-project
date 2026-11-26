@@ -1,6 +1,14 @@
 using "./SourceStorage.cod" SourceBytes;
 using "./ParserStorage.cod" { Tokens, ExprNodes, no_node };
 using "./ModuleExports.cod" { ModuleExports, SelectedExports };
+using "./ModuleExportStorage.cod" {
+    ModuleInterfaces, ModuleInterfaceRow,
+    FamilyMembership { UnprovedMembership }, InterfaceCallableKind { NoCallableKind },
+    AggregateStorage { UnprovedAggregate }, ExceptionSchema { OrdinarySchema },
+    ByteFunctionCompletion { NoByteFunction }, SumInterfacePayload { NoSumInterface },
+    CallableObjectView { NoCallableObjectView },
+};
+using "./ParserStorage.cod" FormalMode { ValueFormal };
 using "./NameResolution.cod" { NameBindings, NameWork };
 using "./OperandChecking.cod" { OperandFacts, CallOwners };
 using "./CompletionChecking.cod" CompletionSites;
@@ -24,17 +32,31 @@ export func compile_module_commands(source:const SourceBytes in S, tokens:Tokens
     where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y, owner W,
            owner F, owner O, owner K, owner C, owner P, owner R} {
     if (!bind_module(source, tokens, nodes, spellings, exports, selected, bindings, work, report)) return false;
-    return compile_bound_commands(source, nodes, selected, bindings, work, facts, owners, sites, commands,
+    ref interfaces = make ModuleInterfaces(0u64, make ModuleInterfaceRow {
+        defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
+        interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
+        type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
+        target_readonly <- 0u8; owner_readonly <- 0u8; has_here <- 0u8; failure_checked <- 0u8;
+        failure_module <- 0u64; failure_identity <- 0u64; name_first <- 0u64; name_past <- 0u64;
+        enum_code <- 0u64; native_function <- no_node(); callable_kind <- NoCallableKind;
+        native_reception <- 0u8;
+        membership <- UnprovedMembership;
+        native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
+        aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
+        scalar_object_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
+    });
+    return compile_bound_commands(source, nodes, selected, bindings, work, interfaces, facts, owners, sites, commands,
                                   plan, report, 0u64, true);
 }
 
 export func compile_bound_commands(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                    selected:const SelectedExports in X, bindings:const NameBindings in Y,
-                                   work:const NameWork in W, facts:OperandFacts in F, owners:CallOwners in O,
+                                   work:const NameWork in W, interfaces:const ModuleInterfaces in I,
+                                   facts:OperandFacts in F, owners:CallOwners in O,
                                    sites:CompletionSites in K, commands:NativeCommands in C,
                                    plan:NativePlan in P, report:ModuleBindingResult in R, base:u64, entry:bool) -> bool
     where {const owner S, const owner N, const owner X, const owner Y, const owner W,
-           owner F, owner O, owner K, owner C, owner P, owner R} {
+           const owner I, owner F, owner O, owner K, owner C, owner P, owner R} {
     plan.used <- 0u64;
     plan.functions <- 0u64;
     plan.labels <- 0u64;
@@ -43,7 +65,7 @@ export func compile_bound_commands(source:const SourceBytes in S, nodes:const Ex
     plan.node <- no_node();
     if (!analyze_bound_operands(source, nodes, selected, bindings, work, facts, owners, report) ||
         !analyze_bound_completion(nodes, bindings, work, facts, sites, report)) return false;
-    if (!lower_native_module(nodes, report.frontend.tree, bindings, work, facts, sites, commands, plan, base, entry)) return false;
+    if (!lower_native_module(nodes, report.frontend.tree, bindings, work, interfaces, facts, sites, commands, plan, base, entry)) return false;
     ref initialization = make InitializationResult { diagnostic <- 0u8; node <- no_node(); };
     if (!check_native_initialization(commands, plan, initialization)) {
         binding_diagnostic(nodes, report, module_completion_failed(), initialization.diagnostic, initialization.node);

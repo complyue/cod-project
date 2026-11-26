@@ -47,6 +47,7 @@ using "./NameResolution.cod" {
     is_lexical_builder, lexical_builder_record, lexical_builder_type,
     builtin_i64, builtin_u64, builtin_u32, builtin_u8, builtin_bool, builtin_string, builtin_c_string, text_type, owner_binding,
 };
+using "./NameResolution.cod" EnumAssertion { FoldedEnumOperand, ConstantEnumAssertion, ValueEnumAssertion };
 using "./ModuleExports.cod" {
     SelectedExports, record_export, enum_export, enum_spelling, sum_export
 };
@@ -308,11 +309,10 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     val binding <- names[at].kind;
     val declaration <- names[at].declaration;
     if (binding == enum_value()) {
-        val head <- selected[declaration].enum_head;
-        if (head >= interface_count) return false;
+        if (work[at].value_kind != enum_type()) return false;
         result.kind <- enum_type();
-        result.defining_module <- interfaces[head].defining_module;
-        result.identity <- interfaces[head].declaration;
+        result.defining_module <- work[at].value_module;
+        result.identity <- work[at].value_identity;
         return true;
     } else {};
     ref typed = make BindingSites {
@@ -487,17 +487,127 @@ func check_text_construction(source:const SourceBytes in S, nodes:const ExprNode
     return false;
 }
 
-func check_type_assertion(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
+func prepare_enum_domain(nodes:const ExprNodes in N, names:const NameBindings in B, work:NameWork in W,
+                         interfaces:const ModuleInterfaces in I, interface_count:u64,
+                         wanted:const DeclaredType in T, at:u64, used:u64, revision:u64) -> bool
+    where {const owner N, const owner B, owner W, const owner I, const owner T} {
+    if (wanted.defining_module != 0u64) {
+        val head <- find_interface(interfaces, interface_count, wanted.defining_module, wanted.identity);
+        if (head == no_node() || interfaces[head].interface_kind != enum_type() ||
+            interfaces[head].entry_count == 0u64 || interfaces[head].entry_count >= interface_count - head)
+            return false;
+        for (member in head + 1u64 .. head + 1u64 + interfaces[head].entry_count) {
+            if (interfaces[member].value_kind != enum_type()) return false
+        };
+        work[at].enum_members <- head;
+        work[at].enum_backing <- interfaces[head].element_kind;
+    } else {
+        ref domain = make DeclarationSites {
+            name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+            index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
+        };
+        ref first = make u64 { no_node() };
+        if (inspect_declaration(nodes, revision, used, wanted.identity, domain) != EnumTypeDeclaration ||
+            !first_sequence_entry(nodes, revision, used, domain.entries, EnumSequence, first)) return false;
+        work[at].enum_members <- first;
+        work[at].enum_backing <- names[domain.value_type].kind;
+    };
+    return work[at].enum_backing != 0u8
+}
+
+func mark_folded_operand(nodes:const ExprNodes in N, work:NameWork in W, operand:u64, used:u64, revision:u64)
+    -> void where {const owner N, owner W} {
+    ref inner = make u64 { no_node() };
+    val current <- operand;
+    for (unused in 0u64 .. used) {
+        work[current].enum_assertion <- FoldedEnumOperand;
+        if (inspect_group(nodes, revision, used, current, inner) != ParenthesizedExpression) return;
+        (current <- inner):void
+    };
+}
+
+func prepare_selected_enum_value(names:const NameBindings in B, selected:const SelectedExports in E,
+                                 work:NameWork in W, interfaces:const ModuleInterfaces in I,
+                                 interface_count:u64, at:u64) -> bool
+    where {const owner B, const owner E, owner W, const owner I} {
+    val selected_value <- names[at].declaration;
+    if (selected_value >= intrinsic (len)(selected)) return false;
+    val head <- selected[selected_value].enum_head;
+    if (head >= interface_count || interfaces[head].interface_kind != enum_type() ||
+        interfaces[head].defining_module != selected[selected_value].origin_module) return false;
+    work[at].value_kind <- enum_type();
+    work[at].value_module <- interfaces[head].defining_module;
+    work[at].value_identity <- interfaces[head].declaration;
+    work[at].enum_code <- selected[selected_value].enum_code;
+    return true
+}
+
+# Complete only the bound enum selection. Value operands are checked later,
+# against this selection and their own ordered evaluation facts.
+export func prepare_enum_assertions(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
+                                   selected:const SelectedExports in E, work:NameWork in W,
+                                   spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I,
+                                   interface_count:u64, used:u64, revision:u64, report:DeclaredExpressionResult in R) -> bool
+    where {const owner S, const owner N, owner B, const owner E, owner W, const owner P, const owner I, owner R} {
+    ref assertion = make AssertionSites { operand <- no_node(); annotation <- no_node(); colon <- 0u64; };
+    ref wanted = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
+    ref code = make u64 { 0u64 };
+    val operand <- no_node();
+    val problem <- 0u8;
+    val numeric <- false;
+    for (at in 0u64 .. used) {
+        if (names[at].kind == enum_value() &&
+            !prepare_selected_enum_value(names, selected, work, interfaces, interface_count, at))
+            return declared_expression_failure(report, unproved_enum_operand(), at);
+        if (inspect_type_assertion(nodes, revision, used, at, assertion) &&
+            describe_type(nodes, names, selected, assertion.annotation, 0u64, revision, used, wanted) &&
+            wanted.kind == enum_type()) {
+            if (!prepare_enum_domain(nodes, names, work, interfaces, interface_count, wanted, at, used, revision))
+                return declared_expression_failure(report, unproved_type_assertion(), assertion.annotation);
+            operand <- assertion.operand;
+            numeric <- integer_code(nodes, used, revision, operand, code);
+            if (numeric || (name_syntax(nodes, used, operand) == OrdinaryName && names[operand].kind == 0u8)) {
+                problem <- if (numeric) {
+                    bind_enum_code(nodes, names, work, interfaces, interface_count, code, at, wanted, revision, used)
+                } else {
+                    bind_enum_spelling(source, nodes, names, work, spellings, interfaces, interface_count,
+                                      operand, at, wanted, revision, used)
+                };
+                if (problem != 0u8) return declared_expression_failure(report, problem,
+                    if (problem == missing_enum_member()) { operand } else { (assertion.annotation) });
+                mark_folded_operand(nodes, work, operand, used, revision);
+                (work[at].enum_assertion <- ConstantEnumAssertion):void
+            } else {
+                (work[at].enum_assertion <- ValueEnumAssertion):void
+            };
+            remember_type(work, at, wanted);
+        };
+    };
+    return true
+}
+
+func check_type_assertion(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
                           selected:const SelectedExports in E, work:NameWork in W,
                           spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:u64,
                           at:u64, used:u64, revision:u64, assertion:const AssertionSites in Q, report:DeclaredExpressionResult in R) -> bool
-    where {const owner S, const owner N, owner B, const owner E, owner W, const owner P, const owner I, const owner Q, owner R} {
+    where {const owner S, const owner N, const owner B, const owner E, owner W, const owner P, const owner I, const owner Q, owner R} {
+    val operand <- assertion.operand;
+    ref actual = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
+    if (work[at].enum_assertion == ConstantEnumAssertion) return true;
+    if (work[at].enum_assertion == ValueEnumAssertion) {
+        if (!trace_type(source, nodes, names, selected, work, spellings, interfaces, interface_count,
+                        operand, used, revision, actual))
+            return declared_expression_failure(report, unproved_enum_operand(), operand);
+        if (actual.kind != work[at].enum_backing &&
+            (actual.kind != enum_type() || actual.defining_module != work[at].value_module ||
+             actual.identity != work[at].value_identity))
+            return declared_expression_failure(report, incompatible_enum_assertion(), operand);
+        return true
+    };
     ref wanted = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
     val annotation <- assertion.annotation;
     if (!describe_type(nodes, names, selected, annotation, 0u64, revision, used, wanted))
         return declared_expression_failure(report, unproved_type_assertion(), annotation);
-    val operand <- assertion.operand;
-    ref actual = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
     if (wanted.kind == builtin_c_string()) {
         if (!trace_type(source, nodes, names, selected, work, spellings, interfaces, interface_count, operand, used, revision, actual) || !text_type(actual.kind))
             return declared_expression_failure(report, invalid_c_string_operand(), operand);
@@ -506,28 +616,8 @@ func check_type_assertion(source:const SourceBytes in S, nodes:const ExprNodes i
             return declared_expression_failure(report, interior_nul_in_c_string(), selected_text);
         remember_type(work, at, wanted);
         return true;
-    } else {};
-    if (wanted.kind != enum_type())
-        return declared_expression_failure(report, unproved_type_assertion(), annotation);
-    ref code = make u64 { 0u64 };
-    val numeric <- integer_code(nodes, used, revision, operand, code);
-    if (numeric || (name_syntax(nodes, used, operand) == OrdinaryName && names[operand].kind == 0u8)) {
-        val problem <- if (numeric) {
-            bind_enum_code(nodes, names, work, interfaces, interface_count, code, at, wanted, revision, used)
-        } else {
-            bind_enum_spelling(source, nodes, names, work, spellings, interfaces, interface_count, operand, at, wanted, revision, used)
-        };
-        if (problem == missing_enum_member()) return declared_expression_failure(report, problem, operand);
-        if (problem != 0u8) return declared_expression_failure(report, problem, annotation);
-        (names[at].kind <- enum_value()):void;
-    } else {
-        if (!trace_type(source, nodes, names, selected, work, spellings, interfaces, interface_count, operand, used, revision, actual))
-            return declared_expression_failure(report, unproved_enum_operand(), operand);
-        if (actual.kind != enum_type() || actual.defining_module != wanted.defining_module || actual.identity != wanted.identity)
-            return declared_expression_failure(report, incompatible_enum_assertion(), operand);
     };
-    remember_type(work, at, wanted);
-    return true;
+    return declared_expression_failure(report, unproved_type_assertion(), annotation)
 }
 
 func check_case_pattern(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,

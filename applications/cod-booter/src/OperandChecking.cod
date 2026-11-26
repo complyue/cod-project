@@ -106,6 +106,7 @@ using "./ModuleExportStorage.cod" ByteFunctionCompletion {
 };
 using "./ExceptionTypes.cod" { ExceptionType, resolve_exception_type };
 using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check, needs_signature_check };
+using "./NameResolution.cod" EnumAssertion { FoldedEnumOperand, ConstantEnumAssertion, ValueEnumAssertion };
 using "./DeclarationTypes.cod" { type_module, type_identity, DeclaredType };
 using "./CaseSchemas.cod" {
     ConstructorCaseFacts,
@@ -181,6 +182,7 @@ export data OperandFact {
     owner_use_next:u64;
     passes_owner:u8;
     text_assertion:u8;
+    enum_assertion_check:bool;
     text_intrinsic:u8;
 }
 export array OperandFacts[u64]:OperandFact;
@@ -3267,42 +3269,47 @@ func check_explicit_discard(nodes:const ExprNodes in N, facts:OperandFacts in F,
     return 0u8;
 }
 
-func check_enum_assertion(source:const SourceBytes in S, nodes:const ExprNodes in N,
-                          names:const NameBindings in B, links:const NameWork in L, facts:OperandFacts in F,
-                          at:u64, used:u64, revision:u64, assertion:const AssertionSites in A) -> u8
-    where {const owner S, const owner N, const owner B, const owner L, owner F, const owner A} {
-    val annotation <- assertion.annotation;
-    if (names[annotation].kind != enum_type()) return unsupported_scalar_assertion();
-    val domain <- names[annotation].declaration;
-    val operand <- assertion.operand;
-    if (name_syntax(nodes, used, operand) == OrdinaryName && names[operand].kind == 0u8) {
-        ref enumeration = make DeclarationSites {
-            name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
-            index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
-        };
-        if (inspect_declaration(nodes, revision, used, domain, enumeration) != EnumTypeDeclaration) return invalid_operand_tree();
-        val member <- find_enum_member(source, nodes, operand, enumeration.entries, revision, used);
-        if (member == no_node()) return missing_enum_member();
-        set_fact(facts, at, scalar_enum(), independent_value(), no_node(), domain, 0u8);
+func check_enum_assertion(nodes:const ExprNodes in N, links:const NameWork in L, facts:OperandFacts in F,
+                          at:u64, operand:u64, source_only:bool) -> u8
+    where {const owner N, const owner L, owner F} {
+    val mode <- links[at].enum_assertion;
+    if (mode == ConstantEnumAssertion) {
+        set_fact(facts, at, scalar_enum(), independent_value(), no_node(), links[at].value_identity, 0u8);
+        facts[at].identity_module <- links[at].value_module;
         facts[at].enum_constant <- 1u8;
-        facts[at].discriminator_code <- links[member].enum_code;
-        return 0u8;
-    } else {};
-    if (facts[operand].kind != never_result() &&
-        (facts[operand].kind != scalar_enum() || facts[operand].identity != domain)) return incompatible_enum_type();
-    copy_fact(facts, at, operand);
-    return 0u8;
+        facts[at].discriminator_code <- links[at].enum_code;
+        return 0u8
+    };
+    if (mode != ValueEnumAssertion) return unsupported_scalar_assertion();
+    if (facts[operand].kind == scalar_enum() &&
+        (facts[operand].identity_module != links[at].value_module || facts[operand].identity != links[at].value_identity))
+        return incompatible_enum_type();
+    if (facts[operand].kind == never_result() || facts[operand].kind == scalar_enum()) {
+        copy_fact(facts, at, operand);
+        return 0u8
+    };
+    val backing <- source_scalar_kind(links[at].enum_backing);
+    if (!source_only && backing == source_u32()) return unsupported_narrow_execution();
+    val issue <- if (backing == source_u32()) { require_source_u32(nodes, facts, operand, false) }
+        else { require_typed_bits(nodes, facts, operand, backing) };
+    if (issue != 0u8) return issue;
+    set_fact(facts, at, scalar_enum(), independent_value(), no_node(), links[at].value_identity, 0u8);
+    facts[at].identity_module <- links[at].value_module;
+    facts[at].enum_assertion_check <- true;
+    return 0u8
 }
 
 func check_bound_name(names:const NameBindings in B, links:const NameWork in L,
-                     facts:OperandFacts in F, views:const SuppliedViews in H, at:u64, source_only:bool)
+                     facts:OperandFacts in F, views:const SuppliedViews in H, at:u64)
     -> u8 where {const owner B, const owner L, owner F, const owner H} {
     val binding <- names[at].kind;
-    if (source_only && binding == enum_value() && links[at].value_kind == enum_type() &&
+    if (binding == enum_value() && links[at].value_kind == enum_type() &&
         links[at].value_module != 0u64 && links[at].value_identity != no_node()) {
         set_fact(facts, at, scalar_enum(), independent_value(), no_node(), links[at].value_identity,
             0u8);
         facts[at].identity_module <- links[at].value_module;
+        facts[at].enum_constant <- 1u8;
+        facts[at].discriminator_code <- links[at].enum_code;
         return 0u8
     };
     if (binding == formal_binding() || binding == local_binding() || binding == exception_binding() ||
@@ -3576,6 +3583,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F,
         owner O, const owner X, const owner H, const owner C} {
     if (at >= used) return invalid_operand_tree();
+    if (links[at].enum_assertion == FoldedEnumOperand) return 0u8;
     if (source_only && at < intrinsic (len)(views)) {
         case views[at] of {
             ReadonlyByteRead {
@@ -3645,7 +3653,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                     if (names[at].scope == no_node()) return 0u8;
                     return check_group(nodes, facts, at, expression.index);
                 };
-                (NameReference) -> { return check_bound_name(names, links, facts, views, at, source_only); };
+                (NameReference) -> { return check_bound_name(names, links, facts, views, at); };
                 (ArrayLength { val target <- target; }) -> {
                     if (!published_syntax_id(nodes, revision, at, target)) return invalid_operand_tree();
                     if (facts[target.index].kind == never_result()) {
@@ -3822,7 +3830,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     ref assertion = make AssertionSites { operand <- no_node(); annotation <- no_node(); colon <- 0u64; };
     if (inspect_type_assertion(nodes, revision, used, at, assertion)) {
         if (names[assertion.annotation].kind == builtin_c_string()) return check_text_assertion(facts, at, assertion.operand);
-        return check_enum_assertion(source, nodes, names, links, facts, at, used, revision, assertion);
+        return check_enum_assertion(nodes, links, facts, at, assertion.operand, source_only);
     };
     ref local = make LocalBindingSites { binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false; };
     if (inspect_local_binding(nodes, revision, used, at, local) && local.mode != ExceptionLocal)
@@ -4104,6 +4112,7 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
         facts[at].owner_use_next <- no_node();
         facts[at].passes_owner <- 0u8;
         facts[at].text_assertion <- 0u8;
+        facts[at].enum_assertion_check <- false;
         facts[at].text_intrinsic <- 0u8;
         owners[at].call_site <- no_node();
         owners[at].actual_owner <- no_node();

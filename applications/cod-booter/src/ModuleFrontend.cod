@@ -37,6 +37,7 @@ using "./ParserStorage.cod" {
     first_named_throw, NamedThrowSites, inspect_named_throw,
 };
 using "./SourceStorage.cod" SourceBytes;
+using "./DeclarationTypes.cod" { DeclaredExpressionResult, prepare_enum_assertions };
 using "./DeclarationDemand.cod" { DeclarationDemand, DeclarationDemands };
 using "./Frontend.cod" { FrontendResult, read_module };
 using "./ParserInput.cod" ParseResult;
@@ -495,8 +496,15 @@ export func bind_module(source:const SourceBytes in S, tokens:Tokens in T, nodes
     ref facts = make AggregateFacts(result.frontend.tree.used, UnprovedAggregate);
     ref no_selections = make CheckedSelections(0u64, make UnpublishedSelection {});
     ref views = make SuppliedViews(result.frontend.tree.used, make NoSuppliedView {});
-    return bind_selected_module(source, nodes, no_selections, 0u64, selected, bindings, work,
-        interfaces, 0u64, facts, views, true, false, result);
+    if (!bind_selected_module(source, nodes, no_selections, 0u64, selected, bindings, work,
+        interfaces, 0u64, facts, views, true, false, result)) return false;
+    ref expressions = make DeclaredExpressionResult { diagnostic <- 0u8; node <- no_node(); };
+    if (!prepare_enum_assertions(source, nodes, bindings, selected, work, spellings, interfaces, 0u64,
+        result.frontend.tree.used, result.frontend.tree.revision, expressions)) {
+        binding_diagnostic(nodes, result, module_binding_failed(), expressions.diagnostic, expressions.node);
+        return false
+    };
+    return true
 }
 
 # A successful operand analysis supplies the facts for checking completion.
