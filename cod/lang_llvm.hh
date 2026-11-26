@@ -1796,7 +1796,11 @@ class LLVMEmission {
     }
     if (expr.kind == Expression::Kind::native_handle_binding && expr.binding == "<-") {
       std::set<size_t> constructors;
-      for (const auto &context : contexts_) constructors.insert(context.at(&expr).native_acquisition->constructor);
+      for (const auto &context : contexts_) {
+        const auto operation = context.operations->find(&expr);
+        if (operation != context.operations->end() && operation->second.native_acquisition)
+          constructors.insert(operation->second.native_acquisition->constructor);
+      }
       for (const auto id : constructors)
         scope.actions.push_back({&expr, llvm::StructType::get(context_, {cleanup_header_, b_.getInt64Ty()}), {}, id});
       return;

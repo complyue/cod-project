@@ -6538,26 +6538,6 @@ class ScalarChecker {
       fail(initializer.at, "an owning native handle effect requires fresh 'make own handle' construction");
     return initializer;
   }
-  size_t select_native_constructor(const Type &declared, const Type &constructed, const Expression &expr) const {
-    if (declared.kind != Type::c_type_marker || constructed.kind != Type::c_type_marker)
-      fail(expr.at, "native handle construction requires a 'handle type' declaration");
-    if (declared != constructed) fail(expr.at, "C handle constructor must match the declared owner type");
-    const bool attached = expr.kind == Expression::Kind::make_borrowed_handle;
-    const bool borrow_only = program_.schemas.at(constructed.identity).native_owner.has_value();
-    if (borrow_only && !attached)
-      fail(expr.at, "borrow-only CType '" + constructed.name + "' cannot be acquired with 'make own handle'");
-    if (attached && !borrow_only)
-      fail(expr.at, "make handle requires a borrow-only CType with a declared owning CType");
-    const auto constructor = std::ranges::find(program_.native_constructors, constructed, &CheckedNativeConstructor::handle);
-    if (constructor == program_.native_constructors.end()) fail(expr.at, "no C constructor declared for '" + constructed.name + "'");
-    if (constructor->inputs.size() != expr.children.size()) fail(expr.at, "wrong number of C constructor arguments");
-    return std::distance(program_.native_constructors.begin(), constructor);
-  }
-  static Type native_handle_type(Type marker, bool owned) {
-    marker.kind = Type::native_handle;
-    marker.owned = owned;
-    return marker;
-  }
   static void check_native_rebind_operands(const Type &destination, const Type &source,
       std::optional<bool> destination_readonly, std::optional<bool> source_readonly, const Location &at) {
     if (source.owned || !matches_native_handle(source, destination))
@@ -12175,13 +12155,6 @@ class ScalarChecker {
     }
     return completes ? *receiving.type : Type{Type::never};
   }
-  static void check_native_invocation_kind(const Form *caller, const Form &callee, const Location &at, bool prepared = false) {
-    if (callee.kind == Form::Kind::function) {
-      if (prepared) fail(at, "defer call requires a procedure");
-    } else if (caller && caller->kind == Form::Kind::function) {
-      fail(at, "a function cannot invoke a procedure");
-    }
-  }
   bool native_constructor_evidence(const CheckedNativeConstructor &constructor, const Expression &initializer,
                                    TypeEvidenceState &state) const {
     if (state.validating_body && state.method)
@@ -12541,7 +12514,7 @@ class ScalarChecker {
           const Type declared{Type::c_type_marker, type->name, type->identity};
           const auto constructed = evidence_annotation(*initializer.annotation, state);
           if (!state.required && constructed.kind != Type::c_type_marker) return {};
-          const auto &constructor = program_.native_constructors[select_native_constructor(declared, constructed, initializer)];
+          const auto &constructor = program_.native_constructors[select_native_constructor(program_, declared, constructed, initializer)];
           return native_constructor_evidence(constructor, initializer, state) ? Type{Type::void_type} : Type{Type::never};
         }
       }
@@ -12932,7 +12905,7 @@ class ScalarChecker {
         const auto &initializer = native_handle_initializer(expr);
         const auto constructed = evidence_annotation(*initializer.annotation, state);
         if (!state.required && constructed.kind != Type::c_type_marker) return {};
-        const auto &constructor = program_.native_constructors[select_native_constructor(declared, constructed, initializer)];
+        const auto &constructor = program_.native_constructors[select_native_constructor(program_, declared, constructed, initializer)];
         if (!native_constructor_evidence(constructor, initializer, state)) return Type::never;
       } else {
         const auto &initializer = *expr.children.front();
@@ -12961,7 +12934,7 @@ class ScalarChecker {
         implementation_gap(expr.at, "attached native handle construction outside a checked borrowed argument");
       const auto type = evidence_annotation(*expr.annotation, state);
       if (!state.required && type.kind != Type::c_type_marker) return {};
-      const auto &constructor = program_.native_constructors[select_native_constructor(type, type, expr)];
+      const auto &constructor = program_.native_constructors[select_native_constructor(program_, type, type, expr)];
       if (!native_constructor_evidence(constructor, expr, state)) return Type::never;
       view = {false, true, false};
       if (const auto owner = state.views.find(expr.owner_name); owner != state.views.end())
@@ -17708,11 +17681,6 @@ class ScalarChecker {
     }
     return supplied;
   }
-  static const Expression &ungrouped_expression(const Expression &expr) {
-    const auto *operand = &expr;
-    while (operand->kind == Expression::Kind::grouped) operand = operand->children.front().get();
-    return *operand;
-  }
   void pipeline_stages(const Expression &expr, bool traversal, std::vector<const Expression *> &stages) const {
     const auto &operand = ungrouped_expression(expr);
     if (operand.kind != Expression::Kind::processor_composition) {
@@ -19049,7 +19017,7 @@ class ScalarChecker {
     const auto &initializer = native_effect_initializer(expr);
     const Type marker{Type::c_type_marker, type.name, type.identity};
     const auto constructed = resolve_annotation(*initializer.annotation, instance);
-    CheckedOperation::NativeAcquisition acquisition{select_native_constructor(marker, constructed, initializer), &initializer};
+    CheckedOperation::NativeAcquisition acquisition{select_native_constructor(program_, marker, constructed, initializer), &initializer};
     const auto completes = prepare_native_acquisition(acquisition, instance, operations);
     operation.native_acquisition = std::move(acquisition);
     operation.operand_type = type;
@@ -19067,7 +19035,7 @@ class ScalarChecker {
     if (delayed_ || (checking_method_ && checking_method_->here_group))
       implementation_gap(expr.at, "attached native handle construction in a deferred or supplied here body");
     const auto type = resolve_annotation(*expr.annotation, instance);
-    const auto id = select_native_constructor(type, type, expr);
+    const auto id = select_native_constructor(program_, type, type, expr);
     const auto &owner_type = *program_.native_constructors[id].parent;
     const auto binding = lexical_.lookup(expr.owner_name);
     if (!binding || !matches_native_handle(bindings_->at(*binding).type, owner_type))
@@ -19096,7 +19064,7 @@ class ScalarChecker {
     const auto &initializer = native_handle_initializer(expr);
     const auto declared = resolve_annotation(*expr.annotation, instance);
     const auto constructed = resolve_annotation(*initializer.annotation, instance);
-    CheckedOperation::NativeAcquisition acquisition{select_native_constructor(declared, constructed, initializer), &initializer, {}};
+    CheckedOperation::NativeAcquisition acquisition{select_native_constructor(program_, declared, constructed, initializer), &initializer, {}};
     const bool completes = prepare_native_acquisition(acquisition, instance, operations);
     const auto place = declare(expr.text, native_handle_type(declared, true), false, true, expr.at);
     const auto owner = next_scope_++;
