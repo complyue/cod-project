@@ -185,6 +185,10 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: on returning is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 146)
         fputs(": error: type synonym cycle has no defining type\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 148)
+        fputs(": error: grouped fixed references are outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 148)
+        fputs(": error: a fixed reference cannot be rebound\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 144)
         fputs(": error: this signed integer operand requires an enum assertion\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 145)

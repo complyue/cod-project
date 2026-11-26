@@ -489,6 +489,18 @@ func lower_assignment(nodes:const ExprNodes in N, names:const NameBindings in B,
                       plan:NativePlan in P, state:LoweringState in R, at:u64,
                       place:u64, input:u64, rebind:bool) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
+    if (rebind && scalar_kind(facts[place].kind)) {
+        val declaration <- names[place].declaration;
+        if (names[declaration].guarded_local != 0u8) {
+            storage_operation(code, plan, use_local(), 0u64, 0u64, declaration, place)
+        };
+        lower_node(nodes, names, links, interfaces, facts, sites, code, plan, state, input);
+        if (state.live) {
+            emit(code, plan, copy_word(), slot(declaration), slot(input));
+            emit(code, plan, copy_word(), slot(at), slot(input))
+        };
+        return
+    };
     if (!rebind && facts[at].call_definition == no_node()) {
         lower_node(nodes, names, links, interfaces, facts, sites, code, plan, state, place);
         if (!state.live) return;

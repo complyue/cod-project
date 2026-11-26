@@ -1287,6 +1287,36 @@ func check_text_installation(nodes:const ExprNodes in N, facts:OperandFacts in F
     return 0u8;
 }
 
+func check_scalar_rebind(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
+    at:u64, destination:u64, input:u64, used:u64, revision:u64) -> u8
+    where {const owner N, const owner B, owner F} {
+    if (name_syntax(nodes, used, destination) != OrdinaryName || names[destination].kind != local_binding())
+        return expected_writable_place();
+    ref local = make LocalBindingSites {
+        binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false;
+    };
+    if (!inspect_local_binding(nodes, revision, used, names[destination].declaration, local) ||
+        local.mode != ReferenceLocal || local.declaration_const ||
+        facts[destination].reception != borrowed_ref() || facts[destination].reservation != no_node())
+        return expected_writable_place();
+    if (facts[input].kind == never_result()) {
+        set_result(facts, at, never_result());
+        return 0u8
+    };
+    if (binds_local_storage(nodes, input) || facts[input].reservation != no_node() ||
+        (facts[input].reception != borrowed_ref() && facts[input].reception != local_place()) ||
+        !same_operand_type(facts, destination, input)) return wrong_operand_type();
+    val owner_site <- facts[destination].owner;
+    if (owner_site == no_node() || owner_site != facts[input].owner)
+        return owner_conflict(nodes, owner_site, facts[input].owner);
+    if (facts[destination].target_readonly == 0u8 && facts[input].target_readonly != 0u8)
+        return expected_writable_place();
+    set_fact(facts, at, facts[destination].kind, borrowed_ref(), owner_site, facts[destination].identity, 0u8);
+    facts[at].identity_module <- facts[destination].identity_module;
+    (facts[at].target_readonly <- facts[destination].target_readonly):void;
+    return 0u8
+}
+
 func check_transfer_destination(
     nodes:const ExprNodes in N, facts:OperandFacts in F, destination:u64)
     -> u8 where {const owner N, owner F} {
@@ -4118,8 +4148,11 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
         return check_augmented_transfer(nodes, facts, at, assignment.destination, assignment.input,
                                        used, revision);
     if ((mode == PlaceRebind || mode == PlaceTransfer || mode == FieldTransfer) && names[at].scope == no_node()) return 0u8;
-    if (mode == PlaceRebind)
-        return check_text_installation(nodes, facts, at, assignment.destination, assignment.input);
+    if (mode == PlaceRebind) {
+        if (scalar_kind(facts[assignment.destination].kind))
+            return check_scalar_rebind(nodes, names, facts, at, assignment.destination, assignment.input, used, revision);
+        return check_text_installation(nodes, facts, at, assignment.destination, assignment.input)
+    };
     if (mode == PlaceTransfer || mode == FieldTransfer) {
         val destination <- assignment.destination;
         val input <- assignment.input;

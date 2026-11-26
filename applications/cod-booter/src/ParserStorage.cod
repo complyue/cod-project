@@ -2418,6 +2418,15 @@ export func inspect_local_binding(nodes:const ExprNodes in N, revision:u64, used
     };
 }
 
+export func fixed_reference_local(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64)
+    -> bool where {const owner N} {
+    ref local = make LocalBindingSites {
+        binding <- no_node(); initializer <- no_node(); mode <- (ReferenceLocal:LocalMode); declaration_const <- false;
+    };
+    return inspect_local_binding(nodes, revision, used, at, local) &&
+        local.mode == (ReferenceLocal:LocalMode) && local.declaration_const
+}
+
 export data FieldSelectionSites { receiver:u64; field:u64; }
 
 export func inspect_field_selection(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,

@@ -62,7 +62,7 @@ using "./ParserStorage.cod" {
         inspect_module_selection,
     DeclarationSyntax, formal_variadic_at,
     BindingSites, inspect_binding, inspect_type_annotation, FormalSites, inspect_formal, is_scope_block,
-    LocalBindingSites, inspect_local_binding,
+    LocalBindingSites, inspect_local_binding, fixed_reference_local,
     DirectCallSites, direct_invocation, CaseSites, CaseArmSites, inspect_case, inspect_case_arm,
     ConstructorCaseSites, inspect_constructor_case, case_pattern,
     BoundHandleSites, HandleConstructionSites, inspect_handle_binding, inspect_handle_construction, inspect_group,
@@ -311,6 +311,7 @@ func unsupported_variadic_body() -> u8 { return 130u8 }
 func unsupported_callable_promise() -> u8 { return 131u8 }
 export func unprovided_callable_promise() -> u8 { return 132u8 }
 func unsupported_handle_rebind() -> u8 { return 133u8 }
+func fixed_reference_rebind() -> u8 { return 148u8 }
 export func expected_value_binding() -> u8 { return 14u8; }
 export func protected_symbol_name() -> u8 { return 142u8 }
 func cyclic_type_synonym() -> u8 { return 146u8 }
@@ -1740,10 +1741,17 @@ func resolve_assignment(source:const SourceBytes in S, nodes:const ExprNodes in 
     if (transfer) { resolve_transfer_family(source, nodes, bindings, work, state, at); };
     resolve_expression(source, nodes, bindings, work, state, assignment.destination);
     if (state.diagnostic != 0u8) return;
-    if (mode == PlaceRebind && native_handle_destination(nodes, bindings, assignment.destination,
-        state.syntax_revision, state.syntax_used)) {
-        reject_name(state, assignment.destination, unsupported_handle_rebind());
-        return
+    if (mode == PlaceRebind) {
+        val name <- ungrouped(nodes, state.syntax_revision, state.syntax_used, assignment.destination);
+        if (name < state.syntax_used && bindings[name].kind == local_binding() &&
+            fixed_reference_local(nodes, state.syntax_revision, state.syntax_used, bindings[name].declaration)) {
+            reject_name(state, assignment.destination, fixed_reference_rebind());
+            return
+        };
+        if (native_handle_destination(nodes, bindings, assignment.destination, state.syntax_revision, state.syntax_used)) {
+            reject_name(state, assignment.destination, unsupported_handle_rebind());
+            return
+        }
     };
     resolve_expression(source, nodes, bindings, work, state, assignment.input);
 }

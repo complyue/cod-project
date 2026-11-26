@@ -880,7 +880,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
             diagnostic_first <- no_node(); diagnostic_past <- no_node();
         };
         stage <- 0u8; diagnostic <- 0u8; related_first <- no_node(); symbol_binder <- no_node();
-        has_predicate_assertion <- false;
+        requires_operand_checks <- false;
     };
     val used <- result.frontend.tree.used;
     val revision <- result.frontend.tree.revision;
@@ -1010,7 +1010,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     };
     if (constructed != no_node() || caught_field != no_node() ||
         (!native && (first_case != no_node() || declared != no_node() || required != no_node() || source_helper != no_node() ||
-                     native_body_evidence != no_node() || byte_function != no_node() || result.has_predicate_assertion))) {
+                     native_body_evidence != no_node() || byte_function != no_node() || result.requires_operand_checks))) {
         if (!check_graph_exception_body(source, nodes, selected, names, work, spellings,
             spelling_size,
                                         published_interfaces, interface_count, aggregate_facts,

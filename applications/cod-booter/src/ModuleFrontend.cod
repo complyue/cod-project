@@ -25,7 +25,7 @@ using "./ParserStorage.cod" ModuleSelectionMode {
 };
 using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 using "./ParserStorage.cod" SelectionSyntax { SelectionReady };
-using "./ParserStorage.cod" LocalMode { ExceptionLocal };
+using "./ParserStorage.cod" LocalMode { ExceptionLocal, ReferenceLocal };
 using "./ParserStorage.cod" FormalMode {
     ValueFormal, ExceptionFormal, HandleFormal, RetainedHandleFormal, ReferenceSlotFormal, IdentityOnlyRefFormal,
 };
@@ -80,7 +80,7 @@ export data ModuleBindingResult {
     diagnostic:u8;
     related_first:u64;
     symbol_binder:u64;
-    has_predicate_assertion:bool;
+    requires_operand_checks:bool;
 }
 
 export func module_read_failed() -> u8 { return 1u8; }
@@ -225,7 +225,7 @@ func construction_query_supported(nodes:const ExprNodes in N, operand:u64) -> bo
 
 # Declaration checking can resolve projection operands without emitting an address.
 func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
-    emit_object:bool, publish_defaults:bool, has_predicate_assertion:bool in P) -> u8
+    emit_object:bool, publish_defaults:bool, requires_operand_checks:bool in P) -> u8
     where {const owner N, owner P} {
     ref construction = make ConstructionSites {
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
@@ -264,7 +264,10 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64,
                     if (defaulted && !publish_defaults) { unsupported_module_declaration() } else { 0u8 }
                 };
                 (LocalBinding { val mode <- mode; val declaration_const <- declaration_const; }) -> {
-                    if (declaration_const) return unsupported_const_local();
+                    if (declaration_const) {
+                        if (mode != ReferenceLocal) return unsupported_const_local();
+                        (requires_operand_checks <- true):void
+                    };
                     if (mode == ExceptionLocal) return 28u8;
                     0u8
                 };
@@ -285,7 +288,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64,
                 InitializeReservation -> unsupported_reserved_initializer();
                 (PredicateAssertion { val message <-; }) -> {
                     case message of {
-                        NoLink -> { (has_predicate_assertion <- true):void; 0u8 };
+                        NoLink -> { (requires_operand_checks <- true):void; 0u8 };
                         (_) -> { unsupported_assertion_message() };
                     }
                 };
@@ -327,7 +330,7 @@ func check_source_profile(nodes:const ExprNodes in N, used:u64, emit_object:bool
     val next <- 0u8;
     for (at in 0u64 .. used) {
         next <- unsupported_source_form(nodes, result.frontend.tree.revision, used, at, emit_object,
-            publish_defaults, result.has_predicate_assertion);
+            publish_defaults, result.requires_operand_checks);
         if (next != 0u8 && (first == no_node() || syntax_first(nodes, used, at) < syntax_first(nodes, used, first))) {
             cause <- next;
             (first <- at):void;
@@ -345,7 +348,7 @@ export func check_parsed_module_profile(nodes:const ExprNodes in N, emit_object:
     result.stage <- 0u8;
     result.diagnostic <- 0u8;
     result.related_first <- no_node();
-    result.has_predicate_assertion <- false;
+    result.requires_operand_checks <- false;
     return check_source_profile(nodes, result.frontend.tree.used, emit_object, publish_defaults, result)
 }
 

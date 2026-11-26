@@ -98,6 +98,7 @@ func expected_catch_name() -> u8 { return 15u8; }
 func catch_all_must_be_last() -> u8 { return 17u8; }
 func expected_symbol() -> u8 { return 18u8; }
 func expected_binding_operator() -> u8 { return 21u8; }
+func unsupported_fixed_reference_group() -> u8 { return 148u8 }
 func expected_condition_open() -> u8 { return 27u8; }
 func unsupported_returning_pattern() -> u8 { return 52u8 }
 func expected_exception_initializer() -> u8 { return 32u8; }
@@ -651,6 +652,7 @@ func parse_binding_item(source:const SourceBytes in S, tokens:const Tokens in T,
     val separator <- punct_at(source, tokens, assignment, past);
     if (mode == ReferenceLocal && (assignment >= past || separator == COMMA || separator == SEMICOLON ||
         separator == RIGHT_BRACE)) {
+        if (declaration_const) { result.diagnostic <- expected_binding_operator(); return };
         ref sites = make BindingSites {
             name <- no_node(); annotation <- no_node(); target_type <- no_node();
             owner_name <- no_node(); readonly <- false
@@ -683,7 +685,11 @@ func parse_local_binding(source:const SourceBytes in S, tokens:const Tokens in T
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + (if (declaration_const) { 2u64 } else { 1u64 });
-    parse_binding_item(source, tokens, nodes, result, past, first, mode, declaration_const)
+    parse_binding_item(source, tokens, nodes, result, past, first, mode, declaration_const);
+    if (result.diagnostic == 0u8 && declaration_const && mode == ReferenceLocal &&
+        punct_at(source, tokens, result.next, past) == COMMA) {
+        (result.diagnostic <- unsupported_fixed_reference_group()):void
+    }
 }
 
 func append_reference_group_item(nodes:ExprNodes in A, result:ParseResult in R, previous:u64, item:u64) -> void
@@ -1713,8 +1719,10 @@ func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
         parse_initialize_reservation(source, tokens, nodes, result, past);
         return
     };
-    if (const_word(source, tokens[at]) && at + 1u64 < past && val_word(source, tokens[at + 1u64])) {
-        parse_local_binding(source, tokens, nodes, result, past, ValueLocal, true);
+    if (const_word(source, tokens[at]) && at + 1u64 < past &&
+        (val_word(source, tokens[at + 1u64]) || ref_word(source, tokens[at + 1u64]))) {
+        val mode <- if (ref_word(source, tokens[at + 1u64])) { (ReferenceLocal:LocalMode) } else { (ValueLocal:LocalMode) };
+        parse_local_binding(source, tokens, nodes, result, past, mode, true);
         return;
     };
     if (val_word(source, tokens[at])) { parse_local_binding(source, tokens, nodes, result, past, ValueLocal, false); return; } else {};
