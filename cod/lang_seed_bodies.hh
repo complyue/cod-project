@@ -201,10 +201,10 @@ class BodyExtraction {
     return row->second;
   }
 
-  void add_outline(Outline outline, const Type &result) {
+  void add_outline(Outline outline, std::optional<Type> result) {
     auto &body = bodies_.emplace_back();
     body.instance.method = declarations_.declarations_.methods.size() + outlined_methods_++;
-    body.instance.result.type = result;
+    body.instance.result.type = std::move(result);
     body.outline = std::move(outline);
   }
 
@@ -698,6 +698,18 @@ class BodyExtraction {
       }
       body_.calls.push_back({&expr, id, {}});
       return op;
+    }
+
+    void call_full_scope(const Expression &expr) {
+      const auto &callable = *expr.children.front();
+      const auto &source = *callable.definition;
+      expect(body_.instance.result.type && !source.case_scan_scope && source.parameters.empty(), expr.at,
+             "replacement seed needs an ordinary intermediate full-scope statement");
+      const auto callee = extraction_.bodies_.size();
+      extraction_.add_outline(outline(source), {});
+      BoundCall edge{&expr, callee, {}};
+      edge.pending_result_arguments.emplace();
+      body_.calls.push_back(std::move(edge));
     }
 
     bool fixed_overload_inputs(const CheckedMethod &method, const CheckedMethod &first) const {
@@ -1618,7 +1630,14 @@ class BodyExtraction {
         scopes_.emplace_back();
         for (size_t i = 0; i < expr.children.size(); ++i) {
           const auto &item = *expr.children[i];
-          if (i + 1 < expr.children.size() && item.kind == Kind::call) {
+          const bool intermediate = i + 1 < expr.children.size();
+          if (intermediate && item.kind == Kind::value_call && item.children.size() == 1 &&
+              item.children.front()->definition && item.children.front()->definition->implicit_scope) {
+            require_executable_expression(item);
+            call_full_scope(item);
+            continue;
+          }
+          if (intermediate && item.kind == Kind::call) {
             require_executable_expression(item);
             auto call_operation = call(item, false, true);
             // Later statements consume no result from a pending call.
@@ -1816,10 +1835,16 @@ class BodyExtraction {
     for (size_t i = 0; i < bodies_.size(); ++i) Frame(*this, i).extract_body();
   }
 
-  void seal_outline(CheckedProgram &program, size_t id) {
+  using CompletedResults = std::map<size_t, ResultContract>;
+
+  static const ResultContract &completed_result(const BoundBody &body, const CompletedResults &results) {
+    return body.instance.result.type ? body.instance.result : results.at(body.instance.method);
+  }
+
+  void seal_outline(CheckedProgram &program, size_t id, const CompletedResults &results) {
     auto &body = bodies_.at(id);
     auto &outline = *body.outline;
-    auto &supplier = bodies_.at(outline.supplier).instance;
+    auto &supplier = bodies_.at(outline.supplier);
     if (body.instance.method != program.methods.size())
       throw std::logic_error("outlined method order changed before emission");
 
@@ -1828,7 +1853,7 @@ class BodyExtraction {
     method.module = outline.module;
     method.definition = body.instance.method;
     method.parameters = body.instance.arguments;
-    method.result = body.instance.result;
+    method.result = completed_result(body, results);
     if (outline.handler) {
       auto &symbol = program.symbols.at(*outline.handler);
       symbol.live_scope = true;
@@ -1841,7 +1866,7 @@ class BodyExtraction {
     scope.owners = std::move(outline.owner_parameters);
     CheckedOperation::SuppliedHere *supplied = nullptr;
     if (auto &here = outline.here) {
-      auto &handoff = supplier.operations.at(here->call).supplied_here;
+      auto &handoff = supplier.instance.operations.at(here->call).supplied_here;
       handoff = CheckedOperation::SuppliedHere{id, {}, {}, std::move(here->here_sources), {}};
       supplied = &*handoff;
       supplied->owners.assign(std::next(outline.owners.begin()), outline.owners.end());
@@ -1851,12 +1876,13 @@ class BodyExtraction {
       scope.here_reception = CheckedMethod::ScopeInputs::HereReception{offered, std::move(positions)};
       scope.here_input_owners = 1;
       scope.lexical_here = std::move(here->lexical_here);
-      method.here_group = CheckedMethod::HereGroupResults{supplier.result.type, here->receiving_result, {}, false};
+      method.here_group = CheckedMethod::HereGroupResults{completed_result(supplier, results).type, here->receiving_result, {}, false};
     } else {
       scope.named = CheckedMethod::ScopeInputs::NamedEntry{scope.parameters.size(), {}};
     }
     for (auto &capture : outline.captures) {
-      const auto [row, inserted] = supplier.operations.emplace(capture.use, place_operand(supplier, capture.source));
+      const auto [row, inserted] =
+          supplier.instance.operations.emplace(capture.use, place_operand(supplier.instance, capture.source));
       if (!inserted) throw std::logic_error("lexical capture already has a supplier operand");
       if (supplied) supplied->places.push_back(capture.use);
       else scope.named->bindings.insert(capture.parameter.name);
@@ -1872,7 +1898,7 @@ class BodyExtraction {
     const auto parameters = program.methods.at(body.instance.method).input_parameters();
     operation.scope_owners = outline.owners;
     auto &arguments = operation.argument_sources.emplace();
-    if (!call.installs_handler)
+    if (!call.installs_handler && call.site->kind != Expression::Kind::value_call)
       for (const auto &argument : call.site->children) arguments.push_back(argument.get());
     const auto first_capture = parameters.size() - outline.captures.size();
     for (size_t i = 0; i < outline.captures.size(); ++i) {
@@ -1883,28 +1909,30 @@ class BodyExtraction {
     }
   }
 
-  std::map<size_t, ResultContract> complete_results() const {
-    std::map<size_t, ResultContract> results;
+  CompletedResults complete_results() const {
+    CompletedResults results;
     for (const auto &body : bodies_) {
       if (body.instance.result.type) continue;
       const auto method = body.instance.method;
-      expect(body.void_exit, declarations_.method(method).source->at,
+      const auto &source = body.outline ? *body.outline->source : *declarations_.method(method).source;
+      expect(body.void_exit, source.at,
              "replacement seed needs independent evidence of a normal no-value exit");
       results.emplace(method, ResultContract{Type{Type::void_type}});
     }
     return results;
   }
 
-  void seal(CheckedProgram &program, const std::map<size_t, ResultContract> &results) {
+  void seal(CheckedProgram &program, const CompletedResults &results) {
     const auto completed = freeze_dependencies().complete();
-    for (const auto &[method, result] : results) program.methods.at(method).result = result;
+    for (const auto &[method, result] : results)
+      if (method < program.methods.size()) program.methods[method].result = result;
     for (const auto &entry : program.native_entries)
       expect(completed[selected_.at(entry.method)].allocations.empty(), program.methods[entry.method].source->at,
              "a C entry cannot import an array allocator capability");
     for (size_t i = 0; i < bodies_.size(); ++i) if (const auto &outline = bodies_[i].outline) {
       expect(outline->handler || completed[i].allocations.empty(), outline->source->at,
              "replacement seed needs an ordinary outlined body without imported allocators");
-      seal_outline(program, i);
+      seal_outline(program, i, results);
     }
     for (size_t i = 0; i < bodies_.size(); ++i) {
       auto &body = bodies_[i];
