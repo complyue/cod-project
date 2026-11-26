@@ -120,6 +120,8 @@ The bundled UTF-8 storage intrinsics can read a text size or byte and create a s
 
 The replacement resolves ordinary fixed positional overloads. It extracts the operand types in source order, excludes methods that cannot accept those types, and requires common parameter modes, access and owner roles among the remaining candidates. Selection prefers exact types to lossless scalar preparation and requires a unique most-specific method. Linked controls cover the bundled text and integer `emitStr` overloads, nominal enum preference over its backing, lossless widening and once-only operand evaluation.
 
+A conditional can supply a readonly text argument when its completing arms share one established owner. The linked provider-suffix probe checks a single condition evaluation and skips the provider call when the selected arm fails.
+
 An intermediate ordinary call can use an omitted void result once the selected body establishes a no-value exit. The replacement prepares the statement's operands during extraction and gives the call its result and ABI after the callee's evidence is complete. The linked probe reaches `DeclarationTypes.prepare_native_operand_types`. A separate range control observes preserved writes after a callee failure and unchanged storage after a failure preparing arguments.
 
 A standalone full scope used as an intermediate statement in an ordinary body can establish its own void result. It borrows the enclosing places and runs its cleanup before the enclosing continuation or catch. Linked probes cover natural completion and an explicit local return. A range iteration can discard incompatible conditional arm values while preserving their effects and failures, as in the linked `ModulePaths.classify_module_path` probe.
