@@ -5838,28 +5838,42 @@ class ScalarChecker {
       if (scope.id == other.id) other.bindings.additions_since_common(scope.bindings, merge_name);
       else other.bindings.each(merge_name);
     }
-    lexical_.bindings_available = a_exits ? b.bindings_available : b_exits ? a.bindings_available : intersect(a.bindings_available, b.bindings_available);
-    lexical_.available = a_exits ? b.available : b_exits ? a.available : intersect(a.available, b.available);
-    lexical_.live_exception_holders = a_exits ? b.live_exception_holders : b_exits ? a.live_exception_holders :
-        intersect(a.live_exception_holders, b.live_exception_holders);
-    if (a_exits) lexical_.exposed_exception_payloads = b.exposed_exception_payloads;
-    else if (!b_exits) lexical_.exposed_exception_payloads.insert(b.exposed_exception_payloads.begin(), b.exposed_exception_payloads.end());
-    if (a_exits) lexical_.symbols = b.symbols;
-    else if (!b_exits) lexical_.symbols = join_symbols(a.symbols, b.symbols);
+    // The left frame already supplies these rows. Copy the right rows only
+    // when they replace the left, or merge them when both paths reach.
+    if (a_exits) {
+      lexical_.bindings_available = b.bindings_available;
+      lexical_.available = b.available;
+      lexical_.live_exception_holders = b.live_exception_holders;
+      lexical_.exposed_exception_payloads = b.exposed_exception_payloads;
+      lexical_.symbols = b.symbols;
+      lexical_.initialized = b.initialized;
+      lexical_.returned = b.returned;
+      lexical_.observed_saved_selections = b.observed_saved_selections;
+      lexical_.predicates = b.predicates;
+      lexical_.boolean_inputs = b.boolean_inputs;
+      lexical_.boolean_payloads = b.boolean_payloads;
+      lexical_.selection_conditions = b.selection_conditions;
+      lexical_.exception_conditions = b.exception_conditions;
+      lexical_.uninitialized = b.uninitialized;
+      lexical_.deferred_payload_writes = b.deferred_payload_writes;
+      lexical_.input_facts = b.input_facts;
+      lexical_.targets = b.targets;
+      lexical_.owners = b.owners;
+      lexical_.selection_identities = b.selection_identities;
+      lexical_.inputs = b.inputs;
+    } else if (both_reach) {
+      lexical_.bindings_available = intersect(a.bindings_available, b.bindings_available);
+      lexical_.available = intersect(a.available, b.available);
+      lexical_.live_exception_holders = intersect(a.live_exception_holders, b.live_exception_holders);
+      lexical_.exposed_exception_payloads.insert(b.exposed_exception_payloads.begin(), b.exposed_exception_payloads.end());
+      lexical_.symbols = join_symbols(a.symbols, b.symbols);
+      lexical_.initialized = intersect(a.initialized, b.initialized);
+      lexical_.returned.merge(b.returned);
+      lexical_.observed_saved_selections = intersect(a.observed_saved_selections, b.observed_saved_selections);
+    }
     lexical_.deferred_symbols.insert(b.deferred_symbols.begin(), b.deferred_symbols.end());
-    lexical_.initialized = a_exits ? b.initialized : b_exits ? a.initialized : intersect(a.initialized, b.initialized);
-    lexical_.returned = a_exits ? b.returned : a.returned;
-    if (!a_exits && !b_exits) lexical_.returned.merge(b.returned);
-    lexical_.observed_saved_selections = a_exits ? b.observed_saved_selections : b_exits ? a.observed_saved_selections :
-        intersect(a.observed_saved_selections, b.observed_saved_selections);
-    lexical_.predicates = a_exits ? b.predicates : a.predicates;
-    lexical_.boolean_inputs = a_exits ? b.boolean_inputs : a.boolean_inputs;
-    lexical_.boolean_payloads = a_exits ? b.boolean_payloads : a.boolean_payloads;
-    lexical_.selection_conditions = a_exits ? b.selection_conditions : a.selection_conditions;
-    lexical_.exception_conditions = a_exits ? b.exception_conditions : a.exception_conditions;
-    lexical_.uninitialized = a_exits ? b.uninitialized : a.uninitialized;
     lexical_.predicate_conditions = both_reach ? left_paths : a_exits ? std::move(right_paths) : std::move(left_paths);
-    if (!a_exits && !b_exits) {
+    if (both_reach) {
       for (const auto &facts : right_paths) CleanupEquations::add_reaching_condition(lexical_.predicate_conditions, facts);
       std::set<size_t> candidates = a.initialized;
       candidates.insert(b.initialized.begin(), b.initialized.end());
@@ -5873,8 +5887,7 @@ class ScalarChecker {
         lexical_.uninitialized[place] = std::move(missing);
       }
     }
-    lexical_.deferred_payload_writes = a_exits ? b.deferred_payload_writes : a.deferred_payload_writes;
-    if (!a_exits && !b_exits) {
+    if (both_reach) {
       std::erase_if(lexical_.boolean_inputs, [&](const auto &input) { return !b.boolean_inputs.contains(input); });
       std::erase_if(lexical_.boolean_payloads, [&](const auto &payload) { return !b.boolean_payloads.contains(payload); });
       lexical_.selection_conditions.merge(b.selection_conditions);
@@ -5888,8 +5901,7 @@ class ScalarChecker {
       }
       lexical_.deferred_payload_writes.insert(b.deferred_payload_writes.begin(), b.deferred_payload_writes.end());
     }
-    lexical_.input_facts = a_exits ? b.input_facts : a.input_facts;
-    if (!a_exits && !b_exits) {
+    if (both_reach) {
       for (const auto input : b.inputs) {
         if (!a.inputs.contains(input)) {
           lexical_.input_facts.assign_from(input, b.input_facts);
@@ -5925,16 +5937,13 @@ class ScalarChecker {
         });
       }
     }
-    lexical_.targets = a_exits ? b.targets : a.targets;
-    lexical_.owners = a_exits ? b.owners : a.owners;
-    if (!a_exits && !b_exits) {
+    if (both_reach) {
       for (const auto &[id, owners] : b.owners) {
         lexical_.owners[id].insert(owners.begin(), owners.end());
         if (lexical_.owners[id].size() > 1) fail(at, "reference owner differs between reaching paths");
       }
     }
-    lexical_.selection_identities = a_exits ? b.selection_identities : a.selection_identities;
-    if (!a_exits && !b_exits) {
+    if (both_reach) {
       std::map<std::pair<size_t, size_t>, size_t> joined;
       const auto equivalent = [](size_t left, size_t right, const auto &paths) {
         return !paths.empty() && std::all_of(paths.begin(), paths.end(), [&](const auto &facts) {
@@ -5962,8 +5971,7 @@ class ScalarChecker {
       merged.versions.insert(right->versions.begin(), right->versions.end());
       lexical_.targets.set(binding, std::move(merged));
     }
-    lexical_.inputs = a_exits ? b.inputs : a.inputs;
-    if (!a_exits && !b_exits) lexical_.inputs.insert(b.inputs.begin(), b.inputs.end());
+    if (both_reach) lexical_.inputs.insert(b.inputs.begin(), b.inputs.end());
     lexical_.live = !a_exits || !b_exits;
     refresh_input_facts(lexical_);
   }
