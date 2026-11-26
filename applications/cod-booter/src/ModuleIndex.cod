@@ -298,6 +298,16 @@ export func checked_module_selections(
     }
 }
 
+export func contains_checked_interface(visits:const Visits in G, used:u64,
+    module:u64, row:u64, published:u64) -> bool where {const owner G} {
+    if (module == 0u64 || module > used || used > intrinsic (len)(visits)) return false;
+    return case visits[module - 1u64] of {
+        Checked { val first <- interfaces_first; val past <- interfaces_past; } ->
+            first <= row && row < past && past <= published;
+        _ -> false
+    }
+}
+
 export proc mark_visiting(visits:Visits in G, id:u64, first:u64, past:u64, revision:u64)
     -> void where {owner G} {
     visits[id] <- make Visiting { key_first <- first; key_past <- past; revision <- revision; };

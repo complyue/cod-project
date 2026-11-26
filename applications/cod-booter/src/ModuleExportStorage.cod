@@ -150,6 +150,7 @@ export data ModuleInterfaceRow {
     exception_schema:ExceptionSchema;
     field_mode:FormalMode;
     scalar_object_body:bool;
+    literal_source_body:bool;
     byte_completion:ByteFunctionCompletion;
     object_view:CallableObjectView;
     array_slot_checked:bool;
@@ -190,6 +191,7 @@ export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:
     row.exception_schema <- (OrdinarySchema:ExceptionSchema);
     row.field_mode <- ValueFormal;
     row.scalar_object_body <- false;
+    row.literal_source_body <- false;
     row.byte_completion <- (NoByteFunction:ByteFunctionCompletion);
     row.array_slot_checked <- false;
     row.array_slot_failures.bounds <- false;
@@ -216,7 +218,7 @@ export func write_sum_row(interfaces:ModuleInterfaces in I, row:u64, module:u64,
         membership <- (UnprovedMembership:FamilyMembership);
         aggregate_storage <- (UnprovedAggregate:AggregateStorage);
         exception_schema <- (OrdinarySchema:ExceptionSchema); field_mode <- ValueFormal;
-        scalar_object_body <- false; byte_completion <- (NoByteFunction:ByteFunctionCompletion); object_view <- make NoCallableObjectView {};
+        scalar_object_body <- false; literal_source_body <- false; byte_completion <- (NoByteFunction:ByteFunctionCompletion); object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -238,7 +240,7 @@ export func write_object_view(interfaces:ModuleInterfaces in I, at:u64, publishe
         sum_payload <- make NoSumInterface {};
         aggregate_storage <- (UnprovedAggregate:AggregateStorage);
         exception_schema <- (OrdinarySchema:ExceptionSchema); field_mode <- ValueFormal;
-        scalar_object_body <- false; byte_completion <- (NoByteFunction:ByteFunctionCompletion);
+        scalar_object_body <- false; literal_source_body <- false; byte_completion <- (NoByteFunction:ByteFunctionCompletion);
         object_view <- view;
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {

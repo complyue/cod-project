@@ -199,6 +199,12 @@ Both source commands also check `reserve_visits`. The visit-array profile requir
 
 The source commands also check a local braced constructor written directly into a writable element of a finite-bits sum array. They verify each initializer and the exact nominal element type, including nested inline bits fields. The isolated `mark_failed_visit` body passes both commands with its original schema. Object lowering and uses that consume the transfer's result remain outside this profile. [Indexed sum transfers](docs/ModuleGraph.md#checking-a-local-sum-constructor-in-an-indexed-transfer)
 
+### Package probe and literal call contracts
+
+The declaration and C provider commands check the imported native package probe with two readonly byte-array loans and four independent 64-bit unsigned bounds. Each loan preserves the array's nominal identity and actual owner. The probe returns the full-width value, including the maximum code for an absent module. The unchanged resolver reaches its first indexed product field after the probe signature is checked. [Native package probe](docs/ModuleGraph.md#checking-the-native-package-probe)
+
+Demanded source bodies can call a directly selected ordinary function proved to return one scalar literal. The defining module publishes this proof only for a complete empty signature and the exact checked body. Source selection through a rename preserves that contract. [Imported literal calls](docs/ModuleGraph.md#checking-an-imported-function-that-returns-a-scalar-literal)
+
 ### Fixed scalar value formals
 
 Ordinary definitions can use `const val n:T` for a supported scalar `T`. The parameter receives its own copy at the written argument position. Its storage allows reads and readonly loans. The source commands check that restriction even in a private unused definition, and the object command emits supported module calls. Fixed reference formals and fixed formals in C and `here` signatures remain outside this profile. [Parameter checking](docs/ModuleGraph.md#parsing-parameters-for-graph-table-growth)

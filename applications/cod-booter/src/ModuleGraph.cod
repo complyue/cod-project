@@ -99,7 +99,7 @@ using "./Compiler.cod" ExpressionScratchPlan;
 using "./ModuleDriver.cod" { plan_module_source, plan_module_workspace, ModuleWorkspacePlan };
 using "./OperandChecking.cod" {
     OperandFact, OperandFacts, OwnerEvidence, CallOwners, OperandCheckResult,
-        prepare_imported_calls, first_declared_failure, append_callable_interfaces, append_array_slot_interfaces,
+        prepare_imported_calls, first_declared_failure, append_callable_interfaces, mark_literal_source_bodies, append_array_slot_interfaces,
     check_module_operands,
 };
 using "./CompletionChecking.cod" { CompletionSite, CompletionSites };
@@ -278,7 +278,7 @@ proc reserve_interfaces(ref var rows:ModuleInterfaces in G, used:u64, required:u
         membership <- UnprovedMembership;
         sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
         exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-        scalar_object_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
+        scalar_object_body <- false; literal_source_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -995,7 +995,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     ref required = make u64 { no_node() };
     ref operands = make OperandCheckResult { diagnostic <- 0u8; node <- no_node(); };
     if (!prepare_imported_calls(nodes, names, selected, work, published_interfaces, interface_count,
-        catalog_exports, callable_uses, used, revision, !native, required, operands)) {
+        catalog_exports, callable_uses, visits, visit_count, used, revision, !native, required, operands)) {
         binding_diagnostic(nodes, result, module_operands_failed(), operands.diagnostic,
             operands.node);
         delivered <- report_graph_rejection(source, lines, diagnostic, result.stage, result.diagnostic,
@@ -1099,6 +1099,8 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         if (delivered != Complete) return delivered;
         return Rejected
     };
+    if (!native && interfaces != no_node() && !mark_literal_source_bodies(nodes, names, work, staged, count,
+        staged_interfaces, interfaces, publication.module_identity, used, revision)) return ScratchFailed;
     if (native && interfaces != no_node() && primitive_definition_namespace(source, nodes, used, revision)) {
         if (!mark_scalar_bodies(nodes, names, work, facts, used, revision,
             staged_interfaces, interfaces, commands, progress[0u64].command_count)) return ScratchFailed;
@@ -1569,7 +1571,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             native_passes_owner <- 0u8; membership <- UnprovedMembership;
             sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
             exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-            scalar_object_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
+            scalar_object_body <- false; literal_source_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
             array_slot_checked <- false; source_allocates <- false;
             array_slot_failures <- make ByteArrayFailures {
                 bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false

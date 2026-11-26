@@ -106,6 +106,8 @@ using "./ModuleExportStorage.cod" {
 using "./ModuleExportStorage.cod" ByteFunctionCompletion {
     NoByteFunction, CheckedByteFunction, ByteFunctionMayFailBounds
 };
+using "./ModuleIndex.cod" { Visits, contains_checked_interface };
+using "./ParserStorage.cod" { completion_syntax, CompletionSyntax { ReturnCompletion } };
 using "./ExceptionTypes.cod" { ExceptionType, resolve_exception_type };
 using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check, needs_signature_check };
 using "./NameResolution.cod" EnumAssertion { FoldedEnumOperand, ConstantEnumAssertion, ValueEnumAssertion };
@@ -126,7 +128,7 @@ using "./NativeDeclarations.cod" {
 };
 using "./NativeDeclarations.cod" { ArraySlotElement, ArraySlotElement { ByteArrayElement, SumArrayElement } };
 using "./NativeDeclarations.cod" SuppliedView {
-    SuppliedArrayView, PreparedImportedNativeOperation, ImportedNativeOperand,
+    SuppliedArrayView, PreparedImportedNativeOperation, ImportedNativeOperand, ImportedNativeU64,
     ReadonlyByteRead, PreparedArrayConstruction, ArraySlotFormal, IndexedArrayDestination,
     IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody
 };
@@ -1827,7 +1829,8 @@ func check_prepared_native_view(nodes:const ExprNodes in N, names:const NameBind
     if (value >= used || facts[value].kind != source_array_loan() ||
         facts[value].identity_module != module || facts[value].identity != identity)
         return wrong_operand_type();
-    if (facts[value].reception != borrowed_ref() || facts[value].owner >= used)
+    if (facts[value].reception != borrowed_ref() || facts[value].owner >= used ||
+        facts[value].target_presence != present_target())
         return unproved_owner();
     if (!readonly && facts[value].target_readonly != 0u8) return expected_writable_place();
     if (names[value].kind == formal_binding()) return 0u8;
@@ -1870,6 +1873,23 @@ func check_prepared_native_operand(nodes:const ExprNodes in N, names:const NameB
     val view <- no_node();
     val diagnostic <- 0u8;
     return case views[argument] of {
+        ImportedNativeU64 {
+            val expected_call <- call_site; val origin <- revision; val ordinal <- position;
+            val expected_input <- input;
+        } -> {
+            if (expected_call != at || origin != revision || ordinal != position ||
+                expected_input != input) return unproved_call_target();
+            if (facts[input].kind == never_result()) {
+                set_result(facts, argument, never_result());
+                return 0u8
+            };
+            # Keep the original operand's type and record the prepared value separately.
+            diagnostic <- if (facts[input].kind == scalar_enum()) { require_value_bits(nodes, facts, input, scalar_u64()) }
+                else { require_array_u64(nodes, facts, input) };
+            if (diagnostic != 0u8) return diagnostic;
+            set_result(facts, argument, scalar_u64());
+            0u8
+        };
         ImportedNativeOperand {
             val expected_call <- call_site; val origin <- revision; val ordinal <- position;
             val expected_input <- input; val kind <- kind; val role <- owner_role;
@@ -2421,15 +2441,15 @@ func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contrac
 }
 
 func remember_imported_call(links:NameWork in L, contracts:const ModuleInterfaces in I,
-                            at:u64, header:u64, source_handles:bool) -> void where {owner L,
+                            at:u64, header:u64, declared_result:bool) -> void where {owner L,
                                 const owner I} {
     links[at].imported_interface <- header;
     links[at].imported_function <- contracts[header].native_function;
     val result <- contracts[header].result_kind;
-    links[at].imported_kind <- if (source_handles) {
+    links[at].imported_kind <- if (declared_result) {
         if (result == builtin_void()) { void_result() } else { source_scalar_kind(result) }
     } else { result };
-    if (!source_handles && result == scalar_enum()) {
+    if (!declared_result && result == scalar_enum()) {
         links[at].imported_type_module <- contracts[header].type_module;
         (links[at].imported_type_identity <- contracts[header].type_identity):void
     };
@@ -2513,7 +2533,9 @@ func scalar_source_call(contracts:const ModuleInterfaces in I, published:u64,
     header:u64) -> bool where {const owner I} {
     if (header >= published || published > intrinsic (len)(contracts)) return false;
     val arity <- contracts[header].entry_count;
-    val result <- contracts[header].result_kind;
+    val result <- if (contracts[header].literal_source_body) {
+        declared_scalar(contracts[header].result_kind)
+    } else { (contracts[header].result_kind) };
     if (contracts[header].interface_kind != callable_binding() || contracts[header].value_kind != 0u8 ||
         contracts[header].defining_module == 0u64 || contracts[header].declaration == no_node() ||
         contracts[header].native_function != no_node() || arity >= published - header ||
@@ -2612,15 +2634,94 @@ func direct_source_using(nodes:const ExprNodes in N, selection:u64, used:u64, re
         bulk.mode == UseResource
 }
 
+func literal_source_result(nodes:const ExprNodes in N, names:const NameBindings in B,
+    links:const NameWork in L, definition:u64, used:u64, revision:u64)
+    -> u8 where {const owner N, const owner B, const owner L} {
+    if (names[definition].kind != callable_binding() || names[definition].declaration != definition ||
+        links[definition].next_method != no_node() || links[definition].active != no_node()) return 0u8;
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    if (inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable ||
+        !callable.function_form || is_scope_block(nodes, callable.body)) return 0u8;
+    ref signature = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
+    };
+    if (inspect_signature(nodes, revision, used, callable.signature, signature) != ValueResultClause) return 0u8;
+    val kind <- declared_scalar(names[signature.annotation].kind);
+    if (kind != scalar_u8() && kind != scalar_u64()) return 0u8;
+    val head <- signature.previous;
+    if (inspect_signature(nodes, revision, used, head, signature) != SignatureHead ||
+        signature.parameter_tail != no_node()) return 0u8;
+    ref tail = make u64 { no_node() };
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    if (!block_tail(nodes, revision, used, callable.body, tail) ||
+        inspect_sequence_entry(nodes, revision, used, tail, entry) != BlockSequence ||
+        entry.previous != no_node() || completion_syntax(nodes, entry.item) != ReturnCompletion)
+        return 0u8;
+    ref operand = make u64 { no_node() };
+    if (!completion_operand(nodes, revision, used, entry.item, operand) || operand >= used) return 0u8;
+    return case nodes[operand] of {
+        Occupied { val syntax <- node; } -> case syntax.payload of {
+            IntegerLiteral { val width <- width; val value <- magnitude; } ->
+                if ((kind == scalar_u8() && width == 8u64 && value <= 255u64) ||
+                    (kind == scalar_u64() && width == 64u64)) { kind } else { 0u8 };
+            _ -> 0u8
+        };
+        _ -> 0u8
+    }
+}
+
+export func mark_literal_source_bodies(nodes:const ExprNodes in N, names:const NameBindings in B,
+    links:const NameWork in L, exports:const ModuleExports in E, export_count:u64,
+    contracts:ModuleInterfaces in I, count:u64, module:u64, used:u64, revision:u64)
+    -> bool where {const owner N, const owner B, const owner L, const owner E, owner I} {
+    if (count > intrinsic (len)(contracts) || export_count > intrinsic (len)(exports) ||
+        used > intrinsic (len)(nodes) || used > intrinsic (len)(names) ||
+        used > intrinsic (len)(links)) return false;
+    val definition <- no_node();
+    val kind <- 0u8;
+    val header <- no_node();
+    for (row in 0u64 .. export_count) {
+        if (exports[row].publishing_module == module && exports[row].origin_module == module &&
+            exports[row].kind == callable_export() && exports[row].shape == ordinary_callable_shape() &&
+            exports[row].checked == 0u8) {
+            definition <- exports[row].identity;
+            if (definition >= used) return false;
+            kind <- literal_source_result(nodes, names, links, definition, used, revision);
+            if (kind != 0u8) {
+                header <- find_interface(contracts, count, module, definition);
+                if (header >= count || contracts[header].interface_kind != callable_binding() ||
+                    contracts[header].value_kind != 0u8 ||
+                    contracts[header].membership != FixedMethods ||
+                    contracts[header].callable_kind != CheckedFunction ||
+                    contracts[header].entry_count != 0u64 || contracts[header].owner_count != 0u64 ||
+                    contracts[header].has_here != 0u8 || contracts[header].native_function != no_node() ||
+                    contracts[header].owner_role != no_node() || contracts[header].target_readonly != 0u8 ||
+                    contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64 ||
+                    (contracts[header].failure_identity != 0u64 && contracts[header].failure_identity != no_node()) ||
+                    contracts[header].failure_module != 0u64 ||
+                    contracts[header].failure_checked != 0u8 || contracts[header].byte_completion != NoByteFunction ||
+                    declared_scalar(contracts[header].result_kind) != kind)
+                    return false;
+                # The structural header starts with zero in this slot. The
+                # checked source-call header encodes absence with no_node().
+                contracts[header].failure_identity <- no_node();
+                (contracts[header].literal_source_body <- true):void
+            }
+        }
+    };
+    return true
+}
+
 func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings in B,
                             selected:const SelectedExports in E, links:NameWork in L,
                             contracts:const ModuleInterfaces in I, interface_count:u64,
                             catalog:const ModuleExports in C, views:const CallableUseProofs in U,
+                            visits:const Visits in G, visit_count:u64,
                             used:u64, revision:u64, source_only:bool, required:u64 in D,
                             at:u64, call:const DirectCallSites in V,
                                 report:OperandCheckResult in R) -> bool
     where {const owner N, const owner B, const owner E, owner L, const owner I, const owner C,
-           const owner U, owner D, const owner V, owner R} {
+           const owner U, const owner G, owner D, const owner V, owner R} {
     val callee <- call.callee;
     if (names[callee].kind != ordinary_selection()) return true;
     val site <- names[callee].declaration;
@@ -2633,6 +2734,22 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         selected[site].identity);
     val handles <- source_only && source_handle_call(contracts, interface_count, header);
     val bytes <- source_only && header != no_node() && contracts[header].byte_completion != NoByteFunction;
+    if (source_only && header != no_node() && contracts[header].literal_source_body) {
+        if (obligation || handles || bytes) return operand_problem(report, at, unsupported_imported_call());
+        # Preparation precedes body demand. An unmatched header leaves no call evidence.
+        if (!scalar_source_call(contracts, interface_count, header) ||
+            !contains_checked_interface(visits, visit_count, selected[site].origin_module, header, interface_count) ||
+            selected[site].dependency_module != selected[site].origin_module ||
+            !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
+            contracts[header].membership != FixedMethods || contracts[header].callable_kind != CheckedFunction ||
+            contracts[header].entry_count != 0u64 || contracts[header].failure_identity != no_node() ||
+            contracts[header].failure_module != 0u64 || contracts[header].failure_checked != 0u8 ||
+            (contracts[header].result_kind != builtin_u8() && contracts[header].result_kind != builtin_u64()) ||
+            !bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, false))
+            return true;
+        remember_imported_call(links, contracts, at, header, true);
+        return true
+    };
     if (bytes && (obligation || !checked_byte_header(contracts, interface_count, header) ||
         selected[site].dependency_module != selected[site].origin_module ||
         !direct_source_using(nodes, selected[site].selection_site, used, revision)))
@@ -2681,16 +2798,17 @@ export func prepare_imported_calls(nodes:const ExprNodes in N, names:const NameB
                                   selected:const SelectedExports in E, links:NameWork in L,
                                   contracts:const ModuleInterfaces in I, interface_count:u64,
                                   catalog:const ModuleExports in C, views:const CallableUseProofs in V,
+                                  visits:const Visits in G, visit_count:u64,
                                   used:u64, revision:u64, source_only:bool, required:u64 in D,
                                   report:OperandCheckResult in R) -> bool
     where {const owner N, const owner B, const owner E, owner L, const owner I, const owner C, const owner V,
-        owner D, owner R} {
+        const owner G, owner D, owner R} {
     required <- no_node();
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
     for (at in 0u64 .. used) {
         if (direct_invocation(nodes, revision, used, at, call) == DirectInvocationReady &&
             !prepare_imported_call(nodes, names, selected, links, contracts, interface_count,
-                catalog, views, used, revision, source_only, required, at, call, report)) return false
+                catalog, views, visits, visit_count, used, revision, source_only, required, at, call, report)) return false
     };
     return true
 }

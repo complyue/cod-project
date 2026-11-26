@@ -1042,7 +1042,7 @@ func check_constructor_arguments(nodes:const ExprNodes in N, names:const NameBin
         membership <- UnprovedMembership;
         native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
         aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-        scalar_object_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
+        scalar_object_body <- false; literal_source_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -1462,6 +1462,7 @@ export data SuppliedView =
     ImportedNativeOperand { call_site:u64; revision:u64; position:u64; input:u64;
         kind:u8; owner_role:u64; owner_site:u64; type_module:u64; type_identity:u64;
         target_readonly:bool; owner_readonly:bool; } |
+    ImportedNativeU64 { call_site:u64; revision:u64; position:u64; input:u64; } |
     ReadonlyByteRead { array_site:u64; index:u64; formal:u64; owner_site:u64;
         type_module:u64; type_identity:u64; } |
     ArraySlotFormal { owner_site:u64; type_module:u64; type_identity:u64; slot:bool; element:ArraySlotElement; element_sum:u64; } |
@@ -2130,7 +2131,7 @@ func check_local_here(nodes:const ExprNodes in N, names:const NameBindings in B,
         membership <- UnprovedMembership;
         native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
         aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-        scalar_object_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
+        scalar_object_body <- false; literal_source_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -2674,10 +2675,18 @@ func ordinary_native_handle_scalars(nodes:const ExprNodes in N, names:const Name
     return false
 }
 
-func imported_native_loan_profile(contracts:const ModuleInterfaces in C, head:u64) -> bool
+func imported_native_loan_profile(contracts:const ModuleInterfaces in C, published:u64, head:u64) -> bool
     where {const owner C} {
-    if (contracts[head].callable_kind != CheckedProcedure) return false;
+    if (published > intrinsic (len)(contracts) || head >= published) return false;
     val arity <- contracts[head].entry_count;
+    if (arity >= published - head) return false;
+    if (contracts[head].result_kind == builtin_u64() && arity == 6u64) {
+        return (contracts[head].callable_kind == CheckedFunction ||
+                contracts[head].callable_kind == CheckedProcedure) &&
+            contracts[head + 1u64].value_kind == array_type() &&
+            contracts[head + 4u64].value_kind == array_type()
+    };
+    if (contracts[head].callable_kind != CheckedProcedure) return false;
     if (contracts[head].result_kind == builtin_u8() && arity == 2u64) {
         val second <- contracts[head + 2u64].value_kind;
         return contracts[head + 1u64].value_kind == c_handle_type() &&
@@ -2699,15 +2708,23 @@ func checked_native_loan_row(row:const ModuleInterfaceRow in R, roles:u64) -> bo
     if (row.value_kind == c_handle_type())
         return row.type_module != 0u64 && row.type_identity != no_node();
     if (row.value_kind == array_type())
-        return row.type_module != 0u64 && row.type_identity != no_node() &&
+        return row.type_module != 0u64 && row.type_identity != no_node() && row.field_mode == ReferenceFormal &&
             row.target_readonly == 1u8 && row.owner_readonly == 1u8;
     return row.value_kind == builtin_c_string() && row.target_readonly == 1u8 &&
         row.owner_readonly == 1u8
 }
 
+func checked_native_u64_row(row:const ModuleInterfaceRow in R) -> bool where {const owner R} {
+    return row.interface_kind == 0u8 && row.value_kind == builtin_u64() &&
+        (row.field_mode == ValueFormal || row.field_mode == ExplicitValueFormal) &&
+        row.type_module == 0u64 && row.type_identity == 0u64 && row.owner_role == no_node() &&
+        row.target_readonly == 0u8 && row.owner_readonly == 0u8 &&
+        row.native_reception == 0u8 && row.native_passes_owner == 0u8
+}
+
 func checked_native_loan_result(contracts:const ModuleInterfaces in C, published:u64,
     head:u64) -> bool where {const owner C} {
-    if (contracts[head].result_kind == builtin_u8())
+    if (contracts[head].result_kind == builtin_u8() || contracts[head].result_kind == builtin_u64())
         return contracts[head].type_module == 0u64 && contracts[head].type_identity == 0u64;
     if (contracts[head].type_module == 0u64 || contracts[head].type_identity == no_node())
         return false;
@@ -2784,12 +2801,18 @@ func prepare_imported_native_loans(nodes:const ExprNodes in N, names:const NameB
                    owner V, owner R} {
     val roles <- contracts[head].owner_count;
     val arity <- contracts[head].entry_count;
+    val byte_probe <- contracts[head].result_kind == builtin_u64();
     if (contracts[head].failure_module != 0u64 || contracts[head].failure_identity != 0u64 ||
         contracts[head].failure_checked != 0u8 || roles == 0u64 || roles > arity ||
         contracts[head].owner_role != no_node() ||
         !checked_native_loan_result(contracts, published, head)) {
         reject_declaration(report, at, invalid_native_parameter());
         return false;
+    };
+    if (byte_probe && (roles > 2u64 ||
+        (roles == 2u64 && contracts[head + 1u64].owner_role == contracts[head + 4u64].owner_role))) {
+        reject_declaration(report, at, invalid_native_parameter());
+        return false
     };
     val argument <- first;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
@@ -2800,34 +2823,59 @@ func prepare_imported_native_loans(nodes:const ExprNodes in N, names:const NameB
     val type <- no_node();
     for (position in 0u64 .. arity) {
         row <- head + 1u64 + position;
-        if (!checked_native_loan_row(contracts[row], roles) || argument >= at ||
+        if (argument >= at ||
             inspect_sequence_entry(nodes, revision, at, argument, entry) != ArgumentSequence ||
             checked_ref_argument(nodes, argument)) {
             reject_declaration(report, at, invalid_native_parameter());
             return false;
         };
-        kind <- contracts[row].value_kind;
-        owner_site <- no_node();
-        if (kind == c_handle_type()) {
-            if (!active_native_loan(nodes, names, selected, work, entry.item, loan, used,
-                revision)) {
-                reject_declaration(report, entry.item, mismatched_actual_handle_owner());
-                return false;
-            };
-            if (!match_selected_handle(nodes, names, selected, contracts[row], entry.item, loan, report))
-                return false;
-            (owner_site <- loan.owner):void
-        };
-        if (kind == array_type()) {
-            type <- find_interface(contracts, published, contracts[row].type_module,
-                contracts[row].type_identity);
-            if (type == no_node() || contracts[type].interface_kind != array_type()) {
-                reject_declaration(report, at, invalid_native_parameter());
+        if (byte_probe && position != 0u64 && position != 3u64) {
+            if (!checked_native_u64_row(contracts[row])) {
+                reject_declaration(report, entry.item, invalid_native_parameter());
                 return false
+            };
+            views[argument] <- make ImportedNativeU64 {
+                call_site <- at; revision <- revision; position <- position; input <- entry.item
             }
+        } else {
+            if (!checked_native_loan_row(contracts[row], roles)) {
+                reject_declaration(report, entry.item, invalid_native_parameter());
+                return false
+            };
+            kind <- contracts[row].value_kind;
+            if (byte_probe && kind != array_type()) {
+                reject_declaration(report, entry.item, invalid_native_parameter());
+                return false
+            };
+            owner_site <- no_node();
+            if (kind == c_handle_type()) {
+                if (!active_native_loan(nodes, names, selected, work, entry.item, loan, used,
+                    revision)) {
+                    reject_declaration(report, entry.item, mismatched_actual_handle_owner());
+                    return false
+                };
+                if (!match_selected_handle(nodes, names, selected, contracts[row], entry.item, loan, report))
+                    return false;
+                (owner_site <- loan.owner):void
+            };
+            if (kind == array_type()) {
+                type <- find_interface(contracts, published, contracts[row].type_module,
+                    contracts[row].type_identity);
+                if (type == no_node() || contracts[type].interface_kind != array_type()) {
+                    reject_declaration(report, at, invalid_native_parameter());
+                    return false
+                };
+                # A checked C array parameter already requires a u64 index.
+                # Join that parameter's original identity to the exact element kind.
+                if (byte_probe && (contracts[type].entry_count != 0u64 ||
+                    contracts[type].element_kind != builtin_u8())) {
+                    reject_declaration(report, entry.item, invalid_native_parameter());
+                    return false
+                }
+            };
+            remember_imported_native_operand(views, argument, at, revision, position, entry.item,
+                                            owner_site, contracts[row])
         };
-        remember_imported_native_operand(views, argument, at, revision, position, entry.item,
-                                        owner_site, contracts[row]);
         (argument <- work[argument].next):void
     };
     if (argument != no_node()) {
@@ -2885,7 +2933,7 @@ func check_native_operation_call(nodes:const ExprNodes in N, names:const NameBin
             membership <- UnprovedMembership;
             sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
             exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-            scalar_object_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
+            scalar_object_body <- false; literal_source_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
             array_slot_checked <- false; source_allocates <- false;
             array_slot_failures <- make ByteArrayFailures {
                 bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -2959,7 +3007,7 @@ func check_native_operation_call(nodes:const ExprNodes in N, names:const NameBin
     };
     val head <- selected_call_interface(names, selected, contracts, interface_count, callee);
     if (head == no_node() || contracts[head].interface_kind != c_operation() || contracts[head].has_here != 0u8) return true;
-    if (imported_native_loan_profile(contracts, head))
+    if (imported_native_loan_profile(contracts, interface_count, head))
         return prepare_imported_native_loans(nodes, names, selected, contracts, work, views,
                                            interface_count, head, at, argument, used, revision, report);
     val first <- argument;
