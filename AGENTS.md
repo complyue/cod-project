@@ -20,7 +20,7 @@ PRs are a normal publication route. Honor the user’s scoped merge delegation, 
 
 ## Compiler design target
 
-Ordinary `cod` compiles and runs with `go run` semantics and leaves no user executable. The seed’s default bootstrap produces `cod-booter`. Seed, booter and first-release `e-wrks/cod` target Go-like compile speed and moderate runtime performance. Optimizing compilation delivers a high-quality executable for later use by default. It is experimental in the first production release and formally supported in 2.0. [Compiler modes](applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds)
+Ordinary `cod` compiles and runs with `go run` semantics and leaves no user executable. The seed’s default bootstrap produces `cod-booter`. Seed, booter and first-release `e-wrks/cod` target Go-like compile speed and moderate runtime performance. In `e-wrks/cod`, `cfe` (Compile for Ever) builds an optimized executable for later use. It is experimental in the first release and formally supported in 2.0. [Compiler modes](applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds)
 
 ## Before coding
 
