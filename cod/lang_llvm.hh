@@ -753,7 +753,7 @@ class LLVMEmission {
   }
   llvm::Value *convert(llvm::Value *value, const Type &from, const Type &to) {
     value = unpack(value, from);
-    if (from == to || from.kind == Type::exception) return value;
+    if (from == to || from.kind == Type::exception || supplies_enum_code(from, to)) return value;
     if (floating(from)) return b_.CreateFPExt(value, native_type(to));
     if (floating(to)) return from == Type::integer ? b_.CreateSIToFP(value, native_type(to)) : b_.CreateUIToFP(value, native_type(to));
     return b_.CreateZExt(value, native_type(to));
@@ -4079,6 +4079,33 @@ class LLVMEmission {
         const auto &[id, code] = member;
         const Type type{Type::enumeration, program_->enums[id].source->name, id};
         return pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(type)), code), type);
+      });
+    }
+    if (expr.kind == K::typed_expression &&
+        std::ranges::any_of(contexts_, [&](const auto &context) { return context.at(&expr).enum_decode; })) {
+      std::map<std::optional<size_t>, std::vector<size_t>> domains;
+      for (size_t i = 0; i < contexts_.size(); ++i) {
+        const auto &checked = contexts_[i].at(&expr);
+        domains[checked.enum_decode ? std::optional{checked.type.identity} : std::nullopt].push_back(i);
+      }
+      return contextual_value(expr, domains, "enum.decode", [&](auto id) -> llvm::Value * {
+        const auto &operand = *expr.children.front();
+        if (!id) return emit_expression(operand, projection, discard);
+        auto *value = emit_expression(operand);
+        if (!reachable()) return nullptr;
+        const auto &domain = program_->enums.at(*id);
+        auto *code = unpack(value, domain.backing);
+        auto *valid = block("enum.code.valid"), *invalid = block("enum.code.invalid");
+        auto *match = b_.CreateSwitch(code, invalid);
+        for (size_t i = 0; i < domain.members.size(); ++i) {
+          const auto &member = domain.members[i];
+          if (member.canonical == i)
+            match->addCase(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(code->getType()), member.code), valid);
+        }
+        b_.SetInsertPoint(invalid);
+        fail_path(ExceptionCategory::type_assertion_failed, expr.at);
+        b_.SetInsertPoint(valid);
+        return discard ? empty_scalar() : pack(code, contexts_.front().at(&expr).type);
       });
     }
     if (fact.enum_assertion) return emit_expression(*expr.children.front(), projection, discard);

@@ -232,6 +232,8 @@ struct Type {
   bool owned = false;
   bool pure_callable = false;
   bool value_result = false;
+  // Set on a checked enum type from its nominal declaration.
+  Kind enum_backing = void_type;
   Type(Kind kind = void_type, std::string name = {}, size_t identity = 0)
       : kind(kind), name(std::move(name)), identity(identity) {}
   bool same_capture_contract(const Type &other) const {
@@ -262,6 +264,10 @@ inline bool integral(Type type) {
   return type == Type::integer || type == Type::uint8 || type == Type::uint32 || type == Type::uint64;
 }
 inline bool numeric(Type type) { return integral(type) || floating(type); }
+inline bool supplies_enum_code(const Type &source, const Type &target) {
+  return source.kind == Type::enumeration && source.enum_backing != Type::void_type &&
+      target == Type{source.enum_backing};
+}
 inline bool text_type(const Type &type) { return type.kind == Type::string || type.kind == Type::c_string; }
 inline bool widens_text(const Type &from, const Type &to) { return from.kind == Type::c_string && to.kind == Type::string; }
 inline Type representation(Type type) {

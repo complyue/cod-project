@@ -2929,6 +2929,36 @@ class ScalarChecker {
     if (const auto member = enum_member(type, operand.text)) return member;
     fail(operand.at, "unknown member '" + operand.text + "' of enum '" + type.name + "'");
   }
+  std::optional<EnumValue> literal_enum_code(const Expression &operand, const Type &type,
+                                             const TypeEvidenceState *state = nullptr) const {
+    using K = Expression::Kind;
+    const auto *source = &operand;
+    while (source->kind == K::grouped) source = source->children.front().get();
+    const bool negative = source->kind == K::unary && source->text == "-" &&
+        source->children.front()->kind == K::integer && operation_name(*source, state) == "-" &&
+        !has_declarations(source->text) && !applicable_operation(source->text, {Type::integer});
+    if (!negative && source->kind != K::integer) return {};
+    const auto &domain = program_.enums.at(type.identity);
+    std::uint64_t code;
+    bool in_range = true;
+    if (negative && signed_minimum(*source, state)) {
+      code = std::uint64_t{1} << 63;
+      in_range = domain.backing == Type::integer;
+    } else if (negative) {
+      const auto magnitude = literal(*source->children.front());
+      if (magnitude.type != Type::integer) return {};
+      code = std::uint64_t{0} - magnitude.integer;
+      in_range = magnitude.integer == 0 || domain.backing == Type::integer;
+    } else {
+      code = literal(*source).integer;
+      in_range = domain.backing != Type::integer || code <= std::uint64_t{INT64_MAX};
+    }
+    if (in_range) {
+      const auto member = std::ranges::find(domain.members, code, &CheckedEnum::Member::code);
+      if (member != domain.members.end()) return EnumValue{type, member->canonical};
+    }
+    fail(operand.at, "integer code is not a member of enum '" + type.name + "'");
+  }
   size_t resolve_symbol(const std::string &name, const Location &at, bool local,
                         std::optional<size_t> method = {}) const {
     const ModuleLookup lookup(module_, method ? program_.methods[*method].module : module_);
@@ -7040,7 +7070,7 @@ class ScalarChecker {
       if (*type < method.source->type_parameters.size() || !substitutions[*type]) return false;
       target = *substitutions[*type];
     }
-    return numeric(target) && widens(argument, target);
+    return supplies_enum_code(argument, target) || (numeric(target) && widens(argument, target));
   }
   std::optional<Substitutions> match(const CheckedMethod &method, const std::vector<Type> &arguments,
                                      const std::vector<Type> &retained = {}, bool widening = false) const {
@@ -7228,7 +7258,8 @@ class ScalarChecker {
         const auto role = binder_index ? category_roles.try_emplace(*binder_index, i).first->second : i;
         domain[i] = independent_input(domain[i], role, mode);
       }
-      if (numeric(parameter) && widens(domain[i], parameter)) domain[i] = parameter;
+      if ((mode == ArgumentMode::value && supplies_enum_code(domain[i], parameter)) ||
+          (numeric(parameter) && widens(domain[i], parameter))) domain[i] = parameter;
     }
     return match(declaration, domain, {}, true).has_value();
   }
@@ -7822,6 +7853,8 @@ class ScalarChecker {
       if (values.empty()) { types.result = types.operand = Type::never; return types; }
       if (equality && (values.front() == Type::boolean || values.front().kind == Type::enumeration) &&
           std::ranges::all_of(values, [&](const auto &type) { return type == values.front(); })) types.operand = values.front();
+      else if (comparison && values.size() == 2 && supplies_enum_code(values[0], values[1])) types.operand = values[1];
+      else if (comparison && values.size() == 2 && supplies_enum_code(values[1], values[0])) types.operand = values[0];
       else {
         if (!std::all_of(values.begin(), values.end(), numeric)) return error("no applicable numeric operation '" + std::string(name) + "'");
         if (const auto common = common_value_type(values)) types.operand = *common;
@@ -12775,9 +12808,18 @@ class ScalarChecker {
       }
       if (annotation.kind == Type::enumeration) {
         const auto &operand = *expr.children.front();
-        if (typed_enum_member(operand, annotation, &state)) return annotation;
+        if (typed_enum_member(operand, annotation, &state) || literal_enum_code(operand, annotation, &state))
+          return annotation;
         const auto type = type_evidence(operand, state, false, nullptr, nullptr, expected_use, true, read, joining);
         if (!type || type == Type::never) return type;
+        if (supplies_enum_code(annotation, *type)) {
+          if (read != EvidenceRead::payload) {
+            require_type_readable_target(state, state.target, operand.at);
+            read_type_target(state, state.value, state.target);
+          }
+          note_type_exit(state, Completion::failure(exception_id(ExceptionCategory::type_assertion_failed)));
+          return annotation;
+        }
         if (*type != annotation) fail(expr.at, "type assertion cannot match enum '" + annotation.name + "'");
         view = state.value;
         target_facts = state.target;
@@ -20788,9 +20830,21 @@ class ScalarChecker {
           operation = enum_literal(*member);
           break;
         }
+        if (const auto member = literal_enum_code(operand, annotation)) {
+          operation = enum_literal(*member);
+          break;
+        }
         const auto type = check(operand, instance, operations, read, discard, nullptr, expected_use,
                                 write_slot, indexed_use, native_loan, construction_owner, reservation_receiver,
                                 loop_discard ? discard_use : DiscardUse::ordinary);
+        if (supplies_enum_code(annotation, type)) {
+          const auto &source = operations.at(&operand);
+          if (!read && source.view) read_view(source, operand.at);
+          operation.type = annotation;
+          operation.enum_decode = true;
+          note_abrupt(expr.at, {exception_id(ExceptionCategory::type_assertion_failed)});
+          break;
+        }
         if (type != Type::never && type != annotation)
           fail(expr.at, "type assertion cannot match enum '" + annotation.name + "'");
         operation = operations.at(&operand);
@@ -25010,6 +25064,7 @@ class ScalarChecker {
     const auto backing = *form.result_type;
     if (!integral(backing)) fail(form.at, "enum backing type must be a fixed-width integer");
     auto type = Type{Type::enumeration, form.name, program_.enums.size()};
+    type.enum_backing = backing.kind;
     auto &domain = program_.enums.emplace_back(CheckedEnum{&form, backing, {}, {}});
     const bool signed_backing = backing == Type::integer;
     const auto maximum = backing == Type::uint8 ? std::uint64_t{UINT8_MAX}

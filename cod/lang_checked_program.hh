@@ -85,7 +85,7 @@ inline bool accepts_exception(const Type &source, const Type &target) {
 }
 inline bool transfers_bits(const Type &source, const Type &target) {
   return !owning_exception(source) && !owning_exception(target) &&
-      (widens(source, target) || accepts_exception(source, target));
+      (widens(source, target) || supplies_enum_code(source, target) || accepts_exception(source, target));
 }
 inline bool transfers_value(const Type &from, const Type &to) {
   return from.kind == Type::procedure || to.kind == Type::procedure ? from == to : transfers_bits(from, to);
@@ -172,6 +172,7 @@ struct CheckedOperation {
   std::uint64_t integer = 0;
   bool enum_literal = false;
   bool enum_assertion = false;
+  bool enum_decode = false;
   bool check_c_string = false;
   bool check_predicate_assertion = false;
   struct LexicalAllocation {
