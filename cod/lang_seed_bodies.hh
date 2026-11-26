@@ -265,7 +265,8 @@ class BodyExtraction {
     }
 
     bool const_input_owner(size_t owner) const {
-      return owner >= null_target - owners().size() && owners().at(null_target - 1 - owner).read_only;
+      return owner < null_target && owner >= null_target - owners().size() &&
+             owners().at(null_target - 1 - owner).read_only;
     }
 
     std::optional<Allocator> allocator_for(size_t owner) const {
@@ -567,7 +568,7 @@ class BodyExtraction {
         const bool handle = input.type.kind == Type::c_type_marker;
         if (!handle)
           expect(actual.type == input.type &&
-                 (input.type.kind == Type::array || (input.type == Type::string && actual.read_only)),
+                 (input.type.kind == Type::array || (text_type(input.type) && actual.read_only)),
                  at, "C provider needs a loan of the declared type and access");
         const auto owner = handle ? native_loan(actual, input.type, at) : single_owner(actual, at);
         const auto &role = form.owner_parameters.at(*input.owner);
@@ -1048,9 +1049,8 @@ class BodyExtraction {
       };
       bool terminates = check_body(*expr.children.front());
       for (const auto &handler : std::span(expr.children).subspan(1)) {
-        expect(handler->kind == Kind::handler && handler->annotation &&
-               handler->annotation->kind == Type::named && handler->read_only,
-               handler->at, "replacement seed needs a named readonly exception catch");
+        expect(handler->kind == Kind::handler && handler->annotation && handler->annotation->kind == Type::named,
+               handler->at, "replacement seed needs a named exception catch");
         const auto type = names().types.find(handler->annotation->name);
         expect(type != names().types.end() && type->second.kind == Type::exception, handler->at,
                "catch needs a resolved exception category");
@@ -1109,6 +1109,21 @@ class BodyExtraction {
       op.product_field = index;
       op.exception_owner = base.place;
       op.read_only = true;
+      return op;
+    }
+
+    CheckedOperation typed_expression(const Expression &expr) {
+      if (expr.annotation == Type::void_type) {
+        operand(expr, 0);
+        return {};
+      }
+      expect(expr.annotation == Type::c_string, expr.at,
+             "replacement seed supports void and CString result assertions");
+      auto op = operand(expr, 0);
+      expect(text_type(op.type) && op.view && op.read_only && op.owners.size() == 1,
+             expr.at, "replacement seed needs a readonly String loan for a CString assertion");
+      op.check_c_string = op.type == Type::string;
+      op.type = Type::c_string;
       return op;
     }
 
@@ -1227,10 +1242,7 @@ class BodyExtraction {
       case Kind::try_scope: return try_statement(expr);
       case Kind::rebind: case Kind::transfer: return assign(expr);
       case Kind::grouped: return operand(expr, 0);
-      case Kind::typed_expression:
-        expect(expr.annotation == Type::void_type, expr.at, "replacement seed supports the void result assertion");
-        operand(expr, 0);
-        return op;
+      case Kind::typed_expression: return typed_expression(expr);
       case Kind::block:
         expect(!expr.scoped, expr.at, "replacement seed has no extracted full-scope body");
         scopes_.emplace_back();
