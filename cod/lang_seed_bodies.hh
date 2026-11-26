@@ -683,6 +683,110 @@ class BodyExtraction {
       return op;
     }
 
+    bool fixed_overload_inputs(const CheckedMethod &method, const CheckedMethod &first) const {
+      const auto parameters = method.input_parameters();
+      const auto first_parameters = first.input_parameters();
+      const auto &roles = method.input_owners();
+      const auto &first_roles = first.input_owners();
+      if (method.interpretation || method.scope_inputs || !method.type_parameters.empty() ||
+          !method.retained_types.empty() || !method.here.empty() || parameters.size() != method.parameters.size() ||
+          roles.size() != first_roles.size()) return false;
+      for (size_t i = 0; i < roles.size(); ++i)
+        if (roles[i].root || roles[i].explicit_parameter || roles[i].read_only != first_roles[i].read_only)
+          return false;
+      for (size_t i = 0; i < parameters.size(); ++i) {
+        const auto &parameter = parameters[i];
+        const auto &type = method.parameters[i];
+        const auto mode = argument_mode(parameter);
+        const auto &prior = first_parameters[i];
+        if (parameter.automatic_conversion || parameter.not_init_ref || parameter.selects_caller_place() ||
+            mode != argument_mode(prior)) return false;
+        if (mode == ArgumentMode::value) {
+          if (!scalar_type(type)) return false;
+        } else {
+          const auto role = std::ranges::find(roles, parameter.owner, &OwnerParameter::name);
+          const auto first_role = std::ranges::find(first_roles, prior.owner, &OwnerParameter::name);
+          if (role == roles.end() || first_role == first_roles.end() ||
+              role - roles.begin() != first_role - first_roles.begin() ||
+              parameter.read_only != prior.read_only || !ordinary_loan(parameter, mode, type)) return false;
+        }
+      }
+      return true;
+    }
+
+    static bool matches_fixed_inputs(const CheckedMethod &method, std::span<const Type> types, bool widening) {
+      for (size_t i = 0; i < types.size(); ++i) {
+        const auto mode = argument_mode(method.input_parameters()[i]);
+        const auto &formal = method.parameters[i];
+        if (types[i] == formal || (mode == ArgumentMode::borrowed_ref && widens_text(types[i], formal))) continue;
+        if (!widening || mode != ArgumentMode::value || !accepts_argument(types[i], formal, mode)) return false;
+      }
+      return true;
+    }
+
+    size_t select_overload(const Expression &expr, const CheckedFamily &family,
+                           std::vector<const CheckedOperation *> &operands) {
+      expect(!expr.has_here_body() && std::ranges::none_of(expr.children, [](const auto &operand) {
+        return operand->spread || operand->checked_ref_argument || operand->kind == Kind::named_argument;
+      }), expr.at, "replacement seed needs positional operands for an ordinary overload");
+      const auto definition = [&](size_t id) -> const CheckedMethod & {
+        return extraction_.declarations_.method(id);
+      };
+      const auto call_name = [&] {
+        const auto &source = *definition(family.methods.front()).source;
+        auto name = "'" + expr.text + "'";
+        if (source.name != expr.text)
+          name += " (canonical " + source.at.filename() + "::" + source.name + ")";
+        return name;
+      };
+      std::vector<size_t> candidates;
+      for (const auto id : family.methods) {
+        const auto &method = definition(id);
+        expect(std::ranges::none_of(method.input_parameters(), &Parameter::variadic),
+               expr.at, "replacement seed needs fixed ordinary overload inputs");
+        if (method.here.empty() && method.parameters.size() == expr.children.size()) candidates.push_back(id);
+      }
+      if (candidates.empty()) fail(expr.at, "no method with the written arity for " + call_name());
+      const auto &first = definition(candidates.front());
+      for (const auto id : candidates)
+        expect(fixed_overload_inputs(definition(id), first), expr.at,
+               "replacement seed needs fixed ordinary overloads with common input modes, access and owner roles");
+
+      // Common preparation makes the same view/access checks apply to every
+      // candidate. Select from the types of the ordered, already extracted operands.
+      std::vector<Type> types;
+      types.reserve(expr.children.size());
+      operands.reserve(expr.children.size());
+      for (const auto &source : expr.children) {
+        const auto &arg = extract(*source);
+        operands.push_back(&arg);
+        types.push_back(arg.type);
+      }
+      for (const bool widening : {false, true}) {
+        std::vector<size_t> applicable;
+        for (const auto id : candidates)
+          if (matches_fixed_inputs(definition(id), types, widening)) applicable.push_back(id);
+        if (applicable.empty()) continue;
+        std::optional<size_t> best;
+        for (const auto id : applicable) {
+          const auto &method = definition(id);
+          const bool dominated = std::ranges::any_of(applicable, [&](size_t other) {
+            const auto &alternative = definition(other);
+            return matches_fixed_inputs(method, alternative.parameters, widening) &&
+                   !matches_fixed_inputs(alternative, method.parameters, widening);
+          });
+          if (dominated) continue;
+          if (best)
+            fail(expr.at, "ambiguous methods for " + call_name() + ": " +
+                 location_text(definition(*best).source->at) + " " + location_text(method.source->at));
+          best = id;
+        }
+        if (!best) fail(expr.at, "no unique most-specific method for " + call_name());
+        return *best;
+      }
+      fail(expr.at, "no applicable method for " + call_name());
+    }
+
     CheckedOperation call(const Expression &expr, bool region_receiver = false) {
       CheckedOperation op;
       if (expr.text == "[]<-" && expr.children.size() == 3) {
@@ -716,9 +820,11 @@ class BodyExtraction {
       }
       const auto *selected = family(expr.text);
       expect(!expr.intrinsic && !visible_local(expr.text) && selected && !selected->symbol &&
-             selected->methods.size() == 1 && selected->declarations.empty(),
+             !selected->methods.empty() && selected->declarations.empty(),
              expr.at, "replacement seed needs an unambiguous ordinary source call");
-      const auto method_id = selected->methods.front();
+      std::vector<const CheckedOperation *> operands;
+      const auto method_id = selected->methods.size() == 1 ? selected->methods.front() :
+          select_overload(expr, *selected, operands);
       const auto &target = extraction_.declarations_.method(method_id);
       expect(target.result.owns_region() == region_receiver, expr.at,
              "an owning region result requires a direct owning declaration");
@@ -733,7 +839,7 @@ class BodyExtraction {
       for (size_t i = 0; i < parameters.size(); ++i) {
         const auto &parameter = parameters[i];
         const auto mode = argument_mode(parameter);
-        const auto &arg = operand(expr, i);
+        const auto &arg = operands.empty() ? operand(expr, i) : *operands[i];
         const auto &formal = target.parameters[i];
         if (mode == ArgumentMode::value) takes_value(arg, formal, expr.children[i]->at);
         else {
