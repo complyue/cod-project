@@ -265,7 +265,7 @@ class BodyExtraction {
     }
 
     bool const_input_owner(size_t owner) const {
-      return owner > first_symbol_owner && owners().at(null_target - 1 - owner).read_only;
+      return owner >= null_target - owners().size() && owners().at(null_target - 1 - owner).read_only;
     }
 
     std::optional<Allocator> allocator_for(size_t owner) const {
@@ -495,9 +495,53 @@ class BodyExtraction {
       return single_owner(actual, at);
     }
 
-    static void bind_native_owner(std::map<size_t, size_t> &owners, size_t role, size_t owner, const Location &at) {
+    void bind_native_owner(std::map<size_t, size_t> &owners, size_t role, size_t owner, const Location &at) const {
       const auto [first, inserted] = owners.emplace(role, owner);
-      if (!inserted && first->second != owner) fail(at, "C arguments for one owner need the same actual owner");
+      if (inserted) return;
+      // Each operand selects its own live descriptor. The symbol ID does not
+      // certify the equality of the selected owner words.
+      expect(!is_symbol_owner(first->second, declarations().symbols.size()) &&
+             !is_symbol_owner(owner, declarations().symbols.size()), at,
+             "replacement seed needs separate C owner roles for dynamic handle loans");
+      if (first->second != owner) fail(at, "C arguments for one owner need the same actual owner");
+    }
+
+    std::string symbol_name(const Expression &expr, const CheckedSymbol &symbol) const {
+      auto result = "symbol '@" + expr.text + "'";
+      if (symbol.declaration && symbol.name != expr.text)
+        result += " (canonical " + symbol.declaration->filename() + "::@" + symbol.name + ")";
+      return result;
+    }
+
+    size_t owning_symbol(const Expression &expr) const {
+      if (visible_local(expr.text) || here_.contains(expr.text) ||
+          (body_.outline && body_.outline->visible_here.contains(expr.text)) ||
+          names().enum_members.contains(expr.text))
+        fail(expr.at, "nearest binding '" + expr.text + "' is not a symbol");
+      const auto selected = names().symbols.find(expr.text);
+      if (selected == names().symbols.end()) fail(expr.at, "unknown symbol '@" + expr.text + "'");
+      const auto &symbol = declarations().symbols.at(selected->second);
+      if (form_.kind == Form::Kind::function)
+        fail(expr.at, "a function cannot access dynamic bindings through " + symbol_name(expr, symbol));
+      expect(!supplied_body(), expr.at, "replacement seed has no owning dynamic effects in a supplied body");
+      if (symbol.reference || !symbol.type || symbol.type->kind != Type::native_handle || !symbol.type->owned)
+        implementation_gap(expr.at, "replacement seed needs an owning native handle " + symbol_name(expr, symbol));
+      return selected->second;
+    }
+
+    const CheckedOperation &native_operand(const Expression &expr, size_t index, const Type &formal) {
+      const auto &source = *expr.children.at(index);
+      if (formal.kind != Type::c_type_marker || source.kind != Kind::symbol) return extract(source);
+      const auto id = owning_symbol(source);
+      const auto &symbol = declarations().symbols.at(id);
+      if (!matches_native_handle(*symbol.type, formal))
+        fail(source.at, symbol_name(source, symbol) + " cannot supply a native handle borrow of type '" + formal.name + "'");
+      CheckedOperation op;
+      op.symbol = id;
+      op.type = native_handle_type(*symbol.type, false);
+      op.view = true;
+      op.owners.insert(symbol_owner_key(id));
+      return remember(source, std::move(op));
     }
 
     CheckedOperation provider_call(const Expression &expr, size_t id) {
@@ -514,7 +558,7 @@ class BodyExtraction {
       for (size_t i = 0; i < native.inputs.size(); ++i) {
         const auto &input = native.inputs[i];
         const auto &at = expr.children[i]->at;
-        const auto &actual = operand(expr, i);
+        const auto &actual = native_operand(expr, i, input.type);
         if (!input.owner) {
           takes_value(actual, input.type, at);
           op.arguments.push_back({ArgumentMode::value, input.type});
@@ -754,7 +798,7 @@ class BodyExtraction {
       for (size_t i = 0; i < constructor.inputs.size(); ++i) {
         const auto &input = constructor.inputs[i];
         const auto &at = initializer.children[i]->at;
-        const auto &actual = operand(initializer, i);
+        const auto &actual = native_operand(initializer, i, input.type);
         if (input.type.kind != Type::c_type_marker) {
           takes_value(actual, input.type, at);
           continue;
@@ -767,6 +811,22 @@ class BodyExtraction {
         bind_native_owner(owners, *input.owner, owner, at);
       }
       return {id, &initializer};
+    }
+
+    CheckedOperation install_native_effect(const Expression &expr) {
+      const auto id = owning_symbol(expr);
+      const auto &symbol = declarations().symbols.at(id);
+      if (expr.binding != "<-" || expr.children.size() != 1)
+        fail(expr.at, "an owning effect for " + symbol_name(expr, symbol) + " requires '<-' and fresh 'make own handle' construction");
+      const auto &initializer = ungrouped_expression(*expr.children.front());
+      if (initializer.kind != Kind::make_owned_handle || !initializer.annotation)
+        fail(initializer.at, "an owning effect for " + symbol_name(expr, symbol) + " requires fresh 'make own handle' construction");
+      const auto &type = *symbol.type;
+      CheckedOperation op;
+      op.symbol = id;
+      op.operand_type = type;
+      op.native_acquisition = native_acquisition(initializer, {Type::c_type_marker, type.name, type.identity});
+      return op;
     }
 
     CheckedOperation attach_native_handle(const Expression &expr) {
@@ -1156,6 +1216,7 @@ class BodyExtraction {
       case Kind::region_binding: return bind_region(expr);
       case Kind::native_handle_binding: return bind_native_handle(expr);
       case Kind::make_borrowed_handle: return attach_native_handle(expr);
+      case Kind::effect: return install_native_effect(expr);
       case Kind::index: return index(expr);
       case Kind::field: return field(expr);
       case Kind::case_expression: return sum_case(expr);
