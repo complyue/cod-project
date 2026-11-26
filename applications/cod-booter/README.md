@@ -116,6 +116,8 @@ A lexical text builder can receive text at construction, be borrowed by a synchr
 
 The replacement also translates a writable, non-null abstract reference symbol when the compiled declarations establish one concrete builder layout. An ordinary call prepares the selected target and actual owner together at that argument. Later operands can change the current binding, and the prepared pair still reaches the selected callee. Linked renderer probes cover normal and exceptional restoration, including scopes that borrow provider-prefix records and lexical text snapshots.
 
+The bundled UTF-8 storage intrinsics can read a text size or byte and create a slice owned by the enclosing full scope. Linked `ProviderNames` probes read the reservation rules and render an identifier. They also exercise ordinary scalar conversion at a typed local declaration, out-of-bounds access, and an invalid UTF-8 slice boundary.
+
 The replacement resolves ordinary fixed positional overloads with common parameter modes, access and owner roles. It prepares the operands in source order, prefers exact types to lossless scalar preparation, and requires a unique most-specific applicable method. Linked controls cover nominal enum preference over its backing, lossless widening and once-only operand evaluation.
 
 An intermediate ordinary call can use an omitted void result once the selected body establishes a no-value exit. The replacement prepares the statement's operands during extraction and gives the call its result and ABI after the callee's evidence is complete. The linked probe reaches `DeclarationTypes.prepare_native_operand_types`. A separate range control observes preserved writes after a callee failure and unchanged storage after a failure preparing arguments.
