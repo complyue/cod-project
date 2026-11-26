@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Investigate parser combinator library support
+
+<a id="h-parser-combinator-wip-20261125"></a>
+**H-PARSER-COMBINATOR-WIP-20261125.** In the CoD project design conversation the project user required “grammar和parse结果肯定要分不同owner”, expressed the preference “接口类型包含多个here-callback实现完整Megaparsec语义”, and requested a WIP. [Research r1](design/ParserCombinatorLibSupport.md) records that invariant and preference under the [production parser direction](#h-production-parser-direction-20261124). The four-arm contract, bound procedure value, open graph representation and comparator details are proposals. Registry r1306→1307, [P-742/P-743](design/DesignAuthorityRegistry.md#d-parser-combinator-research). The prior [roadmap §7](https://github.com/complyue/cod-project/blob/4a4df1338a893433d2e95512511495824f169380/docs/DesignTopics.md#production-parser-combinators) remains the backport boundary.
+
 ## 2026-11-25 — Define callable methods by types and constant values
 
 <a id="h-grouped-method-dispatch-20261125"></a>

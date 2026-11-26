@@ -198,6 +198,8 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 
 **已确认的分工。** 规划中的 `e-wrks/cod` 负责设计和开发类 Megaparsec 的 CoD 解析库，在生产编译器的 lexer 和 parser 中使用，并参照 Edh 组织产生式。booter 继续用递归下降处理 bootstrap 子集和固定优先级。生产实现完成后，另行决定是否将其中一部分回移到 booter。[项目用户的决定](../CHANGELOG.md#h-production-parser-direction-20261124) · [编译器分工](../design/DesignAuthorityRegistry.md#d-20-repositories) · [Edh 解析器](https://github.com/e-wrks/edh/blob/a2e9b95ef1f84cc5677499512c69d4b03a12cbdc/elr/src/Language/Edh/Parser.hs)
 
+[Parser combinator lib support 预研 WIP](../design/ParserCombinatorLibSupport.md) 要求可复用 grammar 与解析结果属于不同的实际 owner。首选研究接口用四个同步 `here` 回调区分消费与否、成功与失败，以 Megaparsec 9.8.3 对照分支路由、状态恢复、诊断和整文件恢复。可绑定的 `proc` 接收者视图及区域内异构子规则仍待验证。
+
 ### 怎样检验 CoD 的表达力
 
 选一条右操作数依赖已读运算符的真实产生式。目标是让作者按文法顺序写出读取左侧、查询结合强度、再解析右侧的过程。检验命名 `proc`、有类型的动态作用域 effects 和同步 `here` 正文怎样承担 Edh 中 monadic sequencing 的作用，让读者能从产生式看出值依赖、局部语法环境和失败处理位置。操作符声明的可见性和结合规则仍由前面的操作符议题决定。库接口、解析状态的表示和失败的传递方式留给原型比较。[动态调用与绑定](../design/SymbolicDynamicScope.md#lexical-selection-installation-and-invocation) · [同步正文的控制语义](../design/CallableStorageAndHereAccess.md#an-effect-in-a-here-callback)
