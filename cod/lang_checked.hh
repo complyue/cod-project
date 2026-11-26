@@ -4409,12 +4409,14 @@ class ScalarChecker {
     return result;
   }
   std::set<size_t> selected_input(const std::set<size_t> &targets) const {
-    auto places = targets;
-    places.erase(null_target);
-    if (places.size() != 1 || !storage(*places.begin()).borrowed) return {};
-    return places;
+    if (targets.empty()) return {};
+    const auto past = *targets.rbegin() == null_target ? std::prev(targets.end()) : targets.end();
+    const auto first = targets.begin();
+    if (first == past || std::next(first) != past || !storage(*first).borrowed) return {};
+    return {*first};
   }
   static void refine_present(LexicalState &state) {
+    if (state.present.empty()) return;
     const auto previous = state.targets;
     previous.each([&](size_t binding, const auto &bounds) {
       const auto &targets = bounds.places, &sources = bounds.null_sources;
@@ -4429,9 +4431,15 @@ class ScalarChecker {
   }
   void record_present(const std::set<size_t> &present) {
     if (!lexical_.live) return;
-    lexical_.present.insert(present.begin(), present.end());
-    for (const auto input : lexical_.inputs)
-      lexical_.input_facts.edit(input, [&](auto &facts) { facts.present.insert(present.begin(), present.end()); });
+    if (!present.empty()) {
+      lexical_.present.insert(present.begin(), present.end());
+      for (const auto input : lexical_.inputs) {
+        const auto &known = lexical_.input_facts.at(input).present;
+        if (std::ranges::all_of(present, [&](size_t place) { return known.contains(place); })) continue;
+        lexical_.input_facts.edit(input, [&](auto &facts) { facts.present.insert(present.begin(), present.end()); });
+      }
+    }
+    // Newly selected aliases can still be refined by existing presence facts.
     refine_present(lexical_);
   }
   void record_presence(const std::set<size_t> &targets) { record_present(selected_input(targets)); }
