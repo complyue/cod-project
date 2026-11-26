@@ -2032,7 +2032,7 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
                 facts[at].target_readonly <- links[at].imported_target_readonly;
                 if (returned_kind == c_string_kind()) { (facts[at].text_nul <- nul_absent()):void; };
             } else {
-                if (links[at].imported_byte_completion != NoByteFunction)
+                if (returned_kind == scalar_enum() || links[at].imported_byte_completion != NoByteFunction)
                     return remember_native_result(facts, at, enum_type(), links[at].imported_type_module,
                         links[at].imported_type_identity);
                 set_result(facts, at, returned_kind);
@@ -2054,10 +2054,11 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
                 return expected_writable_place();
             copy_fact(facts, argument, value)
         } else {
-            diagnostic <- check_argument_operand(nodes, facts, argument,
-                links[argument].imported_kind,
-                links[argument].imported_reception, 0u64, 0u64, links[argument].imported_target_readonly,
-                used, revision);
+            diagnostic <- check_argument_operand(nodes, facts, argument, expected,
+                links[argument].imported_reception,
+                if (expected == scalar_enum()) { (links[argument].imported_type_identity) } else { 0u64 },
+                if (expected == scalar_enum()) { (links[argument].imported_type_module) } else { 0u64 },
+                links[argument].imported_target_readonly, used, revision);
             if (diagnostic != 0u8) return diagnostic
         };
         witness <- links[argument].imported_owner_argument;
@@ -2129,7 +2130,7 @@ func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contrac
         links[argument].imported_owner_readonly <- contracts[row].owner_readonly;
         links[argument].imported_passes_owner <- contracts[row].native_passes_owner;
         role <- contracts[row].owner_role;
-        if (handles || bytes) {
+        if (handles || bytes || (!source_handles && !source_byte && kind == scalar_enum())) {
             links[argument].imported_type_module <- contracts[row].type_module;
             (links[argument].imported_type_identity <- contracts[row].type_identity):void
         };
@@ -2153,6 +2154,10 @@ func remember_imported_call(links:NameWork in L, contracts:const ModuleInterface
     links[at].imported_kind <- if (source_handles) {
         if (result == builtin_void()) { void_result() } else { source_scalar_kind(result) }
     } else { result };
+    if (!source_handles && result == scalar_enum()) {
+        links[at].imported_type_module <- contracts[header].type_module;
+        (links[at].imported_type_identity <- contracts[header].type_identity):void
+    };
     links[at].imported_callable_kind <- contracts[header].callable_kind;
     links[at].imported_target_readonly <- contracts[header].target_readonly;
     links[at].imported_failure <- contracts[header].failure_identity;
@@ -2181,13 +2186,44 @@ func valid_imported_failure(contracts:const ModuleInterfaces in I, published:u64
         else { schema == UncheckedExceptionSchema }
 }
 
+func names_enum_domain(row:const ModuleInterfaceRow in R) -> bool where {const owner R} {
+    return row.type_module != 0u64 && row.type_module != no_node() && row.type_identity != no_node()
+}
+
+func published_enum_domain(contracts:const ModuleInterfaces in I, published:u64,
+                           row:u64) -> bool where {const owner I} {
+    if (!names_enum_domain(contracts[row])) return false;
+    val header <- find_interface(contracts, published, contracts[row].type_module, contracts[row].type_identity);
+    return header != no_node() && contracts[header].interface_kind == enum_type()
+}
+
+# The ordinary call ABI copies one scalar word. A published enum word also
+# carries a canonical domain. A ref/ptr word has a different contract.
+func valid_ordinary_enum_rows(contracts:const ModuleInterfaces in I, published:u64,
+                              header:u64) -> bool where {const owner I} {
+    if (contracts[header].result_kind == scalar_enum() &&
+        (contracts[header].owner_role != no_node() || !published_enum_domain(contracts, published, header)))
+        return false;
+    for (row in header + 1u64 .. header + 1u64 + contracts[header].entry_count) {
+        if (contracts[row].value_kind == scalar_enum() &&
+            (contracts[row].interface_kind != 0u8 || contracts[row].native_reception != local_place() ||
+             contracts[row].owner_role != no_node() || contracts[row].owner_readonly != 0u8 ||
+             contracts[row].native_passes_owner != 0u8 || !published_enum_domain(contracts, published, row)))
+            return false;
+    };
+    return true
+}
+
 func scalar_source_parameter(contracts:const ModuleInterfaces in I, first:u64,
     position:u64) -> bool where {const owner I} {
     val row <- first + position;
     val role <- contracts[row].owner_role;
     val reception <- contracts[row].native_reception;
     val constraint <- contracts[row].owner_readonly;
-    if (contracts[row].interface_kind != 0u8 || !native_scalar(contracts[row].value_kind) ||
+    val kind <- contracts[row].value_kind;
+    if (contracts[row].interface_kind != 0u8 ||
+        (!native_scalar(kind) && (kind != scalar_enum() || reception != local_place() ||
+                                !names_enum_domain(contracts[row]))) ||
         contracts[row].target_readonly > 1u8 || constraint > 1u8 ||
         contracts[row].native_passes_owner != 0u8) return false;
     if (reception == local_place()) return role == no_node() && constraint == 0u8;
@@ -2206,7 +2242,8 @@ func scalar_source_call(contracts:const ModuleInterfaces in I, published:u64,
     if (contracts[header].interface_kind != callable_binding() || contracts[header].value_kind != 0u8 ||
         contracts[header].defining_module == 0u64 || contracts[header].declaration == no_node() ||
         contracts[header].native_function != no_node() || arity >= published - header ||
-        (!native_scalar(result) && result != void_result()) ||
+        (!native_scalar(result) && result != void_result() &&
+         (result != scalar_enum() || !names_enum_domain(contracts[header]))) ||
         contracts[header].owner_role != no_node() ||
         contracts[header].owner_count != 0u64 || contracts[header].has_here != 0u8 ||
         contracts[header].target_readonly != 0u8 ||
@@ -2347,6 +2384,8 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
     } else {
         if (source_only && !handles && !bytes && !scalar_source_call(contracts, interface_count, header))
             return operand_problem(report, at, unsupported_imported_call());
+        if (!handles && !bytes && !valid_ordinary_enum_rows(contracts, interface_count, header))
+            return operand_problem(report, at, unsupported_imported_call());
         if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used,
             revision, handles, bytes))
             return operand_problem(report, at, wrong_argument_count())
@@ -2401,7 +2440,8 @@ func native_callable_arity(nodes:const ExprNodes in N, links:const NameWork in L
         if (first_owner_parameter(links, facts, first,
                                   facts[definition].owner, used) == no_node()) return no_node();
     } else {
-        if (!native_scalar(kind) && kind != void_result()) return no_node();
+        if (!native_scalar(kind) && kind != void_result() &&
+            (kind != scalar_enum() || facts[definition].reception != independent_value())) return no_node();
     };
     return native_parameter_count(nodes, links, facts, first, used, revision);
 }
@@ -2427,7 +2467,7 @@ func native_parameter(nodes:const ExprNodes in N, facts:const OperandFacts in F,
     ref syntax = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
     if (inspect_formal(nodes, revision, used, formal, syntax) != OrdinaryFormal) return false;
     if (mode == local_place())
-        return native_scalar(kind) && (syntax.mode == ValueFormal || syntax.mode == ExplicitValueFormal);
+        return scalar_kind(kind) && (syntax.mode == ValueFormal || syntax.mode == ExplicitValueFormal);
     if (facts[formal].writable_text_place != 0u8) return false;
     if (mode == borrowed_ref()) return native_scalar(kind) || immutable_text_kind(kind);
     return mode == nullable_ptr() && native_scalar(kind);
@@ -2457,6 +2497,13 @@ func publishes_checked_call(exports:const ModuleExports in E, count:u64, module_
             return true
     };
     return false
+}
+
+func publish_enum_domain(facts:const OperandFacts in F, value:u64, module_id:u64, row:ModuleInterfaceRow in I)
+    -> void where {const owner F, owner I} {
+    row.type_module <- if (facts[value].identity_module == 0u64) { module_id } else { (facts[value].identity_module) };
+    row.type_identity <- facts[value].identity;
+    return
 }
 
 export func append_callable_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -2510,6 +2557,9 @@ export func append_callable_interfaces(nodes:const ExprNodes in N, names:const N
                 if (arity >= intrinsic (len)(contracts) - count) return no_node();
                 write_interface_header(contracts[count], module_id, at, callable_binding(), facts[at].kind, arity);
                 contracts[count].membership <- (FixedMethods:FamilyMembership);
+                if (facts[at].kind == scalar_enum()) {
+                    publish_enum_domain(facts, at, module_id, contracts[count])
+                };
                 if (!source_only) { (contracts[count].native_function <- base + at):void };
                 contracts[count].callable_kind <- if (callable.function_form) {
                     CheckedFunction:InterfaceCallableKind
@@ -2527,7 +2577,7 @@ export func append_callable_interfaces(nodes:const ExprNodes in N, names:const N
                 };
                 formal <- first;
                 for (row in count + 1u64 .. count + 1u64 + arity) {
-                    publish_native_parameter(nodes, links, facts, first, formal, arity,
+                    publish_native_parameter(nodes, links, facts, first, formal, arity, module_id,
                         contracts[row]);
                     (formal <- links[formal].next):void;
                 };
@@ -2544,13 +2594,16 @@ export func append_callable_interfaces(nodes:const ExprNodes in N, names:const N
 }
 
 func publish_native_parameter(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                              first:u64, formal:u64, arity:u64, row:ModuleInterfaceRow in I) -> void
+                              first:u64, formal:u64, arity:u64, module_id:u64, row:ModuleInterfaceRow in I) -> void
     where {const owner N, const owner L, const owner F, owner I} {
     write_interface_header(row, 0u64, 0u64, 0u8, 0u8, 0u64);
     row.value_kind <- facts[formal].kind;
     row.native_reception <- facts[formal].reception;
     row.target_readonly <- facts[formal].target_readonly;
-    if (row.native_reception == local_place()) return;
+    if (row.native_reception == local_place()) {
+        if (row.value_kind == scalar_enum()) { publish_enum_domain(facts, formal, module_id, row) };
+        return
+    };
     val binder <- facts[formal].owner;
     # A role is the position of the first parameter that establishes this owner.
     row.owner_role <- first_owner_parameter(links, facts, first, binder, arity);
