@@ -13,7 +13,8 @@ domain-specific High Level Virtual Machine (HLVM) in CoD, choose its instruction
 effects, and offer business users a **Domain Specific Graphical Programming Language**
 for that machine. A planner can draw a warehouse fallback, ask an AI assistant to change
 one route, and inspect the resulting reservations. An editor can put an approval step
-before publication and preview which edition would be released.
+before publication and preview which edition would be released. CoD’s planned production
+parser provides a compiler example. Its grammar is an HLVM program shipped with the toolchain.
 
 The programs are typed directed graphs admitting cycles (DCGs), stored in relocatable
 regions. An instruction is a functor in the C++ sense: a data object with a call
@@ -346,6 +347,30 @@ control. This example needs only instance-local state, branches and a typed outp
 Saving a running instance across a crash would additionally require an explicit account of
 the remaining computation, its state and the status of external effects.
 [Deferred BASIC application](../applications/README.md#deferred-application-hlvm-basic) · [Execution instances and persistent continuations](../design/RegionalSemanticPlatformCharter.md)
+
+## The production CoD parser as an HLVM
+
+The planned `e-wrks/cod` toolchain will ship the parser combinator library `pcl.cod` and a
+disk-backed memory region named `cod.grammar`. Grammar authors use the library to express
+rules and their composition. The grammar for CoD itself is the program for this HLVM.
+The production parser opens the distributed image read-only and starts parsing at its
+grammar entry. The image holds rule data, operands and regional edges. The compatible
+executor supplies the methods that give those rules their meaning.
+
+Consider an expression rule that tries an integer literal and then an identifier as an
+expression. On the source `total`, the literal rule can fail before consuming input.
+The choice then enters the identifier rule at the same cursor and delivers an expression
+node to the current run’s AST. The choice and its child edges belong to the grammar.
+The cursor, success and failure callbacks, diagnostic state and writable AST arena come
+from this invocation. Another source file can enter the same grammar node with its own
+cursor and produce a tree under a different owner.
+
+A release demonstration would run the installed compiler on a procedure containing
+`((x))` with `x` bound, then on a procedure with two missing initializers and a valid
+`return`. The same distributed grammar should parse the nested expression, locate both
+errors in the second file and retain its return statement. Releasing the first tree
+must leave the second usable. These are proposed observations for the production parser.
+[Packaged parser and acceptance](../design/ParserCombinatorLibSupport.md#packaged-production-parser) · [Whole-file recovery](../applications/cod-booter/README.md#whole-file-parser-recovery)
 
 <a id="7-what-we-can-show-and-what-to-measure"></a>
 

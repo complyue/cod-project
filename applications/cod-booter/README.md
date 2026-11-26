@@ -1,10 +1,12 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 45 · Recorded: 2026-11-25 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 46 · Recorded: 2026-11-26 · Phase: initial seed delivery through alternating booter and seed development.
 
 **Compiler design target.** The default `cod` invocation compiles and runs an entry without leaving a user-facing executable. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** Seed and booter development prioritize Go-like compile speed with moderate runtime performance. High-quality optimizing builds belong to the production compiler roadmap. [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
 
 ## Design authority
+
+At r46 the [production parser bundle](../../design/DesignAuthorityRegistry.md#d-20-parser-bundle) adds an installed-toolchain acceptance case to the production roadmap. The [user’s delivery decision](../../CHANGELOG.md#h-production-parser-bundle-20261126) continues the existing division between the production parser and the bootstrap frontends.
 
 At r45 [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap) continues r44’s trusted translation boundary and identifies the persistent booter executable as the seed’s default bootstrap output. The [compiler modes decision](../../CHANGELOG.md#h-default-run-and-optimized-build-20261125) sets the fast compilation target for both bootstrap compilers and the production roadmap under [D-20-COMPILER-MODES](../../design/DesignAuthorityRegistry.md#d-20-compiler-modes).
 
@@ -162,6 +164,8 @@ The compiler and toolchain repositories are planned in the [e-wrks GitHub organi
 | `cod` | The future production compiler written in CoD. The first release targets fast compile-and-run and experiments with optimizing builds. Version 2.0 formally supports the optimizing mode. The compiler also provides full diagnostics, [independent check and emission controls for editors and builds](docs/CompilerPipeline.md#independently-selectable-compiler-operations), and a future CoD REPL. [REPL decision](../../CHANGELOG.md#h-retire-cpp-repl-20261125) |
 | `codup` | Toolchain version management in the role of rustup. |
 | `codmate` | The Language Server Protocol server and IDE plugins, including [reference-site doclet tooltips and navigation](../../design/DomainLanguageDesign.md#definition-doclets). |
+
+The `e-wrks/cod` toolchain will bundle the parser combinator library `pcl.cod` and the DBMR grammar program `cod.grammar`. Its production parser will open that image to parse CoD source on the normal compiler path. [Installed-toolchain workload](../../design/ParserCombinatorLibSupport.md#packaged-production-parser) · [Parser HLVM case study](../../papers/AlgebraicEffectsIsAllYouNeed.md#the-production-cod-parser-as-an-hlvm)
 
 Future package management belongs in `e-wrks/cod`. The bootstrap consumes [manually staged source roots](../../design/CodProjectStructureAndPkgMgmt.md#directory-layout).
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Ship the production parser library and its DBMR grammar
+
+<a id="h-production-parser-bundle-20261126"></a>
+**H-PRODUCTION-PARSER-BUNDLE-20261126.** In the CoD project design conversation the user specified that `e-wrks/cod` will ship bundled `pcl.cod`, that its parser uses DBMR `cod.grammar` shipped with the toolchain, and that the paper should present it as a typical HLVM use case. The [production parser delivery contract](design/DesignAuthorityRegistry.md#d-20-parser-bundle) extends the [r1 research baseline](https://github.com/complyue/cod-project/blob/b18bbc063d5a4bf36ab6012e3e64e4aac693a438/design/ParserCombinatorLibSupport.md) at r2 and the production roadmap at r46. The [paper case](papers/AlgebraicEffectsIsAllYouNeed.md#the-production-cod-parser-as-an-hlvm) gives the planned workload. Parser interface research and the [later booter backport decision](#h-production-parser-direction-20261124) retain their prior scope.
+
 ## 2026-11-26 — Reuse lexical native cleanup in the replacement seed
 
 <a id="k-seed-pipeline-lexical-native-handles-20261126"></a>
