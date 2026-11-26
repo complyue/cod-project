@@ -534,7 +534,7 @@ class BodyExtraction {
       const bool text = source.type == Type::string && source.read_only;
       const bool builder = form_.implicit_scope && declarations().builder_type(source.type);
       const bool lexical_text = form_.implicit_scope && text && !original.owner;
-      const bool scalar_input = body_.case_scope && scalar_type(source.type);
+      const bool scalar_input = form_.implicit_scope && scalar_type(source.type);
       const bool incoming_loan = (handle || text || scalar_input) && original.place && original.owner > first_symbol_owner &&
           std::ranges::any_of(supplier.frame.inputs, [&](const auto &input) {
             return input.place == *original.place && !input.binding_slot &&
@@ -866,6 +866,12 @@ class BodyExtraction {
     static bool implicit_scope_call(const Expression &expr) {
       return expr.kind == Kind::value_call && expr.children.size() == 1 &&
              expr.children.front()->definition && expr.children.front()->definition->implicit_scope;
+    }
+
+    static bool guarded_full_scope(const Expression &expr) {
+      if (expr.kind != Kind::conditional || !implicit_scope_call(*expr.children.at(1))) return false;
+      const auto &alternative = *expr.children.at(2);
+      return alternative.kind == Kind::block && alternative.children.empty();
     }
 
     size_t call_full_scope(const Expression &expr, bool case_scope = false) {
@@ -1898,7 +1904,7 @@ class BodyExtraction {
             if (!call_operation) continue;
             op.type = remember(item, std::move(*call_operation)).type;
           } else {
-            const auto &result = extract(item, discard_iteration_result);
+            const auto &result = extract(item, discard_iteration_result || (intermediate && guarded_full_scope(item)));
             op.type = result.type;
             if (!intermediate && text_type(result.type) && result.view && result.read_only && result.owners.size() == 1) {
               op.view = op.read_only = true;
@@ -1917,6 +1923,15 @@ class BodyExtraction {
         return op;
       case Kind::conditional: {
         expect(operand(expr, 0).type == Type::boolean, expr.at, "conditional requires a Boolean operand");
+        if (discard_iteration_result && guarded_full_scope(expr)) {
+          const auto &call = *expr.children[1];
+          require_executable_expression(call);
+          // The ignored statement result needs no callee type. Sealing the
+          // recorded call still requires its own normal no-value evidence.
+          call_full_scope(call);
+          extract(*expr.children[2]);
+          return op;
+        }
         scopes_.emplace_back();
         const auto &yes = extract(*expr.children[1], discard_iteration_result);
         scopes_.pop_back();
