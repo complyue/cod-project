@@ -25786,8 +25786,11 @@ class ScalarChecker {
 #undef COD_LANG_TEXT_KIND
     return {};
   }
-  bool register_module(const SourceModule &source, std::optional<size_t> &print_symbol,
-                       std::optional<Location> &unsupported_here, CompilationDiagnostics *diagnostics) {
+  enum class DeclarationScope { module, whole_source };
+
+  bool register_module(const SourceModule &source, DeclarationScope scope,
+                       std::optional<size_t> &print_symbol, std::optional<Location> &unsupported_here,
+                       CompilationDiagnostics *diagnostics) {
     const auto &forms = source.forms();
     std::set<std::string_view> fresh_symbols;
     for (const auto &form : forms)
@@ -25922,7 +25925,7 @@ class ScalarChecker {
       }
       for (const auto &child : expr.children) self(self, *child, parent, register_methods);
     };
-    for (const auto &form : forms)
+    if (scope == DeclarationScope::whole_source) for (const auto &form : forms)
       if (form->body)
         collect(collect, *form->body, form->kind == Form::Kind::expression ? nullptr : form.get(), true);
     for (const auto *form : definitions) {
@@ -26029,7 +26032,7 @@ class ScalarChecker {
             fail(form->at, "an owning exception result requires an exception type and establishes its own owner");
           prepared.result.mode = ResultMode::owned_exception;
           prepared.result.read_only = form->result_const;
-          check_exception_result_cleanup(*form->body);
+          if (scope == DeclarationScope::whole_source) check_exception_result_cleanup(*form->body);
         } else if (prepared.result.type->kind == Type::region && prepared.result.type->owned) {
           if (form->c_linkage || form->symbolic || !operation.empty() || here || lexical_methods_.contains(form) ||
               !form->result_owner.empty() || form->result_const || !form->result_kind.empty() ||
@@ -26039,7 +26042,7 @@ class ScalarChecker {
           const auto schema = resolve_signature(*prepared.result.type->target);
           direct_region_roots(schema, form->at);
           prepared.result.type = owned_region_type(schema);
-          require_direct_region_return(*form);
+          if (scope == DeclarationScope::whole_source) require_direct_region_return(*form);
           prepared.result.mode = ResultMode::owned_region;
         } else reject_c_type_payload(*prepared.result.type, form->at);
       }
@@ -26156,7 +26159,7 @@ class ScalarChecker {
         const auto parameter = std::ranges::find(prepared.input_owners(), owner, &OwnerParameter::name);
         prepared.result.read_only |= parameter->read_only;
       }
-      register_lexical_result(prepared);
+      if (scope == DeclarationScope::whole_source) register_lexical_result(prepared);
       check_aggregate_owner_roles(prepared, prepared.parameters);
       for (const auto &parameter : form->type_parameters)
         if (parameter.bound) implementation_gap(parameter.at, "bounded type parameters");
@@ -26320,7 +26323,7 @@ class ScalarChecker {
     require_implemented_source_forms(parameter.here->result, parameter.at, "owning exception result");
   }
 
-  static void require_implemented_source_forms(const Form &form) {
+  static void require_implemented_header(const Form &form) {
     const bool named_co_d_definition = !form.c_linkage &&
         (form.kind == Form::Kind::function || form.kind == Form::Kind::procedure);
     for (const auto &parameter : form.parameters)
@@ -26330,6 +26333,10 @@ class ScalarChecker {
       require_implemented_source_forms(named_co_d_definition && written.kind == Type::exception_holder
           ? *written.target : written, form.at, "owning exception result");
     }
+  }
+
+  static void require_implemented_source_forms(const Form &form) {
+    require_implemented_header(form);
     if (!form.body) return;
     const auto visit = [&](auto &&self, const Expression &expr) -> void {
       using K = Expression::Kind;
@@ -26345,11 +26352,16 @@ class ScalarChecker {
     visit(visit, *form.body);
   }
 
-  std::optional<CheckedProgram> check_program(const SourceProgram &source, CompilationDiagnostics &diagnostics) {
-    modules_.resize(source.modules.size());
-    std::optional<size_t> print_symbol;
+  struct ModuleRegistration {
     std::optional<Location> unsupported_here;
     size_t reported_warnings = 0;
+  };
+
+  std::optional<ModuleRegistration> register_source_modules(const SourceProgram &source, DeclarationScope scope,
+                                                           CompilationDiagnostics &diagnostics) {
+    modules_.resize(source.modules.size());
+    std::optional<size_t> print_symbol;
+    ModuleRegistration result;
     bool registered = source.ready_for_checking();
     for (const auto module : source.construction_order) {
       const auto &input = source.modules[module];
@@ -26363,17 +26375,34 @@ class ScalarChecker {
       if (!diagnostics.continue_work()) return {};
       const ModuleLookup lookup(module_, module);
       if (input.syntax.needs_source_form_check())
-        for (const auto &form : input.forms()) require_implemented_source_forms(*form);
+        for (const auto &form : input.forms()) {
+          if (scope == DeclarationScope::whole_source) require_implemented_source_forms(*form);
+          else require_implemented_header(*form);
+        }
       const auto first_finding = diagnostics.size();
-      if (!register_module(input, print_symbol, unsupported_here, &diagnostics)) registered = false;
+      if (!register_module(input, scope, print_symbol, result.unsupported_here, &diagnostics)) registered = false;
       if (diagnostics.size() != first_finding) relate_module_findings(source, module, diagnostics, first_finding);
-      while (reported_warnings < program_.warnings.size()) {
-        if (!diagnostics.append(program_.warnings[reported_warnings])) return {};
-        ++reported_warnings;
+      while (result.reported_warnings < program_.warnings.size()) {
+        if (!diagnostics.append(program_.warnings[result.reported_warnings])) return {};
+        ++result.reported_warnings;
       }
     }
     if (!registered || diagnostics.has_error() || !diagnostics.continue_work()) return {};
     check_native_type_names();
+    return result;
+  }
+
+  void complete_declared_failures() {
+    for (auto &method : program_.methods)
+      method.throws_categories = declared_exception_categories(method.throws_types);
+    for (auto &family : program_.families)
+      for (auto &declaration : family.declarations)
+        declaration.throws_categories = declared_exception_categories(declaration.throws_types);
+  }
+
+  std::optional<CheckedProgram> check_program(const SourceProgram &source, CompilationDiagnostics &diagnostics) {
+    const auto registration = register_source_modules(source, DeclarationScope::whole_source, diagnostics);
+    if (!registration) return {};
     // Module registration has completed the exception catalog before any call is checked.
     cleanup_exceptions_.type_count = program_.exception_types.size();
     for (size_t category = 1; category < cleanup_exceptions_.type_count; ++category) {
@@ -26382,12 +26411,9 @@ class ScalarChecker {
       if (!program_.exception_types[category].checked)
         default_call_reasons_.insert(Completion::failure(category).reason);
     }
-    for (auto &method : program_.methods)
-      method.throws_categories = declared_exception_categories(method.throws_types);
-    for (auto &family : program_.families)
-      for (auto &declaration : family.declarations)
-        declaration.throws_categories = declared_exception_categories(declaration.throws_types);
-    if (unsupported_here) implementation_gap(*unsupported_here, "this receiving pattern for a here body");
+    complete_declared_failures();
+    if (registration->unsupported_here)
+      implementation_gap(*registration->unsupported_here, "this receiving pattern for a here body");
     prepare_interpretations();
     for (const auto &method : program_.methods) {
       if (!variadic(method)) continue;
@@ -26493,13 +26519,46 @@ class ScalarChecker {
         if (!program_.instances.at(instance).effects.lexical_allocations.empty())
           implementation_gap(method.source->at, "a C entry owner supplying a lexical allocator");
     }
-    program_.warnings.erase(program_.warnings.begin(), program_.warnings.begin() + reported_warnings);
+    program_.warnings.erase(program_.warnings.begin(), program_.warnings.begin() + registration->reported_warnings);
     for (auto &instance : program_.instances)
       instance.array_allocator_roles.emplace(std::move(instance.effects.array_allocations));
     return std::move(program_);
   }
 
 public:
+  class ModuleDeclarations {
+    friend class ScalarChecker;
+
+    // Declaration and method source links point into this exact revision.
+    SourceProgram source_;
+    std::vector<ModuleNames> modules_;
+    CheckedProgram declarations_;
+
+    ModuleDeclarations(SourceProgram source, std::vector<ModuleNames> modules, CheckedProgram declarations)
+        : source_(std::move(source)), modules_(std::move(modules)), declarations_(std::move(declarations)) {}
+
+  public:
+    const SourceProgram &source() const { return source_; }
+    const CheckedMethod &method(size_t id) const { return declarations_.methods.at(id); }
+
+    // A module family is only a candidate for a call. Lexical shadowing,
+    // receiving interpretation and operand preparation belong to extraction.
+    const CheckedFamily *ordinary_family(size_t module, const std::string &spelling) const {
+      const auto &names = modules_.at(module).callables;
+      const auto family = names.find(spelling);
+      return family == names.end() ? nullptr : &declarations_.families.at(family->second);
+    }
+  };
+
+  static std::optional<ModuleDeclarations> bind_module_declarations(SourceProgram source,
+                                                                    CompilationDiagnostics &diagnostics) {
+    ScalarChecker binder;
+    if (!binder.register_source_modules(source, DeclarationScope::module, diagnostics)) return {};
+    binder.complete_declared_failures();
+    binder.program_.warnings.clear();
+    return ModuleDeclarations{std::move(source), std::move(binder.modules_), std::move(binder.program_)};
+  }
+
   std::optional<CheckedProgram> check(const SourceProgram &source, CompilationDiagnostics &diagnostics) {
     return check_program(source, diagnostics);
   }

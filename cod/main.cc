@@ -30,7 +30,7 @@
 
 namespace fs = std::filesystem;
 
-enum class LanguageAction { parse, check, run };
+enum class LanguageAction { parse, check_declarations, check, run };
 
 struct LanguageEmission {
   std::optional<fs::path> ir, bitcode, providers;
@@ -123,11 +123,12 @@ public:
 };
 
 static void printUsage(const char *prog_name) {
-  std::cout << "Usage: " << prog_name << " (--parse FILE | --check FILE | --run FILE) [OPTIONS]\n"
+  std::cout << "Usage: " << prog_name << " (--parse FILE | --check-declarations FILE | --check FILE | --run FILE) [OPTIONS]\n"
             << "\n"
             << "Options:\n"
             << "  --run FILE          Compile and run a CoD source-language entry\n"
             << "  --check FILE        Check a CoD entry and its demanded call paths\n"
+            << "  --check-declarations FILE  Bind module declarations and their signatures\n"
             << "  --parse FILE        Parse a CoD entry and its reachable source modules\n"
             << "  --project PATH      Select the source project's package root\n"
             << "  --emit-llvm FILE    Save directly emitted textual LLVM IR\n"
@@ -208,9 +209,12 @@ int CodTool::compileLanguage(const fs::path &entry, const fs::path &project, Lan
   try {
     cod::language::Compiler compiler{warnings, emission.specialize, emission.bounds_checks};
     auto parsed = compiler.parse(fs::absolute(entry), {getLanguageLibrary(), project}, diagnostic_limit);
-    auto compilation = action == LanguageAction::parse ? compiler.report_parse(std::move(parsed))
-        : compiler.compile(std::move(parsed), emission.ir.has_value(),
-            action == LanguageAction::run || emission.bitcode.has_value(), emission.providers.has_value());
+    auto compilation = [&] {
+      if (action == LanguageAction::parse) return compiler.report_parse(std::move(parsed));
+      if (action == LanguageAction::check_declarations) return compiler.report_declarations(std::move(parsed));
+      return compiler.compile(std::move(parsed), emission.ir.has_value(),
+          action == LanguageAction::run || emission.bitcode.has_value(), emission.providers.has_value());
+    }();
     for (const auto &finding : compilation.diagnostics.findings()) {
       if (const auto *warning = std::get_if<cod::language::WarningDiagnostic>(&finding.primary)) {
         std::cerr << warning->text();
@@ -311,13 +315,16 @@ int main(int argc, const char **argv) {
         return 1;
       }
       project = fs::absolute(argv[++i]);
-    } else if (arg == "--parse" || arg == "--run" || arg == "--check") {
+    } else if (arg == "--parse" || arg == "--check-declarations" || arg == "--run" || arg == "--check") {
       if (i + 1 >= argc || language_entry) {
-        std::cerr << "Error: provide exactly one --parse, --check or --run entry file\n";
+        std::cerr << "Error: provide exactly one entry with --parse, --check-declarations, --check or --run\n";
         return 1;
       }
       language_entry = fs::absolute(argv[++i]);
-      action = arg == "--parse" ? LanguageAction::parse : arg == "--run" ? LanguageAction::run : LanguageAction::check;
+      if (arg == "--parse") action = LanguageAction::parse;
+      else if (arg == "--check-declarations") action = LanguageAction::check_declarations;
+      else if (arg == "--run") action = LanguageAction::run;
+      else action = LanguageAction::check;
     } else if (arg == "--no-specialize") {
       emission.specialize = false;
     } else if (arg == "--no-bounds-checks") {
@@ -367,11 +374,12 @@ int main(int argc, const char **argv) {
   }
 
   if (!language_entry) {
-    std::cerr << "Error: provide a CoD entry with --parse, --check or --run\n";
+    std::cerr << "Error: provide a CoD entry with --parse, --check-declarations, --check or --run\n";
     printUsage(argv[0]);
     return 1;
   }
-  if (action == LanguageAction::parse && (emission.ir || emission.bitcode || emission.providers)) {
+  if ((action == LanguageAction::parse || action == LanguageAction::check_declarations) &&
+      (emission.ir || emission.bitcode || emission.providers)) {
     std::cerr << "Error: artifact emission requires --check or --run\n";
     return 1;
   }

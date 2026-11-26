@@ -84,7 +84,7 @@ The selected name for the C++ build output is `bin/cod-seed` (`bin/cod-seed.exe`
 
 ### Trusted source and the seed
 
-Run `cod-seed --parse FILE` for syntax feedback across the selected entry and its reachable source modules. The command stops after source discovery and parsing. Translation still uses `--check` with the requested artifact options, or `--run` to execute the result.
+Run `cod-seed --parse FILE` for syntax feedback across the selected entry and its reachable source modules. The command stops after source discovery and parsing. Use `cod-seed --check-declarations FILE` to also resolve module selections, nominal layouts and callable signatures. Declarations inside bodies and type checking of executable expressions belong to later work. Both commands report diagnostics without emitting artifacts. Translation uses `--check` with the requested artifact options, or `--run` to execute the result.
 
 The C++ seed translates trusted, valid CoD source into LLVM IR and bitcode to build the CoD-written booter. The current native build also consumes a C provider header and stubs derived from the same interfaces. The seed must resolve names, types, methods, layouts and other facts as far as their consumers need them to produce correct code. In particular, emitted calls must pass the actual owner or allocator when required. Generated code must implement the specified evaluation order, dynamic checks, exceptions, ownership transfers and cleanup. For a nullable access the seed can emit the prescribed runtime null check directly when eliminating it would require a static proof.
 

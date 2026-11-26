@@ -83,6 +83,21 @@ public:
     return result;
   }
 
+  Compilation report_declarations(ParsedCompilation parsed) const {
+    auto result = std::move(parsed.result_);
+    auto &diagnostics = result.diagnostics;
+    try {
+      if (!diagnostics.complete()) return result;
+      const auto declarations = ScalarChecker::bind_module_declarations(std::move(parsed.source_), diagnostics);
+      result.accepted = declarations.has_value() && !promotes_warning(diagnostics);
+    } catch (const LocatedFailure &failure) {
+      retain_failure(diagnostics, failure);
+    } catch (const std::bad_alloc &) {
+      diagnostics.exhaust_storage();
+    }
+    return result;
+  }
+
   Compilation compile(ParsedCompilation parsed, bool emit_text, bool emit_bitcode, bool emit_providers = false) {
     auto result = std::move(parsed.result_);
     result.accepted = false;
