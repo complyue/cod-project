@@ -1034,7 +1034,7 @@ func check_constructor_arguments(nodes:const ExprNodes in N, names:const NameBin
     ref loan = make HandleLoan { marker <- no_node(); owner <- no_node(); readonly <- false; };
     ref parameter = make ModuleInterfaceRow {
         defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
-        interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
+        interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; array_index_kind <- 0u8; value_kind <- 0u8;
         type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node(); target_readonly <- 0u8; owner_readonly <- 0u8;
         has_here <- 0u8; failure_module <- 0u64; failure_identity <- 0u64; failure_checked <- 0u8;
         name_first <- 0u64; name_past <- 0u64; enum_code <- 0u64;
@@ -2123,7 +2123,7 @@ func check_local_here(nodes:const ExprNodes in N, names:const NameBindings in B,
     ref loan = make HandleLoan { marker <- no_node(); owner <- no_node(); readonly <- false; };
     ref parameter = make ModuleInterfaceRow {
         defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
-        interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
+        interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; array_index_kind <- 0u8; value_kind <- 0u8;
         type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node(); target_readonly <- 0u8; owner_readonly <- 0u8;
         has_here <- 0u8; failure_module <- 0u64; failure_identity <- 0u64; failure_checked <- 0u8;
         name_first <- 0u64; name_past <- 0u64; enum_code <- 0u64;
@@ -2922,7 +2922,7 @@ func check_native_operation_call(nodes:const ExprNodes in N, names:const NameBin
         };
         ref row = make ModuleInterfaceRow {
             defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
-            interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
+            interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; array_index_kind <- 0u8; value_kind <- 0u8;
             type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
             target_readonly <- 0u8; owner_readonly <- 0u8;
             has_here <- 0u8; failure_module <- 0u64; failure_identity <- 0u64;
@@ -3617,7 +3617,7 @@ func stage_handle_interface(nodes:const ExprNodes in N, names:const NameBindings
 }
 
 func stage_array_interface(names:const NameBindings in B, selected:const SelectedExports in E,
-                           row:ModuleInterfaceRow in R, defining_module:UInt64, declaration:UInt64, element:UInt64)
+                           row:ModuleInterfaceRow in R, defining_module:UInt64, declaration:UInt64, index:UInt64, element:UInt64)
     where {const owner B, const owner E, owner R} {
     write_interface_header(row, defining_module, declaration, array_type(), 0u8, 0u64);
     val kind <- names[element].kind;
@@ -3627,6 +3627,7 @@ func stage_array_interface(names:const NameBindings in B, selected:const Selecte
         if (selection == sum_export()) { (kind <- sum_type()):void; };
         if (selection == enum_export()) { (kind <- enum_type()):void; };
     };
+    row.array_index_kind <- names[index].kind;
     row.element_kind <- kind;
     if (kind == record_type() || kind == sum_type() || kind == enum_type()) {
         row.type_module <- type_module(names, selected, element, defining_module);
@@ -3665,7 +3666,8 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
         shape <- inspect_declaration(nodes, revision, used, at, declaration);
         if (shape == ArrayTypeDeclaration) {
             if (count >= limit) return no_node();
-            stage_array_interface(names, selected, contracts[count], defining_module, at, declaration.value_type);
+            stage_array_interface(names, selected, contracts[count], defining_module, at,
+                declaration.index_type, declaration.value_type);
             (count <- count + 1u64):void;
         } else {};
         if (shape == HandleTypeDeclaration && work[at].active == no_node()) {

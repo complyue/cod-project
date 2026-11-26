@@ -34,7 +34,7 @@ export func compile_module_commands(source:const SourceBytes in S, tokens:Tokens
     if (!bind_module(source, tokens, nodes, spellings, exports, selected, bindings, work, report)) return false;
     ref interfaces = make ModuleInterfaces(0u64, make ModuleInterfaceRow {
         defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
-        interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
+        interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; array_index_kind <- 0u8; value_kind <- 0u8;
         type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
         target_readonly <- 0u8; owner_readonly <- 0u8; has_here <- 0u8; failure_checked <- 0u8;
         failure_module <- 0u64; failure_identity <- 0u64; name_first <- 0u64; name_past <- 0u64;

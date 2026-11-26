@@ -155,6 +155,7 @@ export data NameWorkSlot {
     sum_loan_formals:bool;
     slot_array_construction:bool;
     inline_sum_initializer:bool;
+    selected_constructor:bool;
     product_type_diagnostic:UInt8;
     product_type_site:UInt64;
     # Reaching installation at expression entry. The syntax count denotes
@@ -896,7 +897,7 @@ export func find_named_field(source:const SourceBytes in S, nodes:const ExprNode
     return locate_named_field(source, nodes, work, tail, name, revision, used, ordinal)
 }
 
-func locate_named_field(source:const SourceBytes in S, nodes:const ExprNodes in N,
+export func locate_named_field(source:const SourceBytes in S, nodes:const ExprNodes in N,
     work:const NameWork in W, tail:UInt64, name:UInt64, revision:UInt64, used:UInt64, ordinal:UInt64 in O)
     -> UInt64 where {const owner S, const owner N, const owner W, owner O} {
     ref field = make UInt64 { no_node() };
@@ -1439,6 +1440,12 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
             resolve_record_initializer(source, nodes, bindings, work, state, construction.contents, inline_sum);
             return
         }
+        if (found == no_node() && state.inline_field_input == at && work[requested].selected_constructor) {
+            remember(bindings, requested, no_node(), constructor_type());
+            work[at].inline_sum_initializer <- true;
+            resolve_record_initializer(source, nodes, bindings, work, state, construction.contents, true);
+            return
+        }
     };
     val record_initializer <- false;
     val text_initializer <- false;
@@ -1509,7 +1516,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
     val body <- construction.contents;
     if (record_initializer) {
         val inline_fields <- state.source_only && construction.queried_operand == no_node() &&
-            bindings[requested].kind == record_type() && shape == BracedConstruction && construction.placement == no_node() &&
+            shape == BracedConstruction && construction.placement == no_node() &&
             state.inline_field_input == at;
         resolve_record_initializer(source, nodes, bindings, work, state, body, inline_fields);
     } else { resolve_expression(source, nodes, bindings, work, state, body); };
@@ -3577,6 +3584,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
         bindings[at].handle_guard <- no_node();
         work[at].local_symbol_conflict <- no_node();
         work[at].inline_sum_initializer <- false;
+        work[at].selected_constructor <- selected[at].constructor_selection != no_node();
         work[at].enum_assertion <- (NoEnumAssertion:EnumAssertion);
         work[at].enum_members <- no_node();
         work[at].enum_backing <- 0u8;

@@ -268,7 +268,7 @@ proc reserve_interfaces(ref var rows:ModuleInterfaces in G, used:UInt64, require
     if (required <= capacity) return;
     ref next = make ModuleInterfaces(growth_capacity(capacity, required), make ModuleInterfaceRow {
         defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
-        interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
+        interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; array_index_kind <- 0u8; value_kind <- 0u8;
         type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
         target_readonly <- 0u8; owner_readonly <- 0u8; has_here <- 0u8; failure_checked <- 0u8;
         failure_module <- 0u64; failure_identity <- 0u64; name_first <- 0u64; name_past <- 0u64;
@@ -1379,6 +1379,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             case_schema_prepared <- false; declaring_sum <- no_node();
             enclosing_case_arm <- no_node(); arm_case <- no_node();
             sum_loan_formals <- false; slot_array_construction <- false; inline_sum_initializer <- false;
+            selected_constructor <- false;
             product_type_diagnostic <- 0u8; product_type_site <- no_node();
             active <- no_node(); module_selection <- no_node(); module_kind <- 0u8; module_scalar <- 0u8;
             local_symbol_conflict <- no_node();
@@ -1562,7 +1563,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         ref checked_selections = make CheckedSelections(selection_capacity, make UnpublishedSelection {});
         ref staged_interfaces = make ModuleInterfaces(staged_interface_capacity, make ModuleInterfaceRow {
             defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
-            interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
+            interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; array_index_kind <- 0u8; value_kind <- 0u8;
             type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
             target_readonly <- 0u8; owner_readonly <- 0u8; has_here <- 0u8; failure_checked <- 0u8;
             failure_module <- 0u64; failure_identity <- 0u64; name_first <- 0u64; name_past <- 0u64;

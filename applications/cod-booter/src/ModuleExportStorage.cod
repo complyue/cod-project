@@ -127,6 +127,7 @@ export data ModuleInterfaceRow {
     interface_kind:UInt8;
     result_kind:UInt8;
     element_kind:UInt8;
+    array_index_kind:UInt8;
     value_kind:UInt8;
     type_module:UInt64;
     type_identity:UInt64;
@@ -169,6 +170,7 @@ export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:
     row.interface_kind <- kind;
     row.result_kind <- result;
     row.element_kind <- 0u8;
+    row.array_index_kind <- 0u8;
     row.value_kind <- 0u8;
     row.type_module <- 0u64;
     row.type_identity <- 0u64;
@@ -207,7 +209,7 @@ export func write_sum_row(interfaces:ModuleInterfaces in I, row:UInt64, module:U
     where {owner I, const owner P} {
     interfaces[row] <- make ModuleInterfaceRow {
         defining_module <- module; declaration <- declaration; entry_count <- entries; owner_count <- 0u64;
-        interface_kind <- kind; result_kind <- 0u8; element_kind <- 0u8;
+        interface_kind <- kind; result_kind <- 0u8; element_kind <- 0u8; array_index_kind <- 0u8;
         value_kind <- if (kind == 0u8) { constructor_type() } else { 0u8 };
         type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
         target_readonly <- 0u8; owner_readonly <- 0u8; has_here <- 0u8; failure_checked <- 0u8;
@@ -231,7 +233,7 @@ export func write_object_view(interfaces:ModuleInterfaces in I, at:UInt64, publi
     view:const CallableObjectView in V) -> void where {owner I, const owner V} {
     interfaces[at] <- make ModuleInterfaceRow {
         defining_module <- publisher; declaration <- no_node(); entry_count <- 0u64; owner_count <- 0u64;
-        interface_kind <- callable_view_interface(); result_kind <- 0u8; element_kind <- 0u8; value_kind <- 0u8;
+        interface_kind <- callable_view_interface(); result_kind <- 0u8; element_kind <- 0u8; array_index_kind <- 0u8; value_kind <- 0u8;
         type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
         target_readonly <- 0u8; owner_readonly <- 0u8; has_here <- 0u8; failure_checked <- 0u8;
         failure_module <- 0u64; failure_identity <- no_node(); name_first <- 0u64; name_past <- 0u64;
