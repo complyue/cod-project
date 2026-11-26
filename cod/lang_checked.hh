@@ -19135,12 +19135,6 @@ class ScalarChecker {
       if (!owner || nonallocating_owners_.contains(*owner) || view.indexed_target)
         implementation_gap(operand.at, "reference symbol requires one stable actual lexical owner");
       if (!lexical_.live) return;
-      const auto boundary = std::find_if(lexical_.scopes.rbegin(), lexical_.scopes.rend(),
-          [&](const auto &scope) { return scope.symbol_entry.has_value() || scope.id == cleanup_scope_; });
-      const auto target_scope = std::find_if(lexical_.scopes.rbegin(), boundary,
-          [&](const auto &scope) { return scope.id == *owner; });
-      if (target_scope != boundary)
-        fail(operand.at, "reference symbol target does not outlive the installation scope");
       lexical_.symbols.update(id, [&](auto &facts) {
         facts.borrowed_owner.emplace(owner);
         if (type.kind == Type::abstract_type) facts.abstract_targets = NominalTargets{source.identity};
