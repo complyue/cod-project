@@ -7259,9 +7259,6 @@ class ScalarChecker {
           implementation_gap(method.source->at, "declaration applicability across different parameter passing modes");
       if (method.source->kind != declaration.source->kind)
         fail(method.source->at, "implementation kind does not satisfy callable declaration");
-      for (const auto category : method.throws_categories)
-        if (program_.exception_types[category].checked && !declaration.throws_categories.contains(category))
-          fail(method.source->at, "implementation exposes a checked exception outside its callable declaration");
       if (use != DeclarationUse::failures && !declaration_covers_types(method, declaration, arguments)) continue;
       if (result) {
         if (access != AccessCoverage::contained || !implies_owners(method, declaration)) continue;
