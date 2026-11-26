@@ -10,7 +10,8 @@ producer, transformer and consumer signatures with separate type constructors fo
 and receiving ends of a chan. The same business types admit a local queue interpretation and an
 inter-Actor interpretation. CoD programs for live and trial pump monitors show what the signatures
 leave to the application. A synchronous submission must leave sufficient routing information for
-its eventual owner, and a progress record must follow every accepted reading it covers. Paired
+its eventual owner, and a progress record must follow every accepted reading it covers. A single
+open processing plan can serve both live ingestion and replay auditing. Paired
 histories show how either condition can fail even when the signatures agree. The
 [fuel-sale case](#a-reflex-style-network-for-a-fuel-sale) extends the question to transactions,
 timeline identity and a point-of-sale Actor.
@@ -60,6 +61,47 @@ an actual way to traverse `F` and `G`, an admissible payload, and permission to 
 endpoint. The kind of a constructor by itself supplies none of those operations. In particular,
 `Consumer` in this notation consumes a *producer*. The per-item operation hidden inside the
 sending terminal consumes a *value*. Substituting one for the other changes the interface.
+
+### One ingress plan for live and replay
+
+An instrument team can prepare the work that a live adapter and a replay audit have in common.
+In this paper example `decode_frames` offers one raw record per well-formed device frame.
+`normalize` converts each such record to the application's reading or progress input, preserving
+sensor identity, timestamp and per-source order. An `Advance` record that overtakes an earlier
+accepted reading can close the window too soon.
+
+```cod
+here ingress = decode_frames() |> normalize()
+```
+
+If decoding connects `Wire[Frame]` to `F[Raw]` and normalization connects `F[Raw]` to
+`G[Input]`, then `ingress` still has both ends open at `Wire[Frame] → G[Input]`. The
+intermediate protocol must match, including any normal reply. Constructing this expression
+prepares the stages once without reading a device, selecting a queue or admitting a record.
+The two local drives below use the CoD connection spellings with illustrative adapters.
+
+```cod
+live_frames()   !> ingress $> admit_live
+replay_frames() !> ingress $> record_input
+```
+
+Here the normalized traversal takes void feedback. The per-item terminal `admit_live` sends
+each input through the live site's admission policy. The per-item terminal `record_input` logs
+the normalized fields for an audit. Both return void. The earlier `sender(tx)` adapter has a
+different calling convention. It drives a whole producer, so its corresponding attachment in
+the paper notation is `sender(txLive)(ingress(liveFrames))`. On a recording of the same
+well-formed frames, compare the normalized records **before** the different terminal actions.
+On the live path, queue admission and the selected site still determine what survives.
+
+As in the design for `pcl.cod`, the library can compose typed operations before a caller
+supplies the concrete input and output. ADT receivers can carry configuration. The driver
+supplies fresh synchronous callbacks when the plan runs. In the
+proposed parser protocol one of four callbacks completes a rule. In this event application
+the local plan can finish while the receiving Actor has an empty turn. What crosses the chan
+is an admissible message. A later `ready(rx, budget)` drives a new local computation with
+that site's window state and its own terminal. Retaining the sender's `here` until an alarm
+arrives would violate its lifetime and give send a remote acknowledgement it does not promise.
+[Lexical connections](../design/ProducersAndTransformers.md#lexical-variables-for-open-pipelines) · [PCL rule interface](../design/ParserCombinatorLibSupport.md#the-rule-interface) · [Companion fare plan](ComposingEnumerativeChoice.md#an-itinerary-plan-with-both-ends-open)
 
 ### Two compositions and a missing arrow
 
@@ -467,6 +509,14 @@ price and resets the volume. A later posted price has no path into its accumulat
 The total sampled at close includes its last increment. The next start resets the volume
 after that observation. Passing `current(saleTotals)` to the earlier-value sampler instead
 changes only one connection and yields a different receipt in the history below.
+
+The dispenser also illustrates a reusable operator with several inputs. In paper notation,
+`receiptPolicy(before, includingUpdate)` fixes the two sampling operations in the wiring
+above. A dispenser later supplies its own posted-price, start, meter and close signals on
+one timeline `T`, and connects the receipt output to a display or an audit log. Each
+installation has its own sale state. The same wiring should yield the 510-cent receipt
+below for either terminal. Attaching a close from another timeline requires an explicit
+bridge. The four input signals and their common timeline remain visible in the interface.
 
 A potential CoD library might offer one network-building context per local timeline, with a
 way to hold state with an initial value and derive current values and update events. The

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Compose fare and event stages before attaching endpoints
+
+<a id="k-papers-open-operator-composition-20261126"></a>
+**K-PAPERS-OPEN-OPERATOR-COMPOSITION-20261126.** The project user proposed studying the language mechanisms explored for `pcl.cod` in both pipeline drafts. The [fare](papers/ComposingEnumerativeChoice.md#an-itinerary-plan-with-both-ends-open) and [event](papers/OpenEventPipelines.md#one-ingress-plan-for-live-and-replay) examples each compose a reusable middle and drive it with two different endpoint pairs. They extend the [previous paper comparison](https://github.com/complyue/cod-project/blob/7dc810e04133d74e06f485daec478e94a521eb11/papers/README.md#read-the-two-pipeline-papers-together) with derived observations under the [existing lexical connection contract](design/ProducersAndTransformers.md#lexical-variables-for-open-pipelines). The shared mechanisms and domain-specific feedback, completion and transport laws remain distinguishable in the [comparison](papers/README.md#read-the-two-pipeline-papers-together).
+
 ## 2026-11-26 — Forward borrowed CLI inputs through the catalog callback
 
 <a id="k-seed-cli-input-loans-20261126"></a>

@@ -10,7 +10,8 @@ family. Both can type the composition of route expansion and price filtering. On
 exposes the difference between a route that expects void feedback and a seat source that expects a
 Boolean. Even a correctly typed filter can answer the seat source incorrectly or open a cursor it
 never needs. We derive the missing behavioral obligations from explicit CoD loops and trace which
-ones a future type language could check at an adapter boundary.
+ones a future type language could check at an adapter boundary. An open fare policy then lets
+the application change both the route source and the terminal without rewriting either stage.
 
 ## Two ways to type a transformer
 
@@ -219,6 +220,50 @@ inventory reach the first 80. On an accepted seat the filter forwards the termin
 normal reply. The expansion stage passes that reply to the particular seat cursor that offered
 the fare. When the terminal returns outward, the pending `yield(fare)` expressions never produce
 ordinary feedback. [Feedback on normal paths](../design/RangedForAndGenerators.md#non-void-feedback-checks-all-normal-exits)
+
+### An itinerary plan with both ends open
+
+The named generators above fix the route source inside `available_fares`. Lift that one
+dependency into the input protocol of `fares_for`. It accepts a route traversal with void
+feedback, still uses `fares_on(route)` to obtain seats, and offers fares with Boolean feedback.
+The `affordable` processor preserves the seat protocol. In a lexical scope with those
+processor signatures, the booking author can name the two stages together.
+
+```cod
+here offers = fares_for() |> affordable(100u64)
+```
+
+The price ceiling and the selected stages are prepared now. No day, route cursor or terminal
+is needed at this point. The open protocol is `Visit[void][Route] → Visit[bool][Fare]`.
+For an audit, attach a recorded route source and a per-fare terminal that records its argument
+and replies true. For a booking, attach today's route source and let the supplying procedure
+return at the first eligible fare. Each of the following drives uses the prepared plan in its live scope.
+
+```cod
+recorded_routes() !> offers $> record_and_continue
+```
+
+```cod
+for val fare <- itineraries(day) !> offers { return fare }
+return 0u64
+```
+
+With the same ordered routes and seat fixture, the audit records **80, 80, 90**. The booking
+returns **80**, closes A's seat cursor and then the route cursor, and never opens B. Both
+runs must reply true to the rejected 120. During the booking the accepted 80 gets no normal
+reply. Replacing the outward return with an ordinary false would finish A and still allow B.
+Changing the route source leaves the seat provider chosen by `fares_for` in place. A replay
+of a different seat inventory would also have to supply that provider.
+
+This is the language support the fare example shares with the parsing HLVM `pcl.cod`.
+A library can expose typed operations on ADT receivers, compose them from their protocols,
+and supply the live `here` arguments when the computation runs. The processor expression
+above uses CoD's bounded lexical connection. A PCL overload such as `p <|> q` can instead
+construct a grammar node before there is a source file, parse session or AST arena. On normal completion a parser rule takes exactly one of its four exits. A fare traversal
+may deliver many offers. The proposed owner-qualified `proc` view becomes a separate question when a selected
+effectful receiver must be returned through a common callable type. Neither example needs to
+retain a previous caller's callback. The snippets illustrate the signature proposal using the
+existing pipeline binding forms. [Fare processor signatures](../design/ProducersAndTransformers.md#one-fare-search-three-spellings) · [Lexical connections](../design/ProducersAndTransformers.md#lexical-variables-for-open-pipelines) · [PCL rule interface](../design/ParserCombinatorLibSupport.md#the-rule-interface) · [Companion event plan](OpenEventPipelines.md#one-ingress-plan-for-live-and-replay)
 
 ## What an equivalence must preserve
 

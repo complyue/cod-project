@@ -17,6 +17,17 @@ still open.
 
 ### Read the two pipeline papers together
 
+Both papers show how to name a composition before choosing either endpoint. The library user can
+[expand routes and filter fares](ComposingEnumerativeChoice.md#an-itinerary-plan-with-both-ends-open), or
+[decode and normalize device frames](OpenEventPipelines.md#one-ingress-plan-for-live-and-replay).
+At the protocol level, a composition operator can connect stages `P → Q` and `Q → R` to
+produce `P → R`. The letters stand for complete protocols, including feedback and borrowing.
+The same CoD mechanisms let [rules of the parsing HLVM `pcl.cod`](../design/ParserCombinatorLibSupport.md#reusable-rules-and-the-scope-of-language-support)
+compose before a caller supplies a parse session and output arena. A bounded lexical
+connection can serve synchronous uses. A reusable regional program needs typed data edges
+and valid owners. Naming families of such signatures, or passing a family itself as a type
+argument, adds separate questions to those concrete examples.
+
 Both ask what changes when a library can pass a type constructor such as `F : Type → Type`
 and use it at several item types. They share candidate notation for producer, transformer and
 consumer. In the booking example a suspended seat source can receive a Boolean from its active
