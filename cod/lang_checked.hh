@@ -23395,7 +23395,10 @@ class ScalarChecker {
         return read.second == BuiltinOperation::array_length;
       });
       if (plan.scalar.calls.empty()) {
-        if (!explicit_length || !direct_readonly_range(plan.scalar, *form.body)) return {};
+        const bool indexed_bytes = std::ranges::any_of(plan.scalar.reads, [](const auto &read) {
+          return read.first->kind == Expression::Kind::index;
+        });
+        if ((!explicit_length && !indexed_bytes) || !direct_readonly_range(plan.scalar, *form.body)) return {};
       } else if (has_value_inputs || explicit_length) return {};
       return plan;
     }
