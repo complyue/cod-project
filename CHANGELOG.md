@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-25 — Name method constants and use enum backing codes
+
+<a id="h-named-method-constants-20261125"></a>
+**H-NAMED-METHOD-CONSTANTS-20261125.** In the CoD project design conversation the project user confirmed “我喜欢你建议的 = 前缀方案，就这样定吧。” [D-10 r269→270](design/SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch) closes the [named-constant roadmap item](https://github.com/complyue/cod-project/blob/9af5fcaf91bfe426f6ca9d0a23619048814b58d6/docs/DesignTopics.md#按实际用例重启的小议题). A method head resolves `=name` outside its own formals and matches the typed singleton.
+
+<a id="h-enum-backing-coercion-20261125"></a>
+**H-ENUM-BACKING-COERCION-20261125.** The project user proposed an ASCII enum for the lexer and clarified “typed enum 值应该能被自动 coarse 成底层类型值用” and “反过来就必须要求 `10:ASCII` 这种写法才行了”. [Typed enums r6→7](design/TypedEnums.md#using-an-enum-as-its-backing-value) supersedes the outbound conversion restriction and the source integer assertion restriction in the [r6 contract](https://github.com/complyue/cod-project/blob/9af5fcaf91bfe426f6ca9d0a23619048814b58d6/design/TypedEnums.md#declaration-and-value-identity). A declared backing-typed value position can consume the enum's code. An explicit `code:E` checks incoming member codes under the existing assertion failure rules. [Module graph r96](applications/cod-booter/docs/ModuleGraph.md#checking-the-native-package-probe) applies the outbound rule to a `u64` bound. [Idiomatic CoD r14](docs/IdiomaticCoD.md#ascii-members-in-a-byte-scanner) applies both decisions to the booter scanner. Registry r1307→1308, [P-658/P-659](design/DesignAuthorityRegistry.md#d-07-enum) and [P-740/P-741](design/DesignAuthorityRegistry.md#d-10-method-groups). Compiler delivery requires implementation evidence.
+
 ## 2026-11-25 — Investigate parser combinator library support
 
 <a id="h-parser-combinator-wip-20261125"></a>

@@ -1,8 +1,10 @@
 # Typed enums
 
-Design revision: 6 · 2026-11-25
+Design revision: 7 · 2026-11-25
 
 ## Design authority
+
+At r7 the [project user’s decision](../CHANGELOG.md#h-enum-backing-coercion-20261125) qualifies [D-07-ENUM](DesignAuthorityRegistry.md#d-07-enum), P-658/P-659, for implicit use of a member's backing value and explicit decoding with `code:E`. Check a runtime member, an alias, an invalid code and the raw-byte lexer workload. Nominal coverage and checked inbound C exchange continue from r6.
 
 The [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125) carries the r5 enum identity and member-lookup contract into method dispatch at r6 under [D-10-METHOD-GROUPS](DesignAuthorityRegistry.md#d-10-method-groups). Check a runtime member, an alternate spelling and a same-code value of a different enum against the public parameter domain. The generated C exchange keeps its existing contract.
 
@@ -35,7 +37,38 @@ This declares eight distinct values with codes 0 through 7. `OldRejected` is a *
 - The RHS of a name/identity alias must name an earlier member of this declaration. A chain resolves to one canonical member. It consumes no code and leaves the next automatic number unchanged. Reject duplicate spellings, independently declared equal codes, self/forward/cyclic references and names from another enum. A full enum can still add another spelling for an existing value.
 - The first declaring name identifies the canonical member in declaration metadata. Runtime values do not remember which spelling supplied them. Adding a spelling preserves codes and coverage. Removing a spelling can break source imports. Adding a distinct member can invalidate an exhaustive case. Published codes that must survive reordering should be explicit. These rules supply no default textual format, serialization policy or cross-version binary guarantee.
 
-An enum value has ordinary scalar `val` semantics and the size/alignment of its backing type on the current target. A stored slot, ref or ptr to an enum follows the usual owner, access and initialization rules. Enums can be bits fields and array elements in CoD lexical or regional storage. Equal backing bits alone grant no implicit conversion between integers or enums. Equality compares values of the same enum; both spellings of Rejected compare equal. No arithmetic, ordering, flags, indexing conversion, units or [fraction operations](FixedWidthFractions.md) follow from the backing type. Ordinary typed initialization must establish a declared member before a read. Zero-filled storage does not initialize a variable, and zero need not denote any member. A nominal sum with payloads retains its own allocation, constructors and tag matching.
+An enum value has ordinary scalar `val` semantics and the size/alignment of its backing type on the current target. A stored slot, ref or ptr to an enum follows the usual owner, access and initialization rules. Enums can be bits fields and array elements in CoD lexical or regional storage. Ordinary typed initialization must establish a declared member before a read. Zero-filled storage does not initialize a variable, and zero need not denote any member. A nominal sum with payloads retains its own allocation, constructors and tag matching.
+
+## Using an enum as its backing value
+
+Given `enum E:B`, a value of `E` implicitly supplies its declared integer code wherever
+a by-value `B` is required. This applies to runtime values and to constants. Assigning to a
+`B` value slot, returning from a function with result `B`, or passing an argument to a
+parameter of type `B` each supplies that code. In `byte == lf`, an existing `u8` operand
+and an `ASCII:u8` member can therefore be compared as bytes. Aliases yield the same code.
+A call with an exact enum overload uses ordinary exact-match priority. Given only the
+backing-typed overload, its body receives the prepared integer.
+
+The source enum retains its nominal type. Same-enum equality uses member identity,
+including aliases. Direct equality between unrelated enum domains retains its existing
+rejection. A caller can compare encodings by supplying the values to explicitly
+backing-typed slots. Integer values enter an enum through explicit checked decoding.
+The value coercion grants no writable view of enum storage through a backing-typed reference.
+See the [byte-oriented lexer example](../docs/IdiomaticCoD.md#ascii-members-in-a-byte-scanner).
+
+### Decoding an integer into an enum
+
+Use `10:ASCII` to obtain the member declared with code 10. A parameter or result expecting
+`ASCII` requires the caller or producer to write the conversion when supplying an integer.
+For an integer literal or a value of the backing type, compare its integer value to the
+declared codes. A sparse domain requires an exact member. Check before narrowing: with
+`lf = 10` in a `u8`-backed enum, `266:ASCII` is invalid. Aliases for 10 yield one member.
+
+Use the [existing assertion failure rules](SymbolicDynamicScope.md#nonnumeric-assertion-contract).
+A provably invalid code rejects statically. For a runtime byte, `byte:ASCII` evaluates
+the operand once, returns the matching member or raises the unchecked
+`TypeAssertionFailedError`. Preserve operand effects even when a proof removes the check.
+A native caller passing an invalid code follows the [generated C boundary](#generated-c-exchange).
 
 ## Names and case matching
 
@@ -55,7 +88,7 @@ func exit_status(ne:NativeError) -> u8 {
 
 Exporting the type publishes its complete member table. `using` and `import` may select individual spellings or `{..}` for all, following the existing [type selector grammar](DomainLanguageDesign.md#publishing-and-selecting-data-constructors). A selector is checked against that type, including old spellings. It introduces the selected names for ordinary expression lookup. Selecting the type alone still supplies its full definition for typed access and coverage. Unselected members do not become ordinary module names merely through publication of the type. Re-export preserves type and member identities. Multiple paths to the same definition retain one domain. Neither imports, adapters nor parallel module worlds may add codes or further member names to that definition. Ordinary method selection has its existing permissions.
 
-In an expression `name:E`, first resolve the visible type E and use ordinary lookup for the operand. A lexically bound value takes precedence, even if asserting it as E then fails. Only when the single identifier has no ordinary binding and E identifies a concrete enum may the checker resolve it in E's member table. An ambiguous or inaccessible name stays an error. For example, a local `Complete:u8` makes `Complete:NativeError` an integer-to-enum assertion that is statically impossible. With no such binding, it denotes member Complete. A bare `Complete` without an ordinary binding still fails. An expected argument or return type does not search for enum members. General `expr : E` retains [ordinary expression typing](SymbolicDynamicScope.md#nonnumeric-assertion-contract); a numeric code needs explicit domain decoding by the application or a checked native boundary.
+In an expression `name:E`, first resolve the visible type E and use ordinary lookup for the operand. A lexically bound value takes precedence, even if asserting it as E then fails. Only when the single identifier has no ordinary binding and E identifies a concrete enum may the checker resolve it in E's member table. An ambiguous or inaccessible name stays an error. For example, with a local `Complete:u8` equal to 1, `Complete:NativeError` decodes that byte and yields `Rejected`. With no such binding, the same expression denotes member `Complete`. A bare `Complete` without an ordinary binding still fails. An expected argument or return type does not search for enum members. An integer operand uses [explicit enum decoding](#decoding-an-integer-into-an-enum).
 
 In either member-pattern spelling, `OldRejected -> expr` or `(OldRejected) -> { expr }`, the static enum type of the subject supplies the member table. The token names a constant pattern; it introduces no variable and reads no shadowing local. A misspelling rejects. In `OldRejected | retryable() -> retry()`, the member test precedes the guard. If the guard declines, scanning continues. Names inside the guard and body use ordinary expression lookup. A member has no variant payload to receive. `isa` remains a type test. [Case semantics](DomainLanguageDesign.md#case-expressions-and-branch-local-variables) govern subject evaluation, source-order effects, guards, fallthrough and result completion. The explicit wildcard `_ -> throw;` raises `UnexpectedCaseError` when reached.
 
@@ -64,6 +97,11 @@ Coverage counts distinct canonical members of the complete declaration, independ
 ## Enum members in method heads
 
 In a [grouped method definition](SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch) a parameter declared `ne:NativeError` gives the pattern `(Rejected)` its enum domain. It matches the prepared argument whether the caller used `Rejected`, used `OldRejected`, or obtained the value at runtime. A local variable of either name cannot change the pattern's meaning. Two otherwise identical methods for the two spellings are duplicate definitions of one domain. The integer `1u8` and a member with code 1 in a different enum do not denote that domain. When complete coverage is required, count distinct members of the full enum. `case` continues to try its arms in source order. Method selection uses the unique most-specific applicable method across the selected family.
+
+When the public slot is instead the backing integer type, a lexically selected member in
+`=name` supplies its code in that slot. With `lf` selected from `ASCII:u8`, `(=lf)` and
+`(10u8)` denote the same singleton in a `u8` slot. Defining both with otherwise identical
+heads is a duplicate. An `ASCII` slot uses `(lf)` for its nominal member pattern.
 
 ## Generated C exchange
 

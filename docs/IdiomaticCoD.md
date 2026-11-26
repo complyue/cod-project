@@ -13,7 +13,8 @@ dependencies are identified where needed. For a compact reference to the source 
 
 ## Design authority
 
-Guide revision 13 applies the [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125)
+Guide revision 14 applies [enum backing coercion](../design/TypedEnums.md#using-an-enum-as-its-backing-value)
+to [ASCII members in a byte scanner](#ascii-members-in-a-byte-scanner). Revision 13 applies the [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125)
 to [tariff dispatch](#put-type-and-value-specializations-in-one-method-group) and [method arm boundaries](#use-canonical-source-form).
 It retains revision 12's [fixed receiver binding](../CHANGELOG.md#h-fixed-self-binding-20261125) in the member examples. Revision 11 applies the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) to direct calls and borrowed results. It continues the revision 10 guidance on the [confirmed OO source rules](../design/DomainLanguageDesign.md#product-storage-inheritance)
 and [direct-parent construction](../design/ConstructionAndAcquisition.md#initializing-the-storage-parent-of-a-product). It applies the [normal-completion rule](../CHANGELOG.md#h-normal-completion-20261124), the [single-directive import](../CHANGELOG.md#h-proc-import-identity-20261124) and the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
@@ -120,9 +121,9 @@ func handling_order(priority:Priority) -> u8 {
 name `Urgent`. The case heads resolve members through the subject's enum, so a same-spelled lexical
 variable does not change their patterns.
 
-The `u8` backing gives the enum a representation; it does not grant arithmetic, ordering or implicit
-integer conversion. The function states the application's ordering explicitly. Use a sum instead
-when a priority needs distinct payloads, such as a deadline belonging only to one alternative.
+A `Priority` value can supply its code to a `u8` result or parameter. `handling_order` gives
+`Urgent` the first handling position independently of its declared code. Use a sum when a
+priority needs distinct payloads, such as a deadline belonging only to one alternative.
 
 Member aliases retain one value identity, and coverage counts distinct members of the complete
 enum. Selecting only some member names does not reduce its domain. An exhaustive case makes each
@@ -131,6 +132,39 @@ policy, accepting that it also covers members added later.
 
 [Enum identity](../design/TypedEnums.md#declaration-and-value-identity) ·
 [Member names and case coverage](../design/TypedEnums.md#names-and-case-matching)
+
+### ASCII members in a byte scanner
+
+A character vocabulary can publish the ASCII codes it uses. This excerpt shows two members
+of the vocabulary:
+
+```cod
+export enum ASCII:u8 {
+    lf = 10;
+    hash = 35;
+}
+```
+
+The [booter's trivia scanner](../applications/cod-booter/src/Lexer.cod) reads raw bytes.
+In the scanner module, select both member names. Their codes let the scanner recognize two bytes
+while accepting every possible input byte:
+
+```cod
+using "./ASCII.cod" ASCII { lf, hash };
+
+func comment_after(byte:u8, was_in_comment:bool) -> bool of {
+    (=lf,   _)         => false;
+    (=hash, _)         => true;
+    (_,     keep:bool) => keep
+}
+```
+
+After `#`, an ordinary byte such as `255u8` keeps the comment open. CR also keeps it open;
+LF closes it. The same names work directly in the scanner's Boolean expression,
+`byte != lf && (comment || byte == hash)`. A method whose public parameter already has
+type `ASCII` can match `(lf)` through that enum's member table. To call it with code 10,
+write `10:ASCII`. A raw byte from a file uses `byte:ASCII` only when the consumer requires
+an ASCII member. The comment scanner can pass through any byte, including `255u8`.
 
 ## Make storage and access visible
 
