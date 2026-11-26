@@ -31,8 +31,6 @@ runner.CASES = {
     'print_null_literal': (query('perform @print(null in here)'),2,'','print requires one primitive scalar argument'),
     'print_void': (query('behave @print(empty())', 'func empty()->void{}'),2,'','print requires one primitive scalar argument'),
     'print_invalid_operand': (query('perform @print(true+1)'),2,'','no applicable numeric operation'),
-    'print_shadow': (IO+'func inspect(print:i64)->i64{val result<-make typeof({behave @print(1);7}){9};return result;}inspect(1);',
-                     2,'',"declaration conflicts with protected symbol name 'print'"),
     'valid_uninstalled_procedure': (query('perform @action(1u64)', 'symbol @action:proc(u64)->u64;'),0,'9\n',''),
     'valid_checked_procedure': (query('behave @action(1u64)', NPE+'symbol @action:proc(u64)->u64 throws NullPointerException;'),0,'9\n',''),
     'procedure_borrow_without_read': (query('perform @action(slot)', 'proc @action(ref input:i64 in O)->i64 where {owner O}{return input;}val slot<-make local i64;'),0,'9\n',''),

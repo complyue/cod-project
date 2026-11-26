@@ -3187,36 +3187,6 @@ class ScalarChecker {
     fail(at, std::move(message));
   }
 
-  void check_symbol_binding_header(const Form &form) const {
-    if (!form.symbolic && !form.operation) check_symbol_binding_name(form.name, form.at);
-    for (const auto &owner : form.owner_parameters) check_symbol_binding_name(owner.name, owner.at);
-    for (const auto &parameter : form.type_parameters) check_symbol_binding_name(parameter.name, parameter.at);
-    for (const auto &parameter : form.parameters) check_symbol_binding_name(parameter.name, parameter.at);
-  }
-
-  void check_symbol_binding_expression(const Expression &expr) const {
-    using K = Expression::Kind;
-    switch (expr.kind) {
-    case K::pointer:
-    case K::bare_ref_slot:
-    case K::alias:
-    case K::here_binding:
-    case K::region_binding:
-    case K::native_handle_binding:
-    case K::exception_binding:
-    case K::range_for:
-    case K::handler:
-      check_symbol_binding_name(expr.text, expr.at);
-      break;
-    default:
-      break;
-    }
-    if (expr.receiving)
-      for (const auto &item : expr.receiving->items)
-        if (item.operation.empty() || !item.declaration_kind.empty())
-          check_symbol_binding_name(item.name, item.at);
-  }
-
   LexicalState::Scope &declaration_scope(const std::string &name, const Location &at) {
     auto selected = lexical_.scopes.rbegin();
     while (!selected->declarations) {
@@ -3277,7 +3247,6 @@ class ScalarChecker {
   size_t bind(const std::string &name, const Type &type, const std::set<size_t> &targets,
               bool read_only, bool value_binding, bool fixed, const Location &at, std::optional<size_t> alias = {},
               bool source_declaration = true, LexicalState::InputFacts *callable_entry = nullptr) {
-    if (source_declaration) check_symbol_binding_name(name, at);
     auto &scope = declaration_scope(name, at);
     if (source_declaration) warn_shadow(name, at);
     const auto id = bindings_->size();
@@ -25866,17 +25835,12 @@ class ScalarChecker {
     std::map<const Form *, const Form *> parents;
     std::map<const Form *, size_t> method_ids;
     std::set<const Form *> installed_bodies;
-    // Collecting nested definitions does not introduce symbol names. At this
-    // point the namespace contains the explicit declarations and selections.
-    const bool check_protected_names = !module_names().symbols.empty();
     const auto collect = [&](auto &&self, const Expression &expr, const Form *parent, bool register_methods) -> void {
-      if (check_protected_names) check_symbol_binding_expression(expr);
       if (expr.kind == Expression::Kind::here_body && !expr.definition) {
         if (register_methods && !unsupported_here) unsupported_here = expr.at;
         register_methods = false;
       }
       if (expr.definition) {
-        if (check_protected_names) check_symbol_binding_header(*expr.definition);
         if (register_methods) {
           if (expr.kind == Expression::Kind::procedure_effect) installed_bodies.insert(expr.definition.get());
           else lexical_methods_.emplace(expr.definition.get(), 0);
@@ -25887,12 +25851,9 @@ class ScalarChecker {
       }
       for (const auto &child : expr.children) self(self, *child, parent, register_methods);
     };
-    for (const auto &form : forms) {
-      if (check_protected_names && (form->kind == Form::Kind::function || form->kind == Form::Kind::procedure))
-        check_symbol_binding_header(*form);
+    for (const auto &form : forms)
       if (form->body)
         collect(collect, *form->body, form->kind == Form::Kind::expression ? nullptr : form.get(), true);
-    }
     for (const auto *form : definitions) {
       const auto constructor = regional_initializer(*form, lexical_methods_.contains(form));
       for (const auto &parameter : form->parameters)

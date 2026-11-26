@@ -89,10 +89,6 @@ ERRORS = {
                         "duplicate declaration of catch parameter 'e'"),
     'nearest_noncallable': (MODULE + 'func f(target:u64)->u64{return target(1u64);}f(2u64);',
                            "nearest binding 'target' is not callable"),
-    'protected_symbol_parameter': ('symbol named:u64;func f(named:u64)->u64{return named;}',
-                                    "declaration conflicts with protected symbol name 'named'"),
-    'protected_symbol_owner': ('symbol O:u64;func f(ref x:u64 in O)->u64 where {owner O}{return x;}',
-                                "declaration conflicts with protected symbol name 'O'"),
 }
 
 

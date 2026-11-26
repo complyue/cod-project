@@ -31,8 +31,6 @@ CASES = {
     "recursive_result": ('func f(x:u64)->const bool { return g(x); } func g(x:u64)->const u64 { return if(x==0u64){1u64}else{f(x-1u64)}; } f(2u64);', 2, "", "return type"),
     "unreachable_definition": ('func unused(x:u64)->const bool { return x; }', 2, "", "return type"),
     "function_effect": (PRELUDE + 'func wrong()->void { behave @print(1u64); } wrong();', 2, "", "function cannot invoke a dynamic procedure"),
-    "protected_symbol_parameter": (PRELUDE + 'proc wrong(print:u64)->void { behave @print(1u64); } wrong(3u64);', 2, "",
-        "declaration conflicts with protected symbol name 'print'"),
     "nearest_callable": ('func f()->const u64 {return 1u64;} func g(f:u64)->const u64 {return f();} g(1u64);', 2, "", "nearest binding 'f' is not callable"),
     "local_storage": ('proc go()->void { val x<-1u64; return; } go();', 0, "", ""),
     "unselected_throws_type": ('func f(x:T)->const T throws StaticallyUnknownTypeException where T { return x; } f(1u64);', 2, "", "throws contracts"),

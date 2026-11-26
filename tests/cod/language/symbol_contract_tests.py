@@ -33,22 +33,8 @@ runner.CASES = {
     'recursive_definition_context': (IO + 'proc outer()->void{proc p(n:u64)->void{'
         'if(n==0u64){behave @print(16u64);}else{{{val local_value<-0u64;p(n-1u64);}}};return;};p(2u64);return;}outer();', 0, '16\n', ''),
     'queried_anonymous_result': (IO + SYMBOL + 'val x<-make local typeof((func(){return @gain;})()){17u64};behave @print(x);', 0, '17\n', ''),
-    'queried_anonymous_shadow': (SYMBOL + 'func outer(gain:u64){val x<-make typeof((func(){return @gain;})()){0u64};return x;}outer(1u64);',
-        2, '', PROTECTED + " 'gain'"),
-    'queried_nested_shadow': (SYMBOL + 'func outer(gain:u64){func inner(){val x<-make typeof((func(){return @gain;})()){0u64};return x;};return inner();}outer(1u64);',
-        2, '', PROTECTED + " 'gain'"),
     'explicit_query_avoids_body_lookup': (IO + SYMBOL + 'func outer(input:u64){func inner(){'
         'val x<-make typeof((func()->u64{return @gain;})()){18u64};return x;};return inner();}behave @print(outer(1u64));', 0, '18\n', ''),
-    'closure_shadowed_symbol': (IO + 'proc outer(print:u64)->void{proc inner=proc()->void{behave @print(1u64);};inner();}outer(1u64);',
-        2, '', PROTECTED + " 'print'"),
-    'nested_closure_shadowed_symbol': (IO + 'proc outer(print:u64)->void{proc middle=proc()->void{proc inner=proc()->void{behave @print(1u64);};inner();};middle();}outer(1u64);',
-        2, '', PROTECTED + " 'print'"),
-    'closure_shadowed_query': (SYMBOL + 'func outer(gain:u64)->u64{func inner(){val x<-make typeof(@gain){0u64};return x;};return inner();}outer(1u64);',
-        2, '', PROTECTED + " 'gain'"),
-    'lexical_self_shadows_symbol': ('using symbol "std:io" @print as @p;proc outer()->void{proc p()->void{behave @p(1u64);};p();}outer();',
-        2, '', PROTECTED + " 'p'"),
-    'owner_shadows_symbol': (SYMBOL + 'func f(ref x:u64 in gain)->u64 where {owner gain}{val y<-make typeof(@gain){0u64};return y;}val x<-1u64;f(x);',
-        2, '', PROTECTED + " 'gain'"),
     'unknown_symbol': ('val x<-make local typeof(@missing){0u64};', 2, '', "unknown symbol 'missing'"),
     'duplicate_symbol': ('symbol gain:u64;symbol @gain:u64;', 2, '', 'duplicate symbol binding'),
     'bare_symbol_is_not_payload': (SYMBOL + 'val x<-gain;', 2, '', 'materialization of a compile-time symbol object'),
@@ -60,28 +46,12 @@ runner.CASES = {
     'same_scope_callable_boundary': ('symbol p:proc(u64)->const u64;proc p(x:u64)->const u64{return x;}', 2, '', PROTECTED + " 'p'"),
     'bodyless_callable_boundary': ('symbol p:proc(u64)->const u64;proc p(x:u64)->const u64;', 2, '', PROTECTED + " 'p'"),
     'type_namespace_boundary': ('using "std:exceptions" MissingReturnError;symbol MissingReturnError:u64;', 2, '', 'symbol declaration conflicts with type name'),
-    'value_namespace_boundary': (SYMBOL + 'val gain<-0u64;', 2, '', PROTECTED + " 'gain'"),
-    'renamed_symbol_blocks_unused_parameter': ({
-        'vocabulary.cod': 'export symbol @gain:u64;',
-        'facade.cod': 'export from "./vocabulary.cod" var @gain as @rate;',
-        'main.cod': 'symbol from "./facade.cod" @rate as @credit;\n'
-            'func unused(credit:u64)->u64{return 7u64;}',
-    }, 2, '', 'vocabulary.cod::@gain'),
     'distinct_local_keeps_symbol_visible': (IO + SYMBOL + '{{val observed<-0u64;}};val x<-make typeof(@gain){19u64};behave @print(x);',
         0, '19\n', ''),
-    'deferred_outer_shadow': (IO + 'proc outer(print:u64)->void{proc inner=proc()->void{defer behave @print(1u64);};inner();}outer(1u64);',
-        2, '', PROTECTED + " 'print'"),
 }
-for name, expression in {
-    'read': '@gain;', 'query': 'val x<-make typeof(@gain){0u64};',
-    'install': 'effect @gain<-1u64;', 'own_family_install': 'effect @gain;',
-    'touch': 'touch @gain;', 'behave': 'behave @gain(1u64);', 'perform': 'perform @gain(1u64);',
-}.items():
-    runner.CASES['nearest_'+name] = (SYMBOL + 'proc f(gain:u64)->void{'+expression+'}f(1u64);',
-        2, '', PROTECTED + " 'gain'")
 runner.CASE_ARGUMENTS = {}
 runner.CASE_SHADOWS = {}
-runner.CASE_LOCATIONS = {'renamed_symbol_blocks_unused_parameter': (2, 13)}
+runner.CASE_LOCATIONS = {}
 runner.EXTRA_SOURCES = [Path(__file__)]
 
 expect_source_rejections(runner, (

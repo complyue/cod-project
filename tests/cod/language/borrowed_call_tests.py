@@ -20,8 +20,6 @@ runner.CASES = {
     'unknown_parameter_owner': ('proc f(x:i64 in O)->void{}', 2, '', 'unknown parameter owner'),
     'unknown_result_owner': ('func f(x:i64)->ref i64 in O{return x;}', 2, '', 'unknown result owner'),
     'owner_is_not_value': ('func f(x:i64 in O)->const i64 where {owner O}{return O;}', 2, '', 'owner binding'),
-    'owner_shadows_symbol': ('using symbol "std:io" @print as @O;proc f(x:i64 in O)->void where {owner O}{behave @O(1);}',
-        2, '', "declaration conflicts with protected symbol name 'O' (canonical std:io::@print)"),
     'owner_duplicate_parameter': ('proc f(O:i64 in O)->void where {owner O}{}', 2, '', 'duplicate declaration'),
     'readonly_argument': ('proc f(x:i64 in O)->void where {owner O}{}const val a<-1;f(a);', 2, '', 'readonly argument'),
     'readonly_parameter': ('proc f(x:const i64 in O)->void where {owner O}{x<-1;}', 2, '', 'readonly destination'),

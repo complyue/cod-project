@@ -2936,81 +2936,9 @@
     "stdout": "13\n60\n8\n110\n"
   },
   {
-    "file": "symbol-lookup-read.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "declaration conflicts with protected symbol name 'gain'"
-  },
-  {
-    "file": "symbol-lookup-effect.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "declaration conflicts with protected symbol name 'gain'"
-  },
-  {
-    "file": "symbol-lookup-touch.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "declaration conflicts with protected symbol name 'gain'"
-  },
-  {
-    "file": "symbol-lookup-perform.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "declaration conflicts with protected symbol name 'task'"
-  },
-  {
-    "file": "symbol-lookup-behave.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "declaration conflicts with protected symbol name 'task'"
-  },
-  {
-    "file": "symbol-lookup-defer.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "declaration conflicts with protected symbol name 'task'"
-  },
-  {
-    "file": "symbol-lookup-inline-effect.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "declaration conflicts with protected symbol name 'task'"
-  },
-  {
-    "file": "symbol-lookup-query.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "declaration conflicts with protected symbol name 'gain'"
-  },
-  {
-    "file": "symbol-lookup-capture.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "declaration conflicts with protected symbol name 'gain'"
-  },
-  {
-    "file": "symbol-lookup-loop.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "declaration conflicts with protected symbol name 'gain'"
-  },
-  {
     "file": "symbol-lookup.cod",
     "exit": 0,
     "stdout": "10\n7\n7\n7\n99\n7\n"
-  },
-  {
-    "file": "symbol-lookup-owner.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "declaration conflicts with protected symbol name 'O'"
-  },
-  {
-    "file": "symbol-lookup-owner-capture.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "declaration conflicts with protected symbol name 'O'"
   },
   {
     "file": "owner-binding-rebind.cod",
