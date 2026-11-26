@@ -392,7 +392,8 @@ class BodyExtraction {
       auto &outlined = *body_.outline;
       const auto &supplier = extraction_.bodies_.at(outlined.supplier).instance;
       const auto &source = supplier.bindings.at(original.binding);
-      const bool array = source.type.kind == Type::array;
+      const bool live_view = source.type.kind == Type::array ||
+          (supplied_body() && source.type.kind == Type::product && declarations().bits_payload(source.type));
       const bool handle = source.type.kind == Type::native_handle && !source.type.owned;
       const bool text = source.type == Type::string && source.read_only;
       const bool incoming_loan = (handle || text) && original.place && original.owner > first_symbol_owner &&
@@ -401,8 +402,8 @@ class BodyExtraction {
                    input.mode == (handle ? ArgumentMode::borrowed_handle : ArgumentMode::borrowed_ref);
           });
       expect(!source.nullable &&
-             (array || incoming_loan || (scalar_type(source.type) && (source.value_binding || source.fixed))),
-             expr.at, "replacement seed needs a stable scalar place, array view or incoming text or handle loan in a lexical capture");
+             (live_view || incoming_loan || (scalar_type(source.type) && (source.value_binding || source.fixed))),
+             expr.at, "replacement seed needs an admitted scalar place, bits view or incoming text or handle loan in a lexical capture");
       if (outlined.handler && scalar_type(source.type))
         expect(source.read_only || (source.fixed && source.requires_initialized), expr.at,
                "replacement seed needs a readonly scalar or fixed scalar reference capture in a live handler");
@@ -421,9 +422,9 @@ class BodyExtraction {
       parameter.owner = outlined.owner_parameters.at(role).name;
       parameter.read_only = source.read_only;
       parameter.fixed_binding = true;
-      // A borrowed array can live in a mutable supplier slot. Read that slot
+      // A borrowed array or product can live in a mutable supplier slot. Read that slot
       // at execution, while keeping the outlined body's own access target-only.
-      if (array && !source.value_binding) {
+      if (live_view && !source.value_binding) {
         parameter.caller_place = Parameter::CallerPlace::reference_slot;
         if (outlined.handler) parameter.fixed_binding = source.fixed;
       }
