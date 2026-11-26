@@ -87,6 +87,8 @@ For each enum assertion a command needs, bind its site, source revision and nomi
 
 The declaration and provider checks can validate these facts using source inputs alone. Object checking consumes the selection and the checked operand. Emission evaluates a dynamic operand once and tests actual membership, including gaps in a sparse enum. Failure raises `TypeAssertionFailedError` through ordinary cleanup. Application reads completed facts and has no interface for traversing the body again. Verify `10:ASCII`, a dynamic byte of 255, lexical shadowing, nominal identity, an operand with an observable effect and preserved outputs on static rejection. [ASCII delivery](../../../design/ImplementationArchitecture.md#delivering-ascii-to-the-booter-scanner)
 
+The linked Linux acceptance covers bundled ASCII and a sparse local enum with an alias. A lexical byte named `ESC` supplies the operand, a same-code value from another enum rejects, and a failed operand retains its original failure. The byte producer runs once in both the normal and invalid-code cases, and cleanup runs before the caller's catch. Positive signed-integer overflow aliases are rejected before narrowing. Negative expression spelling has its own reader boundary.
+
 ## Design from compiler work
 
 A lexer classifies source spans; a parser constructs typed syntax; an analyzer establishes identities, resolves selected definitions and checks demanded operations. Represent those results in CoD's own data and methods. Keep LLVM objects at native emission boundaries rather than putting LLVM pointers into syntax or semantic records.
