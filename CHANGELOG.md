@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Use ordered array views for a single-owner catalog callback
+
+<a id="k-seed-pipeline-ordered-catalog-loans-20261126"></a>
+**K-SEED-PIPELINE-ORDERED-CATALOG-LOANS-20261126.** [D-ARCH-REVIEW r215→216](design/ImplementationArchitecture.md#ordered-array-loans-from-one-native-owner) continues P-682/P-683 and the [r214 synchronous callback review](#k-seed-pipeline-path-key-callback-20261125). At `33362b65` the [catalog declaration](https://github.com/complyue/cod-project/blob/33362b65/applications/cod-booter/src/NativeCatalog.cod#L7) offers two nominal arrays under one owner. The [existing LLVM bridge](https://github.com/complyue/cod-project/blob/33362b65/cod/lang_llvm.hh#L1272) already passes each typed array view and their common owner. The replacement producer may use that ordered interface for direct and forwarded synchronous calls. Execution coverage is reported separately.
+
 ## 2026-11-26 — Ship the production parser library and its DBMR grammar
 
 <a id="h-production-parser-bundle-20261126"></a>
