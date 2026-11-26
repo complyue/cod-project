@@ -1,7 +1,7 @@
 //===--- lang_seed_bodies.hh - Extract executable seed bodies ---------===//
 #pragma once
 
-#include "lang_checked.hh"
+#include "lang_declarations.hh"
 
 #include <numeric>
 #include <variant>
@@ -80,7 +80,7 @@ struct BodyDependencies {
 
 class BodyExtraction {
   using Allocator = CheckedOperation::ArrayAllocator;
-  using Declarations = ScalarChecker::ModuleDeclarations;
+  using Declarations = ModuleBinder::ModuleDeclarations;
   using SymbolBindings = BodyDependencies::Bindings;
 
   struct BoundCall {
@@ -222,7 +222,7 @@ class BodyExtraction {
 
   static const CheckedOperation &add_operation(CheckedInstance &instance, const Expression &expr, CheckedOperation op) {
     const auto [row, first] = instance.operations.emplace(&expr, std::move(op));
-    if (!first) throw std::logic_error("replacement seed produced an operation twice");
+    if (!first) throw std::logic_error("seed produced an operation twice");
     return row->second;
   }
 
@@ -237,7 +237,7 @@ class BodyExtraction {
       output.arms.push_back(type);
       if (type == Type::never) continue;
       expect(type == Type::void_type || scalar_type(type),
-             arm.site->at, "replacement seed needs case arms with void or independent scalar results");
+             arm.site->at, "seed needs case arms with void or independent scalar results");
       expect(output.type == Type::never || output.type == type, arm.site->at, "case arms require one result type");
       output.type = type;
       output.scalar_value_join |= known && known->view;
@@ -277,7 +277,7 @@ class BodyExtraction {
   static void apply_case_return(CheckedInstance &instance, const CaseReturn &pending, const CaseResult &completed) {
     const auto &result = *instance.result.type;
     expect(scalar_type(completed.type) && transfers_value(completed.type, result),
-           pending.input.site->at, "replacement seed needs an admitted value transfer");
+           pending.input.site->at, "seed needs an admitted value transfer");
     auto operation = apply_case(instance, pending.input, completed);
     add_operation(instance, *pending.input.site, std::move(operation));
     add_operation(instance, *pending.site, value_return(result));
@@ -289,16 +289,16 @@ class BodyExtraction {
     expect(!contract.labelled && !contract.inputs.empty() && contract.here.empty() &&
            !contract.feedback && !contract.throws_root && contract.throws_categories.empty() &&
            !contract.result.owner && contract.result.mode == ArgumentMode::value && scalar_type(contract.result.type),
-           at, "replacement seed needs ordered here offers and independent scalar feedback");
+           at, "seed needs ordered here offers and independent scalar feedback");
     std::optional<size_t> owner;
     for (const auto &offer : contract.inputs) {
       if (offer.mode == ArgumentMode::value && !offer.owner && scalar_type(offer.type)) continue;
       expect(offer.type.kind == Type::array && offer.mode == ArgumentMode::borrowed_ref &&
              offer.read_only && offer.owner && *offer.owner && (!owner || owner == offer.owner),
-             at, "replacement seed needs independent scalar offers or readonly arrays from one established here owner");
+             at, "seed needs independent scalar offers or readonly arrays from one established here owner");
       owner = offer.owner;
     }
-    expect(owner.has_value(), at, "replacement seed needs an established here input owner");
+    expect(owner.has_value(), at, "seed needs an established here input owner");
     return *owner;
   }
 
@@ -340,7 +340,7 @@ class BodyExtraction {
             method.result.owns_region() || (method.result.mode == ResultMode::value &&
               (scalar_type(*method.result.type) || method.result.type == Type::void_type)) :
             allow_omitted_void && !source.c_linkage && method.here.empty() && method.result.mode == ResultMode::value),
-           at, "replacement seed needs a fixed ordinary callable body");
+           at, "seed needs a fixed ordinary callable body");
     const auto [row, first] = selected_.try_emplace(method_id, bodies_.size());
     if (first) {
       auto &instance = bodies_.emplace_back().instance;
@@ -364,7 +364,7 @@ class BodyExtraction {
     expect(outline.source->supplied_group && !site.scoped && site.receiving &&
            site.receiving->shape == ReceivingHeader::Shape::ordered && !site.receiving->from_for &&
            site.definition->parameters.size() == offers.size(),
-           site.at, "replacement seed needs a single-brace here body receiving every offer in order");
+           site.at, "seed needs a single-brace here body receiving every offer in order");
     outline.parameters = site.definition->parameters;
     outline.owners.push_back(outline.here->owner);
     const std::string handed_owner = "$here.owner.0";
@@ -373,7 +373,7 @@ class BodyExtraction {
       auto &parameter = outline.parameters[i];
       expect(parameter.type == Type::void_type && parameter.declaration_kind.empty() && parameter.owner.empty() &&
              !parameter.read_only && !parameter.fixed_binding, parameter.at,
-             "replacement seed needs an inferred here reception");
+             "seed needs an inferred here reception");
       const auto &offer = offers[i];
       parameter.type = offer.type;
       parameter.read_only = offer.read_only;
@@ -439,7 +439,7 @@ class BodyExtraction {
     Local declare(const Location &at, const std::string &name, const Type &type, bool value,
                   bool read_only, bool fixed, size_t owner, bool input = false, bool capture = false) {
       expect(std::ranges::find(owners(), name, &OwnerParameter::name) == owners().end(),
-             at, "replacement seed has no lexical shadow of an owner name");
+             at, "seed has no lexical shadow of an owner name");
       const auto id = body_.instance.bindings.size();
       auto &binding = body_.instance.bindings.emplace_back(type, read_only, value, fixed);
       binding.requires_initialized = !value;
@@ -448,7 +448,7 @@ class BodyExtraction {
       auto &scope = capture ? scopes_.front() : scopes_.back();
       const Local local{id, place, owner};
       const auto inserted = scope.names.emplace(name, local).second;
-      expect(inserted, at, "duplicate name in the replacement seed frame");
+      expect(inserted, at, "duplicate name in the seed frame");
       return local;
     }
 
@@ -456,7 +456,7 @@ class BodyExtraction {
       const auto &parameters = owners();
       const auto found = std::ranges::find(parameters, name, &OwnerParameter::name);
       expect(found != parameters.end() && !found->root && !found->explicit_parameter,
-             at, "replacement seed needs an input-bound owner");
+             at, "seed needs an input-bound owner");
       return static_cast<size_t>(found - parameters.begin());
     }
 
@@ -488,7 +488,7 @@ class BodyExtraction {
 
     void confirm_intrinsic(const Expression &expr, const std::string &name) const {
       expect(expr.intrinsic || (!family(name) && !find(name) && !names().native_operations.contains(name)),
-             expr.at, "replacement seed needs a builtin operation without an unresolved override");
+             expr.at, "seed needs a builtin operation without an unresolved override");
     }
 
     const CheckedOperation &operand(const Expression &expr, size_t index) {
@@ -510,7 +510,7 @@ class BodyExtraction {
 
     static void takes_value(const CheckedOperation &value, const Type &to, const Location &at) {
       expect(scalar_type(value.type) && transfers_value(value.type, to),
-             at, "replacement seed needs an admitted value transfer");
+             at, "seed needs an admitted value transfer");
     }
 
     bool ordinary_loan(const Parameter &parameter, ArgumentMode mode, const Type &type) const {
@@ -531,13 +531,13 @@ class BodyExtraction {
     }
 
     static size_t single_owner(const CheckedOperation &view, const Location &at) {
-      expect(view.view && view.owners.size() == 1, at, "replacement seed needs a view with one established owner");
+      expect(view.view && view.owners.size() == 1, at, "seed needs a view with one established owner");
       return *view.owners.begin();
     }
 
     void check_slot(const CheckedOperation &operation, const Location &at) const {
       expect(operation.binding && !body_.instance.bindings.at(*operation.binding).value_binding &&
-             !operation.fixed_binding, at, "replacement seed needs a writable lexical reference slot");
+             !operation.fixed_binding, at, "seed needs a writable lexical reference slot");
     }
 
     void bind_input(const Parameter &parameter, const Type &type, bool capture = false) {
@@ -547,7 +547,7 @@ class BodyExtraction {
       expect(!parameter.not_init_ref && !parameter.variadic && !parameter.automatic_conversion &&
              (!parameter.selects_caller_place() || slot) &&
              (mode == ArgumentMode::value ? scalar_type(type) : native_handle || ordinary_loan(parameter, mode, type)),
-             parameter.at, "replacement seed needs a fixed scalar, array, bits aggregate, text or native handle formal");
+             parameter.at, "seed needs a fixed scalar, array, bits aggregate, text or native handle formal");
       auto &frame = body_.instance.frame;
       const auto owner = parameter.owner.empty() ? size_t{0} : input_owner(owner_role(parameter.owner, parameter.at));
       if (owner) frame.owners.try_emplace(owner, frame.inputs.size());
@@ -578,12 +578,12 @@ class BodyExtraction {
       expect(!source.nullable &&
              (live_view || builder || lexical_text || incoming_loan ||
               (scalar_type(source.type) && (source.value_binding || source.fixed))),
-             expr.at, "replacement seed needs an admitted scalar place, bits view, builder or incoming text or handle loan in a lexical capture");
+             expr.at, "seed needs an admitted scalar place, bits view, builder or incoming text or handle loan in a lexical capture");
       if (outlined.handler && scalar_type(source.type))
         expect(source.read_only || (source.fixed && source.requires_initialized), expr.at,
-               "replacement seed needs a readonly scalar or fixed scalar reference capture in a live handler");
+               "seed needs a readonly scalar or fixed scalar reference capture in a live handler");
       expect(!original.owner || original.owner > first_symbol_owner, expr.at,
-             "replacement seed has no capture of a locally owned region view");
+             "seed has no capture of a locally owned region view");
       const auto known = std::ranges::find(outlined.owners, original.owner);
       const auto role = static_cast<size_t>(known - outlined.owners.begin());
       if (known == outlined.owners.end()) {
@@ -614,20 +614,20 @@ class BodyExtraction {
         const auto found = body_.outline->visible.find(expr.text);
         if (found != body_.outline->visible.end()) {
           const auto *source = std::get_if<Local>(&found->second);
-          expect(source, expr.at, "replacement seed needs a direct lexical procedure call");
+          expect(source, expr.at, "seed needs a direct lexical procedure call");
           bind_capture(expr, *source);
           binding = find(expr.text);
         }
       }
       if (!binding) {
         expect(!here_.contains(expr.text) && (!body_.outline || !body_.outline->visible_here.contains(expr.text)),
-               expr.at, "replacement seed needs a direct here invocation");
+               expr.at, "seed needs a direct here invocation");
         const auto selected = names().enum_members.find(expr.text);
-        expect(selected != names().enum_members.end(), expr.at, "replacement seed needs a bound operand");
+        expect(selected != names().enum_members.end(), expr.at, "seed needs a bound operand");
         return checked_enum_literal(declarations(), selected->second);
       }
       const auto *local = std::get_if<Local>(binding);
-      expect(local, expr.at, "replacement seed needs a direct lexical procedure call");
+      expect(local, expr.at, "seed needs a direct lexical procedure call");
       auto op = place_operand(body_.instance, *local);
       if (op.type.kind == Type::native_handle && op.type.owned) {
         op.type.owned = false;
@@ -645,7 +645,7 @@ class BodyExtraction {
       if (!body_.outline) return nullptr;
       const auto found = body_.outline->visible_here.find(expr.text);
       if (found == body_.outline->visible_here.end()) return nullptr;
-      expect(supplied_body(), expr.at, "replacement seed has no here formal capture in a lexical procedure");
+      expect(supplied_body(), expr.at, "seed has no here formal capture in a lexical procedure");
       auto &here = *body_.outline->here;
       const auto &source = found->second;
       expect(source.owner == here.owner, expr.at, "borrowed here input has a different actual owner from its contract");
@@ -686,9 +686,9 @@ class BodyExtraction {
 
     void supply_here(const Expression &call, const CheckedHereContract &contract, const Type &receiving_result,
                      size_t owner, CheckedOperation &operation) {
-      expect(!body_.outline, call.at, "replacement seed does not supply a here body from an outlined body");
+      expect(!body_.outline, call.at, "seed does not supply a here body from an outlined body");
       const auto &site = *call.children.back();
-      expect(bool(site.definition), site.at, "replacement seed needs a supplied here definition");
+      expect(bool(site.definition), site.at, "seed needs a supplied here definition");
       auto outlined = outline(*site.definition);
       outlined.here = HereSupply{&call, receiving_result, owner, {}, {}};
       const auto target = extraction_.bodies_.size();
@@ -714,7 +714,7 @@ class BodyExtraction {
       }
       std::vector<Type> types;
       for (const auto &arg : expr.children) types.push_back(extract(*arg).type);
-      expect(eager_operation(expr.text), expr.at, "replacement seed needs a supported scalar operator");
+      expect(eager_operation(expr.text), expr.at, "seed needs a supported scalar operator");
       confirm_intrinsic(expr, expr.text);
       const auto types_resolved = eager_types(expr.text, types);
       if (!types_resolved.error.empty()) fail(expr.at, types_resolved.error);
@@ -738,7 +738,7 @@ class BodyExtraction {
       // certify the equality of the selected owner words.
       expect(!is_symbol_owner(first->second, declarations().symbols.size()) &&
              !is_symbol_owner(owner, declarations().symbols.size()), at,
-             "replacement seed needs separate C owner roles for dynamic handle loans");
+             "seed needs separate C owner roles for dynamic handle loans");
       if (first->second != owner) fail(at, "C arguments for one owner need the same actual owner");
     }
 
@@ -764,9 +764,9 @@ class BodyExtraction {
 
     void require_owning_symbol(const Expression &expr, size_t id) const {
       const auto &symbol = declarations().symbols.at(id);
-      expect(!supplied_body(), expr.at, "replacement seed has no owning dynamic effects in a supplied body");
+      expect(!supplied_body(), expr.at, "seed has no owning dynamic effects in a supplied body");
       if (symbol.reference || !symbol.type || symbol.type->kind != Type::native_handle || !symbol.type->owned)
-        implementation_gap(expr.at, "replacement seed needs an owning native handle " + symbol_name(expr, symbol));
+        implementation_gap(expr.at, "seed needs an owning native handle " + symbol_name(expr, symbol));
     }
 
     const CheckedOperation &native_operand(const Expression &expr, size_t index, const Type &formal) {
@@ -788,7 +788,7 @@ class BodyExtraction {
     const Type &reference_target(const Expression &expr, size_t id) const {
       const auto target = extraction_.reference_targets_.find(id);
       if (target == extraction_.reference_targets_.end())
-        implementation_gap(expr.at, "replacement seed needs a unique concrete builder target for borrowed " +
+        implementation_gap(expr.at, "seed needs a unique concrete builder target for borrowed " +
             symbol_name(expr, declarations().symbols.at(id)));
       return target->second;
     }
@@ -796,7 +796,7 @@ class BodyExtraction {
     CheckedOperation scalar_symbol(const Expression &source, size_t id) const {
       const auto &symbol = declarations().symbols.at(id);
       expect(!symbol.reference && symbol.type && scalar_type(*symbol.type), source.at,
-             "replacement seed needs a scalar symbolic binding");
+             "seed needs a scalar symbolic binding");
       CheckedOperation op;
       op.symbol = id;
       if (source.kind != Kind::touch) op.type = *symbol.type;
@@ -877,7 +877,7 @@ class BodyExtraction {
           fail(expr.children[i]->at, "text byte offset must have type u64");
       if (access == BuiltinOperation::text_slice) {
         expect(!in_iteration_ && !supplied_body(), expr.at,
-               "replacement seed needs a text slice owned by the enclosing full scope");
+               "seed needs a text slice owned by the enclosing full scope");
         op.view = op.read_only = true;
         op.owners.insert(0);
         op.lexical_allocation = CheckedOperation::LexicalAllocation{0, CheckedOperation::LexicalAllocation::text_slice};
@@ -941,7 +941,7 @@ class BodyExtraction {
       const auto &callable = *expr.children.front();
       const auto &source = *callable.definition;
       expect(!body_.outline && body_.instance.result.type && !source.case_scan_scope && source.parameters.empty(), expr.at,
-             "replacement seed needs an ordinary intermediate full-scope statement");
+             "seed needs an ordinary intermediate full-scope statement");
       const auto callee = extraction_.bodies_.size();
       extraction_.add_outline(outline(source), {});
       auto &target = extraction_.bodies_.at(callee);
@@ -998,7 +998,7 @@ class BodyExtraction {
                            std::vector<const CheckedOperation *> &operands) {
       expect(!expr.has_here_body() && std::ranges::none_of(expr.children, [](const auto &operand) {
         return operand->spread || operand->checked_ref_argument || operand->kind == Kind::named_argument;
-      }), expr.at, "replacement seed needs positional operands for an ordinary overload");
+      }), expr.at, "seed needs positional operands for an ordinary overload");
       const auto definition = [&](size_t id) -> const CheckedMethod & {
         return extraction_.declarations_.method(id);
       };
@@ -1013,14 +1013,14 @@ class BodyExtraction {
       for (const auto id : family.methods) {
         const auto &method = definition(id);
         expect(std::ranges::none_of(method.input_parameters(), &Parameter::variadic),
-               expr.at, "replacement seed needs fixed ordinary overload inputs");
+               expr.at, "seed needs fixed ordinary overload inputs");
         if (method.here.empty() && method.parameters.size() == expr.children.size()) candidates.push_back(id);
       }
       if (candidates.empty()) fail(expr.at, "no method with the written arity for " + call_name());
       for (const auto id : candidates) {
         const auto &method = definition(id);
         expect(fixed_overload_inputs(method, method), expr.at,
-               "replacement seed needs fixed ordinary overload inputs");
+               "seed needs fixed ordinary overload inputs");
       }
 
       // Common preparation makes the same view/access checks apply to every
@@ -1042,7 +1042,7 @@ class BodyExtraction {
       const auto &first = definition(candidates.front());
       for (const auto id : std::span(candidates).subspan(1))
         expect(fixed_overload_inputs(definition(id), first), expr.at,
-               "replacement seed needs possibly applicable overloads with common input modes, access and owner roles");
+               "seed needs possibly applicable overloads with common input modes, access and owner roles");
       for (const bool widening : {false, true}) {
         std::vector<size_t> applicable;
         for (const auto id : candidates)
@@ -1105,7 +1105,7 @@ class BodyExtraction {
       const auto *selected = family(expr.text);
       expect(!expr.intrinsic && !visible_local(expr.text) && selected && !selected->symbol &&
              !selected->methods.empty() && selected->declarations.empty(),
-             expr.at, "replacement seed needs an unambiguous ordinary source call");
+             expr.at, "seed needs an unambiguous ordinary source call");
       std::vector<const CheckedOperation *> operands;
       const auto method_id = selected->methods.size() == 1 ? selected->methods.front() :
           select_overload(expr, *selected, operands);
@@ -1132,7 +1132,7 @@ class BodyExtraction {
         if (current_symbol)
           expect(target.result.type && !region_receiver && target.here.empty() &&
                  !parameter.selects_caller_place() && (mode == ArgumentMode::borrowed_read || mode == ArgumentMode::borrowed_ref),
-                 source.at, "replacement seed needs a direct ordinary borrow of the current reference symbol");
+                 source.at, "seed needs a direct ordinary borrow of the current reference symbol");
         if (mode == ArgumentMode::value) takes_value(arg, formal, expr.children[i]->at);
         else {
           const auto &at = expr.children[i]->at;
@@ -1143,7 +1143,7 @@ class BodyExtraction {
                  !parameter.not_init_ref && (!parameter.selects_caller_place() || parameter.selects_caller_ref_slot()) &&
                  (native_handle || ordinary_loan(parameter, mode, formal)) && arg.type == formal &&
                  (parameter.read_only || !arg.read_only),
-                 at, "replacement seed needs the declared ordinary borrow and access");
+                 at, "seed needs the declared ordinary borrow and access");
           if (parameter.selects_caller_ref_slot()) check_slot(arg, at);
           const auto owner = single_owner(arg, at);
           if (native_handle && !role->read_only && const_input_owner(owner))
@@ -1152,7 +1152,7 @@ class BodyExtraction {
             fail(at, "const owner cannot supply a writable builder owner");
           const auto [first, inserted] = actual_owners.emplace(static_cast<size_t>(role - roles.begin()), owner);
           expect(inserted || (!current_symbol && !is_symbol_owner(first->second, declarations().symbols.size())),
-                 at, "replacement seed needs a separate ordinary owner role for a current reference symbol");
+                 at, "seed needs a separate ordinary owner role for a current reference symbol");
           expect(inserted || first->second == owner, at, "one formal owner needs the same actual owner");
         }
         op.arguments.push_back({mode, formal, parameter.selects_caller_ref_slot(), {}, current_symbol});
@@ -1193,9 +1193,9 @@ class BodyExtraction {
         expect(!parameter.here && !parameter.variadic && !parameter.automatic_conversion &&
                !parameter.selects_caller_place() && parameter.owner.empty() && !parameter.not_init_ref &&
                (parameter.declaration_kind.empty() || parameter.declaration_kind == "val"),
-               parameter.at, "replacement seed needs independent lexical procedure inputs");
+               parameter.at, "seed needs independent lexical procedure inputs");
         parameter.type = resolve_annotation(parameter.type, parameter.at);
-        expect(scalar_type(parameter.type), parameter.at, "replacement seed needs a scalar lexical procedure input");
+        expect(scalar_type(parameter.type), parameter.at, "seed needs a scalar lexical procedure input");
       }
     }
 
@@ -1205,15 +1205,15 @@ class BodyExtraction {
              !source.operation && !source.c_linkage && !source.symbolic && !source.explicit_captures &&
              source.owner_parameters.empty() && source.type_parameters.empty() && source.throws_types.empty() &&
              source.result_type && source.result_owner.empty() && source.result_kind.empty(), expr.at,
-             "replacement seed needs a named lexical procedure with a fixed independent signature");
+             "seed needs a named lexical procedure with a fixed independent signature");
       const auto result = resolve_annotation(*source.result_type, source.at);
       expect(result == Type::void_type || scalar_type(result), source.at,
-             "replacement seed needs a scalar or void lexical procedure result");
+             "seed needs a scalar or void lexical procedure result");
       expect(std::ranges::find(owners(), source.name, &OwnerParameter::name) == owners().end(), expr.at,
-             "replacement seed has no lexical shadow of an owner name");
+             "seed has no lexical shadow of an owner name");
       const auto definition = extraction_.local_definitions_.size();
       const auto inserted = scopes_.back().names.emplace(source.name, LocalProcedure{definition}).second;
-      expect(inserted, expr.at, "duplicate name in the replacement seed frame");
+      expect(inserted, expr.at, "duplicate name in the seed frame");
       auto outlined = outline(source);
       bind_independent_parameters(outlined);
       extraction_.local_definitions_.push_back({std::move(outlined), result, {}});
@@ -1226,7 +1226,7 @@ class BodyExtraction {
              !symbol.type->pure_callable && symbol.type->target && !symbol.type->variadic &&
              symbol.type->owners.empty() && symbol.type->argument_modes.empty() &&
              (scalar_type(*symbol.type->target) || *symbol.type->target == Type::void_type),
-             expr.at, "replacement seed needs a fixed procedure symbol with independent inputs and result");
+             expr.at, "seed needs a fixed procedure symbol with independent inputs and result");
       return *symbol.type;
     }
 
@@ -1237,7 +1237,7 @@ class BodyExtraction {
       expect(!body_.outline && !in_iteration_ && source.kind == Form::Kind::procedure && source.body &&
              source.owner_parameters.empty() && source.type_parameters.empty() && !source.explicit_captures &&
              source.result_type && source.result_owner.empty() && source.result_kind.empty(),
-             expr.at, "replacement seed needs a live handler in an ordinary procedure frame");
+             expr.at, "seed needs a live handler in an ordinary procedure frame");
       auto outlined = outline(source);
       outlined.handler = id;
       bind_independent_parameters(outlined);
@@ -1248,7 +1248,7 @@ class BodyExtraction {
              "live handler must implement the selected symbol's exact contract");
       if (executable_) {
         const auto added = extraction_.handler_layouts_.insert(id).second;
-        expect(added, expr.at, "replacement seed needs one live handler layout per symbol");
+        expect(added, expr.at, "seed needs one live handler layout per symbol");
       }
 
       const auto callee = extraction_.bodies_.size();
@@ -1268,7 +1268,7 @@ class BodyExtraction {
       const auto &contract = handler_contract(id, expr);
       const auto active = std::ranges::find_if(scopes_.rbegin(), scopes_.rend(),
           [&](const auto &scope) { return scope.handlers.contains(id); });
-      expect(active != scopes_.rend(), expr.at, "replacement seed needs a selected live handler in the current invocation");
+      expect(active != scopes_.rend(), expr.at, "seed needs a selected live handler in the current invocation");
       const auto callee = active->handlers.at(id);
       expect(expr.children.size() == contract.parameters.size() && !expr.has_here_body(), expr.at,
              "live handler invocation needs its declared positional arguments");
@@ -1287,12 +1287,12 @@ class BodyExtraction {
 
     CheckedOperation fresh_region(const Expression &expr) {
       expect(!supplied_body() && expr.annotation && expr.initializer_block, expr.at,
-             "replacement seed needs a named region with explicit root initializers");
+             "seed needs a named region with explicit root initializers");
       const auto schema = resolve_annotation(*expr.annotation, expr.at);
       const auto &roots = direct_region_roots(declarations(), schema, expr.at);
       auto order = region_initializers(roots, expr);
       expect(order.size() == roots.fields.size() && std::set(order.begin(), order.end()).size() == order.size(),
-             expr.at, "replacement seed needs one initializer for each region root");
+             expr.at, "seed needs one initializer for each region root");
 
       takes_value(operand(expr, 0), Type::uint64, expr.children.front()->at);
       const auto items = expr.initializer_items();
@@ -1310,12 +1310,12 @@ class BodyExtraction {
     CheckedOperation bind_region(const Expression &expr) {
       expect(!supplied_body() && !in_iteration_ && expr.annotation && expr.annotation->owned &&
              expr.annotation->target && expr.children.size() == 1, expr.at,
-             "replacement seed needs a fixed lexical owning region declaration");
+             "seed needs a fixed lexical owning region declaration");
       const auto schema = resolve_annotation(*expr.annotation->target, expr.at);
       const auto &initializer = ungrouped_expression(*expr.children.front());
       expect(initializer.kind == Kind::make_region ||
              (initializer.kind == Kind::call && !initializer.intrinsic && !initializer.has_here_body()),
-             initializer.at, "replacement seed needs a fresh region or a direct owning region factory");
+             initializer.at, "seed needs a fresh region or a direct owning region factory");
       const auto &value = remember(initializer, initializer.kind == Kind::make_region
           ? fresh_region(initializer) : call(initializer, true).value());
       if (value.type != owned_region_type(schema))
@@ -1346,7 +1346,7 @@ class BodyExtraction {
       const auto id = select_native_constructor(declarations(), declared, constructed, initializer);
       const auto &constructor = declarations().native_constructors.at(id);
       expect(!constructor.retained_parent, initializer.at,
-             "replacement seed has no C handle acquisition with a retained parent");
+             "seed has no C handle acquisition with a retained parent");
       check_native_invocation_kind(&form_, *constructor.source, initializer.at);
       std::map<size_t, size_t> owners;
       for (size_t i = 0; i < constructor.inputs.size(); ++i) {
@@ -1377,11 +1377,11 @@ class BodyExtraction {
         const auto &target = reference_target(expr, id);
         expect(!supplied_body() && (!body_.outline || form_.implicit_scope) &&
                expr.binding == "=" && expr.children.size() == 1,
-               expr.at, "replacement seed needs a synchronous borrowed reference effect");
+               expr.at, "seed needs a synchronous borrowed reference effect");
         const auto &view = operand(expr, 0);
         const auto owner = single_owner(view, expr.children.front()->at);
         expect(view.type == target && !view.read_only && !const_input_owner(owner),
-               expr.children.front()->at, "replacement seed needs the declared writable target of a borrowed effect");
+               expr.children.front()->at, "seed needs the declared writable target of a borrowed effect");
         CheckedOperation op;
         op.symbol = id;
         return op;
@@ -1412,7 +1412,7 @@ class BodyExtraction {
     }
 
     CheckedOperation attach_native_handle(const Expression &expr) {
-      expect(!supplied_body() && expr.annotation, expr.at, "replacement seed needs a direct lexical C handle attachment");
+      expect(!supplied_body() && expr.annotation, expr.at, "seed needs a direct lexical C handle attachment");
       const auto type = resolve_annotation(*expr.annotation, expr.at);
       auto plan = native_acquisition(expr, type);
       const auto &parent = *declarations().native_constructors.at(plan.constructor).parent;
@@ -1435,14 +1435,14 @@ class BodyExtraction {
 
     CheckedOperation bind_native_handle(const Expression &expr) {
       expect(!supplied_body() && expr.annotation && expr.children.size() == 1, expr.at,
-             "replacement seed needs a direct lexical C handle declaration");
+             "seed needs a direct lexical C handle declaration");
       const auto marker = resolve_annotation(*expr.annotation, expr.at);
       CheckedOperation op;
       if (expr.binding == "<-") {
         if (in_iteration_) fail(expr.at, "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope");
         const auto &initializer = ungrouped_expression(*expr.children.front());
         expect(initializer.kind == Kind::make_owned_handle && initializer.annotation, initializer.at,
-               "replacement seed needs a fresh owning C handle initializer");
+               "seed needs a fresh owning C handle initializer");
         op.native_acquisition = native_acquisition(initializer, marker);
         // The low owner keys name local storage in this activation's frame.
         // They carry no array allocation capability.
@@ -1450,7 +1450,7 @@ class BodyExtraction {
         op.place = declare(expr.at, expr.text, native_handle_type(marker, true), true, false, true, owner).place;
       } else {
         expect(expr.binding == "=" && expr.owner_name.empty(), expr.at,
-               "replacement seed needs a borrowed handle declaration with an inferred owner");
+               "seed needs a borrowed handle declaration with an inferred owner");
         const auto &initial = operand(expr, 0);
         const auto owner = native_loan(initial, marker, expr.children.front()->at);
         op.place = declare(expr.at, expr.text, initial.type, true, initial.read_only, true, owner).place;
@@ -1464,11 +1464,11 @@ class BodyExtraction {
              expr.initializer_block && expr.owner_name.empty() &&
              resolve_annotation(*expr.annotation, expr.at) == type &&
              declarations().bits_payload(type),
-             expr.at, "replacement seed needs a complete inline bits product initializer");
+             expr.at, "seed needs a complete inline bits product initializer");
       const auto &schema = declarations().schemas.at(type.identity);
       const auto order = product_initializers(schema, expr);
       expect(std::set(order.begin(), order.end()).size() == schema.fields.size(), expr.at,
-             "replacement seed needs an initializer for each product field");
+             "seed needs an initializer for each product field");
       CheckedOperation op;
       op.type = op.operand_type = type;
       if (local_storage) op.place = storage("$product", type, 0, false, false);
@@ -1494,7 +1494,7 @@ class BodyExtraction {
       const auto *initializer = expr.construction_initializer();
       expect(initializer && !initializer->children.empty() && !expr.constructor_arguments &&
              expr.owner_name.empty() && !supplied_body() && !in_iteration_, expr.at,
-             "replacement seed needs an initialized lexical scalar construction");
+             "seed needs an initialized lexical scalar construction");
       takes_value(extract(*initializer), type, initializer->at);
       CheckedOperation op;
       op.type = op.operand_type = type;
@@ -1506,7 +1506,7 @@ class BodyExtraction {
 
     CheckedOperation make_lexical_text(const Expression &expr, const Type &type, bool builder) {
       expect(expr.owner_name.empty() && !in_iteration_ && !supplied_body(), expr.at,
-             "replacement seed needs lexical text in the enclosing full scope");
+             "seed needs lexical text in the enclosing full scope");
       const auto count = expr.children.size();
       if (!expr.constructor_arguments || (builder ? count != 0 && count != 2 : count != 1))
         fail(expr.at, builder ? "a lexical text builder requires zero arguments or two positional text pieces"
@@ -1531,7 +1531,7 @@ class BodyExtraction {
 
     CheckedOperation make(const Expression &expr) {
       expect(!expr.construction_type_query && expr.annotation,
-             expr.at, "replacement seed needs a declared construction type");
+             expr.at, "seed needs a declared construction type");
       CheckedOperation op;
       const auto &spelling = expr.annotation->name;
       const auto found = expr.annotation->kind == Type::named ? names().constructors.find(spelling) : names().constructors.end();
@@ -1541,7 +1541,7 @@ class BodyExtraction {
         const auto &arm = sum.alternatives.at(selected.alternative);
         expect(expr.initializer_block && expr.owner_name.empty() && !sum.regional_only &&
                arm.initializers.empty() && !family(spelling),
-               expr.at, "replacement seed needs an inline sum initializer");
+               expr.at, "seed needs an inline sum initializer");
         op.type = Type{Type::sum, sum.source->name, selected.sum};
         op.place = storage("$sum", op.type, 0, false, false);
         op.sum_constructor = selected;
@@ -1552,7 +1552,7 @@ class BodyExtraction {
           const auto field = std::ranges::find_if(arm.fields, [&](const auto &field) { return field.source->name == label->text; });
           expect(field != arm.fields.end() && !field->stores_target(), label->at, "sum initializer field is unavailable");
           const auto ordinal = static_cast<size_t>(field - arm.fields.begin());
-          expect(supplied.insert(ordinal).second, label->at, "replacement seed needs a single initializer per field");
+          expect(supplied.insert(ordinal).second, label->at, "seed needs a single initializer per field");
           takes_payload(extract(*item->children.back()), field->type, item->at);
           CheckedOperation initializer;
           initializer.operand_type = field->type;
@@ -1571,13 +1571,13 @@ class BodyExtraction {
       if (type.kind == Type::product) return make_product(expr, type, true);
       expect(type.kind == Type::array && expr.constructor_arguments &&
              expr.children.size() == 2 && !family(spelling),
-             expr.at, "replacement seed needs an ordinary array constructor");
-      expect(!supplied_body(), expr.at, "replacement seed does not allocate arrays inside a here literal");
+             expr.at, "seed needs an ordinary array constructor");
+      expect(!supplied_body(), expr.at, "seed does not allocate arrays inside a here literal");
       const auto owner = array_owner(expr);
       const auto allocator = allocator_for(owner);
       // Ordinary blocks use the enclosing full invocation's allocation owner.
       expect(allocator && (allocator->kind != Allocator::lexical || !in_iteration_), expr.at,
-             "replacement seed needs an admitted array allocation owner");
+             "seed needs an admitted array allocation owner");
       const auto &array = declarations().arrays.at(type.identity);
       expect(declarations().bits_payload(array.element), expr.at, "array fill requires a finite bits element");
       takes_value(operand(expr, 0), Type::uint64, expr.children.front()->at);
@@ -1634,17 +1634,17 @@ class BodyExtraction {
       expect(!expr.annotation && expr.owner_name.empty() && !expr.fixed_binding && !expr.read_only &&
              (expr.declaration_kind.empty() || expr.declaration_kind == "val") &&
              expr.children.front()->kind == Kind::name,
-             expr.at, "replacement seed needs an unqualified alias of a lexical scalar val");
+             expr.at, "seed needs an unqualified alias of a lexical scalar val");
       const auto &source = operand(expr, 0);
       expect(source.view && source.binding && source.place && scalar_type(source.type) &&
              body_.instance.bindings.at(*source.binding).value_binding && source.owners.size() == 1 && source.owners.contains(0),
-             expr.at, "replacement seed needs an alias of a lexical scalar val");
+             expr.at, "seed needs an alias of a lexical scalar val");
       expect(std::ranges::find(owners(), expr.text, &OwnerParameter::name) == owners().end(),
-             expr.at, "replacement seed has no lexical shadow of an owner name");
+             expr.at, "seed has no lexical shadow of an owner name");
       // Both names resolve to the same storage and carry its original access.
       const Local local{*source.binding, source.place, 0};
       expect(scopes_.back().names.emplace(expr.text, local).second, expr.at,
-             "duplicate name in the replacement seed frame");
+             "duplicate name in the seed frame");
       return {};
     }
 
@@ -1652,7 +1652,7 @@ class BodyExtraction {
       const bool value = expr.declaration_kind == "val";
       expect((value || expr.declaration_kind == "ref") && expr.children.size() == 1 &&
              expr.owner_name.empty() && !expr.read_only,
-             expr.at, "replacement seed needs an initialized ref or scalar val");
+             expr.at, "seed needs an initialized ref or scalar val");
       const auto &initial = operand(expr, 0);
       const auto type = expr.annotation ? resolve_annotation(*expr.annotation, expr.at) : initial.type;
       if (!value && type != initial.type)
@@ -1673,7 +1673,7 @@ class BodyExtraction {
       const auto check_body = [&](const Expression &body) {
         const auto &result = extract(body);
         expect(result.type == Type::never || result.type == Type::void_type, body.at,
-               "replacement seed needs an effect-only protected body");
+               "seed needs an effect-only protected body");
         return result.type == Type::never;
       };
       const auto incoming = supplied_;
@@ -1683,7 +1683,7 @@ class BodyExtraction {
       for (const auto &handler : std::span(expr.children).subspan(1)) {
         supplied_ = incoming;
         expect(handler->kind == Kind::handler && handler->annotation && handler->annotation->kind == Type::named,
-               handler->at, "replacement seed needs a named exception catch");
+               handler->at, "seed needs a named exception catch");
         const auto type = names().types.find(handler->annotation->name);
         expect(type != names().types.end() && type->second.kind == Type::exception, handler->at,
                "catch needs a resolved exception category");
@@ -1707,13 +1707,13 @@ class BodyExtraction {
 
     CheckedOperation braced_throw(const Expression &expr) {
       expect(expr.annotation && expr.annotation->kind == Type::named,
-             expr.at, "replacement seed needs a braced throw with a named exception");
+             expr.at, "seed needs a braced throw with a named exception");
       const auto type = names().types.find(expr.annotation->name);
       expect(type != names().types.end(), expr.at, "throw needs a resolved exception category");
       const auto &schema = scalar_exception_schema(declarations(), type->second, expr.at);
       const auto fields = product_initializers(schema, expr);
       expect(std::set(fields.begin(), fields.end()).size() == schema.fields.size(), expr.at,
-             "replacement seed needs a complete exception payload");
+             "seed needs a complete exception payload");
       for (size_t i = 0; i < fields.size(); ++i) {
         const auto &item = *expr.children[i];
         const auto &field = schema.fields[fields[i]];
@@ -1739,7 +1739,7 @@ class BodyExtraction {
       // The existing transfer takes the holder from this catch. A nested
       // interception would need proof that the original holder is still usable.
       expect(caught.protected_depth == protected_depth_, expr.at,
-             "replacement seed cannot transfer a caught exception across an intervening protected body");
+             "seed cannot transfer a caught exception across an intervening protected body");
       CheckedOperation op;
       op.type = Type::never;
       op.place = op.exception_owner = caught.place;
@@ -1749,7 +1749,7 @@ class BodyExtraction {
     CheckedOperation exception_field(const Expression &expr, const CheckedOperation &base) {
       expect(expr.children.front()->kind == Kind::name && base.place &&
              std::ranges::find(catches_, *base.place, &ActiveCatch::place) != catches_.end() &&
-             nominal_exception(base.type), expr.at, "replacement seed needs a field read from the active nominal catch");
+             nominal_exception(base.type), expr.at, "seed needs a field read from the active nominal catch");
       const auto &schema = scalar_exception_schema(declarations(), base.type, expr.at);
       const auto index = product_field(schema, expr);
       CheckedOperation op;
@@ -1808,10 +1808,10 @@ class BodyExtraction {
         return {};
       }
       expect(type == Type::c_string, expr.at,
-             "replacement seed supports enum, void and CString result assertions");
+             "seed supports enum, void and CString result assertions");
       auto op = operand_result(operand(expr, 0));
       expect(text_type(op.type) && op.view && op.read_only && op.owners.size() == 1,
-             expr.at, "replacement seed needs a readonly String loan for a CString assertion");
+             expr.at, "seed needs a readonly String loan for a CString assertion");
       op.check_c_string = op.type == Type::string;
       op.type = Type::c_string;
       return op;
@@ -1822,7 +1822,7 @@ class BodyExtraction {
       if (base.type.kind == Type::exception) return exception_field(expr, base);
       const bool region_root = base.type.kind == Type::region && base.type.owned && base.type.target && base.place;
       expect(region_root || (base.type.kind == Type::product && base.view && declarations().bits_payload(base.type)),
-             expr.at, "replacement seed needs an inline field of a bits product or owned region");
+             expr.at, "seed needs an inline field of a bits product or owned region");
       const auto &type = region_root ? *base.type.target : base.type;
       const auto &schema = declarations().schemas.at(type.identity);
       const auto index = product_field(schema, expr);
@@ -1843,7 +1843,7 @@ class BodyExtraction {
       const bool sum = subject.type.kind == Type::sum && subject.view && declarations().bits_payload(subject.type);
       const bool enumeration = subject.type.kind == Type::enumeration;
       expect((sum || enumeration || subject.type == Type::boolean) && !expr.case_resumes,
-             expr.at, "replacement seed needs a closed Boolean, enum or bits sum case without resumption");
+             expr.at, "seed needs a closed Boolean, enum or bits sum case without resumption");
       std::set<std::uint64_t> covered;
       bool catch_all = false;
       BoundCase input{&expr, {}};
@@ -1853,11 +1853,11 @@ class BodyExtraction {
         const auto &arm = *entry;
         expect(arm.kind == Kind::case_arm && !arm.case_resumes &&
                (arm.children.size() == 1 || arm.children.size() == 2), arm.at,
-               "replacement seed needs a case arm without resumption");
+               "seed needs a case arm without resumption");
         const bool guarded = arm.children.size() == 2;
         const auto pattern = bind_case_pattern(declarations(), subject.type, arm, names().constructors);
         std::vector<size_t> payload_fields;
-        expect(pattern.kind != CasePattern::Kind::null, arm.at, "replacement seed needs a non-null case pattern");
+        expect(pattern.kind != CasePattern::Kind::null, arm.at, "seed needs a non-null case pattern");
         if (!guarded) {
           if (pattern.kind == CasePattern::Kind::any) catch_all = true;
           else covered.insert(pattern.code);
@@ -1885,7 +1885,7 @@ class BodyExtraction {
         if (guarded) {
           const auto &guard = *arm.children.front();
           expect(extract(guard).type == Type::boolean, guard.at,
-                 "replacement seed needs a Boolean result for the case guard");
+                 "seed needs a Boolean result for the case guard");
           // A declining guard can change a borrowed subject through an alias.
           // Only the following tests can establish coverage of its new tag.
           if (subject.view) covered.clear();
@@ -1935,7 +1935,7 @@ class BodyExtraction {
           })) return false;
       require_executable_expression(value);
       auto input = bind_case(value, true);
-      expect(!input.reaches_end, value.at, "replacement seed needs an exhaustive returned case with a full-scope arm");
+      expect(!input.reaches_end, value.at, "seed needs an exhaustive returned case with a full-scope arm");
       body_.case_returns.push_back({&expr, std::move(input)});
       return true;
     }
@@ -1964,14 +1964,14 @@ class BodyExtraction {
       case Kind::make_borrowed_handle: return attach_native_handle(expr);
       case Kind::effect: return expr.definition ? install_handler(expr) : install_effect(expr);
       case Kind::procedure_effect:
-        expect(expr.definition != nullptr, expr.at, "replacement seed needs a private live handler body");
+        expect(expr.definition != nullptr, expr.at, "seed needs a private live handler body");
         return install_handler(expr);
       case Kind::behave: case Kind::perform: return invoke_handler(expr);
       case Kind::index: return index(expr);
       case Kind::field: return field(expr);
       case Kind::case_expression: return check_case(expr);
       case Kind::case_break:
-        expect(expr.children.empty(), expr.at, "replacement seed needs a payload-free case break");
+        expect(expr.children.empty(), expr.at, "seed needs a payload-free case break");
         [[fallthrough]];
       case Kind::case_failure:
         op.type = Type::never;
@@ -1983,7 +1983,7 @@ class BodyExtraction {
       case Kind::grouped: return operand_result(extract(*expr.children.front(), discard_iteration_result));
       case Kind::typed_expression: return typed_expression(expr);
       case Kind::block:
-        expect(!expr.scoped, expr.at, "replacement seed has no extracted full-scope body");
+        expect(!expr.scoped, expr.at, "seed has no extracted full-scope body");
         scopes_.emplace_back();
         for (size_t i = 0; i < expr.children.size(); ++i) {
           const auto &item = *expr.children[i];
@@ -2013,7 +2013,7 @@ class BodyExtraction {
         return op;
       case Kind::pointer_group:
         for (const auto &item : expr.children) {
-          expect(item->kind == Kind::pointer, item->at, "replacement seed needs an initialized local declaration");
+          expect(item->kind == Kind::pointer, item->at, "seed needs an initialized local declaration");
           body_.instance.operations.emplace(item.get(), declaration(*item, expr.fixed_binding));
         }
         return op;
@@ -2044,7 +2044,7 @@ class BodyExtraction {
           return op;
         }
         expect(yes.type == no.type || yes.type == Type::never || no.type == Type::never,
-               expr.at, "replacement seed needs compatible conditional results");
+               expr.at, "seed needs compatible conditional results");
         const auto &completes = yes.type == Type::never ? no : yes;
         const auto &other = yes.type == Type::never ? yes : no;
         op.type = completes.type;
@@ -2059,7 +2059,7 @@ class BodyExtraction {
         const auto &first = operand(expr, 0);
         const auto &last = operand(expr, 1);
         expect(integral(first.type) && first.type == last.type && expr.children.size() == 3,
-               expr.at, "replacement seed needs an ordinary half-open scalar range");
+               expr.at, "seed needs an ordinary half-open scalar range");
         op.operand_type = first.type;
         scopes_.emplace_back();
         op.place = declare(expr.at, expr.text, first.type, true, true, true, 0).place;
@@ -2073,12 +2073,12 @@ class BodyExtraction {
       }
       case Kind::return_tail: {
         expect(!supplied_body() && !body_.instance.result.owns_region(), expr.at,
-               "replacement seed needs an independent callable result at the tail");
+               "seed needs an independent callable result at the tail");
         const auto &tail = operand(expr, 0);
         op.type = tail.type;
         if (tail.type != Type::never && tail.type != Type::void_type) {
           expect(body_.instance.result.type.has_value(), expr.at,
-                 "replacement seed needs a declared result for a value tail");
+                 "seed needs a declared result for a value tail");
           const auto &result = *body_.instance.result.type;
           takes_value(tail, result, expr.at);
           op.type = Type::never;
@@ -2088,9 +2088,9 @@ class BodyExtraction {
       }
       case Kind::return_value: case Kind::continue_value:
         expect(supplied_body() == (expr.kind == Kind::continue_value), expr.at,
-               "replacement seed needs an ordinary return or a local here continue");
+               "seed needs an ordinary return or a local here continue");
         if (!body_.instance.result.type) {
-          expect(expr.children.empty(), expr.at, "replacement seed needs a declared result for a value return");
+          expect(expr.children.empty(), expr.at, "seed needs a declared result for a value return");
           body_.void_exit = &expr;
           op.type = Type::never;
           op.operand_type = Type::void_type;
@@ -2099,7 +2099,7 @@ class BodyExtraction {
         if (body_.instance.result.owns_region()) {
           expect(expr.children.size() == 1, expr.at, "return needs a fresh region");
           const auto &value = ungrouped_expression(*expr.children.front());
-          expect(value.kind == Kind::make_region, value.at, "replacement seed needs a direct fresh region return");
+          expect(value.kind == Kind::make_region, value.at, "seed needs a direct fresh region return");
           if (remember(value, fresh_region(value)).type != *body_.instance.result.type)
             fail(value.at, "constructed region does not match the declared root schema");
         } else if (expr.children.empty()) expect(body_.instance.result.type == Type::void_type, expr.at, "return needs a value");
@@ -2108,7 +2108,7 @@ class BodyExtraction {
         op.operand_type = *body_.instance.result.type;
         return op;
       default:
-        implementation_gap(expr.at, "replacement seed has no executable extraction for this source form");
+        implementation_gap(expr.at, "seed has no executable extraction for this source form");
       }
     }
 
@@ -2129,7 +2129,7 @@ class BodyExtraction {
       expect(!expr.checked_ref_argument && !expr.spread && !expr.lexical_symbol_call &&
              (expr.definition ? expr.kind == Kind::callable || expr.kind == Kind::effect ||
                                  expr.kind == Kind::procedure_effect : expr.kind != Kind::callable) && !expr.receiving,
-             expr.at, "replacement seed has no extracted transport for this expression");
+             expr.at, "seed has no extracted transport for this expression");
     }
 
     const CheckedOperation &extract(const Expression &expr, bool discard_iteration_result = false) {
@@ -2168,13 +2168,13 @@ class BodyExtraction {
       }
       const auto &end = extract(*form_.body);
       expect(body_.instance.frame.owners.size() == owners().size(), form_.at,
-             "replacement seed needs an input for every formal owner");
+             "seed needs an input for every formal owner");
       if (body_.instance.result.type) {
         expect(end.type == Type::never || body_.instance.result.type == Type::void_type,
-               form_.at, "replacement seed needs a reachable return for this result");
+               form_.at, "seed needs a reachable return for this result");
       } else {
         expect(end.type == Type::void_type || end.type == Type::never,
-               form_.at, "replacement seed needs a declared result for a value tail");
+               form_.at, "seed needs a declared result for a value tail");
         if (end.type == Type::void_type && !body_.void_exit) body_.void_exit = form_.body.get();
       }
       if (body_.outline) body_.instance.context = body_.instance.arguments;
@@ -2279,10 +2279,10 @@ class BodyExtraction {
   void extract() {
     const auto &program = declarations_.declarations_;
     expect(!program.native_entries.empty(), {declarations_.source_.modules.front().path.string()},
-           "replacement seed currently needs a C entry");
+           "seed translation requires a C entry");
     for (const auto &module : declarations_.source_.modules)
       for (const auto &form : module.forms())
-        expect(form->kind != Form::Kind::expression, form->at, "replacement seed has no executable module initializer");
+        expect(form->kind != Form::Kind::expression, form->at, "seed has no executable module initializer");
     for (const auto &entry : program.native_entries) select_body(entry.method, program.methods[entry.method].source->at);
     // Demand a source body once. A discovered dependency only adds its own
     // binding work; it cannot restart a caller or publish a callee summary.
@@ -2369,20 +2369,20 @@ class BodyExtraction {
       const auto method = body.instance.method;
       const auto &source = body.outline ? *body.outline->source : *declarations_.method(method).source;
       if (!body.case_scope) {
-        expect(body.void_exit, source.at, "replacement seed needs independent evidence of a normal no-value exit");
+        expect(body.void_exit, source.at, "seed needs independent evidence of a normal no-value exit");
         results.emplace(method, ResultContract{Type{Type::void_type}});
         continue;
       }
       if (body.void_exit)
-        implementation_gap(body.void_exit->at, "replacement seed needs a value on every normal full-scope arm exit");
+        implementation_gap(body.void_exit->at, "seed needs a value on every normal full-scope arm exit");
       std::optional<Type> result;
       for (const auto &returned : body.value_returns) {
         if (returned.type == Type::never) continue;
-        expect(scalar_type(returned.type), returned.site->at, "replacement seed needs independent scalar arm returns");
+        expect(scalar_type(returned.type), returned.site->at, "seed needs independent scalar arm returns");
         expect(!result || *result == returned.type, returned.site->at, "full-scope arm returns require one result type");
         result = returned.type;
       }
-      expect(result.has_value(), source.at, "replacement seed needs independent evidence of a full-scope arm result");
+      expect(result.has_value(), source.at, "seed needs independent evidence of a full-scope arm result");
       results.emplace(method, ResultContract{std::move(result)});
     }
     return results;
@@ -2407,7 +2407,7 @@ class BodyExtraction {
              "a C entry cannot import an array allocator capability");
     for (size_t i = 0; i < executable; ++i) if (const auto &outline = bodies_[i].outline) {
       expect(outline->handler || completed[i].allocations.empty(), outline->source->at,
-             "replacement seed needs an ordinary outlined body without imported allocators");
+             "seed needs an ordinary outlined body without imported allocators");
       seal_outline(program, i, results);
     }
     for (size_t i = 0; i < executable; ++i) {
@@ -2433,13 +2433,13 @@ class BodyExtraction {
         const auto &callee = completed[call.callee];
         if (call.installs_handler) {
           if (callee.unbound_replay)
-            implementation_gap(call.site->at, "replacement seed cannot complete a live handler's replay inventory; "
+            implementation_gap(call.site->at, "seed cannot complete a live handler's replay inventory; "
                                "unrepresented dependency at " + location_text(*callee.unbound_replay));
           for (const auto id : callee.replay) {
             const auto &symbol = program.symbols.at(id);
             if (symbol.reference || !symbol.type || !scalar_type(*symbol.type)) {
               const auto canonical = symbol.declaration ? symbol.declaration->filename() + "::" : "";
-              implementation_gap(call.site->at, "replacement seed needs a supported scalar binding in live handler "
+              implementation_gap(call.site->at, "seed needs a supported scalar binding in live handler "
                                  "replay for " + canonical + "@" + symbol.name);
             }
           }

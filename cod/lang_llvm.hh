@@ -100,14 +100,13 @@ class LLVMEmission {
     size_t parameter_count() const { return here_index() + here_count() + here_group; }
   };
   std::vector<CallLayout> call_layouts_;
-  bool specialize_ = true;
   bool bounds_checks_ = true;
   bool environments_ = false;
   unsigned environment_field_ = 0;
   std::vector<Type> callable_types_;
   std::map<size_t, llvm::StructType *> product_layouts_;
   std::map<size_t, llvm::StructType *> regional_product_layouts_;
-  std::vector<llvm::Function *> general_, specialized_;
+  std::vector<llvm::Function *> methods_;
   struct HereEntry { llvm::Function *entry; llvm::StructType *activation; bool group; };
   std::map<size_t, HereEntry> here_entries_;
   std::map<size_t, llvm::Function *> prepared_source_entries_;
@@ -1473,8 +1472,7 @@ class LLVMEmission {
           llvm::Value *receiver = target;
           if (supplied.returning) {
             const auto id = supplied.returning->receiver;
-            const bool specialized = specialize_ && instance && target == specialized_.at(*instance);
-            auto *alternate = specialized ? specialized_.at(id) : general_.at(program_->instances[id].method);
+            auto *alternate = methods_.at(program_->instances[id].method);
             if (!alternate || target->getFunctionType() != alternate->getFunctionType())
               throw std::logic_error("supplied here return state changed the receiver layout");
             receiver = b_.CreateSelect(returning, alternate, target);
@@ -1513,7 +1511,7 @@ class LLVMEmission {
     const auto instance_id = value.target(actual);
     const auto &instance = program_->instances[instance_id];
     const auto method = instance.method;
-    auto *target = specialize_ ? specialized_[instance_id] : general_[method];
+    auto *target = methods_[method];
     for (size_t i = 0; i < arguments.size(); ++i) if (actual[i] != instance.arguments[i]) {
       auto *original = arguments[i];
       arguments[i] = convert_value(original, actual[i], instance.arguments[i]);
@@ -1691,28 +1689,16 @@ class LLVMEmission {
     const auto cases = choices(expr, source_inputs, true);
     const std::vector<llvm::Value *> inputs(arguments.begin(), arguments.begin() + source_inputs.size());
     const std::vector<llvm::Value *> captured(arguments.begin() + source_inputs.size(), arguments.end());
-    if (cases.front().operation->callee && (cases.size() > 1 || !specialize_)) {
-      const auto id = *cases.front().operation->callee;
-      const auto &target = program_->instances[id];
-      // Share the call only when its lexical and declaration context also agrees.
-      if (std::all_of(cases.begin(), cases.end(), [&](const Choice &choice) {
-            if (!choice.operation->callee) return false;
-            const auto &other = program_->instances[*choice.operation->callee];
-            return other.method == target.method && other.retained_types == target.retained_types &&
-                other.query_environment == target.query_environment;
-          })) return native_call(expr, general_[target.method], target.method, inputs, captured, id, nullptr, here_site,
-                                  here_values, false, current_owners);
-    }
     return choose(expr, inputs, cases, outcome_, [&](const Choice &choice) -> llvm::Value * {
       if (choice.nominal_callee) {
         const auto id = *choice.nominal_callee;
         const auto method = program_->instances[id].method;
-        auto *target = specialize_ ? specialized_[id] : general_[method];
+        auto *target = methods_[method];
         return native_call(expr, target, method, inputs, captured, id, nullptr, nullptr, {}, true);
       }
       if (choice.operation->callee) {
         const auto id = *choice.operation->callee;
-        auto *target = specialize_ && cases.size() == 1 ? specialized_[id] : general_[program_->instances[id].method];
+        auto *target = methods_[program_->instances[id].method];
         return native_call(expr, target, program_->instances[id].method, inputs, captured, id, nullptr, here_site,
                            here_values, false, current_owners);
       }
@@ -2642,7 +2628,7 @@ class LLVMEmission {
       const auto target = program_->symbols.at(symbol).scoped_instance.value();
       const auto &instance = program_->instances.at(target);
       const auto method = instance.method;
-      auto *callee = specialize_ ? specialized_.at(target) : general_.at(method);
+      auto *callee = methods_.at(method);
       auto *valid = block("scoped.effect.installed"), *missing = block("scoped.effect.unbound");
       b_.CreateCondBr(b_.CreateIsNotNull(record), valid, missing);
       b_.SetInsertPoint(missing);
@@ -3964,7 +3950,7 @@ class LLVMEmission {
       b_.CreateStore(integer(segment_count), b_.CreateStructGEP(value_pack_, descriptor, 1));
       b_.CreateStore(total, b_.CreateStructGEP(value_pack_, descriptor, 2));
       arguments.push_back(pack(b_.CreatePtrToInt(descriptor, b_.getInt64Ty()), Type::uint64));
-      auto *target = specialize_ ? specialized_[callee] : general_[instance.method];
+      auto *target = methods_[instance.method];
       auto *value = propagate(native_call(expr, target, instance.method, std::move(arguments), {}, callee));
       if (reachable()) b_.CreateStore(value, result);
     }
@@ -4077,7 +4063,7 @@ class LLVMEmission {
         arguments.push_back(b_.CreateInsertValue(view, b_.getInt32(tag(field.type)), 1));
       }
       const auto method = program_->instances.at(*callee).method;
-      auto *entry = specialize_ ? specialized_.at(*callee) : general_.at(method);
+      auto *entry = methods_.at(method);
       propagate(native_call(expr, entry, method, std::move(arguments), {}, callee));
       if (contexts_.front().at(&expr).type == Type::never) {
         b_.CreateUnreachable();
@@ -5109,7 +5095,7 @@ class LLVMEmission {
       arguments.push_back(body.CreateLoad(b_.getPtrTy(), body.CreateStructGEP(storage, backing, layout.operands + i)));
     arguments.push_back(entry->getArg(0));
     if (upstream) arguments.push_back(upstream);
-    auto *target = specialize_ ? specialized_.at(id) : general_.at(instance.method);
+    auto *target = methods_.at(instance.method);
     body.CreateRet(body.CreateCall(target, arguments));
   }
   void declare_here_entry(size_t id) {
@@ -5162,7 +5148,7 @@ class LLVMEmission {
     for (size_t i = 0; i < layout.lexical_here; ++i)
       prepared.push_back(body.CreateLoad(here_, body.CreateStructGEP(activation, borrowed, here_begin + i)));
     if (layout.here_group) prepared.push_back(borrowed);
-    auto *result = body.CreateCall(general_.at(instance.method), prepared);
+    auto *result = body.CreateCall(methods_.at(instance.method), prepared);
     if (!layout.here_group) { body.CreateRet(result); return; }
     auto *forward = llvm::BasicBlock::Create(context_, "here.failure", entry);
     auto *completed = llvm::BasicBlock::Create(context_, "here.completed", entry);
@@ -5269,9 +5255,8 @@ class LLVMEmission {
       if (auto *slot = bindings_.at(binding).reference_slot) b_.CreateStore(storage_.at(place), slot);
     }
   }
-  void body(llvm::Function *function, const CheckedMethod &method, std::optional<size_t> instance) {
-    const auto &layout = program_->instances[instance ? *instance : method.instances.front()];
-    const auto prepared = checked_body(*program_, method, instance);
+  void body(llvm::Function *function, const CheckedMethod &method, const CheckedInstance &layout) {
+    const auto prepared = checked_body(layout);
     const auto &frame = prepared.frame;
     const auto &call = call_layouts_.at(layout.method);
     if (function->arg_size() != call.parameter_count()) throw std::logic_error("native body disagrees with its parameter roles");
@@ -5290,8 +5275,7 @@ class LLVMEmission {
       suspended_return_.present = b_.getInt1(*method.here_group->supplier_return);
     if (method.here_group && method.here_group->binds_return_payload)
       suspended_return_.value = b_.CreateLoad(scalar_, b_.CreateStructGEP(here_return_header(), here_destination_, 1));
-    contexts_.clear();
-    for (const auto &context : prepared.contexts) contexts_.push_back({&context.operations(), context.instance});
+    contexts_ = {{&prepared.context.operations(), &layout}};
     if (call.captures) {
       auto *values = function->getArg(call.captures_index());
       for (size_t c = 0; c < call.captures; ++c) {
@@ -5309,32 +5293,8 @@ class LLVMEmission {
     }
     if (call.declaration_context)
       query_environment_ = function->getArg(call.query_index());
-    llvm::Value *requires_return = nullptr;
-    const auto needs_return = [&](size_t id) {
-      return !method.regional_initializer && method.source->completion_requires_return(*program_->instances[id].result.type);
-    };
-    if (instance) {
-      if (needs_return(*instance)) requires_return = b_.getTrue();
-    }
-    else {
-      const bool all_return = std::ranges::all_of(method.instances, needs_return);
-      if (all_return) requires_return = b_.getTrue();
-      llvm::Value *admitted = b_.getFalse();
-      for (const auto id : method.instances) {
-        auto *context = matches_context(program_->instances[id]);
-        admitted = b_.CreateOr(admitted, context);
-        if (!all_return && needs_return(id))
-          requires_return = requires_return ? b_.CreateOr(requires_return, context) : context;
-      }
-      auto *valid = block("arguments.valid"), *invalid = block("arguments.invalid");
-      b_.CreateCondBr(admitted, valid, invalid);
-      b_.SetInsertPoint(invalid);
-      for (auto *place : parameter_values_) clear_value(place);
-      for (auto *holder : exception_parameter_slots_) release_failure_owner(b_, take_failure_owner(b_, holder));
-      b_.CreateRet(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::unsound_runtime_typing)),
-          integer(site(method.source->at)), null_pointer()));
-      b_.SetInsertPoint(valid);
-    }
+    auto *requires_return = !method.regional_initializer && method.source->completion_requires_return(*layout.result.type)
+        ? b_.getTrue() : nullptr;
     std::optional<Control> initialization;
     if (!prepared.writable_captures.empty()) {
       initialization = Control{nullptr, block("inputs.failed")};
@@ -5368,19 +5328,8 @@ class LLVMEmission {
       b_.SetInsertPoint(failed); clear_value(completion_.value); b_.CreateBr(ready); b_.SetInsertPoint(ready);
     }
     auto *value = load(completion_.value);
-    if (call.native_borrow_destination && (!instance || layout.result.native_borrow())) {
-      llvm::Value *native = b_.getTrue();
-      if (!instance && std::ranges::any_of(method.instances, [&](size_t id) {
-            return !program_->instances[id].result.native_borrow();
-          })) {
-        auto *identity = b_.CreateExtractValue(value, 1);
-        native = b_.getFalse();
-        for (const auto id : method.instances) {
-          const auto &result = program_->instances[id].result;
-          if (result.native_borrow())
-            native = b_.CreateOr(native, b_.CreateICmpEQ(identity, b_.getInt32(tag(*result.type))));
-        }
-      }
+    if (call.native_borrow_destination) {
+      auto *native = b_.getTrue();
       auto *ready = b_.CreateAnd(native, b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(1)));
       auto *unpublished_value = b_.CreateSelect(native, empty_scalar(), value);
       auto *publish = block("native.return.publish"), *done = block("native.return.complete");
@@ -5409,34 +5358,6 @@ class LLVMEmission {
         protected_outcomes_ ? load(completion_.transfer) : nullptr, owned_failures_ ? load(completion_.failure_owner) : nullptr,
         case_scan_request_ ? b_.CreateAnd(load(case_scan_request_), b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(0))) : nullptr));
     case_scan_request_ = nullptr;
-  }
-  void dispatch_native_frames(llvm::Function *function, const CheckedMethod &method) {
-    function_ = function;
-    b_.SetInsertPoint(block("entry"));
-    const auto &first = program_->instances[method.instances.front()];
-    const auto &layout = call_layouts_[first.method];
-    std::vector<llvm::Value *> forwarded;
-    for (auto &argument : function->args()) forwarded.push_back(&argument);
-    arguments_.assign(forwarded.begin(), forwarded.begin() + layout.operands);
-    if (layout.captures) {
-      auto *values = forwarded.at(layout.captures_index());
-      for (size_t i = 0; i < layout.captures; ++i)
-        arguments_.push_back(b_.CreateLoad(scalar_, b_.CreateGEP(scalar_, values, integer(i))));
-    }
-    for (size_t i = 0; i < layout.retained; ++i)
-      arguments_.push_back(b_.CreateInsertValue(empty_scalar(), forwarded.at(layout.retained_begin() + i), 1));
-    query_environment_ = layout.declaration_context ? forwarded.at(layout.query_index()) : nullptr;
-    for (const auto id : method.instances) {
-      auto *selected = block("frame.selected"), *next = block("frame.next");
-      b_.CreateCondBr(matches_context(program_->instances[id]), selected, next);
-      b_.SetInsertPoint(selected);
-      b_.CreateRet(b_.CreateCall(specialized_[id], forwarded));
-      b_.SetInsertPoint(next);
-    }
-    for (size_t i = 0; i < first.frame.inputs.size(); ++i)
-      if (first.frame.inputs[i].mode == ArgumentMode::value) release_value(forwarded[i]);
-    b_.CreateRet(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::unsound_runtime_typing)),
-        integer(site(method.source->at)), null_pointer()));
   }
   void emit_sites() {
     function_ = llvm::Function::Create(llvm::FunctionType::get(b_.getPtrTy(), {b_.getInt64Ty()}, false),
@@ -5544,7 +5465,7 @@ class LLVMEmission {
       const auto role = null_target - 1 - owner;
       arguments.push_back(bridge->getArg(entry.inputs.size() + role));
     }
-    auto *outcome = b_.CreateCall(general_.at(entry.method), arguments);
+    auto *outcome = b_.CreateCall(methods_.at(entry.method), arguments);
     auto *completed = block("entry.completed");
     b_.CreateCondBr(abrupt_outcome(outcome), finish_, completed);
     b_.SetInsertPoint(finish_);
@@ -5569,27 +5490,13 @@ class LLVMEmission {
     b_.SetInsertPoint(returned);
     b_.CreateRetVoid();
   }
-  void emit_main() {
-    auto *main = llvm::Function::Create(llvm::FunctionType::get(b_.getInt32Ty(), false),
-        llvm::GlobalValue::ExternalLinkage, "main", module_);
-    std::vector<const Expression *> initializers;
-    for (const auto &initializer : program_->initializers) initializers.push_back(initializer.expression);
-    begin(main, program_->entry_storage, program_->entry_bindings);
-    contexts_ = {{&program_->entry}};
-    call_scope(initializers, Location{});
-    b_.SetInsertPoint(finish_);
-    b_.SetInsertPoint(emit_exit_diagnostics("normal"));
-    b_.CreateCall(runtime("cod_lang_exception_finish", b_.getVoidTy(), {}));
-    b_.CreateRet(b_.getInt32(0));
-  }
-
 public:
-  std::pair<std::string, std::string> emit(const CheckedProgram &program, bool emit_text, bool emit_bitcode, bool specialize = true, bool bounds_checks = true) {
-    program_ = &program; specialize_ = specialize; bounds_checks_ = bounds_checks;
+  std::pair<std::string, std::string> emit(const CheckedProgram &program, bool emit_text, bool emit_bitcode, bool bounds_checks = true) {
+    program_ = &program; bounds_checks_ = bounds_checks;
     const auto allocates_lexically = [](const auto &operations) {
       return std::ranges::any_of(operations, [](const auto &operation) { return operation.second.lexical_allocation.has_value(); });
     };
-    owns_lexical_allocations_ = allocates_lexically(program.entry) || std::ranges::any_of(program.instances, [&](const auto &instance) {
+    owns_lexical_allocations_ = std::ranges::any_of(program.instances, [&](const auto &instance) {
       return allocates_lexically(instance.operations);
     });
     protected_outcomes_ = std::ranges::any_of(program.methods, [](const auto &method) { return method.here_group && !method.instances.empty(); });
@@ -5656,7 +5563,6 @@ public:
           used_symbols.insert(*operation.symbol);
       }
     };
-    collect_operations(program.entry);
     for (const auto &value : program.callables) {
       for (const auto instance : value.implementations()) retain_method(program.instances[instance].method);
       const auto &symbols = program.captured_symbols(value);
@@ -5716,7 +5622,7 @@ public:
         owners.insert(array_owners.begin(), array_owners.end());
       } else call.array_owners.assign(array_owners.begin(), array_owners.end());
     }
-    general_.resize(program.methods.size()); specialized_.resize(program.instances.size());
+    methods_.resize(program.methods.size());
     for (size_t i = 0; i < program.methods.size(); ++i) {
       if (!emitted_methods[i]) continue;
       const auto &method = program.methods[i];
@@ -5728,43 +5634,23 @@ public:
       }
       const auto prefix = "cod.method." + std::to_string(method.definition) + "." + method.source->name +
           (i == method.definition ? std::string{} : ".interpretation." + std::to_string(i));
-      if (method.instances.size() == 1 && method.source->type_parameters.empty() && method.captures.empty() &&
-          method.retained_types.empty() && !method.declaration_context()) {
-        general_[i] = declare(prefix + ".native", layout);
-        specialized_[method.instances.front()] = general_[i];
-        continue;
-      }
-      general_[i] = declare(prefix + ".general", layout);
-      if (specialize || method.separate_native_frames) for (const auto id : method.instances) {
-        std::string name = prefix + (method.separate_native_frames ? ".frame" : ".specialized");
-        for (const auto &type : program.instances[id].context) name += "." + type_name(type);
-        if (method.declaration_context()) name += ".query." + std::to_string(program.instances[id].query_environment);
-        specialized_[id] = declare(name, layout);
-      }
+      if (method.instances.size() != 1 || !method.source->type_parameters.empty() || !method.captures.empty() ||
+          !method.retained_types.empty() || method.declaration_context())
+        throw std::logic_error("seed emission requires one concrete native frame per method");
+      methods_[i] = declare(prefix + ".native", layout);
     }
     for (const auto instance : here_instances) declare_here_entry(instance);
     for (const auto instance : prepared_sources) declare_prepared_source(instance);
     for (size_t i = 0; i < program.methods.size(); ++i) {
       if (!emitted_methods[i]) continue;
       const auto &method = program.methods[i];
-      const auto first = method.instances.front();
-      if (specialized_[first] == general_[i]) {
-        body(general_[i], method, first);
-        continue;
-      }
-      if (method.separate_native_frames) dispatch_native_frames(general_[i], method);
-      else body(general_[i], method, {});
-      if (specialize || method.separate_native_frames)
-        for (const auto id : method.instances) body(specialized_[id], method, id);
+      body(methods_[i], method, program.instances[method.instances.front()]);
     }
-    if (program.native_entries.empty()) emit_main();
-    else {
-      // Nested crossings share the supplying execution's exception history.
-      auto *active = new llvm::GlobalVariable(module_, b_.getInt1Ty(), false, llvm::GlobalValue::InternalLinkage,
-          b_.getFalse(), "cod.native.entry.active");
-      active->setThreadLocalMode(llvm::GlobalVariable::GeneralDynamicTLSModel);
-      for (const auto &entry : program.native_entries) emit_native_entry(entry, active);
-    }
+    // Nested crossings share the supplying execution's exception history.
+    auto *active = new llvm::GlobalVariable(module_, b_.getInt1Ty(), false, llvm::GlobalValue::InternalLinkage,
+        b_.getFalse(), "cod.native.entry.active");
+    active->setThreadLocalMode(llvm::GlobalVariable::GeneralDynamicTLSModel);
+    for (const auto &entry : program.native_entries) emit_native_entry(entry, active);
     emit_sites();
     emit_bits_transfers();
     std::string errors;

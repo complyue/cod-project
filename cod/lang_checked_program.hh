@@ -706,7 +706,6 @@ struct CheckedMethod {
   std::vector<Capture> queries;
   bool captures_resolved = false;
   bool contextual_result = false;
-  bool separate_native_frames = false;
   bool retains_lexical_definitions = false;
   std::vector<Capture> lexical_definitions;
   bool declaration_context() const { return contextual_result || !queries.empty() || retains_lexical_definitions; }
@@ -900,7 +899,6 @@ struct CheckedEnum {
 };
 
 struct CheckedProgram {
-  struct Initializer { size_t module; const Expression *expression; };
   bool deferred_aggregates = false;
   std::vector<CheckedExceptionCategory> exception_types = intrinsic_exception_types();
   Type exception_type(size_t category) const {
@@ -936,12 +934,7 @@ struct CheckedProgram {
   std::vector<Expr> generated_here_bodies;
   std::deque<CheckedMethod> methods;
   std::deque<CheckedInstance> instances;
-  std::map<const Expression *, CheckedOperation> entry;
-  std::vector<Initializer> initializers;
-  std::vector<size_t> execution_order;
   std::vector<WarningDiagnostic> warnings;
-  std::vector<CheckedStorage> entry_storage;
-  std::vector<CheckedBinding> entry_bindings;
   bool exception_values = false;
   bool builder_type(const Type &type) const {
     return type.kind == Type::product && schemas.at(type.identity).lexical_builder;
@@ -1007,18 +1000,13 @@ struct CheckedBody {
   // Conservative writable exposure of an invocation input. Unexposed saved
   // payloads can be observed without acquiring another complete image.
   std::set<size_t> writable_captures;
-  std::vector<Context> contexts;
+  Context context;
 };
 
-inline CheckedBody checked_body(const CheckedProgram &program, const CheckedMethod &method, std::optional<size_t> instance) {
-  const auto instances = instance ? std::vector<size_t>{*instance} : method.instances;
-  if (instances.empty()) throw std::logic_error("checked body has no implementation context");
+inline CheckedBody checked_body(const CheckedInstance &checked) {
   CheckedBody result;
   std::map<size_t, size_t> places;
-  // A lexical declaration has one frame role even when a checked context
-  // borrows an existing target and another constructs local payload storage.
-  for (const auto id : instances) {
-    const auto &checked = program.instances[id];
+  {
     const auto retain = [&](const CheckedStorage &place) {
       const auto [entry, inserted] = places.emplace(place.binding, result.storage.size());
       if (inserted) {
@@ -1032,18 +1020,15 @@ inline CheckedBody checked_body(const CheckedProgram &program, const CheckedMeth
     for (const auto capture : checked.frame.captures) retain(checked.storage.at(capture));
     for (const auto &place : checked.storage) retain(place);
   }
-  bool frame_ready = false;
-  for (const auto id : instances) {
-    const auto &checked = program.instances[id];
+  {
     const auto remap = [&](size_t place) { return place == null_target ? place : places.at(checked.storage.at(place).binding); };
     auto inputs = checked.frame;
     for (auto &input : inputs.inputs) input.place = remap(input.place);
     for (auto &capture : inputs.captures) capture = remap(capture);
-    if (frame_ready && result.frame != inputs) throw std::logic_error("incompatible checked native input roles");
-    result.frame = std::move(inputs); frame_ready = true;
+    result.frame = std::move(inputs);
     bool unchanged = true;
     for (size_t i = 0; i < checked.storage.size(); ++i) unchanged = unchanged && remap(i) == i;
-    auto &context = result.contexts.emplace_back(&checked, std::nullopt);
+    result.context = {&checked, std::nullopt};
     for (const auto &[expr, operation] : checked.operations) {
       for (size_t a = 0; a < operation.arguments.size(); ++a) {
         if (operation.arguments[a].mode == ArgumentMode::value) continue;
@@ -1053,7 +1038,7 @@ inline CheckedBody checked_body(const CheckedProgram &program, const CheckedMeth
               argument.targets.contains(checked.frame.captures[c])) result.writable_captures.insert(c);
       }
     }
-    if (unchanged) continue;
+    if (unchanged) return result;
     const auto optional = [&](std::optional<size_t> &place) { if (place) place = remap(*place); };
     const auto set = [&](std::set<size_t> &source) {
       std::set<size_t> targets;
@@ -1076,8 +1061,8 @@ inline CheckedBody checked_body(const CheckedProgram &program, const CheckedMeth
       set(operation.targets); set(operation.callable_targets); set(operation.captures);
       for (auto &capture : operation.callable_captures) self(self, capture);
     };
-    context.remapped_operations = checked.operations;
-    for (auto &[expr, operation] : *context.remapped_operations) lower(lower, operation);
+    result.context.remapped_operations = checked.operations;
+    for (auto &[expr, operation] : *result.context.remapped_operations) lower(lower, operation);
   }
   return result;
 }
