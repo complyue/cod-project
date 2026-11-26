@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r214 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r213 for the [synchronous path-key callback in the replacement seed](#extracting-the-path-key-callback). The [review](../CHANGELOG.md#k-seed-pipeline-path-key-callback-20261125) applies the existing supplied-body, native loan and completion contracts to phase-owned inputs for the LLVM backend.
+
 At r213 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r212’s [replacement seed pipeline](#replacement-seed-pipeline) under the [compiler modes decision](../CHANGELOG.md#h-default-run-and-optimized-build-20261125). The bootstrap performance target governs default-path work. The high-quality optimizing mode belongs to [D-20-COMPILER-MODES](DesignAuthorityRegistry.md#d-20-compiler-modes).
 
 At r212 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r211 for the [first LLVM handoff](#replacement-seed-pipeline). The [adapter review](../CHANGELOG.md#k-replacement-seed-llvm-handoff-20261125) identifies the existing LLVM and provider consumers, the lifetime of their source references and the boundary between their emission walk and upstream collection.
@@ -765,6 +767,14 @@ Give each fact kind a producer and each later reader a completed, revision-appro
 For the first LLVM handoff, the new producers can seal the existing `CheckedProgram` representation for the operations this backend reads. Keep the matching parsed revision alive for its source and operation pointers. `LLVMEmission::emit` and `emit_native_providers` take the sealed program by const reference. The LLVM pass may traverse that source to emit control flow and derive its private layouts from completed instance data. A missing prerequisite must surface before output publication. This adapter has no entry to the old checker and requires no verifier facts merely to populate legacy fields.
 
 Structure the seed around the [independently selectable compiler operations](../applications/cod-booter/docs/CompilerPipeline.md#independently-selectable-compiler-operations). Development mainline owns implementation, verification and cutover. The real entry and its native interfaces determine completion. Focused comparisons during development answer correctness questions. The full-build performance decision follows the removal gate below.
+
+#### Extracting the path-key callback
+
+In [`ModuleIndex.fill_path`](../applications/cod-booter/src/ModuleIndex.cod) the supplied body calls `fill_key(keys, first, key)` after comparing the offered key length with `length`. The [ordinary receiver](../applications/cod-booter/src/NativeSource.cod) has a lexical `here work` formal. Its own supplied body relays the native `bytes` loan to that formal. Register each body with its source revision, defining interpretation, lexical site and bindings in scope at that point. During its single extraction, the supplier records the call and its prepared operands. During the literal’s own extraction, it records the outer bindings it actually uses.
+
+Complete the mapping from those uses to captured places, owners and lexical `here` descriptors before supplying the existing LLVM frame. `first` and `length` keep their readonly access. `keys` still selects writable backing under G. The offered byte view is bounded by the selected `PathOwner` under P and the synchronous handoff. The relay captures the existing `work` descriptor. The receiver invokes that descriptor through its declared signature and can serve different literals with the same ABI. Neither capture completion nor invocation schedules another traversal of the supplier.
+
+The [provider](../applications/cod-booter/native/path_provider.c) lends the selected path bytes and reports native status separately from callback completion. `Complete` and `ScratchFailed` are both ordinary `CompilerStatus` feedback. A protected exit carries its original payload and cleanup through the bridge. An invalid native response retains its boundary failure. Verify a ready insertion, ordinary failed feedback, and a reached abrupt callback. An unready path throws `PathNotReadyException` with status 1 before a loan begins. A failure of the second reserve happens even earlier and retains the first rebind. Preserve these distinctions in the linked result and retain prior outputs on a translation failure. This review covers the direct synchronous relay on this path.
 
 ### Seed checker migration and performance acceptance
 
