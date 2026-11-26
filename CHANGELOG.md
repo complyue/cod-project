@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Put review routing first in the project rules
+
+<a id="k-review-routing-20261126"></a>
+**K-REVIEW-ROUTING-20261126.** D-GOV r1321→1322 continues the [confirmed delegation](#h-mainline-design-review-boundary-20261125). The user reiterated “你只负责影响足够重大的事项上把关” in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). Compared with [the previous guide](https://github.com/complyue/cod-project/blob/813eab5d/AGENTS.md), [the decision table](AGENTS.md#design-discussion-and-development-mainline) gives each review trigger and its owner once. The [registry](design/DesignAuthorityRegistry.md#recording-a-design-revision) now carries the detailed design-record instructions. Existing approval thresholds, phase prohibitions, verification and operational permissions continue.
+
 ## 2026-11-26 — Compare lexical connections and independently owned parser plans
 
 <a id="k-parser-owned-plan-study-20261126"></a>

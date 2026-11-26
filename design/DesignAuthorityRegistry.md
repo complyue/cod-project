@@ -1,10 +1,10 @@
 # Design authority and value lineage
 
-Registry revision: 1321 · Audit date: 2026-11-26 (America/Los_Angeles)
+Registry revision: 1322 · Audit date: 2026-11-26 (America/Los_Angeles)
 
 ## Design authority
 
-[D-GOV](#d-gov) covers the current registry revision and all sections. V-03 → GOV-01 → GOV-02 through E-11/E-12 makes each delegated scope traceable to its human-confirmed charter value. H-05 establishes the baseline. H-388/H-391/H-403/H-411/H-412 govern evidence, presentation and audit delivery. [Editorial continuity](../CHANGELOG.md#k-hygiene-index-20261123)
+[D-GOV](#d-gov) covers the current registry revision and all sections. V-03 → GOV-01 → GOV-02 through E-11/E-12 makes each delegated scope traceable to its human-confirmed charter value. H-05 establishes the baseline. H-388/H-391/H-403/H-411/H-412 govern evidence, presentation and audit delivery. [Editorial continuity](../CHANGELOG.md#k-hygiene-index-20261123) · [Review routing and record location](../CHANGELOG.md#k-review-routing-20261126)
 
 The scope table gives the confirmed boundary, exclusions and open questions for each contract. Assess changes against its value and dependency edges, reverse links and original human evidence. The linked design owns detailed acceptance. Human confirmation, agent continuity and implementation coverage have distinct meanings. [Charter](RegionalSemanticPlatformCharter.md) · [Project rules](../AGENTS.md)
 
@@ -18,6 +18,12 @@ The scope table gives the confirmed boundary, exclusions and open questions for 
 6. H-386 requires topic-based human discussion and eventual whole-file approval of new designs. Ask for concrete decisions, not internal IDs; do not reopen settled preferences. Build/test/toolchain permissions remain independent.
 7. Human history is append-only in Git: preserve the actual source, statement, time uncertainty, scope and exclusions. Corrections/withdrawals get new events. Read original evidence when exact scope matters; an index or agent summary cannot replace confirmation. The [changelog evidence index](../CHANGELOG.md#authority-evidence-index) provides targeted retrieval.
 8. [H-IMPLEMENTATION-FIDELITY-20261117](../CHANGELOG.md#h-implementation-fidelity-20261117) governs implementation work through [AGENTS.md](../AGENTS.md#semantic-fidelity-and-implementation-obstacles): discuss any necessary semantic compromise at the design level before introducing it. Existing-code conflicts require disclosure of sunk cost, faithful migration to the latest confirmed contract and continuing debt reduction; implementation convenience does not justify pressuring the human to accept defects.
+
+### Recording a design revision
+
+- **Assess the change from the confirmed baseline.** Compare the cumulative changes in value, goals, assumptions, scope, invariants, trade-offs, interfaces, acceptance and downstream effects. Qualification requires a human-confirmed value path, explicit propositions and relationships, covered revision and scope, invariants, non-goals, acceptance and valid continuity. Dependencies, shipped code, agent summaries, silence and general approval cannot establish it.
+- **Update the three records together.** Near the top of every new or revised design put a compact **Design authority** block identifying its registry entry, revision and sections, parent concepts and relationships, value rationale, invariants, non-goals, acceptance, confirmed baseline and continuity. In the registry, maintain separate concepts and edges with endpoints, kind, rationale, scoped version and status. Update exclusions, open questions, affected descendants, dependencies, reverse links and supersession. Invalidate only affected scope.
+- **Preserve the decision.** Use a stable changelog ID and immutable commit/path locator. Record the human, explicit statement, source and time, covered revision, accepted or rejected scope and exclusions. Label excerpts when durable evidence is unavailable. Record corrections, withdrawals and supersession as new events. For missing evidence, describe the alternatives and decision needed. Register unqualified legacy documents as `pending-human` with the missing evidence and candidate value path.
 
 <a id="5-evidence-access"></a>
 
