@@ -2,7 +2,7 @@
 
 Roadmap revision: 48 · Recorded: 2026-11-26 · Phase: initial seed delivery through alternating booter and seed development.
 
-**Compiler design target.** The default `cod` invocation compiles and runs an entry without leaving a user-facing executable. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** Seed and booter development prioritize Go-like compile speed with moderate runtime performance. The production compiler’s `cfe` (Compile for Ever) command builds and saves an optimized executable for later use. [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
+**Compiler design target.** On the command line, `cod` (Compile on Demand) compiles the entry for this run and executes it immediately, leaving no user-facing executable. The planned production command `cfe` (Compile for Ever) spends more time optimizing the program and saves the executable for later runs. Seed and booter development prioritize Go-like compile speed with moderate runtime performance. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
 
 ## Design authority
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Explain Compile on Demand alongside Compile for Ever
+
+<a id="k-cod-cli-name-20261126"></a>
+**K-COD-CLI-NAME-20261126.** The project user described the CLI meaning as “命令行上 cod 的 Compile on Demand 语义” in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). Registry r1325→1326 continues [D-20-COMPILER-MODES](design/DesignAuthorityRegistry.md#d-20-compiler-modes). The [compiler mode table](applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds) pairs the two names with the run and save behavior in the [previous contract](https://github.com/complyue/cod-project/blob/b3e97f50b15a39f107db3c25b4a689a326ac6ac9/applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds).
+
 ## 2026-11-26 — Plan Event Processing Systems as one CoD library
 
 <a id="h-eps-library-direction-20261126"></a>
