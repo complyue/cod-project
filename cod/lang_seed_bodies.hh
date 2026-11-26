@@ -1867,7 +1867,12 @@ class BodyExtraction {
             if (!call_operation) continue;
             op.type = remember(item, std::move(*call_operation)).type;
           } else {
-            op.type = extract(item, discard_iteration_result).type;
+            const auto &result = extract(item, discard_iteration_result);
+            op.type = result.type;
+            if (!intermediate && text_type(result.type) && result.view && result.read_only && result.owners.size() == 1) {
+              op.view = op.read_only = true;
+              op.owners = result.owners;
+            }
           }
           if (op.type == Type::never) break;
         }
@@ -1882,18 +1887,25 @@ class BodyExtraction {
       case Kind::conditional: {
         expect(operand(expr, 0).type == Type::boolean, expr.at, "conditional requires a Boolean operand");
         scopes_.emplace_back();
-        const auto yes = extract(*expr.children[1], discard_iteration_result).type;
+        const auto &yes = extract(*expr.children[1], discard_iteration_result);
         scopes_.pop_back();
         scopes_.emplace_back();
-        const auto no = extract(*expr.children[2], discard_iteration_result).type;
+        const auto &no = extract(*expr.children[2], discard_iteration_result);
         scopes_.pop_back();
         if (discard_iteration_result) {
-          op.type = yes == Type::never && no == Type::never ? Type::never : Type::void_type;
+          op.type = yes.type == Type::never && no.type == Type::never ? Type::never : Type::void_type;
           return op;
         }
-        expect(yes == no || yes == Type::never || no == Type::never,
+        expect(yes.type == no.type || yes.type == Type::never || no.type == Type::never,
                expr.at, "replacement seed needs compatible conditional results");
-        op.type = yes == Type::never ? no : yes;
+        const auto &completes = yes.type == Type::never ? no : yes;
+        const auto &other = yes.type == Type::never ? yes : no;
+        op.type = completes.type;
+        if (text_type(op.type) && completes.view && completes.read_only && completes.owners.size() == 1 &&
+            (other.type == Type::never || (other.view && other.read_only && other.owners == completes.owners))) {
+          op.view = op.read_only = true;
+          op.owners = completes.owners;
+        }
         return op;
       }
       case Kind::range_for: {
