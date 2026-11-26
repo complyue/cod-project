@@ -303,6 +303,9 @@ class BodyExtraction {
       if (type == Type::string)
         return mode == ArgumentMode::borrowed_ref && parameter.read_only &&
                !parameter.owner.empty() && !parameter.selects_caller_place();
+      if (declarations().builder_type(type))
+        return (mode == ArgumentMode::borrowed_ref || mode == ArgumentMode::borrowed_read) &&
+               !parameter.selects_caller_place();
       return (mode == ArgumentMode::borrowed_read || mode == ArgumentMode::borrowed_ref) &&
              (type.kind == Type::array || scalar_type(type) ||
               (type.kind == Type::product && declarations().bits_payload(type)));
@@ -330,7 +333,7 @@ class BodyExtraction {
       expect(!parameter.not_init_ref && !parameter.variadic && !parameter.automatic_conversion &&
              (!parameter.selects_caller_place() || slot) &&
              (mode == ArgumentMode::value ? scalar_type(type) : native_handle || ordinary_loan(parameter, mode, type)),
-             parameter.at, "replacement seed needs a fixed scalar, array, bits product, readonly String or native handle formal");
+             parameter.at, "replacement seed needs a fixed scalar, array, bits product, text or native handle formal");
       auto &frame = body_.instance.frame;
       const auto owner = parameter.owner.empty() ? size_t{0} : input_owner(owner_role(parameter.owner, parameter.at));
       if (owner) frame.owners.try_emplace(owner, frame.inputs.size());
@@ -586,6 +589,25 @@ class BodyExtraction {
       return op;
     }
 
+    bool text_piece(const Type &type) const {
+      return text_type(type) || declarations().builder_type(type);
+    }
+
+    CheckedOperation append_text(const Expression &expr) {
+      expect(expr.children.size() == 2 && !expr.has_here_body(), expr.at,
+             "text append requires a builder and one text piece");
+      const auto &target = operand(expr, 0);
+      const auto owner = single_owner(target, expr.children[0]->at);
+      if (!declarations().builder_type(target.type) || target.read_only || const_input_owner(owner))
+        fail(expr.children[0]->at, "text append requires writable builder and owner access");
+      const auto &piece = operand(expr, 1);
+      if (!text_piece(piece.type)) fail(expr.children[1]->at, "text append requires a text piece");
+      single_owner(piece, expr.children[1]->at);
+      CheckedOperation op;
+      op.builtin = BuiltinOperation::builder_append;
+      return op;
+    }
+
     CheckedOperation call_local(const Expression &expr, const LocalProcedure &local, bool region_receiver) {
       auto &known = extraction_.local_definitions_.at(local.definition);
       if (!known.body) {
@@ -635,6 +657,9 @@ class BodyExtraction {
           return call_local(expr, *local, region_receiver);
       if (!expr.intrinsic && !visible_local(expr.text)) {
         if (const auto *formal = find_here(expr)) return invoke_here(expr, *formal);
+        const auto primitive = names().text_primitives.find(expr.text);
+        if (primitive != names().text_primitives.end() && primitive->second == COD_LANG_BUILDER_APPEND_EXPORT)
+          return append_text(expr);
         const auto native = names().native_operations.find(expr.text);
         if (native != names().native_operations.end()) return provider_call(expr, native->second);
       }
@@ -674,6 +699,8 @@ class BodyExtraction {
           const auto owner = single_owner(arg, at);
           if (native_handle && !role->read_only && const_input_owner(owner))
             fail(at, "const owner cannot supply a writable native handle owner");
+          if (declarations().builder_type(formal) && !role->read_only && const_input_owner(owner))
+            fail(at, "const owner cannot supply a writable builder owner");
           const auto [first, inserted] = actual_owners.emplace(static_cast<size_t>(role - roles.begin()), owner);
           expect(inserted || first->second == owner, at, "one formal owner needs the same actual owner");
         }
@@ -923,6 +950,31 @@ class BodyExtraction {
       return op;
     }
 
+    CheckedOperation make_lexical_text(const Expression &expr, const Type &type, bool builder) {
+      expect(expr.owner_name.empty() && !in_iteration_ && !supplied_body(), expr.at,
+             "replacement seed needs lexical text in the enclosing full scope");
+      const auto count = expr.children.size();
+      if (!expr.constructor_arguments || (builder ? count != 0 && count != 2 : count != 1))
+        fail(expr.at, builder ? "a lexical text builder requires zero arguments or two positional text pieces"
+                             : "make String requires one positional text operand");
+      using Allocation = CheckedOperation::LexicalAllocation;
+      Allocation plan{0, builder ? Allocation::builder : Allocation::text};
+      for (size_t i = 0; i < count; ++i) {
+        const auto &piece = operand(expr, i);
+        if (!text_piece(piece.type)) fail(expr.children[i]->at, "text construction requires a text piece");
+        single_owner(piece, expr.children[i]->at);
+        if (declarations().builder_type(piece.type)) plan.builder_inputs |= 1u << i;
+      }
+      if (!builder && plan.builder_inputs) plan.kind = Allocation::builder_snapshot;
+      CheckedOperation op;
+      op.type = op.operand_type = type;
+      op.view = true;
+      op.read_only = !builder;
+      op.owners.insert(0);
+      op.lexical_allocation = plan;
+      return op;
+    }
+
     CheckedOperation make(const Expression &expr) {
       expect(!expr.construction_type_query && expr.annotation,
              expr.at, "replacement seed needs a declared construction type");
@@ -960,6 +1012,8 @@ class BodyExtraction {
       }
       const auto type = resolve_annotation(*expr.annotation, expr.at);
       if (scalar_type(type)) return make_scalar(expr, type);
+      const bool builder = declarations().builder_type(type);
+      if (builder || type == Type::string) return make_lexical_text(expr, type, builder);
       if (type.kind == Type::product) return make_product(expr, type, true);
       expect(type.kind == Type::array && expr.constructor_arguments &&
              expr.children.size() == 2 && !family(spelling),
@@ -967,8 +1021,7 @@ class BodyExtraction {
       expect(!supplied_body(), expr.at, "replacement seed does not allocate arrays inside a here literal");
       const auto owner = array_owner(expr);
       const auto allocator = allocator_for(owner);
-      // Ordinary blocks only introduce bindings. Allocation belongs to the
-      // enclosing full invocation, which owns its cleanup.
+      // Ordinary blocks use the enclosing full invocation's allocation owner.
       expect(allocator && (allocator->kind != Allocator::lexical || !in_iteration_), expr.at,
              "replacement seed needs an admitted array allocation owner");
       const auto &array = declarations().arrays.at(type.identity);
@@ -1030,7 +1083,6 @@ class BodyExtraction {
              expr.at, "replacement seed needs an inferred initialized val or ref");
       const auto &initial = operand(expr, 0);
       expect(initial.type.kind != Type::native_handle, expr.at, "a native handle view needs a handle declaration");
-      expect(initial.type != Type::string, expr.at, "replacement seed supports existing readonly String formal loans");
       const auto owner = value ? size_t{0} : single_owner(initial, expr.at);
       if (value) takes_value(initial, initial.type, expr.at);
       const auto local = declare(expr.at, expr.text, initial.type, value, value ? fixed : initial.read_only, fixed, owner);
@@ -1225,6 +1277,11 @@ class BodyExtraction {
       CheckedOperation op;
       switch (expr.kind) {
       case Kind::integer: case Kind::real: return numeric_literal(expr);
+      case Kind::string_literal:
+        op.type = Type::string;
+        op.view = op.read_only = true;
+        op.owners.insert(0);
+        return op;
       case Kind::boolean:
         op.type = Type::boolean;
         op.integer = expr.text == "true";
@@ -1289,6 +1346,19 @@ class BodyExtraction {
         operand(expr, 2);
         in_iteration_ = enclosing_iteration;
         scopes_.pop_back();
+        return op;
+      }
+      case Kind::return_tail: {
+        expect(!supplied_body() && !body_.instance.result.owns_region(), expr.at,
+               "replacement seed needs an independent callable result at the tail");
+        const auto &tail = operand(expr, 0);
+        op.type = tail.type;
+        if (tail.type != Type::never && tail.type != Type::void_type) {
+          const auto &result = *body_.instance.result.type;
+          takes_value(tail, result, expr.at);
+          op.type = Type::never;
+          op.operand_type = result;
+        }
         return op;
       }
       case Kind::return_value: case Kind::continue_value:
