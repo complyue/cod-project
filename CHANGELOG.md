@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Prepare a current symbol’s selected target and owner together
+
+<a id="k-seed-current-symbol-argument-20261126"></a>
+**K-SEED-CURRENT-SYMBOL-ARGUMENT-20261126.** [D-ARCH-REVIEW r220→221](design/ImplementationArchitecture.md#preparing-a-current-reference-symbol-argument) applies [D-10-OWNER-SYMBOL](design/DesignAuthorityRegistry.md#d-10-owner-symbol) to [`writeUtf8(@sout, piece)`](https://github.com/complyue/cod-project/blob/b85956e7/cod/library/string.cod#L83). The [entry-owner lookup](https://github.com/complyue/cod-project/blob/b85956e7/cod/lang_llvm.hh#L1130) and [current target load](https://github.com/complyue/cod-project/blob/b85956e7/cod/lang_llvm.hh#L3074) identify different preparation times. The reviewed path takes both words from the descriptor at the operand site. Registry r1330→1331 continues P-682/P-683. Linked acceptance remains with mainline.
+
 ## 2026-11-26 — Complete the case result before applying the enclosing return
 
 <a id="k-seed-case-arm-result-20261126"></a>
