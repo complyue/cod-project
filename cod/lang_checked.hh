@@ -26279,7 +26279,6 @@ public:
                                                                     CompilationDiagnostics &diagnostics) {
     ScalarChecker binder;
     if (!binder.register_source_modules(source, DeclarationScope::module, diagnostics)) return {};
-    binder.complete_declared_failures();
     binder.program_.warnings.clear();
     return ModuleDeclarations{std::move(source), std::move(binder.modules_), std::move(binder.program_)};
   }
