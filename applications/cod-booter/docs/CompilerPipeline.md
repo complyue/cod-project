@@ -1,15 +1,25 @@
 # Compiler artifacts and persistent stage reuse
 
-Revision: 6 · Recorded: 2026-11-17 · Status: planning draft.
+Revision 7 · 2026-11-25 · Stage controls confirmed. Persistent artifact design remains a planning draft.
 
 ## Design authority
 
+[**D-20-STAGE-CONTROLS**](../../../design/DesignAuthorityRegistry.md#d-20-stage-controls) covers [independently selectable compiler operations](#independently-selectable-compiler-operations) at r7. The [project user’s decision](../../../CHANGELOG.md#h-compiler-pipeline-replacement-20261125) derives this scope from C-80 and charter §§5.3 and 9, through P-744/P-745. The same compiler results serve editor feedback and build requests. Their revision, dependencies and validation status must remain identifiable. The r6 proposals for persistence, representation and cache policy continue with their original qualification.
+
 - **Output-contract alignment:** [H-601](../../../CHANGELOG.md#h-601)/[H-602](../../../CHANGELOG.md#h-602)/[K-INIT-PLACE-CORRECTION-20261117](../../../CHANGELOG.md#k-init-place-correction-20261117) covers r5→6. D-22 keeps ordinary init reference semantics and explicit var for caller-slot declared place aliasing; no target modifier is introduced. Native handle storage, ownership and provider proof remain pending. Preserve C-81/C-65, charter §§4.3/6.3/8/12, D-16 and D-17 timing/cleanup. Only the dependency/initialization interpretation changes; pipeline behavior and full application/native/value-path qualification remain unchanged.
 
-- **Registry / coverage:** [D-20](../../../design/DesignAuthorityRegistry.md#d-20), revision 6, all sections; detailed representation, caching and validation contracts are `pending-human`.
+- **Artifact and persistence scope.** [D-20](../../../design/DesignAuthorityRegistry.md#d-20) carries the r6 proposals into r7. Detailed representation, caching and validation of persistent artifacts remain `pending-human`.
 - **Baseline / assessment:** [H-353](../../../CHANGELOG.md#h-353) selects a CoD-native compiler pilot and investigation of DBMR stage caches. [K-473](../../../CHANGELOG.md#k-473) records the draft; [K-515](../../../CHANGELOG.md#k-515) preserves this pipeline scope while the set adopts H-356's separately authorized defer prerequisite. C-80/P-314/P-315/P-317 links typed compiler intent and reusable structured results to C-01/C-05 and charter §§2, 5.3–5.4, 7 and 12.
 - **Dependencies / invariants:** P-316/P-318, D-01 regional representation, D-14 owners, D-15 independent module worlds and D-16 numerical/syntax compatibility. Preserve identities, selected interpretations and relocation; no native addresses in persistent artifacts and no cross-module world editing.
 - **Acceptance / exclusions:** future cached and uncached paths must preserve applicable semantic observations and reject stale/incompatible reuse, with actual time/memory measurements. No cache schema, partition algorithm, checksum, file API or implementation is selected here.
+
+## Independently selectable compiler operations
+
+A client can request parsing, type checking, lexical-access checking, ownership checking and emission separately. The replacement C++ seed should make these operations independently selectable wherever practical. The CoD booter should adopt the separations proved useful in the seed. The future `e-wrks/cod` compiler **must** provide independent controls to build clients and its LSP/IDE clients. Users choose the work they want for their available compute and desired feedback latency. Specific option spellings, defaults for editor profiles and a persistence format are separate implementation choices.
+
+Each operation declares its required inputs and delivers its own result. For example, resolving the selected type and layout of an operand can be necessary to emit LLVM even with type diagnostics disabled. Emission still prepares its actual owner, cleanup and ABI operands. Work exclusive to a disabled check stays off. With parsing disabled, a downstream operation can consume a matching completed syntax result. If an input is missing or stale, identify the unavailable prerequisite. A request must not silently enable a disabled stage. A skipped check supplies no successful validation claim. Publishing an artifact as checked requires the evidence prescribed for that artifact.
+
+For production acceptance, exercise parse-only feedback with damaged source, individual check selections without emission, and a build using completed inputs with parsing off. Enable ownership checking on the same revision and observe its diagnostics while reusing the available inputs. After an edit, refresh affected results using their recorded dependencies and preserve results whose inputs remain valid. Diagnostics belong to the revision and the checks that actually ran. On a valid input, selecting extra diagnostics preserves emitted program behavior. A stale syntax input with parsing off must be distinguishable from a successful check. These cases concern the compiler interface used by both the editor and the build. They require no particular storage format.
 
 ## Design from compiler work
 
