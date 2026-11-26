@@ -20323,7 +20323,6 @@ class ScalarChecker {
         const auto &array = operations.at(expr.children.front().get());
         const auto &shape = type.kind == Type::arguments ? value_pack_index()
             : indexed_array(type, array.view && !array.mixed_view, expr.at);
-        require_live_view(array, expr.at);
         read_view(array, expr.at);
         const auto index = child(1);
         if (index == Type::never) break;
@@ -20335,7 +20334,6 @@ class ScalarChecker {
         operation.operand_type = type;
         const auto source = check_bits_payload(*expr.children[2], shape.element, instance, operations);
         if (source == Type::never) break;
-        require_live_view(array, expr.at);
         operation.type = shape.element;
         operation.view = operation.indexed_target = operation.read_only = true;
         operation.owners = array.owners;
@@ -20453,7 +20451,6 @@ class ScalarChecker {
         if (type != Type::never) {
           const auto &array = operations.at(expr.children.front().get());
           check_array_length_type(type, array.view && !array.mixed_view, expr.at);
-          require_live_view(array, expr.at);
           read_view(array, expr.at);
         }
         break;
@@ -20476,7 +20473,7 @@ class ScalarChecker {
         if (prepared.type == Type::never) { operation.type = Type::never; break; }
         if (!text_type(prepared.type)) fail(source.at, "text access requires a readable String");
         prepare_borrow(prepared, ArgumentMode::borrowed_ref, source.at);
-        require_live_view(prepared, source.at);
+        if (*access == BuiltinOperation::text_slice) require_live_view(prepared, source.at);
         for (size_t i = 1; i < expr.children.size(); ++i) {
           const auto &offset = *expr.children[i];
           const auto type = check(offset, instance, operations, true);
@@ -21664,7 +21661,6 @@ class ScalarChecker {
         shape = source.kind == Type::arguments ? &value_pack_index()
             : &indexed_array(source, array.view && !array.mixed_view, expr.at);
         operation.operand_type = source;
-        require_live_view(array, expr.at);
         read_view(array, expr.at);
       }
       const auto index = child(1);
@@ -21675,7 +21671,6 @@ class ScalarChecker {
       operation.type = shape->element;
       // Value consumers select overloads using the target's access and owner.
       const auto &array = operations.at(expr.children.front().get());
-      require_live_view(array, expr.at);
       operation.view = operation.indexed_target = true;
       operation.read_only = array.read_only;
       operation.owners = array.owners;
