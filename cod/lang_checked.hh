@@ -558,7 +558,7 @@ class ScalarChecker {
     const auto &effects = read_effects(instance, validating_ || collect ? SymbolEffectUse::all : SymbolEffectUse::none);
     if (validating_ || collect) for (const auto id : effects.symbols) {
       const auto &symbol = program_.symbols[id];
-      if (current_scalars && !symbol_needs_transport_fact(id) && symbol.type && scalar_type(*symbol.type)) {
+      if (current_scalars && !symbol_needs_transport_fact(symbol) && symbol.type && scalar_type(*symbol.type)) {
         if (collect) observe_symbol_use(lexical_, id, at);
       } else if (validating_) implementation_gap(at, "dynamic binding requirements at a here invocation");
     }
@@ -4495,8 +4495,7 @@ class ScalarChecker {
     }
     return result;
   }
-  bool symbol_needs_transport_fact(size_t symbol) const {
-    const auto &binding = program_.symbols[symbol];
+  static bool symbol_needs_transport_fact(const CheckedSymbol &binding) {
     return binding.reference || binding.live_scope || (binding.type && binding.type->kind == Type::native_handle);
   }
   bool tracks_ordinary_symbol_uses() const {
@@ -4506,8 +4505,8 @@ class ScalarChecker {
     return tracks_ordinary_symbol_uses() ? SymbolEffectUse::all : SymbolEffectUse::transport_only;
   }
   void observe_symbol_use(LexicalState &state, size_t symbol, const Location &at) {
-    if (!tracks_ordinary_symbol_uses() && !symbol_needs_transport_fact(symbol)) return;
     const auto &binding = program_.symbols[symbol];
+    if (!tracks_ordinary_symbol_uses() && !symbol_needs_transport_fact(binding)) return;
     if (delayed_ && state.live && binding.live_scope)
       implementation_gap(at, "deferred access to a live scoped procedure activation");
     if (validating_ && state.live && binding.reference) {
@@ -4678,7 +4677,7 @@ class ScalarChecker {
     std::set<size_t> transport_symbols;
     const bool collect_ordinary_symbols = prepared && tracks_ordinary_symbol_uses();
     if (prepared && !collect_ordinary_symbols) for (const auto symbol : target.symbols)
-      if (symbol_needs_transport_fact(symbol)) transport_symbols.insert(symbol);
+      if (symbol_needs_transport_fact(program_.symbols[symbol])) transport_symbols.insert(symbol);
     const auto &symbol_uses = collect_ordinary_symbols ? target.symbols : transport_symbols;
     std::map<size_t, CleanupEquations::Effects> effects;
     for (const auto reason : reasons) {
@@ -4962,7 +4961,7 @@ class ScalarChecker {
         if (symbol_use == SymbolEffectUse::all) effects.symbols.insert(next.symbols.begin(), next.symbols.end());
         else if (symbol_use == SymbolEffectUse::transport_only)
           for (const auto symbol : next.symbols)
-            if (symbol_needs_transport_fact(symbol)) effects.symbols.insert(symbol);
+            if (symbol_needs_transport_fact(program_.symbols[symbol])) effects.symbols.insert(symbol);
         // Different definitions can declare their owners in different orders.
         // Translate each effect to the owner slot of the shared callable type.
         std::set<size_t> owners;
@@ -24329,7 +24328,7 @@ class ScalarChecker {
       if (known.symbols != effects.symbols) {
         const auto differs = [&](const auto &before, const auto &after) {
           return std::ranges::any_of(before, [&](size_t symbol) {
-            return symbol_needs_transport_fact(symbol) && !after.contains(symbol);
+            return symbol_needs_transport_fact(program_.symbols[symbol]) && !after.contains(symbol);
           });
         };
         changes.transport_symbols = mode == EffectMerge::symbols &&
@@ -24466,14 +24465,20 @@ class ScalarChecker {
     } closing{closing_write_effects_, closing_symbol_effects_};
     std::deque<size_t> pending;
     std::set<size_t> queued;
+    // Entry exports no symbol requirements. Scalar handler activation reads
+    // its completed replay layout independently of the symbol-only pass.
+    const bool check_module_entry = !program_.initializers.empty() &&
+        (!symbols || std::ranges::any_of(program_.symbols, symbol_needs_transport_fact));
     const auto enqueue = [&](size_t context) {
-      if (context) {
+      if (!context) {
+        if (!check_module_entry) return;
+      } else {
         const auto &body = program_.instances[context - 1];
         if (body.effects_frozen || (symbols && body.symbol_requirements_known_empty)) return;
       }
       if (queued.insert(context).second) pending.push_back(context);
     };
-    if (!program_.initializers.empty()) enqueue(0);
+    enqueue(0);
     size_t instances = 0, callables = program_.callables.size();
     const auto discover = [&] {
       while (instances < program_.instances.size()) enqueue(++instances);
