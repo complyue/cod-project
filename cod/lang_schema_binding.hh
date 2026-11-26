@@ -5,8 +5,46 @@
 
 namespace cod::language {
 
+inline const Expression &ungrouped_expression(const Expression &expr) {
+  const auto *operand = &expr;
+  while (operand->kind == Expression::Kind::grouped) operand = operand->children.front().get();
+  return *operand;
+}
+
 inline bool matches_native_handle(const Type &type, const Type &marker) {
   return type.kind == Type::native_handle && type.identity == marker.identity;
+}
+
+inline size_t select_native_constructor(const CheckedProgram &program, const Type &declared,
+                                        const Type &constructed, const Expression &expr) {
+  if (declared.kind != Type::c_type_marker || constructed.kind != Type::c_type_marker)
+    fail(expr.at, "native handle construction requires a 'handle type' declaration");
+  if (declared != constructed) fail(expr.at, "C handle constructor must match the declared owner type");
+  const bool attached = expr.kind == Expression::Kind::make_borrowed_handle;
+  const bool borrow_only = program.schemas.at(constructed.identity).native_owner.has_value();
+  if (borrow_only && !attached)
+    fail(expr.at, "borrow-only CType '" + constructed.name + "' cannot be acquired with 'make own handle'");
+  if (attached && !borrow_only)
+    fail(expr.at, "make handle requires a borrow-only CType with a declared owning CType");
+  const auto constructor = std::ranges::find(program.native_constructors, constructed, &CheckedNativeConstructor::handle);
+  if (constructor == program.native_constructors.end()) fail(expr.at, "no C constructor declared for '" + constructed.name + "'");
+  if (constructor->inputs.size() != expr.children.size()) fail(expr.at, "wrong number of C constructor arguments");
+  return std::distance(program.native_constructors.begin(), constructor);
+}
+
+inline Type native_handle_type(Type marker, bool owned) {
+  marker.kind = Type::native_handle;
+  marker.owned = owned;
+  return marker;
+}
+
+inline void check_native_invocation_kind(const Form *caller, const Form &callee, const Location &at,
+                                         bool prepared = false) {
+  if (callee.kind == Form::Kind::function) {
+    if (prepared) fail(at, "defer call requires a procedure");
+  } else if (caller && caller->kind == Form::Kind::function) {
+    fail(at, "a function cannot invoke a procedure");
+  }
 }
 
 inline const CheckedSchema &scalar_exception_schema(const CheckedProgram &program, const Type &type, const Location &at) {

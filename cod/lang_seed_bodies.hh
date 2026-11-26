@@ -171,6 +171,7 @@ class BodyExtraction {
     std::vector<std::map<std::string, Local>> scopes_{1};
     std::map<std::string, HereFormal> here_;
     std::set<size_t> caught_places_;
+    bool in_iteration_ = false;
     using Kind = Expression::Kind;
 
     const Local *find(const std::string &name) const {
@@ -219,8 +220,12 @@ class BodyExtraction {
       return method_ ? method_->input_owners() : body_.literal->owner_parameters;
     }
 
+    bool const_input_owner(size_t owner) const {
+      return owner > first_symbol_owner && owners().at(null_target - 1 - owner).read_only;
+    }
+
     bool can_allocate(size_t owner) const {
-      return !owner || !owners().at(null_target - 1 - owner).read_only;
+      return !owner || (owner > first_symbol_owner && !const_input_owner(owner));
     }
 
     static Allocator capability(size_t owner) {
@@ -334,7 +339,12 @@ class BodyExtraction {
         op.integer = declarations().enums.at(member.type.identity).members.at(member.member).code;
         return op;
       }
-      return place_operand(body_.instance, *local);
+      auto op = place_operand(body_.instance, *local);
+      if (op.type.kind == Type::native_handle && op.type.owned) {
+        op.type.owned = false;
+        op.reborrows_native_owner = true;
+      }
+      return op;
     }
 
     bool visible_local(const std::string &name) const {
@@ -407,14 +417,24 @@ class BodyExtraction {
       return op;
     }
 
+    static size_t native_loan(const CheckedOperation &actual, const Type &marker, const Location &at) {
+      if (marker.kind != Type::c_type_marker || !matches_native_handle(actual.type, marker) || actual.type.owned)
+        fail(at, "expected a native handle borrow of type '" + marker.name + "'");
+      return single_owner(actual, at);
+    }
+
+    static void bind_native_owner(std::map<size_t, size_t> &owners, size_t role, size_t owner, const Location &at) {
+      const auto [first, inserted] = owners.emplace(role, owner);
+      if (!inserted && first->second != owner) fail(at, "C arguments for one owner need the same actual owner");
+    }
+
     CheckedOperation provider_call(const Expression &expr, size_t id) {
       const auto &native = declarations().native_operations.at(id);
       const auto &form = *native.contract.source;
       expect(native.has_here() == expr.has_here_body(), expr.at, "arguments do not match the C provider's here declaration");
       expect(expr.children.size() == native.inputs.size() + expr.has_here_body(),
              expr.at, "arguments do not match the C provider declaration");
-      if (form_.kind == Form::Kind::function && form.kind != Form::Kind::function)
-        fail(expr.at, "a function cannot invoke a procedure");
+      check_native_invocation_kind(&form_, form, expr.at);
       CheckedOperation op;
       op.type = *native.contract.result.type;
       op.native_call = id;
@@ -429,15 +449,14 @@ class BodyExtraction {
           continue;
         }
         const bool handle = input.type.kind == Type::c_type_marker;
-        expect(handle ? matches_native_handle(actual.type, input.type) && !actual.type.owned :
-               input.type.kind == Type::array && actual.type == input.type,
-               at, "C provider needs a loan of the declared nominal type");
-        const auto owner = single_owner(actual, at);
+        if (!handle)
+          expect(input.type.kind == Type::array && actual.type == input.type,
+                 at, "C provider needs a loan of the declared nominal type");
+        const auto owner = handle ? native_loan(actual, input.type, at) : single_owner(actual, at);
         const auto &role = form.owner_parameters.at(*input.owner);
-        if (!role.read_only && (actual.read_only || !can_allocate(owner)))
+        if (!role.read_only && (actual.read_only || (handle ? const_input_owner(owner) : !can_allocate(owner))))
           fail(at, "readonly loan cannot supply a writable C provider owner");
-        const auto [first, inserted] = owners.emplace(*input.owner, owner);
-        if (!inserted && first->second != owner) fail(at, "C provider arguments for one owner need the same actual owner");
+        bind_native_owner(owners, *input.owner, owner, at);
         op.arguments.push_back({handle ? ArgumentMode::borrowed_handle : ArgumentMode::borrowed_ref, actual.type});
       }
       if (native.has_here()) {
@@ -507,6 +526,8 @@ class BodyExtraction {
                  at, "replacement seed needs the declared ordinary borrow and access");
           if (parameter.selects_caller_ref_slot()) check_slot(arg, at);
           const auto owner = single_owner(arg, at);
+          if (native_handle && !role->read_only && const_input_owner(owner))
+            fail(at, "const owner cannot supply a writable native handle owner");
           const auto [first, inserted] = actual_owners.emplace(static_cast<size_t>(role - roles.begin()), owner);
           expect(inserted || first->second == owner, at, "one formal owner needs the same actual owner");
         }
@@ -535,6 +556,80 @@ class BodyExtraction {
       const auto found = names().types.find(annotation.name);
       if (found == names().types.end()) fail(at, "unknown type '" + annotation.name + "'");
       return found->second;
+    }
+
+    CheckedOperation::NativeAcquisition native_acquisition(const Expression &initializer, const Type &declared) {
+      const auto constructed = resolve_annotation(*initializer.annotation, initializer.at);
+      const auto id = select_native_constructor(declarations(), declared, constructed, initializer);
+      const auto &constructor = declarations().native_constructors.at(id);
+      expect(!constructor.retained_parent, initializer.at,
+             "replacement seed has no C handle acquisition with a retained parent");
+      check_native_invocation_kind(&form_, *constructor.source, initializer.at);
+
+      std::map<size_t, size_t> owners;
+      for (size_t i = 0; i < constructor.inputs.size(); ++i) {
+        const auto &input = constructor.inputs[i];
+        const auto &at = initializer.children[i]->at;
+        const auto &actual = operand(initializer, i);
+        if (input.type.kind != Type::c_type_marker) {
+          takes_value(actual, input.type, at);
+          continue;
+        }
+        const auto owner = native_loan(actual, input.type, at);
+        if (!constructor.source->parameters.at(i).read_only && actual.read_only)
+          fail(at, "readonly handle cannot supply a writable C constructor argument");
+        if (!constructor.source->owner_parameters.at(*input.owner).read_only && const_input_owner(owner))
+          fail(at, "const owner cannot supply a writable C constructor owner");
+        bind_native_owner(owners, *input.owner, owner, at);
+      }
+      return {id, &initializer};
+    }
+
+    CheckedOperation attach_native_handle(const Expression &expr) {
+      expect(!body_.literal && expr.annotation, expr.at, "replacement seed needs a direct lexical C handle attachment");
+      const auto type = resolve_annotation(*expr.annotation, expr.at);
+      auto plan = native_acquisition(expr, type);
+      const auto &parent = *declarations().native_constructors.at(plan.constructor).parent;
+      const auto *local = find(expr.owner_name);
+      if (!local || !local->place)
+        fail(expr.at, "make handle requires a live owned '" + parent.name + "' handle");
+      const auto &binding = body_.instance.bindings.at(local->binding);
+      if (!binding.type.owned || !matches_native_handle(binding.type, parent))
+        fail(expr.at, "make handle requires a live owned '" + parent.name + "' handle");
+      if (binding.read_only || const_input_owner(local->owner))
+        fail(expr.at, "a readonly native handle cannot attach a child");
+      plan.parent_place = local->place;
+      CheckedOperation op;
+      op.type = native_handle_type(type, false);
+      op.view = true;
+      op.owners.insert(local->owner);
+      op.native_acquisition = std::move(plan);
+      return op;
+    }
+
+    CheckedOperation bind_native_handle(const Expression &expr) {
+      expect(!body_.literal && expr.annotation && expr.children.size() == 1, expr.at,
+             "replacement seed needs a direct lexical C handle declaration");
+      const auto marker = resolve_annotation(*expr.annotation, expr.at);
+      CheckedOperation op;
+      if (expr.binding == "<-") {
+        if (in_iteration_) fail(expr.at, "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope");
+        const auto &initializer = ungrouped_expression(*expr.children.front());
+        expect(initializer.kind == Kind::make_owned_handle && initializer.annotation, initializer.at,
+               "replacement seed needs a fresh owning C handle initializer");
+        op.native_acquisition = native_acquisition(initializer, marker);
+        // The low owner keys name local storage in this activation's frame.
+        // They carry no array allocation capability.
+        const auto owner = body_.instance.bindings.size() + 1;
+        op.place = declare(expr.at, expr.text, native_handle_type(marker, true), true, false, true, owner).place;
+      } else {
+        expect(expr.binding == "=" && expr.owner_name.empty(), expr.at,
+               "replacement seed needs a borrowed handle declaration with an inferred owner");
+        const auto &initial = operand(expr, 0);
+        const auto owner = native_loan(initial, marker, expr.children.front()->at);
+        op.place = declare(expr.at, expr.text, initial.type, true, initial.read_only, true, owner).place;
+      }
+      return op;
     }
 
     CheckedOperation make_product(const Expression &expr, const Type &type, bool local_storage) {
@@ -671,6 +766,7 @@ class BodyExtraction {
              !expr.annotation && expr.owner_name.empty() && !expr.read_only,
              expr.at, "replacement seed needs an inferred initialized val or ref");
       const auto &initial = operand(expr, 0);
+      expect(initial.type.kind != Type::native_handle, expr.at, "a native handle view needs a handle declaration");
       const auto owner = value ? size_t{0} : single_owner(initial, expr.at);
       if (value) takes_value(initial, initial.type, expr.at);
       const auto local = declare(expr.at, expr.text, initial.type, value, value ? fixed : initial.read_only, fixed, owner);
@@ -852,6 +948,8 @@ class BodyExtraction {
       case Kind::unary: case Kind::binary: return eager(expr);
       case Kind::call: return call(expr);
       case Kind::make_object: return make(expr);
+      case Kind::native_handle_binding: return bind_native_handle(expr);
+      case Kind::make_borrowed_handle: return attach_native_handle(expr);
       case Kind::index: return index(expr);
       case Kind::field: return field(expr);
       case Kind::case_expression: return sum_case(expr);
@@ -902,7 +1000,9 @@ class BodyExtraction {
         op.operand_type = first.type;
         scopes_.emplace_back();
         op.place = declare(expr.at, expr.text, first.type, true, true, true, 0).place;
+        const auto enclosing_iteration = std::exchange(in_iteration_, true);
         operand(expr, 2);
+        in_iteration_ = enclosing_iteration;
         scopes_.pop_back();
         return op;
       }
