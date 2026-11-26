@@ -444,7 +444,7 @@ class ScalarChecker {
     bool when;
     size_t parent;
   };
-  struct ScalarPredicatePlan {
+  struct ScalarPlan {
     struct Call {
       const Expression *site;
       size_t instance, guard;
@@ -453,11 +453,11 @@ class ScalarChecker {
     std::vector<LeafGuard> guards;
     std::vector<Call> calls;
   };
-  std::map<size_t, ScalarPredicatePlan> scalar_callers_;
-  const ScalarPredicatePlan *applying_scalar_ = nullptr;
+  std::map<size_t, ScalarPlan> scalar_callers_;
+  const ScalarPlan *applying_scalar_ = nullptr;
   size_t planned_scalar_target(const Expression *site) const {
     const auto &calls = applying_scalar_->calls;
-    const auto call = std::ranges::find(calls, site, &ScalarPredicatePlan::Call::site);
+    const auto call = std::ranges::find(calls, site, &ScalarPlan::Call::site);
     if (call == calls.end()) throw std::logic_error("scalar application reached an unplanned call");
     return call->instance;
   }
@@ -22548,11 +22548,10 @@ class ScalarChecker {
     }
   }
   struct LeafBehaviorPlan {
-    enum class Kind { borrowed_byte, scalar_predicate, byte_literal, integer_result } kind = Kind::borrowed_byte;
+    enum class Kind { borrowed_byte, scalar_predicate, scalar_literal, integer_result } kind = Kind::borrowed_byte;
     const Expression *primitive = nullptr;
-    ScalarPredicatePlan predicate;
+    ScalarPlan scalar;
     const Expression *literal_result = nullptr;
-    std::vector<const Expression *> integer_operations;
   };
   static bool short_circuit_predicate(const Expression &expr) {
     return expr.kind == Expression::Kind::binary && (expr.text == "&&" || expr.text == "||");
@@ -22564,7 +22563,31 @@ class ScalarChecker {
     return expr.kind == Expression::Kind::binary && (expr.text == "+" || expr.text == "*");
   }
 
-  bool bind_scalar_predicate(const Expression &expr, const TypeEvidenceState &scope, ScalarPredicatePlan &plan,
+  bool bind_scalar_literal_call(const Expression &expr, const TypeEvidenceState &scope, ScalarPlan &plan,
+                                Type::Kind result, size_t guard) const {
+    if (expr.intrinsic || !expr.children.empty() || scope.bindings.contains(expr.text) ||
+        text_primitive(expr, &scope) || native_operation(expr.text, &scope)) return false;
+    const auto family = named_family(expr, &scope);
+    if (family.methods.size() != 1 || family.context || family.definition || family.declaration ||
+        !family.retained_types().empty() || has_declarations(expr.text)) return false;
+    const auto &method = program_.methods[family.methods.front()];
+    if (!method.input_parameters().empty() || method.source->kind != Form::Kind::function ||
+        abstract_effect_inputs_.contains(method.source)) return false;
+    const auto matching = [&](size_t id) {
+      const auto &instance = program_.instances[id];
+      // An explicitly declared result can set result_supplied. The query
+      // environment identifies a result supplied by the calling context.
+      return instance.arguments.empty() && instance.environment.empty() && instance.retained_types.empty() &&
+          !instance.query_environment && instance.incoming_abstract_targets.empty() &&
+          instance.result.mode == ResultMode::value && instance.result.type == result;
+    };
+    const auto target = std::ranges::find_if(method.instances, matching);
+    if (target == method.instances.end()) return false;
+    plan.calls.push_back({&expr, *target, guard});
+    return true;
+  }
+
+  bool bind_scalar_predicate(const Expression &expr, const TypeEvidenceState &scope, ScalarPlan &plan,
                              size_t guard = null_target) const {
     using K = Expression::Kind;
     if (expr.annotation || expr.intrinsic || expr.lexical_symbol_call || expr.checked_ref_argument) return false;
@@ -22573,28 +22596,8 @@ class ScalarChecker {
       return scope.bindings.contains(expr.text);
     case K::boolean: case K::integer:
       return true;
-    case K::call: {
-      if (!expr.children.empty() || expr.has_here_body() || scope.bindings.contains(expr.text) ||
-          text_primitive(expr, &scope) || native_operation(expr.text, &scope)) return false;
-      const auto family = named_family(expr, &scope);
-      if (family.methods.size() != 1 || family.context || family.definition || family.declaration ||
-          !family.retained_types().empty() || has_declarations(expr.text)) return false;
-      const auto &method = program_.methods[family.methods.front()];
-      if (!method.input_parameters().empty() || method.source->kind != Form::Kind::function ||
-          abstract_effect_inputs_.contains(method.source)) return false;
-      const auto matching = [&](size_t id) {
-        const auto &instance = program_.instances[id];
-        // An explicitly declared result can set result_supplied. The query
-        // environment identifies a result supplied by the calling context.
-        return instance.arguments.empty() && instance.environment.empty() && instance.retained_types.empty() &&
-            !instance.query_environment && instance.incoming_abstract_targets.empty() &&
-            instance.result.mode == ResultMode::value && instance.result.type == Type::uint8;
-      };
-      const auto target = std::ranges::find_if(method.instances, matching);
-      if (target == method.instances.end()) return false;
-      plan.calls.push_back({&expr, *target, guard});
-      return true;
-    }
+    case K::call:
+      return bind_scalar_literal_call(expr, scope, plan, Type::uint8, guard);
     case K::grouped:
       break;
     case K::unary: case K::binary:
@@ -22619,7 +22622,8 @@ class ScalarChecker {
     });
   }
 
-  bool bind_leaf_operations(const Expression &expr, TypeEvidenceState &scope, LeafBehaviorPlan &plan) const {
+  bool bind_leaf_operations(const Expression &expr, TypeEvidenceState &scope, LeafBehaviorPlan &plan,
+                            size_t guard = null_target) const {
     using K = Expression::Kind;
     const bool integer_result = plan.kind == LeafBehaviorPlan::Kind::integer_result;
     if (expr.definition || expr.receiving || expr.annotation || expr.checked_ref_argument ||
@@ -22638,9 +22642,18 @@ class ScalarChecker {
     case K::return_tail:
       if (integer_result) return false;
       break;
-    case K::conditional:
+    case K::conditional: {
       if (!expr.ordinary_braced_if() && (!integer_result || expr.children[1]->kind != K::return_value)) return false;
-      break;
+      if (!integer_result) break;
+      const auto &test = *expr.children.front();
+      if (!bind_leaf_operations(test, scope, plan, guard)) return false;
+      const auto yes = plan.scalar.guards.size();
+      plan.scalar.guards.push_back({&test, true, guard});
+      if (!bind_leaf_operations(*expr.children[1], scope, plan, yes)) return false;
+      const auto no = plan.scalar.guards.size();
+      plan.scalar.guards.push_back({&test, false, guard});
+      return bind_leaf_operations(*expr.children[2], scope, plan, no);
+    }
     case K::pointer_group:
       if (integer_result || expr.declaration_kind != "val" || expr.children.size() != 1 ||
           expr.children.front()->kind != K::pointer) return false;
@@ -22652,8 +22665,12 @@ class ScalarChecker {
       return scope.bindings.try_emplace(expr.text).second;
     case K::unary: case K::binary: {
       if (integer_result && short_circuit_predicate(expr)) {
-        plan.integer_operations.push_back(&expr);
-        break;
+        plan.scalar.operations.push_back(&expr);
+        const auto &left = *expr.children.front();
+        if (!bind_leaf_operations(left, scope, plan, guard)) return false;
+        const auto right = plan.scalar.guards.size();
+        plan.scalar.guards.push_back({&left, expr.text == "&&", guard});
+        return bind_leaf_operations(*expr.children.back(), scope, plan, right);
       }
       const auto operation = operation_name(expr, &scope);
       // The ordinary checker still validates the selected builtin and all
@@ -22665,7 +22682,7 @@ class ScalarChecker {
           const auto *methods = proven_family_methods(*family, interpretation_);
           if (!methods || !methods->empty() || has_declarations(expr.text)) return false;
         }
-        plan.integer_operations.push_back(&expr);
+        plan.scalar.operations.push_back(&expr);
       } else if ((operation != "!" && operation != "==") ||
                  !named_family(expr, &scope).methods.empty() || has_declarations(expr.text)) return false;
       break;
@@ -22675,7 +22692,8 @@ class ScalarChecker {
           expr.children.front()->kind != K::name) return false;
       break;
     case K::call:
-      if (integer_result || expr.has_here_body() || expr.intrinsic ||
+      if (integer_result) return bind_scalar_literal_call(expr, scope, plan.scalar, Type::uint64, guard);
+      if (expr.has_here_body() || expr.intrinsic ||
           text_access(text_primitive(expr, &scope)) != BuiltinOperation::text_byte ||
           plan.primitive || expr.children.size() != 2 || expr.children.front()->kind != K::string_literal)
         return false;
@@ -22685,7 +22703,7 @@ class ScalarChecker {
       return false;
     }
     return std::ranges::all_of(expr.children, [&](const auto &child) {
-      return bind_leaf_operations(*child, scope, plan);
+      return bind_leaf_operations(*child, scope, plan, guard);
     });
   }
 
@@ -22717,17 +22735,21 @@ class ScalarChecker {
     const auto &parameters = method.input_parameters();
     if (parameters.size() != instance.arguments.size()) return {};
     LeafBehaviorPlan plan;
-    if (byte_literal) {
+    if ((byte_literal || integer_result) && parameters.empty() && form.body->children.size() == 1) {
       const auto &result = *form.body->children.front();
-      if (!parameters.empty() || result.children.size() != 1) return {};
-      const auto &value = *result.children.front();
       // Leave numeric range validation to the ordinary checker, where a
       // located failure is staged with the other unavailable leaf bodies.
-      if (value.kind != Expression::Kind::integer || value.annotation || !value.text.ends_with("u8")) return {};
-      plan.kind = LeafBehaviorPlan::Kind::byte_literal;
-      plan.literal_result = &value;
-      return plan;
+      if (result.children.size() == 1) {
+        const auto &value = *result.children.front();
+        if (value.kind == Expression::Kind::integer && !value.annotation &&
+            value.text.ends_with(byte_literal ? "u8" : "u64")) {
+          plan.kind = LeafBehaviorPlan::Kind::scalar_literal;
+          plan.literal_result = &value;
+          return plan;
+        }
+      }
     }
+    if (byte_literal) return {};
     TypeEvidenceState scope;
     scope.method = instance.method;
     if (integer_result) plan.kind = LeafBehaviorPlan::Kind::integer_result;
@@ -22756,8 +22778,8 @@ class ScalarChecker {
       if (!bind_leaf_operations(*form.body, scope, plan)) return {};
     } else if (scalar_function) {
       const auto &result = *form.body->children.front();
-      if (result.children.size() != 1 || !bind_scalar_predicate(*result.children.front(), scope, plan.predicate)) return {};
-      if (!plan.predicate.calls.empty() && (form.case_scan_scope || instance.query_environment ||
+      if (result.children.size() != 1 || !bind_scalar_predicate(*result.children.front(), scope, plan.scalar)) return {};
+      if (!plan.scalar.calls.empty() && (form.case_scan_scope || instance.query_environment ||
           !instance.retained_types.empty() || abstract_effect_inputs_.contains(method.source))) return {};
     } else if (!has_borrowed_formal || !bind_leaf_operations(*form.body, scope, plan)) return {};
     return plan;
@@ -22769,12 +22791,13 @@ class ScalarChecker {
     LexicalState state;
   };
   struct ScalarExit {
+    size_t reason;
     Location origin;
     CleanupEquations::BooleanValue result;
   };
 
-  static void check_bound_scalar_operations(std::span<const Expression *const> sites, const CheckedInstance &instance) {
-    for (const auto *site : sites) {
+  void check_scalar_operations(const ScalarPlan &plan, const CheckedInstance &instance) const {
+    for (const auto *site : plan.operations) {
       const auto &operation = instance.operations.at(site);
       const auto builtin = short_circuit_predicate(*site) ? BuiltinOperation::none :
           site->kind == Expression::Kind::unary ? BuiltinOperation::unary : BuiltinOperation::binary;
@@ -22785,42 +22808,40 @@ class ScalarChecker {
           (arithmetic && operation.operand_type != Type::uint64))
         throw std::logic_error("scalar operation disagrees with its leaf binding plan");
     }
-  }
-
-  static void check_scalar_operations(const ScalarPredicatePlan &plan, const CheckedInstance &instance) {
-    check_bound_scalar_operations(plan.operations, instance);
     for (const auto &call : plan.calls) {
       const auto &operation = instance.operations.at(call.site);
       if (!operation.reads_direct_body || operation.callable_call || operation.builtin != BuiltinOperation::none ||
-          operation.callee != call.instance || !operation.arguments.empty() || operation.type != Type::uint8)
-        throw std::logic_error("scalar predicate disagrees with its planned call");
+          operation.callee != call.instance || !operation.arguments.empty() ||
+          operation.type != *program_.instances.at(call.instance).result.type)
+        throw std::logic_error("scalar operation disagrees with its planned call");
     }
+  }
+
+  static bool planned_arithmetic_failure(const ScalarPlan &plan, size_t reason, const Location &origin) {
+    return reason == 2 && std::ranges::any_of(plan.operations,
+        [&](const Expression *site) { return leaf_integer_arithmetic(*site) && origin == site->at; });
   }
 
   void complete_leaf_exits(const LeafBehaviorPlan &leaf, const CheckedInstance &instance,
                            const std::vector<LeafExitEquation> &exits) {
     const bool borrowed = leaf.kind == LeafBehaviorPlan::Kind::borrowed_byte;
-    if (leaf.kind == LeafBehaviorPlan::Kind::scalar_predicate) {
-      check_scalar_operations(leaf.predicate, instance);
-    } else if (leaf.kind == LeafBehaviorPlan::Kind::integer_result) {
-      check_bound_scalar_operations(leaf.integer_operations, instance);
-    } else if (leaf.kind == LeafBehaviorPlan::Kind::byte_literal) {
+    if (leaf.kind == LeafBehaviorPlan::Kind::scalar_literal) {
       const auto &operation = instance.operations.at(leaf.literal_result);
-      if (operation.type != Type::uint8 || operation.callee || operation.callable_call || operation.builtin != BuiltinOperation::none)
-        throw std::logic_error("byte literal return disagrees with its binding plan");
-    } else {
+      if (operation.type != *instance.result.type || operation.callee || operation.callable_call ||
+          operation.builtin != BuiltinOperation::none)
+        throw std::logic_error("scalar literal return disagrees with its binding plan");
+    } else if (borrowed) {
       const auto &operation = instance.operations.at(leaf.primitive);
       if (operation.builtin != BuiltinOperation::text_byte || operation.callee)
         throw std::logic_error("closed leaf primitive disagrees with its binding plan");
-    }
+    } else check_scalar_operations(leaf.scalar, instance);
     if (!borrowed && exits.empty()) throw std::logic_error("closed scalar function has no normal exit");
     const auto bounds = Completion::failure(exception_id(ExceptionCategory::index_out_of_bounds)).reason;
     for (const auto &exit : exits) {
       if (exit.reason) {
         const bool byte_bounds = borrowed && exit.reason == bounds && exit.origin == leaf.primitive->at;
-        const bool arithmetic_failure = exit.reason == 2 && std::ranges::any_of(leaf.integer_operations,
-            [&](const Expression *site) { return leaf_integer_arithmetic(*site) && exit.origin == site->at; });
-        if (!byte_bounds && !arithmetic_failure) throw std::logic_error("closed leaf extraction found an unbound exit");
+        if (!byte_bounds && !planned_arithmetic_failure(leaf.scalar, exit.reason, exit.origin))
+          throw std::logic_error("closed leaf extraction found an unbound exit");
       }
       observe_outcome(exit.reason, exit.state);
     }
@@ -23077,10 +23098,15 @@ class ScalarChecker {
         if (!proving) return;
         if (case_scan || outcomes.declared_root || (completion != Type::never && lexical_.live))
           throw std::logic_error("scalar application reached an unplanned completion");
+        const bool boolean_result = instance.result.type == Type::boolean;
         for (const auto &path : outcomes.paths) {
-          if (path.completion.reason != 1 || path.here_exit)
+          if (path.here_exit || !path.exceptions.empty())
             throw std::logic_error("scalar application reached an unplanned exit");
-          scalar_exits->push_back({path.at, returned_boolean(path.state)});
+          if (path.completion.reason == 1)
+            scalar_exits->push_back({0, path.at, boolean_result ? returned_boolean(path.state) : CleanupEquations::BooleanValue{}});
+          else if (planned_arithmetic_failure(*applying_scalar_, path.completion.reason, path.at))
+            scalar_exits->push_back({path.completion.reason, path.at, {}});
+          else throw std::logic_error("scalar application reached an unplanned exit");
         }
         return;
       }
@@ -23267,7 +23293,7 @@ class ScalarChecker {
     BodyReplay &operator=(const BodyReplay &) = delete;
   };
 
-  std::vector<ScalarExit> apply_scalar_caller(size_t id, const ScalarPredicatePlan &plan) {
+  std::vector<ScalarExit> apply_scalar_caller(size_t id, const ScalarPlan &plan) {
     struct ApplicationScope {
       ScalarChecker &checker;
       ~ApplicationScope() {
@@ -23284,7 +23310,8 @@ class ScalarChecker {
     check_instance_flow(id, false, nullptr, &exits);
     const auto &instance = program_.instances[id];
     check_scalar_operations(plan, instance);
-    if (exits.empty()) throw std::logic_error("scalar application found no normal return");
+    if (std::ranges::none_of(exits, [](const auto &exit) { return !exit.reason; }))
+      throw std::logic_error("scalar application found no normal return");
     for (const auto &exit : exits) for (const auto &[truth, clauses] : exit.result) for (const auto &facts : clauses) {
       CleanupEquations::ConditionFacts formal;
       formal.inputs = facts.inputs;
@@ -23296,10 +23323,14 @@ class ScalarChecker {
     return exits;
   }
 
-  static CallEffects seal_scalar_caller(const std::vector<ScalarExit> &exits) {
+  static CallEffects seal_scalar_caller(const std::vector<ScalarExit> &exits, const Type &result) {
     CallEffects effects;
-    for (const auto &exit : exits) CleanupEquations::merge_boolean(effects.returned.boolean, exit.result);
-    if (effects.returned.boolean.empty()) effects.returned.boolean = CleanupEquations::unknown_boolean();
+    for (const auto &exit : exits) {
+      if (exit.reason) effects.escaping_failures.insert(exit.reason);
+      else CleanupEquations::merge_boolean(effects.returned.boolean, exit.result);
+    }
+    if (result == Type::boolean && effects.returned.boolean.empty())
+      effects.returned.boolean = CleanupEquations::unknown_boolean();
     return effects;
   }
 
@@ -23332,7 +23363,7 @@ class ScalarChecker {
     };
     if (const auto plan = scalar_callers_.find(id); plan != scalar_callers_.end()) {
       const auto exits = apply_scalar_caller(id, plan->second);
-      const auto actual = seal_scalar_caller(exits);
+      const auto actual = seal_scalar_caller(exits, *instance.result.type);
       if (actual != instance.effects) throw std::logic_error("completed scalar caller differs from final validation");
     } else {
       if (const auto it = distinct_binding_effects_.find(id); it != distinct_binding_effects_.end())
@@ -23481,7 +23512,7 @@ class ScalarChecker {
     std::set<size_t> completed_literals;
     for (const auto &[id, plan] : std::as_const(bound)) {
       if ((plan.kind == LeafBehaviorPlan::Kind::borrowed_byte && !plan.primitive) ||
-          !plan.predicate.calls.empty()) continue;
+          !plan.scalar.calls.empty()) continue;
       ReplayWarnings warnings;
       struct ExtractionScope {
         ScalarChecker &checker;
@@ -23512,7 +23543,7 @@ class ScalarChecker {
         instance.effects_frozen = true;
         instance.scalar_frame_ready = prepare_frame && warnings.warnings.empty();
         frame.keep_frame = true;
-        if (plan.kind == LeafBehaviorPlan::Kind::byte_literal) completed_literals.insert(id);
+        if (plan.kind == LeafBehaviorPlan::Kind::scalar_literal) completed_literals.insert(id);
       } catch (const LocatedFailure &failure) {
         // An independent entry error retains its ordinary precedence. A
         // consumer of this leaf cannot apply the initial placeholder.
@@ -23527,13 +23558,13 @@ class ScalarChecker {
     };
     std::vector<Application> applications;
     for (const auto &[id, plan] : std::as_const(bound)) {
-      if (plan.predicate.calls.empty() || !std::ranges::all_of(plan.predicate.calls, [&](const auto &call) {
+      if (plan.scalar.calls.empty() || !std::ranges::all_of(plan.scalar.calls, [&](const auto &call) {
             return completed_literals.contains(call.instance);
           })) continue;
       auto &instance = program_.instances[id];
       BodyReplay frame{program_, instance};
       try {
-        auto exits = apply_scalar_caller(id, plan.predicate);
+        auto exits = apply_scalar_caller(id, plan.scalar);
         applications.push_back({id, BodyFrame{instance}, std::move(exits)});
       } catch (const LocatedFailure &) {
         // The ordinary checker retains this body's diagnostic and its order.
@@ -23546,8 +23577,8 @@ class ScalarChecker {
       auto &plan = bound.at(id);
       const auto &method = program_.methods[instance.method];
       const bool frame_ready = independent_scalar_frame(instance, method, plan);
-      auto completed = seal_scalar_caller(application.exits);
-      scalar_callers_.emplace(id, std::move(plan.predicate));
+      auto completed = seal_scalar_caller(application.exits, *instance.result.type);
+      scalar_callers_.emplace(id, std::move(plan.scalar));
       std::move(application.frame).install(instance);
       instance.effects = std::move(completed);
       instance.effects_frozen = true;
