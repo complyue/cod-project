@@ -31,25 +31,90 @@ class BodyExtraction {
     size_t callee;
     std::map<size_t, Allocator> owners;
   };
-  struct BoundBody {
-    CheckedInstance instance;
-    std::set<size_t> allocations;
-    std::vector<BoundCall> calls;
-  };
   struct Local {
     size_t binding;
     std::optional<size_t> place;
     size_t owner;
   };
+  struct HereFormal {
+    const CheckedHereContract *contract;
+    size_t owner, slot;
+  };
+  struct Capture {
+    const Expression *use;
+    Local source;
+    Parameter parameter;
+  };
+  struct Literal {
+    const Expression *site;
+    const Expression *call;
+    const CheckedHereContract *contract;
+    Type receiving_result;
+    size_t supplier, module, owner;
+    std::map<std::string, Local> visible;
+    std::map<std::string, HereFormal> visible_here;
+    std::vector<size_t> owners;
+    std::vector<OwnerParameter> owner_parameters;
+    std::vector<Capture> captures;
+    std::vector<CheckedLexicalHere> lexical_here;
+    std::vector<size_t> here_sources;
+    Parameter offered;
+  };
+  struct BoundBody {
+    CheckedInstance instance;
+    std::set<size_t> allocations;
+    std::vector<BoundCall> calls;
+    std::optional<Literal> literal;
+  };
 
   const Declarations &declarations_;
   std::map<size_t, size_t> selected_;
   std::deque<BoundBody> bodies_;
+  size_t literal_count_ = 0;
 
   explicit BodyExtraction(const Declarations &declarations) : declarations_(declarations) {}
 
   static void expect(bool condition, const Location &at, const char *detail) {
     if (!condition) implementation_gap(at, detail);
+  }
+
+  static size_t input_owner(size_t role) { return null_target - 1 - role; }
+
+  static const CheckedHereContract::Component &array_offer(const CheckedHereContract &contract, const Location &at) {
+    expect(!contract.labelled && contract.inputs.size() == 1 && contract.here.empty() &&
+           !contract.feedback && !contract.throws_root && contract.throws_categories.empty() &&
+           !contract.result.owner && contract.result.mode == ArgumentMode::value && scalar_type(contract.result.type),
+           at, "replacement seed needs one readonly array and independent scalar here feedback");
+    const auto &offer = contract.inputs.front();
+    expect(offer.type.kind == Type::array && offer.mode == ArgumentMode::borrowed_ref &&
+           offer.read_only && offer.owner && *offer.owner,
+           at, "replacement seed needs a readonly array from an established here owner");
+    return offer;
+  }
+
+  static Type invocation_type(const CheckedHereContract &contract, const Location &at) {
+    const auto &offer = array_offer(contract, at);
+    Type type{Type::procedure};
+    type.pure_callable = type.value_result = true;
+    type.parameters = {offer.type};
+    type.argument_modes = {offer.mode};
+    type.const_views = {true};
+    type.owners = {1, 0};
+    type.target = std::make_shared<Type>(contract.result.type);
+    return type;
+  }
+
+  static CheckedOperation place_operand(const CheckedInstance &instance, const Local &local) {
+    const auto &binding = instance.bindings.at(local.binding);
+    CheckedOperation op;
+    op.type = binding.type;
+    op.binding = local.binding;
+    op.place = local.place;
+    op.owners.insert(local.owner);
+    op.view = true;
+    op.read_only = binding.read_only;
+    op.fixed_binding = binding.fixed;
+    return op;
   }
 
   size_t select_body(size_t method_id, const Location &at) {
@@ -58,7 +123,7 @@ class BodyExtraction {
     expect(source.body && !source.implicit_scope && !source.supplied_scope && !source.supplied_group &&
            !source.case_scan_scope && !source.symbolic && !method.interpretation && !method.local_effect_symbol &&
            !method.parent && !method.regional_initializer && method.operation.empty() &&
-           method.here.empty() && method.type_parameters.empty() && source.captures.empty() &&
+           method.here.size() <= 1 && method.type_parameters.empty() && source.captures.empty() &&
            method.result.type && method.result.mode == ResultMode::value &&
            (scalar_type(*method.result.type) || method.result.type == Type::void_type),
            at, "replacement seed needs a fixed ordinary callable body");
@@ -73,11 +138,38 @@ class BodyExtraction {
     return row->second;
   }
 
+  void add_literal(Literal literal) {
+    const auto &site = *literal.site;
+    const auto &offer = array_offer(*literal.contract, site.at);
+    expect(site.definition && site.definition->supplied_group && !site.scoped && site.receiving &&
+           site.receiving->shape == ReceivingHeader::Shape::ordered && !site.receiving->from_for &&
+           site.definition->parameters.size() == 1,
+           site.at, "replacement seed needs a single-brace here body with one ordered reception");
+    auto &parameter = literal.offered = site.definition->parameters.front();
+    expect(parameter.type == Type::void_type && parameter.declaration_kind.empty() && parameter.owner.empty() &&
+           !parameter.read_only && !parameter.fixed_binding, parameter.at,
+           "replacement seed needs an inferred here reception");
+    parameter.type = offer.type;
+    parameter.declaration_kind = "ref";
+    parameter.read_only = parameter.fixed_binding = true;
+    parameter.owner = "$here.owner.0";
+    literal.owners.push_back(literal.owner);
+    literal.owner_parameters.push_back({parameter.owner, {}, site.at, false, true});
+    auto &body = bodies_.emplace_back();
+    body.instance.method = declarations_.declarations_.methods.size() + literal_count_++;
+    body.instance.result.type = literal.contract->result.type;
+    body.literal = std::move(literal);
+  }
+
   class Frame {
     BodyExtraction &extraction_;
     BoundBody &body_;
-    const CheckedMethod &method_;
+    size_t id_;
+    const CheckedMethod *method_;
+    const Form &form_;
+    size_t module_;
     std::vector<std::map<std::string, Local>> scopes_{1};
+    std::map<std::string, HereFormal> here_;
     std::set<size_t> caught_places_;
     using Kind = Expression::Kind;
 
@@ -101,40 +193,45 @@ class BodyExtraction {
     }
 
     Local declare(const Location &at, const std::string &name, const Type &type, bool value,
-                  bool read_only, bool fixed, size_t owner, bool input = false) {
-      expect(std::ranges::find(method_.input_owners(), name, &OwnerParameter::name) == method_.input_owners().end(),
+                  bool read_only, bool fixed, size_t owner, bool input = false, bool capture = false) {
+      expect(std::ranges::find(owners(), name, &OwnerParameter::name) == owners().end(),
              at, "replacement seed has no lexical shadow of an owner name");
       const auto id = body_.instance.bindings.size();
       auto &binding = body_.instance.bindings.emplace_back(type, read_only, value, fixed);
       binding.requires_initialized = !value;
       const auto place = value || input ? std::optional{storage(name, type, owner, read_only, input && owner != 0, id)}
                                         : std::nullopt;
-      const auto [entry, inserted] = scopes_.back().emplace(name, Local{id, place, owner});
+      auto &scope = capture ? scopes_.front() : scopes_.back();
+      const auto [entry, inserted] = scope.emplace(name, Local{id, place, owner});
       expect(inserted, at, "duplicate name in the replacement seed frame");
       return entry->second;
     }
 
     size_t owner_role(const std::string &name, const Location &at) const {
-      const auto &owners = method_.input_owners();
-      const auto found = std::ranges::find(owners, name, &OwnerParameter::name);
-      expect(found != owners.end() && !found->root && !found->explicit_parameter,
+      const auto &parameters = owners();
+      const auto found = std::ranges::find(parameters, name, &OwnerParameter::name);
+      expect(found != parameters.end() && !found->root && !found->explicit_parameter,
              at, "replacement seed needs an input-bound owner");
-      return static_cast<size_t>(found - owners.begin());
+      return static_cast<size_t>(found - parameters.begin());
+    }
+
+    const std::vector<OwnerParameter> &owners() const {
+      return method_ ? method_->input_owners() : body_.literal->owner_parameters;
     }
 
     bool can_allocate(size_t owner) const {
-      return !owner || !method_.input_owners().at(null_target - 1 - owner).read_only;
+      return !owner || !owners().at(null_target - 1 - owner).read_only;
     }
 
     static Allocator capability(size_t owner) {
       return owner ? Allocator{Allocator::input, null_target - 1 - owner} : Allocator{Allocator::lexical};
     }
 
-    const auto &names() const { return extraction_.declarations_.modules_.at(method_.module); }
+    const auto &names() const { return extraction_.declarations_.modules_.at(module_); }
     const CheckedProgram &declarations() const { return extraction_.declarations_.declarations_; }
 
     const CheckedFamily *family(const std::string &name) const {
-      return extraction_.declarations_.ordinary_family(method_.module, name);
+      return extraction_.declarations_.ordinary_family(module_, name);
     }
 
     void confirm_intrinsic(const Expression &expr, const std::string &name) const {
@@ -166,8 +263,61 @@ class BodyExtraction {
              !operation.fixed_binding, at, "replacement seed needs a writable lexical reference slot");
     }
 
-    CheckedOperation name(const Expression &expr) const {
+    void bind_input(const Parameter &parameter, const Type &type, bool capture = false) {
+      const auto mode = argument_mode(parameter);
+      const bool slot = parameter.selects_caller_ref_slot();
+      const bool native_handle = mode == ArgumentMode::borrowed_handle && type.kind == Type::native_handle;
+      expect(!parameter.not_init_ref && !parameter.variadic && !parameter.automatic_conversion &&
+             (!parameter.selects_caller_place() || slot) &&
+             (mode == ArgumentMode::value ? scalar_type(type) : native_handle || ordinary_loan(mode, type)),
+             parameter.at, "replacement seed needs a fixed scalar, array or native handle formal");
+      auto &frame = body_.instance.frame;
+      const auto owner = parameter.owner.empty() ? size_t{0} : input_owner(owner_role(parameter.owner, parameter.at));
+      if (owner) frame.owners.try_emplace(owner, frame.inputs.size());
+      const bool value = mode != ArgumentMode::borrowed_ref && !native_handle;
+      const auto local = declare(parameter.at, parameter.name, type, value,
+                                 parameter.read_only || (mode == ArgumentMode::value && parameter.fixed_binding),
+                                 parameter.fixed_binding || native_handle, owner, true, capture);
+      frame.inputs.push_back({*local.place, mode, parameter.selects_caller_place()});
+    }
+
+    void bind_capture(const Expression &expr, Local original) {
+      auto &literal = *body_.literal;
+      const auto &supplier = extraction_.bodies_.at(literal.supplier).instance;
+      const auto &source = supplier.bindings.at(original.binding);
+      const bool array = source.type.kind == Type::array;
+      expect(!source.nullable && (array || (scalar_type(source.type) && (source.value_binding || source.fixed))),
+             expr.at, "replacement seed needs a stable scalar place or array view in a here capture");
+      const auto known = std::ranges::find(literal.owners, original.owner);
+      const auto role = static_cast<size_t>(known - literal.owners.begin());
+      if (known == literal.owners.end()) {
+        const auto &method = extraction_.declarations_.method(supplier.method);
+        const bool read_only = original.owner && method.input_owners().at(null_target - 1 - original.owner).read_only;
+        literal.owners.push_back(original.owner);
+        literal.owner_parameters.push_back({"$here.owner." + std::to_string(role), {}, expr.at, false, read_only});
+      }
+      Parameter parameter{expr.text, source.type, expr.at, false, {}};
+      parameter.declaration_kind = "ref";
+      parameter.owner = literal.owner_parameters.at(role).name;
+      parameter.read_only = source.read_only;
+      parameter.fixed_binding = true;
+      // A borrowed array can live in a mutable supplier slot. Read that slot
+      // at execution, while keeping the callback's own access target-only.
+      if (array && !source.value_binding) parameter.caller_place = Parameter::CallerPlace::reference_slot;
+      bind_input(parameter, parameter.type, true);
+      body_.instance.arguments.push_back(parameter.type);
+      literal.captures.push_back({&expr, original, std::move(parameter)});
+    }
+
+    CheckedOperation name(const Expression &expr) {
       const auto *local = find(expr.text);
+      if (!local && body_.literal) {
+        const auto found = body_.literal->visible.find(expr.text);
+        if (found != body_.literal->visible.end()) {
+          bind_capture(expr, found->second);
+          local = find(expr.text);
+        }
+      }
       if (!local) {
         const auto selected = names().enum_members.find(expr.text);
         expect(selected != names().enum_members.end(), expr.at, "replacement seed needs a bound operand");
@@ -178,16 +328,56 @@ class BodyExtraction {
         op.integer = declarations().enums.at(member.type.identity).members.at(member.member).code;
         return op;
       }
-      const auto &binding = body_.instance.bindings.at(local->binding);
-      CheckedOperation op;
-      op.type = binding.type;
-      op.binding = local->binding;
-      op.place = local->place;
-      op.owners.insert(local->owner);
-      op.view = true;
-      op.read_only = binding.read_only;
-      op.fixed_binding = binding.fixed;
-      return op;
+      return place_operand(body_.instance, *local);
+    }
+
+    bool visible_local(const std::string &name) const {
+      return find(name) || (body_.literal && body_.literal->visible.contains(name));
+    }
+
+    const HereFormal *find_here(const Expression &expr) {
+      if (const auto current = here_.find(expr.text); current != here_.end()) return &current->second;
+      if (!body_.literal) return nullptr;
+      auto &literal = *body_.literal;
+      const auto found = literal.visible_here.find(expr.text);
+      if (found == literal.visible_here.end()) return nullptr;
+      const auto &source = found->second;
+      expect(source.owner == literal.owner, expr.at, "borrowed here input has a different actual owner from its contract");
+      auto rebased = *source.contract;
+      rebased.inputs.front().owner = 1;
+      const auto slot = literal.lexical_here.size();
+      literal.lexical_here.push_back({expr.text, invocation_type(rebased, expr.at), std::move(rebased), {}});
+      literal.here_sources.push_back(source.slot);
+      return &here_.emplace(expr.text, HereFormal{source.contract, input_owner(0), slot}).first->second;
+    }
+
+    CheckedOperation invoke_here(const Expression &expr, const HereFormal &formal) {
+      const auto &offer = array_offer(*formal.contract, expr.at);
+      expect(!expr.has_here_body() && expr.children.size() == 1, expr.at, "here call requires one array argument");
+      const auto &input = operand(expr, 0);
+      expect(input.type == offer.type && input.view, expr.children.front()->at,
+             "here call needs the declared nominal array view");
+      if (single_owner(input, expr.children.front()->at) != formal.owner)
+        fail(expr.children.front()->at, "borrowed here input has a different actual owner from its contract");
+      CheckedOperation operation;
+      operation.type = formal.contract->result.type;
+      operation.operand_type = invocation_type(*formal.contract, expr.at);
+      operation.invokes_here = formal.slot;
+      operation.arguments.push_back({offer.mode, offer.type});
+      return operation;
+    }
+
+    void supply_here(const Expression &call, const CheckedHereContract &contract, const Type &receiving_result,
+                     size_t owner, CheckedOperation &operation) {
+      expect(!body_.literal, call.at, "replacement seed does not supply another here body from a literal");
+      Literal literal{call.children.back().get(), &call, &contract, receiving_result, id_, module_, owner,
+                      {}, here_, {}, {}, {}, {}, {}, {}};
+      for (const auto &scope : scopes_)
+        for (const auto &[name, local] : scope) literal.visible.insert_or_assign(name, local);
+      extraction_.add_literal(std::move(literal));
+      operation.argument_sources.emplace();
+      for (const auto &operand : std::span(call.children).first(call.children.size() - 1))
+        operation.argument_sources->push_back(operand.get());
     }
 
     CheckedOperation eager(const Expression &expr) {
@@ -214,9 +404,10 @@ class BodyExtraction {
     CheckedOperation provider_call(const Expression &expr, size_t id) {
       const auto &native = declarations().native_operations.at(id);
       const auto &form = *native.contract.source;
-      expect(!native.has_here() && !expr.has_here_body(), expr.at, "replacement seed needs a bound native here body");
-      expect(expr.children.size() == native.inputs.size(), expr.at, "arguments do not match the C provider declaration");
-      if (method_.source->kind == Form::Kind::function && form.kind != Form::Kind::function)
+      expect(native.has_here() == expr.has_here_body(), expr.at, "arguments do not match the C provider's here declaration");
+      expect(expr.children.size() == native.inputs.size() + expr.has_here_body(),
+             expr.at, "arguments do not match the C provider declaration");
+      if (form_.kind == Form::Kind::function && form.kind != Form::Kind::function)
         fail(expr.at, "a function cannot invoke a procedure");
       CheckedOperation op;
       op.type = *native.contract.result.type;
@@ -243,6 +434,13 @@ class BodyExtraction {
         if (!inserted && first->second != owner) fail(at, "C provider arguments for one owner need the same actual owner");
         op.arguments.push_back({handle ? ArgumentMode::borrowed_handle : ArgumentMode::borrowed_ref, actual.type});
       }
+      if (native.has_here()) {
+        const auto &contract = native.contract.here.front();
+        const auto &offer = array_offer(contract, expr.at);
+        const auto owner = owners.find(*offer.owner - 1);
+        expect(owner != owners.end(), expr.at, "native here loan needs the prepared actual owner");
+        supply_here(expr, contract, op.type, owner->second, op);
+      }
       return op;
     }
 
@@ -268,21 +466,24 @@ class BodyExtraction {
         op.builtin = BuiltinOperation::array_length;
         return op;
       }
-      if (!expr.intrinsic && !find(expr.text)) {
+      if (!expr.intrinsic && !visible_local(expr.text)) {
+        if (const auto *formal = find_here(expr)) return invoke_here(expr, *formal);
         const auto native = names().native_operations.find(expr.text);
         if (native != names().native_operations.end()) return provider_call(expr, native->second);
       }
       const auto *selected = family(expr.text);
-      expect(!expr.intrinsic && !find(expr.text) && selected && !selected->symbol &&
-             selected->methods.size() == 1 && selected->declarations.empty() && !expr.has_here_body(),
+      expect(!expr.intrinsic && !visible_local(expr.text) && selected && !selected->symbol &&
+             selected->methods.size() == 1 && selected->declarations.empty(),
              expr.at, "replacement seed needs an unambiguous ordinary source call");
       const auto method_id = selected->methods.front();
       const auto &target = extraction_.declarations_.method(method_id);
-      expect(method_.source->kind != Form::Kind::function || target.source->kind == Form::Kind::function,
-             expr.at, "a function cannot invoke a procedure");
+      if (form_.kind == Form::Kind::function && target.source->kind != Form::Kind::function)
+        fail(expr.at, "a function cannot invoke a procedure");
       const auto callee = extraction_.select_body(method_id, expr.at);
       const auto parameters = target.input_parameters();
-      expect(parameters.size() == expr.children.size(), expr.at, "ordinary call argument count does not match");
+      expect(target.here.size() == size_t{expr.has_here_body()} &&
+             parameters.size() + expr.has_here_body() == expr.children.size(),
+             expr.at, "ordinary call arguments do not match the selected declaration");
       std::map<size_t, size_t> actual_owners;
       for (size_t i = 0; i < parameters.size(); ++i) {
         const auto &parameter = parameters[i];
@@ -314,6 +515,14 @@ class BodyExtraction {
       body_.calls.push_back(std::move(edge));
       op.type = *target.result.type;
       op.callee = callee;
+      if (expr.has_here_body()) {
+        const auto &contract = target.here.front();
+        const auto &offer = array_offer(contract, expr.at);
+        const auto owner = actual_owners.find(*offer.owner - 1);
+        expect(owner != actual_owners.end(), expr.at, "here loan needs a prepared actual owner");
+        supply_here(expr, contract, op.type, owner->second, op);
+        op.here_arguments.resize(1);
+      }
       return op;
     }
 
@@ -355,6 +564,7 @@ class BodyExtraction {
       expect(type != names().types.end() && type->second.kind == Type::array && expr.constructor_arguments &&
              expr.children.size() == 2 && !family(spelling),
              expr.at, "replacement seed needs an ordinary array constructor");
+      expect(!body_.literal, expr.at, "replacement seed does not allocate arrays inside a here literal");
       const auto owner = expr.owner_name.empty() ? size_t{0} : null_target - 1 - owner_role(expr.owner_name, expr.at);
       expect(can_allocate(owner) && (owner || scopes_.size() == 2), expr.at,
              "replacement seed needs an admitted array allocation owner");
@@ -565,11 +775,13 @@ class BodyExtraction {
         scopes_.pop_back();
         return op;
       }
-      case Kind::return_value:
-        if (expr.children.empty()) expect(method_.result.type == Type::void_type, expr.at, "return needs a value");
-        else takes_value(operand(expr, 0), *method_.result.type, expr.at);
+      case Kind::return_value: case Kind::continue_value:
+        expect(bool(body_.literal) == (expr.kind == Kind::continue_value), expr.at,
+               "replacement seed needs an ordinary return or a local here continue");
+        if (expr.children.empty()) expect(body_.instance.result.type == Type::void_type, expr.at, "return needs a value");
+        else takes_value(operand(expr, 0), *body_.instance.result.type, expr.at);
         op.type = Type::never;
-        op.operand_type = *method_.result.type;
+        op.operand_type = *body_.instance.result.type;
         return op;
       default:
         implementation_gap(expr.at, "replacement seed has no executable extraction for this source form");
@@ -589,35 +801,36 @@ class BodyExtraction {
     }
 
   public:
-    Frame(BodyExtraction &extraction, BoundBody &body)
-        : extraction_(extraction), body_(body), method_(extraction.declarations_.method(body.instance.method)) {}
+    Frame(BodyExtraction &extraction, size_t id)
+        : extraction_(extraction), body_(extraction.bodies_[id]), id_(id),
+          method_(body_.literal ? nullptr : &extraction.declarations_.method(body_.instance.method)),
+          form_(method_ ? *method_->source : *body_.literal->site->definition),
+          module_(method_ ? method_->module : body_.literal->module) {}
 
     void extract_body() {
-      const auto parameters = method_.input_parameters();
-      auto &frame = body_.instance.frame;
-      for (size_t i = 0; i < parameters.size(); ++i) {
-        const auto &parameter = parameters[i];
-        const auto &type = method_.parameters[i];
-        const auto mode = argument_mode(parameter);
-        const bool slot = parameter.selects_caller_ref_slot();
-        const bool native_handle = mode == ArgumentMode::borrowed_handle && type.kind == Type::native_handle;
-        expect(!parameter.not_init_ref && !parameter.variadic && !parameter.automatic_conversion &&
-               (!parameter.selects_caller_place() || slot) &&
-               (mode == ArgumentMode::value ? scalar_type(type) : native_handle || ordinary_loan(mode, type)),
-               parameter.at, "replacement seed needs a fixed scalar, array or native handle formal");
-        const auto owner = parameter.owner.empty() ? size_t{0} : null_target - 1 - owner_role(parameter.owner, parameter.at);
-        if (owner) frame.owners.try_emplace(owner, i);
-        const bool value = mode != ArgumentMode::borrowed_ref && !native_handle;
-        const auto local = declare(parameter.at, parameter.name, type, value,
-                                   parameter.read_only || (mode == ArgumentMode::value && parameter.fixed_binding),
-                                   parameter.fixed_binding || native_handle, owner, true);
-        frame.inputs.push_back({*local.place, mode, parameter.selects_caller_place()});
+      if (method_) {
+        const auto parameters = method_->input_parameters();
+        for (size_t i = 0; i < parameters.size(); ++i) bind_input(parameters[i], method_->parameters[i]);
+        if (!method_->here.empty()) {
+          const auto &contract = method_->here.front();
+          const auto &offer = array_offer(contract, form_.at);
+          expect(*offer.owner <= owners().size(), form_.at, "here declaration has no established owner");
+          const auto owner = input_owner(*offer.owner - 1);
+          const auto &formal = form_.parameters.front();
+          expect(!find(formal.name), formal.at, "duplicate here parameter name");
+          here_.emplace(formal.name, HereFormal{&contract, owner, 0});
+        }
+      } else {
+        const auto &offered = body_.literal->offered;
+        bind_input(offered, offered.type);
+        body_.instance.arguments.push_back(offered.type);
       }
-      expect(frame.owners.size() == method_.input_owners().size(), method_.source->at,
+      const auto &end = extract(*form_.body);
+      expect(body_.instance.frame.owners.size() == owners().size(), form_.at,
              "replacement seed needs an input for every formal owner");
-      const auto &end = extract(*method_.source->body);
-      expect(end.type == Type::never || method_.result.type == Type::void_type,
-             method_.source->at, "replacement seed needs a reachable return for this result");
+      expect(end.type == Type::never || body_.instance.result.type == Type::void_type,
+             form_.at, "replacement seed needs a reachable return for this result");
+      if (body_.literal) body_.instance.context = body_.instance.arguments;
     }
   };
 
@@ -670,7 +883,41 @@ class BodyExtraction {
     for (const auto &entry : program.native_entries) select_body(entry.method, program.methods[entry.method].source->at);
     // Demand a source body once. A discovered dependency only adds its own
     // binding work; it cannot restart a caller or publish a callee summary.
-    for (size_t i = 0; i < bodies_.size(); ++i) Frame(*this, bodies_[i]).extract_body();
+    for (size_t i = 0; i < bodies_.size(); ++i) Frame(*this, i).extract_body();
+  }
+
+  void seal_literal(CheckedProgram &program, size_t id) {
+    auto &body = bodies_.at(id);
+    auto &literal = *body.literal;
+    auto &supplier = bodies_.at(literal.supplier).instance;
+    const auto &definition = *literal.site->definition;
+    expect(body.instance.method == program.methods.size(), definition.at, "here method order changed before emission");
+
+    CheckedOperation::SuppliedHere supplied{id, {}, {}, std::move(literal.here_sources), {}};
+    supplied.owners.assign(std::next(literal.owners.begin()), literal.owners.end());
+    CheckedMethod::ScopeInputs scope{};
+    scope.lexical_method = body.instance.method;
+    scope.parameters.push_back(std::move(literal.offered));
+    scope.owners = std::move(literal.owner_parameters);
+    scope.here_reception = CheckedMethod::ScopeInputs::HereReception{1, {0}};
+    scope.here_input_owners = 1;
+    scope.lexical_here = std::move(literal.lexical_here);
+    for (auto &capture : literal.captures) {
+      const auto [row, inserted] = supplier.operations.emplace(capture.use, place_operand(supplier, capture.source));
+      if (!inserted) throw std::logic_error("here capture already has a supplier operand");
+      supplied.places.push_back(capture.use);
+      if (capture.parameter.selects_caller_ref_slot()) scope.live_bindings.insert(scope.parameters.size());
+      scope.parameters.push_back(std::move(capture.parameter));
+    }
+    supplier.operations.at(literal.call).supplied_here = std::move(supplied);
+    auto &method = program.methods.emplace_back();
+    method.source = &definition;
+    method.module = literal.module;
+    method.definition = body.instance.method;
+    method.parameters = body.instance.arguments;
+    method.result = body.instance.result;
+    method.scope_inputs = std::move(scope);
+    method.here_group = CheckedMethod::HereGroupResults{supplier.result.type, literal.receiving_result, {}, false};
   }
 
   void seal(CheckedProgram &program) {
@@ -678,6 +925,10 @@ class BodyExtraction {
     for (const auto &entry : program.native_entries)
       expect(roles[selected_.at(entry.method)].empty(), program.methods[entry.method].source->at,
              "a C entry cannot import an array allocator capability");
+    for (size_t i = 0; i < bodies_.size(); ++i) if (const auto &literal = bodies_[i].literal) {
+      expect(roles[i].empty(), literal->site->at, "replacement seed needs a here body without imported allocators");
+      seal_literal(program, i);
+    }
     for (size_t i = 0; i < bodies_.size(); ++i) {
       auto &body = bodies_[i];
       for (const auto &call : body.calls) {
