@@ -25465,14 +25465,17 @@ class ScalarChecker {
     std::map<const Form *, const Form *> parents;
     std::map<const Form *, size_t> method_ids;
     std::set<const Form *> installed_bodies;
+    // Collecting nested definitions does not introduce symbol names. At this
+    // point the namespace contains the explicit declarations and selections.
+    const bool check_protected_names = !module_names().symbols.empty();
     const auto collect = [&](auto &&self, const Expression &expr, const Form *parent, bool register_methods) -> void {
-      check_symbol_binding_expression(expr);
+      if (check_protected_names) check_symbol_binding_expression(expr);
       if (expr.kind == Expression::Kind::here_body && !expr.definition) {
         if (register_methods && !unsupported_here) unsupported_here = expr.at;
         register_methods = false;
       }
       if (expr.definition) {
-        check_symbol_binding_header(*expr.definition);
+        if (check_protected_names) check_symbol_binding_header(*expr.definition);
         if (register_methods) {
           if (expr.kind == Expression::Kind::procedure_effect) installed_bodies.insert(expr.definition.get());
           else lexical_methods_.emplace(expr.definition.get(), 0);
@@ -25484,7 +25487,7 @@ class ScalarChecker {
       for (const auto &child : expr.children) self(self, *child, parent, register_methods);
     };
     for (const auto &form : forms) {
-      if (form->kind == Form::Kind::function || form->kind == Form::Kind::procedure)
+      if (check_protected_names && (form->kind == Form::Kind::function || form->kind == Form::Kind::procedure))
         check_symbol_binding_header(*form);
       if (form->body)
         collect(collect, *form->body, form->kind == Form::Kind::expression ? nullptr : form.get(), true);
@@ -25838,8 +25841,11 @@ class ScalarChecker {
       if (lexical) lexical_methods_[form] = id;
       else family.push_back(id);
     }
-    for (const auto &[name, family] : module_names().callables)
-      check_symbol_binding_name(name, program_.families[family].at);
+    // Method registration may also have introduced implicit symbols. Both
+    // maps are ordered by spelling, so the first conflict stays the same.
+    for (const auto &[name, symbol] : module_names().symbols)
+      if (const auto family = module_names().callables.find(name); family != module_names().callables.end())
+        check_symbol_binding_name(name, program_.families[family->second].at);
     for (const auto &[name, type] : module_names().types)
       if (module_names().symbols.contains(name) || module_names().callables.contains(name))
         implementation_gap({source.path.string()}, "same-scope type and callable/symbol bindings");
