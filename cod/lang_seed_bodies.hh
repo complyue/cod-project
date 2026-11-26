@@ -110,6 +110,36 @@ class BodyExtraction {
     Type result;
     std::optional<size_t> body;
   };
+  using CompletedResults = std::map<size_t, ResultContract>;
+  struct ArmValue {
+    Type type;
+    bool view;
+  };
+  struct CaseArm {
+    const Expression *site;
+    CasePattern pattern;
+    std::vector<size_t> payload_fields;
+    // An index here identifies the implicit scope's method.
+    std::variant<ArmValue, size_t> result;
+  };
+  struct BoundCase {
+    const Expression *site;
+    std::vector<CaseArm> arms;
+    bool reaches_end = false;
+  };
+  struct CaseResult {
+    Type type = Type::never;
+    bool scalar_value_join = false;
+    std::vector<Type> arms;
+  };
+  struct CaseReturn {
+    const Expression *site;
+    BoundCase input;
+  };
+  struct ValueReturn {
+    const Expression *site;
+    Type type;
+  };
   struct BoundBody {
     CheckedInstance instance;
     std::set<size_t> allocations;
@@ -117,6 +147,9 @@ class BodyExtraction {
     std::optional<Outline> outline;
     bool open_replay = false;
     const Expression *void_exit = nullptr;
+    bool case_scope = false;
+    std::vector<ValueReturn> value_returns;
+    std::vector<CaseReturn> case_returns;
   };
 
   const Declarations &declarations_;
@@ -130,6 +163,66 @@ class BodyExtraction {
 
   static void expect(bool condition, const Location &at, const char *detail) {
     if (!condition) implementation_gap(at, detail);
+  }
+
+  static const CheckedOperation &add_operation(CheckedInstance &instance, const Expression &expr, CheckedOperation op) {
+    const auto [row, first] = instance.operations.emplace(&expr, std::move(op));
+    if (!first) throw std::logic_error("replacement seed produced an operation twice");
+    return row->second;
+  }
+
+  static CaseResult complete_case(const BoundCase &input, const CompletedResults &results) {
+    CaseResult output;
+    for (const auto &arm : input.arms) {
+      const auto *known = std::get_if<ArmValue>(&arm.result);
+      const auto &type = known ? known->type : *results.at(std::get<size_t>(arm.result)).type;
+      output.arms.push_back(type);
+      if (type == Type::never) continue;
+      expect(type == Type::void_type || scalar_type(type),
+             arm.site->at, "replacement seed needs case arms with void or independent scalar results");
+      expect(output.type == Type::never || output.type == type, arm.site->at, "case arms require one result type");
+      output.type = type;
+      output.scalar_value_join |= known && known->view;
+    }
+    if (input.reaches_end) {
+      if (output.type == Type::never) output.type = Type::void_type;
+      else if (output.type != Type::void_type)
+        fail(input.site->at, "value case may finish without a result; provide a completing arm or a catch-all");
+    }
+    return output;
+  }
+
+  static CheckedOperation apply_case(CheckedInstance &instance, const BoundCase &input, const CaseResult &result) {
+    for (size_t i = 0; i < input.arms.size(); ++i) {
+      const auto &arm = input.arms[i];
+      CheckedOperation op;
+      op.case_pattern = arm.pattern;
+      op.case_payload_fields = arm.payload_fields;
+      op.type = result.arms.at(i);
+      op.case_arm_completes = op.type != Type::never;
+      add_operation(instance, *arm.site, std::move(op));
+    }
+    CheckedOperation op;
+    op.type = result.type;
+    op.case_reaches_end = input.reaches_end;
+    op.scalar_value_join = result.scalar_value_join;
+    return op;
+  }
+
+  static CheckedOperation value_return(const Type &result) {
+    CheckedOperation op;
+    op.type = Type::never;
+    op.operand_type = result;
+    return op;
+  }
+
+  static void apply_case_return(CheckedInstance &instance, const CaseReturn &pending, const CaseResult &completed) {
+    const auto &result = *instance.result.type;
+    expect(scalar_type(completed.type) && transfers_value(completed.type, result),
+           pending.input.site->at, "replacement seed needs an admitted value transfer");
+    auto operation = apply_case(instance, pending.input, completed);
+    add_operation(instance, *pending.input.site, std::move(operation));
+    add_operation(instance, *pending.site, value_return(result));
   }
 
   static size_t input_owner(size_t role) { return null_target - 1 - role; }
@@ -412,7 +505,8 @@ class BodyExtraction {
           (supplied_body() && source.type.kind == Type::product && declarations().bits_payload(source.type));
       const bool handle = source.type.kind == Type::native_handle && !source.type.owned;
       const bool text = source.type == Type::string && source.read_only;
-      const bool incoming_loan = (handle || text) && original.place && original.owner > first_symbol_owner &&
+      const bool scalar_input = body_.case_scope && scalar_type(source.type);
+      const bool incoming_loan = (handle || text || scalar_input) && original.place && original.owner > first_symbol_owner &&
           std::ranges::any_of(supplier.frame.inputs, [&](const auto &input) {
             return input.place == *original.place && !input.binding_slot &&
                    input.mode == (handle ? ArgumentMode::borrowed_handle : ArgumentMode::borrowed_ref);
@@ -700,16 +794,24 @@ class BodyExtraction {
       return op;
     }
 
-    void call_full_scope(const Expression &expr) {
+    static bool implicit_scope_call(const Expression &expr) {
+      return expr.kind == Kind::value_call && expr.children.size() == 1 &&
+             expr.children.front()->definition && expr.children.front()->definition->implicit_scope;
+    }
+
+    size_t call_full_scope(const Expression &expr, bool case_scope = false) {
       const auto &callable = *expr.children.front();
       const auto &source = *callable.definition;
       expect(!body_.outline && body_.instance.result.type && !source.case_scan_scope && source.parameters.empty(), expr.at,
              "replacement seed needs an ordinary intermediate full-scope statement");
       const auto callee = extraction_.bodies_.size();
       extraction_.add_outline(outline(source), {});
+      auto &target = extraction_.bodies_.at(callee);
+      target.case_scope = case_scope;
       BoundCall edge{&expr, callee, {}};
       edge.pending_result_arguments.emplace();
       body_.calls.push_back(std::move(edge));
+      return target.instance.method;
     }
 
     bool fixed_overload_inputs(const CheckedMethod &method, const CheckedMethod &first) const {
@@ -1517,7 +1619,7 @@ class BodyExtraction {
       return op;
     }
 
-    CheckedOperation check_case(const Expression &expr) {
+    BoundCase bind_case(const Expression &expr, bool allow_scope = false) {
       const auto &subject = operand(expr, 0);
       const bool sum = subject.type.kind == Type::sum && subject.view && declarations().bits_payload(subject.type);
       const bool enumeration = subject.type.kind == Type::enumeration;
@@ -1526,15 +1628,13 @@ class BodyExtraction {
              expr.at, "replacement seed needs a closed Boolean, enum or bits sum case without case transfers");
       std::set<std::uint64_t> covered;
       bool catch_all = false;
-      CheckedOperation op;
-      op.type = Type::never;
+      BoundCase input{&expr, {}};
       for (const auto &entry : std::span(expr.children).subspan(1)) {
         const auto &arm = *entry;
         expect(arm.kind == Kind::case_arm && !arm.case_resumes && arm.children.size() == 1, arm.at,
                "replacement seed needs an unguarded case arm");
-        CheckedOperation matched;
-        matched.case_pattern = bind_case_pattern(declarations(), subject.type, arm, names().constructors);
-        const auto &pattern = matched.case_pattern;
+        const auto pattern = bind_case_pattern(declarations(), subject.type, arm, names().constructors);
+        std::vector<size_t> payload_fields;
         expect(pattern.kind != CasePattern::Kind::null, arm.at, "replacement seed needs a non-null case pattern");
         if (pattern.kind == CasePattern::Kind::any) catch_all = true;
         else covered.insert(pattern.code);
@@ -1554,38 +1654,57 @@ class BodyExtraction {
             binding.place = local.place;
             binding.type = saved.type;
             binding.operand_type = alternative.fields.at(saved.field).type;
-            matched.case_payload_fields.push_back(saved.field);
+            payload_fields.push_back(saved.field);
             remember(receiver, std::move(binding));
           }
         }
-        const auto &result = operand(arm, 0);
-        matched.type = result.type;
-        matched.case_arm_completes = result.type != Type::never;
-        if (matched.case_arm_completes) {
-          expect(result.type == Type::void_type || scalar_type(result.type),
-                 arm.at, "replacement seed needs case arms with void or independent scalar results");
-          expect(op.type == Type::never || op.type == result.type, arm.at, "case arms require one result type");
-          op.type = result.type;
-          op.scalar_value_join |= result.view;
+        const auto &value = *arm.children.front();
+        if (allow_scope && implicit_scope_call(value)) {
+          require_executable_expression(value);
+          const auto method = call_full_scope(value, true);
+          input.arms.push_back({&arm, pattern, std::move(payload_fields), method});
+        } else {
+          const auto &result = extract(value);
+          input.arms.push_back({&arm, pattern, std::move(payload_fields), ArmValue{result.type, result.view}});
         }
         scopes_.pop_back();
-        remember(arm, std::move(matched));
       }
       if (!catch_all) {
-        if (sum) op.case_reaches_end = covered.size() != declarations().sums.at(subject.type.identity).alternatives.size();
+        if (sum) input.reaches_end = covered.size() != declarations().sums.at(subject.type.identity).alternatives.size();
         else if (enumeration) {
           const auto &domain = declarations().enums.at(subject.type.identity);
-          op.case_reaches_end = std::ranges::any_of(domain.members, [&](const auto &member) {
+          input.reaches_end = std::ranges::any_of(domain.members, [&](const auto &member) {
             return !covered.contains(member.code);
           });
-        } else op.case_reaches_end = covered.size() != 2;
+        } else input.reaches_end = covered.size() != 2;
       }
-      if (op.case_reaches_end) {
-        if (op.type == Type::never) op.type = Type::void_type;
-        else if (op.type != Type::void_type)
-          fail(expr.at, "value case may finish without a result; provide a completing arm or a catch-all");
+      return input;
+    }
+
+    CheckedOperation check_case(const Expression &expr) {
+      const auto input = bind_case(expr);
+      const auto result = complete_case(input, {});
+      return apply_case(body_.instance, input, result);
+    }
+
+    bool record_pending_return(const Expression &expr) {
+      if (expr.kind != Kind::return_value || expr.children.size() != 1) return false;
+      const auto &value = *expr.children.front();
+      if (body_.case_scope) {
+        const auto &result = extract(value);
+        body_.value_returns.push_back({&expr, result.type});
+        return true;
       }
-      return op;
+      if (body_.outline || !body_.instance.result.type || !scalar_type(*body_.instance.result.type) ||
+          value.kind != Kind::case_expression) return false;
+      if (std::ranges::none_of(std::span(value.children).subspan(1), [](const auto &arm) {
+            return arm->kind == Kind::case_arm && arm->children.size() == 1 && implicit_scope_call(*arm->children.front());
+          })) return false;
+      require_executable_expression(value);
+      auto input = bind_case(value, true);
+      expect(!input.reaches_end, value.at, "replacement seed needs an exhaustive returned case with a full-scope arm");
+      body_.case_returns.push_back({&expr, std::move(input)});
+      return true;
     }
 
     CheckedOperation operation(const Expression &expr, bool discard_iteration_result) {
@@ -1631,8 +1750,7 @@ class BodyExtraction {
         for (size_t i = 0; i < expr.children.size(); ++i) {
           const auto &item = *expr.children[i];
           const bool intermediate = i + 1 < expr.children.size();
-          if (intermediate && item.kind == Kind::value_call && item.children.size() == 1 &&
-              item.children.front()->definition && item.children.front()->definition->implicit_scope) {
+          if (intermediate && implicit_scope_call(item)) {
             require_executable_expression(item);
             call_full_scope(item);
             continue;
@@ -1737,9 +1855,7 @@ class BodyExtraction {
         body_.open_replay = true;
       if (op.view && !scalar_type(op.type) && op.type != Type::exception)
         op.discarded_view = true;
-      const auto [row, first] = body_.instance.operations.emplace(&expr, std::move(op));
-      if (!first) throw std::logic_error("replacement seed visited an operation twice");
-      return row->second;
+      return add_operation(body_.instance, expr, std::move(op));
     }
 
     static void require_executable_expression(const Expression &expr) {
@@ -1751,6 +1867,9 @@ class BodyExtraction {
 
     const CheckedOperation &extract(const Expression &expr, bool discard_iteration_result = false) {
       require_executable_expression(expr);
+      // The lexical path ends at a return independently of its pending result.
+      static const CheckedOperation terminal{Type::never};
+      if (record_pending_return(expr)) return terminal;
       return remember(expr, operation(expr, discard_iteration_result));
     }
 
@@ -1839,8 +1958,6 @@ class BodyExtraction {
     for (size_t i = 0; i < bodies_.size(); ++i) Frame(*this, i).extract_body();
   }
 
-  using CompletedResults = std::map<size_t, ResultContract>;
-
   static const ResultContract &completed_result(const BoundBody &body, const CompletedResults &results) {
     return body.instance.result.type ? body.instance.result : results.at(body.instance.method);
   }
@@ -1919,14 +2036,37 @@ class BodyExtraction {
       if (body.instance.result.type) continue;
       const auto method = body.instance.method;
       const auto &source = body.outline ? *body.outline->source : *declarations_.method(method).source;
-      expect(body.void_exit, source.at,
-             "replacement seed needs independent evidence of a normal no-value exit");
-      results.emplace(method, ResultContract{Type{Type::void_type}});
+      if (!body.case_scope) {
+        expect(body.void_exit, source.at, "replacement seed needs independent evidence of a normal no-value exit");
+        results.emplace(method, ResultContract{Type{Type::void_type}});
+        continue;
+      }
+      if (body.void_exit)
+        implementation_gap(body.void_exit->at, "replacement seed needs a value on every normal full-scope arm exit");
+      std::optional<Type> result;
+      for (const auto &returned : body.value_returns) {
+        if (returned.type == Type::never) continue;
+        expect(scalar_type(returned.type), returned.site->at, "replacement seed needs independent scalar arm returns");
+        expect(!result || *result == returned.type, returned.site->at, "full-scope arm returns require one result type");
+        result = returned.type;
+      }
+      expect(result.has_value(), source.at, "replacement seed needs independent evidence of a full-scope arm result");
+      results.emplace(method, ResultContract{std::move(result)});
     }
     return results;
   }
 
-  void seal(CheckedProgram &program, const CompletedResults &results) {
+  using CompletedCases = std::map<const Expression *, CaseResult>;
+
+  CompletedCases complete_case_returns(const CompletedResults &results) const {
+    CompletedCases cases;
+    for (const auto &body : bodies_)
+      for (const auto &pending : body.case_returns)
+        cases.emplace(pending.site, complete_case(pending.input, results));
+    return cases;
+  }
+
+  void seal(CheckedProgram &program, const CompletedResults &results, const CompletedCases &cases) {
     const auto completed = freeze_dependencies().complete();
     for (const auto &[method, result] : results)
       if (method < program.methods.size()) program.methods[method].result = result;
@@ -1941,6 +2081,10 @@ class BodyExtraction {
     for (size_t i = 0; i < bodies_.size(); ++i) {
       auto &body = bodies_[i];
       if (!body.instance.result.type) body.instance.result = results.at(body.instance.method);
+      for (const auto &returned : body.value_returns)
+        add_operation(body.instance, *returned.site, value_return(*body.instance.result.type));
+      for (const auto &pending : body.case_returns)
+        apply_case_return(body.instance, pending, cases.at(pending.site));
       for (const auto &call : body.calls) {
         if (call.pending_result_arguments) {
           const auto target = bodies_[call.callee].instance.method;
@@ -1978,8 +2122,9 @@ public:
     BodyExtraction extraction(declarations);
     extraction.extract();
     const auto results = extraction.complete_results();
+    const auto cases = extraction.complete_case_returns(results);
     auto program = std::move(declarations.declarations_);
-    extraction.seal(program, results);
+    extraction.seal(program, results, cases);
     return {std::move(declarations.source_), std::move(program)};
   }
 };
