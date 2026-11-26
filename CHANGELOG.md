@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Give each actual receiver its own indexing families
+
+<a id="h-receiver-index-families-20261126"></a>
+**H-RECEIVER-INDEX-FAMILIES-20261126.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user endorsed per-type indexing families and concrete ADT dispatch “即使caller用的抽象类型声明变量”. [D-30-INDEX-FAMILIES](design/DesignAuthorityRegistry.md#d-30-index-families) adds the receiver identity and module-view rule to the [prior indexed call contract](https://github.com/complyue/cod-project/blob/ac3cbf00ef69e08b506169c01e4adb2db2216424/design/CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads). D-30r10 / D-07r229 / D-15r85 carry forward receiver permissions, distinct operations, pack selection and demand-based AOT coverage. How a concrete type acquires an abstract default for a missing shape is open. [Generic writer and adapter acceptance](design/CollectionsAndBuiltinContainers.md#receiver-families-for-indexing). Registry r1353→1354.
+
 ## 2026-11-26 — Use the default scalar names in selector examples
 
 <a id="k-selector-scalar-spellings-20261126"></a>
