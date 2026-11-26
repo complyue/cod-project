@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 226
+Discussion revision: 227
 
 Recorded: 2026-11-26
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r227 [D-07-SLICE-CASE](DesignAuthorityRegistry.md#d-07-slice-case) extends the r226 case grammar to match supplied and omitted slice fields. P-770/P-771 preserve the nominal subject, branch-local bindings, guard order and open-type coverage. [Decision and examples](RangedForAndGenerators.md#matching-a-slice-in-a-case-arm)
 
 At r226 [D-29-SELECTOR-LITERALS](DesignAuthorityRegistry.md#d-29-selector-literals) uses ordinary nominal conformance and typed case on the public AxisSelector parent. The [indexed call](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads) supplies the assigned operand before the index parameters. The r225 nominal type identity rules continue.
 
@@ -450,6 +452,8 @@ Haskell 2010 spells the analogous import `import Model (Receipt(Accepted))` or `
 Grouped method arms use `=>` to introduce callable bodies. A `case` uses `->` to enter a selected branch within the executing body. Constant heads share typed literal and nominal enum matching with [method groups](SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch). The surrounding construct determines selection and control.
 
 The full source form is `case subject of { (pattern) | guard -> { body }; ... }`. A guard is optional. In the full form, parentheses delimit the pattern and preserve the subject’s established result mode. Parentheses written around the subject itself follow ordinary expression rules. Ordinary statements may appear between arms. An arm header and its `->` must be a direct item of the body of the case that owns it. An ordinary group, `if`, full scope or callback nested in that body cannot declare another arm of that case. A nested `case ... of` owns a new arm sequence. Arrows in other grammar productions, such as `value -> parameter` in a call, retain their ordinary interpretation. After `->`, single braces group statements in the enclosing callable and double braces invoke a full scope. An empty header `()` and a wildcard `(_)` accept any subject without binding it, including a null pointer. A written bare `|` before `->` supplies no predicate. Thus `() | -> {{ ... }}` is a catch-all with a local return. With `() | ready() -> {{ ... }}`, call ready once when reached and enter the body only if it returns true. A trailing here argument uses `=>` and has its own handoff contract. The seed [expression grammar](../cod/lang_syntax.hh) provides `if` with `else`. Haskell’s case expressions supply the precedent for constructor patterns, source order and guards over pattern-bound names. [Haskell 2010 §3.13](https://www.haskell.org/onlinereport/haskell2010/haskellch3.html#x8-460003.13)
+
+**Axis-relative slice patterns.** A [mirrored slice head](RangedForAndGenerators.md#matching-a-slice-in-a-case-arm) such as `(.. by val d)` selects the matching builtin slice shape and binds a supplied field. Its parentheses delimit the pattern. The optional guard and arm use the usual branch scope and control.
 
 **Short arms.** At the start of a direct case item, `Name -> expr` tests a visible constructor of the subject sum or a member of the subject enum exactly as `(Name) -> { expr }` does. A constructor can have fields that this arm ignores. Enum member lookup uses the subject’s member table, including alternate spellings. When the tokens form a direct short head, that pattern interpretation takes precedence over an ordinary expression starting with the same name and arrow. A bare name introduces no local. A constructor followed by a braced receiving specification introduces the same branch-local bindings as the parenthesized constructor pattern. Either head, an enum member or a wildcard can take an optional `| guard` before the arm arrow. The pattern parentheses are optional in each of these forms. For every case subject, `_ -> expr` is the unguarded wildcard `(_) -> { expr }`, including for null. The author chooses to cover all remaining values and assumes responsibility for what happens when a sum or enum grows. Using a wildcard alone calls for no diagnostic.
 
