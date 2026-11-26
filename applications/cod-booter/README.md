@@ -181,6 +181,12 @@ The C++ seed and CoD booter must parse the [owning catch header and ordinary ref
 
 Acceptance checks each frontend at its own parse boundary. A valid form carries its binding mode, owner name when present, and construction operands into checking. Malformed syntax fails at parsing. When an execution path is unsupported, the compiler can reject the parsed form during checking or lowering. Supported paths must execute their required propagation, handling and cleanup. For example, parsing `catch (e:const E)` as a borrowed local loses the handler’s release obligation even when the handler only reads e.
 
+### Predicate assertions
+
+The booter’s three commands check `assert predicate;` in an ordinary body. The predicate must supply a `bool`. A literal false predicate is rejected, including under parentheses. A literal true predicate needs no assertion branch. Otherwise the compiled program evaluates the predicate once and raises unchecked `AssertionFailedError` on false. Failures during evaluation retain their category and follow ordinary cleanup. The source commands check the body containing the assertion.
+
+Quoted assertion messages and reference-identity predicates such as `p is not null` still receive located profile diagnostics. [Predicate assertion contract](../../design/SymbolicDynamicScope.md#predicate-assertions-and-flow-refinement)
+
 ### Transparent type synonyms
 
 The booter accepts first-order declarations such as `export type Float64 = double`. The binder resolves the target in the defining module before checking signatures or layouts. Chains can refer forward to local declarations and through selected exports, including renamed and default selections. Cycles containing only synonyms fail at the target that closes the cycle.

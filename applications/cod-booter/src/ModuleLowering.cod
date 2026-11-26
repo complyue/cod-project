@@ -2,7 +2,7 @@ using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid, RangeLoop, Parenthesized, BooleanLiteral,
     ModuleSelection, BulkModuleSelection, DefaultPublicSet, CallableDefinition, EnumDefinition, TypeSynonym, RecordDefinition, Publication, TextLiteral, NullLiteral,
-    BlockSyntax, ScopeSyntax, DiscardedExpression, CheckedTypeAssertion, ProtectedBlock, CaseExpression,
+    BlockSyntax, ScopeSyntax, DiscardedExpression, CheckedTypeAssertion, PredicateAssertion, ProtectedBlock, CaseExpression,
     BreakValue, BreakVoid, CaseFallthrough, CaseFailure, RaiseValue, RaisePending,
 };
 using "./ParserStorage.cod" {
@@ -65,7 +65,7 @@ using "./CompletionChecking.cod" {
 };
 using "./ModuleExports.cod" {
     exception_root_identity, null_pointer_identity, missing_return_identity, unexpected_case_identity,
-    out_of_memory_identity, index_out_of_bounds_identity, type_assertion_failed_identity, text_byte_export,
+    out_of_memory_identity, index_out_of_bounds_identity, type_assertion_failed_identity, assertion_failed_identity, text_byte_export,
 };
 using "./NativeCommands.cod" {
     NativeCommands, NativePlan, declare_function, begin_function, position_block, jump,
@@ -1537,6 +1537,17 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
                     };
                     lower_node(nodes, names, links, interfaces, facts, sites, code, plan, state, operand.index);
                     return;
+                };
+                (PredicateAssertion { val predicate <-; }) -> {
+                    if (!published_syntax_id(nodes, state.syntax_revision, at, predicate)) {
+                        plan.diagnostic <- invalid_native_module();
+                        return
+                    };
+                    lower_bits(nodes, names, links, interfaces, facts, sites, code, plan, state, predicate.index);
+                    if (state.live && facts[at].predicate_assertion_check) {
+                        guard_word(code, plan, state, slot(predicate.index), true, assertion_failed_identity(), syntax.span.first)
+                    };
+                    return
                 };
                 (CheckedTypeAssertion { val operand <- operand; val colon <- colon; }) -> {
                     if (!published_syntax_id(nodes, state.syntax_revision, at, operand)) {

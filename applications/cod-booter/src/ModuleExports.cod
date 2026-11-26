@@ -327,6 +327,7 @@ export func missing_return_identity() -> u64 { return 5u64; }
 export func index_out_of_bounds_identity() -> u64 { return 8u64; }
 export func unexpected_case_identity() -> u64 { return 9u64; }
 export func type_assertion_failed_identity() -> u64 { return 10u64; }
+export func assertion_failed_identity() -> u64 { return 13u64; }
 
 export func unproved_module_exports() -> u8 { return 1u8; }
 export func missing_module_export() -> u8 { return 2u8; }

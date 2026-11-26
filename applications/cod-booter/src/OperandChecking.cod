@@ -27,7 +27,7 @@ using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid, RangeHeader, RangeLoop, Parenthesized,
     BooleanLiteral, TextLiteral, NullLiteral, DiscardedExpression, BreakValue, BreakVoid, CaseFallthrough,
-    CaseFailure, RaiseValue, RaisePending, NamedThrow, ArrayLength,
+    CaseFailure, RaiseValue, RaisePending, NamedThrow, ArrayLength, PredicateAssertion,
 };
 using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
 using "./ParserStorage.cod" CallableSyntax { InvalidCallable };
@@ -184,6 +184,7 @@ export data OperandFact {
     passes_owner:u8;
     text_assertion:u8;
     enum_assertion_check:bool;
+    predicate_assertion_check:bool;
     text_intrinsic:u8;
 }
 export array OperandFacts[u64]:OperandFact;
@@ -257,6 +258,7 @@ func duplicate_catch_category() -> u8 { return 15u8; }
 func procedure_call_in_function() -> u8 { return 16u8; }
 func value_tail_in_void_function() -> u8 { return 17u8; }
 func expected_boolean_condition() -> u8 { return 18u8; }
+func false_predicate_assertion() -> u8 { return 147u8 }
 func unproved_reservation_selection() -> u8 { return 19u8; }
 func unsupported_narrow_execution() -> u8 { return 20u8; }
 func readonly_owner_argument() -> u8 { return 21u8; }
@@ -2771,6 +2773,21 @@ func check_conditional(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u
     return diagnostic;
 }
 
+func check_predicate_assertion(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64,
+    predicate:u64, used:u64, revision:u64) -> u8 where {const owner N, owner F} {
+    if (facts[predicate].kind == never_result()) {
+        set_result(facts, at, never_result());
+        return 0u8
+    };
+    if (require_typed_bits(nodes, facts, predicate, scalar_bool()) != 0u8)
+        return expected_boolean_condition();
+    val truth <- boolean_literal(nodes, used, ungrouped(nodes, revision, used, predicate));
+    if (truth == LiteralFalse) return false_predicate_assertion();
+    only_void(facts, at);
+    (facts[at].predicate_assertion_check <- truth != LiteralTrue):void;
+    return 0u8
+}
+
 # Remaining canonical members are tracked by count and exclusion markers.
 # A possible write through another view starts a fresh scan generation.
 data CaseCoverage {
@@ -4043,6 +4060,11 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                     used, revision); };
                 (ContinueVoid) -> { return check_here_continue(nodes, names, links, facts, at, used,
                     revision); };
+                (PredicateAssertion { val predicate <-; }) -> {
+                    if (!published_syntax_id(nodes, revision, at, predicate)) return invalid_operand_tree();
+                    if (names[at].scope == no_node()) return 0u8;
+                    return check_predicate_assertion(nodes, facts, at, predicate.index, used, revision)
+                };
                 (DiscardedExpression { val operand <- operand; }) -> {
                     if (!published_syntax_id(nodes, revision, at, operand)) return invalid_operand_tree();
                     if (names[at].scope == no_node()) return 0u8;
@@ -4464,6 +4486,7 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
         facts[at].passes_owner <- 0u8;
         facts[at].text_assertion <- 0u8;
         facts[at].enum_assertion_check <- false;
+        facts[at].predicate_assertion_check <- false;
         facts[at].text_intrinsic <- 0u8;
         owners[at].call_site <- no_node();
         owners[at].actual_owner <- no_node();

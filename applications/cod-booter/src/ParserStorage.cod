@@ -2563,6 +2563,23 @@ export func text_literal_syntax(nodes:const ExprNodes in N, used:u64, at:u64) ->
     };
 }
 
+export func predicate_operand(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64)
+    -> u64 where {const owner N} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return no_node();
+    return case nodes[at] of {
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                (PredicateAssertion { val predicate <-; }) -> {
+                    if (!published_syntax_id(nodes, revision, at, predicate)) return no_node();
+                    predicate.index
+                };
+                (_) -> { no_node() };
+            }
+        };
+        (_) -> { no_node() };
+    }
+}
+
 export data AssertionSites { operand:u64; annotation:u64; colon:u64; }
 
 export func inspect_type_assertion(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,

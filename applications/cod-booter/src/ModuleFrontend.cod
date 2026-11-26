@@ -1,3 +1,4 @@
+using "./ParserStorage.cod" NodeLink { NoLink };
 using "./ModuleExportStorage.cod" ByteFunctionCompletion { NoByteFunction };
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
@@ -79,6 +80,7 @@ export data ModuleBindingResult {
     diagnostic:u8;
     related_first:u64;
     symbol_binder:u64;
+    has_predicate_assertion:bool;
 }
 
 export func module_read_failed() -> u8 { return 1u8; }
@@ -101,7 +103,7 @@ func unsupported_scoped_procedure() -> u8 { return 124u8; }
 func unsupported_reference_group() -> u8 { return 134u8; }
 func unsupported_identity_reference() -> u8 { return 135u8; }
 func unsupported_reserved_initializer() -> u8 { return 136u8; }
-func unsupported_predicate_assertion() -> u8 { return 137u8; }
+func unsupported_assertion_message() -> u8 { return 137u8; }
 func unsupported_reference_identity() -> u8 { return 138u8; }
 func unsupported_returning_condition() -> u8 { return 143u8 }
 
@@ -129,7 +131,7 @@ export func rejected_unsupported_declaration(result:const ModuleBindingResult in
          result.diagnostic == unsupported_reference_slot_formal() || result.diagnostic == unsupported_fixed_formal() ||
          result.diagnostic == unsupported_procedure_symbol() || result.diagnostic == unsupported_scoped_procedure() ||
          result.diagnostic == unsupported_reference_group() || result.diagnostic == unsupported_identity_reference() ||
-         result.diagnostic == unsupported_reserved_initializer() || result.diagnostic == unsupported_predicate_assertion() ||
+         result.diagnostic == unsupported_reserved_initializer() || result.diagnostic == unsupported_assertion_message() ||
          result.diagnostic == unsupported_reference_identity() || result.diagnostic == unsupported_returning_condition() ||
          (result.diagnostic >= 28u8 && result.diagnostic <= 40u8));
 }
@@ -223,8 +225,8 @@ func construction_query_supported(nodes:const ExprNodes in N, operand:u64) -> bo
 
 # Declaration checking can resolve projection operands without emitting an address.
 func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
-    emit_object:bool, publish_defaults:bool) -> u8
-    where {const owner N} {
+    emit_object:bool, publish_defaults:bool, has_predicate_assertion:bool in P) -> u8
+    where {const owner N, owner P} {
     ref construction = make ConstructionSites {
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
         initializer <- no_node(); contents <- no_node();
@@ -281,7 +283,12 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64,
                 BareReferenceBinding -> unsupported_reference_group();
                 ReferenceBindingGroup -> unsupported_reference_group();
                 InitializeReservation -> unsupported_reserved_initializer();
-                PredicateAssertion -> unsupported_predicate_assertion();
+                (PredicateAssertion { val message <-; }) -> {
+                    case message of {
+                        NoLink -> { (has_predicate_assertion <- true):void; 0u8 };
+                        (_) -> { unsupported_assertion_message() };
+                    }
+                };
                 ReferenceIdentity -> unsupported_reference_identity();
                 ReturningCondition -> unsupported_returning_condition();
                 (Formal { val mode <- mode; val fixed <- binding_const; }) -> {
@@ -320,7 +327,7 @@ func check_source_profile(nodes:const ExprNodes in N, used:u64, emit_object:bool
     val next <- 0u8;
     for (at in 0u64 .. used) {
         next <- unsupported_source_form(nodes, result.frontend.tree.revision, used, at, emit_object,
-            publish_defaults);
+            publish_defaults, result.has_predicate_assertion);
         if (next != 0u8 && (first == no_node() || syntax_first(nodes, used, at) < syntax_first(nodes, used, first))) {
             cause <- next;
             (first <- at):void;
@@ -338,6 +345,7 @@ export func check_parsed_module_profile(nodes:const ExprNodes in N, emit_object:
     result.stage <- 0u8;
     result.diagnostic <- 0u8;
     result.related_first <- no_node();
+    result.has_predicate_assertion <- false;
     return check_source_profile(nodes, result.frontend.tree.used, emit_object, publish_defaults, result)
 }
 

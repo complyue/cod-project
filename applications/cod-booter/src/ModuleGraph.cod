@@ -880,6 +880,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
             diagnostic_first <- no_node(); diagnostic_past <- no_node();
         };
         stage <- 0u8; diagnostic <- 0u8; related_first <- no_node(); symbol_binder <- no_node();
+        has_predicate_assertion <- false;
     };
     val used <- result.frontend.tree.used;
     val revision <- result.frontend.tree.revision;
@@ -1009,7 +1010,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     };
     if (constructed != no_node() || caught_field != no_node() ||
         (!native && (first_case != no_node() || declared != no_node() || required != no_node() || source_helper != no_node() ||
-                     native_body_evidence != no_node() || byte_function != no_node()))) {
+                     native_body_evidence != no_node() || byte_function != no_node() || result.has_predicate_assertion))) {
         if (!check_graph_exception_body(source, nodes, selected, names, work, spellings,
             spelling_size,
                                         published_interfaces, interface_count, aggregate_facts,
@@ -1392,7 +1393,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             owner <- no_node(); identity <- 0u64; reservation <- no_node(); product_words <- 0u64; bits_product <- false;
             word_offset <- 0u64; last_initializer <- no_node(); writable_text_place <- 0u8; call_definition <- no_node();
             text_nul <- 0u8; allocation_owner <- no_node(); owner_chain <- no_node(); owner_use_next <- no_node();
-            passes_owner <- 0u8; text_assertion <- 0u8; enum_assertion_check <- false; text_intrinsic <- 0u8;
+            passes_owner <- 0u8; text_assertion <- 0u8; enum_assertion_check <- false; predicate_assertion_check <- false; text_intrinsic <- 0u8;
         });
         ref owners = make CallOwners(capacity, make OwnerEvidence {
             call_site <- no_node(); actual_owner <- no_node(); uses <- 0u64;

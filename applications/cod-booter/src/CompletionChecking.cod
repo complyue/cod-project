@@ -1,7 +1,7 @@
 using "./ParserStorage.cod" AssignmentSyntax { AugmentedPlaceTransfer };
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
-    DiscardedExpression, CheckedTypeAssertion, RaisePending, RaiseValue, NamedThrow,
+    DiscardedExpression, CheckedTypeAssertion, PredicateAssertion, RaisePending, RaiseValue, NamedThrow,
         CaseFallthrough, CaseFailure
 };
 using "./ParserStorage.cod" BinarySyntax { ArithmeticBinary, ComparisonBinary };
@@ -64,7 +64,7 @@ using "./OperandChecking.cod" {
 };
 using "./ModuleExports.cod" {
     exception_root_identity, null_pointer_identity, missing_return_identity, unexpected_case_identity,
-    out_of_memory_identity, index_out_of_bounds_identity, type_assertion_failed_identity, text_byte_export,
+    out_of_memory_identity, index_out_of_bounds_identity, type_assertion_failed_identity, assertion_failed_identity, text_byte_export,
 };
 using "./ExceptionTypes.cod" exception_type_covers;
 using "./ModuleExportStorage.cod" ByteFunctionCompletion {
@@ -395,6 +395,11 @@ func direct_operand(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, 
                 (DiscardedExpression { val operand <- operand; }) -> {
                     if (!published_syntax_id(nodes, revision, at, operand)) return false;
                     child <- operand.index;
+                    true
+                };
+                (PredicateAssertion { val predicate <-; }) -> {
+                    if (!published_syntax_id(nodes, revision, at, predicate)) return false;
+                    (child <- predicate.index):void;
                     true
                 };
                 (CheckedTypeAssertion { val operand <- operand; }) -> {
@@ -793,6 +798,9 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
     if (inspect_local_binding(nodes, revision, used, at, binding) && binding.mode == ReferenceLocal &&
         facts[binding.initializer].reception == nullable_ptr() &&
         sites[binding.initializer].presence != present_target()) return unproved_nonnull_binding();
+    if (facts[at].predicate_assertion_check)
+        return route_failure(nodes, names, links, facts, sites, at, used, revision,
+            assertion_failed_identity(), 0u8, possible_failure());
     if (facts[at].text_assertion != 0u8 || facts[at].enum_assertion_check)
         return route_failure(nodes, names, links, facts, sites, at, used, revision, type_assertion_failed_identity(), 0u8, possible_failure());
     if (facts[at].checks_array_bounds)

@@ -170,7 +170,7 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
     else if (diagnostic->stage == 3 && diagnostic->code == 136)
         fputs(": error: initializing a reserved target is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 137)
-        fputs(": error: predicate assertion checking is outside the supported compiler profile\n", stderr);
+        fputs(": error: predicate assertion messages are outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 138)
         fputs(": error: reference identity checking is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 139)
@@ -182,6 +182,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
     else if (diagnostic->stage == 3 && diagnostic->code == 142)
         fputs(": error: declaration conflicts with a protected symbol name\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 143)
+        fputs(": error: on returning is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 146)
         fputs(": error: type synonym cycle has no defining type\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 144)
         fputs(": error: this signed integer operand requires an enum assertion\n", stderr);
@@ -310,6 +312,10 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: symbolic procedure declaration checking is outside the current compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 124)
         fputs(": error: scoped symbolic procedure checking is outside the current compiler profile\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 18)
+        fputs(": error: condition must have type bool\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 147)
+        fputs(": error: assertion condition is provably false\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 20)
         fputs(": error: narrow integer execution is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 21)
