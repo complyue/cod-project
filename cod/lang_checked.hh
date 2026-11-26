@@ -3084,6 +3084,13 @@ class ScalarChecker {
   ArgumentPreparation argument_preparation(const Expression &expr, std::string_view operation, const std::vector<Type> &prefix,
                                             const std::vector<ArgumentEvidence> &evidence, const Access &prefix_access, const Owners &prefix_owners, bool required = true, const TypeEvidenceState *state = nullptr) const {
     if (expr.intrinsic) return {};
+    // An unbound eager builtin prepares values. The ordinary checker
+    // determines their types after evaluating the operands in order.
+    if (!state && !expr.lexical_symbol_call && eager_operation(operation) && !ordinary_binding(expr.text) &&
+        std::ranges::none_of(prefix, [](const Type &input) { return input.kind == Type::abstract_type; }) &&
+        std::ranges::none_of(evidence, [](const ArgumentEvidence &input) {
+          return input.type && input.type->kind == Type::abstract_type;
+        })) return {};
     std::vector<std::optional<Type>> arguments;
     Access access;
     Owners owners;
@@ -3127,7 +3134,7 @@ class ScalarChecker {
       if (contextual)
         candidates = method_candidates(family.methods, arguments, family.retained_types(), access, owners, state);
     }
-    auto applicable = candidates.methods;
+    auto applicable = std::move(candidates.methods);
     if (complete) {
       applicable = most_specific(applicable, access, owners, state, candidates.widening);
       if (required && applicable.size() > 1 && std::all_of(applicable.begin() + 1, applicable.end(), [&](size_t id) {
@@ -15029,9 +15036,9 @@ class ScalarChecker {
     }
     return result;
   }
-  std::vector<ArgumentEvidence> argument_evidence(const Expression &expr) const {
+  std::vector<ArgumentEvidence> argument_evidence(const Expression &expr, const NamedFamily &family) const {
     if (expr.children.empty()) return {};
-    if (expr.intrinsic || named_family(expr).methods.empty()) return std::vector<ArgumentEvidence>(expr.children.size());
+    if (expr.intrinsic || family.methods.empty()) return std::vector<ArgumentEvidence>(expr.children.size());
     // These operands only read their own declaration or its product schema.
     // Compound operands can change or inspect other bindings during inference.
     using K = Expression::Kind;
@@ -20531,6 +20538,9 @@ class ScalarChecker {
       }
       std::vector<Type> arguments;
       std::vector<CheckedOperation> views;
+      const auto count = expr.children.size();
+      arguments.reserve(count);
+      views.reserve(count);
       bool completes = true;
       const bool declared_builtin = eager && !expr.intrinsic && family.methods.empty() && has_declarations(expr.text);
       const bool builtin_signature = eager && (expr.intrinsic ||
@@ -20541,12 +20551,14 @@ class ScalarChecker {
         operation.callable_captures = capture_values(family, expr.at);
         if (!operation.callable_captures.empty()) note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       }
-      auto evidence = argument_evidence(expr);
+      auto evidence = argument_evidence(expr, family);
       // Rank the source operands before the selected adapter adds readonly
       // views or full-scope storage. Only transport uses the prepared owners.
       Access source_access;
       Owners source_owners;
-      for (size_t i = 0; i < expr.children.size(); ++i) {
+      source_access.reserve(count);
+      source_owners.reserve(count);
+      for (size_t i = 0; i < count; ++i) {
         auto preparation = argument_preparation(expr, name, arguments, evidence, source_access, source_owners);
         const auto mode = preparation.mode;
         // A builtin's passing mode is established. Retain context for missing
