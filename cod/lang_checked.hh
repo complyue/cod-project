@@ -22253,17 +22253,19 @@ class ScalarChecker {
     return result;
   }
 
+  void clear_target_discovery() {
+    possible_targets_.clear(); possible_null_sources_.clear(); target_dependencies_.clear();
+    catalog_storage_.clear(); catalog_bindings_.clear();
+    rebound_.clear(); loop_states_.clear(); deferred_product_writes_.clear();
+  }
+
   void begin_check(std::vector<CheckedStorage> &storage, std::vector<CheckedBinding> &bindings,
                    std::map<const Expression *, CheckedOperation> &operations, bool proving) {
     proving_ = proving;
     if (!applying_scalar_) observed_ = {};
     storage_ = &storage; bindings_ = &bindings;
     storage.clear(); bindings.clear(); operations.clear(); definitions_.clear();
-    if (!proving) {
-      possible_targets_.clear(); possible_null_sources_.clear(); target_dependencies_.clear(); catalog_storage_.clear();
-      catalog_bindings_.clear();
-      rebound_.clear(); loop_states_.clear(); deferred_product_writes_.clear();
-    }
+    if (!proving) clear_target_discovery();
     lexical_ = {}; cleanup_ = CleanupEquations{program_.exception_types}; scope_storage_.clear(); checked_scope_owners_.clear(); external_owners_.clear();
     native_resource_owners_.clear(); native_owner_scopes_.clear(); scope_native_owner_places_.clear(); region_owners_.clear();
     incoming_native_symbol_owners_.clear();
@@ -22286,7 +22288,8 @@ class ScalarChecker {
   }
 
   enum class FlowExports { none, every_pass, final_pass };
-  template <typename Check> void check_flow(FlowExports exports, const Check &check) {
+  enum class TargetPreparation { discover, independent_scalar };
+  template <typename Check> void check_flow(FlowExports exports, TargetPreparation targets, const Check &check) {
     const bool validating = validating_;
     struct RestoreExport {
       bool &active;
@@ -22299,6 +22302,15 @@ class ScalarChecker {
     outgoing_payload_writes_.reset();
     if (restore.previous && exports != FlowExports::none && !closing_symbol_effects_ && !applying_scalar_)
       outgoing_payload_writes_.emplace();
+    if (targets == TargetPreparation::independent_scalar) {
+      clear_target_discovery();
+      loop_evidence_changed_ = false;
+      exporting_effects_ = restore.previous && exports != FlowExports::none;
+      check(true);
+      if (!loop_states_.empty() || loop_evidence_changed_)
+        throw std::logic_error("independent scalar proving discovered a loop");
+      return;
+    }
     exporting_effects_ = restore.previous && exports == FlowExports::every_pass;
     validating_ = false;
     check(false);
@@ -22339,7 +22351,7 @@ class ScalarChecker {
       ~EntryBehaviorScope() { active = nullptr; }
     } scope{entry_behavior_check_};
     if (!unavailable_leaf_behaviors_.empty()) entry_behavior_check_ = &behavior;
-    check_flow(FlowExports::none, [&](bool proving) {
+    check_flow(FlowExports::none, TargetPreparation::discover, [&](bool proving) {
       begin_check(program_.entry_storage, program_.entry_bindings, program_.entry, proving);
       AbruptFlow entry_flow{1, {}};
       abrupt_ = &entry_flow;
@@ -22880,7 +22892,12 @@ class ScalarChecker {
     // outgoing summaries. Closure still consumes its last settling iteration.
     const auto exports = validating_ && !instance.effects_frozen && !leaf && !scalar_exits
         ? FlowExports::final_pass : FlowExports::every_pass;
-    check_flow(exports, [&](bool proving) {
+    // A late call-name collision returns to the ordinary validation schedule.
+    const bool bound_scalar = leaf ? leaf->kind != LeafBehaviorPlan::Kind::borrowed_byte
+                                   : scalar_exits && !validating_;
+    const auto targets = bound_scalar && !distinct_bindings && independent_scalar_frame(instance, *checking_method_)
+        ? TargetPreparation::independent_scalar : TargetPreparation::discover;
+    check_flow(exports, targets, [&](bool proving) {
       begin_check(instance.storage, instance.bindings, instance.operations, proving);
       for (const auto &[symbol, targets] : instance.incoming_abstract_targets)
         lexical_.symbols.update(symbol, [&](auto &facts) { facts.abstract_targets = targets; });
@@ -23495,10 +23512,8 @@ class ScalarChecker {
     }
     return changes;
   }
-  static bool independent_scalar_frame(const CheckedInstance &instance, const CheckedMethod &method,
-                                       const LeafBehaviorPlan &plan) {
-    return plan.kind != LeafBehaviorPlan::Kind::borrowed_byte &&
-        !method.source->case_scan_scope && !instance.query_environment && instance.retained_types.empty() &&
+  static bool independent_scalar_frame(const CheckedInstance &instance, const CheckedMethod &method) {
+    return !method.source->case_scan_scope && !instance.query_environment && instance.retained_types.empty() &&
         method.captures.empty() && method.retained_types.empty() && method.input_owners().empty() &&
         std::ranges::all_of(method.input_parameters(), [](const Parameter &parameter) {
           return parameter.owner.empty() && !parameter.not_init_ref && argument_mode(parameter) == ArgumentMode::value;
@@ -23530,7 +23545,8 @@ class ScalarChecker {
       } scope{*this, validating_};
       extracting_leaf_ = &plan;
       auto &instance = program_.instances[id];
-      const bool prepare_frame = independent_scalar_frame(instance, program_.methods[instance.method], plan);
+      const bool prepare_frame = plan.kind != LeafBehaviorPlan::Kind::borrowed_byte &&
+          independent_scalar_frame(instance, program_.methods[instance.method]);
       if (prepare_frame) {
         validating_ = true;
         // Leave any unexpected warning to the ordinary validation path.
@@ -23575,8 +23591,7 @@ class ScalarChecker {
       const auto id = application.instance;
       auto &instance = program_.instances[id];
       auto &plan = bound.at(id);
-      const auto &method = program_.methods[instance.method];
-      const bool frame_ready = independent_scalar_frame(instance, method, plan);
+      const bool frame_ready = independent_scalar_frame(instance, program_.methods[instance.method]);
       auto completed = seal_scalar_caller(application.exits, *instance.result.type);
       scalar_callers_.emplace(id, std::move(plan.scalar));
       std::move(application.frame).install(instance);
