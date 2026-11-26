@@ -4257,20 +4257,24 @@ class LLVMEmission {
     }
     case K::name: {
       if (projection == Projection::slot) return binding_slot(*fact.binding);
-      std::map<std::pair<std::optional<size_t>, bool>, std::vector<size_t>> alternatives;
-      for (size_t i = 0; i < contexts_.size(); ++i) {
-        const auto &selected = contexts_[i].at(&expr);
-        alternatives[{selected.captured_place, selected.reborrows_native_owner}].push_back(i);
-      }
-      auto *address = contextual_value(expr, alternatives, "storage.address", [&](const auto &plan) -> llvm::Value * {
+      using AddressPlan = std::pair<std::optional<size_t>, bool>;
+      const auto emit_address = [&](const AddressPlan &plan) -> llvm::Value * {
         const auto &[captured, reborrow] = plan;
         const auto &selected = contexts_.front().at(&expr);
         auto *address = binding_address(*selected.binding, selected.place);
         if (captured && !bindings_.at(*selected.binding).value_binding)
           address = b_.CreateSelect(b_.CreateICmpEQ(address, null_pointer()), null_pointer(), storage_.at(*captured));
-        if (reborrow) return native_reborrow(b_.CreateLoad(b_.getInt64Ty(), address));
-        return address;
-      }, b_.getPtrTy());
+        return reborrow ? native_reborrow(b_.CreateLoad(b_.getInt64Ty(), address)) : address;
+      };
+      auto *address = [&]() {
+        if (contexts_.size() == 1) return emit_address({fact.captured_place, fact.reborrows_native_owner});
+        std::map<AddressPlan, std::vector<size_t>> alternatives;
+        for (size_t i = 0; i < contexts_.size(); ++i) {
+          const auto &selected = contexts_[i].at(&expr);
+          alternatives[{selected.captured_place, selected.reborrows_native_owner}].push_back(i);
+        }
+        return contextual_value(expr, alternatives, "storage.address", emit_address, b_.getPtrTy());
+      }();
       return read ? load_place(checked_address(address, expr, expr.at), expr) : address;
     }
     case K::unary:

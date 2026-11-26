@@ -3394,9 +3394,13 @@ class ScalarChecker {
     }
     return result;
   }
-  void require_slots_live(const std::set<size_t> &slots, const Location &at, const std::string &message) const {
-    for (const auto id : physical_slots(slots))
-      if (!lexical_.bindings_available.contains(id)) fail(at, message);
+  bool slot_is_live(size_t id) const {
+    const auto &selection = binding(id).selection;
+    const auto available = [&](size_t slot) { return lexical_.bindings_available.contains(slot); };
+    return selection.empty() ? available(id) : std::ranges::all_of(selection, available);
+  }
+  void require_slots_live(const std::set<size_t> &slots, const Location &at, const char *message) const {
+    if (!std::ranges::all_of(slots, [&](size_t id) { return slot_is_live(id); })) fail(at, message);
   }
   static void reference_slot(bool value_binding, bool fixed, const Location &at) {
     if (value_binding) fail(at, "val storage has no reference binding; use '<-' for bits transfer");
@@ -18752,12 +18756,9 @@ class ScalarChecker {
     if (slot.type.kind == Type::native_handle && use != BindingUse::native_loan)
       implementation_gap(expr.at, "an opaque C handle used outside a checked native operation");
     if (slot.indexed_element_owner) {
-      const auto owner = *slot.indexed_element_owner;
-      if (lexical_.live && !owner_alive(owner))
-        fail(expr.at, "declared indexed place refers to array storage whose lexical owner has ended");
       operation.type = slot.type;
       operation.binding = *binding;
-      operation.owners = {owner};
+      operation.owners = {*slot.indexed_element_owner};
       operation.read_only = slot.read_only;
       operation.fixed_binding = slot.fixed;
       operation.view = operation.indexed_target = true;
@@ -18765,10 +18766,8 @@ class ScalarChecker {
       return operation;
     }
     const auto selected = slot.alias.value_or(*binding);
-    require_slots_live({selected}, expr.at, "aliased binding's lexical scope has ended");
-    if (lexical_.live) for (const auto owner : lexical_.owners.at(selected))
-      if (!owner_alive(owner))
-        fail(expr.at, "binding '" + expr.text + "' refers to storage whose lexical owner has ended");
+    if ((selected != *binding || !slot.selection.empty()) && !slot_is_live(selected))
+      fail(expr.at, "aliased binding's lexical scope has ended");
     operation.binding = selected;
     operation.slots = {selected};
     operation.owners = lexical_.owners.at(selected);
@@ -18898,8 +18897,9 @@ class ScalarChecker {
   }
 
   CheckedOperation named_binding(const Expression &expr, size_t binding, const Type *expected = nullptr, bool read = true) {
-    if (!lexical_.bindings_available.contains(binding)) fail(expr.at, "binding '" + expr.text + "' is not available on every reaching path");
     if (const auto found = definitions_.find(binding); found != definitions_.end()) {
+      if (!lexical_.bindings_available.contains(binding))
+        fail(expr.at, "binding '" + expr.text + "' is not available on every reaching path");
       const auto &definition = found->second;
       return materialize_definition(NamedFamily{{definition.method}, nullptr, {}, &definition, definition.declaration.get()}, expected, expr.at);
     }
