@@ -23,6 +23,7 @@ namespace seed { class BodyExtraction; }
 class ModuleBinder {
 
   CheckedProgram program_;
+  std::vector<WarningDiagnostic> warnings_;
 
   Type exception_type(size_t category) const { return program_.exception_type(category); }
   std::set<size_t> exception_possibilities(const Type &type) const {
@@ -183,22 +184,16 @@ class ModuleBinder {
     return method.operation == "<=>";
   }
 
-  Type resolve_type(Type type, const CheckedMethod *method = nullptr, const Substitutions *bindings = nullptr,
-                    bool partial = false) const {
+  Type resolve_type(Type type, const CheckedMethod *method = nullptr) const {
     const ModuleLookup lookup(module_, method ? method->module : module_);
-    if (method) if (const auto index = binder(*method, type)) {
-      if (!bindings) return type;
-      if (const auto &bound = (*bindings)[*index]) return *bound;
-      if (partial) return type;
-      implementation_gap(method->source->at, "type parameter is not determined by the arguments");
-    }
+    if (method && binder(*method, type)) return type;
     if (type.kind == Type::named && !type.target)
       if (const auto found = module_names().types.find(type.name); found != module_names().types.end()) return found->second;
     if (type.kind == Type::procedure) {
-      for (auto &parameter : type.parameters) parameter = resolve_type(std::move(parameter), method, bindings, partial);
+      for (auto &parameter : type.parameters) parameter = resolve_type(std::move(parameter), method);
       // Throws declarations are resolved independently of argument inference.
       for (auto &failure : type.throws_types) failure = resolve_type(std::move(failure), method);
-      if (type.target) type.target = std::make_shared<Type>(resolve_type(*type.target, method, bindings, partial));
+      if (type.target) type.target = std::make_shared<Type>(resolve_type(*type.target, method));
       // Independent results have a passing mode, not a target-access qualifier.
       if (type.value_result &&
           type.const_views.size() > type.parameters.size()) {
@@ -326,11 +321,6 @@ class ModuleBinder {
     return pattern == actual || (parameter && !swap_operation(method.operation) &&
                                   accepts_exception(actual, pattern));
   }
-  static Substitutions type_context(const CheckedMethod &method, const std::vector<Type> &retained) {
-    Substitutions substitutions(method.type_parameters.size());
-    for (size_t i = 0; i < retained.size(); ++i) substitutions.at(method.source->type_parameters.size() + i) = retained[i];
-    return substitutions;
-  }
   bool bind_parameter(const CheckedMethod &method, size_t index, const Type &argument,
                       Substitutions &substitutions, bool widening) const {
     index = parameter_index(method, index);
@@ -357,9 +347,9 @@ class ModuleBinder {
     return supplies_enum_code(argument, target) || (numeric(target) && widens(argument, target));
   }
   std::optional<Substitutions> match(const CheckedMethod &method, const std::vector<Type> &arguments,
-                                     const std::vector<Type> &retained = {}, bool widening = false) const {
-    if (!accepts_arity(method, arguments.size()) || method.retained_types.size() != retained.size()) return {};
-    auto substitutions = type_context(method, retained);
+                                     bool widening) const {
+    if (!accepts_arity(method, arguments.size())) return {};
+    Substitutions substitutions(method.type_parameters.size());
     for (size_t i = 0; i < arguments.size(); ++i) {
       if (!bind_parameter(method, i, arguments[i], substitutions, widening)) return {};
     }
@@ -427,7 +417,7 @@ class ModuleBinder {
     for (size_t i = 0; i < narrow.parameters.size(); ++i) {
       arguments.push_back(independent_input(rigid_type(narrow, narrow.parameters[i]), i, argument_mode(parameter_at(narrow, i))));
     }
-    return match(broad, arguments, {}, widening).has_value();
+    return match(broad, arguments, widening).has_value();
   }
   static Type callable_signature(const CheckedMethod &checked, const std::vector<Type> &arguments, const ResultContract &contract) {
     const auto &method = *checked.source;
@@ -1914,7 +1904,7 @@ class ModuleBinder {
     for (const auto &[family, aliases] : module_names().extensions) if (aliases.size() > 1) {
       std::string message = "one callable identity is extended through multiple aliases:";
       for (const auto &[name, at] : aliases) message += " '" + name + "' at " + location_text(at);
-      program_.warnings.push_back({Warning::multi_alias_extension, aliases.begin()->second, std::move(message)});
+      warnings_.push_back({Warning::multi_alias_extension, aliases.begin()->second, std::move(message)});
     }
     publish_module(source);
     module_names().publication_ready = true;
@@ -1972,8 +1962,8 @@ class ModuleBinder {
       const auto first_finding = diagnostics.size();
       if (!register_module(input, print_symbol, &diagnostics)) registered = false;
       if (diagnostics.size() != first_finding) relate_module_findings(source, module, diagnostics, first_finding);
-      while (reported_warnings < program_.warnings.size()) {
-        if (!diagnostics.append(program_.warnings[reported_warnings])) return false;
+      while (reported_warnings < warnings_.size()) {
+        if (!diagnostics.append(warnings_[reported_warnings])) return false;
         ++reported_warnings;
       }
     }
@@ -2012,7 +2002,6 @@ public:
                                                                     CompilationDiagnostics &diagnostics) {
     ModuleBinder binder;
     if (!binder.register_source_modules(source, diagnostics)) return {};
-    binder.program_.warnings.clear();
     return ModuleDeclarations{std::move(source), std::move(binder.modules_), std::move(binder.program_)};
   }
 };

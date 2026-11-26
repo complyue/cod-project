@@ -4,13 +4,13 @@
 #include "lang_syntax.hh"
 #include "lang_diagnostics.hh"
 #include "lang_exceptions.hh"
-#include "lang_completion.hh"
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -22,6 +22,8 @@
 #include <vector>
 
 namespace cod::language {
+
+inline constexpr size_t null_target = std::numeric_limits<size_t>::max();
 
 [[noreturn]] inline void implementation_gap(const Location &at, const std::string &detail) {
   fail(at, "micro-dispatch implementation gap: " + detail + "; this is not a language restriction");
@@ -55,7 +57,6 @@ inline Type text_access_result(BuiltinOperation operation, const Expression &exp
 }
 // Nominal schema identities for a selected abstract target. An empty set carries no narrowing.
 using NominalTargets = std::set<size_t>;
-using AbstractSymbolTargets = std::map<size_t, NominalTargets>;
 inline bool eager_operation(std::string_view name) {
   return name == "+" || name == "-" || name == "*" || name == "/" || name == "%" || name == "!" ||
       name == "==" || name == "!=" || name == "<" || name == ">" || name == "<=" || name == ">=";
@@ -168,13 +169,7 @@ struct CheckedOperation {
   bool rebind_native_handle = false;
   bool reborrows_native_owner = false;
   std::optional<size_t> binding;
-  // Immutable selected reference, independent of the mutable binding version.
-  std::optional<size_t> selection_identity;
-  std::optional<size_t> embedded_slot_selection;
-  std::set<size_t> slots;
-  std::set<size_t> targets, owners, origins, selection_versions;
-  // Formal nullable inputs, or null_target for an independently absent view.
-  std::set<size_t> null_sources;
+  std::set<size_t> targets, owners;
   bool read_only = false;
   bool fixed_binding = false;
   bool view = false;
@@ -215,16 +210,8 @@ struct CheckedOperation {
   bool case_scope_resumes = false;
   bool case_arm_completes = false;
   bool minimum_literal = false;
-  ExceptionFacts exceptions;
   std::set<size_t> captures;
   std::optional<size_t> captured_place;
-  // Sufficient incoming-selection requirements; empty means initialized.
-  std::optional<CleanupEquations::Initialization> initialization;
-  bool initialized_target() const { return initialization && initialization->empty(); }
-  void constrain_initialization(const std::optional<CleanupEquations::Initialization> &condition) {
-    if (initialization && condition) initialization->insert(condition->begin(), condition->end());
-    else initialization.reset();
-  }
   bool mixed_view = false;
   bool scalar_value_join = false;
   bool borrowed_result = false;
@@ -309,24 +296,7 @@ struct CheckedOperation {
   std::optional<size_t> opened_pipeline_stages;
   std::vector<size_t> scope_here;
   std::optional<HereExit> here_exit;
-  // Possible borrowed callable targets at invocation, after slot selection.
-  std::vector<std::set<size_t>> callable_argument_targets;
   std::set<size_t> nullable_arguments;
-  std::map<size_t, CleanupEquations::Effects> invocation;
-  struct NullTest { size_t binding; std::set<size_t> versions; bool null_when_true = true; };
-  struct Predicate {
-    enum class Kind { null_test, negation, conjunction, disjunction, alternatives, abrupt, constant_true, constant_false, presence };
-    Kind kind;
-    NullTest test{};
-    std::shared_ptr<const Predicate> left, right;
-    CleanupEquations::BooleanValue results{};
-    bool complete_results = false;
-    std::optional<size_t> storage_observation{};
-  };
-  // Immutable evidence describes the produced boolean, independently of its source spelling.
-  std::shared_ptr<const Predicate> predicate;
-  // Absence means no relation; a present empty value retains provisional result evidence.
-  std::optional<CleanupEquations::BooleanValue> nullness{};
 };
 
 struct CheckedStorage {
@@ -448,122 +418,6 @@ struct CheckedBinding {
   PlaceKind kind() const { return place_kind(value_binding, requires_initialized); }
 };
 
-// Substitutions are checking obligations, not semantic methods or activation records.
-struct CallBehavior {
-  struct CaseScopeExits {
-    bool scan = false;
-    bool result = false;
-    bool operator==(const CaseScopeExits &) const = default;
-  };
-  // A case-arm scope preserves normal scan and delivered return as distinct
-  // exit summaries. Ordinary callables combine them under normal completion.
-  std::optional<CaseScopeExits> case_scope_exits;
-  // A missing row grants no guarantee. Conditional initialization keeps its
-  // paired row, and a regional initializer's normal row also marks completion.
-  std::map<size_t, std::set<size_t>> initialized;
-  std::map<size_t, CleanupEquations::MissingInitialization> uninitialized;
-  std::map<size_t, std::set<size_t>> present;
-  struct BindingResult {
-    // Initial input targets and nullable input provenance; null_target denotes
-    // an absent target introduced by the method itself.
-    std::set<size_t> targets, null_sources;
-    bool initialized = false;
-    bool operator==(const BindingResult &) const = default;
-  };
-  std::map<size_t, std::map<size_t, BindingResult>> bindings;
-  // Every input target that can be written into a caller binding, including
-  // intermediate selections not retained by any completed outcome. null_target
-  // records an independently absent target introduced by the method.
-  std::map<size_t, std::set<size_t>> binding_sources;
-  // Possible writes to the original borrowed targets, independently of postconditions.
-  std::set<size_t> written_inputs;
-  // Postconditions describe the original borrowed targets, not local parameter
-  // bindings after rebinding. Values refer to argument snapshots at call entry.
-  // Empty provisional facts do not remove declared completion paths.
-  std::map<size_t, std::map<size_t, ExceptionFacts>> payloads;
-  std::map<size_t, CleanupEquations::BooleanValues> booleans;
-  CleanupEquations::Returned returned;
-  // Declared owner indices, translated to the actual owners at each call.
-  std::set<size_t> lexical_allocations;
-  std::set<size_t> array_allocations;
-  // Possible failures on completed paths, including conservative bounds for unresolved calls.
-  std::set<size_t> escaping_failures;
-  // Every observed arrival of these escaping categories keeps the direct owned object.
-  std::set<size_t> direct_owned_failures;
-  // Checked obligations of an immediate scope after local completion. Zero
-  // represents the declared Exception root independently of payload evidence.
-  std::set<size_t> scope_checked_failures;
-  bool breaks_here_call = false;
-  bool returns_from_supplier = false;
-  bool propagates_here_transfer = false;
-  bool propagates_outer_here_transfer = false;
-  bool operator==(const CallBehavior &) const = default;
-};
-
-struct CallEffects : CallBehavior {
-  std::set<size_t> symbols; // Required current symbol identities, not operand positions.
-  bool operator==(const CallEffects &) const = default;
-};
-enum class OwnerMatch { satisfied, unknown, mismatch };
-// Proof identities are separate from executable owner handles. Scoped identities
-// describe fresh storage within one evidence pass and are normalized when retained.
-struct EvidenceOwner {
-  enum class Kind { checked, retained, parameter, scoped };
-  Kind kind = Kind::checked;
-  size_t id;
-  const Expression *scope = nullptr;
-  EvidenceOwner(size_t id = 0) : id(id) {}
-  static EvidenceOwner retained(size_t id) { EvidenceOwner owner{id}; owner.kind = Kind::retained; return owner; }
-  static EvidenceOwner parameter(size_t id) { EvidenceOwner owner{id}; owner.kind = Kind::parameter; return owner; }
-  static EvidenceOwner for_scope(const Expression &expr) {
-    EvidenceOwner owner; owner.kind = Kind::scoped; owner.scope = &expr; return owner;
-  }
-  bool operator==(const EvidenceOwner &) const = default;
-  bool operator<(const EvidenceOwner &other) const {
-    if (kind != other.kind) return kind < other.kind;
-    if (kind == Kind::scoped) return std::less<const Expression *>{}(scope, other.scope);
-    return id < other.id;
-  }
-};
-struct ViewEvidence {
-  std::optional<bool> read_only, view, value_binding;
-  std::optional<EvidenceOwner> owner = {};
-  bool mixed_view = false;
-  std::optional<bool> fixed_binding = {}, slot_read_only = {};
-  // Independent capture eligibility is distinct from the binding-slot category.
-  std::optional<bool> value_capture = {};
-  bool nullable = false;
-  std::set<EvidenceOwner> place_owners = {};
-  std::optional<PlaceKind> storage_kind = {};
-  NominalTargets nominal_targets = {};
-  bool direct_text_place = false;
-  bool native_borrow_slot = false;
-  bool reservation_slot = false;
-  void project_target() {
-    value_binding.reset();
-    fixed_binding.reset();
-    slot_read_only.reset();
-    place_owners.clear();
-    storage_kind.reset();
-    direct_text_place = false;
-    native_borrow_slot = false;
-    reservation_slot = false;
-  }
-  template <typename Map> void map_owners(Map map) {
-    if (owner) owner = map(*owner);
-    std::set<EvidenceOwner> mapped;
-    for (const auto place : place_owners) mapped.insert(map(place));
-    place_owners = std::move(mapped);
-  }
-  bool operator==(const ViewEvidence &) const = default;
-};
-struct QueryBinding {
-  std::string name;
-  Type type;
-  ViewEvidence view;
-  std::optional<EvidenceOwner> owner_binding = {};
-  bool operator==(const QueryBinding &) const = default;
-};
 enum class ResultMode { value, borrowed_ref, borrowed_ptr, borrowed_handle, owned_region, owned_exception };
 struct ResultContract {
   std::optional<Type> type;
@@ -576,30 +430,6 @@ struct ResultContract {
   bool owns_region() const { return mode == ResultMode::owned_region; }
   bool owns_exception() const { return mode == ResultMode::owned_exception; }
   bool operator==(const ResultContract &) const = default;
-};
-// Declaration evidence has no runtime payload or authority to access retained storage.
-struct QueryEnvironment {
-  struct ScopeSelection {
-    std::string place;
-    std::optional<bool> present;
-    std::optional<size_t> live_input;
-    std::set<size_t> overlapping_inputs, same_selection_inputs;
-    std::set<std::string> same_selection_places;
-    bool operator==(const ScopeSelection &) const = default;
-  };
-  struct LexicalDefinition {
-    size_t definition;
-    std::map<std::string, std::string> inputs;
-    bool operator==(const LexicalDefinition &) const = default;
-  };
-  std::vector<QueryBinding> bindings;
-  std::map<std::string, ScopeSelection> scope_selections;
-  std::map<std::string, LexicalDefinition> lexical_definitions;
-  std::set<std::string> symbol_shadows;
-  std::vector<std::vector<OwnerMatch>> owners;
-  std::vector<std::vector<OwnerMatch>> scope_owners;
-  std::optional<ResultContract> result;
-  bool operator==(const QueryEnvironment &) const = default;
 };
 // Incoming values name storage roles; lexical bindings also include owner names.
 struct CheckedInput {
@@ -615,13 +445,6 @@ struct CheckedFrame {
   std::map<size_t, size_t> owners;
   bool operator==(const CheckedFrame &) const = default;
 };
-// Ordinary captured values retain their source access contract independently
-// of their saved payload and the storage created for each invocation.
-struct CheckedCaptureInput {
-  Type type;
-  bool read_only = false;
-  bool operator==(const CheckedCaptureInput &) const = default;
-};
 struct CheckedInstance {
   size_t method;
   std::vector<Type> arguments;
@@ -630,19 +453,8 @@ struct CheckedInstance {
   bool complete = false;
   std::vector<CheckedStorage> storage;
   std::vector<CheckedBinding> bindings;
-  CallEffects effects;
-  std::vector<CheckedCaptureInput> environment;
-  std::vector<Type> context, retained_types;
-  std::vector<std::optional<Type>> substitutions;
-  size_t query_environment = 0;
+  std::vector<Type> context;
   CheckedFrame frame;
-  bool result_supplied = false;
-  bool always_throws = false;
-  AbstractSymbolTargets incoming_abstract_targets = {};
-  std::map<std::string, size_t> lexical_bindings = {};
-  bool effects_frozen = false;
-  bool scalar_frame_ready = false;
-  bool symbol_requirements_known_empty = false;
   // Completed capability arguments for this executable frame. An empty
   // layout is valid. A missing layout cannot supply the LLVM call ABI.
   std::optional<std::set<size_t>> array_allocator_roles = {};
@@ -688,8 +500,7 @@ struct CheckedMethod {
   std::optional<SumConstructor> regional_initializer;
   std::optional<size_t> regional_initializer_fields;
   std::optional<size_t> family, local_effect_symbol;
-  std::vector<size_t> nested;
-  std::vector<size_t> instances;
+  std::optional<size_t> instance;
   std::vector<Type> parameters;
   ResultContract result;
   struct LexicalResult {
@@ -703,14 +514,7 @@ struct CheckedMethod {
   std::set<size_t> throws_categories;
   std::vector<Type> throws_types;
   std::vector<Capture> captures;
-  std::vector<Capture> queries;
-  bool captures_resolved = false;
-  bool contextual_result = false;
-  bool retains_lexical_definitions = false;
-  std::vector<Capture> lexical_definitions;
-  bool declaration_context() const { return contextual_result || !queries.empty() || retains_lexical_definitions; }
   std::vector<std::string> type_parameters;
-  std::vector<size_t> retained_types;
   std::optional<size_t> parent;
   std::vector<CheckedHereContract> here;
   // Concrete body or prepared producer bound to each formal.
@@ -724,23 +528,13 @@ struct CheckedMethod {
   };
   std::optional<HereGroupResults> here_group;
   struct ScopeInputs {
-    struct PlaceAccess {
-      size_t input;
-      bool read_only, fixed;
-      bool operator==(const PlaceAccess &) const = default;
-    };
-    size_t lexical_method;
     struct NamedEntry {
       size_t explicit_parameters;
-      std::set<std::string> bindings;
       bool operator==(const NamedEntry &) const = default;
     };
     std::optional<NamedEntry> named;
     std::vector<Parameter> parameters;
     std::vector<OwnerParameter> owners;
-    std::map<std::string, size_t> owner_names;
-    std::vector<std::vector<OwnerMatch>> relations;
-    std::vector<bool> nonnull;
     std::vector<CheckedLexicalHere> lexical_here;
     struct HereReception {
       size_t offered;
@@ -752,21 +546,9 @@ struct CheckedMethod {
     // live places come from the supplier's activation.
     size_t here_input_owners = 0;
     std::set<size_t> here_snapshots;
-    // These inputs use borrowed transport while retaining val/holder semantics.
-    std::set<size_t> live_values;
     // A reference input carries the supplier's binding slot.
     std::set<size_t> live_bindings;
-    // A direct scope capture borrows the supplying owner's native handle.
-    std::set<size_t> native_owner_inputs;
-    // Several lexical names can designate one transported place.
-    std::map<std::string, PlaceAccess> place_access;
-    std::map<size_t, std::set<size_t>> place_owners;
-    // Slot relationships can include projected product input ordinals.
-    std::set<std::pair<size_t, size_t>> overlapping_input_bindings;
-    // Entry observations use input ordinals until the body allocates local slots.
-    std::set<std::pair<size_t, size_t>> disjoint_input_targets;
-    CleanupEquations::BooleanValues boolean_conditions;
-    CleanupEquations::ConditionClauses reference_conditions;
+
   };
   std::optional<ScopeInputs> scope_inputs;
   size_t here_inputs() const {
@@ -928,13 +710,11 @@ struct CheckedProgram {
   std::vector<CheckedNativeOperation> native_operations;
   std::vector<CheckedSymbol> symbols;
   std::deque<CheckedFamily> families;
-  std::vector<QueryEnvironment> query_environments{{}};
   std::vector<CheckedCallable> callables;
   std::vector<std::unique_ptr<Expression>> scope_operands;
   std::vector<Expr> generated_here_bodies;
   std::deque<CheckedMethod> methods;
   std::deque<CheckedInstance> instances;
-  std::vector<WarningDiagnostic> warnings;
   bool exception_values = false;
   bool builder_type(const Type &type) const {
     return type.kind == Type::product && schemas.at(type.identity).lexical_builder;

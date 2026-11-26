@@ -959,7 +959,7 @@ class BodyExtraction {
       const auto &roles = method.input_owners();
       const auto &first_roles = first.input_owners();
       if (method.interpretation || method.scope_inputs || !method.type_parameters.empty() ||
-          !method.retained_types.empty() || !method.here.empty() || parameters.size() != method.parameters.size() ||
+          !method.here.empty() || parameters.size() != method.parameters.size() ||
           roles.size() != first_roles.size()) return false;
       for (size_t i = 0; i < roles.size(); ++i)
         if (roles[i].root || roles[i].explicit_parameter || roles[i].read_only != first_roles[i].read_only)
@@ -2135,7 +2135,11 @@ class BodyExtraction {
     const CheckedOperation &extract(const Expression &expr, bool discard_iteration_result = false) {
       require_executable_expression(expr);
       // The lexical path ends at a return independently of its pending result.
-      static const CheckedOperation terminal{Type::never};
+      static const CheckedOperation terminal = [] {
+        CheckedOperation operation;
+        operation.type = Type::never;
+        return operation;
+      }();
       if (record_pending_return(expr)) return terminal;
       return remember(expr, operation(expr, discard_iteration_result));
     }
@@ -2313,7 +2317,6 @@ class BodyExtraction {
       method.throws_types = symbol.type->throws_types;
     }
     CheckedMethod::ScopeInputs scope{};
-    scope.lexical_method = body.instance.method;
     scope.parameters = std::move(outline.parameters);
     scope.owners = std::move(outline.owner_parameters);
     CheckedOperation::SuppliedHere *supplied = nullptr;
@@ -2330,14 +2333,13 @@ class BodyExtraction {
       scope.lexical_here = std::move(here->lexical_here);
       method.here_group = CheckedMethod::HereGroupResults{completed_result(supplier, results).type, here->receiving_result, {}, false};
     } else {
-      scope.named = CheckedMethod::ScopeInputs::NamedEntry{scope.parameters.size(), {}};
+      scope.named = CheckedMethod::ScopeInputs::NamedEntry{scope.parameters.size()};
     }
     for (auto &capture : outline.captures) {
       const auto [row, inserted] =
           supplier.instance.operations.emplace(capture.use, place_operand(supplier.instance, capture.source));
       if (!inserted) throw std::logic_error("lexical capture already has a supplier operand");
       if (supplied) supplied->places.push_back(capture.use);
-      else scope.named->bindings.insert(capture.parameter.name);
       if (capture.parameter.selects_caller_ref_slot()) scope.live_bindings.insert(scope.parameters.size());
       scope.parameters.push_back(std::move(capture.parameter));
     }
@@ -2457,7 +2459,7 @@ class BodyExtraction {
       }
       body.instance.array_allocator_roles = completed[i].allocations;
       body.instance.complete = true;
-      program.methods[body.instance.method].instances.push_back(i);
+      program.methods[body.instance.method].instance = i;
       program.instances.push_back(std::move(body.instance));
     }
   }
