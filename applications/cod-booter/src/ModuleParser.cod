@@ -5,12 +5,12 @@ using "ASCII.cod" ASCII {
 using "./Lexer.cod" {
     own_word, quoted_text, multiline_text, identifier, using_word, as_word, symbol_word, symbol_name,
     from_word, proc_word, func_word, ref_word, ptr_word, where_word, const_word, in_word,
-    data_word, array_word, export_word, handle_word, c_linkage, enum_word, integer_literal,
+    data_word, array_word, export_word, handle_word, c_linkage, enum_word,
     import_word, type_word, region_word, default_word, mixin_word, var_word, val_word, valid_module_path,
         invalid_module_path_escape,
 };
 using "./ExpressionParser.cod" {
-    callable_local_head, parse_symbol, parse_callable, parse_next_expression, integer_width, parse_integer_magnitude,
+    callable_local_head, parse_symbol, parse_callable, parse_next_expression, parse_enum_integer_literal,
 };
 using "./ParserInput.cod" {
     ParseResult, punct_at, punct_pair_at, append_syntax_node, append_module_item, append_module, parse_identifier,
@@ -29,7 +29,7 @@ using "./ParserStorage.cod" SyntaxRole { ModuleItemRole, ModuleSelectionItemRole
 using "./ParserStorage.cod" ExprPayload {
     CallableDefinition, CEntryDefinition, ModulePathSyntax, ModuleSelection, AllMembers, ChosenMembers, ChosenMember,
     HandleType, NominalParent, RecordDefinition, AbstractType, TypeSynonym, HandleSymbol, ValueSymbol, ReferenceSymbol, Publication,
-    ArrayDefinition, EnumInteger, EnumMember, EnumDefinition, SumDefinition, SumArm, RegionDefinition,
+    ArrayDefinition, EnumMember, EnumDefinition, SumDefinition, SumArm, RegionDefinition,
     BulkModuleSelection, DefaultPublicSet, DefaultMark,
 };
 using "./ParserStorage.cod" FormalSyntax { OrdinaryFormal };
@@ -681,20 +681,10 @@ func parse_array(source:const SourceBytes in S, tokens:const Tokens in T,
 func parse_enum_initializer(source:const SourceBytes in S, tokens:const Tokens in T,
                             nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
-    val first <- result.next;
-    val negative <- punct_at(source, tokens, first, past) == MINUS;
-    val at <- first + if (negative) { 1u64 } else { 0u64 };
-    if (at < past && tokens[at].kind == integer_literal()) {
-        val width <- integer_width(source, tokens[at]);
-        val magnitude <- parse_integer_magnitude(source, tokens[at], result, width);
-        if (result.diagnostic != 0u8) return false;
-        append_syntax_node(nodes, result, tokens[first].first, tokens[at].past, make EnumInteger {
-            magnitude <- magnitude; negative <- negative; width <- width;
-        });
-        result.next <- at + 1u64;
-        return result.diagnostic == 0u8;
-    } else {};
-    if (!negative) return parse_module_name(source, tokens, nodes, result, past);
+    if (parse_enum_integer_literal(source, tokens, nodes, result, past)) return true;
+    if (result.diagnostic != 0u8) return false;
+    if (punct_at(source, tokens, result.next, past) != MINUS)
+        return parse_module_name(source, tokens, nodes, result, past);
     result.diagnostic <- expected_enum_member();
     return false;
 }

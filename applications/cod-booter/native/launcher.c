@@ -183,6 +183,10 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: declaration conflicts with a protected symbol name\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 143)
         fputs(": error: type synonym cycle has no defining type\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 144)
+        fputs(": error: this signed integer operand requires an enum assertion\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 145)
+        fputs(": error: a negative enum code requires an unsuffixed signed 64-bit operand\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 49)
         fputs(": error: a declaration in a loop body or else requires an explicit {{ ... }} scope\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 50)

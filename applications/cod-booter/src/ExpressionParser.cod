@@ -25,7 +25,7 @@ using "./ParserStorage.cod" {
     no_node,
 };
 using "./ParserStorage.cod" ExprPayload {
-    IntegerLiteral, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid,
+    IntegerLiteral, EnumInteger, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid,
     ContinueValue, ContinueVoid, BreakValue, BreakVoid,
     CallableDefinition, CallablePromise, ScopedProcedureDefinition, ProcedureActivation, CProviderDeclaration,
         CEntryDefinition,
@@ -126,7 +126,7 @@ func append_decimal_digit(number:u64 in N, byte:u8) -> bool where {owner N} {
     return true;
 }
 
-export func integer_width(source:const SourceBytes in S, token:const Token in T) -> u64
+func integer_width(source:const SourceBytes in S, token:const Token in T) -> u64
     where {const owner S, const owner T} {
     val end <- token.past;
     val length <- end - token.first;
@@ -138,7 +138,7 @@ export func integer_width(source:const SourceBytes in S, token:const Token in T)
     return 0u64;
 }
 
-export func parse_integer_magnitude(source:const SourceBytes in S, token:const Token in T,
+func parse_integer_magnitude(source:const SourceBytes in S, token:const Token in T,
                                    result:ParseResult in R, width:u64) -> u64 where {const owner S, const owner T, owner R} {
     val suffix <- if (width == 0u64) { 0u64 } else { if (width == 8u64) { 2u64 } else { 3u64 } };
     val end <- token.past - suffix;
@@ -154,6 +154,25 @@ export func parse_integer_magnitude(source:const SourceBytes in S, token:const T
         return 0u64;
     } else {};
     return number;
+}
+
+# Read the mathematical operand. The enum check decides whether its sign
+# and magnitude denote a member of the selected backing type.
+export func parse_enum_integer_literal(source:const SourceBytes in S, tokens:const Tokens in T,
+    nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    val first <- result.next;
+    val negative <- punct_at(source, tokens, first, past) == MINUS;
+    val digits <- first + if (negative) { 1u64 } else { 0u64 };
+    if (digits >= past || tokens[digits].kind != integer_literal()) return false;
+    val width <- integer_width(source, tokens[digits]);
+    val magnitude <- parse_integer_magnitude(source, tokens[digits], result, width);
+    if (result.diagnostic != 0u8) return false;
+    append_syntax_node(nodes, result, tokens[first].first, tokens[digits].past, make EnumInteger {
+        magnitude <- magnitude; negative <- negative; width <- width;
+    });
+    result.next <- digits + 1u64;
+    return result.diagnostic == 0u8
 }
 
 func outer_invocation(nodes:const ExprNodes in A, result:const ParseResult in R, root:u64) -> u64
@@ -1729,6 +1748,11 @@ func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
         if (result.diagnostic == 0u8) { (result.next <- at + 1u64):void; } else {};
         return;
     } else {};
+    if (punct_at(source, tokens, at, past) == MINUS) {
+        if (!parse_enum_integer_literal(source, tokens, nodes, result, past) && result.diagnostic == 0u8)
+            { (result.diagnostic <- expected_operand()):void };
+        return
+    };
     if (tokens[at].kind == integer_literal()) {
         val width <- integer_width(source, tokens[at]);
         if (width == 0u64 && punct_at(source, tokens, at + 1u64, past) != COLON) {

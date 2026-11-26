@@ -39,7 +39,7 @@ using "./ParserStorage.cod" {
     syntax_first, syntax_past, LocalBindingSites, inspect_local_binding, ConditionalSites, inspect_conditional,
     FieldSelectionSites, inspect_field_selection, SignatureSites, inspect_signature, AssertionSites, inspect_type_assertion,
     CaseSites, inspect_case, CaseArmSites, inspect_case_arm, case_pattern, text_literal_syntax, BinarySites, inspect_binary,
-    EnumMemberSites, inspect_enum_member, SumArmSites, inspect_sum_arm,
+    EnumMemberSites, inspect_enum_member, EnumIntegerSyntax, inspect_enum_integer, SumArmSites, inspect_sum_arm,
 };
 using "./NameResolution.cod" {
     NameBindings, NameWork, locate_record_field, formal_binding, local_binding,
@@ -86,6 +86,7 @@ export data DeclaredExpressionResult {
 export func unproved_type_assertion() -> u8 { return 84u8; }
 func missing_enum_member() -> u8 { return 85u8; }
 func incompatible_enum_assertion() -> u8 { return 86u8; }
+func invalid_signed_enum_operand() -> u8 { return 145u8 }
 func unproved_enum_operand() -> u8 { return 87u8; }
 func unproved_case_subject() -> u8 { return 93u8; }
 func invalid_case_pattern_type() -> u8 { return 94u8; }
@@ -373,19 +374,41 @@ func bind_enum_spelling(source:const SourceBytes in S, nodes:const ExprNodes in 
     return 0u8;
 }
 
-func integer_code(nodes:const ExprNodes in N, used:u64, revision:u64, at:u64, code:u64 in C)
-    -> bool where {const owner N, owner C} {
-    val literal <- ungrouped(nodes, revision, used, at);
-    if (literal >= used || literal >= intrinsic (len)(nodes)) return false;
-    return case nodes[literal] of {
+func read_enum_operand(nodes:const ExprNodes in N, used:u64, revision:u64, at:u64,
+    literal:EnumIntegerSyntax in C) -> bool where {const owner N, owner C} {
+    val atom <- ungrouped(nodes, revision, used, at);
+    if (atom >= used || atom >= intrinsic (len)(nodes)) return false;
+    if (inspect_enum_integer(nodes, used, atom, literal)) return true;
+    return case nodes[atom] of {
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of {
-                (IntegerLiteral { val value <- magnitude; }) -> { (code <- value):void; true };
+                (IntegerLiteral { val magnitude <-; val width <-; }) -> {
+                    literal.magnitude <- magnitude;
+                    literal.negative <- false;
+                    literal.width <- width;
+                    true
+                };
                 (_) -> { false };
             }
         };
         (_) -> { false };
     }
+}
+
+func enum_code_bits(literal:const EnumIntegerSyntax in L, backing:u8, code:u64 in C) -> u8
+    where {const owner L, owner C} {
+    val magnitude <- literal.magnitude;
+    val signed <- backing == builtin_i64();
+    if (literal.negative) {
+        if (literal.width != 0u64 || magnitude > 9223372036854775808u64)
+            return invalid_signed_enum_operand();
+        if (magnitude != 0u64 && !signed) return missing_enum_member();
+        (code <- if (magnitude == 0u64) { 0u64 } else { 18446744073709551615u64 - (magnitude - 1u64) }):void
+    } else {
+        if (signed && magnitude > 9223372036854775807u64) return missing_enum_member();
+        (code <- magnitude):void
+    };
+    return 0u8
 }
 
 func bind_enum_code(nodes:const ExprNodes in N, names:NameBindings in B, work:NameWork in W,
@@ -399,8 +422,6 @@ func bind_enum_code(nodes:const ExprNodes in N, names:NameBindings in B, work:Na
         };
         if (inspect_declaration(nodes, revision, used, type.identity, domain) != EnumTypeDeclaration)
             return unproved_type_assertion();
-        if (names[domain.value_type].kind == builtin_i64() && code > 9223372036854775807u64)
-            return missing_enum_member();
         val member <- find_enum_code(nodes, names, work, domain.entries, code, revision, used);
         if (member == no_node()) return missing_enum_member();
         names[destination].declaration <- member;
@@ -412,8 +433,6 @@ func bind_enum_code(nodes:const ExprNodes in N, names:NameBindings in B, work:Na
         return unproved_type_assertion();
     val width <- interfaces[head].entry_count;
     if (width >= interface_count - head) return unproved_type_assertion();
-    if (interfaces[head].element_kind == builtin_i64() && code > 9223372036854775807u64)
-        return missing_enum_member();
     for (row in head + 1u64 .. head + 1u64 + width) {
         if (interfaces[row].value_kind != enum_type()) return unproved_type_assertion();
         if (interfaces[row].enum_code == code) {
@@ -552,6 +571,7 @@ export func prepare_enum_assertions(source:const SourceBytes in S, nodes:const E
     ref assertion = make AssertionSites { operand <- no_node(); annotation <- no_node(); colon <- 0u64; };
     ref wanted = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
     ref code = make u64 { 0u64 };
+    ref literal = make EnumIntegerSyntax { magnitude <- 0u64; negative <- false; width <- 0u64; };
     val operand <- no_node();
     val problem <- 0u8;
     val numeric <- false;
@@ -565,13 +585,16 @@ export func prepare_enum_assertions(source:const SourceBytes in S, nodes:const E
             if (!prepare_enum_domain(nodes, names, work, interfaces, interface_count, wanted, at, used, revision))
                 return declared_expression_failure(report, unproved_type_assertion(), assertion.annotation);
             operand <- assertion.operand;
-            numeric <- integer_code(nodes, used, revision, operand, code);
+            numeric <- read_enum_operand(nodes, used, revision, operand, literal);
             if (numeric || (name_syntax(nodes, used, operand) == OrdinaryName && names[operand].kind == 0u8)) {
-                problem <- if (numeric) {
-                    bind_enum_code(nodes, names, work, interfaces, interface_count, code, at, wanted, revision, used)
+                if (numeric) {
+                    problem <- enum_code_bits(literal, work[at].enum_backing, code);
+                    if (problem != 0u8) return declared_expression_failure(report, problem, operand);
+                    (problem <- bind_enum_code(nodes, names, work, interfaces, interface_count,
+                        code, at, wanted, revision, used)):void
                 } else {
-                    bind_enum_spelling(source, nodes, names, work, spellings, interfaces, interface_count,
-                                      operand, at, wanted, revision, used)
+                    (problem <- bind_enum_spelling(source, nodes, names, work, spellings, interfaces,
+                        interface_count, operand, at, wanted, revision, used)):void
                 };
                 if (problem != 0u8) return declared_expression_failure(report, problem,
                     if (problem == missing_enum_member()) { operand } else { (assertion.annotation) });

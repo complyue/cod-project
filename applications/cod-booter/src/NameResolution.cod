@@ -7,7 +7,7 @@ using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid, BlockSyntax, ScopeSyntax,
     SymbolReference, SymbolicInvocation, HereInvocation, ContinueValue, ContinueVoid, BreakValue, BreakVoid, RangeLoop,
     Parenthesized, Transfer, Rebind, InitializerTransfer, InitializerRebind, NamedConstruction,
-    BooleanLiteral, Negation, Conjunction, Disjunction, ArithmeticExpression, ComparisonExpression, Concatenation,
+    BooleanLiteral, EnumInteger, Negation, Conjunction, Disjunction, ArithmeticExpression, ComparisonExpression, Concatenation,
     IndexSelection, FieldSelection, ArrayLength, DiscardedExpression, Conditional, TextLiteral,
     RaisePending, RaiseValue, NamedThrow, NullLiteral, CaseFallthrough, CaseFailure, CaseExpression,
         CaseArm,
@@ -314,6 +314,7 @@ func unsupported_handle_rebind() -> u8 { return 133u8 }
 export func expected_value_binding() -> u8 { return 14u8; }
 export func protected_symbol_name() -> u8 { return 142u8 }
 func cyclic_type_synonym() -> u8 { return 143u8 }
+func unsupported_signed_literal() -> u8 { return 144u8 }
 
 func reject_name(state:NameState in R, node:u64, diagnostic:u8) -> void where {owner R} {
     state.diagnostic <- diagnostic;
@@ -1844,6 +1845,11 @@ func resolve_assertion(source:const SourceBytes in S, nodes:const ExprNodes in N
     if (bindings[target.index].kind != builtin_c_string() &&
         name_syntax(nodes, state.syntax_used, operand.index) == OrdinaryName && bindings[operand.index].kind != enum_value() &&
         lookup(source, nodes, work, operand.index, 0u64, state.used) == no_node()) return;
+    # A signed literal used directly by an assertion needs only the enum
+    # decoder's completed domain. Other uses still require signed evaluation.
+    val atom <- ungrouped(nodes, state.syntax_revision, state.syntax_used, operand.index);
+    ref literal = make EnumIntegerSyntax { magnitude <- 0u64; negative <- false; width <- 0u64; };
+    if (inspect_enum_integer(nodes, state.syntax_used, atom, literal)) return;
     resolve_expression(source, nodes, bindings, work, state, operand.index);
 }
 
@@ -2012,6 +2018,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                 (Conjunction) -> { resolve_logical(source, nodes, bindings, work, state, at); return; };
                 (Disjunction) -> { resolve_logical(source, nodes, bindings, work, state, at); return; };
                 (IntegerLiteral) -> { return; };
+                (EnumInteger) -> { reject_name(state, at, unsupported_signed_literal()); return; };
                 (RangeLoop) -> {
                     resolve_range(source, nodes, bindings, work, state, at);
                     return;
