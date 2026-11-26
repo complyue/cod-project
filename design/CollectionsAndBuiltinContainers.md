@@ -1,8 +1,10 @@
 # Collections and builtin containers
 
-Design revision 10 · 2026-11-26 · Source design draft
+Design revision 11 · 2026-11-26 · Source design draft
 
 ## Design authority
+
+At r11 the [user’s priority decision](../CHANGELOG.md#h-index-defaults-and-free-methods-20261126) completes [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families). P-778/P-779 continue r10 receiver identity, call-form eligibility and AOT coverage. [Abstract defaults and free indexing operators](#abstract-defaults-and-free-indexing-operators) cover shapes missing from the concrete receiver, including explicit expansion, ambiguity and ordinary module visibility.
 
 At r10 [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families), P-778/P-779, gives each nominal receiver its own family for each indexing operation in the selected world. [Dispatch through an abstract receiver](#receiver-families-for-indexing) preserves r9 argument order, access, fixed and variadic selection, and library control of the axes. The [user decision](../CHANGELOG.md#h-receiver-index-families-20261126) covers indexing. Ordinary free functions keep their established families.
 
@@ -86,11 +88,33 @@ Suppose `Dense` and `Sparse` both declare conformance to `Matrix`. Each defines 
 | `m[row, col] <- value` | Dense fixed setter from the adapter | Sparse variadic setter |
 | `m[axes...] <- value`, with the same two indices | Dense variadic setter | Sparse variadic setter |
 
-One receiver's variadic method never competes with another receiver's variadic method. Within the chosen family, ordinary tuple specificity and the explicit pack rule apply. Its methods may specialize an index type, a selector pattern or the value. An ambiguous concrete choice needs resolution in that family. An applicable concrete implementation takes priority over behavior offered for the abstract receiver. Automatic use of an implemented abstract default for a shape absent on the concrete receiver remains a separate design question. An invocation failure propagates through ordinary cleanup. A read-only receiver keeps its access when its concrete type becomes known.
+One receiver's variadic method never competes with another receiver's variadic method. Within the chosen family, ordinary tuple specificity and the explicit pack rule apply. Its methods may specialize an index type, a selector pattern or the value. An ambiguous concrete choice needs resolution in that family. An applicable concrete method takes priority. A shape missing on the concrete receiver can use an [abstract default or a free operator](#abstract-defaults-and-free-indexing-operators). An invocation failure propagates through ordinary cleanup. A read-only receiver keeps its access when its concrete type becomes known.
 
-A caller can pass or forward a `Matrix` view without a cast or a user-written type switch. Its declared conformance and the selected world determine which concrete types the call can admit. Ahead-of-time compilation checks coverage of each demanded call, including its result, access, ownership and effects. When the actual type is already known the compiler can emit a direct call. Otherwise it preserves the receiver evidence and prepares local dispatch that selects the actual ADT's indexing behavior. A shared generic body can execute both rows of the table. A known Dense call needs only the Dense family’s incoming effects. A call that still admits both receiver types must cover the requirements that either route could impose, including each selected family’s pre-2.0 incoming-symbol rule. Concrete type evidence can discharge an unreachable alternative. [Family-wide incoming effects](SymbolicDynamicScope.md#family-wide-effect-requirements-before-20) [AOT coverage](AheadOfTimeExecutionPreparation.md#actual-type-dispatch-and-wpo-coverage)
+A caller can pass or forward a `Matrix` view without a cast or a user-written type switch. Its declared conformance and the selected world determine which concrete types the call can admit. Ahead-of-time compilation checks coverage of each demanded call, including its result, access, ownership and effects. When the actual type is already known the compiler can emit a direct call. Otherwise it preserves the receiver evidence and prepares local dispatch that selects the actual ADT's indexing behavior. A shared generic body can execute both rows of the table. A call known to select the Dense setter needs that family’s incoming effects. When several receiver types or call shapes remain reachable, cover every family the call can actually select, including an abstract or free fallback. Apply the pre-2.0 incoming-symbol rule to each selected family. Concrete type evidence can discharge an unreachable alternative. [Family-wide incoming effects](SymbolicDynamicScope.md#family-wide-effect-requirements-before-20) [AOT coverage](AheadOfTimeExecutionPreparation.md#actual-type-dispatch-and-wpo-coverage)
 
 Verify the same actual through concrete and abstract formals, both receiver types through one call site, and two module views with and without the adapter. In the original view the direct two-axis `Dense` call reaches its variadic body. A reachable type with no permitted implementation for the demanded write must fail coverage, and an unused conformer outside the admitted call need not supply it.
+
+#### Abstract defaults and free indexing operators
+
+For each admitted actual receiver and prepared argument shape, choose the first level with an applicable implementation of the requested indexing operation:
+
+1. The actual concrete receiver’s OO family.
+2. Visible OO defaults on abstractions to which that receiver has declared conformance, including inherited abstractions. Conformance makes an applicable default available automatically. A concrete author can specialize it by providing an applicable method.
+3. The unprefixed free operator family for that operation, resolved by ordinary name lookup in the call’s selected module interpretation.
+
+Family priority precedes comparison of parameter refinements across levels. For example, a free method that explicitly names `Dense` and the exact index type still yields to an applicable `Matrix` default. Within a level use the established applicability and unique-most-specific rules, including nominal conformance, access, units and typed patterns. The same inherited definition reached twice counts once. If two unrelated abstractions offer equally good defaults for the same arguments, a call reaching those defaults is ambiguous even if the free family has an exact match. A concrete implementation for that shape can resolve it.
+
+Suppose `Dense` declares conformance to `Matrix` and supplies a two-index setter. `Matrix` supplies a one-index setter that translates a linear index into a row and column and calls the two-index operation. A library can also author methods in an unprefixed family, for example with the head `func ([]<-)(m:Dense in O, value:Int64, i:Int64) -> void where {const owner O}`. It can define a local free callable or explicitly import a free family to extend it. This declaration contributes to that free family. An OO head such as `func Dense.([]<-)(…)` contributes to the receiver family under its own extension grant. The free family follows ordinary aliases, shadowing and visibility in the selected world. Another package’s private or unselected family is outside lookup.
+
+| Write to an actual `Dense`, also when passed as `Matrix` | Selected implementation |
+| --- | --- |
+| `m[row, col] <- v` | The concrete two-index setter. |
+| `m[i] <- v`, with both the `Matrix` default and the exact free method above | The one-index `Matrix` default. Its delegated two-index write reaches `Dense`. |
+| `m[label] <- v`, with a nominal label accepted only by a visible free method | The free label setter. Without that family the demanded call lacks coverage. |
+
+The written call form determines eligibility at every level. If `Dense` also provides an applicable variadic setter, it wins over a fixed abstract or free setter for the same ordinary call. For `m[axes...] <- v`, only variadic implementations participate. A fixed concrete setter therefore leaves room for an applicable variadic abstract default, then a visible free variadic implementation if the OO levels lack one. The one-variadic limit remains per family. [Fixed and expanded calls](SymbolicDynamicScope.md#runtime-array-expansion-and-one-variadic-parameter)
+
+This ordering selects one implementation. Ambiguity at the winning level, a missing required effect, a failed argument conversion, a bounds failure or a throw from the selected body do not trigger another attempt. Use the same prepared receiver and argument values. Both bracket notation and the corresponding explicit indexing operator call keep their established written evaluation orders. Explicit `intrinsic` indexing retains its existing builtin contract. Check the three calls above in two worlds with different free-family visibility, explicit pack selection through a missing OO shape, and a throwing default with a free setter whose observable write must be skipped.
 
 ### Unitless and unit-bearing axes
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Reuse abstract indexing defaults before visible free operators
+
+<a id="h-index-defaults-and-free-methods-20261126"></a>
+**H-INDEX-DEFAULTS-AND-FREE-METHODS-20261126.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user selected automatic use of an abstract default (“那肯定是选项1”) and directed “认为OO method比全局free method更具体”. [D-30-INDEX-FAMILIES](design/DesignAuthorityRegistry.md#d-30-index-families) extends the [r10 receiver decision](https://github.com/complyue/cod-project/blob/2d8c18d2968fa0370243a0a6c3cd9ebfda7d32b2/design/CollectionsAndBuiltinContainers.md#receiver-families-for-indexing) to a visible unprefixed indexing family contributed through ordinary callable declarations. D-30r11 / D-15r86 preserve module-world isolation, explicit expansion, once-only evaluation and covered runtime dispatch. This scope covers the three indexing operations. [Examples and acceptance](design/CollectionsAndBuiltinContainers.md#abstract-defaults-and-free-indexing-operators). Registry r1354→1355.
+
 ## 2026-11-26 — Give each actual receiver its own indexing families
 
 <a id="h-receiver-index-families-20261126"></a>

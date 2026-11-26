@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 85 · Recorded: 2026-11-26 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 86 · Recorded: 2026-11-26 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+At r86 [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families) applies r85’s receiver publication and ordinary callable lookup to [automatic abstract defaults and visible free indexing operators](CollectionsAndBuiltinContainers.md#abstract-defaults-and-free-indexing-operators). The two extension grants retain their existing scope.
 
 At r85 [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families) extends r84 type-view publication to [receiver-carried indexing methods](CollectionsAndBuiltinContainers.md#receiver-families-for-indexing). Contributing a method requires authority over the receiver. Selecting an adapter can add its published method in the receiving world.
 
@@ -191,7 +193,7 @@ The constructor overload family belongs to the nominal type. Its dctors are meth
 
 ### Publication of type-carried call operators
 
-For the three indexing operations, selecting a type view likewise brings its published receiver families; an explicit import of the receiver permits an OO extension. Distinct ADTs can each supply their own variadic setter in the same world. Selecting multiple views of one receiver applies the existing contribution identity, conflict and visibility rules. [Receiver families for indexing](CollectionsAndBuiltinContainers.md#receiver-families-for-indexing)
+For the three indexing operations, selecting a type view likewise brings its published receiver families; an explicit import of the receiver permits an OO extension. Distinct ADTs can each supply their own variadic setter in the same world. Selecting multiple views of one receiver applies the existing contribution identity, conflict and visibility rules. A declared conformer receives visible abstract indexing defaults. An unprefixed operator declaration belongs to the ordinary local or explicitly imported free family. Indexing can reach that family after both OO levels lack an applicable implementation. [Dispatch order and a two-world test](CollectionsAndBuiltinContainers.md#abstract-defaults-and-free-indexing-operators)
 
 Exporting a nominal data type also publishes the `(())` family visible on that type in the exporting world. Re-export of a selected type view carries its family. Plain `using` selects the family with the type. An `import` of the type also permits local extension. A standalone `export`, `using` or `import` of `(())` is invalid. Calls use [type-level lookup](DomainLanguageDesign.md#type-level-call-operator-lookup).
 
