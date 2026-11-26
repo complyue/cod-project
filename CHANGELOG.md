@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Bind product fill fields in writable array growth
+
+<a id="k-seed-array-growth-product-fill-20261125"></a>
+**K-SEED-ARRAY-GROWTH-PRODUCT-FILL-20261125.** The [architecture review](design/ImplementationArchitecture.md#product-fills-in-writable-array-growth) continues D-ARCH-REVIEW r205→206. At `f7be2b4b:applications/cod-booter/src/ModuleGraph.cod`, five reserve procedures use explicit product fills. The [writable growth schedule](#k-seed-array-growth-contract-20261125) can consume their ordinary checked field operations in written order, including each call to a completed literal function.
+
 ## 2026-11-25 — Complete writable array growth before its callers
 
 <a id="k-seed-array-growth-contract-20261125"></a>
